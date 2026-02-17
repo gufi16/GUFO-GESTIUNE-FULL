@@ -19,27 +19,9 @@ export async function GET() {
     data: { name: "Demo Restaurant SRL" },
   });
 
-  const loc = await prisma.location.create({
-    data: {
-      tenantId: tenant.id,
-      name: "Punct lucru 1",
-      code: "PL1",
-    },
-  });
-
-  const wh = await prisma.warehouse.create({
-    data: {
-      tenantId: tenant.id,
-      locationId: loc.id,
-      name: "Depozit Principal",
-      code: "MAIN",
-    },
-  });
-
   return NextResponse.json({
     ok: true,
     tenantId: tenant.id,
-    locationId: loc.id,
-    warehouseId: wh.id,
   });
 }
+
