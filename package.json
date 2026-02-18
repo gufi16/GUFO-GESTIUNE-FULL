@@ -3,25 +3,24 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3000",
+    "dev": "next dev",
     "build": "next build",
-    "start": "next start -p $PORT -H 0.0.0.0"
-    "prisma:generate": "prisma generate",
-    "db:push": "prisma db push"
+    "start": "next start -p $PORT -H 0.0.0.0",
+    "lint": "next lint"
   },
   "dependencies": {
-    "@prisma/client": "^5.19.1",
+    "@prisma/client": "^5.22.0",
     "next": "14.2.5",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
-    "prisma": "^5.19.1",
-    "typescript": "^5.5.4",
-    "@types/node": "^20.14.10",
-    "@types/react": "^18.3.3"
-  },
-  "engines": {
-    "node": ">=20 <23"
+    "prisma": "^5.22.0",
+    "typescript": "^5.3.3",
+    "@types/node": "^20.11.19",
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "eslint": "^8.56.0",
+    "eslint-config-next": "14.2.5"
   }
 }
