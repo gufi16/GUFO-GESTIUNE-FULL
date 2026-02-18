@@ -24,3 +24,25 @@ model Product {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 }
+model Customer {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name      String
+  email     String?
+  phone     String?
+  vatCode   String?  // CUI
+  regNo     String?  // Nr. Reg. Com
+  address   String?
+  city      String?
+  country   String?  @default("RO")
+  notes     String?
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, name])
+}
