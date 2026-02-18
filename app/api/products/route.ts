@@ -20,6 +20,10 @@ export async function POST(req: NextRequest) {
   try {
     const tenantId = getTenantId(req)
     const body = await req.json()
+    if (!body?.name || !String(body.name).trim()) {
+  return NextResponse.json({ error: "Missing product name" }, { status: 400 })
+}
+
     const product = await prisma.product.create({
       data: {
         tenantId,
