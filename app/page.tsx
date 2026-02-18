@@ -1,27 +1,12 @@
-async function load() {
-  if (!tenantId?.trim()) return
-  const res = await fetch(`/api/products?tenantId=${encodeURIComponent(tenantId.trim())}`)
-  const data = await res.json()
-  if (!res.ok) {
-    alert(data?.error || "Failed to load products")
-    return
-  }
-  setProducts(data)
+export default function HomePage() {
+  return (
+    <main style={{ padding: 40 }}>
+      <h1>GUFO Gestiune</h1>
+      <p>Admin demo:</p>
+      <ul>
+        <li><a href="/products">Products</a></li>
+        <li><a href="/api/health">API Health</a></li>
+      </ul>
+    </main>
+  )
 }
-
-async function create() {
-  const tid = tenantId?.trim()
-  const n = name?.trim()
-
-  if (!tid) return alert("Tenant ID lipsă")
-  if (!n) return alert("Product name lipsă")
-
-  const res = await fetch(`/api/products?tenantId=${encodeURIComponent(tid)}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: n, uom: "buc" })
-  })
-
-  const data = await res.json()
-
-  if (!res.ok) {
