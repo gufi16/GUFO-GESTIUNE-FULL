@@ -31,21 +31,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing tenantId" }, { status: 400 })
     }
 
-    // ✅ IMPORTANT: asigură-te că tenantul există (altfel FK = 500)
+    // body safe (dacă vine gol / nu e JSON -> {})
+    let body: any = {}
+    try {
+      body = await req.json()
+    } catch {
+      body = {}
+    }
+
+    const rawName = body?.name ?? body?.productName ?? body?.product?.name ?? ""
+    const name = String(rawName).trim()
+
+    if (!name) {
+      return NextResponse.json(
+        { error: "Missing product name", receivedBody: body },
+        { status: 400 }
+      )
+    }
+
+    // asigură tenant existent (FK)
     await prisma.tenant.upsert({
       where: { id: tenantId },
       update: {},
-      create: {
-        id: tenantId,         // setăm explicit ID-ul ca să fie exact ce bagi tu în input
-        name: tenantId,       // poți pune alt nume mai târziu
-      },
+      create: { id: tenantId, name: tenantId },
     })
-
-    const body = await req.json()
-    const name = String(body?.name || "").trim()
-    if (!name) {
-      return NextResponse.json({ error: "Missing product name" }, { status: 400 })
-    }
 
     const product = await prisma.product.create({
       data: {
