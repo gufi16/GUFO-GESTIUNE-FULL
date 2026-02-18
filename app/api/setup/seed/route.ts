@@ -16,8 +16,8 @@ export async function GET() {
   }
 
   const tenant = await prisma.tenant.create({
-    data: { name: "Demo Restaurant SRL" },
-  });
+  data: { id: "demo-restaurant-1", name: "Demo Restaurant SRL" },
+});
 
   return NextResponse.json({
     ok: true,
