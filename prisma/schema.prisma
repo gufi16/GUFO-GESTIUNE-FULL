@@ -8,26 +8,26 @@ datasource db {
 }
 
 model Tenant {
-  id        String     @id
+  id        String    @id
   name      String
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime? // ✅ optional ca să nu crape pe date existente
 
   products  Product[]
-  customers Customer[]   // ✅ relația lipsă
+  customers Customer[]
 }
 
 model Product {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   name      String
-  uom       String   @default("buc")
-  isActive  Boolean  @default(true)
+  uom       String    @default("buc")
+  isActive  Boolean   @default(true)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime? // ✅ optional ca să nu crape pe cele 2 produse existente
 
   @@index([tenantId])
 }
