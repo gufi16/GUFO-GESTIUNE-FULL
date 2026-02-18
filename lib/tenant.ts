@@ -1,10 +1,7 @@
 import { NextRequest } from "next/server"
 
-export function getTenantId(req: NextRequest): string {
+export function getTenantId(req: NextRequest) {
   const headerTenant = req.headers.get("x-tenant-id")
   const queryTenant = req.nextUrl.searchParams.get("tenantId")
-
-  const tenantId = (headerTenant || queryTenant || "").trim()
-
-  return tenantId
+  return (headerTenant || queryTenant || "").trim()
 }
