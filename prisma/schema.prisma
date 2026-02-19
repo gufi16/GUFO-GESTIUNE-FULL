@@ -7,27 +7,68 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Tenant {
-  id        String    @id
-  name      String
-  createdAt DateTime  @default(now())
-  updatedAt DateTime?   // IMPORTANT: optional ca să nu crape db push
+/* =========================
+   ENUMS (pentru Factura + e-Factura ready)
+   ========================= */
 
-  products  Product[]
-  customers Customer[]
+enum CustomerType {
+  PF
+  PJ
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PAID
+  CANCELLED
+}
+
+enum EFacturaStatus {
+  NONE
+  READY
+  SENT
+  ACCEPTED
+  REJECTED
+}
+
+enum VatCategory {
+  S   // standard
+  Z   // zero rate
+  E   // exempt
+  AE  // reverse charge / special
+  K   // intracommunity (optional pe viitor)
+  O   // outside scope
+}
+
+/* =========================
+   CORE MODELS (existente, păstrate compatibil)
+   ========================= */
+
+model Tenant {
+  id        String   @id
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime? // IMPORTANT: optional ca să nu crape db push
+
+  products      Product[]
+  customers     Customer[]
+  invoices      Invoice[]
+  companyProfile CompanyProfile?
 }
 
 model Product {
-  id        String    @id @default(cuid())
+  id        String   @id @default(cuid())
   tenantId  String
-  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   name      String
-  uom       String    @default("buc")
-  isActive  Boolean   @default(true)
+  uom       String   @default("buc")
+  isActive  Boolean  @default(true)
 
-  createdAt DateTime  @default(now())
-  updatedAt DateTime?   // IMPORTANT: optional
+  createdAt DateTime @default(now())
+  updatedAt DateTime? // IMPORTANT: optional
+
+  invoiceItems InvoiceItem[]
 
   @@index([tenantId])
 }
@@ -37,6 +78,7 @@ model Customer {
   tenantId  String
   tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
+  // EXISTENTE (le păstrăm)
   name      String
   email     String?
   phone     String?
@@ -47,10 +89,126 @@ model Customer {
   country   String?  @default("RO")
   notes     String?
 
+  // NOI (e-Factura-ready, fără să strice UI-ul existent)
+  type         CustomerType @default(PJ)
+  taxId        String?      // CUI (PJ) / CNP (PF optional)
+  addressLine1 String?
+  addressLine2 String?
+  county       String?      // județ/sector
+  postalCode   String?
+
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  invoices  Invoice[]
+
   @@index([tenantId])
   @@index([tenantId, name])
+}
+
+/* =========================
+   COMPANY PROFILE (emitent / setări per tenant)
+   ========================= */
+
+model CompanyProfile {
+  id           String   @id @default(cuid())
+  tenantId     String   @unique
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // date firmă emitent (necesare pt e-Factura)
+  name         String
+  taxId        String   // CUI/CIF
+  regCom       String?  // Jxx/...
+
+  isVatPayer   Boolean  @default(true)
+
+  // adresă structurată
+  country      String   @default("RO")
+  county       String?
+  city         String?
+  addressLine1 String?
+  addressLine2 String?
+  postalCode   String?
+
+  // bancă (recomandat)
+  iban         String?
+  bankName     String?
+
+  // seria facturii (setată de client/tenant)
+  invoiceSeries String @default("FCT")
+  invoiceNumberStart Int @default(1)
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+/* =========================
+   INVOICE (Factura) + ITEMS
+   ========================= */
+
+model Invoice {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  series    String
+  number    Int
+  issueDate DateTime @default(now())
+  dueDate   DateTime?
+
+  status    InvoiceStatus @default(DRAFT)
+  currency  String        @default("RON")
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  // totaluri calculate (din linii)
+  subtotal Decimal @db.Decimal(18, 2) @default(0)
+  vatTotal  Decimal @db.Decimal(18, 2) @default(0)
+  total     Decimal @db.Decimal(18, 2) @default(0)
+
+  // e-Factura tracking (mai târziu)
+  efacturaStatus   EFacturaStatus @default(NONE)
+  efacturaUploadId String?
+  efacturaErrors   String?
+
+  items     InvoiceItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@unique([tenantId, series, number])
+}
+
+model InvoiceItem {
+  id        String   @id @default(cuid())
+  tenantId  String
+
+  invoiceId String
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  description String
+  uom         String  @default("buc")
+
+  quantity  Decimal @db.Decimal(18, 3) @default(1)
+  unitPrice Decimal @db.Decimal(18, 2) @default(0) // recomandat: preț fără TVA
+
+  vatRate     Decimal     @db.Decimal(5, 2) @default(19) // 0/5/9/19 etc
+  vatCategory VatCategory @default(S)
+
+  // totaluri linie (calculate)
+  lineNet   Decimal @db.Decimal(18, 2) @default(0)
+  lineVat   Decimal @db.Decimal(18, 2) @default(0)
+  lineTotal Decimal @db.Decimal(18, 2) @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([invoiceId])
 }
