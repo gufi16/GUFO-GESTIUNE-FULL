@@ -137,20 +137,20 @@ export async function POST(req: NextRequest) {
           total,
 
           items: {
-            create: computedItems.map((it) => ({
-              tenantId,
-              productId: it.productId ?? null,
-              description: it.description,
-              uom: it.uom,
-              quantity: it.quantity,
-              unitPrice: it.unitPrice,
-              vatRate: it.vatRate,
-              vatCategory: it.vatCategory,
-              lineNet: it.lineNet,
-              lineVat: it.lineVat,
-              lineTotal: it.lineTotal,
-            })),
-          },
+  create: computedItems.map((it) => ({
+    tenantId,
+    description: it.description,
+    uom: it.uom,
+    quantity: it.quantity,
+    unitPrice: it.unitPrice,
+    vatRate: it.vatRate,
+    vatCategory: it.vatCategory,
+    lineNet: it.lineNet,
+    lineVat: it.lineVat,
+    lineTotal: it.lineTotal,
+  })),
+},
+
         },
         include: { customer: true, items: true },
       });
