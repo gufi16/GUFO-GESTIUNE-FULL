@@ -1,11 +1,9 @@
 // app/api/invoices/route.ts
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Prisma, VatCategory } from "@prisma/client";
 
-// Dacă ai deja prisma în "@/lib/prisma", poți înlocui blocul de mai jos cu:
-// import { prisma } from "@/lib/prisma";
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
-export const prisma =
+const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
     log: ["error", "warn"],
@@ -14,79 +12,66 @@ if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
 type CreateInvoiceBody = {
   customerId: string;
+  issueDate?: string; // ISO
+  dueDate?: string; // ISO
+  currency?: string; // default RON
+  status?: "DRAFT" | "ISSUED" | "PAID" | "CANCELLED";
   items: Array<{
     description: string;
-    quantity: number;
-    unitPrice: number;
-    vatRate?: number; // 0/5/9/19 etc
+    quantity: number; // ex 2
+    unitPrice: number; // ex 100
+    vatRate?: number; // ex 19
+    vatCategory?: VatCategory; // S/Z/E/AE/K/O
+    uom?: string; // default "buc"
+    productId?: string | null;
   }>;
-  currency?: string; // optional
-  notes?: string; // optional
-  issueDate?: string; // optional ISO
-  dueDate?: string; // optional ISO
 };
-
-// Helper: calc totals
-function calcLine(quantity: number, unitPrice: number, vatRate: number) {
-  const qty = Number(quantity || 0);
-  const price = Number(unitPrice || 0);
-  const vat = Number(vatRate || 0);
-
-  const net = qty * price;
-  const vatAmount = net * (vat / 100);
-  const gross = net + vatAmount;
-
-  return { net, vatAmount, gross, vat };
-}
 
 function getTenantId(req: Request) {
   const { searchParams } = new URL(req.url);
   return searchParams.get("tenantId")?.trim() || null;
 }
 
+function toDec(n: number | string) {
+  // Prisma Decimal
+  return new Prisma.Decimal(n);
+}
+
+function calcLine(qty: Prisma.Decimal, unitPrice: Prisma.Decimal, vatRate: Prisma.Decimal) {
+  const lineNet = qty.mul(unitPrice);
+  const lineVat = lineNet.mul(vatRate).div(new Prisma.Decimal(100));
+  const lineTotal = lineNet.add(lineVat);
+  return { lineNet, lineVat, lineTotal };
+}
+
 /**
  * GET /api/invoices?tenantId=REST-1
- * Returnează lista de facturi pentru tenant (cu items + customer, dacă vrei)
  */
 export async function GET(req: Request) {
   try {
     const tenantId = getTenantId(req);
-    if (!tenantId) {
-      return NextResponse.json({ error: "Missing tenantId" }, { status: 400 });
-    }
+    if (!tenantId) return NextResponse.json({ error: "Missing tenantId" }, { status: 400 });
 
     const invoices = await prisma.invoice.findMany({
       where: { tenantId },
       orderBy: { createdAt: "desc" },
-      include: {
-        customer: true,
-        items: true,
-      },
+      include: { customer: true, items: true },
     });
 
     return NextResponse.json(invoices, { status: 200 });
   } catch (e: any) {
-    return NextResponse.json(
-      { error: e?.message || "Server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: e?.message || "Server error" }, { status: 500 });
   }
 }
 
 /**
  * POST /api/invoices?tenantId=REST-1
- * Body:
- * {
- *   "customerId": "...",
- *   "items":[{"description":"Test","quantity":2,"unitPrice":100,"vatRate":19}]
- * }
+ * body: { customerId, items:[...] }
  */
 export async function POST(req: Request) {
   try {
     const tenantId = getTenantId(req);
-    if (!tenantId) {
-      return NextResponse.json({ error: "Missing tenantId" }, { status: 400 });
-    }
+    if (!tenantId) return NextResponse.json({ error: "Missing tenantId" }, { status: 400 });
 
     const body = (await req.json()) as CreateInvoiceBody;
 
@@ -97,104 +82,115 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing items[]" }, { status: 400 });
     }
 
-    // Verifică clientul în tenant-ul corect
+    // tenant exists?
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant) return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
+
+    // customer must belong to same tenant
     const customer = await prisma.customer.findFirst({
       where: { id: body.customerId, tenantId },
     });
-    if (!customer) {
-      return NextResponse.json({ error: "Customer not found" }, { status: 404 });
-    }
+    if (!customer) return NextResponse.json({ error: "Customer not found" }, { status: 404 });
 
-    // Normalizează items + calcule
-    const normalizedItems = body.items.map((it, idx) => {
+    // CompanyProfile for series + numbering
+    const profile = await prisma.companyProfile.findUnique({
+      where: { tenantId },
+      select: { invoiceSeries: true, invoiceNumberStart: true },
+    });
+    const series = profile?.invoiceSeries ?? "FCT";
+    const startNo = profile?.invoiceNumberStart ?? 1;
+
+    const currency = (body.currency || "RON").trim() || "RON";
+    const issueDate = body.issueDate ? new Date(body.issueDate) : new Date();
+    const dueDate = body.dueDate ? new Date(body.dueDate) : null;
+
+    // normalize items + totals
+    const normalized = body.items.map((it, idx) => {
       const description = String(it.description || "").trim();
-      const quantity = Number(it.quantity);
-      const unitPrice = Number(it.unitPrice);
-      const vatRate = Number(it.vatRate ?? 19);
+      if (!description) throw new Error(`Item[${idx}] missing description`);
 
-      if (!description) {
-        throw new Error(`Item[${idx}] missing description`);
-      }
-      if (!Number.isFinite(quantity) || quantity <= 0) {
-        throw new Error(`Item[${idx}] invalid quantity`);
-      }
-      if (!Number.isFinite(unitPrice) || unitPrice < 0) {
-        throw new Error(`Item[${idx}] invalid unitPrice`);
-      }
-      if (!Number.isFinite(vatRate) || vatRate < 0) {
-        throw new Error(`Item[${idx}] invalid vatRate`);
-      }
+      const qtyNum = Number(it.quantity);
+      const priceNum = Number(it.unitPrice);
+      const vatNum = Number(it.vatRate ?? 19);
 
-      const { net, vatAmount, gross } = calcLine(quantity, unitPrice, vatRate);
+      if (!Number.isFinite(qtyNum) || qtyNum <= 0) throw new Error(`Item[${idx}] invalid quantity`);
+      if (!Number.isFinite(priceNum) || priceNum < 0) throw new Error(`Item[${idx}] invalid unitPrice`);
+      if (!Number.isFinite(vatNum) || vatNum < 0) throw new Error(`Item[${idx}] invalid vatRate`);
+
+      const quantity = toDec(qtyNum);
+      const unitPrice = toDec(priceNum);
+      const vatRate = toDec(vatNum);
+
+      const { lineNet, lineVat, lineTotal } = calcLine(quantity, unitPrice, vatRate);
 
       return {
+        tenantId,
+        productId: it.productId ?? null,
         description,
+        uom: it.uom?.trim() || "buc",
         quantity,
         unitPrice,
         vatRate,
-        netAmount: net, // dacă schema ta NU are câmpurile astea, scoate-le
-        vatAmount: vatAmount,
-        grossAmount: gross,
+        vatCategory: it.vatCategory ?? "S",
+        lineNet,
+        lineVat,
+        lineTotal,
       };
     });
 
-    // Totaluri
-    const totals = normalizedItems.reduce(
-      (acc, it) => {
-        acc.net += it.netAmount ?? it.quantity * it.unitPrice;
-        acc.vat += it.vatAmount ?? (it.quantity * it.unitPrice * (it.vatRate / 100));
-        acc.gross += it.grossAmount ?? (it.quantity * it.unitPrice * (1 + it.vatRate / 100));
-        return acc;
-      },
-      { net: 0, vat: 0, gross: 0 }
-    );
+    const subtotal = normalized.reduce((acc, it) => acc.add(it.lineNet), toDec(0));
+    const vatTotal = normalized.reduce((acc, it) => acc.add(it.lineVat), toDec(0));
+    const total = normalized.reduce((acc, it) => acc.add(it.lineTotal), toDec(0));
 
-    // (optional) invoice number simplu: INV-<timestamp>
-    const invoiceNumber = `INV-${Date.now()}`;
+    // Create invoice + items in one transaction, with next number
+    const created = await prisma.$transaction(async (tx) => {
+      // compute next number for (tenantId, series)
+      const last = await tx.invoice.findFirst({
+        where: { tenantId, series },
+        orderBy: { number: "desc" },
+        select: { number: true },
+      });
 
-    // IMPORTANT:
-    // Dacă schema ta de Prisma NU are câmpurile: invoiceNumber/currency/notes/issueDate/dueDate/totalNet/totalVat/totalGross,
-    // scoate-le din create() ca să nu crape.
-    const created = await prisma.invoice.create({
-      data: {
-        tenantId,
-        customerId: body.customerId,
+      const nextNumber = last?.number ? last.number + 1 : startNo;
 
-        invoiceNumber,
-        currency: body.currency ?? "RON",
-        notes: body.notes ?? null,
-        issueDate: body.issueDate ? new Date(body.issueDate) : new Date(),
-        dueDate: body.dueDate ? new Date(body.dueDate) : null,
-
-        totalNet: totals.net,
-        totalVat: totals.vat,
-        totalGross: totals.gross,
-
-        items: {
-          create: normalizedItems.map((it) => ({
-            description: it.description,
-            quantity: it.quantity,
-            unitPrice: it.unitPrice,
-            vatRate: it.vatRate,
-
-            // Dacă schema NU are aceste câmpuri, scoate-le:
-            netAmount: it.netAmount,
-            vatAmount: it.vatAmount,
-            grossAmount: it.grossAmount,
-          })),
+      const invoice = await tx.invoice.create({
+        data: {
+          tenantId,
+          series,
+          number: nextNumber,
+          issueDate,
+          dueDate,
+          status: body.status ?? "DRAFT",
+          currency,
+          customerId: body.customerId,
+          subtotal,
+          vatTotal,
+          total,
+          // efacturaStatus defaults to NONE in schema
+          items: {
+            create: normalized.map((it) => ({
+              tenantId: it.tenantId,
+              productId: it.productId,
+              description: it.description,
+              uom: it.uom,
+              quantity: it.quantity,
+              unitPrice: it.unitPrice,
+              vatRate: it.vatRate,
+              vatCategory: it.vatCategory,
+              lineNet: it.lineNet,
+              lineVat: it.lineVat,
+              lineTotal: it.lineTotal,
+            })),
+          },
         },
-      },
-      include: {
-        customer: true,
-        items: true,
-      },
+        include: { customer: true, items: true },
+      });
+
+      return invoice;
     });
 
     return NextResponse.json(created, { status: 201 });
   } catch (e: any) {
-    return NextResponse.json(
-      { error: e?.message || "Server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: e?.message || "Server error" }, { status: 500 });
   }
 }
