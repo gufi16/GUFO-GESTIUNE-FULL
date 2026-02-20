@@ -26,21 +26,13 @@ export async function GET(req: Request) {
   const invoices = await prisma.invoice.findMany({
     where: { tenantId },
     orderBy: { createdAt: "desc" },
-    include: {
-      customer: true,
-      items: true,
-    },
+    include: { customer: true, items: true },
   });
 
   return NextResponse.json(invoices);
 }
 
 // POST /api/invoices?tenantId=REST-1
-// Body:
-// {
-//   "customerId": "...",
-//   "items": [{ "description":"Test", "quantity":2, "unitPrice":100, "vatRate":19, "productId": null? , "uom":"buc"? }]
-// }
 export async function POST(req: Request) {
   const tenantId = getTenantIdFromUrl(req);
   if (!tenantId) return jsonError("Missing tenantId", 400);
@@ -52,7 +44,7 @@ export async function POST(req: Request) {
     return jsonError("Invalid JSON body", 400);
   }
 
-  const customerId = (body?.customerId || "").trim();
+  const customerId = String(body?.customerId || "").trim();
   const items = Array.isArray(body?.items) ? body.items : [];
 
   if (!customerId) return jsonError("Missing customerId", 400);
@@ -69,7 +61,7 @@ export async function POST(req: Request) {
     where: { tenantId },
   });
 
-  // dacă n-ai profil, îl creează minimal (ca să nu crape)
+  // dacă n-ai profil, îl creează minimal
   if (!profile) {
     profile = await prisma.companyProfile.create({
       data: {
@@ -83,66 +75,69 @@ export async function POST(req: Request) {
     });
   }
 
-  // 3) calculează next number (cel mai mare + 1)
+  // 3) calculează next number
   const last = await prisma.invoice.findFirst({
     where: { tenantId, series: profile.invoiceSeries },
     orderBy: { number: "desc" },
     select: { number: true },
   });
 
-  const nextNumber =
-    (last?.number ?? (profile.invoiceNumberStart - 1)) + 1;
+  const nextNumber = (last?.number ?? (profile.invoiceNumberStart - 1)) + 1;
 
   // 4) normalizează + calculează linii
-  const computedItems = items.map((raw: any) => {
-    const description = String(raw?.description ?? "").trim();
-    if (!description) throw new Error("Item.description missing");
+  let computedItems: any[] = [];
+  try {
+    computedItems = items.map((raw: any) => {
+      const description = String(raw?.description ?? "").trim();
+      if (!description) throw new Error("Item.description missing");
 
-    const uom = String(raw?.uom ?? "buc").trim() || "buc";
+      const uom = String(raw?.uom ?? "buc").trim() || "buc";
 
-    const quantityNum = Number(raw?.quantity ?? 0);
-    const unitPriceNum = Number(raw?.unitPrice ?? 0);
-    const vatRateNum = Number(raw?.vatRate ?? 19);
+      const quantityNum = Number(raw?.quantity ?? 0);
+      const unitPriceNum = Number(raw?.unitPrice ?? 0);
+      const vatRateNum = Number(raw?.vatRate ?? 19);
 
-    if (!Number.isFinite(quantityNum) || quantityNum <= 0)
-      throw new Error("Item.quantity invalid");
-    if (!Number.isFinite(unitPriceNum) || unitPriceNum < 0)
-      throw new Error("Item.unitPrice invalid");
-    if (!Number.isFinite(vatRateNum) || vatRateNum < 0)
-      throw new Error("Item.vatRate invalid");
+      if (!Number.isFinite(quantityNum) || quantityNum <= 0)
+        throw new Error("Item.quantity invalid");
+      if (!Number.isFinite(unitPriceNum) || unitPriceNum < 0)
+        throw new Error("Item.unitPrice invalid");
+      if (!Number.isFinite(vatRateNum) || vatRateNum < 0)
+        throw new Error("Item.vatRate invalid");
 
-    const quantity = toDecimal(quantityNum);
-    const unitPrice = toDecimal(unitPriceNum);
-    const vatRate = toDecimal(vatRateNum);
+      const quantity = toDecimal(quantityNum);
+      const unitPrice = toDecimal(unitPriceNum);
+      const vatRate = toDecimal(vatRateNum);
 
-    const lineNet = quantity.mul(unitPrice);
-    const lineVat = lineNet.mul(vatRate).div(toDecimal(100));
-    const lineTotal = lineNet.add(lineVat);
+      const lineNet = quantity.mul(unitPrice);
+      const lineVat = lineNet.mul(vatRate).div(toDecimal(100));
+      const lineTotal = lineNet.add(lineVat);
 
-    const productId =
-      raw?.productId && String(raw.productId).trim()
-        ? String(raw.productId).trim()
-        : null;
+      const productId =
+        raw?.productId && String(raw.productId).trim()
+          ? String(raw.productId).trim()
+          : null;
 
-    // vatCategory: dacă nu trimiți, default S
-    const vatCategory =
-      raw?.vatCategory && String(raw.vatCategory).trim()
-        ? String(raw.vatCategory).trim()
-        : "S";
+      const vatCategory =
+        raw?.vatCategory && String(raw.vatCategory).trim()
+          ? String(raw.vatCategory).trim()
+          : "S";
 
-    return {
-      productId, // <-- EXISTĂ, deci nu mai ai eroarea TS
-      description,
-      uom,
-      quantity,
-      unitPrice,
-      vatRate,
-      vatCategory,
-      lineNet,
-      lineVat,
-      lineTotal,
-    };
-  });
+      return {
+        productId,
+        description,
+        uom,
+        quantity,
+        unitPrice,
+        vatRate,
+        vatCategory,
+        lineNet,
+        lineVat,
+        lineTotal,
+      };
+    });
+  } catch (e: any) {
+    return jsonError("Invalid items", 400, { details: String(e?.message ?? e) });
+  }
 
   let subtotal = toDecimal(0);
   let vatTotal = toDecimal(0);
@@ -188,7 +183,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json(created, { status: 201 });
   } catch (e: any) {
-    // dacă lovești unique constraint pe (tenantId, series, number) etc.
     return jsonError("Failed to create invoice", 500, {
       details: String(e?.message ?? e),
     });
