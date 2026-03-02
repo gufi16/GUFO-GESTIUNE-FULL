@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useTenantId } from "@/lib/useTenantId";
+import { useTenantId } from "../../../lib/useTenantId";
 
 export default function ProductsClient() {
   const tenantId = useTenantId();
@@ -32,7 +32,7 @@ export default function ProductsClient() {
       <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 16 }}>Produse</h1>
 
       {!tenantId && (
-        <p style={{ fontSize: 13, color: "#b00020" }}>
+        <p style={{ fontSize: 13, color: "#b00020", marginBottom: 16 }}>
           Lipsește tenantId în URL. Exemplu: <code>?tenantId=REST-1</code>
         </p>
       )}
