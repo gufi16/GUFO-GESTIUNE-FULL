@@ -3,55 +3,46 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTenantId } from "../../../lib/useTenantId";
 
-type Invoice = {
+type Receipt = {
   id: string;
-  tenantId: string;
   series: string;
   number: number;
-  customerId: string;
-  customerName?: string | null;
-  subtotal: number;
-  vat: number;
-  total: number;
-  createdAt?: string;
+  date: string;
+  partnerId?: string | null;
+  notes?: string | null;
 };
 
-export default function InvoicesClient() {
+export default function ReceiptsClient() {
   const tenantId = useTenantId();
 
   const [loading, setLoading] = useState(false);
-  const [items, setItems] = useState<Invoice[]>([]);
+  const [items, setItems] = useState<Receipt[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  // create minimal
+  // create minimal NIR
   const [creating, setCreating] = useState(false);
-  const [customerId, setCustomerId] = useState("");
+  const [partnerId, setPartnerId] = useState("");
   const [productId, setProductId] = useState("");
   const [qty, setQty] = useState<number>(1);
+  const [unitPrice, setUnitPrice] = useState<number>(0);
+  const [notes, setNotes] = useState("");
 
   const canCreate = useMemo(() => {
-    return !!tenantId && !!customerId && !!productId && qty > 0;
-  }, [tenantId, customerId, productId, qty]);
+    return !!tenantId && !!productId && qty > 0 && unitPrice >= 0;
+  }, [tenantId, productId, qty, unitPrice]);
 
-  async function loadInvoices() {
+  async function loadReceipts() {
     if (!tenantId) return;
     setLoading(true);
     setError(null);
 
     try {
-      const res = await fetch(`/api/invoices?tenantId=${encodeURIComponent(tenantId)}`, {
-        cache: "no-store",
-      });
-
-      if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(txt || `Failed to load invoices (${res.status})`);
-      }
-
+      const res = await fetch(`/api/receipts?tenantId=${encodeURIComponent(tenantId)}`, { cache: "no-store" });
+      if (!res.ok) throw new Error((await res.text()) || `Failed (${res.status})`);
       const data = await res.json();
       setItems(Array.isArray(data) ? data : []);
     } catch (e: any) {
-      setError(e?.message || "Eroare la încărcarea facturilor");
+      setError(e?.message || "Eroare la încărcarea NIR");
       setItems([]);
     } finally {
       setLoading(false);
@@ -59,11 +50,11 @@ export default function InvoicesClient() {
   }
 
   useEffect(() => {
-    loadInvoices();
+    loadReceipts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId]);
 
-  async function createInvoice() {
+  async function createReceipt() {
     if (!canCreate) return;
 
     setCreating(true);
@@ -71,29 +62,28 @@ export default function InvoicesClient() {
 
     try {
       const payload = {
-        customerId,
-        items: [{ productId, qty: Number(qty) }],
+        partnerId: partnerId || null,
+        notes: notes || null,
+        items: [{ productId, qty: Number(qty), unitPrice: Number(unitPrice) }],
       };
 
-      const res = await fetch(`/api/invoices?tenantId=${encodeURIComponent(tenantId)}`, {
+      const res = await fetch(`/api/receipts?tenantId=${encodeURIComponent(tenantId)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
-      if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(txt || `Failed to create invoice (${res.status})`);
-      }
+      if (!res.ok) throw new Error((await res.text()) || `Failed (${res.status})`);
 
-      // reset
-      setCustomerId("");
+      setPartnerId("");
       setProductId("");
       setQty(1);
+      setUnitPrice(0);
+      setNotes("");
 
-      await loadInvoices();
+      await loadReceipts();
     } catch (e: any) {
-      setError(e?.message || "Eroare la creare factură");
+      setError(e?.message || "Eroare la creare NIR");
     } finally {
       setCreating(false);
     }
@@ -101,7 +91,7 @@ export default function InvoicesClient() {
 
   return (
     <div>
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>Facturi</h1>
+      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>NIR (Notă de recepție)</h1>
 
       <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 16 }}>
         Tenant: <code>{tenantId || "(lipsește tenantId)"}</code>
@@ -113,16 +103,15 @@ export default function InvoicesClient() {
         </p>
       )}
 
-      {/* Create (minimal) */}
       <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12, marginBottom: 18 }}>
-        <div style={{ fontWeight: 700, marginBottom: 10 }}>Creează factură (test rapid)</div>
+        <div style={{ fontWeight: 700, marginBottom: 10 }}>Creează NIR (test rapid)</div>
 
         <div style={{ display: "grid", gap: 10, maxWidth: 520 }}>
           <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-            Customer ID
+            Partner ID (opțional)
             <input
-              value={customerId}
-              onChange={(e) => setCustomerId(e.target.value)}
+              value={partnerId}
+              onChange={(e) => setPartnerId(e.target.value)}
               placeholder="ex: cus_..."
               style={{ padding: 8, border: "1px solid #ccc", borderRadius: 6 }}
             />
@@ -142,15 +131,38 @@ export default function InvoicesClient() {
             Cantitate
             <input
               type="number"
-              min={1}
+              min={0.001}
+              step="0.001"
               value={qty}
               onChange={(e) => setQty(Number(e.target.value))}
               style={{ padding: 8, border: "1px solid #ccc", borderRadius: 6 }}
             />
           </label>
 
+          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+            Preț unitar (fără TVA)
+            <input
+              type="number"
+              min={0}
+              step="0.0001"
+              value={unitPrice}
+              onChange={(e) => setUnitPrice(Number(e.target.value))}
+              style={{ padding: 8, border: "1px solid #ccc", borderRadius: 6 }}
+            />
+          </label>
+
+          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+            Note
+            <input
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="opțional"
+              style={{ padding: 8, border: "1px solid #ccc", borderRadius: 6 }}
+            />
+          </label>
+
           <button
-            onClick={createInvoice}
+            onClick={createReceipt}
             disabled={!canCreate || creating}
             style={{
               padding: "10px 12px",
@@ -161,12 +173,12 @@ export default function InvoicesClient() {
               fontWeight: 700,
             }}
           >
-            {creating ? "Se creează…" : "Creează factură"}
+            {creating ? "Se creează…" : "Creează NIR"}
           </button>
         </div>
 
         <div style={{ fontSize: 12, opacity: 0.7, marginTop: 10 }}>
-          Notă: form minim (ID-uri). Următorul pas: dropdown-uri pe Customers/Products + editor linii.
+          TVA nu se folosește aici. NIR generează mișcări de stoc (IN) în StockLedger.
         </div>
       </div>
 
@@ -179,7 +191,7 @@ export default function InvoicesClient() {
 
       {loading && <p>Se încarcă...</p>}
 
-      {!loading && tenantId && items.length === 0 && <p>Nu există facturi pentru acest tenant.</p>}
+      {!loading && tenantId && items.length === 0 && <p>Nu există NIR-uri pentru acest tenant.</p>}
 
       {!loading && items.length > 0 && (
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -187,23 +199,19 @@ export default function InvoicesClient() {
             <tr>
               <th style={{ borderBottom: "1px solid #ddd", padding: 8, textAlign: "left" }}>Serie</th>
               <th style={{ borderBottom: "1px solid #ddd", padding: 8, textAlign: "left" }}>Nr</th>
-              <th style={{ borderBottom: "1px solid #ddd", padding: 8, textAlign: "left" }}>Client</th>
-              <th style={{ borderBottom: "1px solid #ddd", padding: 8, textAlign: "left" }}>Subtotal</th>
-              <th style={{ borderBottom: "1px solid #ddd", padding: 8, textAlign: "left" }}>TVA</th>
-              <th style={{ borderBottom: "1px solid #ddd", padding: 8, textAlign: "left" }}>Total</th>
+              <th style={{ borderBottom: "1px solid #ddd", padding: 8, textAlign: "left" }}>Dată</th>
+              <th style={{ borderBottom: "1px solid #ddd", padding: 8, textAlign: "left" }}>Partner</th>
             </tr>
           </thead>
           <tbody>
-            {items.map((inv) => (
-              <tr key={inv.id}>
-                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{inv.series}</td>
-                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{inv.number}</td>
+            {items.map((r) => (
+              <tr key={r.id}>
+                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{r.series}</td>
+                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{r.number}</td>
                 <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>
-                  {inv.customerName || inv.customerId}
+                  {new Date(r.date).toLocaleDateString()}
                 </td>
-                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{inv.subtotal}</td>
-                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{inv.vat}</td>
-                <td style={{ padding: 8, borderBottom: "1px solid #eee", fontWeight: 700 }}>{inv.total}</td>
+                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{r.partnerId || "-"}</td>
               </tr>
             ))}
           </tbody>
