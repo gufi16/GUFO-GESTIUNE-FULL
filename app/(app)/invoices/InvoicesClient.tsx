@@ -113,7 +113,6 @@ export default function InvoicesClient() {
         </p>
       )}
 
-      {/* Create (minimal) */}
       <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12, marginBottom: 18 }}>
         <div style={{ fontWeight: 700, marginBottom: 10 }}>Creează factură (test rapid)</div>
 
