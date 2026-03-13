@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: poshard-saas-frontend
+    env: static
+    plan: starter
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist

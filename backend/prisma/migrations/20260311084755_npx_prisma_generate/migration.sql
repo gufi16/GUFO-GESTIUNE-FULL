@@ -1,0 +1,20 @@
+-- AlterTable
+ALTER TABLE "Category" ADD COLUMN     "imageUrl" TEXT;
+
+-- AlterTable
+ALTER TABLE "Product" ADD COLUMN     "imageUrl" TEXT;
+
+-- AlterTable
+ALTER TABLE "PurchaseReceiptItem" ALTER COLUMN "qty" SET DEFAULT 0,
+ALTER COLUMN "stockQty" SET DEFAULT 0,
+ALTER COLUMN "unitCostNetFc" SET DEFAULT 0,
+ALTER COLUMN "unitCostNetRon" SET DEFAULT 0,
+ALTER COLUMN "lineNetFc" SET DEFAULT 0,
+ALTER COLUMN "lineVatFc" SET DEFAULT 0,
+ALTER COLUMN "lineGrossFc" SET DEFAULT 0,
+ALTER COLUMN "lineNetRon" SET DEFAULT 0,
+ALTER COLUMN "lineVatRon" SET DEFAULT 0,
+ALTER COLUMN "lineGrossRon" SET DEFAULT 0;
+
+-- AlterTable
+ALTER TABLE "TransferDocItem" ALTER COLUMN "qty" SET DEFAULT 0;

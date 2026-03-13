@@ -1,0 +1,734 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+  MANAGER
+  CASHIER
+  WAREHOUSE
+}
+
+enum ProductClass {
+  PRODUS_FIN
+  MATERIE_PRIMA
+  MARFA
+  AMBALAJE
+  CONSUMABILE
+  SEMIFABRICATE
+  REZIDUALE
+  ALTE_MATERIALE
+}
+
+enum StockMoveType {
+  IN
+  OUT
+  TRANSFER
+  ADJUST
+}
+
+enum RefType {
+  SALE
+  PURCHASE
+  TRANSFER
+  INVENTORY
+  CONSUMPTION
+  PRODUCTION
+}
+
+enum CurrencyCode {
+  RON
+  EUR
+  USD
+  HUF
+}
+
+enum PurchaseReceiptStatus {
+  DRAFT
+  POSTED
+  CANCELLED
+}
+
+enum TransferStatus {
+  DRAFT
+  POSTED
+  CANCELLED
+}
+
+enum RecipeStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+}
+
+enum PaymentType {
+  CASH
+  CARD
+  MIXED
+}
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company           Company?
+  users             User[]
+  licenses          License[]
+  locations         Location[]
+  terminals         Terminal[]
+
+  vatRates          VatRate[]
+  uoms              Uom[]
+  departments       Department[]
+  categories        Category[]
+  skuCounters       SkuCounter[]
+  products          Product[]
+  suppliers         Supplier[]
+  recipes           Recipe[]
+
+  sales             Sale[]
+  stockBalances     StockBalance[]
+  stockMoves        StockMove[]
+  purchaseReceipts  PurchaseReceipt[]
+  transferDocs      TransferDoc[]
+  consumptionDocs   ConsumptionDoc[]
+  productionDocs    ProductionDoc[]
+}
+
+model Company {
+  id        String   @id @default(cuid())
+  tenantId  String   @unique
+
+  name      String
+  cui       String?
+  regNo     String?
+  address   String?
+
+  bank      String?
+  iban      String?
+
+  email     String?
+  phone     String?
+  posSyncInterval Int @default(5)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+model User {
+  id           String   @id @default(cuid())
+  tenantId     String
+  email        String
+  name         String
+  passwordHash String
+  role         UserRole @default(ADMIN)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+}
+
+model License {
+  id          String   @id @default(cuid())
+  tenantId    String
+  keyHash     String   @unique
+  keyPrefix   String
+  expiresAt   DateTime
+  isSuspended Boolean  @default(false)
+
+  modDashboard    Boolean @default(true)
+  modDocuments    Boolean @default(true)
+  modInventory    Boolean @default(true)
+  modNomenclature Boolean @default(true)
+  modSettings     Boolean @default(true)
+  modPos          Boolean @default(true)
+  modReports      Boolean @default(false)
+
+  limitLocations Int @default(1)
+  limitTerminals Int @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+}
+
+model Location {
+  id         String   @id @default(cuid())
+  tenantId   String
+  name       String
+  code       String
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant            Tenant             @relation(fields: [tenantId], references: [id])
+  terminals         Terminal[]
+  sales             Sale[]
+  stockBalances     StockBalance[]
+  stockMoves        StockMove[]
+  purchaseReceipts  PurchaseReceipt[]
+  transferDocsFrom  TransferDoc[]      @relation("TransferFromLocation")
+  transferDocsTo    TransferDoc[]      @relation("TransferToLocation")
+  consumptionDocs   ConsumptionDoc[]
+  productionDocs    ProductionDoc[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+}
+
+model Terminal {
+  id                 String   @id @default(cuid())
+  tenantId           String
+  locationId         String?
+  deviceId           String
+  label              String?
+  isLockedToLocation Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  location Location? @relation(fields: [locationId], references: [id])
+  sales    Sale[]
+
+  @@unique([tenantId, deviceId])
+  @@index([tenantId])
+  @@index([locationId])
+}
+
+model VatRate {
+  id         String   @id @default(cuid())
+  tenantId   String
+  name       String
+  rate       Int
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  tenant        Tenant                @relation(fields: [tenantId], references: [id])
+  products      Product[]
+  receiptItems  PurchaseReceiptItem[]
+  transferItems TransferDocItem[]
+
+  @@unique([tenantId, rate])
+  @@index([tenantId])
+}
+
+model Uom {
+  id               String   @id @default(cuid())
+  tenantId         String
+  code             String
+  name             String
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+
+  tenant           Tenant                 @relation(fields: [tenantId], references: [id])
+  stockProducts    Product[]              @relation("StockUom")
+  purchaseProducts Product[]              @relation("PurchaseUom")
+  receiptItems     PurchaseReceiptItem[]
+  transferItems    TransferDocItem[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+}
+
+model Department {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id])
+  categories Category[]
+  products   Product[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+model Category {
+  id             String   @id @default(cuid())
+  tenantId       String
+  departmentId   String?
+  name           String
+  imageUrl       String?
+  isActive       Boolean  @default(true)
+  isVisibleInPos Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id])
+  department Department? @relation(fields: [departmentId], references: [id])
+  products   Product[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@index([departmentId])
+}
+
+model SkuCounter {
+  id        String   @id @default(cuid())
+  tenantId  String
+  key       String
+  value     Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+}
+
+model Product {
+  id              String       @id @default(cuid())
+  tenantId        String
+
+  sku             String
+  name            String
+  imageUrl        String?
+  class           ProductClass @default(PRODUS_FIN)
+
+  vatRateId       String
+  uomId           String
+  purchaseUomId   String?
+  purchaseFactor  Decimal      @default(1)
+
+  departmentId    String?
+  categoryId      String?
+
+  price           Decimal      @default(0)
+  isActive        Boolean      @default(true)
+  isVisibleInPos  Boolean      @default(true)
+  isSgr           Boolean      @default(false)
+  sgrValue        Decimal      @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant        Tenant                @relation(fields: [tenantId], references: [id])
+  vatRate       VatRate               @relation(fields: [vatRateId], references: [id])
+  uom           Uom                   @relation("StockUom", fields: [uomId], references: [id])
+  purchaseUom   Uom?                  @relation("PurchaseUom", fields: [purchaseUomId], references: [id])
+  department    Department?           @relation(fields: [departmentId], references: [id])
+  category      Category?             @relation(fields: [categoryId], references: [id])
+
+  barcodes                  ProductBarcode[]
+  saleItems                 SaleItem[]
+  stockBalances             StockBalance[]
+  stockMoves                StockMove[]
+  receiptItems              PurchaseReceiptItem[]
+  transferItems             TransferDocItem[]
+  consumptionItems          ConsumptionDocItem[] @relation("ConsumptionIngredientProduct")
+  finishedConsumptionItems  ConsumptionDocItem[] @relation("ConsumptionFinishedProduct")
+  productionItems           ProductionDocItem[]
+
+  recipe        Recipe?               @relation("RecipeProduct")
+  usedInRecipes RecipeItem[]          @relation("RecipeIngredientProduct")
+
+  @@unique([tenantId, sku])
+  @@index([tenantId])
+  @@index([tenantId, name])
+  @@index([departmentId])
+  @@index([categoryId])
+  @@index([purchaseUomId])
+}
+
+model Recipe {
+  id          String       @id @default(cuid())
+  tenantId    String
+  productId   String       @unique
+  code        String?
+  name        String?
+  notes       String?
+  yieldQty    Decimal      @default(1)
+  status      RecipeStatus @default(DRAFT)
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product     Product      @relation("RecipeProduct", fields: [productId], references: [id], onDelete: Cascade)
+  items       RecipeItem[]
+
+  @@index([tenantId])
+  @@index([productId])
+  @@index([status])
+}
+
+model RecipeItem {
+  id                String   @id @default(cuid())
+  recipeId          String
+  ingredientId      String
+  qty               Decimal
+  lossPercent       Decimal  @default(0)
+  sortOrder         Int      @default(0)
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  recipe            Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  ingredient        Product  @relation("RecipeIngredientProduct", fields: [ingredientId], references: [id])
+
+  @@index([recipeId])
+  @@index([ingredientId])
+  @@index([sortOrder])
+  @@unique([recipeId, ingredientId])
+}
+
+model ProductBarcode {
+  id        String   @id @default(cuid())
+  tenantId  String
+  productId String
+  barcode   String
+  createdAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@unique([tenantId, barcode])
+  @@index([tenantId])
+  @@index([productId])
+}
+
+model Supplier {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  code      String?
+  cif       String?
+  regCom    String?
+  address   String?
+  city      String?
+  country   String?
+  phone     String?
+  email     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant   Tenant            @relation(fields: [tenantId], references: [id])
+  receipts PurchaseReceipt[]
+
+  @@index([tenantId])
+  @@index([tenantId, name])
+}
+
+model Sale {
+  id           String      @id @default(cuid())
+  tenantId     String
+  locationId   String
+  terminalId   String?
+
+  clientSaleId String?
+  receiptNo    String?
+  soldAt       DateTime
+
+  total        Decimal     @default(0)
+
+  paymentType  PaymentType @default(CASH)
+  cashAmount   Decimal?    @db.Decimal(12, 2)
+  cardAmount   Decimal?    @db.Decimal(12, 2)
+  operatorName String?
+
+  createdAt    DateTime    @default(now())
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  location Location  @relation(fields: [locationId], references: [id])
+  terminal Terminal? @relation(fields: [terminalId], references: [id])
+
+  items SaleItem[]
+  consumptionDocs ConsumptionDoc[]
+
+  @@index([tenantId])
+  @@index([locationId])
+  @@index([terminalId])
+  @@index([soldAt])
+}
+
+model SaleItem {
+  id        String   @id @default(cuid())
+  saleId    String
+  productId String
+
+  qty       Decimal
+  unitPrice Decimal
+  vatRate   Int
+
+  sale    Sale    @relation(fields: [saleId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([saleId])
+  @@index([productId])
+}
+
+model StockBalance {
+  id         String   @id @default(cuid())
+  tenantId   String
+  locationId String
+  productId  String
+
+  qty        Decimal  @default(0)
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
+  location Location @relation(fields: [locationId], references: [id])
+  product  Product  @relation(fields: [productId], references: [id])
+
+  @@unique([tenantId, locationId, productId])
+  @@index([tenantId])
+  @@index([locationId])
+  @@index([productId])
+}
+
+model StockMove {
+  id          String        @id @default(cuid())
+  tenantId    String
+  locationId  String
+  productId   String
+
+  type        StockMoveType
+  qty         Decimal
+
+  refType     RefType?
+  refId       String?
+  note        String?
+
+  createdAt   DateTime @default(now())
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
+  location Location @relation(fields: [locationId], references: [id])
+  product  Product  @relation(fields: [productId], references: [id])
+
+  @@index([tenantId])
+  @@index([locationId])
+  @@index([productId])
+  @@index([refType, refId])
+}
+
+model ConsumptionDoc {
+  id          String   @id @default(cuid())
+  tenantId    String
+  locationId  String
+  saleId      String?
+  docNo       String
+  docDate     DateTime
+  note        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  location    Location @relation(fields: [locationId], references: [id])
+  sale        Sale?    @relation(fields: [saleId], references: [id])
+
+  items       ConsumptionDocItem[]
+
+  @@index([tenantId])
+  @@index([locationId])
+  @@index([saleId])
+  @@index([docDate])
+  @@unique([tenantId, docNo])
+}
+
+model ConsumptionDocItem {
+  id                String   @id @default(cuid())
+  consumptionDocId  String
+  finishedProductId String?
+  ingredientId      String
+  qty               Decimal
+  note              String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  consumptionDoc    ConsumptionDoc @relation(fields: [consumptionDocId], references: [id], onDelete: Cascade)
+  finishedProduct   Product?       @relation("ConsumptionFinishedProduct", fields: [finishedProductId], references: [id])
+  ingredient        Product        @relation("ConsumptionIngredientProduct", fields: [ingredientId], references: [id])
+
+  @@index([consumptionDocId])
+  @@index([finishedProductId])
+  @@index([ingredientId])
+}
+
+model ProductionDoc {
+  id          String   @id @default(cuid())
+  tenantId    String
+  locationId  String
+  docNo       String
+  docDate     DateTime
+  note        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  location    Location @relation(fields: [locationId], references: [id])
+
+  items       ProductionDocItem[]
+
+  @@index([tenantId])
+  @@index([locationId])
+  @@index([docDate])
+  @@unique([tenantId, docNo])
+}
+
+model ProductionDocItem {
+  id               String   @id @default(cuid())
+  productionDocId  String
+  productId        String
+  qty              Decimal
+  createdAt        DateTime @default(now())
+
+  productionDoc    ProductionDoc @relation(fields: [productionDocId], references: [id], onDelete: Cascade)
+  product          Product       @relation(fields: [productId], references: [id])
+
+  @@index([productionDocId])
+  @@index([productId])
+}
+
+model PurchaseReceipt {
+  id             String                @id @default(cuid())
+  tenantId       String
+  locationId     String
+  supplierId     String?
+  supplierName   String?
+  supplierCode   String?
+  docNo          String
+  docDate        DateTime
+  currency       CurrencyCode          @default(RON)
+  fxRate         Decimal               @default(1)
+
+  totalNetFc     Decimal               @default(0)
+  totalVatFc     Decimal               @default(0)
+  totalGrossFc   Decimal               @default(0)
+
+  totalNetRon    Decimal               @default(0)
+  totalVatRon    Decimal               @default(0)
+  totalGrossRon  Decimal               @default(0)
+
+  note           String?
+  status         PurchaseReceiptStatus @default(DRAFT)
+
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  tenant         Tenant                @relation(fields: [tenantId], references: [id])
+  location       Location              @relation(fields: [locationId], references: [id])
+  supplier       Supplier?             @relation(fields: [supplierId], references: [id])
+  items          PurchaseReceiptItem[]
+
+  @@index([tenantId])
+  @@index([locationId])
+  @@index([supplierId])
+  @@index([status])
+  @@index([docDate])
+  @@unique([tenantId, docNo])
+}
+
+model PurchaseReceiptItem {
+  id               String           @id @default(cuid())
+  receiptId        String
+  productId        String
+  uomId            String
+
+  qty              Decimal         @default(0)
+  conversionFactor Decimal         @default(1)
+  stockQty         Decimal         @default(0)
+
+  unitCostNetFc    Decimal         @default(0)
+  unitCostNetRon   Decimal         @default(0)
+
+  lineNetFc        Decimal         @default(0)
+  lineVatFc        Decimal         @default(0)
+  lineGrossFc      Decimal         @default(0)
+
+  lineNetRon       Decimal         @default(0)
+  lineVatRon       Decimal         @default(0)
+  lineGrossRon     Decimal         @default(0)
+
+  vatRateId        String?
+  vatRateValue     Decimal         @default(19)
+
+  createdAt        DateTime        @default(now())
+
+  receipt          PurchaseReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  product          Product         @relation(fields: [productId], references: [id])
+  uom              Uom             @relation(fields: [uomId], references: [id])
+  vatRate          VatRate?        @relation(fields: [vatRateId], references: [id])
+
+  @@index([receiptId])
+  @@index([productId])
+  @@index([uomId])
+  @@index([vatRateId])
+}
+
+model TransferDoc {
+  id                String         @id @default(cuid())
+  tenantId          String
+  fromLocationId    String
+  toLocationId      String
+  docNo             String
+  docDate           DateTime
+  note              String?
+  reason            String?
+  delegateName      String?
+  delegateCi        String?
+  vehicle           String?
+  vehicleNo         String?
+  senderName        String?
+  receiverName      String?
+  approvedBy        String?
+  totalQty          Decimal        @default(0)
+  totalValue        Decimal        @default(0)
+  status            TransferStatus @default(DRAFT)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  tenant            Tenant         @relation(fields: [tenantId], references: [id])
+  fromLocation      Location       @relation("TransferFromLocation", fields: [fromLocationId], references: [id])
+  toLocation        Location       @relation("TransferToLocation", fields: [toLocationId], references: [id])
+  items             TransferDocItem[]
+
+  @@unique([tenantId, docNo])
+  @@index([tenantId])
+  @@index([fromLocationId])
+  @@index([toLocationId])
+  @@index([status])
+  @@index([docDate])
+}
+
+model TransferDocItem {
+  id               String      @id @default(cuid())
+  transferId       String
+  productId        String
+  uomId            String
+  qty              Decimal     @default(0)
+  unitPrice        Decimal     @default(0)
+  lineValue        Decimal     @default(0)
+  vatRateId        String?
+  vatRateValue     Decimal     @default(0)
+  createdAt        DateTime    @default(now())
+
+  transfer         TransferDoc @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  product          Product     @relation(fields: [productId], references: [id])
+  uom              Uom         @relation(fields: [uomId], references: [id])
+  vatRate          VatRate?    @relation(fields: [vatRateId], references: [id])
+
+  @@index([transferId])
+  @@index([productId])
+  @@index([uomId])
+  @@index([vatRateId])
+}

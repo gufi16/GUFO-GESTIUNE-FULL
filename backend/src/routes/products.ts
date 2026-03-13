@@ -1,0 +1,773 @@
+import { Router } from "express"
+import path from "path"
+import fs from "fs"
+import multer from "multer"
+import { prisma } from "../lib/prisma"
+import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
+
+const router = Router()
+
+const uploadsDir = path.join(process.cwd(), "uploads", "products")
+fs.mkdirSync(uploadsDir, { recursive: true })
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, uploadsDir)
+  },
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname || "").toLowerCase()
+    const safeExt = ext || ".jpg"
+    const baseName = path
+      .basename(file.originalname || "image", ext)
+      .replace(/[^a-zA-Z0-9-_]/g, "-")
+      .replace(/-+/g, "-")
+      .slice(0, 50)
+
+    cb(null, `${Date.now()}-${baseName}${safeExt}`)
+  }
+})
+
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024
+  },
+  fileFilter: (_req, file, cb) => {
+    const ok = /^image\/(jpeg|jpg|png|webp|gif)$/i.test(file.mimetype)
+    if (!ok) {
+      cb(new Error("Sunt permise doar fișiere imagine: jpg, png, webp, gif."))
+      return
+    }
+    cb(null, true)
+  }
+})
+
+router.use(requireAuth)
+
+const RECIPE_REQUIRED_CLASSES = ["PRODUS_FIN", "SEMIFABRICATE"]
+const RECIPE_INGREDIENT_CLASSES = ["MATERIE_PRIMA", "MARFA", "SEMIFABRICATE"]
+const PRODUCT_CLASS_RULES: Record<
+  string,
+  {
+    allowPrice: boolean
+    allowPos: boolean
+    allowSgr: boolean
+  }
+> = {
+  MATERIE_PRIMA: { allowPrice: false, allowPos: false, allowSgr: false },
+  SEMIFABRICATE: { allowPrice: false, allowPos: false, allowSgr: false },
+  PRODUS_FIN: { allowPrice: true, allowPos: true, allowSgr: true },
+  MARFA: { allowPrice: true, allowPos: true, allowSgr: true },
+  AMBALAJE: { allowPrice: false, allowPos: false, allowSgr: false },
+  CONSUMABILE: { allowPrice: false, allowPos: false, allowSgr: false },
+  REZIDUALE: { allowPrice: false, allowPos: false, allowSgr: false },
+  ALTE_MATERIALE: { allowPrice: false, allowPos: false, allowSgr: false }
+}
+const ALL_PRODUCT_CLASSES = Object.keys(PRODUCT_CLASS_RULES)
+
+function getClassRules(classValue: string) {
+  return PRODUCT_CLASS_RULES[classValue] || null
+}
+
+function normalizeProductFlags(classValue: string, payload: { price: number; isVisibleInPos: boolean; isSgr: boolean }) {
+  const rules = getClassRules(classValue)
+
+  if (!rules) {
+    throw new Error("Clasificare produs invalidă.")
+  }
+
+  return {
+    price: rules.allowPrice ? payload.price : 0,
+    isVisibleInPos: rules.allowPos ? payload.isVisibleInPos : false,
+    isSgr: rules.allowSgr ? payload.isSgr : false
+  }
+}
+
+function toNumber(value: any) {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : 0
+}
+
+function toNullableText(value: any) {
+  const text = String(value || "").trim()
+  return text || null
+}
+
+function padNumber(value: number, size = 6) {
+  return String(value).padStart(size, "0")
+}
+
+function normalizeImageUrl(value: any) {
+  const text = String(value || "").trim()
+  return text || null
+}
+
+function buildPublicImageUrl(req: any, folder: "products" | "categories", filename: string) {
+  return `${req.protocol}://${req.get("host")}/uploads/${folder}/${filename}`
+}
+
+router.post(
+  "/api/v1/products/upload-image",
+  upload.single("image"),
+  async (req: AuthedRequest, res) => {
+    if (!req.file) {
+      return res.status(400).json({ ok: false, error: "Nu ai selectat nicio imagine." })
+    }
+
+    return res.json({
+      ok: true,
+      imageUrl: buildPublicImageUrl(req, "products", req.file.filename)
+    })
+  }
+)
+
+router.get("/api/v1/products", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const q = String(req.query.q || "").trim()
+
+  const items = await prisma.product.findMany({
+    where: {
+      tenantId,
+      ...(q
+        ? {
+            OR: [
+              { name: { contains: q, mode: "insensitive" } },
+              { sku: { contains: q, mode: "insensitive" } }
+            ]
+          }
+        : {})
+    },
+    include: {
+      vatRate: true,
+      uom: true,
+      purchaseUom: true,
+      department: true,
+      category: {
+        include: {
+          department: true
+        }
+      },
+      recipe: {
+        include: {
+          items: true
+        }
+      }
+    },
+    orderBy: { name: "asc" }
+  })
+
+  res.json({ ok: true, items })
+})
+
+router.post("/api/v1/products", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+
+  const name = String(req.body?.name || "").trim()
+  const imageUrl = normalizeImageUrl(req.body?.imageUrl)
+  const vatRateId = String(req.body?.vatRateId || "").trim()
+  const uomId = String(req.body?.uomId || "").trim()
+  const purchaseUomIdRaw = String(req.body?.purchaseUomId || "").trim()
+  const purchaseUomId = purchaseUomIdRaw || null
+  const purchaseFactor = toNumber(req.body?.purchaseFactor || 1)
+  const price = toNumber(req.body?.price || 0)
+  const categoryIdRaw = String(req.body?.categoryId || "").trim()
+  const categoryId = categoryIdRaw || null
+  const classValue = String(req.body?.class || "MARFA").trim()
+  const requestedIsActive = req.body?.isActive === undefined ? true : Boolean(req.body?.isActive)
+  const requestedVisibleInPos =
+    req.body?.isVisibleInPos === undefined ? true : Boolean(req.body?.isVisibleInPos)
+  const requestedIsSgr = req.body?.isSgr === undefined ? false : Boolean(req.body?.isSgr)
+
+  if (!ALL_PRODUCT_CLASSES.includes(classValue)) {
+    return res.status(400).json({ ok: false, error: "Clasificare produs invalidă." })
+  }
+
+  const { price: normalizedPrice, isVisibleInPos, isSgr } = normalizeProductFlags(classValue, {
+    price,
+    isVisibleInPos: requestedVisibleInPos,
+    isSgr: requestedIsSgr
+  })
+
+  if (!name) {
+    return res.status(400).json({ ok: false, error: "Denumirea produsului este obligatorie." })
+  }
+
+  if (!vatRateId) {
+    return res.status(400).json({ ok: false, error: "TVA este obligatoriu." })
+  }
+
+  if (!uomId) {
+    return res.status(400).json({ ok: false, error: "UM este obligatorie." })
+  }
+
+  if (purchaseFactor <= 0) {
+    return res.status(400).json({ ok: false, error: "Factorul trebuie să fie mai mare decât 0." })
+  }
+
+  const [vatRate, uom, purchaseUom, category] = await Promise.all([
+    prisma.vatRate.findFirst({
+      where: {
+        id: vatRateId,
+        tenantId
+      }
+    }),
+    prisma.uom.findFirst({
+      where: {
+        id: uomId,
+        tenantId
+      }
+    }),
+    purchaseUomId
+      ? prisma.uom.findFirst({
+          where: {
+            id: purchaseUomId,
+            tenantId
+          }
+        })
+      : Promise.resolve(null),
+    categoryId
+      ? prisma.category.findFirst({
+          where: {
+            id: categoryId,
+            tenantId
+          },
+          include: {
+            department: true
+          }
+        })
+      : Promise.resolve(null)
+  ])
+
+  if (!vatRate) {
+    return res.status(404).json({ ok: false, error: "TVA inexistent." })
+  }
+
+  if (!uom) {
+    return res.status(404).json({ ok: false, error: "UM inexistentă." })
+  }
+
+  if (purchaseUomId && !purchaseUom) {
+    return res.status(404).json({ ok: false, error: "UM achiziție inexistentă." })
+  }
+
+  if (categoryId && !category) {
+    return res.status(404).json({ ok: false, error: "Categoria nu există." })
+  }
+
+  try {
+    const item = await prisma.$transaction(async (tx) => {
+      const counter = await tx.skuCounter.upsert({
+        where: {
+          tenantId_key: {
+            tenantId,
+            key: "product"
+          }
+        },
+        update: {
+          value: {
+            increment: 1
+          }
+        },
+        create: {
+          tenantId,
+          key: "product",
+          value: 1
+        }
+      })
+
+      const finalSku = padNumber(counter.value)
+
+      const existingSku = await tx.product.findFirst({
+        where: {
+          tenantId,
+          sku: finalSku
+        }
+      })
+
+      if (existingSku) {
+        throw new Error("Există deja un produs cu acest cod.")
+      }
+
+      const forcedInactiveBecauseMissingRecipe = RECIPE_REQUIRED_CLASSES.includes(classValue)
+
+      const created = await tx.product.create({
+        data: {
+          tenantId,
+          sku: finalSku,
+          name,
+          imageUrl,
+          class: classValue as any,
+          vatRateId,
+          uomId,
+          purchaseUomId: purchaseUomId || uomId,
+          purchaseFactor,
+          categoryId,
+          departmentId: category?.departmentId || null,
+          price: normalizedPrice,
+          isActive: forcedInactiveBecauseMissingRecipe ? false : requestedIsActive,
+          isVisibleInPos,
+          isSgr,
+          sgrValue: isSgr ? 0.5 : 0
+        },
+        include: {
+          vatRate: true,
+          uom: true,
+          purchaseUom: true,
+          department: true,
+          category: {
+            include: {
+              department: true
+            }
+          },
+          recipe: {
+            include: {
+              items: true
+            }
+          }
+        }
+      })
+
+      return {
+        ...created,
+        forcedInactiveBecauseMissingRecipe
+      }
+    })
+
+    res.json({ ok: true, item })
+  } catch (e: any) {
+    res.status(400).json({ ok: false, error: e?.message || "Nu am putut salva produsul." })
+  }
+})
+
+router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const id = String(req.params.id)
+
+  const name = String(req.body?.name || "").trim()
+  const imageUrl = normalizeImageUrl(req.body?.imageUrl)
+  const vatRateId = String(req.body?.vatRateId || "").trim()
+  const uomId = String(req.body?.uomId || "").trim()
+  const purchaseUomIdRaw = String(req.body?.purchaseUomId || "").trim()
+  const purchaseUomId = purchaseUomIdRaw || null
+  const purchaseFactor = toNumber(req.body?.purchaseFactor || 1)
+  const price = toNumber(req.body?.price || 0)
+  const categoryIdRaw = String(req.body?.categoryId || "").trim()
+  const categoryId = categoryIdRaw || null
+  const classValue = String(req.body?.class || "MARFA").trim()
+  const requestedIsActive = req.body?.isActive === undefined ? true : Boolean(req.body?.isActive)
+  const requestedVisibleInPos =
+    req.body?.isVisibleInPos === undefined ? true : Boolean(req.body?.isVisibleInPos)
+  const requestedIsSgr = req.body?.isSgr === undefined ? false : Boolean(req.body?.isSgr)
+
+  if (!ALL_PRODUCT_CLASSES.includes(classValue)) {
+    return res.status(400).json({ ok: false, error: "Clasificare produs invalidă." })
+  }
+
+  const { price: normalizedPrice, isVisibleInPos, isSgr } = normalizeProductFlags(classValue, {
+    price,
+    isVisibleInPos: requestedVisibleInPos,
+    isSgr: requestedIsSgr
+  })
+
+  if (!name) {
+    return res.status(400).json({ ok: false, error: "Denumirea produsului este obligatorie." })
+  }
+
+  if (!vatRateId) {
+    return res.status(400).json({ ok: false, error: "TVA este obligatoriu." })
+  }
+
+  if (!uomId) {
+    return res.status(400).json({ ok: false, error: "UM este obligatorie." })
+  }
+
+  if (purchaseFactor <= 0) {
+    return res.status(400).json({ ok: false, error: "Factorul trebuie să fie mai mare decât 0." })
+  }
+
+  const current = await prisma.product.findFirst({
+    where: {
+      id,
+      tenantId
+    }
+  })
+
+  if (!current) {
+    return res.status(404).json({ ok: false, error: "Produsul nu există." })
+  }
+
+  const [vatRate, uom, purchaseUom, category, existingRecipe] = await Promise.all([
+    prisma.vatRate.findFirst({
+      where: {
+        id: vatRateId,
+        tenantId
+      }
+    }),
+    prisma.uom.findFirst({
+      where: {
+        id: uomId,
+        tenantId
+      }
+    }),
+    purchaseUomId
+      ? prisma.uom.findFirst({
+          where: {
+            id: purchaseUomId,
+            tenantId
+          }
+        })
+      : Promise.resolve(null),
+    categoryId
+      ? prisma.category.findFirst({
+          where: {
+            id: categoryId,
+            tenantId
+          },
+          include: {
+            department: true
+          }
+        })
+      : Promise.resolve(null),
+    prisma.recipe.findFirst({
+      where: {
+        tenantId,
+        productId: id
+      }
+    })
+  ])
+
+  if (!vatRate) {
+    return res.status(404).json({ ok: false, error: "TVA inexistent." })
+  }
+
+  if (!uom) {
+    return res.status(404).json({ ok: false, error: "UM inexistentă." })
+  }
+
+  if (purchaseUomId && !purchaseUom) {
+    return res.status(404).json({ ok: false, error: "UM achiziție inexistentă." })
+  }
+
+  if (categoryId && !category) {
+    return res.status(404).json({ ok: false, error: "Categoria nu există." })
+  }
+
+  try {
+    const forcedInactiveBecauseMissingRecipe =
+      RECIPE_REQUIRED_CLASSES.includes(classValue) && !existingRecipe
+
+    const item = await prisma.product.update({
+      where: { id },
+      data: {
+        name,
+        imageUrl,
+        class: classValue as any,
+        vatRateId,
+        uomId,
+        purchaseUomId: purchaseUomId || uomId,
+        purchaseFactor,
+        categoryId,
+        departmentId: category?.departmentId || null,
+        price: normalizedPrice,
+        isActive: forcedInactiveBecauseMissingRecipe ? false : requestedIsActive,
+        isVisibleInPos,
+        isSgr,
+        sgrValue: isSgr ? 0.5 : 0
+      },
+      include: {
+        vatRate: true,
+        uom: true,
+        purchaseUom: true,
+        department: true,
+        category: {
+          include: {
+            department: true
+          }
+        },
+        recipe: {
+          include: {
+            items: true
+          }
+        }
+      }
+    })
+
+    res.json({
+      ok: true,
+      item: {
+        ...item,
+        forcedInactiveBecauseMissingRecipe
+      }
+    })
+  } catch {
+    res.status(400).json({ ok: false, error: "Nu am putut actualiza produsul." })
+  }
+})
+
+router.get("/api/v1/products/:id/recipe", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const productId = String(req.params.id)
+
+  const product = await prisma.product.findFirst({
+    where: {
+      id: productId,
+      tenantId
+    },
+    include: {
+      uom: true
+    }
+  })
+
+  if (!product) {
+    return res.status(404).json({ ok: false, error: "Produsul nu există." })
+  }
+
+  const recipe = await prisma.recipe.findFirst({
+    where: {
+      tenantId,
+      productId
+    },
+    include: {
+      items: {
+        include: {
+          ingredient: {
+            include: {
+              uom: true
+            }
+          }
+        },
+        orderBy: {
+          sortOrder: "asc"
+        }
+      }
+    }
+  })
+
+  return res.json({
+    ok: true,
+    product,
+    recipe
+  })
+})
+
+router.post("/api/v1/products/:id/recipe", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const productId = String(req.params.id)
+
+  const product = await prisma.product.findFirst({
+    where: {
+      id: productId,
+      tenantId
+    }
+  })
+
+  if (!product) {
+    return res.status(404).json({ ok: false, error: "Produsul nu există." })
+  }
+
+  if (product.class !== "PRODUS_FIN" && product.class !== "SEMIFABRICATE") {
+    return res.status(400).json({
+      ok: false,
+      error: "Rețetarul se poate defini doar pentru PRODUS_FIN sau SEMIFABRICATE."
+    })
+  }
+
+  const code = toNullableText(req.body?.code)
+  const name = toNullableText(req.body?.name)
+  const notes = toNullableText(req.body?.notes)
+  const status = String(req.body?.status || "DRAFT").trim()
+  const yieldQty = toNumber(req.body?.yieldQty || 1)
+  const isActive = req.body?.isActive === undefined ? true : Boolean(req.body?.isActive)
+  const activateProduct = req.body?.activateProduct === undefined ? true : Boolean(req.body?.activateProduct)
+  const itemsRaw = Array.isArray(req.body?.items) ? req.body.items : []
+
+  if (yieldQty <= 0) {
+    return res.status(400).json({ ok: false, error: "Randamentul trebuie să fie mai mare decât 0." })
+  }
+
+  if (!["DRAFT", "ACTIVE", "INACTIVE"].includes(status)) {
+    return res.status(400).json({ ok: false, error: "Status rețetar invalid." })
+  }
+
+  const normalizedItems: Array<{
+    ingredientId: string
+    qty: number
+    lossPercent: number
+    sortOrder: number
+    notes: string | null
+  }> = itemsRaw.map((line: any, index: number) => ({
+    ingredientId: String(line?.ingredientId || "").trim(),
+    qty: toNumber(line?.qty || 0),
+    lossPercent: toNumber(line?.lossPercent || 0),
+    sortOrder: Number.isFinite(Number(line?.sortOrder)) ? Number(line.sortOrder) : index + 1,
+    notes: toNullableText(line?.notes)
+  }))
+
+  if (!normalizedItems.length) {
+    return res.status(400).json({ ok: false, error: "Adaugă cel puțin un ingredient în rețetar." })
+  }
+
+  for (const line of normalizedItems) {
+    if (!line.ingredientId) {
+      return res.status(400).json({ ok: false, error: "Există ingrediente fără produs selectat." })
+    }
+    if (line.ingredientId === productId) {
+      return res.status(400).json({ ok: false, error: "Produsul nu poate fi ingredient în propriul rețetar." })
+    }
+    if (line.qty <= 0) {
+      return res.status(400).json({ ok: false, error: "Cantitatea ingredientului trebuie să fie mai mare decât 0." })
+    }
+    if (line.lossPercent < 0) {
+      return res.status(400).json({ ok: false, error: "Pierderea nu poate fi negativă." })
+    }
+  }
+
+  const ingredientIds = Array.from(new Set(normalizedItems.map((x) => x.ingredientId)))
+  const ingredients = await prisma.product.findMany({
+    where: {
+      tenantId,
+      id: { in: ingredientIds }
+    },
+    include: {
+      uom: true
+    }
+  })
+
+  if (ingredients.length !== ingredientIds.length) {
+    return res.status(400).json({ ok: false, error: "Unul sau mai multe ingrediente nu există." })
+  }
+
+  const invalidIngredient = ingredients.find(
+    (ingredient) => !RECIPE_INGREDIENT_CLASSES.includes(String(ingredient.class))
+  )
+
+  if (invalidIngredient) {
+    return res.status(400).json({
+      ok: false,
+      error:
+        "În rețetar sunt permise doar ingrediente din clasele MATERIE_PRIMA, MARFA sau SEMIFABRICATE."
+    })
+  }
+
+  try {
+    const recipe = await prisma.$transaction(async (tx) => {
+      const existing = await tx.recipe.findFirst({
+        where: {
+          tenantId,
+          productId
+        }
+      })
+
+      const savedRecipe = existing
+        ? await tx.recipe.update({
+            where: { id: existing.id },
+            data: {
+              code,
+              name,
+              notes,
+              status: status as any,
+              yieldQty,
+              isActive
+            }
+          })
+        : await tx.recipe.create({
+            data: {
+              tenantId,
+              productId,
+              code,
+              name,
+              notes,
+              status: status as any,
+              yieldQty,
+              isActive
+            }
+          })
+
+      await tx.recipeItem.deleteMany({
+        where: {
+          recipeId: savedRecipe.id
+        }
+      })
+
+      if (normalizedItems.length) {
+        await tx.recipeItem.createMany({
+          data: normalizedItems.map((line) => ({
+            recipeId: savedRecipe.id,
+            ingredientId: line.ingredientId,
+            qty: line.qty,
+            lossPercent: line.lossPercent,
+            sortOrder: line.sortOrder,
+            notes: line.notes
+          }))
+        })
+      }
+
+      if (activateProduct) {
+        await tx.product.update({
+          where: { id: productId },
+          data: { isActive: true }
+        })
+      }
+
+      return tx.recipe.findUnique({
+        where: {
+          id: savedRecipe.id
+        },
+        include: {
+          items: {
+            include: {
+              ingredient: {
+                include: {
+                  uom: true
+                }
+              }
+            },
+            orderBy: {
+              sortOrder: "asc"
+            }
+          },
+          product: true
+        }
+      })
+    })
+
+    return res.json({
+      ok: true,
+      recipe,
+      productActivated: activateProduct
+    })
+  } catch (e: any) {
+    return res.status(400).json({
+      ok: false,
+      error: e?.message || "Nu am putut salva rețetarul."
+    })
+  }
+})
+
+router.delete("/api/v1/products/:id", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const id = String(req.params.id)
+
+  const current = await prisma.product.findFirst({
+    where: {
+      id,
+      tenantId
+    }
+  })
+
+  if (!current) {
+    return res.status(404).json({ ok: false, error: "Produsul nu există." })
+  }
+
+  try {
+    await prisma.product.delete({
+      where: { id }
+    })
+
+    res.json({ ok: true })
+  } catch {
+    res.status(400).json({ ok: false, error: "Produsul este utilizat și nu poate fi șters." })
+  }
+})
+
+export default router
