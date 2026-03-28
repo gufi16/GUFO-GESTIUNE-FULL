@@ -154,8 +154,8 @@ export default function Sidebar() {
                   DT
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold text-[#17324D]">Demo tenant</div>
-                  <div className="mt-1 truncate text-xs text-slate-500">demo-tenant • demo-location</div>
+                  <div className="truncate text-sm font-semibold text-[#17324D]">Tenant activ</div>
+                  <div className="mt-1 truncate text-xs text-slate-500">cont conectat</div>
                 </div>
               </div>
             </div>

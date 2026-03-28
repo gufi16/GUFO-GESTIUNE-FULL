@@ -23,7 +23,7 @@ export function requireAuth(req: AuthedRequest, res: Response, next: NextFunctio
     return res.status(401).json({ ok: false, error: "Missing token" })
   }
 
-  if (token === "DEV_CONTROL_PANEL_TOKEN") {
+  if (process.env.NODE_ENV !== "production" && token === "DEV_CONTROL_PANEL_TOKEN") {
     req.auth = {
       userId: "dev-control-panel",
       tenantId: null,

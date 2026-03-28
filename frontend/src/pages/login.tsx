@@ -4,8 +4,8 @@ import { useNavigate } from "react-router-dom";
 
 export default function Login() {
   const nav = useNavigate();
-  const [email, setEmail] = useState("admin@demo.local");
-  const [password, setPassword] = useState("admin1234");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -37,6 +37,7 @@ export default function Login() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               autoComplete="username"
+              placeholder="Email"
             />
           </div>
 
@@ -48,6 +49,7 @@ export default function Login() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
+              placeholder="Parola"
             />
           </div>
 

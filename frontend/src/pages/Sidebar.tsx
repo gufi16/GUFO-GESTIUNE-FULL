@@ -269,9 +269,9 @@ export default function Sidebar() {
 
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                    <span className="truncate">Demo tenant</span>
+                    <span className="truncate">Tenant activ</span>
                   </div>
-                  <div className="mt-1 truncate text-xs text-slate-500">demo-tenant • demo-location</div>
+                  <div className="mt-1 truncate text-xs text-slate-500">cont conectat</div>
                 </div>
               </div>
             </div>

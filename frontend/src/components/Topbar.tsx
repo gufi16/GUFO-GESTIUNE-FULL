@@ -112,8 +112,8 @@ export default function Topbar() {
               <Sparkles size={18} />
             </div>
             <div className="text-sm">
-              <div className="font-semibold text-[#17324D]">Admin</div>
-              <div className="text-xs text-slate-500">demo@gufo.ro</div>
+              <div className="font-semibold text-[#17324D]">Cont activ</div>
+              <div className="text-xs text-slate-500">ERP</div>
             </div>
           </div>
         </div>

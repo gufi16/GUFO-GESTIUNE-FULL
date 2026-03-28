@@ -42,7 +42,8 @@ dotenv.config()
 const app = express()
 const PORT = Number(process.env.PORT || 3001)
 const CORS_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:5173"
-const JWT_SECRET = process.env.JWT_SECRET || "dev_secret"
+const JWT_SECRET =
+  process.env.JWT_SECRET || (process.env.NODE_ENV !== "production" ? "dev_secret" : "")
 
 const uploadsDir = path.join(process.cwd(), "uploads")
 const productUploadsDir = path.join(uploadsDir, "products")
@@ -58,6 +59,9 @@ app.use(morgan("dev"))
 app.use("/uploads", express.static(uploadsDir))
 
 function signPosToken(payload: { tenantId: string; terminalId: string; deviceId: string }) {
+  if (!JWT_SECRET) {
+    throw new Error("JWT_SECRET is required in production")
+  }
   return jwt.sign(payload, JWT_SECRET, { expiresIn: "30d" })
 }
 
@@ -137,10 +141,18 @@ app.post("/api/v1/admin/auth/login", async (req, res) => {
     return res.status(400).json({ ok: false, error: parsed.error.flatten() })
   }
 
-  const controlEmail = String(process.env.CONTROL_PANEL_EMAIL || "owner@gufo.local")
+  const controlEmail = String(
+    process.env.CONTROL_PANEL_EMAIL || (process.env.NODE_ENV !== "production" ? "owner@gufo.local" : "")
+  )
     .trim()
     .toLowerCase()
-  const controlPassword = String(process.env.CONTROL_PANEL_PASSWORD || "gufo1234")
+  const controlPassword = String(
+    process.env.CONTROL_PANEL_PASSWORD || (process.env.NODE_ENV !== "production" ? "gufo1234" : "")
+  )
+
+  if (!controlEmail || !controlPassword) {
+    return res.status(503).json({ ok: false, error: "Control Panel auth is not configured" })
+  }
 
   if (
     parsed.data.email.trim().toLowerCase() !== controlEmail ||
@@ -173,7 +185,10 @@ app.get("/api/v1/admin/me", requireAuth, async (req: AuthedRequest, res) => {
     ok: true,
     user_id: auth.userId,
     role: auth.role,
-    email: auth.email || process.env.CONTROL_PANEL_EMAIL || "owner@gufo.local",
+    email:
+      auth.email ||
+      process.env.CONTROL_PANEL_EMAIL ||
+      (process.env.NODE_ENV !== "production" ? "owner@gufo.local" : "owner"),
   })
 })
 

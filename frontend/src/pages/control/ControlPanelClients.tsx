@@ -194,7 +194,7 @@ export default function ControlPanelClients() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
-  const [ownerEmail, setOwnerEmail] = useState("owner@gufo.local")
+  const [ownerEmail, setOwnerEmail] = useState("")
   const [loggingOut, setLoggingOut] = useState(false)
   const [createdCredentials, setCreatedCredentials] = useState<{ clientName: string; email: string; password: string } | null>(null)
   const [form, setForm] = useState<CreateClientPayload>({
@@ -214,9 +214,9 @@ export default function ControlPanelClients() {
   async function loadOwnerProfile() {
     try {
       const profile = await controlMe()
-      setOwnerEmail(typeof (profile as any)?.email === "string" ? (profile as any).email : "owner@gufo.local")
+      setOwnerEmail(typeof (profile as any)?.email === "string" ? (profile as any).email : "Owner")
     } catch {
-      setOwnerEmail("owner@gufo.local")
+      setOwnerEmail("Owner")
     }
   }
 
