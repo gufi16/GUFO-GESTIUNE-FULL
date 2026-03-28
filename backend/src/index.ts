@@ -9,10 +9,12 @@ import jwt from "jsonwebtoken"
 import { z } from "zod"
 import fs from "fs"
 import path from "path"
+import crypto from "crypto"
 
 import { prisma } from "./lib/prisma"
-import { signAccessToken, verifySecret } from "./lib/auth"
+import { hashSecret, signAccessToken, verifySecret } from "./lib/auth"
 import { requireAuth, AuthedRequest } from "./middleware/requireAuth"
+import { hasSmtpConfig, sendMail } from "./lib/mailer"
 
 import productsRouter from "./routes/products"
 import metaRouter from "./routes/meta"
@@ -36,6 +38,7 @@ import salesInvoicesRouter from "./routes/salesInvoices"
 import customersRouter from "./routes/customers"
 import minutesDocsRouter from "./routes/minutesDocs"
 import incomingEfacturaRouter from "./routes/incomingEfactura"
+import usersRouter from "./routes/users"
 
 dotenv.config()
 
@@ -86,6 +89,15 @@ const LoginSchema = z.object({
 const ControlPanelLoginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(4),
+})
+
+const ForgotPasswordSchema = z.object({
+  email: z.string().email(),
+})
+
+const ResetPasswordSchema = z.object({
+  token: z.string().min(20),
+  password: z.string().min(6),
 })
 
 app.post("/api/v1/auth/login", async (req, res) => {
@@ -171,6 +183,146 @@ app.post("/api/v1/admin/auth/login", async (req, res) => {
   return res.json({
     ok: true,
     access_token: token,
+  })
+})
+
+app.post("/api/v1/auth/forgot-password", async (req, res) => {
+  const parsed = ForgotPasswordSchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res.status(400).json({ ok: false, error: parsed.error.flatten() })
+  }
+
+  if (!hasSmtpConfig()) {
+    return res.status(503).json({
+      ok: false,
+      error: "Resetarea parolei nu este configurata inca.",
+    })
+  }
+
+  const email = parsed.data.email.trim().toLowerCase()
+  const user = await prisma.user.findFirst({
+    where: {
+      email,
+      isActive: true,
+    },
+    include: {
+      tenant: {
+        select: {
+          name: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  })
+
+  if (!user) {
+    return res.json({
+      ok: true,
+      message: "Daca exista un cont pe acest email, am trimis instructiunile de resetare.",
+    })
+  }
+
+  await prisma.passwordResetToken.updateMany({
+    where: {
+      userId: user.id,
+      usedAt: null,
+      expiresAt: { gt: new Date() },
+    },
+    data: {
+      usedAt: new Date(),
+    },
+  })
+
+  const rawToken = crypto.randomBytes(32).toString("hex")
+  const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex")
+  const expiresAt = new Date(Date.now() + 1000 * 60 * 60)
+
+  await prisma.passwordResetToken.create({
+    data: {
+      tenantId: user.tenantId,
+      userId: user.id,
+      tokenHash,
+      expiresAt,
+    },
+  })
+
+  const publicBase =
+    String(process.env.PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "") ||
+    String(req.headers.origin || "").trim().replace(/\/+$/, "") ||
+    String(CORS_ORIGIN || "").trim().replace(/\/+$/, "")
+
+  const resetUrl = `${publicBase}/reset-password?token=${rawToken}`
+
+  await sendMail({
+    to: user.email,
+    subject: "Resetare parola Gufo ERP",
+    text: [
+      `Salut ${user.name},`,
+      "",
+      `Am primit o cerere de resetare a parolei pentru contul tau din ${user.tenant.name}.`,
+      `Acceseaza linkul de mai jos pentru a seta o parola noua:`,
+      resetUrl,
+      "",
+      "Linkul este valabil 60 de minute.",
+      "Daca nu ai cerut resetarea parolei, poti ignora acest mesaj.",
+    ].join("\n"),
+    html: `
+      <div style="font-family:Arial,sans-serif;color:#17324D">
+        <h2 style="margin-bottom:12px">Resetare parola Gufo ERP</h2>
+        <p>Salut <strong>${user.name}</strong>,</p>
+        <p>Am primit o cerere de resetare a parolei pentru contul tau din <strong>${user.tenant.name}</strong>.</p>
+        <p>
+          <a href="${resetUrl}" style="display:inline-block;padding:12px 18px;border-radius:10px;background:#17324D;color:#fff;text-decoration:none;font-weight:700">
+            Reseteaza parola
+          </a>
+        </p>
+        <p style="margin-top:12px">Sau foloseste direct acest link:</p>
+        <p><a href="${resetUrl}">${resetUrl}</a></p>
+        <p>Linkul este valabil 60 de minute.</p>
+      </div>
+    `,
+  })
+
+  return res.json({
+    ok: true,
+    message: "Daca exista un cont pe acest email, am trimis instructiunile de resetare.",
+  })
+})
+
+app.post("/api/v1/auth/reset-password", async (req, res) => {
+  const parsed = ResetPasswordSchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res.status(400).json({ ok: false, error: parsed.error.flatten() })
+  }
+
+  const tokenHash = crypto.createHash("sha256").update(parsed.data.token).digest("hex")
+  const resetToken = await prisma.passwordResetToken.findUnique({
+    where: { tokenHash },
+    include: {
+      user: true,
+    },
+  })
+
+  if (!resetToken || resetToken.usedAt || resetToken.expiresAt <= new Date() || !resetToken.user.isActive) {
+    return res.status(400).json({ ok: false, error: "Linkul de resetare este invalid sau expirat." })
+  }
+
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: resetToken.userId },
+      data: {
+        passwordHash: await hashSecret(parsed.data.password),
+      },
+    }),
+    prisma.passwordResetToken.update({
+      where: { id: resetToken.id },
+      data: { usedAt: new Date() },
+    }),
+  ])
+
+  return res.json({
+    ok: true,
+    message: "Parola a fost actualizata. Te poti autentifica din nou.",
   })
 })
 
@@ -604,6 +756,7 @@ app.use(stockRouter)
 app.use(purchaseRouter)
 app.use(minutesDocsRouter)
 app.use(incomingEfacturaRouter)
+app.use(usersRouter)
 app.use(companyRouter)
 app.use("/api/v1/purchase-receipts", purchaseReceiptsPdf)
 app.use(transferRouter)

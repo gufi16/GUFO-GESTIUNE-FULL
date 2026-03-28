@@ -215,6 +215,7 @@ model Tenant {
   minutesDocs            MinutesDoc[]
   salesInvoices          SalesInvoice[]
   incomingEInvoices      IncomingEInvoice[]
+  passwordResetTokens    PasswordResetToken[]
   efacturaLogs           EFacturaLog[]
   externalIntegrations   ExternalIntegration[]
   externalOrders         ExternalOrder[]
@@ -308,9 +309,27 @@ model User {
   updatedAt    DateTime @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
+  passwordResetTokens PasswordResetToken[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
+}
+
+model PasswordResetToken {
+  id         String   @id @default(cuid())
+  tenantId   String
+  userId     String
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model License {

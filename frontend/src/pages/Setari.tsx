@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import PageHeader from "../components/PageHeader"
 import { useNavigate } from "react-router-dom"
-import { ArrowRight, Building2, FileDigit, Percent, ReceiptText, RefreshCcw, Settings2 } from "lucide-react"
+import { ArrowRight, Building2, FileDigit, Percent, ReceiptText, RefreshCcw, Settings2, Users } from "lucide-react"
 import {
   DocumentMetric,
   InlineNotice,
@@ -37,6 +37,12 @@ const items = [
     route: "/setari/efactura",
     icon: ReceiptText,
   },
+  {
+    name: "Utilizatori ERP",
+    desc: "Administrezi administratorii, managerii, ospatarii si restul echipei.",
+    route: "/setari/utilizatori",
+    icon: Users,
+  },
 ]
 
 const allowedIntervals = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30]
@@ -54,7 +60,6 @@ export default function Setari() {
 
   useEffect(() => {
     loadPosSyncConfig()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function loadPosSyncConfig() {
@@ -129,10 +134,7 @@ export default function Setari() {
 
   return (
     <div className="space-y-3">
-      <PageHeader
-        badge="configurare"
-        title="Setari"
-      />
+      <PageHeader badge="configurare" title="Setari" />
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
         <DocumentMetric title="Module setari" value={items.length} tone="slate" />
@@ -144,7 +146,7 @@ export default function Setari() {
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-            {availableItems.map((item) => {
+        {availableItems.map((item) => {
           const Icon = item.icon
           return (
             <button

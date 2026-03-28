@@ -4,9 +4,10 @@ import AppShell from "./components/AppShell"
 import RequireAuth from "./components/RequireAuth"
 import RequireControlAuth from "./components/RequireControlAuth"
 import ControlPanelLayout from "./components/control/ControlPanelLayout"
+import ForgotPassword from "./pages/ForgotPassword"
 import Login from "./pages/login"
+import ResetPassword from "./pages/ResetPassword"
 import ControlPanelLogin from "./pages/control/ControlPanelLogin"
-
 import Dashboard from "./pages/Dashboard"
 import InregistrareDocument from "./pages/InregistrareDocument"
 import Gestiune from "./pages/Gestiune"
@@ -27,7 +28,6 @@ import TransferPage from "./pages/transfer"
 import FacturaPage from "./pages/factura"
 import ProcesVerbalPage from "./pages/proces-verbal"
 import FacturiPrimiteSPVPage from "./pages/FacturiPrimiteSPV"
-
 import UomPage from "./pages/uom"
 import DepartamentePage from "./pages/departamente"
 import CategoriiPage from "./pages/categorii"
@@ -35,7 +35,7 @@ import TvaPage from "./pages/tva"
 import FirmaPage from "./pages/Firma"
 import SetariNumerotarePage from "./pages/SetariNumerotare"
 import SetariEFacturaPage from "./pages/SetariEFactura"
-
+import UtilizatoriPage from "./pages/Utilizatori"
 import Productie from "./pages/Productie"
 import Rapoarte from "./pages/Rapoarte"
 import ControlPanelDashboard from "./pages/control/ControlPanelDashboard"
@@ -65,10 +65,9 @@ export default function App() {
 
   return (
     <Routes>
-      {/* LOGIN CLIENT ERP */}
       <Route path="/login" element={<Login />} />
-
-      {/* LOGIN CONTROL PANEL */}
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/cp/login" element={<ControlPanelLogin />} />
 
       <Route
@@ -80,7 +79,6 @@ export default function App() {
         }
       />
 
-      {/* CONTROL PANEL - DOAR OWNER */}
       <Route
         element={
           <RequireControlAuth>
@@ -97,7 +95,6 @@ export default function App() {
         <Route path="/control-panel/audit" element={<ControlPanelDashboard />} />
       </Route>
 
-      {/* ERP CLIENT */}
       <Route
         element={
           <RequireAuth>
@@ -151,8 +148,9 @@ export default function App() {
         <Route path="/setari/tva" element={<RequireModule code="settings"><TvaPage /></RequireModule>} />
         <Route path="/setari/numerotare" element={<RequireModule code="settings"><SetariNumerotarePage /></RequireModule>} />
         <Route path="/setari/efactura" element={<RequireModule code="settings"><SetariEFacturaPage /></RequireModule>} />
+        <Route path="/setari/utilizatori" element={<RequireModule code="settings"><UtilizatoriPage /></RequireModule>} />
 
-        <Route path="*" element={<div className="p-6">Pagina nu există.</div>} />
+        <Route path="*" element={<div className="p-6">Pagina nu exista.</div>} />
       </Route>
     </Routes>
   )

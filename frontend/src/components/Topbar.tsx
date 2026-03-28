@@ -1,9 +1,12 @@
-import { Bell, MapPin, Search, Sparkles } from "lucide-react"
+import { Bell, LogOut, MapPin, Search, Sparkles } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
+import { useNavigate } from "react-router-dom"
 import { API_BASE as API, authHeaders } from "../lib/api"
+import { logout } from "../lib/auth"
 import { getActiveLocationId, setActiveLocationId, subscribeToActiveLocation } from "../lib/location"
 
 export default function Topbar() {
+  const navigate = useNavigate()
   const [locations, setLocations] = useState<Array<{ id: string; name: string; code?: string }>>([])
   const [locationId, setLocationIdState] = useState(getActiveLocationId())
 
@@ -62,6 +65,11 @@ export default function Topbar() {
     setActiveLocationId(nextLocationId)
   }
 
+  function handleLogout() {
+    logout()
+    navigate("/login")
+  }
+
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/90 backdrop-blur">
       <div className="flex h-14 items-center gap-2.5 px-3 md:px-3.5 xl:px-3.5">
@@ -74,6 +82,15 @@ export default function Topbar() {
             />
           </div>
         </div>
+
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="inline-flex h-9 items-center justify-center rounded-[12px] border border-rose-200 bg-rose-50 px-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 md:hidden"
+        >
+          <LogOut size={16} className="mr-2" />
+          Logout
+        </button>
 
         <div className="hidden items-center gap-3 md:flex">
           <div className="flex items-center gap-2 rounded-[12px] border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm shadow-slate-900/[0.03]">
@@ -116,6 +133,15 @@ export default function Topbar() {
               <div className="text-xs text-slate-500">ERP</div>
             </div>
           </div>
+
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="inline-flex h-9 items-center justify-center rounded-[12px] border border-rose-200 bg-rose-50 px-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
+          >
+            <LogOut size={16} className="mr-2" />
+            Logout
+          </button>
         </div>
       </div>
     </header>

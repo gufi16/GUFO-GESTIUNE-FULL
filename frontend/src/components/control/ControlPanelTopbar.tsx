@@ -1,6 +1,15 @@
-import { Bell, Search, ShieldCheck, Sparkles } from "lucide-react"
+import { Bell, LogOut, Search, ShieldCheck, Sparkles } from "lucide-react"
+import { useNavigate } from "react-router-dom"
+import { controlLogout } from "../../lib/controlAuth"
 
 export default function ControlPanelTopbar() {
+  const navigate = useNavigate()
+
+  function handleLogout() {
+    controlLogout()
+    navigate("/cp/login")
+  }
+
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
       <div className="flex h-20 items-center gap-4 px-4 md:px-6 xl:px-8">
@@ -13,6 +22,15 @@ export default function ControlPanelTopbar() {
             />
           </div>
         </div>
+
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="inline-flex h-11 items-center justify-center rounded-2xl border border-rose-200 bg-rose-50 px-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 md:hidden"
+        >
+          <LogOut size={16} className="mr-2" />
+          Logout
+        </button>
 
         <div className="hidden items-center gap-3 md:flex">
           <button
@@ -34,6 +52,15 @@ export default function ControlPanelTopbar() {
               </div>
             </div>
           </div>
+
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="inline-flex h-11 items-center justify-center rounded-2xl border border-rose-200 bg-rose-50 px-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
+          >
+            <LogOut size={16} className="mr-2" />
+            Logout
+          </button>
         </div>
       </div>
     </header>
