@@ -1,8 +1,49 @@
 import { useEffect, useMemo, useState } from "react"
+import { ArrowLeft, ArrowRightLeft, FileOutput, Plus, Truck, Warehouse } from "lucide-react"
+import PageHeader from "../components/PageHeader"
+import {
+  DocumentField,
+  DocumentMetric,
+  DocumentSection,
+  DocumentStatusPill,
+  InlineNotice,
+  documentButtonDangerClass,
+  documentButtonPrimaryClass,
+  documentButtonSecondaryClass,
+  documentInputClass,
+  documentTextareaClass,
+  readonlyInputStyle,
+} from "../components/DocumentUi"
+import { API_BASE as API, getToken } from "../lib/api"
+import { getActiveLocationId, setActiveLocationId, subscribeToActiveLocation } from "../lib/location"
+import { downloadPdfFile } from "../lib/pdf"
+import { getDocumentNumbering, getPreviewValue, type NumberingPayload } from "../lib/numbering"
 
-const API = "http://localhost:3001"
+type LocationOption = {
+  id: string
+  name: string
+  code?: string
+}
 
-function makeLine() {
+type ProductOption = {
+  id: string
+  name: string
+  sku?: string
+  price?: number
+  uom?: { code?: string } | null
+}
+
+type TransferLine = {
+  id: string
+  productId: string
+  search: string
+  sku: string
+  uomCode: string
+  qty: string
+  unitPrice: string
+}
+
+function makeLine(): TransferLine {
   return {
     id: crypto.randomUUID(),
     productId: "",
@@ -10,11 +51,11 @@ function makeLine() {
     sku: "",
     uomCode: "",
     qty: "1",
-    unitPrice: "0"
+    unitPrice: "0",
   }
 }
 
-function ensureArray(value: any): any[] {
+function ensureArray<T = any>(value: any): T[] {
   return Array.isArray(value) ? value : []
 }
 
@@ -24,27 +65,34 @@ function getTransferIdFromUrl() {
 }
 
 function formatNumber(value: any) {
-  return Number(value || 0).toFixed(2)
+  return Number(value || 0).toLocaleString("ro-RO", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+
+function parsePositive(value: any) {
+  const normalized = String(value ?? "").replace(",", ".").trim()
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
 }
 
 export default function TransferPage() {
-  const token =
-    localStorage.getItem("token") ||
-    localStorage.getItem("access_token") ||
-    ""
-
+  const token = getToken() || ""
   const transferId = getTransferIdFromUrl()
 
-  const [locations, setLocations] = useState<any[]>([])
-  const [products, setProducts] = useState<any[]>([])
+  const [locations, setLocations] = useState<LocationOption[]>([])
+  const [products, setProducts] = useState<ProductOption[]>([])
+  const [numbering, setNumbering] = useState<NumberingPayload["previews"] | null>(null)
   const [loadingMeta, setLoadingMeta] = useState(false)
   const [loadingDoc, setLoadingDoc] = useState(false)
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState("DRAFT")
   const [error, setError] = useState("")
+  const [message, setMessage] = useState("")
 
   const [header, setHeader] = useState({
-    fromLocationId: "",
+    fromLocationId: getActiveLocationId(),
     toLocationId: "",
     docNo: "",
     docDate: new Date().toISOString().slice(0, 10),
@@ -56,17 +104,31 @@ export default function TransferPage() {
     vehicleNo: "",
     senderName: "",
     receiverName: "",
-    approvedBy: ""
+    approvedBy: "",
   })
 
-  const [lines, setLines] = useState<any[]>([makeLine()])
+  const [lines, setLines] = useState<TransferLine[]>([makeLine()])
 
   useEffect(() => {
     loadMeta()
+    const unsubscribe = subscribeToActiveLocation((locationId) => {
+      if (transferId) return
+      setHeader((prev) => {
+        if (!locationId || prev.fromLocationId === locationId) return prev
+        return {
+          ...prev,
+          fromLocationId: locationId,
+          toLocationId: prev.toLocationId === locationId ? "" : prev.toLocationId,
+        }
+      })
+    })
+    return unsubscribe
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
     if (transferId) loadDoc()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transferId])
 
   async function loadMeta() {
@@ -76,23 +138,49 @@ export default function TransferPage() {
 
     try {
       const headers = { Authorization: `Bearer ${token}` }
-      const [locRes, prodRes] = await Promise.all([
+      const [locRes, prodRes, numberingData] = await Promise.all([
         fetch(`${API}/api/v1/meta/locations`, { headers }),
-        fetch(`${API}/api/v1/products`, { headers })
+        fetch(`${API}/api/v1/products`, { headers }),
+        getDocumentNumbering().catch(() => null),
       ])
 
       const locData = await locRes.json().catch(() => ({}))
       const prodData = await prodRes.json().catch(() => ({}))
 
       if (locRes.status === 401 || prodRes.status === 401) {
-        setError("Token expirat sau invalid. Fă login din nou.")
+        setError("Sesiunea a expirat. Intră din nou în cont și reîncearcă.")
         return
       }
 
-      setLocations(ensureArray(locData.locations))
-      setProducts(ensureArray(prodData.items))
+      const nextLocations = ensureArray<LocationOption>(locData.locations)
+      const nextProducts = ensureArray<ProductOption>(prodData.items)
+
+      setLocations(nextLocations)
+      setProducts(nextProducts)
+      setNumbering(numberingData?.previews || null)
+
+      if (!transferId) {
+        const activeLocationId = getActiveLocationId()
+        const fallbackFrom =
+          nextLocations.find((location) => location.id === activeLocationId)?.id || nextLocations[0]?.id || ""
+
+        setHeader((prev) => ({
+          ...prev,
+          fromLocationId: prev.fromLocationId || fallbackFrom,
+          docNo: prev.docNo || getPreviewValue(numberingData?.previews, "transfer"),
+          toLocationId:
+            prev.toLocationId && prev.toLocationId !== (prev.fromLocationId || fallbackFrom)
+              ? prev.toLocationId
+              : nextLocations.find((location) => location.id !== (prev.fromLocationId || fallbackFrom))?.id || "",
+        }))
+      } else if (!transferId) {
+        setHeader((prev) => ({
+          ...prev,
+          docNo: prev.docNo || getPreviewValue(numberingData?.previews, "transfer"),
+        }))
+      }
     } catch {
-      setError("Nu pot încărca datele pentru transfer.")
+      setError("Nu am putut încărca datele pentru transfer.")
     } finally {
       setLoadingMeta(false)
     }
@@ -102,27 +190,27 @@ export default function TransferPage() {
     if (!token || !transferId) return
     setLoadingDoc(true)
     setError("")
+    setMessage("")
 
     try {
       const res = await fetch(`${API}/api/v1/transfers/${transferId}`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       })
 
       const data = await res.json().catch(() => ({}))
 
       if (res.status === 401) {
-        setError("Token expirat sau invalid. Fă login din nou.")
+        setError("Sesiunea a expirat. Intră din nou în cont și reîncearcă.")
         return
       }
 
       if (!data.ok || !data.doc) {
-        setError(data.error || "Nu pot încărca transferul.")
+        setError(data.error || "Nu am putut încărca transferul.")
         return
       }
 
       const doc = data.doc
       setStatus(doc.status || "DRAFT")
-
       setHeader({
         fromLocationId: doc.fromLocationId || "",
         toLocationId: doc.toLocationId || "",
@@ -136,28 +224,28 @@ export default function TransferPage() {
         vehicleNo: doc.vehicleNo || "",
         senderName: doc.senderName || "",
         receiverName: doc.receiverName || "",
-        approvedBy: doc.approvedBy || ""
+        approvedBy: doc.approvedBy || "",
       })
 
       const loadedLines = ensureArray(doc.items).map((item: any) => ({
         id: item.id || crypto.randomUUID(),
-        productId: item.productId,
+        productId: item.productId || "",
         search: item.product?.name || "",
         sku: item.product?.sku || "",
         uomCode: item.uom?.code || item.product?.uom?.code || "",
         qty: String(item.qty ?? 1),
-        unitPrice: String(item.unitPrice ?? 0)
+        unitPrice: String(item.unitPrice ?? 0),
       }))
 
       setLines(loadedLines.length ? loadedLines : [makeLine()])
     } catch {
-      setError("Nu pot încărca transferul.")
+      setError("Nu am putut încărca transferul.")
     } finally {
       setLoadingDoc(false)
     }
   }
 
-  function setLineValue(id: string, patch: any) {
+  function setLineValue(id: string, patch: Partial<TransferLine>) {
     setLines((prev) => prev.map((line) => (line.id === id ? { ...line, ...patch } : line)))
   }
 
@@ -167,7 +255,7 @@ export default function TransferPage() {
 
   function removeLine(id: string) {
     setLines((prev) => {
-      const next = prev.filter((x) => x.id !== id)
+      const next = prev.filter((line) => line.id !== id)
       return next.length ? next : [makeLine()]
     })
   }
@@ -176,122 +264,115 @@ export default function TransferPage() {
     const q = String(search || "").trim().toLowerCase()
     if (q.length < 2) return []
     return products
-      .filter((p: any) => {
-        const name = String(p.name || "").toLowerCase()
-        const sku = String(p.sku || "").toLowerCase()
-        return name.includes(q) || sku.includes(q)
+      .filter((product) => {
+        const haystack = [product.name, product.sku].filter(Boolean).join(" ").toLowerCase()
+        return haystack.includes(q)
       })
       .slice(0, 8)
   }
 
-  function chooseProduct(lineId: string, product: any) {
-    setLines((prev) =>
-      prev.map((line) =>
-        line.id === lineId
-          ? {
-              ...line,
-              productId: product.id,
-              search: product.name,
-              sku: product.sku || "",
-              uomCode: product.uom?.code || "",
-              unitPrice: String(product.price ?? 0)
-            }
-          : line
-      )
-    )
+  function chooseProduct(lineId: string, product: ProductOption) {
+    setLineValue(lineId, {
+      productId: product.id,
+      search: product.name || "",
+      sku: product.sku || "",
+      uomCode: product.uom?.code || "",
+      unitPrice: String(product.price ?? 0),
+    })
   }
 
-  const validLines = useMemo(() => {
-    return lines.filter((l) => l.productId && Number(l.qty || 0) > 0)
-  }, [lines])
+  const validLines = useMemo(
+    () => lines.filter((line) => line.productId && parsePositive(line.qty) > 0),
+    [lines]
+  )
 
-  const totals = useMemo(() => {
-    return validLines.reduce(
-      (acc, line) => {
-        const qty = Number(line.qty || 0)
-        const unitPrice = Number(line.unitPrice || 0)
-        acc.totalQty += qty
-        acc.totalValue += qty * unitPrice
-        return acc
-      },
-      { totalQty: 0, totalValue: 0 }
-    )
-  }, [validLines])
+  const totals = useMemo(
+    () =>
+      validLines.reduce(
+        (acc, line) => {
+          const qty = parsePositive(line.qty)
+          const unitPrice = Math.max(0, Number(line.unitPrice || 0))
+          acc.totalQty += qty
+          acc.totalValue += qty * unitPrice
+          return acc
+        },
+        { totalQty: 0, totalValue: 0 }
+      ),
+    [validLines]
+  )
 
   const isPosted = status === "POSTED"
+  const fromLocation = locations.find((location) => location.id === header.fromLocationId)
+  const toLocationOptions = locations.filter((location) => location.id !== header.fromLocationId)
 
   async function saveDoc(postNow = false) {
     if (!token) {
-      alert("Nu există token de autentificare.")
+      setError("Lipsește sesiunea de autentificare.")
       return
     }
 
     if (isPosted) {
-      alert("Documentul POSTED este read-only.")
+      setError("Transferul este deja postat și nu mai poate fi modificat.")
       return
     }
 
     if (!header.fromLocationId) {
-      alert("Selectează gestiunea predătoare.")
+      setError("Selectează gestiunea predătoare.")
       return
     }
 
     if (!header.toLocationId) {
-      alert("Selectează gestiunea primitoare.")
+      setError("Selectează gestiunea primitoare.")
       return
     }
 
     if (header.fromLocationId === header.toLocationId) {
-      alert("Gestiunile trebuie să fie diferite.")
-      return
-    }
-
-    if (!header.docNo.trim()) {
-      alert("Completează nr. document.")
+      setError("Gestiunea de plecare și cea de sosire trebuie să fie diferite.")
       return
     }
 
     if (!header.docDate) {
-      alert("Completează data document.")
+      setError("Completează data documentului.")
       return
     }
 
     if (!validLines.length) {
-      alert("Adaugă cel puțin un produs.")
+      setError("Adaugă cel puțin un produs în transfer.")
       return
     }
 
     setSaving(true)
+    setError("")
+    setMessage("")
 
     try {
       const res = await fetch(`${API}/api/v1/transfers/full`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           id: transferId || null,
           header,
-          items: validLines.map((l) => ({
-            productId: l.productId,
-            qty: Number(l.qty || 0),
-            unitPrice: Number(l.unitPrice || 0)
+          items: validLines.map((line) => ({
+            productId: line.productId,
+            qty: parsePositive(line.qty),
+            unitPrice: Math.max(0, Number(line.unitPrice || 0)),
           })),
-          postNow
-        })
+          postNow,
+        }),
       })
 
       const data = await res.json().catch(() => ({}))
-      setSaving(false)
 
       if (res.status === 401) {
-        alert("Token expirat sau invalid.")
+        setError("Sesiunea a expirat. Intră din nou în cont și reîncearcă.")
         return
       }
 
       if (!data.ok) {
-        alert(data.error || "Eroare la salvarea transferului.")
+        setError(data.error || "Transferul nu a putut fi salvat.")
         return
       }
 
@@ -301,378 +382,353 @@ export default function TransferPage() {
       }
 
       setStatus(data.doc?.status || (postNow ? "POSTED" : "DRAFT"))
-      alert(postNow ? "Transfer salvat și postat." : "Transfer salvat.")
-
-      if (transferId) {
-        await loadDoc()
-      }
+      setMessage(postNow ? "Transferul a fost salvat și postat." : "Transferul a fost salvat ca draft.")
+      if (transferId) await loadDoc()
     } catch {
+      setError("A apărut o eroare la salvarea transferului.")
+    } finally {
       setSaving(false)
-      alert("Eroare la salvarea transferului.")
     }
   }
 
   async function exportPdf() {
     if (!transferId) {
-      alert("Salvează documentul înainte.")
+      setError("Salvează documentul înainte de export.")
       return
     }
 
     const res = await fetch(`${API}/api/v1/transfers/${transferId}/pdf`, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
+      headers: { Authorization: `Bearer ${token}` },
     })
 
     if (!res.ok) {
-      alert("Nu pot genera PDF.")
+      setError("Nu am putut genera PDF-ul transferului.")
       return
     }
 
-    const blob = await res.blob()
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `TRANSFER_${header.docNo || "document"}.pdf`
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    window.URL.revokeObjectURL(url)
+    await downloadPdfFile(res, `TRANSFER_${header.docNo || "document"}.pdf`)
   }
 
   return (
-    <div style={{ padding: 20 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, gap: 12, flexWrap: "wrap" }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: 28 }}>
-            {!transferId ? "Transfer nou" : isPosted ? "Vizualizare transfer" : "Editare transfer"}
-          </h1>
-          <p style={{ color: "#666", marginTop: 6 }}>
-            Notă de transfer / transfer între gestiuni
-          </p>
-        </div>
+    <div className="space-y-3">
+      <PageHeader
+        badge="document"
+        title={!transferId ? "Transfer nou" : isPosted ? "Transfer postat" : "Editare transfer"}
+        subtitle="Mută produse între gestiuni într-un flux mai clar, cu selecții rapide și totaluri vizibile."
+      />
 
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <a href="/transfer" style={{ textDecoration: "none" }}>
-            <button style={btnSecondary}>Înapoi la listă</button>
-          </a>
-
-          <button style={btnSecondary} onClick={exportPdf} disabled={!transferId || loadingDoc}>
-            Export PDF
-          </button>
-
-          {!isPosted && (
-            <>
-              <button style={btnSecondary} onClick={() => saveDoc(false)} disabled={saving || loadingDoc}>
-                {saving ? "Se salvează..." : "Salvează draft"}
-              </button>
-
-              <button style={btnPrimary} onClick={() => saveDoc(true)} disabled={saving || loadingDoc}>
-                {saving ? "Se salvează..." : "Salvează și postează"}
-              </button>
-            </>
-          )}
-        </div>
+      <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-3">
+        <DocumentMetric title="Status" value={<DocumentStatusPill status={status || "DRAFT"} />} tone="amber" />
+        <DocumentMetric title="Cantitate totală" value={formatNumber(totals.totalQty)} tone="blue" />
+        <DocumentMetric title="Valoare estimată" value={`${formatNumber(totals.totalValue)} RON`} tone="emerald" />
       </div>
 
-      {status && <div style={{ marginBottom: 14 }}><StatusBadge status={status} /></div>}
-      {error && <div style={errorBox}>{error}</div>}
-      {loadingDoc && <div style={infoBox}>Se încarcă documentul...</div>}
+      <div className="flex flex-wrap gap-2">
+        <a href="/transfer" className={documentButtonSecondaryClass}>
+          <ArrowLeft size={16} className="mr-2" />
+          Înapoi la listă
+        </a>
+        <button type="button" className={documentButtonSecondaryClass} onClick={exportPdf} disabled={!transferId || loadingDoc}>
+          <FileOutput size={16} className="mr-2" />
+          PDF
+        </button>
+        {!isPosted ? (
+          <>
+            <button type="button" className={documentButtonSecondaryClass} onClick={() => saveDoc(false)} disabled={saving || loadingDoc}>
+              {saving ? "Se salvează..." : "Salvează draft"}
+            </button>
+            <button type="button" className={documentButtonPrimaryClass} onClick={() => saveDoc(true)} disabled={saving || loadingDoc}>
+              {saving ? "Se salvează..." : "Salvează și postează"}
+            </button>
+          </>
+        ) : null}
+      </div>
 
-      <Section title="Antet document">
-        <div style={grid2}>
-          <Field label="Gestiune predătoare">
-            <select value={header.fromLocationId} onChange={(e) => setHeader({ ...header, fromLocationId: e.target.value })} style={input} disabled={isPosted}>
-              <option value="">Selectează</option>
-              {locations.map((l) => (
-                <option key={l.id} value={l.id}>{l.name}</option>
-              ))}
-            </select>
-          </Field>
+      {loadingMeta ? <InlineNotice>Se încarcă nomenclatoarele pentru transfer.</InlineNotice> : null}
+      {loadingDoc ? <InlineNotice>Se încarcă documentul selectat.</InlineNotice> : null}
+      {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
+      {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
+      {isPosted ? (
+        <InlineNotice>
+          Documentul este postat și rămâne doar în regim de vizualizare, PDF și urmărire istoric.
+        </InlineNotice>
+      ) : null}
 
-          <Field label="Gestiune primitoare">
-            <select value={header.toLocationId} onChange={(e) => setHeader({ ...header, toLocationId: e.target.value })} style={input} disabled={isPosted}>
-              <option value="">Selectează</option>
-              {locations.filter((l) => l.id !== header.fromLocationId).map((l) => (
-                <option key={l.id} value={l.id}>{l.name}</option>
-              ))}
-            </select>
-          </Field>
-
-          <Field label="Nr. document">
-            <input value={header.docNo} onChange={(e) => setHeader({ ...header, docNo: e.target.value })} style={input} disabled={isPosted} />
-          </Field>
-
-          <Field label="Data document">
-            <input type="date" value={header.docDate} onChange={(e) => setHeader({ ...header, docDate: e.target.value })} style={input} disabled={isPosted} />
-          </Field>
-
-          <Field label="Motiv transfer">
-            <input value={header.reason} onChange={(e) => setHeader({ ...header, reason: e.target.value })} style={input} disabled={isPosted} />
-          </Field>
-
-          <Field label="Observații">
-            <input value={header.note} onChange={(e) => setHeader({ ...header, note: e.target.value })} style={input} disabled={isPosted} />
-          </Field>
-
-          <Field label="Delegat / Transportator">
-            <input value={header.delegateName} onChange={(e) => setHeader({ ...header, delegateName: e.target.value })} style={input} disabled={isPosted} />
-          </Field>
-
-          <Field label="CI / BI">
-            <input value={header.delegateCi} onChange={(e) => setHeader({ ...header, delegateCi: e.target.value })} style={input} disabled={isPosted} />
-          </Field>
-
-          <Field label="Mijloc transport">
-            <input value={header.vehicle} onChange={(e) => setHeader({ ...header, vehicle: e.target.value })} style={input} disabled={isPosted} />
-          </Field>
-
-          <Field label="Nr. auto">
-            <input value={header.vehicleNo} onChange={(e) => setHeader({ ...header, vehicleNo: e.target.value })} style={input} disabled={isPosted} />
-          </Field>
-
-          <Field label="Am predat">
-            <input value={header.senderName} onChange={(e) => setHeader({ ...header, senderName: e.target.value })} style={input} disabled={isPosted} />
-          </Field>
-
-          <Field label="Am primit">
-            <input value={header.receiverName} onChange={(e) => setHeader({ ...header, receiverName: e.target.value })} style={input} disabled={isPosted} />
-          </Field>
-
-          <Field label="Avizat">
-            <input value={header.approvedBy} onChange={(e) => setHeader({ ...header, approvedBy: e.target.value })} style={input} disabled={isPosted} />
-          </Field>
-        </div>
-      </Section>
-
-      <Section title="Linii transfer">
-        {!isPosted && (
-          <div style={{ marginBottom: 12 }}>
-            <button style={btnPrimary} onClick={addLine}>+ Adaugă linie</button>
-          </div>
-        )}
-
-        {lines.map((line) => {
-          const matches = productMatches(line.search)
-          const lineValue = Number(line.qty || 0) * Number(line.unitPrice || 0)
-
-          return (
-            <div key={line.id} style={lineCard}>
-              <div style={gridLine}>
-                <CompactField label="Produs">
-                  <input
-                    value={line.search}
-                    onChange={(e) => setLineValue(line.id, { search: e.target.value, productId: "" })}
-                    style={inputCompact}
-                    disabled={isPosted}
-                  />
-                </CompactField>
-
-                <CompactField label="Cod">
-                  <input value={line.sku} readOnly style={{ ...inputCompact, background: "#f9fafb" }} />
-                </CompactField>
-
-                <CompactField label="UM">
-                  <input value={line.uomCode} readOnly style={{ ...inputCompact, background: "#f9fafb" }} />
-                </CompactField>
-
-                <CompactField label="Cantitate">
-                  <input value={line.qty} onChange={(e) => setLineValue(line.id, { qty: e.target.value })} style={inputCompact} disabled={isPosted} />
-                </CompactField>
-
-                <CompactField label="Preț">
-                  <input value={line.unitPrice} onChange={(e) => setLineValue(line.id, { unitPrice: e.target.value })} style={inputCompact} disabled={isPosted} />
-                </CompactField>
-
-                <CompactField label="Valoare">
-                  <input value={formatNumber(lineValue)} readOnly style={{ ...inputCompact, background: "#f9fafb", fontWeight: 600 }} />
-                </CompactField>
-
-                <div style={{ paddingTop: 22 }}>
-                  {!isPosted && <button style={btnDangerSmall} onClick={() => removeLine(line.id)}>Șterge</button>}
-                </div>
-              </div>
-
-              {line.search.trim().length >= 2 && !line.productId && !isPosted && (
-                <div style={{ marginTop: 10 }}>
-                  {matches.length > 0 ? (
-                    <div style={resultsBox}>
-                      {matches.map((p: any) => (
-                        <button key={p.id} type="button" style={resultBtn} onClick={() => chooseProduct(line.id, p)}>
-                          <div style={{ fontWeight: 600 }}>{p.name}</div>
-                          <div style={{ fontSize: 12, color: "#666" }}>
-                            {p.sku} · UM {p.uom?.code || "-"} · Preț {formatNumber(p.price)}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div style={{ color: "#991b1b", fontSize: 13 }}>Nu există produse găsite pentru „{line.search}”.</div>
-                  )}
-                </div>
-              )}
+      <DocumentSection
+        title="Antet document"
+        description="Locația activă din topbar completează automat gestiunea de plecare pentru documentele noi."
+      >
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <DocumentField label="Gestiune predătoare" hint={fromLocation?.code ? `Cod: ${fromLocation.code}` : undefined}>
+            <div className="relative">
+              <Warehouse className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+              <select
+                value={header.fromLocationId}
+                onChange={(e) => {
+                  const nextId = e.target.value
+                  setHeader((prev) => ({
+                    ...prev,
+                    fromLocationId: nextId,
+                    toLocationId: prev.toLocationId === nextId ? "" : prev.toLocationId,
+                  }))
+                  setActiveLocationId(nextId)
+                }}
+                className={`${documentInputClass} pl-9`}
+                disabled={isPosted}
+              >
+                <option value="">Selectează</option>
+                {locations.map((location) => (
+                  <option key={location.id} value={location.id}>
+                    {location.name}
+                  </option>
+                ))}
+              </select>
             </div>
-          )
-        })}
-      </Section>
+          </DocumentField>
 
-      <Section title="Totaluri">
-        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-          <Card title="Total cantități" value={formatNumber(totals.totalQty)} />
-          <Card title="Total valoare" value={`${formatNumber(totals.totalValue)} lei`} />
+          <DocumentField label="Gestiune primitoare">
+            <div className="relative">
+              <ArrowRightLeft className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+              <select
+                value={header.toLocationId}
+                onChange={(e) => setHeader((prev) => ({ ...prev, toLocationId: e.target.value }))}
+                className={`${documentInputClass} pl-9`}
+                disabled={isPosted}
+              >
+                <option value="">Selectează</option>
+                {toLocationOptions.map((location) => (
+                  <option key={location.id} value={location.id}>
+                    {location.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </DocumentField>
+
+          <DocumentField label="Nr. document">
+            <input
+              value={header.docNo}
+              className={documentInputClass}
+              readOnly
+              style={readonlyInputStyle}
+            />
+          </DocumentField>
+
+          <DocumentField label="Data document">
+            <input
+              type="date"
+              value={header.docDate}
+              onChange={(e) => setHeader((prev) => ({ ...prev, docDate: e.target.value }))}
+              className={documentInputClass}
+              disabled={isPosted}
+            />
+          </DocumentField>
+
+          <DocumentField label="Motiv transfer">
+            <input
+              value={header.reason}
+              onChange={(e) => setHeader((prev) => ({ ...prev, reason: e.target.value }))}
+              className={documentInputClass}
+              disabled={isPosted}
+            />
+          </DocumentField>
+
+          <DocumentField label="Observații">
+            <input
+              value={header.note}
+              onChange={(e) => setHeader((prev) => ({ ...prev, note: e.target.value }))}
+              className={documentInputClass}
+              disabled={isPosted}
+            />
+          </DocumentField>
+
+          <DocumentField label="Delegat / Transportator">
+            <input
+              value={header.delegateName}
+              onChange={(e) => setHeader((prev) => ({ ...prev, delegateName: e.target.value }))}
+              className={documentInputClass}
+              disabled={isPosted}
+            />
+          </DocumentField>
+
+          <DocumentField label="CI / BI">
+            <input
+              value={header.delegateCi}
+              onChange={(e) => setHeader((prev) => ({ ...prev, delegateCi: e.target.value }))}
+              className={documentInputClass}
+              disabled={isPosted}
+            />
+          </DocumentField>
+
+          <DocumentField label="Mijloc transport">
+            <div className="relative">
+              <Truck className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+              <input
+                value={header.vehicle}
+                onChange={(e) => setHeader((prev) => ({ ...prev, vehicle: e.target.value }))}
+                className={`${documentInputClass} pl-9`}
+                disabled={isPosted}
+              />
+            </div>
+          </DocumentField>
+
+          <DocumentField label="Nr. auto">
+            <input
+              value={header.vehicleNo}
+              onChange={(e) => setHeader((prev) => ({ ...prev, vehicleNo: e.target.value }))}
+              className={documentInputClass}
+              disabled={isPosted}
+            />
+          </DocumentField>
+
+          <DocumentField label="Am predat">
+            <input
+              value={header.senderName}
+              onChange={(e) => setHeader((prev) => ({ ...prev, senderName: e.target.value }))}
+              className={documentInputClass}
+              disabled={isPosted}
+            />
+          </DocumentField>
+
+          <DocumentField label="Am primit">
+            <input
+              value={header.receiverName}
+              onChange={(e) => setHeader((prev) => ({ ...prev, receiverName: e.target.value }))}
+              className={documentInputClass}
+              disabled={isPosted}
+            />
+          </DocumentField>
+
+          <DocumentField label="Avizat">
+            <input
+              value={header.approvedBy}
+              onChange={(e) => setHeader((prev) => ({ ...prev, approvedBy: e.target.value }))}
+              className={documentInputClass}
+              disabled={isPosted}
+            />
+          </DocumentField>
         </div>
-      </Section>
+      </DocumentSection>
+
+      <DocumentSection
+        title="Linii transfer"
+        description="Caută după nume sau SKU și completezi repede doar cantitatea și prețul."
+        actions={
+          !isPosted ? (
+            <button type="button" className={documentButtonPrimaryClass} onClick={addLine}>
+              <Plus size={16} className="mr-2" />
+              Adaugă linie
+            </button>
+          ) : null
+        }
+      >
+        <div className="space-y-3">
+          {lines.map((line, index) => {
+            const matches = productMatches(line.search)
+            const lineValue = parsePositive(line.qty) * Math.max(0, Number(line.unitPrice || 0))
+
+            return (
+              <div key={line.id} className="rounded-[18px] border border-slate-200 bg-slate-50/80 p-3">
+                <div className="mb-2.5 flex items-center justify-between gap-2">
+                  <div className="text-[13px] font-semibold text-slate-700">Poziția {index + 1}</div>
+                  {!isPosted ? (
+                    <button type="button" className={documentButtonDangerClass} onClick={() => removeLine(line.id)}>
+                      Șterge
+                    </button>
+                  ) : null}
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
+                  <DocumentField label="Produs">
+                    <input
+                      value={line.search}
+                      onChange={(e) => setLineValue(line.id, { search: e.target.value, productId: "" })}
+                      className={documentInputClass}
+                      disabled={isPosted}
+                      placeholder="Scrie 2-3 litere"
+                    />
+                  </DocumentField>
+
+                  <DocumentField label="SKU">
+                    <input value={line.sku} readOnly className={documentInputClass} style={readonlyInputStyle} />
+                  </DocumentField>
+
+                  <DocumentField label="UM">
+                    <input value={line.uomCode} readOnly className={documentInputClass} style={readonlyInputStyle} />
+                  </DocumentField>
+
+                  <DocumentField label="Cantitate">
+                    <input
+                      value={line.qty}
+                      onChange={(e) => setLineValue(line.id, { qty: e.target.value })}
+                      className={documentInputClass}
+                      disabled={isPosted}
+                    />
+                  </DocumentField>
+
+                  <DocumentField label="Preț unitar">
+                    <input
+                      value={line.unitPrice}
+                      onChange={(e) => setLineValue(line.id, { unitPrice: e.target.value })}
+                      className={documentInputClass}
+                      disabled={isPosted}
+                    />
+                  </DocumentField>
+
+                  <DocumentField label="Valoare">
+                    <input value={formatNumber(lineValue)} readOnly className={documentInputClass} style={readonlyInputStyle} />
+                  </DocumentField>
+                </div>
+
+                {line.search.trim().length >= 2 && !line.productId && !isPosted ? (
+                  <div className="mt-2 rounded-[14px] border border-slate-200 bg-white p-2 shadow-sm">
+                    {matches.length ? (
+                      <div className="space-y-1.5">
+                        {matches.map((product) => (
+                          <button
+                            key={product.id}
+                            type="button"
+                            onClick={() => chooseProduct(line.id, product)}
+                            className="w-full rounded-[12px] px-3 py-2.5 text-left transition hover:bg-slate-50"
+                          >
+                            <div className="font-semibold text-slate-900">{product.name}</div>
+                            <div className="mt-1 text-xs text-slate-500">
+                              {product.sku || "Fără SKU"} · UM {product.uom?.code || "-"} · Preț {formatNumber(product.price)}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="px-3 py-2 text-sm text-red-600">Nu am găsit niciun produs pentru „{line.search}”.</div>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            )
+          })}
+        </div>
+      </DocumentSection>
+
+      <DocumentSection title="Observații și totaluri" description="Păstrează rezumatul documentului la vedere înainte de postare.">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.8fr_0.9fr]">
+          <DocumentField label="Notă internă">
+            <textarea
+              value={header.note}
+              onChange={(e) => setHeader((prev) => ({ ...prev, note: e.target.value }))}
+              rows={4}
+              className={documentTextareaClass}
+              disabled={isPosted}
+              placeholder="Poți nota aici detalii despre transport, lot sau aprobare."
+            />
+          </DocumentField>
+
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-1">
+            <DocumentMetric title="Produse selectate" value={validLines.length} tone="slate" />
+            <DocumentMetric title="Cantitate totală" value={formatNumber(totals.totalQty)} tone="blue" />
+            <DocumentMetric title="Valoare totală" value={`${formatNumber(totals.totalValue)} RON`} tone="emerald" />
+          </div>
+        </div>
+      </DocumentSection>
     </div>
   )
-}
-
-function Field({ label, children }: any) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <label style={{ fontSize: 14, color: "#555" }}>{label}</label>
-      {children}
-    </div>
-  )
-}
-
-function CompactField({ label, children }: any) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
-      <label style={{ fontSize: 12, color: "#666" }}>{label}</label>
-      {children}
-    </div>
-  )
-}
-
-function Section({ title, children }: any) {
-  return (
-    <div style={{ marginBottom: 28 }}>
-      <h2 style={{ marginBottom: 12 }}>{title}</h2>
-      {children}
-    </div>
-  )
-}
-
-function Card({ title, value }: any) {
-  return (
-    <div style={{ border: "1px solid #e5e5e5", borderRadius: 10, padding: 14, minWidth: 180, background: "#fafafa" }}>
-      <div style={{ fontSize: 13, color: "#666" }}>{title}</div>
-      <div style={{ fontSize: 20, fontWeight: 700 }}>{value}</div>
-    </div>
-  )
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const map: any = {
-    DRAFT: { bg: "#fff7ed", color: "#9a3412" },
-    POSTED: { bg: "#ecfdf5", color: "#166534" },
-    CANCELLED: { bg: "#f3f4f6", color: "#374151" }
-  }
-  const s = map[status] || { bg: "#f3f4f6", color: "#111827" }
-
-  return (
-    <span style={{ background: s.bg, color: s.color, padding: "6px 12px", borderRadius: 999, fontSize: 12, fontWeight: 600 }}>
-      {status}
-    </span>
-  )
-}
-
-const errorBox: React.CSSProperties = {
-  border: "1px solid #fecaca",
-  background: "#fef2f2",
-  color: "#991b1b",
-  borderRadius: 10,
-  padding: 12,
-  marginBottom: 20
-}
-
-const infoBox: React.CSSProperties = {
-  border: "1px solid #dbeafe",
-  background: "#eff6ff",
-  color: "#1d4ed8",
-  borderRadius: 10,
-  padding: 12,
-  marginBottom: 20
-}
-
-const grid2: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-  gap: 14
-}
-
-const gridLine: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "minmax(220px, 2.2fr) 110px 70px 100px 100px 110px 70px",
-  gap: 8,
-  alignItems: "end"
-}
-
-const lineCard: React.CSSProperties = {
-  border: "1px solid #e5e5e5",
-  borderRadius: 12,
-  padding: 12,
-  marginBottom: 12,
-  background: "#fff"
-}
-
-const resultsBox: React.CSSProperties = {
-  display: "grid",
-  gap: 8
-}
-
-const resultBtn: React.CSSProperties = {
-  textAlign: "left",
-  border: "1px solid #d1d5db",
-  background: "#fff",
-  borderRadius: 10,
-  padding: 10,
-  cursor: "pointer"
-}
-
-const input: React.CSSProperties = {
-  padding: "9px 11px",
-  borderRadius: 8,
-  border: "1px solid #d1d5db",
-  outline: "none",
-  width: "100%",
-  boxSizing: "border-box"
-}
-
-const inputCompact: React.CSSProperties = {
-  padding: "8px 9px",
-  borderRadius: 8,
-  border: "1px solid #d1d5db",
-  outline: "none",
-  width: "100%",
-  boxSizing: "border-box",
-  fontSize: 13
-}
-
-const btnPrimary: React.CSSProperties = {
-  padding: "9px 14px",
-  borderRadius: 8,
-  border: "none",
-  background: "#111",
-  color: "#fff",
-  cursor: "pointer"
-}
-
-const btnSecondary: React.CSSProperties = {
-  padding: "9px 14px",
-  borderRadius: 8,
-  border: "1px solid #ddd",
-  background: "#fff",
-  cursor: "pointer"
-}
-
-const btnDangerSmall: React.CSSProperties = {
-  padding: "8px 10px",
-  borderRadius: 8,
-  border: "1px solid #fecaca",
-  background: "#fef2f2",
-  color: "#991b1b",
-  cursor: "pointer",
-  fontSize: 12,
-  width: "100%"
 }

@@ -1,7 +1,18 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { ImagePlus, Layers3, MonitorSmartphone, Tags } from "lucide-react"
 import PageHeader from "../components/PageHeader"
-
-const API = "http://localhost:3001"
+import {
+  DocumentField,
+  DocumentMetric,
+  DocumentSection,
+  InlineNotice,
+  documentButtonDangerClass,
+  documentButtonPrimaryClass,
+  documentButtonSecondaryClass,
+  documentInputClass,
+  documentTextareaClass,
+} from "../components/DocumentUi"
+import { API_BASE as API, getToken } from "../lib/api"
 
 type Department = {
   id: string
@@ -18,10 +29,7 @@ type Category = {
 }
 
 export default function CategoriiPage() {
-  const token =
-    localStorage.getItem("token") ||
-    localStorage.getItem("access_token") ||
-    ""
+  const token = getToken() || ""
 
   const [list, setList] = useState<Category[]>([])
   const [deps, setDeps] = useState<Department[]>([])
@@ -37,8 +45,19 @@ export default function CategoriiPage() {
   const [error, setError] = useState("")
   const [editingId, setEditingId] = useState("")
 
+  const stats = useMemo(
+    () => ({
+      total: list.length,
+      withImage: list.filter((item) => Boolean(item.imageUrl)).length,
+      visibleInPos: list.filter((item) => item.isVisibleInPos !== false).length,
+      departments: new Set(list.map((item) => item.department?.name || item.departmentId).filter(Boolean)).size,
+    }),
+    [list]
+  )
+
   useEffect(() => {
     load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function load() {
@@ -51,7 +70,7 @@ export default function CategoriiPage() {
 
       const [categoriesRes, depsRes] = await Promise.all([
         fetch(`${API}/api/v1/meta/categories`, { headers }),
-        fetch(`${API}/api/v1/meta/departments`, { headers })
+        fetch(`${API}/api/v1/meta/departments`, { headers }),
       ])
 
       const categoriesData = await categoriesRes.json().catch(() => ({}))
@@ -93,9 +112,9 @@ export default function CategoriiPage() {
       const res = await fetch(`${API}/api/v1/meta/categories/upload-image`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
-        body: formData
+        body: formData,
       })
 
       const data = await res.json().catch(() => ({}))
@@ -106,6 +125,7 @@ export default function CategoriiPage() {
       }
 
       setImageUrl(data.imageUrl || "")
+      setMessage("Imaginea categoriei a fost încărcată.")
     } catch {
       setError("Nu am putut încărca imaginea.")
     } finally {
@@ -135,25 +155,22 @@ export default function CategoriiPage() {
 
     try {
       const isEdit = Boolean(editingId)
-      const url = isEdit
-        ? `${API}/api/v1/meta/categories/${editingId}`
-        : `${API}/api/v1/meta/categories`
-
+      const url = isEdit ? `${API}/api/v1/meta/categories/${editingId}` : `${API}/api/v1/meta/categories`
       const method = isEdit ? "PUT" : "POST"
 
       const res = await fetch(url, {
         method,
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           name: name.trim(),
           departmentId,
           imageUrl: imageUrl.trim() || null,
           isVisibleInPos,
-          ...(isEdit ? { isActive: true } : {})
-        })
+          ...(isEdit ? { isActive: true } : {}),
+        }),
       })
 
       const data = await res.json().catch(() => ({}))
@@ -193,7 +210,7 @@ export default function CategoriiPage() {
     try {
       const res = await fetch(`${API}/api/v1/meta/categories/${id}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       })
 
       const data = await res.json().catch(() => ({}))
@@ -217,338 +234,182 @@ export default function CategoriiPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        badge="nomenclator"
         title="Categorii produse"
-        subtitle="Categorii organizate pe departamente, cu poze pentru Android POS."
+        subtitle="Categorii organizate pe departamente, cu imagine și vizibilitate pentru Android POS."
       />
 
-      {error ? <div style={errorBox}>{error}</div> : null}
-      {message ? <div style={successBox}>{message}</div> : null}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <DocumentMetric title="Categorii" value={stats.total} tone="slate" />
+        <DocumentMetric title="Cu imagine" value={stats.withImage} tone="blue" />
+        <DocumentMetric title="Vizibile in POS" value={stats.visibleInPos} tone="emerald" />
+        <DocumentMetric title="Departamente active" value={stats.departments} tone="amber" />
+      </div>
 
-      <div style={card}>
-        <div style={formTitle}>{editingId ? "Edit categorie" : "Adaugă categorie"}</div>
+      {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
+      {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
 
-        <div style={addGrid}>
-          <input
-            placeholder="Categorie"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            style={input}
-          />
-
-          <select
-            value={departmentId}
-            onChange={(e) => setDepartmentId(e.target.value)}
-            style={input}
-          >
-            <option value="">Departament</option>
-            {deps.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-              </option>
-            ))}
-          </select>
-
-          <label style={checkboxWrap}>
-            <input
-              type="checkbox"
-              checked={isVisibleInPos}
-              onChange={(e) => setIsVisibleInPos(e.target.checked)}
-            />
-            <span>Vizibilă în POS</span>
-          </label>
-
-          <div style={actionsRow}>
-            <button onClick={save} style={btnPrimary} disabled={saving || uploading}>
-              {saving ? "Se salvează..." : editingId ? "Salvează" : "Adaugă"}
-            </button>
-
+      <DocumentSection
+        title={editingId ? "Edit categorie" : "Adaugă categorie"}
+        description="Salvezi categoria, apoi poți încărca poza și o vezi imediat în preview."
+        actions={
+          <>
             {editingId ? (
-              <button onClick={resetForm} style={btnSecondary}>
+              <button type="button" onClick={resetForm} className={documentButtonSecondaryClass}>
                 Renunță
               </button>
             ) : null}
-          </div>
+            <button type="button" onClick={save} className={documentButtonPrimaryClass} disabled={saving || uploading}>
+              {saving ? "Se salvează..." : editingId ? "Salvează" : "Adaugă"}
+            </button>
+          </>
+        }
+      >
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <DocumentField label="Categorie">
+            <input placeholder="Categorie" value={name} onChange={(e) => setName(e.target.value)} className={documentInputClass} />
+          </DocumentField>
+
+          <DocumentField label="Departament">
+            <select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} className={documentInputClass}>
+              <option value="">Departament</option>
+              {deps.map((department) => (
+                <option key={department.id} value={department.id}>
+                  {department.name}
+                </option>
+              ))}
+            </select>
+          </DocumentField>
+
+          <DocumentField label="Vizibilitate POS">
+            <label className="flex h-12 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-700">
+              <input type="checkbox" checked={isVisibleInPos} onChange={(e) => setIsVisibleInPos(e.target.checked)} />
+              <span>Vizibilă în POS</span>
+            </label>
+          </DocumentField>
         </div>
 
-        {editingId ? (
-          <>
-            <div style={uploadRow}>
-              <label style={uploadLabel}>
-                <input
-                  type="file"
-                  accept="image/*"
-                  style={{ display: "none" }}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0]
-                    if (file) uploadImage(file)
-                  }}
-                />
-                <span style={btnSecondary}>
+        <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+          <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+            <div className="mb-3 text-sm font-semibold text-slate-900">Imagine categorie</div>
+
+            {editingId ? (
+              <div className="flex flex-wrap gap-3">
+                <label className={documentButtonSecondaryClass}>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) uploadImage(file)
+                    }}
+                  />
+                  <ImagePlus size={16} className="mr-2" />
                   {uploading ? "Se încarcă..." : "Încarcă poză categorie"}
-                </span>
-              </label>
+                </label>
 
-              {imageUrl.trim() ? (
-                <button type="button" style={btnDangerSoft} onClick={() => setImageUrl("")}>
-                  Șterge poza
-                </button>
-              ) : null}
-            </div>
-
-            {imageUrl.trim() ? (
-              <div style={previewWrap}>
-                <div style={previewLabel}>Preview categorie</div>
-                <img
-                  src={imageUrl}
-                  alt="Preview categorie"
-                  style={previewImage}
-                  onError={(e) => {
-                    ;(e.currentTarget as HTMLImageElement).style.display = "none"
-                  }}
-                />
+                {imageUrl.trim() ? (
+                  <button type="button" className={documentButtonDangerClass} onClick={() => setImageUrl("")}>
+                    Șterge poza
+                  </button>
+                ) : null}
               </div>
             ) : (
-              <div style={hintBox}>
-                Categoria nu are încă poză. Poți încărca poza doar în modul de editare, exact cum ai cerut.
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-4 text-sm text-slate-500">
+                Salvează mai întâi categoria, apoi intră pe edit ca să încarci poza.
               </div>
             )}
-          </>
+          </div>
+
+          <div className="rounded-[24px] border border-slate-200 bg-white p-4">
+            <div className="mb-3 text-sm font-semibold text-slate-900">Preview categorie</div>
+            {imageUrl.trim() ? (
+              <img
+                src={imageUrl}
+                alt="Preview categorie"
+                className="h-36 w-36 rounded-2xl border border-slate-200 object-cover"
+                onError={(e) => {
+                  ;(e.currentTarget as HTMLImageElement).style.display = "none"
+                }}
+              />
+            ) : (
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
+                Categoria nu are încă poză.
+              </div>
+            )}
+          </div>
+        </div>
+      </DocumentSection>
+
+      <DocumentSection title="Categorii existente" description="Le vezi pe toate, cu departamentul, vizibilitatea în POS și imaginea asociată.">
+        {loading ? (
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+            Se încarcă...
+          </div>
         ) : (
-          <div style={hintBox}>
-            Salvează mai întâi categoria, apoi intră pe Edit ca să încarci poza.
+          <div className="overflow-hidden rounded-[24px] border border-slate-200">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-slate-500">
+                <tr>
+                  <th className="px-4 py-3 text-left font-medium">Poză</th>
+                  <th className="px-4 py-3 text-left font-medium">Categorie</th>
+                  <th className="px-4 py-3 text-left font-medium">Departament</th>
+                  <th className="px-4 py-3 text-left font-medium">Vizibilă POS</th>
+                  <th className="px-4 py-3 text-right font-medium">Acțiuni</th>
+                </tr>
+              </thead>
+              <tbody>
+                {list.map((category) => (
+                  <tr key={category.id} className="border-t border-slate-200">
+                    <td className="px-4 py-4">
+                      {category.imageUrl ? (
+                        <img
+                          src={category.imageUrl}
+                          alt={category.name}
+                          className="h-14 w-14 rounded-2xl border border-slate-200 object-cover"
+                          onError={(e) => {
+                            ;(e.currentTarget as HTMLImageElement).style.display = "none"
+                          }}
+                        />
+                      ) : (
+                        <span className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+                          <ImagePlus size={18} />
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-4">
+                      <div className="font-semibold text-slate-900">{category.name}</div>
+                    </td>
+                    <td className="px-4 py-4 text-slate-600">{category.department?.name || "-"}</td>
+                    <td className="px-4 py-4">
+                      <span
+                        className={
+                          category.isVisibleInPos !== false
+                            ? "inline-flex rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700"
+                            : "inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600"
+                        }
+                      >
+                        {category.isVisibleInPos !== false ? "Da" : "Nu"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4">
+                      <div className="flex justify-end gap-2">
+                        <button type="button" onClick={() => startEdit(category)} className={documentButtonSecondaryClass}>
+                          Edit
+                        </button>
+                        <button type="button" onClick={() => remove(category.id)} className={documentButtonDangerClass}>
+                          Șterge
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
-
-        {loading ? (
-          <div>Se încarcă...</div>
-        ) : (
-          <table style={table}>
-            <thead>
-              <tr>
-                <th style={th}>Poză</th>
-                <th style={th}>Categorie</th>
-                <th style={th}>Departament</th>
-                <th style={th}>Vizibilă POS</th>
-                <th style={th}>Acțiuni</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {list.map((c) => (
-                <tr key={c.id}>
-                  <td style={td}>
-                    {c.imageUrl ? (
-                      <img
-                        src={c.imageUrl}
-                        alt={c.name}
-                        style={thumb}
-                        onError={(e) => {
-                          ;(e.currentTarget as HTMLImageElement).style.display = "none"
-                        }}
-                      />
-                    ) : (
-                      <span style={{ color: "#888" }}>-</span>
-                    )}
-                  </td>
-
-                  <td style={td}>{c.name}</td>
-                  <td style={td}>{c.department?.name || "-"}</td>
-                  <td style={td}>{c.isVisibleInPos !== false ? "Da" : "Nu"}</td>
-
-                  <td style={td}>
-                    <div style={rowActions}>
-                      <button onClick={() => startEdit(c)} style={btnEdit}>
-                        Edit
-                      </button>
-
-                      <button onClick={() => remove(c.id)} style={btnDanger}>
-                        Șterge
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      </DocumentSection>
     </div>
   )
-}
-
-const card: React.CSSProperties = {
-  background: "#fff",
-  border: "1px solid #e5e7eb",
-  borderRadius: 18,
-  padding: 24
-}
-
-const formTitle: React.CSSProperties = {
-  fontSize: 18,
-  fontWeight: 700,
-  marginBottom: 14
-}
-
-const addGrid: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "1fr 1fr auto",
-  gap: 10,
-  marginBottom: 16,
-  alignItems: "center"
-}
-
-const input: React.CSSProperties = {
-  padding: "10px 12px",
-  border: "1px solid #d1d5db",
-  borderRadius: 10,
-  width: "100%"
-}
-
-const actionsRow: React.CSSProperties = {
-  display: "flex",
-  gap: 10
-}
-
-const uploadRow: React.CSSProperties = {
-  display: "flex",
-  gap: 10,
-  alignItems: "center",
-  marginBottom: 16
-}
-
-const uploadLabel: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center"
-}
-
-const btnPrimary: React.CSSProperties = {
-  background: "#111",
-  color: "#fff",
-  border: "none",
-  borderRadius: 10,
-  padding: "10px 14px",
-  cursor: "pointer"
-}
-
-const btnSecondary: React.CSSProperties = {
-  background: "#fff",
-  color: "#111",
-  border: "1px solid #d1d5db",
-  borderRadius: 10,
-  padding: "10px 14px",
-  cursor: "pointer",
-  display: "inline-flex",
-  alignItems: "center"
-}
-
-const btnEdit: React.CSSProperties = {
-  background: "#fff",
-  color: "#111",
-  border: "1px solid #d1d5db",
-  borderRadius: 8,
-  padding: "6px 10px",
-  cursor: "pointer"
-}
-
-const btnDanger: React.CSSProperties = {
-  background: "#ef4444",
-  color: "#fff",
-  border: "none",
-  borderRadius: 8,
-  padding: "6px 10px",
-  cursor: "pointer"
-}
-
-const btnDangerSoft: React.CSSProperties = {
-  background: "#fff1f2",
-  color: "#991b1b",
-  border: "1px solid #fecdd3",
-  borderRadius: 10,
-  padding: "10px 14px",
-  cursor: "pointer"
-}
-
-const table: React.CSSProperties = {
-  width: "100%",
-  borderCollapse: "collapse"
-}
-
-const th: React.CSSProperties = {
-  textAlign: "left",
-  padding: "10px 12px",
-  borderBottom: "1px solid #e5e7eb",
-  background: "#f9fafb"
-}
-
-const td: React.CSSProperties = {
-  padding: "10px 12px",
-  borderBottom: "1px solid #f1f5f9",
-  verticalAlign: "middle"
-}
-
-const rowActions: React.CSSProperties = {
-  display: "flex",
-  gap: 8
-}
-
-const thumb: React.CSSProperties = {
-  width: 56,
-  height: 56,
-  objectFit: "cover",
-  borderRadius: 10,
-  border: "1px solid #e5e7eb"
-}
-
-const previewWrap: React.CSSProperties = {
-  marginBottom: 16
-}
-
-const previewLabel: React.CSSProperties = {
-  fontSize: 13,
-  color: "#666",
-  marginBottom: 8
-}
-
-const previewImage: React.CSSProperties = {
-  width: 120,
-  height: 120,
-  objectFit: "cover",
-  borderRadius: 14,
-  border: "1px solid #e5e7eb"
-}
-
-const hintBox: React.CSSProperties = {
-  marginBottom: 16,
-  padding: 12,
-  borderRadius: 12,
-  border: "1px dashed #d1d5db",
-  background: "#f9fafb",
-  color: "#4b5563"
-}
-
-const checkboxWrap: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 8,
-  padding: "10px 12px",
-  border: "1px solid #d1d5db",
-  borderRadius: 10,
-  minHeight: 42,
-  background: "#fff"
-}
-
-const errorBox: React.CSSProperties = {
-  border: "1px solid #fecaca",
-  background: "#fef2f2",
-  color: "#991b1b",
-  borderRadius: 12,
-  padding: 12
-}
-
-const successBox: React.CSSProperties = {
-  border: "1px solid #bbf7d0",
-  background: "#f0fdf4",
-  color: "#166534",
-  borderRadius: 12,
-  padding: 12
 }

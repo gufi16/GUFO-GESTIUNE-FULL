@@ -6,15 +6,14 @@ type PageHeaderProps = {
 
 export default function PageHeader({ title, subtitle, badge }: PageHeaderProps) {
   return (
-    <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+    <div className="w-full rounded-[14px] border border-slate-200 bg-white px-3 py-2.5 shadow-sm shadow-slate-900/[0.03]">
       {badge ? (
-        <div className="mb-3 inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-blue-700">
+        <div className="mb-1 inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-600">
           {badge}
         </div>
       ) : null}
 
-      <h1 className="text-3xl font-semibold tracking-tight text-slate-900">{title}</h1>
-      {subtitle ? <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">{subtitle}</p> : null}
+      <h1 className="text-[20px] font-semibold tracking-tight text-[#17324D] md:text-[22px]">{title}</h1>
     </div>
   )
 }

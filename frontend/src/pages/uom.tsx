@@ -1,8 +1,15 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import PageHeader from "../components/PageHeader"
 import DataTable from "../components/ui/DataTable"
-
-const API = "http://localhost:3001"
+import {
+  DocumentMetric,
+  InlineNotice,
+  documentButtonDangerClass,
+  documentButtonPrimaryClass,
+  documentButtonSecondaryClass,
+  documentInputClass,
+} from "../components/DocumentUi"
+import { API_BASE as API, getToken } from "../lib/api"
 
 type Uom = {
   id: string
@@ -12,115 +19,151 @@ type Uom = {
 }
 
 export default function UomPage() {
-  const token =
-    localStorage.getItem("token") ||
-    localStorage.getItem("access_token") ||
-    ""
+  const token = getToken() || ""
 
   const [list, setList] = useState<Uom[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [code, setCode] = useState("")
   const [name, setName] = useState("")
+  const [error, setError] = useState("")
+  const [message, setMessage] = useState("")
+
+  const stats = useMemo(
+    () => ({
+      total: list.length,
+      active: list.filter((item) => item.isActive).length,
+      inactive: list.filter((item) => !item.isActive).length,
+    }),
+    [list]
+  )
 
   useEffect(() => {
     load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function load() {
-    const res = await fetch(`${API}/api/v1/meta/uom`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
+    setLoading(true)
+    setError("")
+    try {
+      const res = await fetch(`${API}/api/v1/meta/uom`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
 
-    const data = await res.json()
-    setList(data.items || [])
-    setLoading(false)
+      const data = await res.json().catch(() => ({}))
+      setList(data.items || [])
+    } catch {
+      setError("Nu am putut încărca unitățile de măsură.")
+      setList([])
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function add() {
-    if (!code || !name) return
+    if (!code.trim() || !name.trim()) {
+      setError("Completează codul și denumirea.")
+      return
+    }
 
     setSaving(true)
+    setError("")
+    setMessage("")
 
     const res = await fetch(`${API}/api/v1/meta/uom`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`
+        Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ code, name })
+      body: JSON.stringify({ code: code.trim(), name: name.trim() }),
     })
 
-    const data = await res.json()
+    const data = await res.json().catch(() => ({}))
     setSaving(false)
 
     if (!data.ok) {
-      alert(data.error)
+      setError(data.error || "Nu am putut salva unitatea.")
       return
     }
 
     setCode("")
     setName("")
+    setMessage("Unitatea de măsură a fost adăugată.")
     load()
   }
 
   async function toggle(item: Uom) {
+    setError("")
+    setMessage("")
+
     await fetch(`${API}/api/v1/meta/uom/${item.id}`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`
+        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
         code: item.code,
         name: item.name,
-        isActive: !item.isActive
-      })
+        isActive: !item.isActive,
+      }),
     })
 
+    setMessage(item.isActive ? "Unitatea a fost dezactivată." : "Unitatea a fost activată.")
     load()
   }
 
   async function remove(id: string) {
     if (!confirm("Ștergi unitatea?")) return
 
+    setError("")
+    setMessage("")
+
     await fetch(`${API}/api/v1/meta/uom/${id}`, {
       method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` }
+      headers: { Authorization: `Bearer ${token}` },
     })
 
+    setMessage("Unitatea a fost ștearsă.")
     load()
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <PageHeader
         badge="nomenclator"
         title="Unități de măsură"
-        subtitle="Unități utilizate în produse și documente. Lista standard este încărcată automat în sistem."
+        subtitle="Unități utilizate în produse și documente. Lista standard rămâne ușor de administrat și clară vizual."
       />
 
-      <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="mb-6 flex flex-col gap-3 lg:flex-row">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <DocumentMetric title="UM" value={stats.total} tone="slate" />
+        <DocumentMetric title="Active" value={stats.active} tone="emerald" />
+        <DocumentMetric title="Inactive" value={stats.inactive} tone="amber" />
+      </div>
+
+      {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
+      {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
+
+      <div className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-4 flex flex-col gap-2.5 lg:flex-row">
           <input
             placeholder="Cod (ex: BUC)"
             value={code}
             onChange={(e) => setCode(e.target.value)}
-            className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 lg:w-40"
+            className={`${documentInputClass} lg:w-40`}
           />
 
           <input
             placeholder="Denumire (ex: Bucată)"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="h-11 flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
+            className={`${documentInputClass} flex-1`}
           />
 
-          <button
-            onClick={add}
-            disabled={saving}
-            className="h-11 rounded-2xl bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-60"
-          >
+          <button onClick={add} disabled={saving} className={documentButtonPrimaryClass}>
             {saving ? "Se salvează..." : "Adaugă"}
           </button>
         </div>
@@ -147,22 +190,16 @@ export default function UomPage() {
                 className: "text-right",
                 render: (u) => (
                   <div className="flex justify-end gap-2">
-                    <button
-                      onClick={() => toggle(u)}
-                      className="rounded-xl bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-200"
-                    >
+                    <button onClick={() => toggle(u)} className={documentButtonSecondaryClass}>
                       {u.isActive ? "Dezactivează" : "Activează"}
                     </button>
 
-                    <button
-                      onClick={() => remove(u.id)}
-                      className="rounded-xl bg-red-500 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-red-600"
-                    >
+                    <button onClick={() => remove(u.id)} className={documentButtonDangerClass}>
                       Șterge
                     </button>
                   </div>
-                )
-              }
+                ),
+              },
             ]}
           />
         )}

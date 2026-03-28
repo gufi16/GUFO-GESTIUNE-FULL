@@ -1,8 +1,11 @@
 services:
   - type: web
-    name: poshard-saas-frontend
+    name: poshard-frontend
     env: static
     plan: starter
     rootDir: frontend
-    buildCommand: npm install && npm run build
+    buildCommand: npm ci && npm run build
     staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        sync: false

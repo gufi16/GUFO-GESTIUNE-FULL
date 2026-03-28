@@ -1,14 +1,50 @@
 import { useEffect, useMemo, useState } from "react"
+import type { CSSProperties, KeyboardEvent, ReactNode } from "react"
 import PageHeader from "../components/PageHeader"
+import { API_BASE, getToken } from "../lib/api"
+import { getActiveLocationId, setActiveLocationId, subscribeToActiveLocation } from "../lib/location"
+import { downloadPdfFile } from "../lib/pdf"
+import { getDocumentNumbering, getPreviewValue, type NumberingPayload } from "../lib/numbering"
+import { formatFactorRo, formatMoneyRo, formatNumberRo, formatQtyRo, parseLocaleNumber } from "../lib/format"
 
-const API = "http://localhost:3001"
+type AnyObj = Record<string, any>
 
-function toNumberSafe(value: any) {
-  const n = Number(value)
-  return Number.isFinite(n) ? n : 0
+type NirLine = {
+  id: string
+  productId: string
+  search: string
+  uomId: string
+  uomCode: string
+  factor: string
+  qty: string
+  price: string
+  vat: string
+  isSgr: boolean
+  sgrValue: string
+  autoFactor: boolean
 }
 
-function makeLine() {
+function rawToken() {
+  return getToken() || localStorage.getItem("token") || localStorage.getItem("access_token") || ""
+}
+
+function toNumberSafe(value: any) {
+  return parseLocaleNumber(value)
+}
+
+function clampPositiveString(value: any, fallback = "0") {
+  const n = Math.max(0, toNumberSafe(value))
+  if (!Number.isFinite(n)) return fallback
+  return String(n)
+}
+
+function clampStrictPositiveString(value: any, fallback = "1") {
+  const n = Math.max(0.000001, toNumberSafe(value))
+  if (!Number.isFinite(n)) return fallback
+  return String(n)
+}
+
+function makeLine(): NirLine {
   return {
     id: crypto.randomUUID(),
     productId: "",
@@ -20,7 +56,8 @@ function makeLine() {
     price: "0",
     vat: "19",
     isSgr: false,
-    sgrValue: "0.50"
+    sgrValue: "0.50",
+    autoFactor: true,
   }
 }
 
@@ -60,23 +97,79 @@ function getReceiptIdFromUrl() {
   return params.get("id") || ""
 }
 
-function formatNumber(value: any) {
-  return Number(value || 0).toFixed(2)
+function getIncomingInvoiceIdFromUrl() {
+  const params = new URLSearchParams(window.location.search)
+  return params.get("incomingInvoiceId") || ""
+}
+
+function formatNumber(value: any, digits = 2) {
+  return formatNumberRo(value, digits)
+}
+
+function focusNextField(e: KeyboardEvent<HTMLInputElement | HTMLSelectElement>) {
+  if (e.key !== "Enter") return
+  e.preventDefault()
+
+  const current = e.currentTarget
+  const fields = Array.from(
+    document.querySelectorAll<HTMLElement>("[data-grid-field='nir']")
+  ).filter((el) => !el.hasAttribute("disabled"))
+
+  const index = fields.indexOf(current)
+  if (index >= 0 && index < fields.length - 1) {
+    fields[index + 1].focus()
+    if ((fields[index + 1] as HTMLInputElement).select) {
+      ;(fields[index + 1] as HTMLInputElement).select()
+    }
+  }
+}
+
+function getLineComputed(line: NirLine, fxRate: string) {
+  const qty = Math.max(0, toNumberSafe(line.qty))
+  const factor = Math.max(0.000001, toNumberSafe(line.factor) || 1)
+  const price = Math.max(0, toNumberSafe(line.price))
+  const vat = Math.max(0, toNumberSafe(line.vat))
+  const fx = Math.max(0.000001, toNumberSafe(fxRate) || 1)
+  const qtyBase = qty * factor
+  const netFc = qtyBase * price
+  const vatFc = (netFc * vat) / 100
+  const sgrUnit = line.isSgr ? Math.max(0, toNumberSafe(line.sgrValue || 0.5)) : 0
+  const sgrFc = qtyBase * sgrUnit
+  const grossFc = netFc + vatFc
+  const withSgrFc = grossFc + sgrFc
+
+  return {
+    qty,
+    factor,
+    price,
+    vat,
+    fx,
+    qtyBase,
+    netFc,
+    vatFc,
+    sgrUnit,
+    sgrFc,
+    grossFc,
+    withSgrFc,
+    netRon: netFc * fx,
+    vatRon: vatFc * fx,
+    grossRon: grossFc * fx,
+    sgrRon: sgrFc * fx,
+    withSgrRon: withSgrFc * fx,
+  }
 }
 
 export default function NirPage() {
-  const token =
-    localStorage.getItem("token") ||
-    localStorage.getItem("access_token") ||
-    ""
-
+  const token = rawToken()
   const receiptId = getReceiptIdFromUrl()
+  const incomingInvoiceId = getIncomingInvoiceIdFromUrl()
 
   const [products, setProducts] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])
   const [suppliers, setSuppliers] = useState<any[]>([])
   const [uoms, setUoms] = useState<any[]>([])
   const [vatRates, setVatRates] = useState<any[]>([])
+  const [numbering, setNumbering] = useState<NumberingPayload["previews"] | null>(null)
 
   const [saving, setSaving] = useState(false)
   const [loadingMeta, setLoadingMeta] = useState(false)
@@ -89,7 +182,7 @@ export default function NirPage() {
   const [supplierChosen, setSupplierChosen] = useState(false)
 
   const [header, setHeader] = useState({
-    locationId: "",
+    locationId: getActiveLocationId(),
     supplierId: "",
     supplierName: "",
     supplierCode: "",
@@ -97,10 +190,14 @@ export default function NirPage() {
     docDate: new Date().toISOString().slice(0, 10),
     currency: "RON",
     fxRate: "1",
-    note: ""
+    note: "",
+    sourceIncomingEInvoiceId: "",
+    spvDownloadId: "",
+    spvUploadIndex: "",
+    spvInvoiceNo: "",
   })
 
-  const [lines, setLines] = useState<any[]>([makeLine()])
+  const [lines, setLines] = useState<NirLine[]>([makeLine()])
 
   const [quickProductOpen, setQuickProductOpen] = useState(false)
   const [quickProductLineId, setQuickProductLineId] = useState("")
@@ -113,7 +210,7 @@ export default function NirPage() {
     purchaseFactor: "1",
     vatRateId: "",
     price: "0",
-    isSgr: false
+    isSgr: false,
   })
 
   const [quickSupplierOpen, setQuickSupplierOpen] = useState(false)
@@ -126,18 +223,35 @@ export default function NirPage() {
     regNo: "",
     address: "",
     email: "",
-    phone: ""
+    phone: "",
   })
 
   useEffect(() => {
     loadMeta()
+    const unsubscribe = subscribeToActiveLocation((locationId) => {
+      if (receiptId) return
+      setHeader((prev) => {
+        if (!locationId || prev.locationId === locationId) return prev
+        return { ...prev, locationId }
+      })
+    })
+    return unsubscribe
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
     if (receiptId) {
       loadReceipt(receiptId)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [receiptId])
+
+  useEffect(() => {
+    if (!receiptId && incomingInvoiceId && products.length && locations.length) {
+      void loadIncomingInvoice(incomingInvoiceId)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [receiptId, incomingInvoiceId, products.length, locations.length])
 
   async function loadMeta() {
     setLoadingMeta(true)
@@ -148,12 +262,13 @@ export default function NirPage() {
     if (token) headers.Authorization = `Bearer ${token}`
 
     try {
-      const [p, l, s, u, v] = await Promise.all([
-        fetch(`${API}/api/v1/products`, { headers }),
-        fetch(`${API}/api/v1/meta/locations`, { headers }),
-        fetch(`${API}/api/v1/meta/suppliers`, { headers }),
-        fetch(`${API}/api/v1/meta/uom`, { headers }),
-        fetch(`${API}/api/v1/meta/vat`, { headers })
+      const [p, l, s, u, v, numberingData] = await Promise.all([
+        fetch(`${API_BASE}/api/v1/products`, { headers }),
+        fetch(`${API_BASE}/api/v1/meta/locations`, { headers }),
+        fetch(`${API_BASE}/api/v1/meta/suppliers`, { headers }),
+        fetch(`${API_BASE}/api/v1/meta/uom`, { headers }),
+        fetch(`${API_BASE}/api/v1/meta/vat`, { headers }),
+        getDocumentNumbering().catch(() => null),
       ])
 
       const pData = await p.json().catch(() => ({}))
@@ -183,6 +298,17 @@ export default function NirPage() {
       setSuppliers(nextSuppliers)
       setUoms(nextUoms)
       setVatRates(nextVatRates)
+      setNumbering(numberingData?.previews || null)
+
+      if (!receiptId && nextLocations.length) {
+        const preferredLocationId =
+          nextLocations.find((location: AnyObj) => location.id === getActiveLocationId())?.id || nextLocations[0]?.id || ""
+
+        setHeader((prev) => ({
+          ...prev,
+          locationId: prev.locationId || preferredLocationId,
+        }))
+      }
 
       if (
         !nextProducts.length &&
@@ -212,10 +338,10 @@ export default function NirPage() {
     setLoadError("")
 
     try {
-      const res = await fetch(`${API}/api/v1/purchase-receipts/${id}`, {
+      const res = await fetch(`${API_BASE}/api/v1/purchase-receipts/${id}`, {
         headers: {
-          Authorization: `Bearer ${token}`
-        }
+          Authorization: `Bearer ${token}`,
+        },
       })
 
       const data = await res.json().catch(() => ({}))
@@ -243,13 +369,17 @@ export default function NirPage() {
         docDate: r.docDate ? String(r.docDate).slice(0, 10) : "",
         currency: r.currency || "RON",
         fxRate: String(r.fxRate || 1),
-        note: r.note || ""
+        note: r.note || "",
+        sourceIncomingEInvoiceId: r.sourceIncomingEInvoiceId || "",
+        spvDownloadId: r.spvDownloadId || "",
+        spvUploadIndex: r.spvUploadIndex || "",
+        spvInvoiceNo: r.spvInvoiceNo || "",
       })
 
       setSupplierSearch(r.supplier?.name || r.supplierName || "")
       setSupplierChosen(!!(r.supplierId || r.supplierName))
 
-      const loadedLines = ensureArray(r.items).map((item: any) => ({
+      const loadedLines: NirLine[] = ensureArray(r.items).map((item: any) => ({
         id: item.id || crypto.randomUUID(),
         productId: item.productId || "",
         search: item.product?.name || "",
@@ -264,7 +394,10 @@ export default function NirPage() {
         price: String(item.unitCostNetFc ?? 0),
         vat: String(item.vatRateValue ?? 19),
         isSgr: Boolean(item.product?.isSgr),
-        sgrValue: String(item.product?.isSgr ? Number(item.product?.sgrValue || 0.5) : 0)
+        sgrValue: String(
+          item.product?.isSgr ? Number(item.product?.sgrValue || 0.5) : 0
+        ),
+        autoFactor: true,
       }))
 
       setLines(loadedLines.length ? loadedLines : [makeLine()])
@@ -275,14 +408,107 @@ export default function NirPage() {
     }
   }
 
-  function setLineValue(id: string, patch: any) {
+  async function loadIncomingInvoice(id: string) {
+    if (!token) return
+
+    setLoadError("")
+
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/efactura/incoming/${id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok || !data?.item) {
+        setLoadError(data?.error || "Nu pot incarca factura primita din SPV.")
+        return
+      }
+
+      const item = data.item
+      const preferredLocationId =
+        locations.find((location: AnyObj) => location.id === getActiveLocationId())?.id ||
+        locations[0]?.id ||
+        ""
+
+      setHeader((prev) => ({
+        ...prev,
+        locationId: prev.locationId || preferredLocationId,
+        supplierId: item.supplierId || "",
+        supplierName: item.supplier?.name || item.supplierName || "",
+        supplierCode: item.supplier?.code || item.supplierCode || "",
+        docNo: item.invoiceNo || prev.docNo,
+        docDate: item.invoiceDate ? String(item.invoiceDate).slice(0, 10) : prev.docDate,
+        currency: item.currency || "RON",
+        fxRate: "1",
+        note: `Import SPV - ID descarcare: ${item.spvDownloadId || "-"}`,
+        sourceIncomingEInvoiceId: item.id || "",
+        spvDownloadId: item.spvDownloadId || "",
+        spvUploadIndex: item.spvUploadIndex || "",
+        spvInvoiceNo: item.invoiceNo || "",
+      }))
+
+      setSupplierSearch(item.supplier?.name || item.supplierName || "")
+      setSupplierChosen(Boolean(item.supplierId || item.supplierName))
+
+      const nextLines: NirLine[] = ensureArray(item.items).map((line: any) => {
+        const matched = line.matchedProduct
+        const purchaseUom = matched?.purchaseUom || matched?.uom || null
+        const fallbackUom = uoms.find((entry: AnyObj) => String(entry?.code || "").trim().toLowerCase() === String(line.uomCode || "").trim().toLowerCase())
+        return {
+          id: crypto.randomUUID(),
+          productId: matched?.id || "",
+          search: matched?.name || line.productName || "",
+          uomId: purchaseUom?.id || fallbackUom?.id || "",
+          uomCode: purchaseUom?.code || fallbackUom?.code || line.uomCode || "",
+          factor: String(matched?.purchaseFactor || 1),
+          qty: String(line.qty ?? 0),
+          price: String(line.unitPrice ?? 0),
+          vat: String(line.vatRate ?? matched?.vatRate?.rate ?? 19),
+          isSgr: Boolean(matched?.isSgr),
+          sgrValue: String(matched?.isSgr ? Number(matched?.sgrValue || 0.5) : 0),
+          autoFactor: true,
+        }
+      })
+
+      setLines(nextLines.length ? nextLines : [makeLine()])
+    } catch {
+      setLoadError("Nu pot incarca factura primita din SPV.")
+    }
+  }
+
+  function setLineValue(id: string, patch: Partial<NirLine>) {
     setLines((prev) =>
       prev.map((line) => (line.id === id ? { ...line, ...patch } : line))
     )
   }
 
+  function normalizeLineValue(id: string, key: keyof NirLine) {
+    setLines((prev) =>
+      prev.map((line) => {
+        if (line.id !== id) return line
+
+        if (key === "qty") return { ...line, qty: clampPositiveString(line.qty, "1") }
+        if (key === "price") return { ...line, price: clampPositiveString(line.price, "0") }
+        if (key === "vat") return { ...line, vat: clampPositiveString(line.vat, "19") }
+        if (key === "factor") return { ...line, factor: clampStrictPositiveString(line.factor, "1") }
+        if (key === "sgrValue") return { ...line, sgrValue: clampPositiveString(line.sgrValue, "0.50") }
+
+        return line
+      })
+    )
+  }
+
   function addLine() {
     setLines((prev) => [...prev, makeLine()])
+    setTimeout(() => {
+      const fields = Array.from(
+        document.querySelectorAll<HTMLElement>("[data-grid-field='nir']")
+      )
+      const last = fields[fields.length - 6]
+      last?.focus()
+    }, 0)
   }
 
   function removeLine(id: string) {
@@ -297,7 +523,7 @@ export default function NirPage() {
     if (q.length < 2) return []
 
     return ensureArray(products)
-      .filter((p: any) => {
+      .filter((p: AnyObj) => {
         const name = String(p?.name || "").toLowerCase()
         const sku = String(p?.sku || "").toLowerCase()
         return name.includes(q) || sku.includes(q)
@@ -310,7 +536,7 @@ export default function NirPage() {
     if (q.length < 2) return []
 
     return ensureArray(suppliers)
-      .filter((s: any) => {
+      .filter((s: AnyObj) => {
         const name = String(s?.name || "").toLowerCase()
         const code = String(s?.code || "").toLowerCase()
         const cif = String(s?.cif || "").toLowerCase()
@@ -319,7 +545,9 @@ export default function NirPage() {
       .slice(0, 8)
   }
 
-  function chooseProduct(lineId: string, product: any) {
+  function chooseProduct(lineId: string, product: AnyObj) {
+    const productFactor = Math.max(0.000001, toNumberSafe(product.purchaseFactor || 1))
+
     setLines((prev) =>
       prev.map((line) => {
         if (line.id !== lineId) return line
@@ -329,22 +557,23 @@ export default function NirPage() {
           search: product.name,
           uomId: product.purchaseUom?.id || product.uom?.id || "",
           uomCode: product.purchaseUom?.code || product.uom?.code || "",
-          factor: String(product.purchaseFactor || 1),
+          factor: String(productFactor),
           vat: String(product.vatRate?.rate || 19),
-          price: String(product.price ?? line.price ?? "0"),
+          price: String(product.costPrice ?? line.price ?? "0"),
           isSgr: Boolean(product.isSgr),
-          sgrValue: String(product.isSgr ? Number(product.sgrValue || 0.5) : 0)
+          sgrValue: String(product.isSgr ? Number(product.sgrValue || 0.5) : 0),
+          autoFactor: true,
         }
       })
     )
   }
 
-  function chooseSupplier(supplier: any) {
+  function chooseSupplier(supplier: AnyObj) {
     setHeader((prev) => ({
       ...prev,
       supplierId: supplier.id,
       supplierName: supplier.name || "",
-      supplierCode: supplier.code || ""
+      supplierCode: supplier.code || "",
     }))
     setSupplierSearch(supplier.name || "")
     setSupplierChosen(true)
@@ -352,11 +581,28 @@ export default function NirPage() {
     setQuickSupplierError("")
   }
 
-  function openQuickProduct(line: any) {
-    const defaultUom = uoms.find((u: any) => u.isActive !== false) || uoms[0]
+  function toggleFactorMode(line: NirLine) {
+    if (!line.productId) return
+
+    if (line.autoFactor) {
+      setLineValue(line.id, { autoFactor: false })
+      return
+    }
+
+    const product = products.find((p: AnyObj) => p.id === line.productId)
+    const productFactor = Math.max(0.000001, toNumberSafe(product?.purchaseFactor || 1))
+
+    setLineValue(line.id, {
+      autoFactor: true,
+      factor: String(productFactor),
+    })
+  }
+
+  function openQuickProduct(line: NirLine) {
+    const defaultUom = uoms.find((u: AnyObj) => u.isActive !== false) || uoms[0]
     const defaultVat =
-      vatRates.find((v: any) => Number(v.rate) === 19 && v.isActive !== false) ||
-      vatRates.find((v: any) => v.isActive !== false) ||
+      vatRates.find((v: AnyObj) => Number(v.rate) === 19 && v.isActive !== false) ||
+      vatRates.find((v: AnyObj) => v.isActive !== false) ||
       vatRates[0]
 
     setQuickProductLineId(line.id)
@@ -369,7 +615,7 @@ export default function NirPage() {
       purchaseFactor: "1",
       vatRateId: defaultVat?.id || "",
       price: "0",
-      isSgr: false
+      isSgr: false,
     })
   }
 
@@ -380,14 +626,14 @@ export default function NirPage() {
     setQuickProductError("")
   }
 
-  async function tryCreateProduct(url: string, payload: any) {
+  async function tryCreateProduct(url: string, payload: AnyObj) {
     const res = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`
+        Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
     })
 
     const data = await res.json().catch(() => ({}))
@@ -406,7 +652,7 @@ export default function NirPage() {
     }
 
     if (!quickProductForm.purchaseUomId) {
-      setQuickProductError("Selectează UM achiziție.")
+      setQuickProductError("Selectează ambalaj.")
       return
     }
 
@@ -422,18 +668,18 @@ export default function NirPage() {
       name: quickProductForm.name.trim(),
       uomId: quickProductForm.uomId,
       purchaseUomId: quickProductForm.purchaseUomId,
-      purchaseFactor: toNumberSafe(quickProductForm.purchaseFactor) || 1,
+      purchaseFactor: Math.max(0.000001, toNumberSafe(quickProductForm.purchaseFactor) || 1),
       vatRateId: quickProductForm.vatRateId,
-      price: toNumberSafe(quickProductForm.price),
+      price: Math.max(0, toNumberSafe(quickProductForm.price)),
       isActive: true,
-      isSgr: quickProductForm.isSgr
+      isSgr: quickProductForm.isSgr,
     }
 
     try {
-      let result = await tryCreateProduct(`${API}/api/v1/products`, payload)
+      let result = await tryCreateProduct(`${API_BASE}/api/v1/products`, payload)
 
       if (!result.res.ok) {
-        result = await tryCreateProduct(`${API}/api/v1/meta/products`, payload)
+        result = await tryCreateProduct(`${API_BASE}/api/v1/meta/products`, payload)
       }
 
       if (result.res.status === 401) {
@@ -458,11 +704,7 @@ export default function NirPage() {
         return
       }
 
-      setProducts((prev) => {
-        const next = [created, ...prev]
-        return next
-      })
-
+      setProducts((prev) => [created, ...prev])
       chooseProduct(quickProductLineId, created)
       setQuickProductLoading(false)
       closeQuickProduct()
@@ -477,12 +719,12 @@ export default function NirPage() {
     setQuickSupplierError("")
     setQuickSupplierForm({
       name: supplierSearch.trim(),
-      code: "",
+      code: getPreviewValue(numbering, "supplier"),
       cif: "",
       regNo: "",
       address: "",
       email: "",
-      phone: ""
+      phone: "",
     })
   }
 
@@ -492,14 +734,14 @@ export default function NirPage() {
     setQuickSupplierError("")
   }
 
-  async function tryCreateSupplier(url: string, payload: any) {
+  async function tryCreateSupplier(url: string, payload: AnyObj) {
     const res = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`
+        Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
     })
 
     const data = await res.json().catch(() => ({}))
@@ -523,14 +765,14 @@ export default function NirPage() {
       address: quickSupplierForm.address.trim() || null,
       email: quickSupplierForm.email.trim() || null,
       phone: quickSupplierForm.phone.trim() || null,
-      isActive: true
+      isActive: true,
     }
 
     try {
-      let result = await tryCreateSupplier(`${API}/api/v1/suppliers`, payload)
+      let result = await tryCreateSupplier(`${API_BASE}/api/v1/suppliers`, payload)
 
       if (!result.res.ok) {
-        result = await tryCreateSupplier(`${API}/api/v1/meta/suppliers`, payload)
+        result = await tryCreateSupplier(`${API_BASE}/api/v1/meta/suppliers`, payload)
       }
 
       if (result.res.status === 401) {
@@ -565,42 +807,37 @@ export default function NirPage() {
   }
 
   const validLines = useMemo(() => {
-    return lines.filter((l) => l.productId && Number(l.qty || 0) > 0)
+    return lines.filter((l) => l.productId && Math.max(0, toNumberSafe(l.qty)) > 0)
   }, [lines])
+
+  const duplicateProductIds = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const line of validLines) {
+      counts.set(line.productId, (counts.get(line.productId) || 0) + 1)
+    }
+    return new Set(
+      Array.from(counts.entries())
+        .filter(([, count]) => count > 1)
+        .map(([productId]) => productId)
+    )
+  }, [validLines])
 
   const totals = useMemo(() => {
     return validLines.reduce(
-      (acc, l) => {
-        const qty = Number(l.qty || 0)
-        const factor = Number(l.factor || 1)
-        const price = Number(l.price || 0)
-        const vat = Number(l.vat || 0)
-        const fx = Number(header.fxRate || 1)
-        const isSgr = Boolean(l.isSgr)
-        const sgrUnit = isSgr ? Number(l.sgrValue || 0.5) : 0
-        const sgrFc = qty * sgrUnit
+      (acc, line) => {
+        const c = getLineComputed(line, header.fxRate)
 
-        const stockQty = qty * factor
-        const netFc = qty * price
-        const vatFc = (netFc * vat) / 100
-        const grossFc = netFc + vatFc
-
-        const netRon = netFc * fx
-        const vatRon = vatFc * fx
-        const grossRon = grossFc * fx
-        const sgrRon = sgrFc * fx
-
-        acc.stockQty += stockQty
-        acc.netFc += netFc
-        acc.vatFc += vatFc
-        acc.grossFc += grossFc
-        acc.sgrFc += sgrFc
-        acc.withSgrFc += grossFc + sgrFc
-        acc.netRon += netRon
-        acc.vatRon += vatRon
-        acc.grossRon += grossRon
-        acc.sgrRon += sgrRon
-        acc.withSgrRon += grossRon + sgrRon
+        acc.stockQty += c.qtyBase
+        acc.netFc += c.netFc
+        acc.vatFc += c.vatFc
+        acc.grossFc += c.grossFc
+        acc.sgrFc += c.sgrFc
+        acc.withSgrFc += c.withSgrFc
+        acc.netRon += c.netRon
+        acc.vatRon += c.vatRon
+        acc.grossRon += c.grossRon
+        acc.sgrRon += c.sgrRon
+        acc.withSgrRon += c.withSgrRon
 
         return acc
       },
@@ -615,7 +852,7 @@ export default function NirPage() {
         vatRon: 0,
         grossRon: 0,
         sgrRon: 0,
-        withSgrRon: 0
+        withSgrRon: 0,
       }
     )
   }, [validLines, header.fxRate])
@@ -661,30 +898,34 @@ export default function NirPage() {
         docNo: header.docNo,
         docDate: header.docDate,
         currency: header.currency,
-        fxRate: Number(header.fxRate || 1),
-        note: header.note
+        fxRate: Math.max(0.000001, toNumberSafe(header.fxRate) || 1),
+        note: header.note,
+        sourceIncomingEInvoiceId: header.sourceIncomingEInvoiceId || null,
+        spvDownloadId: header.spvDownloadId || null,
+        spvUploadIndex: header.spvUploadIndex || null,
+        spvInvoiceNo: header.spvInvoiceNo || header.docNo,
       },
       items: validLines.map((l) => ({
         productId: l.productId,
         uomId: l.uomId || null,
-        qty: Number(l.qty || 0),
-        conversionFactor: Number(l.factor || 1),
-        unitCostNetFc: Number(l.price || 0),
-        vatRateValue: Number(l.vat || 19)
+        qty: Math.max(0, toNumberSafe(l.qty)),
+        conversionFactor: Math.max(0.000001, toNumberSafe(l.factor) || 1),
+        unitCostNetFc: Math.max(0, toNumberSafe(l.price)),
+        vatRateValue: Math.max(0, toNumberSafe(l.vat)),
       })),
-      postNow
+      postNow,
     }
 
     setSaving(true)
 
     try {
-      const res = await fetch(`${API}/api/v1/purchase-receipts/full`, {
+      const res = await fetch(`${API_BASE}/api/v1/purchase-receipts/full`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       })
 
       const data = await res.json().catch(() => ({}))
@@ -737,20 +978,16 @@ export default function NirPage() {
     }
 
     try {
-      const res = await fetch(`${API}/api/v1/purchase-receipts/${receiptId}/pdf`, {
+      const res = await fetch(`${API_BASE}/api/v1/purchase-receipts/${receiptId}/pdf`, {
         headers: {
-          Authorization: `Bearer ${token}`
-        }
+          Authorization: `Bearer ${token}`,
+        },
       })
 
       if (!res.ok) {
         alert("Nu pot genera PDF.")
         return
       }
-
-      const blob = await res.blob()
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement("a")
 
       const supplier = (header.supplierName || supplierSearch || "Furnizor")
         .replace(/\s+/g, "-")
@@ -760,17 +997,10 @@ export default function NirPage() {
         .replace(/\s+/g, "-")
         .replace(/[^a-zA-Z0-9\-_.]/g, "")
 
-      link.href = url
-      link.download = `NIR_${docNo}_${supplier}.pdf`
-
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-
-      window.URL.revokeObjectURL(url)
+      await downloadPdfFile(res, `NIR_${docNo}_${supplier}.pdf`)
     } catch (err) {
       console.error(err)
-      alert("Eroare export PDF")
+      alert("Eroare PDF")
     }
   }
 
@@ -782,15 +1012,17 @@ export default function NirPage() {
       ? "Vizualizare NIR"
       : "Editare NIR"
 
+  const uniqueProductsCount = new Set(validLines.map((x) => x.productId)).size
+
   return (
-    <div style={{ padding: 4 }}>
+    <div style={pageWrap}>
       <div className="no-print" style={{ marginBottom: 20 }}>
         <PageHeader
           badge="operațiuni"
           title={pageTitle}
           subtitle={
             !receiptId
-              ? "Recepție marfă one-screen"
+              ? "Recepție marfă simplă, compactă și rapidă"
               : isPosted
                 ? "Document postat în stoc, disponibil doar pentru vizualizare"
                 : "Document draft editabil"
@@ -798,18 +1030,7 @@ export default function NirPage() {
         />
       </div>
 
-      <div
-        className="no-print"
-        style={{
-          display: "flex",
-          justifyContent: "flex-end",
-          alignItems: "center",
-          marginBottom: 20,
-          gap: 12,
-          flexWrap: "wrap"
-        }}
-      >
-
+      <div className="no-print" style={topActions}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <a href="/inregistrare-document/nir" style={{ textDecoration: "none" }}>
             <button style={btnSecondary}>Înapoi la listă</button>
@@ -819,7 +1040,6 @@ export default function NirPage() {
             style={btnSecondary}
             onClick={handlePrint}
             disabled={!receiptId || loadingReceipt}
-            title={!receiptId ? "Salvează documentul înainte de print." : ""}
           >
             Printează
           </button>
@@ -828,9 +1048,8 @@ export default function NirPage() {
             style={btnSecondary}
             onClick={exportPdf}
             disabled={!receiptId || loadingReceipt}
-            title={!receiptId ? "Salvează documentul înainte de export PDF." : ""}
           >
-            Export PDF
+            PDF
           </button>
 
           {!isPosted && (
@@ -862,9 +1081,9 @@ export default function NirPage() {
       )}
 
       {isPosted && (
-        <div style={infoBox}>
-          Documentul este POSTED și este blocat la editare. Poți doar să îl vizualizezi, să îl printezi sau să faci export PDF.
-        </div>
+          <div style={infoBox}>
+            Documentul este POSTED și este blocat la editare. Poți doar să îl vizualizezi, să îl printezi sau să generezi PDF.
+          </div>
       )}
 
       {(authError || loadError) && <div style={errorBox}>{authError || loadError}</div>}
@@ -874,16 +1093,20 @@ export default function NirPage() {
       ) : (
         <>
           <Section title="Antet document">
-            <div style={grid2}>
+            <div style={headerGrid}>
               <Field label="Locație">
                 <select
                   value={header.locationId}
-                  onChange={(e) => setHeader({ ...header, locationId: e.target.value })}
+                  onChange={(e) => {
+                    const nextLocationId = e.target.value
+                    setHeader({ ...header, locationId: nextLocationId })
+                    setActiveLocationId(nextLocationId)
+                  }}
                   style={input}
                   disabled={isPosted}
                 >
                   <option value="">Selectează locația</option>
-                  {ensureArray(locations).map((l: any) => (
+                  {ensureArray(locations).map((l: AnyObj) => (
                     <option key={l.id} value={l.id}>
                       {l.name}
                     </option>
@@ -925,7 +1148,7 @@ export default function NirPage() {
                       ...prev,
                       supplierId: "",
                       supplierName: value,
-                      supplierCode: ""
+                      supplierCode: "",
                     }))
                   }}
                   style={input}
@@ -936,7 +1159,7 @@ export default function NirPage() {
                   <div style={inlineUnderField}>
                     {matchedSuppliers.length > 0 ? (
                       <div style={resultsBox}>
-                        {matchedSuppliers.map((s: any) => (
+                        {matchedSuppliers.map((s: AnyObj) => (
                           <button
                             key={s.id}
                             type="button"
@@ -973,7 +1196,7 @@ export default function NirPage() {
                 <input
                   value={header.supplierCode}
                   readOnly
-                  style={{ ...input, background: "#f9fafb" }}
+                  style={{ ...input, background: "#f8fafc" }}
                 />
               </Field>
 
@@ -985,7 +1208,7 @@ export default function NirPage() {
                     setHeader({
                       ...header,
                       currency: value,
-                      fxRate: value === "RON" ? "1" : header.fxRate
+                      fxRate: value === "RON" ? "1" : header.fxRate,
                     })
                   }}
                   style={input}
@@ -1003,266 +1226,312 @@ export default function NirPage() {
                   type="text"
                   value={header.fxRate}
                   onChange={(e) => setHeader({ ...header, fxRate: e.target.value })}
+                  onBlur={() =>
+                    setHeader((prev) => ({
+                      ...prev,
+                      fxRate:
+                        prev.currency === "RON"
+                          ? "1"
+                          : clampStrictPositiveString(prev.fxRate, "1"),
+                    }))
+                  }
                   style={input}
                   disabled={header.currency === "RON" || isPosted}
+                />
+              </Field>
+
+              <Field label="Observații">
+                <input
+                  value={header.note}
+                  onChange={(e) => setHeader({ ...header, note: e.target.value })}
+                  style={input}
+                  disabled={isPosted}
                 />
               </Field>
             </div>
           </Section>
 
-          <Section title="Produse recepționate">
-            {!isPosted && (
-              <div style={{ marginBottom: 12 }}>
-                <button
-                  style={btnPrimary}
-                  onClick={addLine}
-                  disabled={loadingMeta}
-                >
-                  + Adaugă linie
-                </button>
-              </div>
-            )}
-
-            {lines.map((line) => {
-              const matches = productMatches(line.search)
-              const qty = Number(line.qty || 0)
-              const price = Number(line.price || 0)
-              const vat = Number(line.vat || 0)
-
-              const net = qty * price
-              const vatValue = (net * vat) / 100
-              const sgrUnit = Boolean(line.isSgr) ? Number(line.sgrValue || 0.5) : 0
-              const sgrTotal = qty * sgrUnit
-              const total = net + vatValue + sgrTotal
-
-              const canAddQuickProduct =
-                !isPosted &&
-                line.search.trim().length >= 2 &&
-                !line.productId &&
-                matches.length === 0 &&
-                uoms.length > 0 &&
-                vatRates.length > 0
-
-              return (
-                <div key={line.id} style={lineCard}>
-                  <div style={gridLine}>
-                    <CompactField label="Produs">
-                      <input
-                        type="text"
-                        placeholder="Scrie primele 2-3 litere..."
-                        value={line.search}
-                        onChange={(e) =>
-                          setLineValue(line.id, {
-                            search: e.target.value,
-                            productId: ""
-                          })
-                        }
-                        style={inputCompact}
-                        disabled={isPosted}
-                      />
-                    </CompactField>
-
-                    <CompactField label="UM">
-                      <input
-                        type="text"
-                        value={line.uomCode}
-                        readOnly
-                        style={{ ...inputCompact, background: "#f9fafb" }}
-                      />
-                    </CompactField>
-
-                    <CompactField label="Factor">
-                      <input
-                        type="text"
-                        value={line.factor}
-                        onChange={(e) => setLineValue(line.id, { factor: e.target.value })}
-                        style={inputCompact}
-                        disabled={isPosted}
-                      />
-                    </CompactField>
-
-                    <CompactField label="Cant.">
-                      <input
-                        type="text"
-                        value={line.qty}
-                        onChange={(e) => setLineValue(line.id, { qty: e.target.value })}
-                        style={inputCompact}
-                        disabled={isPosted}
-                      />
-                    </CompactField>
-
-                    <CompactField label="Preț ach.">
-                      <input
-                        type="text"
-                        value={line.price}
-                        onChange={(e) => setLineValue(line.id, { price: e.target.value })}
-                        style={inputCompact}
-                        disabled={isPosted}
-                      />
-                    </CompactField>
-
-                    <CompactField label="TVA %">
-                      <input
-                        type="text"
-                        value={line.vat}
-                        onChange={(e) => setLineValue(line.id, { vat: e.target.value })}
-                        style={inputCompact}
-                        disabled={isPosted}
-                      />
-                    </CompactField>
-
-                    <CompactField label="Net">
-                      <input
-                        type="text"
-                        value={net.toFixed(2)}
-                        readOnly
-                        style={{ ...inputCompact, background: "#f9fafb", fontWeight: 600 }}
-                      />
-                    </CompactField>
-
-                    <CompactField label="TVA">
-                      <input
-                        type="text"
-                        value={vatValue.toFixed(2)}
-                        readOnly
-                        style={{ ...inputCompact, background: "#f9fafb", fontWeight: 600 }}
-                      />
-                    </CompactField>
-
-                    <CompactField label="SGR">
-                      <input
-                        type="text"
-                        value={sgrTotal.toFixed(2)}
-                        readOnly
-                        style={{ ...inputCompact, background: "#f9fafb", fontWeight: 600 }}
-                      />
-                    </CompactField>
-
-                    <CompactField label="Total">
-                      <input
-                        type="text"
-                        value={total.toFixed(2)}
-                        readOnly
-                        style={{ ...inputCompact, background: "#f9fafb", fontWeight: 600 }}
-                      />
-                    </CompactField>
-
-                    <div style={{ paddingTop: 22 }}>
-                      {!isPosted ? (
-                        <button
-                          style={btnDangerSmall}
-                          onClick={() => removeLine(line.id)}
-                        >
-                          Șterge
-                        </button>
-                      ) : (
-                        <div />
-                      )}
-                    </div>
-                  </div>
-
-                  {line.productId && line.isSgr && (
-                    <div style={sgrRow}>
-                      <div style={sgrRowGrid}>
-                        <div style={sgrLabelWrap}>
-                          <div style={sgrBadge}>SGR</div>
-                          <div style={sgrName}>SGR {line.search || "Produs"}</div>
-                        </div>
-
-                        <div>
-                          <div style={sgrMiniLabel}>UM</div>
-                          <div style={sgrMiniValue}>{line.uomCode || "-"}</div>
-                        </div>
-
-                        <div>
-                          <div style={sgrMiniLabel}>Cant.</div>
-                          <div style={sgrMiniValue}>{qty.toFixed(2)}</div>
-                        </div>
-
-                        <div>
-                          <div style={sgrMiniLabel}>Preț</div>
-                          <div style={sgrMiniValue}>{sgrUnit.toFixed(2)}</div>
-                        </div>
-
-                        <div>
-                          <div style={sgrMiniLabel}>TVA %</div>
-                          <div style={sgrMiniValue}>0.00</div>
-                        </div>
-
-                        <div>
-                          <div style={sgrMiniLabel}>Total SGR</div>
-                          <div style={sgrMiniValueStrong}>{sgrTotal.toFixed(2)}</div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {line.search.trim().length >= 2 && !line.productId && !isPosted && (
-                    <div style={{ marginTop: 10 }}>
-                      {matches.length > 0 ? (
-                        <div style={resultsBox}>
-                          {matches.map((p: any) => (
-                            <button
-                              key={p.id}
-                              type="button"
-                              style={resultBtn}
-                              onClick={() => chooseProduct(line.id, p)}
-                            >
-                              <div style={{ fontWeight: 600 }}>{p.name}</div>
-                              <div style={{ fontSize: 12, color: "#666" }}>
-                                {p.sku} · UM {p.purchaseUom?.code || p.uom?.code || "-"} · TVA{" "}
-                                {p.vatRate?.rate ?? "-"}{p.isSgr ? " · SGR 0.50" : ""}
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      ) : (
-                        <div style={quickAddWrap}>
-                          <div style={{ color: "#991b1b", fontSize: 13 }}>
-                            Nu există produse găsite pentru „{line.search}”
-                          </div>
-
-                          {canAddQuickProduct && (
-                            <button
-                              type="button"
-                              style={btnSecondary}
-                              onClick={() => openQuickProduct(line)}
-                            >
-                              Adaugă produs nou
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </Section>
-
-          <Section title="Totaluri">
-            <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-              <Card
-                title={`Net ${header.currency}`}
-                value={`${formatNumber(totals.netFc)} ${header.currency}`}
-              />
-              <Card
-                title={`TVA ${header.currency}`}
-                value={`${formatNumber(totals.vatFc)} ${header.currency}`}
-              />
-              <Card
-                title={`SGR ${header.currency}`}
-                value={`${formatNumber(totals.sgrFc)} ${header.currency}`}
-              />
-              <Card
-                title={`Total fără SGR ${header.currency}`}
-                value={`${formatNumber(totals.grossFc)} ${header.currency}`}
-              />
+          <Section title="Sumar recepție">
+            <div style={totalsGrid}>
+              <Card title="Linii document" value={String(lines.length)} />
+              <Card title="Produse valide" value={String(uniqueProductsCount)} />
+              <Card title="Cantitate reală" value={`${formatNumber(totals.stockQty)} buc`} />
               <Card
                 title={`Total cu SGR ${header.currency}`}
                 value={`${formatNumber(totals.withSgrFc)} ${header.currency}`}
               />
+            </div>
 
+            {duplicateProductIds.size > 0 && (
+              <div style={{ ...warningBox, marginTop: 16 }}>
+                Ai produse duplicate pe mai multe linii. Nu blochez salvarea, dar verifică să nu dublezi recepția din greșeală.
+              </div>
+            )}
+          </Section>
+
+          <Section title="Produse recepționate">
+            <div style={toolbarRow}>
+              <div>
+                <div style={toolbarTitle}>Grid compact ERP România</div>
+                <div style={toolbarSubtitle}>
+                  Cantitatea este număr de ambalaje, prețul este pe bucată, iar totalul se calculează pe cantitatea reală.
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <div style={miniStatPill}>
+                  {lines.length} {lines.length === 1 ? "linie" : "linii"}
+                </div>
+                {!isPosted && (
+                  <button style={btnPrimary} onClick={addLine} disabled={loadingMeta}>
+                    + Adaugă linie
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div style={rowsHeader}>
+              <div>Produs</div>
+              <div>Ambalaj</div>
+              <div>Cant.</div>
+              <div>Preț/buc</div>
+              <div>TVA</div>
+              <div>Cant./ambalaj</div>
+              <div>Total</div>
+              <div></div>
+            </div>
+
+            <div style={linesViewport}>
+              <div style={rowsStack}>
+                {lines.map((line) => {
+                  const matches = productMatches(line.search)
+                  const canAddQuickProduct =
+                    !isPosted &&
+                    line.search.trim().length >= 2 &&
+                    !line.productId &&
+                    matches.length === 0 &&
+                    uoms.length > 0 &&
+                    vatRates.length > 0
+
+                  const computed = getLineComputed(line, header.fxRate)
+                  const isDuplicate = Boolean(line.productId && duplicateProductIds.has(line.productId))
+
+                  return (
+                    <div
+                      key={line.id}
+                      style={{
+                        ...rowCard,
+                        border: isDuplicate ? "1px solid #fbbf24" : rowCard.border,
+                        background: isDuplicate ? "#fffdf5" : rowCard.background,
+                      }}
+                    >
+                      <div style={rowMain}>
+                        <div style={productCell}>
+                          <input
+                            data-grid-field="nir"
+                            type="text"
+                            placeholder="Produs..."
+                            value={line.search}
+                            onChange={(e) =>
+                              setLineValue(line.id, {
+                                search: e.target.value,
+                                productId: "",
+                              })
+                            }
+                            onKeyDown={focusNextField}
+                            style={inputCompact}
+                            disabled={isPosted}
+                          />
+
+                          {line.productId && (
+                            <div style={selectedProductMeta}>
+                              Selectat · ambalaj {line.uomCode || "-"} {line.isSgr ? "· SGR" : ""}
+                              {line.autoFactor ? " · factor auto" : " · factor manual"}
+                            </div>
+                          )}
+
+                          {isDuplicate && (
+                            <div style={duplicateMeta}>
+                              Atenție: produsul apare și pe altă linie.
+                            </div>
+                          )}
+                        </div>
+
+                        <div>
+                          <input
+                            data-grid-field="nir"
+                            type="text"
+                            value={line.uomCode}
+                            readOnly
+                            style={inputCompactReadOnly}
+                          />
+                        </div>
+
+                        <div>
+                          <input
+                            data-grid-field="nir"
+                            type="text"
+                            value={line.qty}
+                            onChange={(e) => setLineValue(line.id, { qty: e.target.value })}
+                            onBlur={() => normalizeLineValue(line.id, "qty")}
+                            onKeyDown={focusNextField}
+                            style={inputCompact}
+                            disabled={isPosted}
+                          />
+                        </div>
+
+                        <div>
+                          <input
+                            data-grid-field="nir"
+                            type="text"
+                            value={line.price}
+                            onChange={(e) => setLineValue(line.id, { price: e.target.value })}
+                            onBlur={() => normalizeLineValue(line.id, "price")}
+                            onKeyDown={focusNextField}
+                            style={inputCompact}
+                            disabled={isPosted}
+                          />
+                        </div>
+
+                        <div>
+                          <input
+                            data-grid-field="nir"
+                            type="text"
+                            value={line.vat}
+                            onChange={(e) => setLineValue(line.id, { vat: e.target.value })}
+                            onBlur={() => normalizeLineValue(line.id, "vat")}
+                            onKeyDown={focusNextField}
+                            style={inputCompact}
+                            disabled={isPosted}
+                          />
+                        </div>
+
+                        <div>
+                          <input
+                            data-grid-field="nir"
+                            type="text"
+                            value={line.factor}
+                            onChange={(e) => setLineValue(line.id, { factor: e.target.value })}
+                            onBlur={() => normalizeLineValue(line.id, "factor")}
+                            onKeyDown={focusNextField}
+                            style={{
+                              ...inputCompact,
+                              background:
+                                line.productId && line.autoFactor ? "#f8fafc" : "#fff",
+                              color:
+                                line.productId && line.autoFactor ? "#64748b" : "#0f172a",
+                            }}
+                            disabled={isPosted || Boolean(line.productId && line.autoFactor)}
+                          />
+                        </div>
+
+                        <div style={totalCell}>
+                          <div style={totalValue}>{formatMoneyRo(computed.withSgrFc)}</div>
+                          <div style={totalMeta}>
+                            {computed.qty.toFixed(2)} amb × {computed.factor.toFixed(2)} ={" "}
+                            {computed.qtyBase.toFixed(2)} buc
+                          </div>
+                        </div>
+
+                        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                          {!isPosted && (
+                            <button style={btnDangerIcon} onClick={() => removeLine(line.id)}>
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div style={rowExtra}>
+                        {line.productId && (
+                          <div style={lineInsightGrid}>
+                            <div style={insightChip}>
+                              <strong>Relație:</strong> {computed.qty.toFixed(2)} amb ×{" "}
+                              {computed.factor.toFixed(2)} = {computed.qtyBase.toFixed(2)} buc
+                            </div>
+
+                            <div style={insightChip}>
+                              <strong>Net:</strong> {computed.netFc.toFixed(2)} {header.currency}
+                            </div>
+
+                            <div style={insightChip}>
+                              <strong>TVA:</strong> {computed.vatFc.toFixed(2)} {header.currency}
+                            </div>
+
+                            {line.isSgr && (
+                              <div style={sgrInlineBox}>
+                                <span style={sgrBadge}>SGR</span>
+                                <span>
+                                  {computed.qtyBase.toFixed(2)} buc × {computed.sgrUnit.toFixed(2)} ={" "}
+                                  {computed.sgrFc.toFixed(2)}
+                                </span>
+                              </div>
+                            )}
+
+                            {!isPosted && (
+                              <button
+                                type="button"
+                                style={line.autoFactor ? btnSoftAuto : btnSoftManual}
+                                onClick={() => toggleFactorMode(line)}
+                              >
+                                Factor: {line.autoFactor ? "Auto" : "Manual"}
+                              </button>
+                            )}
+                          </div>
+                        )}
+
+                        {line.search.trim().length >= 2 && !line.productId && !isPosted && (
+                          <>
+                            {matches.length > 0 ? (
+                              <div style={quickResultsGrid}>
+                                {matches.map((p: AnyObj) => (
+                                  <button
+                                    key={p.id}
+                                    type="button"
+                                    style={resultBtnCompact}
+                                    onClick={() => chooseProduct(line.id, p)}
+                                  >
+                                    <div style={{ fontWeight: 600 }}>{p.name}</div>
+                                    <div style={{ fontSize: 12, color: "#64748b" }}>
+                                      {p.sku || "-"} · Ambalaj {p.purchaseUom?.code || p.uom?.code || "-"} · TVA {p.vatRate?.rate ?? "-"}%
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
+                            ) : (
+                              <div style={quickAddWrap}>
+                                <div style={{ color: "#991b1b", fontSize: 13 }}>
+                                  Nu există produse găsite pentru „{line.search}”
+                                </div>
+
+                                {canAddQuickProduct && (
+                                  <button
+                                    type="button"
+                                    style={btnSecondary}
+                                    onClick={() => openQuickProduct(line)}
+                                  >
+                                    Adaugă produs nou
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </Section>
+
+          <Section title="Totaluri">
+            <div style={totalsGrid}>
+              <Card title={`Net ${header.currency}`} value={`${formatNumber(totals.netFc)} ${header.currency}`} />
+              <Card title={`TVA ${header.currency}`} value={`${formatNumber(totals.vatFc)} ${header.currency}`} />
+              <Card title={`SGR ${header.currency}`} value={`${formatNumber(totals.sgrFc)} ${header.currency}`} />
+              <Card title={`Total fără SGR ${header.currency}`} value={`${formatNumber(totals.grossFc)} ${header.currency}`} />
+              <Card title={`Total cu SGR ${header.currency}`} value={`${formatNumber(totals.withSgrFc)} ${header.currency}`} />
               {header.currency !== "RON" && (
                 <>
                   <Card title="Total RON fără SGR" value={`${formatNumber(totals.grossRon)} RON`} />
@@ -1278,7 +1547,7 @@ export default function NirPage() {
       {quickProductOpen && (
         <div style={modalOverlay}>
           <div style={modalCard}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+            <div style={modalHeader}>
               <div>
                 <h3 style={{ margin: 0 }}>Adaugă produs nou</h3>
                 <div style={{ color: "#666", fontSize: 13, marginTop: 4 }}>
@@ -1293,7 +1562,7 @@ export default function NirPage() {
 
             {quickProductError && <div style={{ ...errorBox, marginTop: 14 }}>{quickProductError}</div>}
 
-            <div style={{ ...grid2, marginTop: 16 }}>
+            <div style={{ ...headerGrid, marginTop: 16 }}>
               <Field label="Denumire produs">
                 <input
                   value={quickProductForm.name}
@@ -1308,15 +1577,12 @@ export default function NirPage() {
                 <select
                   value={quickProductForm.uomId}
                   onChange={(e) =>
-                    setQuickProductForm((prev) => ({
-                      ...prev,
-                      uomId: e.target.value
-                    }))
+                    setQuickProductForm((prev) => ({ ...prev, uomId: e.target.value }))
                   }
                   style={input}
                 >
                   <option value="">Selectează UM</option>
-                  {uoms.map((u: any) => (
+                  {uoms.map((u: AnyObj) => (
                     <option key={u.id} value={u.id}>
                       {u.code} - {u.name}
                     </option>
@@ -1324,19 +1590,19 @@ export default function NirPage() {
                 </select>
               </Field>
 
-              <Field label="UM achiziție">
+              <Field label="Ambalaj">
                 <select
                   value={quickProductForm.purchaseUomId}
                   onChange={(e) =>
                     setQuickProductForm((prev) => ({
                       ...prev,
-                      purchaseUomId: e.target.value
+                      purchaseUomId: e.target.value,
                     }))
                   }
                   style={input}
                 >
-                  <option value="">Selectează UM achiziție</option>
-                  {uoms.map((u: any) => (
+                  <option value="">Selectează ambalaj</option>
+                  {uoms.map((u: AnyObj) => (
                     <option key={u.id} value={u.id}>
                       {u.code} - {u.name}
                     </option>
@@ -1344,13 +1610,19 @@ export default function NirPage() {
                 </select>
               </Field>
 
-              <Field label="Factor achiziție">
+              <Field label="Cantitate pe ambalaj">
                 <input
                   value={quickProductForm.purchaseFactor}
                   onChange={(e) =>
                     setQuickProductForm((prev) => ({
                       ...prev,
-                      purchaseFactor: e.target.value
+                      purchaseFactor: e.target.value,
+                    }))
+                  }
+                  onBlur={() =>
+                    setQuickProductForm((prev) => ({
+                      ...prev,
+                      purchaseFactor: clampStrictPositiveString(prev.purchaseFactor, "1"),
                     }))
                   }
                   style={input}
@@ -1363,13 +1635,13 @@ export default function NirPage() {
                   onChange={(e) =>
                     setQuickProductForm((prev) => ({
                       ...prev,
-                      vatRateId: e.target.value
+                      vatRateId: e.target.value,
                     }))
                   }
                   style={input}
                 >
                   <option value="">Selectează TVA</option>
-                  {vatRates.map((v: any) => (
+                  {vatRates.map((v: AnyObj) => (
                     <option key={v.id} value={v.id}>
                       {v.name} - {v.rate}%
                     </option>
@@ -1383,7 +1655,13 @@ export default function NirPage() {
                   onChange={(e) =>
                     setQuickProductForm((prev) => ({
                       ...prev,
-                      price: e.target.value
+                      price: e.target.value,
+                    }))
+                  }
+                  onBlur={() =>
+                    setQuickProductForm((prev) => ({
+                      ...prev,
+                      price: clampPositiveString(prev.price, "0"),
                     }))
                   }
                   style={input}
@@ -1398,7 +1676,7 @@ export default function NirPage() {
                     onChange={(e) =>
                       setQuickProductForm((prev) => ({
                         ...prev,
-                        isSgr: e.target.checked
+                        isSgr: e.target.checked,
                       }))
                     }
                   />
@@ -1407,7 +1685,7 @@ export default function NirPage() {
               </Field>
             </div>
 
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18 }}>
+            <div style={modalActions}>
               <button type="button" onClick={closeQuickProduct} style={btnSecondary}>
                 Renunță
               </button>
@@ -1427,7 +1705,7 @@ export default function NirPage() {
       {quickSupplierOpen && (
         <div style={modalOverlay}>
           <div style={modalCard}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+            <div style={modalHeader}>
               <div>
                 <h3 style={{ margin: 0 }}>Adaugă furnizor nou</h3>
                 <div style={{ color: "#666", fontSize: 13, marginTop: 4 }}>
@@ -1442,7 +1720,7 @@ export default function NirPage() {
 
             {quickSupplierError && <div style={{ ...errorBox, marginTop: 14 }}>{quickSupplierError}</div>}
 
-            <div style={{ ...grid2, marginTop: 16 }}>
+            <div style={{ ...headerGrid, marginTop: 16 }}>
               <Field label="Nume">
                 <input
                   value={quickSupplierForm.name}
@@ -1456,10 +1734,8 @@ export default function NirPage() {
               <Field label="Cod">
                 <input
                   value={quickSupplierForm.code}
-                  onChange={(e) =>
-                    setQuickSupplierForm((prev) => ({ ...prev, code: e.target.value }))
-                  }
-                  style={input}
+                  readOnly
+                  style={inputCompactReadOnly}
                 />
               </Field>
 
@@ -1514,7 +1790,7 @@ export default function NirPage() {
               </Field>
             </div>
 
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18 }}>
+            <div style={modalActions}>
               <button type="button" onClick={closeQuickSupplier} style={btnSecondary}>
                 Renunță
               </button>
@@ -1534,7 +1810,7 @@ export default function NirPage() {
   )
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div style={sectionWrap}>
       <div style={sectionTitle}>{title}</div>
@@ -1543,19 +1819,10 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <label style={{ fontSize: 14, fontWeight: 600 }}>{label}</label>
-      {children}
-    </div>
-  )
-}
-
-function CompactField({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <label style={{ fontSize: 12, color: "#555", fontWeight: 600 }}>{label}</label>
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <label style={{ fontSize: 13, fontWeight: 600 }}>{label}</label>
       {children}
     </div>
   )
@@ -1564,8 +1831,8 @@ function CompactField({ label, children }: { label: string; children: React.Reac
 function Card({ title, value }: { title: string; value: string }) {
   return (
     <div style={cardSmall}>
-      <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>{title}</div>
-      <div style={{ fontSize: 20, fontWeight: 700 }}>{value}</div>
+      <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>{title}</div>
+      <div style={{ fontSize: 18, fontWeight: 700 }}>{value}</div>
     </div>
   )
 }
@@ -1587,7 +1854,7 @@ function StatusBadge({ status }: { status: string }) {
         padding: "6px 10px",
         borderRadius: 999,
         fontSize: 12,
-        fontWeight: 700
+        fontWeight: 700,
       }}
     >
       {status}
@@ -1595,229 +1862,430 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
-const btnPrimary: React.CSSProperties = {
-  padding: "10px 14px",
-  borderRadius: 10,
-  border: "none",
-  background: "#2563eb",
-  color: "#fff",
-  cursor: "pointer",
-  fontWeight: 700
+const pageWrap: CSSProperties = {
+  padding: 0,
 }
 
-const btnSecondary: React.CSSProperties = {
-  padding: "10px 14px",
+const topActions: CSSProperties = {
+  display: "flex",
+  justifyContent: "flex-end",
+  alignItems: "center",
+  marginBottom: 10,
+  gap: 8,
+  flexWrap: "wrap",
+}
+
+const headerGrid: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+  gap: 8,
+}
+
+const sectionWrap: CSSProperties = {
+  background: "#fff",
+  border: "1px solid #e2e8f0",
+  borderRadius: 14,
+  padding: 12,
+  marginBottom: 10,
+  boxShadow: "0 1px 2px rgba(15,23,42,0.04)",
+}
+
+const sectionTitle: CSSProperties = {
+  fontSize: 14,
+  fontWeight: 700,
+  marginBottom: 8,
+}
+
+const toolbarRow: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 6,
+  flexWrap: "wrap",
+  marginBottom: 8,
+}
+
+const toolbarTitle: CSSProperties = {
+  display: "none",
+  fontSize: 13,
+  fontWeight: 700,
+  color: "#0f172a",
+}
+
+const toolbarSubtitle: CSSProperties = {
+  display: "none",
+  fontSize: 11,
+  color: "#64748b",
+  marginTop: 2,
+}
+
+const rowsHeader: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(260px,2.4fr) 80px 88px 96px 70px 110px 150px 44px",
+  gap: 6,
+  padding: "0 4px 4px",
+  color: "#64748b",
+  fontSize: 10,
+  fontWeight: 800,
+  textTransform: "uppercase",
+  letterSpacing: 0.3,
+}
+
+const linesViewport: CSSProperties = {
+  maxHeight: 400,
+  overflowY: "auto",
+  paddingRight: 4,
+}
+
+const rowsStack: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 4,
+}
+
+const rowCard: CSSProperties = {
+  border: "1px solid #e2e8f0",
+  borderRadius: 12,
+  background: "#fcfcfd",
+  padding: 5,
+}
+
+const rowMain: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(260px,2.4fr) 80px 88px 96px 70px 110px 150px 44px",
+  gap: 6,
+  alignItems: "center",
+}
+
+const rowExtra: CSSProperties = {
+  marginTop: 4,
+  display: "flex",
+  flexDirection: "column",
+  gap: 4,
+}
+
+const productCell: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 3,
+}
+
+const selectedProductMeta: CSSProperties = {
+  fontSize: 11,
+  color: "#16a34a",
+  fontWeight: 700,
+  paddingLeft: 2,
+}
+
+const duplicateMeta: CSSProperties = {
+  fontSize: 11,
+  color: "#b45309",
+  fontWeight: 700,
+  paddingLeft: 2,
+}
+
+const totalCell: CSSProperties = {
+  minHeight: 32,
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "center",
+  gap: 1,
+  padding: "4px 6px",
+  borderRadius: 8,
+  background: "#eff6ff",
+  border: "1px solid #bfdbfe",
+}
+
+const totalValue: CSSProperties = {
+  fontSize: 13,
+  fontWeight: 800,
+  color: "#1e3a8a",
+  lineHeight: 1.1,
+}
+
+const totalMeta: CSSProperties = {
+  fontSize: 10,
+  color: "#64748b",
+  lineHeight: 1.15,
+}
+
+const totalsGrid: CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+}
+
+const miniStatPill: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "5px 8px",
+  borderRadius: 999,
+  background: "#f8fafc",
+  border: "1px solid #e2e8f0",
+  color: "#0f172a",
+  fontSize: 11,
+  fontWeight: 700,
+}
+
+const sgrInlineBox: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  flexWrap: "wrap",
+  padding: "5px 7px",
+  borderRadius: 10,
+  background: "#f8fafc",
+  border: "1px dashed #cbd5e1",
+  fontSize: 11,
+  color: "#0f172a",
+}
+
+const quickResultsGrid: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 6,
+}
+
+const lineInsightGrid: CSSProperties = {
+  display: "flex",
+  gap: 6,
+  flexWrap: "wrap",
+  alignItems: "center",
+}
+
+const insightChip: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 5,
+  padding: "5px 8px",
+  borderRadius: 999,
+  background: "#f8fafc",
+  border: "1px solid #e2e8f0",
+  fontSize: 11,
+  color: "#0f172a",
+}
+
+const btnPrimary: CSSProperties = {
+  padding: "9px 12px",
+  borderRadius: 10,
+  border: "none",
+  background: "#17324d",
+  color: "#fff",
+  cursor: "pointer",
+  fontSize: 13,
+  fontWeight: 700,
+}
+
+const btnSecondary: CSSProperties = {
+  padding: "9px 12px",
   borderRadius: 10,
   border: "1px solid #cbd5e1",
   background: "#fff",
   color: "#111827",
   cursor: "pointer",
-  fontWeight: 600
+  fontSize: 13,
+  fontWeight: 600,
 }
 
-const btnDangerSmall: React.CSSProperties = {
-  padding: "8px 12px",
-  borderRadius: 10,
+const btnSoftAuto: CSSProperties = {
+  padding: "6px 10px",
+  borderRadius: 999,
+  border: "1px solid #bbf7d0",
+  background: "#f0fdf4",
+  color: "#166534",
+  cursor: "pointer",
+  fontSize: 12,
+  fontWeight: 700,
+}
+
+const btnSoftManual: CSSProperties = {
+  padding: "6px 10px",
+  borderRadius: 999,
+  border: "1px solid #cbd5e1",
+  background: "#f8fafc",
+  color: "#334155",
+  cursor: "pointer",
+  fontSize: 12,
+  fontWeight: 700,
+}
+
+const btnDangerIcon: CSSProperties = {
+  width: 32,
+  height: 32,
+  borderRadius: 8,
   border: "1px solid #fecaca",
   background: "#fff1f2",
   color: "#991b1b",
   cursor: "pointer",
-  fontWeight: 600
+  fontSize: 12,
+  fontWeight: 800,
 }
 
-const input: React.CSSProperties = {
-  width: "100%",
-  border: "1px solid #cbd5e1",
-  borderRadius: 10,
-  padding: "10px 12px",
-  fontSize: 14,
-  outline: "none",
-  boxSizing: "border-box"
-}
-
-const inputCompact: React.CSSProperties = {
+const input: CSSProperties = {
   width: "100%",
   border: "1px solid #cbd5e1",
   borderRadius: 10,
   padding: "9px 10px",
-  fontSize: 14,
+  fontSize: 13,
   outline: "none",
-  boxSizing: "border-box"
+  boxSizing: "border-box",
 }
 
-const sectionWrap: React.CSSProperties = {
+const inputCompact: CSSProperties = {
+  width: "100%",
+  border: "1px solid #cbd5e1",
+  borderRadius: 8,
+  padding: "6px 7px",
+  fontSize: 12,
+  outline: "none",
+  boxSizing: "border-box",
   background: "#fff",
+  height: 30,
+}
+
+const inputCompactReadOnly: CSSProperties = {
+  width: "100%",
   border: "1px solid #e2e8f0",
-  borderRadius: 24,
-  padding: 20,
-  marginBottom: 18,
-  boxShadow: "0 1px 2px rgba(15,23,42,0.04)"
+  borderRadius: 8,
+  padding: "6px 7px",
+  fontSize: 12,
+  outline: "none",
+  boxSizing: "border-box",
+  background: "#f8fafc",
+  height: 30,
 }
 
-const sectionTitle: React.CSSProperties = {
-  fontSize: 18,
-  fontWeight: 700,
-  marginBottom: 14
-}
-
-const grid2: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-  gap: 14
-}
-
-const gridLine: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "2.1fr 0.8fr 0.8fr 0.8fr 0.9fr 0.7fr 0.9fr 0.9fr 0.9fr 0.9fr auto",
-  gap: 10,
-  alignItems: "start"
-}
-
-const lineCard: React.CSSProperties = {
-  border: "1px solid #e5e7eb",
-  borderRadius: 14,
-  padding: 14,
-  marginBottom: 12
-}
-
-const sgrRow: React.CSSProperties = {
-  marginTop: 10,
+const cardSmall: CSSProperties = {
+  minWidth: 160,
   padding: 12,
-  border: "1px dashed #cbd5e1",
   borderRadius: 12,
-  background: "#f8fafc"
+  border: "1px solid #e5e7eb",
+  background: "#fff",
 }
 
-const sgrRowGrid: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "2.1fr 0.8fr 0.8fr 0.8fr 0.8fr 1fr",
-  gap: 10,
-  alignItems: "center"
+const infoBox: CSSProperties = {
+  padding: 10,
+  borderRadius: 10,
+  background: "#eff6ff",
+  border: "1px solid #bfdbfe",
+  color: "#1d4ed8",
+  marginBottom: 12,
+  fontSize: 13,
 }
 
-const sgrLabelWrap: React.CSSProperties = {
+const warningBox: CSSProperties = {
+  padding: 10,
+  borderRadius: 10,
+  background: "#f8fafc",
+  border: "1px solid #e2e8f0",
+  color: "#334155",
+  fontSize: 13,
+}
+
+const errorBox: CSSProperties = {
+  padding: 10,
+  borderRadius: 10,
+  background: "#fef2f2",
+  border: "1px solid #fecaca",
+  color: "#991b1b",
+  marginBottom: 12,
+  fontSize: 13,
+}
+
+const resultsBox: CSSProperties = {
   display: "flex",
-  alignItems: "center",
-  gap: 10
+  flexDirection: "column",
+  gap: 6,
+  marginTop: 4,
 }
 
-const sgrBadge: React.CSSProperties = {
+const resultBtn: CSSProperties = {
+  textAlign: "left",
+  padding: 8,
+  borderRadius: 8,
+  border: "1px solid #e5e7eb",
+  background: "#fff",
+  cursor: "pointer",
+}
+
+const resultBtnCompact: CSSProperties = {
+  textAlign: "left",
+  padding: 8,
+  borderRadius: 8,
+  border: "1px solid #e5e7eb",
+  background: "#fff",
+  cursor: "pointer",
+}
+
+const quickAddWrap: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 8,
+  border: "1px dashed #cbd5e1",
+  borderRadius: 10,
+  padding: 8,
+  background: "#f8fafc",
+  flexWrap: "wrap",
+}
+
+const inlineUnderField: CSSProperties = {
+  marginTop: 6,
+}
+
+const inlineActionBox: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 8,
+  border: "1px dashed #cbd5e1",
+  borderRadius: 8,
+  padding: 8,
+  background: "#f8fafc",
+}
+
+const sgrBadge: CSSProperties = {
   padding: "4px 8px",
   borderRadius: 999,
   background: "#e0f2fe",
   color: "#075985",
-  fontSize: 12,
-  fontWeight: 700,
-  whiteSpace: "nowrap"
-}
-
-const sgrName: React.CSSProperties = {
-  fontSize: 14,
-  fontWeight: 600,
-  color: "#0f172a"
-}
-
-const sgrMiniLabel: React.CSSProperties = {
   fontSize: 11,
-  color: "#64748b",
-  marginBottom: 4,
-  fontWeight: 600
+  fontWeight: 800,
+  whiteSpace: "nowrap",
 }
 
-const sgrMiniValue: React.CSSProperties = {
-  fontSize: 14,
-  color: "#0f172a"
-}
-
-const sgrMiniValueStrong: React.CSSProperties = {
-  fontSize: 14,
-  color: "#0f172a",
-  fontWeight: 700
-}
-
-const cardSmall: React.CSSProperties = {
-  minWidth: 180,
-  padding: 16,
-  borderRadius: 14,
-  border: "1px solid #e5e7eb",
-  background: "#fff"
-}
-
-const infoBox: React.CSSProperties = {
-  padding: 12,
-  borderRadius: 12,
-  background: "#eff6ff",
-  border: "1px solid #bfdbfe",
-  color: "#1d4ed8",
-  marginBottom: 16
-}
-
-const errorBox: React.CSSProperties = {
-  padding: 12,
-  borderRadius: 12,
-  background: "#fef2f2",
-  border: "1px solid #fecaca",
-  color: "#991b1b",
-  marginBottom: 16
-}
-
-const resultsBox: React.CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 8,
-  marginTop: 6
-}
-
-const resultBtn: React.CSSProperties = {
-  textAlign: "left",
-  padding: 10,
-  borderRadius: 10,
-  border: "1px solid #e5e7eb",
-  background: "#fff",
-  cursor: "pointer"
-}
-
-const quickAddWrap: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 10,
-  paddingTop: 8
-}
-
-const inlineUnderField: React.CSSProperties = {
-  marginTop: 8
-}
-
-const inlineActionBox: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 10,
-  border: "1px dashed #fca5a5",
-  borderRadius: 10,
-  padding: 10,
-  background: "#fff7ed"
-}
-
-const modalOverlay: React.CSSProperties = {
+const modalOverlay: CSSProperties = {
   position: "fixed",
   inset: 0,
   background: "rgba(0,0,0,0.35)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  padding: 16,
-  zIndex: 1000
+  padding: 12,
+  zIndex: 1000,
 }
 
-const modalCard: React.CSSProperties = {
+const modalCard: CSSProperties = {
   width: "100%",
   maxWidth: 900,
   background: "#fff",
-  borderRadius: 18,
-  padding: 18,
+  borderRadius: 14,
+  padding: 14,
   boxShadow: "0 20px 60px rgba(0,0,0,0.18)",
   maxHeight: "90vh",
-  overflowY: "auto"
+  overflowY: "auto",
+}
+
+const modalHeader: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 8,
+  alignItems: "center",
+}
+
+const modalActions: CSSProperties = {
+  display: "flex",
+  justifyContent: "flex-end",
+  gap: 8,
+  marginTop: 12,
 }

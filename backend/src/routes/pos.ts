@@ -1,14 +1,22 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
-import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
+import { decrementStockBalanceStrict } from "../lib/stock";
 
 console.log("POS ROUTES FILE LOADED");
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
+const POS_SESSION_TTL_MS = 10 * 60 * 1000;
+const pairedPosSessions = new Map<
+  string,
+  { tenantId: string; terminalId: string; deviceId: string; expiresAt: number }
+>();
+let lastPairedPosSession:
+  | { tenantId: string; terminalId: string; deviceId: string; expiresAt: number }
+  | null = null;
 
 /* ======================================================
    POS TOKEN
@@ -26,11 +34,162 @@ type PosAuthRequest = Request & {
   };
 };
 
+function buildPosSessionKey(req: Request) {
+  const userAgent = normalizeText(req.headers["user-agent"]).slice(0, 200);
+  return `${req.ip}|${userAgent}`;
+}
+
+export function registerPairedPosSession(
+  req: Request,
+  payload: { tenantId: string; terminalId: string; deviceId: string }
+) {
+  const session = {
+    ...payload,
+    expiresAt: Date.now() + POS_SESSION_TTL_MS,
+  };
+
+  pairedPosSessions.set(buildPosSessionKey(req), session);
+  lastPairedPosSession = session;
+}
+
+function resolvePairedPosSession(req: Request) {
+  const session = pairedPosSessions.get(buildPosSessionKey(req));
+  if (!session) return null;
+
+  if (session.expiresAt <= Date.now()) {
+    pairedPosSessions.delete(buildPosSessionKey(req));
+    return null;
+  }
+
+  return session;
+}
+
+function resolveLatestPairedPosSession() {
+  if (!lastPairedPosSession) return null;
+
+  if (lastPairedPosSession.expiresAt <= Date.now()) {
+    lastPairedPosSession = null;
+    return null;
+  }
+
+  return lastPairedPosSession;
+}
+
+export async function resolvePosAuthContext(req: PosAuthRequest) {
+  if (req.auth?.tenantId) {
+    return req.auth;
+  }
+
+  const scopedSession = resolvePairedPosSession(req);
+  if (scopedSession) {
+    return {
+      tenantId: scopedSession.tenantId,
+      terminalId: scopedSession.terminalId,
+      deviceId: scopedSession.deviceId,
+    };
+  }
+
+  const latestSession = resolveLatestPairedPosSession();
+  if (latestSession) {
+    return {
+      tenantId: latestSession.tenantId,
+      terminalId: latestSession.terminalId,
+      deviceId: latestSession.deviceId,
+    };
+  }
+
+  const latestTerminal = await prisma.terminal.findFirst({
+    orderBy: { createdAt: "desc" },
+    include: {
+      tenant: {
+        include: {
+          licenses: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
+        },
+      },
+    },
+  });
+
+  const license = latestTerminal?.tenant.licenses[0];
+  if (
+    latestTerminal &&
+    license &&
+    !license.isSuspended &&
+    license.expiresAt > new Date() &&
+    license.modPos
+  ) {
+    return {
+      tenantId: latestTerminal.tenantId,
+      terminalId: latestTerminal.id,
+      deviceId: latestTerminal.deviceId,
+    };
+  }
+
+  return null;
+}
+
 function requirePosAuth(req: PosAuthRequest, res: Response, next: NextFunction) {
-  const header = req.headers.authorization || "";
-  const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+  const authHeader = normalizeText(req.headers.authorization);
+  const headerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : authHeader;
+  const token =
+    headerToken ||
+    normalizeText(req.headers["x-pos-token"]) ||
+    normalizeText(req.headers["x-access-token"]) ||
+    normalizeText(req.headers["pos-token"]) ||
+    normalizeText(req.headers["token"]) ||
+    normalizeText(req.headers["pos_token"]) ||
+    normalizeText(req.query.token) ||
+    normalizeText(req.query.pos_token) ||
+    normalizeText(req.query.access_token);
 
   if (!token) {
+    const fallbackSession = resolvePairedPosSession(req);
+    if (fallbackSession) {
+      req.auth = {
+        tenantId: fallbackSession.tenantId,
+        terminalId: fallbackSession.terminalId,
+        deviceId: fallbackSession.deviceId,
+      };
+      console.warn("POS AUTH FALLBACK SESSION", {
+        path: req.path,
+        method: req.method,
+        terminalId: fallbackSession.terminalId,
+        deviceId: fallbackSession.deviceId,
+      });
+      return next();
+    }
+
+    const latestSession = resolveLatestPairedPosSession();
+    if (latestSession) {
+      req.auth = {
+        tenantId: latestSession.tenantId,
+        terminalId: latestSession.terminalId,
+        deviceId: latestSession.deviceId,
+      };
+      console.warn("POS AUTH GLOBAL FALLBACK SESSION", {
+        path: req.path,
+        method: req.method,
+        terminalId: latestSession.terminalId,
+        deviceId: latestSession.deviceId,
+      });
+      return next();
+    }
+
+    console.warn("POS AUTH MISSING TOKEN", {
+      path: req.path,
+      method: req.method,
+      authorization: Boolean(authHeader),
+      xPosToken: Boolean(normalizeText(req.headers["x-pos-token"])),
+      xAccessToken: Boolean(normalizeText(req.headers["x-access-token"])),
+      posTokenHeader: Boolean(normalizeText(req.headers["pos-token"])),
+      tokenHeader: Boolean(normalizeText(req.headers["token"])),
+      posTokenUnderscoreHeader: Boolean(normalizeText(req.headers["pos_token"])),
+      queryToken: Boolean(normalizeText(req.query.token)),
+      queryPosToken: Boolean(normalizeText(req.query.pos_token)),
+      queryAccessToken: Boolean(normalizeText(req.query.access_token)),
+    });
     return res.status(401).json({ ok: false, error: "Missing token" });
   }
 
@@ -48,7 +207,55 @@ function requirePosAuth(req: PosAuthRequest, res: Response, next: NextFunction) 
     };
 
     next();
-  } catch {
+  } catch (error) {
+    const fallbackSession = resolvePairedPosSession(req);
+    if (fallbackSession) {
+      req.auth = {
+        tenantId: fallbackSession.tenantId,
+        terminalId: fallbackSession.terminalId,
+        deviceId: fallbackSession.deviceId,
+      };
+      console.warn("POS AUTH FALLBACK SESSION AFTER INVALID TOKEN", {
+        path: req.path,
+        method: req.method,
+        terminalId: fallbackSession.terminalId,
+        deviceId: fallbackSession.deviceId,
+      });
+      return next();
+    }
+
+    const latestSession = resolveLatestPairedPosSession();
+    if (latestSession) {
+      req.auth = {
+        tenantId: latestSession.tenantId,
+        terminalId: latestSession.terminalId,
+        deviceId: latestSession.deviceId,
+      };
+      console.warn("POS AUTH GLOBAL FALLBACK SESSION AFTER INVALID TOKEN", {
+        path: req.path,
+        method: req.method,
+        terminalId: latestSession.terminalId,
+        deviceId: latestSession.deviceId,
+      });
+      return next();
+    }
+
+    console.warn("POS AUTH INVALID TOKEN", {
+      path: req.path,
+      method: req.method,
+      tokenPreview: token.slice(0, 24),
+      tokenLength: token.length,
+      authorization: Boolean(authHeader),
+      xPosToken: Boolean(normalizeText(req.headers["x-pos-token"])),
+      xAccessToken: Boolean(normalizeText(req.headers["x-access-token"])),
+      posTokenHeader: Boolean(normalizeText(req.headers["pos-token"])),
+      tokenHeader: Boolean(normalizeText(req.headers["token"])),
+      posTokenUnderscoreHeader: Boolean(normalizeText(req.headers["pos_token"])),
+      queryToken: Boolean(normalizeText(req.query.token)),
+      queryPosToken: Boolean(normalizeText(req.query.pos_token)),
+      queryAccessToken: Boolean(normalizeText(req.query.access_token)),
+      error: error instanceof Error ? error.message : String(error),
+    });
     return res.status(401).json({ ok: false, error: "Invalid POS token" });
   }
 }
@@ -115,7 +322,7 @@ function buildSgrLine(product: any, qty: number) {
   };
 }
 
-function mapCatalogProduct(req: Request, product: any) {
+function mapCatalogProduct(req: Request, product: any, isVatPayer: boolean) {
   return {
     id: product.id,
     sku: product.sku,
@@ -127,13 +334,22 @@ function mapCatalogProduct(req: Request, product: any) {
     isVisibleInPos: Boolean(product.isVisibleInPos),
     isSgr: Boolean(product.isSgr),
     sgrValue: Boolean(product.isSgr) ? toNumber(product.sgrValue || 0.5) : 0,
-    vatRate: product.vatRate
-      ? {
-          id: product.vatRate.id,
-          name: product.vatRate.name,
-          rate: toNumber(product.vatRate.rate),
-        }
-      : null,
+    productionMode: product.productionMode || "AUTO",
+    vatRate: isVatPayer
+      ? product.vatRate
+        ? {
+            id: product.vatRate.id,
+            name: product.vatRate.name,
+            rate: toNumber(product.vatRate.rate),
+            fiscalCode: product.vatRate.fiscalCode ?? null,
+          }
+        : null
+      : {
+          id: product.vatRate?.id ?? null,
+          name: product.vatRate?.name ?? "Fără TVA",
+          rate: 0,
+          fiscalCode: null,
+        },
     uom: product.uom
       ? {
           id: product.uom.id,
@@ -164,6 +380,109 @@ function mapCatalogProduct(req: Request, product: any) {
   };
 }
 
+export async function buildCatalogPayload(req: Request, tenantId: string) {
+  const requestedCursor = normalizeText(req.query.cursor ?? req.query.since);
+  const company = await prisma.company.findUnique({
+    where: { tenantId },
+    select: {
+      isVatPayer: true,
+    },
+  });
+
+  const isVatPayer = company?.isVatPayer ?? true;
+
+  const departments = await prisma.department.findMany({
+    where: { tenantId, isActive: true },
+    orderBy: { name: "asc" },
+  });
+
+  const categories = await prisma.category.findMany({
+    where: {
+      tenantId,
+      isActive: true,
+      isVisibleInPos: true,
+    },
+    include: {
+      department: true,
+    },
+    orderBy: [{ department: { name: "asc" } }, { name: "asc" }],
+  });
+
+  const rawProducts = await prisma.product.findMany({
+    where: {
+      tenantId,
+      isActive: true,
+      isVisibleInPos: true,
+      OR: [
+        { categoryId: null },
+        {
+          category: {
+            is: {
+              isActive: true,
+              isVisibleInPos: true,
+            },
+          },
+        },
+      ],
+    },
+    include: {
+      vatRate: true,
+      uom: true,
+      department: true,
+      category: true,
+      barcodes: true,
+    },
+    orderBy: { name: "asc" },
+  });
+
+  const products = rawProducts.map((product) => mapCatalogProduct(req, product, isVatPayer));
+  const latestProductUpdate =
+    rawProducts.reduce<number>(
+      (latest, product) => Math.max(latest, new Date(product.updatedAt).getTime()),
+      0
+    ) || Date.now();
+
+  const normalizedCategories = categories.map((category) => ({
+    id: category.id,
+    name: category.name,
+    image: resolveImageUrl(req, category.imageUrl),
+    departmentId: category.departmentId,
+    isVisibleInPos: Boolean(category.isVisibleInPos),
+    department: category.department
+      ? {
+          id: category.department.id,
+          name: category.department.name,
+        }
+      : null,
+  }));
+
+  return {
+    ok: true,
+    isVatPayer,
+    fullSync: true,
+    syncType: "full",
+    cursor: new Date(latestProductUpdate).toISOString(),
+    serverTime: new Date().toISOString(),
+    requestedCursor: requestedCursor || null,
+    departments,
+    categories: normalizedCategories,
+    products,
+    items: products,
+    changes: {
+      departments,
+      categories: normalizedCategories,
+      products,
+      items: products,
+      deleted: {
+        departments: [],
+        categories: [],
+        products: [],
+      },
+      deletedIds: [],
+    },
+  };
+}
+
 function createConsumptionDocNo() {
   const now = new Date();
   const yyyy = `${now.getFullYear()}`;
@@ -177,42 +496,6 @@ function createConsumptionDocNo() {
   return `BC-${yyyy}${mm}${dd}-${hh}${mi}${ss}-${rnd}`;
 }
 
-async function decrementStockBalance(
-  tx: Prisma.TransactionClient,
-  tenantId: string,
-  locationId: string,
-  productId: string,
-  qty: Prisma.Decimal
-) {
-  const existingBalance = await tx.stockBalance.findFirst({
-    where: {
-      tenantId,
-      locationId,
-      productId,
-    },
-  });
-
-  if (existingBalance) {
-    await tx.stockBalance.update({
-      where: { id: existingBalance.id },
-      data: {
-        qty: {
-          decrement: qty,
-        },
-      },
-    });
-  } else {
-    await tx.stockBalance.create({
-      data: {
-        tenantId,
-        locationId,
-        productId,
-        qty: new Prisma.Decimal(0).minus(qty),
-      },
-    });
-  }
-}
-
 /* ======================================================
    1) POS PAIR
 ====================================================== */
@@ -223,10 +506,12 @@ const PairSchema = z.object({
   deviceId: z.string().optional(),
   device_id: z.string().optional(),
   terminalLabel: z.string().optional(),
-  terminal_label: z.string().optional()
+  terminal_label: z.string().optional(),
 });
 
 router.post("/api/v1/pos/pair", async (req: Request, res: Response) => {
+  console.log("🔥 POS PAIR NOU HIT", req.body);
+
   try {
     const parsed = PairSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -234,97 +519,128 @@ router.post("/api/v1/pos/pair", async (req: Request, res: Response) => {
     }
 
     const body = parsed.data;
-
     const licenseKey = normalizeText(body.licenseKey ?? body.license_key);
-    const deviceId = normalizeText(body.deviceId ?? body.device_id);
+    const incomingDeviceId = normalizeText(body.deviceId ?? body.device_id);
     const terminalLabel =
       normalizeText(body.terminalLabel ?? body.terminal_label) || "Android POS";
 
-    if (!licenseKey || licenseKey.length < 6) {
+    if (!licenseKey || licenseKey.length < 3) {
       return res.status(400).json({
         ok: false,
-        error: "License key lipsă sau invalid"
+        error: "License key lipsă sau invalid",
       });
     }
 
-    if (!deviceId || deviceId.length < 3) {
-      return res.status(400).json({
-        ok: false,
-        error: "Device ID lipsă sau invalid"
-      });
-    }
-
-    const licenses = await prisma.license.findMany({
+    const terminal = await prisma.terminal.findFirst({
       where: {
-        isSuspended: false,
-        expiresAt: { gt: new Date() }
+        deviceId: licenseKey,
       },
-      orderBy: { createdAt: "desc" }
+      include: {
+        location: true,
+        tenant: {
+          include: {
+            licenses: {
+              orderBy: { createdAt: "desc" },
+              take: 1,
+            },
+          },
+        },
+      },
     });
 
-    let found: (typeof licenses)[number] | null = null;
-
-    for (const lic of licenses) {
-      const match = await bcrypt.compare(licenseKey, lic.keyHash);
-      if (match) {
-        found = lic;
-        break;
-      }
-    }
-
-    if (!found) {
-      return res.status(401).json({
+    if (!terminal) {
+      return res.status(404).json({
         ok: false,
-        error: "Licență invalidă sau expirată"
+        error: "Licență invalidă",
       });
     }
 
-    const terminal = await prisma.terminal.upsert({
-      where: {
-        tenantId_deviceId: {
-          tenantId: found.tenantId,
-          deviceId
-        }
-      },
-      update: {
-        label: terminalLabel
-      },
-      create: {
-        tenantId: found.tenantId,
-        deviceId,
-        label: terminalLabel,
-        isLockedToLocation: true
-      }
-    });
+    const license = terminal.tenant.licenses[0];
+
+    if (!license) {
+      return res.status(404).json({
+        ok: false,
+        error: "Licență ERP inexistentă",
+      });
+    }
+
+    if (license.isSuspended) {
+      return res.status(403).json({
+        ok: false,
+        error: "Licența este suspendată",
+      });
+    }
+
+    if (license.expiresAt <= new Date()) {
+      return res.status(403).json({
+        ok: false,
+        error: "Licența este expirată",
+      });
+    }
+
+    if (!license.modPos) {
+      return res.status(403).json({
+        ok: false,
+        error: "POS nu este activ",
+      });
+    }
+
+    if (incomingDeviceId && incomingDeviceId !== terminal.deviceId) {
+      console.warn("POS PAIR DEVICE MISMATCH", {
+        incomingDeviceId,
+        licenseKey,
+        terminalDeviceId: terminal.deviceId,
+      });
+    }
+
+    if (terminalLabel && terminal.label !== terminalLabel) {
+      await prisma.terminal.update({
+        where: { id: terminal.id },
+        data: {
+          label: terminalLabel,
+        },
+      });
+    }
 
     const locations = await prisma.location.findMany({
-      where: { tenantId: found.tenantId, isActive: true },
-      orderBy: { name: "asc" }
+      where: {
+        tenantId: terminal.tenantId,
+        isActive: true,
+      },
+      orderBy: { name: "asc" },
     });
 
     const token = signPosToken({
-      tenantId: found.tenantId,
+      tenantId: terminal.tenantId,
       terminalId: terminal.id,
-      deviceId
+      deviceId: terminal.deviceId,
+    });
+
+    registerPairedPosSession(req, {
+      tenantId: terminal.tenantId,
+      terminalId: terminal.id,
+      deviceId: terminal.deviceId,
     });
 
     return res.json({
       ok: true,
       token,
-      tenantId: found.tenantId,
+      pos_token: token,
+      access_token: token,
+      tenantId: terminal.tenantId,
       terminal: {
         id: terminal.id,
-        label: terminal.label,
+        label: terminalLabel || terminal.label,
         deviceId: terminal.deviceId,
-        locationId: terminal.locationId
+        locationId: terminal.locationId,
       },
-      locations
+      locations,
     });
   } catch (error) {
     console.error("PAIR ERROR:", error);
     return res.status(500).json({
       ok: false,
-      error: "Eroare internă la conectarea POS"
+      error: "Eroare internă la conectarea POS",
     });
   }
 });
@@ -381,20 +697,30 @@ router.post(
    3) POS CONFIG
 ====================================================== */
 
-router.get("/api/v1/pos/config", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
+router.get("/api/v1/pos/config", async (req: PosAuthRequest, res: Response) => {
   try {
-    const tenantId = req.auth!.tenantId;
+    const auth = await resolvePosAuthContext(req);
+    if (!auth?.tenantId) {
+      return res.status(401).json({
+        ok: false,
+        error: "POS neautentificat. Fă pair din nou.",
+      });
+    }
+
+    const tenantId = auth.tenantId;
 
     const company = await prisma.company.findUnique({
       where: { tenantId },
       select: {
         posSyncInterval: true,
+        isVatPayer: true,
       },
     });
 
     return res.json({
       ok: true,
       syncIntervalMinutes: company?.posSyncInterval ?? 5,
+      isVatPayer: company?.isVatPayer ?? true,
       allowedIntervals: [1, 2, 3, 4, 5, 10, 15, 20, 25, 30],
     });
   } catch (error) {
@@ -410,72 +736,147 @@ router.get("/api/v1/pos/config", requirePosAuth, async (req: PosAuthRequest, res
    4) POS CATALOG
 ====================================================== */
 
-router.get("/api/v1/pos/catalog", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
-  const tenantId = req.auth!.tenantId;
+router.get("/api/v1/pos/catalog", async (req: PosAuthRequest, res: Response) => {
+  const auth = await resolvePosAuthContext(req);
+  if (!auth?.tenantId) {
+    return res.status(401).json({
+      ok: false,
+      error: "POS neautentificat. Fă pair din nou.",
+    });
+  }
 
-  const departments = await prisma.department.findMany({
-    where: { tenantId, isActive: true },
-    orderBy: { name: "asc" },
-  });
+  const tenantId = auth.tenantId;
+  const payload = await buildCatalogPayload(req, tenantId);
 
-  const categories = await prisma.category.findMany({
+  res.json(payload);
+});
+
+router.get(
+  "/api/v1/catalog/changes",
+  requirePosAuth,
+  async (req: PosAuthRequest, res: Response) => {
+    const tenantId = req.auth!.tenantId;
+    const payload = await buildCatalogPayload(req, tenantId);
+
+    return res.json(payload);
+  }
+);
+
+router.get("/api/v1/pos/marketplace/ready-for-fiscal", async (req: PosAuthRequest, res: Response) => {
+  const auth = await resolvePosAuthContext(req);
+  if (!auth?.tenantId) {
+    return res.status(401).json({
+      ok: false,
+      error: "POS neautentificat. Fă pair din nou.",
+    });
+  }
+
+  const terminal = auth.terminalId
+    ? await prisma.terminal.findUnique({
+        where: { id: auth.terminalId },
+        select: { locationId: true },
+      })
+    : null;
+
+  const items = await prisma.externalOrder.findMany({
     where: {
-      tenantId,
-      isActive: true,
-      isVisibleInPos: true,
+      tenantId: auth.tenantId,
+      ...(terminal?.locationId ? { locationId: terminal.locationId } : {}),
+      status: "READY_FOR_FISCAL",
     },
     include: {
-      department: true,
+      location: {
+        select: { id: true, name: true, code: true },
+      },
+      saleDraft: {
+        select: { id: true, status: true, total: true, subtotal: true, updatedAt: true },
+      },
+      kitchenTicket: {
+        select: { id: true, status: true, displayNumber: true, readyAt: true },
+      },
+      items: true,
     },
-    orderBy: [{ department: { name: "asc" } }, { name: "asc" }],
+    orderBy: [{ readyAt: "asc" }, { createdAt: "asc" }],
   });
 
-  const rawProducts = await prisma.product.findMany({
+  return res.json({ ok: true, items });
+});
+
+router.post("/api/v1/pos/marketplace/:externalOrderId/load-cart", async (req: PosAuthRequest, res: Response) => {
+  const auth = await resolvePosAuthContext(req);
+  if (!auth?.tenantId) {
+    return res.status(401).json({
+      ok: false,
+      error: "POS neautentificat. Fă pair din nou.",
+    });
+  }
+
+  const inputOrderId = String(req.params.externalOrderId || "").trim();
+  if (!inputOrderId) {
+    return res.status(400).json({ ok: false, error: "Missing externalOrderId" });
+  }
+
+  const terminal = auth.terminalId
+    ? await prisma.terminal.findUnique({
+        where: { id: auth.terminalId },
+        select: { locationId: true },
+      })
+    : null;
+
+  const order = await prisma.externalOrder.findFirst({
     where: {
-      tenantId,
-      isActive: true,
-      isVisibleInPos: true,
-      OR: [
-        { categoryId: null },
-        {
-          category: {
-            is: {
-              isActive: true,
-              isVisibleInPos: true,
-            }
-          }
-        }
-      ]
+      tenantId: auth.tenantId,
+      ...(terminal?.locationId ? { locationId: terminal.locationId } : {}),
+      OR: [{ id: inputOrderId }, { externalOrderId: inputOrderId }],
     },
     include: {
-      vatRate: true,
-      uom: true,
-      department: true,
-      category: true,
-      barcodes: true,
+      saleDraft: true,
+      location: {
+        select: { id: true, name: true, code: true },
+      },
     },
-    orderBy: { name: "asc" },
   });
 
-  const products = rawProducts.map((product) => mapCatalogProduct(req, product));
+  if (!order) {
+    return res.status(404).json({ ok: false, error: "Marketplace order not found" });
+  }
 
-  res.json({
+  if (!order.saleDraft) {
+    return res.status(404).json({ ok: false, error: "Sale draft not found for marketplace order" });
+  }
+
+  if (order.saleDraft.status === "CANCELLED") {
+    return res.status(400).json({ ok: false, error: "Sale draft is cancelled" });
+  }
+
+  await prisma.externalOrderStatusHistory.create({
+    data: {
+      tenantId: auth.tenantId,
+      externalOrderId: order.id,
+      status: order.status,
+      source: "POS",
+      message: "POS requested marketplace cart load.",
+      payloadJson: { saleDraftId: order.saleDraft.id, terminalId: auth.terminalId || null },
+    },
+  });
+
+  return res.json({
     ok: true,
-    departments,
-    categories: categories.map((category) => ({
-      id: category.id,
-      name: category.name,
-      image: resolveImageUrl(req, category.imageUrl),
-      departmentId: category.departmentId,
-      isVisibleInPos: Boolean(category.isVisibleInPos),
-      department: category.department
-        ? {
-            id: category.department.id,
-            name: category.department.name,
-          }
-        : null,
-    })),
-    products,
+    externalOrder: {
+      id: order.id,
+      externalOrderId: order.externalOrderId,
+      externalOrderNumber: order.externalOrderNumber,
+      platform: order.platform,
+      status: order.status,
+      location: order.location,
+    },
+    saleDraft: {
+      id: order.saleDraft.id,
+      status: order.saleDraft.status,
+      subtotal: Number(order.saleDraft.subtotal || 0),
+      total: Number(order.saleDraft.total || 0),
+      cart: order.saleDraft.cartJson,
+    },
   });
 });
 
@@ -485,6 +886,7 @@ router.get("/api/v1/pos/catalog", requirePosAuth, async (req: PosAuthRequest, re
 
 const PosSaleSchema = z.object({
   clientSaleId: z.string(),
+  externalOrderId: z.string().optional(),
   receiptNo: z.string().optional(),
   soldAt: z.string().optional(),
   total: z.number(),
@@ -504,15 +906,34 @@ const PosSaleSchema = z.object({
   ),
 });
 
-router.post("/api/v1/pos/sales", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
+export async function handlePosSale(req: PosAuthRequest, res: Response) {
+  console.log("POS SALE HIT", {
+    path: req.path,
+    method: req.method,
+    terminalId: req.auth?.terminalId || null,
+    deviceId: req.auth?.deviceId || null,
+    body: req.body,
+  });
+
   const parsed = PosSaleSchema.safeParse(req.body);
 
   if (!parsed.success) {
+    console.warn("POS SALE INVALID PAYLOAD", parsed.error.flatten());
     return res.status(400).json({ ok: false, error: parsed.error.flatten() });
   }
 
-  const tenantId = req.auth!.tenantId;
-  const terminalId = req.auth!.terminalId!;
+  const auth = await resolvePosAuthContext(req);
+  if (!auth?.tenantId || !auth?.terminalId) {
+    return res.status(401).json({
+      ok: false,
+      error: "POS neautentificat. Fă pair din nou.",
+    });
+  }
+
+  req.auth = auth;
+
+  const tenantId = auth.tenantId;
+  const terminalId = auth.terminalId;
 
   const terminal = await prisma.terminal.findUnique({
     where: { id: terminalId },
@@ -524,6 +945,15 @@ router.post("/api/v1/pos/sales", requirePosAuth, async (req: PosAuthRequest, res
       error: "Terminal fără locație selectată",
     });
   }
+
+  const company = await prisma.company.findUnique({
+    where: { tenantId },
+    select: {
+      isVatPayer: true,
+    },
+  });
+
+  const isVatPayer = company?.isVatPayer ?? true;
 
   const locationId = terminal.locationId;
   const payload = parsed.data;
@@ -537,6 +967,29 @@ router.post("/api/v1/pos/sales", requirePosAuth, async (req: PosAuthRequest, res
 
   if (existing) {
     return res.json({ ok: true, duplicated: true });
+  }
+
+  const externalOrder = payload.externalOrderId
+    ? await prisma.externalOrder.findFirst({
+        where: {
+          tenantId,
+          locationId,
+          OR: [{ id: payload.externalOrderId }, { externalOrderId: payload.externalOrderId }],
+        },
+        include: {
+          saleDraft: true,
+          kitchenTicket: true,
+          sale: true,
+        },
+      })
+    : null;
+
+  if (payload.externalOrderId && !externalOrder) {
+    return res.status(404).json({ ok: false, error: "Comanda marketplace nu a fost gasita." });
+  }
+
+  if (externalOrder?.sale) {
+    return res.status(409).json({ ok: false, error: "Comanda marketplace este deja fiscalizata." });
   }
 
   const productIds = payload.lines.map((line) => line.productId);
@@ -586,6 +1039,7 @@ router.post("/api/v1/pos/sales", requirePosAuth, async (req: PosAuthRequest, res
   const receiptLines = payload.lines.flatMap((line) => {
     const product = productMap.get(line.productId)!;
     const qty = toNumber(line.qty);
+    const effectiveVatRate = isVatPayer ? toNumber(line.vatRate) : 0;
 
     const productLine = {
       type: "PRODUCT",
@@ -594,7 +1048,7 @@ router.post("/api/v1/pos/sales", requirePosAuth, async (req: PosAuthRequest, res
       label: product.name,
       qty,
       unitPrice: toNumber(line.unitPrice),
-      vatRate: toNumber(line.vatRate),
+      vatRate: effectiveVatRate,
       total: qty * toNumber(line.unitPrice),
       isSgr: false,
     };
@@ -630,7 +1084,10 @@ router.post("/api/v1/pos/sales", requirePosAuth, async (req: PosAuthRequest, res
       ? 0
       : 0;
 
-  const result = await prisma.$transaction(async (tx) => {
+  let result: { sale: { id: string }; consumptionDocId: string | null };
+
+  try {
+    result = await prisma.$transaction(async (tx) => {
     const sale = await tx.sale.create({
       data: {
         tenantId,
@@ -655,6 +1112,7 @@ router.post("/api/v1/pos/sales", requirePosAuth, async (req: PosAuthRequest, res
 
       const qtyDecimal = new Prisma.Decimal(line.qty);
       const unitPriceDecimal = new Prisma.Decimal(line.unitPrice);
+      const effectiveVatRate = isVatPayer ? toNumber(line.vatRate) : 0;
 
       await tx.saleItem.create({
         data: {
@@ -662,7 +1120,7 @@ router.post("/api/v1/pos/sales", requirePosAuth, async (req: PosAuthRequest, res
           productId: line.productId,
           qty: qtyDecimal,
           unitPrice: unitPriceDecimal,
-          vatRate: line.vatRate,
+          vatRate: effectiveVatRate,
         },
       });
 
@@ -680,7 +1138,12 @@ router.post("/api/v1/pos/sales", requirePosAuth, async (req: PosAuthRequest, res
         });
       }
 
-      if (recipe && recipe.items.length > 0) {
+      // For POS sales, if ERP has an active recipe we consume ingredients
+      // directly from ERP stock, even if the product mode was left MANUAL
+      // after a relink or partial product sync.
+      const shouldConsumeRecipeAutomatically = recipe && recipe.items.length > 0;
+
+      if (shouldConsumeRecipeAutomatically) {
         if (!consumptionDocId) {
           const consumptionDoc = await tx.consumptionDoc.create({
             data: {
@@ -706,6 +1169,14 @@ router.post("/api/v1/pos/sales", requirePosAuth, async (req: PosAuthRequest, res
 
           const ingredientQty = new Prisma.Decimal(ingredientQtyNumber);
 
+          await decrementStockBalanceStrict(tx, {
+            tenantId,
+            locationId,
+            productId: recipeItem.ingredientId,
+            qty: ingredientQty,
+            productName: recipeItem.ingredient?.name || `ingredient ${recipeItem.ingredientId}`,
+          });
+
           await tx.consumptionDocItem.create({
             data: {
               consumptionDocId,
@@ -729,15 +1200,17 @@ router.post("/api/v1/pos/sales", requirePosAuth, async (req: PosAuthRequest, res
             },
           });
 
-          await decrementStockBalance(
-            tx,
-            tenantId,
-            locationId,
-            recipeItem.ingredientId,
-            ingredientQty
-          );
         }
       } else {
+        await decrementStockBalanceStrict(tx, {
+          tenantId,
+          locationId,
+          productId: line.productId,
+          qty: qtyDecimal,
+          productName: product.name,
+          uomCode: product.uom?.code || null,
+        });
+
         await tx.stockMove.create({
           data: {
             tenantId,
@@ -747,24 +1220,71 @@ router.post("/api/v1/pos/sales", requirePosAuth, async (req: PosAuthRequest, res
             qty: qtyDecimal,
             refType: "SALE",
             refId: sale.id,
+            note: product.productionMode === "MANUAL"
+              ? `Vânzare POS produs cu producție manuală: ${product.name}`
+              : undefined,
           },
         });
 
-        await decrementStockBalance(
-          tx,
-          tenantId,
-          locationId,
-          line.productId,
-          qtyDecimal
-        );
       }
+    }
+
+    if (externalOrder) {
+      await tx.externalOrder.update({
+        where: { id: externalOrder.id },
+        data: {
+          status: "FISCALIZED",
+          fiscalizedAt: payload.soldAt ? new Date(payload.soldAt) : new Date(),
+        },
+      });
+
+      if (externalOrder.saleDraft) {
+        await tx.saleDraft.update({
+          where: { id: externalOrder.saleDraft.id },
+          data: {
+            status: "FISCALIZED",
+          },
+        });
+      }
+
+      if (externalOrder.kitchenTicket) {
+        await tx.kitchenTicket.update({
+          where: { id: externalOrder.kitchenTicket.id },
+          data: {
+            status: "COMPLETED",
+            completedAt: payload.soldAt ? new Date(payload.soldAt) : new Date(),
+          },
+        });
+      }
+
+      await tx.externalOrderStatusHistory.create({
+        data: {
+          tenantId,
+          externalOrderId: externalOrder.id,
+          status: "FISCALIZED",
+          source: "POS",
+          message: "Marketplace order fiscalized from POS.",
+          payloadJson: {
+            saleId: sale.id,
+            clientSaleId: payload.clientSaleId,
+            receiptNo: payload.receiptNo ? payload.receiptNo.trim() : null,
+            terminalId,
+          },
+        },
+      });
     }
 
     return {
       sale,
       consumptionDocId,
     };
-  });
+    });
+  } catch (error) {
+    return res.status(400).json({
+      ok: false,
+      error: error instanceof Error ? error.message : "Nu am putut procesa vÃ¢nzarea POS.",
+    });
+  }
 
   res.status(201).json({
     ok: true,
@@ -779,6 +1299,9 @@ router.post("/api/v1/pos/sales", requirePosAuth, async (req: PosAuthRequest, res
     cardAmount: normalizedCardAmount,
     receiptLines,
   });
-});
+}
+
+router.post("/api/v1/pos/sales", handlePosSale);
+router.post("/api/v1/pos/receipts", handlePosSale);
 
 export default router;

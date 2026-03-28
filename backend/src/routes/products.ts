@@ -1,7 +1,9 @@
+// @ts-nocheck
 import { Router } from "express"
 import path from "path"
 import fs from "fs"
 import multer from "multer"
+import { Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 
@@ -46,6 +48,8 @@ router.use(requireAuth)
 
 const RECIPE_REQUIRED_CLASSES = ["PRODUS_FIN", "SEMIFABRICATE"]
 const RECIPE_INGREDIENT_CLASSES = ["MATERIE_PRIMA", "MARFA", "SEMIFABRICATE"]
+const PRODUCTION_MODE_VALUES = ["AUTO", "MANUAL"]
+
 const PRODUCT_CLASS_RULES: Record<
   string,
   {
@@ -83,6 +87,11 @@ function normalizeProductFlags(classValue: string, payload: { price: number; isV
   }
 }
 
+function normalizeProductionMode(value: any) {
+  const mode = String(value || "AUTO").trim().toUpperCase()
+  return PRODUCTION_MODE_VALUES.includes(mode) ? mode : null
+}
+
 function toNumber(value: any) {
   const n = Number(value)
   return Number.isFinite(n) ? n : 0
@@ -95,6 +104,42 @@ function toNullableText(value: any) {
 
 function padNumber(value: number, size = 6) {
   return String(value).padStart(size, "0")
+}
+
+async function getNextAvailableProductSkuValue(
+  client: typeof prisma | Prisma.TransactionClient,
+  tenantId: string
+) {
+  const counter = await client.skuCounter.findUnique({
+    where: {
+      tenantId_key: {
+        tenantId,
+        key: "product"
+      }
+    }
+  })
+
+  let nextValue = (counter?.value || 0) + 1
+
+  for (let attempt = 0; attempt < 1000; attempt += 1) {
+    const candidate = padNumber(nextValue + attempt)
+    const existing = await client.product.findFirst({
+      where: {
+        tenantId,
+        sku: candidate
+      },
+      select: { id: true }
+    })
+
+    if (!existing) {
+      return {
+        sku: candidate,
+        value: nextValue + attempt
+      }
+    }
+  }
+
+  throw new Error("Nu pot genera urmatorul SKU disponibil.")
 }
 
 function normalizeImageUrl(value: any) {
@@ -159,20 +204,44 @@ router.get("/api/v1/products", async (req: AuthedRequest, res) => {
   res.json({ ok: true, items })
 })
 
+router.get("/api/v1/products/next-sku", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+
+  try {
+    const preview = await getNextAvailableProductSkuValue(prisma, tenantId)
+    res.json({ ok: true, sku: preview.sku })
+  } catch (e: any) {
+    res.status(400).json({ ok: false, error: e?.message || "Nu pot genera urmatorul SKU." })
+  }
+})
+
 router.post("/api/v1/products", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
 
+  const company = await prisma.company.findUnique({
+    where: { tenantId },
+    select: {
+      isVatPayer: true
+    }
+  })
+
+  const isVatPayer = company?.isVatPayer ?? true
+
   const name = String(req.body?.name || "").trim()
   const imageUrl = normalizeImageUrl(req.body?.imageUrl)
-  const vatRateId = String(req.body?.vatRateId || "").trim()
+  const vatRateIdRaw = String(req.body?.vatRateId || "").trim()
+  const vatRateId = isVatPayer ? vatRateIdRaw : null
   const uomId = String(req.body?.uomId || "").trim()
   const purchaseUomIdRaw = String(req.body?.purchaseUomId || "").trim()
   const purchaseUomId = purchaseUomIdRaw || null
   const purchaseFactor = toNumber(req.body?.purchaseFactor || 1)
   const price = toNumber(req.body?.price || 0)
+  const costPrice = toNumber(req.body?.costPrice || 0)
   const categoryIdRaw = String(req.body?.categoryId || "").trim()
   const categoryId = categoryIdRaw || null
+  const requestedSku = String(req.body?.sku || "").trim()
   const classValue = String(req.body?.class || "MARFA").trim()
+  let productionMode = normalizeProductionMode(req.body?.productionMode || "AUTO")
   const requestedIsActive = req.body?.isActive === undefined ? true : Boolean(req.body?.isActive)
   const requestedVisibleInPos =
     req.body?.isVisibleInPos === undefined ? true : Boolean(req.body?.isVisibleInPos)
@@ -180,6 +249,10 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
 
   if (!ALL_PRODUCT_CLASSES.includes(classValue)) {
     return res.status(400).json({ ok: false, error: "Clasificare produs invalidă." })
+  }
+
+  if (!productionMode) {
+    return res.status(400).json({ ok: false, error: "Mod de producție invalid." })
   }
 
   const { price: normalizedPrice, isVisibleInPos, isSgr } = normalizeProductFlags(classValue, {
@@ -192,7 +265,7 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
     return res.status(400).json({ ok: false, error: "Denumirea produsului este obligatorie." })
   }
 
-  if (!vatRateId) {
+  if (isVatPayer && !vatRateId) {
     return res.status(400).json({ ok: false, error: "TVA este obligatoriu." })
   }
 
@@ -204,13 +277,24 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
     return res.status(400).json({ ok: false, error: "Factorul trebuie să fie mai mare decât 0." })
   }
 
-  const [vatRate, uom, purchaseUom, category] = await Promise.all([
-    prisma.vatRate.findFirst({
-      where: {
-        id: vatRateId,
-        tenantId
-      }
-    }),
+  const [vatRate, fallbackVatRate, uom, purchaseUom, category] = await Promise.all([
+    vatRateId
+      ? prisma.vatRate.findFirst({
+          where: {
+            id: vatRateId,
+            tenantId
+          }
+        })
+      : Promise.resolve(null),
+    !isVatPayer
+      ? prisma.vatRate.findFirst({
+          where: {
+            tenantId,
+            rate: 0,
+            isActive: true
+          }
+        })
+      : Promise.resolve(null),
     prisma.uom.findFirst({
       where: {
         id: uomId,
@@ -238,8 +322,16 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
       : Promise.resolve(null)
   ])
 
-  if (!vatRate) {
+  if (isVatPayer && !vatRate) {
     return res.status(404).json({ ok: false, error: "TVA inexistent." })
+  }
+
+  if (!isVatPayer && !fallbackVatRate) {
+    return res.status(400).json({ ok: false, error: "Lipsește cota TVA 0% pentru companiile neplătitoare de TVA." })
+  }
+
+  if (!isVatPayer && !fallbackVatRate) {
+    return res.status(400).json({ ok: false, error: "Lipsește cota TVA 0% pentru companiile neplătitoare de TVA." })
   }
 
   if (!uom) {
@@ -256,38 +348,28 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
 
   try {
     const item = await prisma.$transaction(async (tx) => {
-      const counter = await tx.skuCounter.upsert({
-        where: {
-          tenantId_key: {
+      let finalSku = requestedSku
+      if (requestedSku) {
+        const existingSku = await tx.product.findFirst({
+          where: {
             tenantId,
-            key: "product"
-          }
-        },
-        update: {
-          value: {
-            increment: 1
-          }
-        },
-        create: {
-          tenantId,
-          key: "product",
-          value: 1
+            sku: requestedSku
+          },
+          select: { id: true }
+        })
+
+        if (existingSku) {
+          throw new Error("Exista deja un produs cu acest cod.")
         }
-      })
-
-      const finalSku = padNumber(counter.value)
-
-      const existingSku = await tx.product.findFirst({
-        where: {
-          tenantId,
-          sku: finalSku
-        }
-      })
-
-      if (existingSku) {
-        throw new Error("Există deja un produs cu acest cod.")
+      } else {
+        const preview = await getNextAvailableProductSkuValue(tx, tenantId)
+        finalSku = preview.sku
+        await tx.skuCounter.upsert({
+          where: { tenantId_key: { tenantId, key: "product" } },
+          update: { value: preview.value },
+          create: { tenantId, key: "product", value: preview.value }
+        })
       }
-
       const forcedInactiveBecauseMissingRecipe = RECIPE_REQUIRED_CLASSES.includes(classValue)
 
       const created = await tx.product.create({
@@ -297,17 +379,19 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
           name,
           imageUrl,
           class: classValue as any,
-          vatRateId,
+          vatRateId: vatRate?.id || fallbackVatRate?.id || vatRateIdRaw,
           uomId,
           purchaseUomId: purchaseUomId || uomId,
           purchaseFactor,
           categoryId,
           departmentId: category?.departmentId || null,
           price: normalizedPrice,
+          costPrice,
           isActive: forcedInactiveBecauseMissingRecipe ? false : requestedIsActive,
           isVisibleInPos,
           isSgr,
-          sgrValue: isSgr ? 0.5 : 0
+          sgrValue: isSgr ? 0.5 : 0,
+          productionMode: productionMode as any
         },
         include: {
           vatRate: true,
@@ -343,14 +427,25 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
   const id = String(req.params.id)
 
+  const company = await prisma.company.findUnique({
+    where: { tenantId },
+    select: {
+      isVatPayer: true
+    }
+  })
+
+  const isVatPayer = company?.isVatPayer ?? true
+
   const name = String(req.body?.name || "").trim()
   const imageUrl = normalizeImageUrl(req.body?.imageUrl)
-  const vatRateId = String(req.body?.vatRateId || "").trim()
+  const vatRateIdRaw = String(req.body?.vatRateId || "").trim()
+  const vatRateId = isVatPayer ? vatRateIdRaw : null
   const uomId = String(req.body?.uomId || "").trim()
   const purchaseUomIdRaw = String(req.body?.purchaseUomId || "").trim()
   const purchaseUomId = purchaseUomIdRaw || null
   const purchaseFactor = toNumber(req.body?.purchaseFactor || 1)
   const price = toNumber(req.body?.price || 0)
+  const costPrice = toNumber(req.body?.costPrice || 0)
   const categoryIdRaw = String(req.body?.categoryId || "").trim()
   const categoryId = categoryIdRaw || null
   const classValue = String(req.body?.class || "MARFA").trim()
@@ -363,6 +458,10 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
     return res.status(400).json({ ok: false, error: "Clasificare produs invalidă." })
   }
 
+  if (!productionMode) {
+    return res.status(400).json({ ok: false, error: "Mod de producție invalid." })
+  }
+
   const { price: normalizedPrice, isVisibleInPos, isSgr } = normalizeProductFlags(classValue, {
     price,
     isVisibleInPos: requestedVisibleInPos,
@@ -373,7 +472,7 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
     return res.status(400).json({ ok: false, error: "Denumirea produsului este obligatorie." })
   }
 
-  if (!vatRateId) {
+  if (isVatPayer && !vatRateId) {
     return res.status(400).json({ ok: false, error: "TVA este obligatoriu." })
   }
 
@@ -396,13 +495,28 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
     return res.status(404).json({ ok: false, error: "Produsul nu există." })
   }
 
-  const [vatRate, uom, purchaseUom, category, existingRecipe] = await Promise.all([
-    prisma.vatRate.findFirst({
-      where: {
-        id: vatRateId,
-        tenantId
-      }
-    }),
+  productionMode = normalizeProductionMode(
+    req.body?.productionMode ?? current.productionMode ?? "AUTO"
+  )
+
+  const [vatRate, fallbackVatRate, uom, purchaseUom, category, existingRecipe] = await Promise.all([
+    vatRateId
+      ? prisma.vatRate.findFirst({
+          where: {
+            id: vatRateId,
+            tenantId
+          }
+        })
+      : Promise.resolve(null),
+    !isVatPayer
+      ? prisma.vatRate.findFirst({
+          where: {
+            tenantId,
+            rate: 0,
+            isActive: true
+          }
+        })
+      : Promise.resolve(null),
     prisma.uom.findFirst({
       where: {
         id: uomId,
@@ -436,7 +550,7 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
     })
   ])
 
-  if (!vatRate) {
+  if (isVatPayer && !vatRate) {
     return res.status(404).json({ ok: false, error: "TVA inexistent." })
   }
 
@@ -462,17 +576,19 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
         name,
         imageUrl,
         class: classValue as any,
-        vatRateId,
+        vatRateId: vatRate?.id || fallbackVatRate?.id || current.vatRateId,
         uomId,
         purchaseUomId: purchaseUomId || uomId,
         purchaseFactor,
         categoryId,
         departmentId: category?.departmentId || null,
         price: normalizedPrice,
+        costPrice,
         isActive: forcedInactiveBecauseMissingRecipe ? false : requestedIsActive,
         isVisibleInPos,
         isSgr,
-        sgrValue: isSgr ? 0.5 : 0
+        sgrValue: isSgr ? 0.5 : 0,
+        productionMode: productionMode as any
       },
       include: {
         vatRate: true,

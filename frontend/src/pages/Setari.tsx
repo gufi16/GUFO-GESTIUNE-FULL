@@ -1,34 +1,50 @@
 import { useEffect, useState } from "react"
 import PageHeader from "../components/PageHeader"
 import { useNavigate } from "react-router-dom"
-import { ArrowRight, Building2, Percent, RefreshCcw } from "lucide-react"
-
-const API = "http://localhost:3001"
+import { ArrowRight, Building2, FileDigit, Percent, ReceiptText, RefreshCcw, Settings2 } from "lucide-react"
+import {
+  DocumentMetric,
+  InlineNotice,
+  documentButtonPrimaryClass,
+  documentButtonSecondaryClass,
+  documentInputClass,
+} from "../components/DocumentUi"
+import { API_BASE as API, getToken } from "../lib/api"
+import { hasModule } from "../lib/modules"
 
 const items = [
   {
-    name: "Firmă",
-    desc: "Date companie, identificare fiscală și informații de bază.",
+    name: "Firma",
+    desc: "Date companie, identificare fiscala si informatii de baza.",
     route: "/setari/firma",
-    icon: Building2
+    icon: Building2,
   },
   {
     name: "Cote TVA",
-    desc: "Gestionare cote TVA și valori utilizate în documente.",
+    desc: "Gestionare cote TVA si valori utilizate in documente.",
     route: "/setari/tva",
-    icon: Percent
-  }
+    icon: Percent,
+  },
+  {
+    name: "Serii si numerotare",
+    desc: "Setezi seria facturii, numarul de start si codurile automate pentru documente, clienti si furnizori.",
+    route: "/setari/numerotare",
+    icon: FileDigit,
+  },
+  {
+    name: "Setari e-Factura",
+    desc: "Configurezi emitentul, mediul de lucru si baza pentru integrarea ANAF.",
+    route: "/setari/efactura",
+    icon: ReceiptText,
+  },
 ]
 
 const allowedIntervals = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30]
 
 export default function Setari() {
   const nav = useNavigate()
-
-  const token =
-    localStorage.getItem("token") ||
-    localStorage.getItem("access_token") ||
-    ""
+  const token = getToken() || ""
+  const availableItems = items.filter((item) => item.route !== "/setari/efactura" || hasModule("efactura"))
 
   const [posSyncInterval, setPosSyncInterval] = useState<number>(5)
   const [loadingConfig, setLoadingConfig] = useState(true)
@@ -38,11 +54,12 @@ export default function Setari() {
 
   useEffect(() => {
     loadPosSyncConfig()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function loadPosSyncConfig() {
     if (!token) {
-      setError("Nu există token de autentificare. Fă login din nou.")
+      setError("Nu exista token de autentificare. Fa login din nou.")
       setLoadingConfig(false)
       return
     }
@@ -54,20 +71,20 @@ export default function Setari() {
     try {
       const res = await fetch(`${API}/api/v1/company/pos-sync-config`, {
         headers: {
-          Authorization: `Bearer ${token}`
-        }
+          Authorization: `Bearer ${token}`,
+        },
       })
 
       const data = await res.json().catch(() => ({}))
 
       if (!res.ok || !data.ok) {
-        setError(data.error || "Nu am putut încărca setarea de sync POS.")
+        setError(data.error || "Nu am putut incarca setarea de sync POS.")
         return
       }
 
       setPosSyncInterval(Number(data.posSyncInterval || 5))
     } catch {
-      setError("Nu am putut încărca setarea de sync POS.")
+      setError("Nu am putut incarca setarea de sync POS.")
     } finally {
       setLoadingConfig(false)
     }
@@ -75,7 +92,7 @@ export default function Setari() {
 
   async function savePosSyncConfig() {
     if (!token) {
-      setError("Nu există token de autentificare. Fă login din nou.")
+      setError("Nu exista token de autentificare. Fa login din nou.")
       return
     }
 
@@ -88,11 +105,11 @@ export default function Setari() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          posSyncInterval
-        })
+          posSyncInterval,
+        }),
       })
 
       const data = await res.json().catch(() => ({}))
@@ -111,37 +128,33 @@ export default function Setari() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <PageHeader
         badge="configurare"
-        title="Setări"
-        subtitle="Configurări generale ale aplicației, sincronizare POS și administrarea elementelor de bază."
+        title="Setari"
       />
 
-      {error ? (
-        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
-      ) : null}
+      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
+        <DocumentMetric title="Module setari" value={items.length} tone="slate" />
+        <DocumentMetric title="Autosync POS" value={`${posSyncInterval} min`} tone="blue" />
+        <DocumentMetric title="Status configurare" value={loadingConfig ? "Se incarca" : "Activ"} tone="emerald" />
+      </div>
 
-      {message ? (
-        <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-          {message}
-        </div>
-      ) : null}
+      {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
+      {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        {items.map((i) => {
-          const Icon = i.icon
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+            {availableItems.map((item) => {
+          const Icon = item.icon
           return (
             <button
-              key={i.name}
+              key={item.name}
               type="button"
-              onClick={() => nav(i.route)}
-              className="group rounded-[28px] border border-slate-200 bg-white p-5 text-left shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-md"
+              onClick={() => nav(item.route)}
+              className="group rounded-[20px] border border-slate-200 bg-white p-4 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
             >
               <div className="flex items-start justify-between gap-4">
-                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
+                <span className="flex h-10 w-10 items-center justify-center rounded-[14px] bg-blue-50 text-blue-700">
                   <Icon size={20} />
                 </span>
 
@@ -151,13 +164,10 @@ export default function Setari() {
               </div>
 
               <div className="mt-5">
-                <div className="text-lg font-semibold text-slate-900">{i.name}</div>
-                <div className="mt-2 text-sm leading-6 text-slate-500">
-                  {i.desc}
-                </div>
+                <div className="text-[16px] font-semibold text-slate-900">{item.name}</div>
               </div>
 
-              <div className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-blue-700">
+              <div className="mt-4 inline-flex items-center gap-1.5 text-[13px] font-semibold text-blue-700">
                 Deschide
                 <ArrowRight size={16} className="transition-transform duration-200 group-hover:translate-x-1" />
               </div>
@@ -165,29 +175,24 @@ export default function Setari() {
           )
         })}
 
-        <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm lg:col-span-1">
+        <div className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="text-lg font-semibold text-slate-900">Sync POS</div>
-              <div className="mt-2 text-sm leading-6 text-slate-500">
-                Setezi la ce interval să se sincronizeze automat Android POS cu gestiunea.
-              </div>
+              <div className="text-[16px] font-semibold text-slate-900">Sync POS</div>
             </div>
 
-            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-white">
-              <RefreshCcw size={20} />
+            <span className="flex h-10 w-10 items-center justify-center rounded-[14px] bg-slate-900 text-white">
+              <Settings2 size={20} />
             </span>
           </div>
 
           <div className="mt-6">
-            <label className="mb-2 block text-sm font-medium text-slate-700">
-              Interval autosync POS
-            </label>
+            <label className="mb-2 block text-sm font-medium text-slate-700">Interval autosync POS</label>
 
             <select
               value={posSyncInterval}
               onChange={(e) => setPosSyncInterval(Number(e.target.value))}
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
+              className={documentInputClass}
               disabled={loadingConfig || savingConfig}
             >
               {allowedIntervals.map((value) => (
@@ -199,20 +204,13 @@ export default function Setari() {
           </div>
 
           <div className="mt-5 flex gap-3">
-            <button
-              className="rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-60"
-              onClick={savePosSyncConfig}
-              disabled={loadingConfig || savingConfig}
-            >
-              {savingConfig ? "Se salvează..." : "Salvează"}
+            <button className={documentButtonPrimaryClass} onClick={savePosSyncConfig} disabled={loadingConfig || savingConfig}>
+              {savingConfig ? "Se salveaza..." : "Salveaza"}
             </button>
 
-            <button
-              className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
-              onClick={loadPosSyncConfig}
-              disabled={loadingConfig || savingConfig}
-            >
-              Reîncarcă
+            <button className={documentButtonSecondaryClass} onClick={loadPosSyncConfig} disabled={loadingConfig || savingConfig}>
+              <RefreshCcw size={16} className="mr-2" />
+              Reincarca
             </button>
           </div>
         </div>

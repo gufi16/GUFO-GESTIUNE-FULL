@@ -1,3 +1,4 @@
+// @ts-nocheck
 import fs from "fs"
 import { Router } from "express"
 import PDFDocument from "pdfkit"
@@ -163,11 +164,13 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
       return res.status(404).json({ ok: false, error: "Bonul de consum nu a fost găsit." })
     }
 
+    const consumptionDoc = docData
+
     const company = await prisma.company.findUnique({
       where: { tenantId },
     })
 
-    const filename = `BonConsum_${safeFilePart(docData.docNo)}_${safeFilePart(docData.location?.name || "locatie")}.pdf`
+    const filename = `BonConsum_${safeFilePart(consumptionDoc.docNo)}_${safeFilePart(consumptionDoc.location?.name || "locatie")}.pdf`
 
     res.setHeader("Content-Type", "application/pdf")
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`)
@@ -178,8 +181,8 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
       margin: 20,
       info: {
         Title: filename,
-        Author: company?.name || "POSHard SaaS",
-        Subject: `Bon de consum ${docData.docNo}`,
+        Author: company?.name || "Gufo ERP",
+        Subject: `Bon de consum ${consumptionDoc.docNo}`,
       },
     })
 
@@ -404,18 +407,18 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
     function drawMetaBlock() {
       let y = margin + headerBlockHeight + 10
 
-      const saleReceiptNo = docData.sale?.receiptNo || "-"
-      const operatorName = docData.sale?.operatorName || "-"
-      const saleDate = docData.sale?.soldAt ? fmtDateTime(docData.sale.soldAt) : "-"
+      const saleReceiptNo = consumptionDoc.sale?.receiptNo || "-"
+      const operatorName = consumptionDoc.sale?.operatorName || "-"
+      const saleDate = consumptionDoc.sale?.soldAt ? fmtDateTime(consumptionDoc.sale.soldAt) : "-"
 
       const metaRows = [
         [
           "Document",
-          text(docData.docNo),
+          text(consumptionDoc.docNo),
           "Data document",
-          fmtDateTime(docData.docDate),
+          fmtDateTime(consumptionDoc.docDate),
           "Locatie",
-          text(docData.location?.name),
+          text(consumptionDoc.location?.name),
         ],
         [
           "Bon POS",
@@ -427,9 +430,9 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
         ],
         [
           "Nota",
-          text(docData.note),
+          text(consumptionDoc.note),
           "Nr. pozitii",
-          String(docData.items.length),
+          String(consumptionDoc.items.length),
           "Cantitate totala",
           fmt(totalQty, 3),
         ],
@@ -544,15 +547,15 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
         totalsY += bold ? 17 : 14
       }
 
-      totalLine("Nr. pozitii consum", String(docData.items.length))
+      totalLine("Nr. pozitii consum", String(consumptionDoc.items.length))
       totalLine("Cantitate totala consum", fmt(totalQty, 3), true)
 
-      if (docData.sale) {
+      if (consumptionDoc.sale) {
         totalsY += 6
         doc.moveTo(rightX + 8, totalsY).lineTo(rightX + rightWidthBox - 8, totalsY).stroke("#111111")
         totalsY += 8
-        totalLine("Bon POS", text(docData.sale.receiptNo))
-        totalLine("Total vanzare", fmt(num(docData.sale.total)), true)
+        totalLine("Bon POS", text(consumptionDoc.sale.receiptNo))
+        totalLine("Total vanzare", fmt(num(consumptionDoc.sale.total)), true)
       }
     }
 

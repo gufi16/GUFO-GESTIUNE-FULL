@@ -13,13 +13,13 @@ dateTo
 
 router.get("/api/v1/dashboard", async (req: Request, res: Response) => {
   try {
-
     const tenantId = req.headers["x-tenant-id"] as string;
+    const locationId = req.query.locationId ? String(req.query.locationId) : null;
 
     if (!tenantId) {
       return res.status(400).json({
         ok: false,
-        error: "tenantId lipsă"
+        error: "tenantId lipsă",
       });
     }
 
@@ -35,20 +35,23 @@ router.get("/api/v1/dashboard", async (req: Request, res: Response) => {
        TOTAL SALES
     ===================================== */
 
-    const salesAgg = await prisma.sale.aggregate({
-      where: {
-        tenantId,
-        soldAt: {
-          gte: dateFrom,
-          lte: dateTo
-        }
+    const saleWhere = {
+      tenantId,
+      ...(locationId ? { locationId } : {}),
+      soldAt: {
+        gte: dateFrom,
+        lte: dateTo,
       },
+    };
+
+    const salesAgg = await prisma.sale.aggregate({
+      where: saleWhere,
       _sum: {
-        total: true
+        total: true,
       },
       _count: {
-        id: true
-      }
+        id: true,
+      },
     });
 
     const sales = Number(salesAgg._sum.total || 0);
@@ -60,29 +63,17 @@ router.get("/api/v1/dashboard", async (req: Request, res: Response) => {
     ===================================== */
 
     const cashAgg = await prisma.sale.aggregate({
-      where: {
-        tenantId,
-        soldAt: {
-          gte: dateFrom,
-          lte: dateTo
-        }
-      },
+      where: saleWhere,
       _sum: {
-        cashAmount: true
-      }
+        cashAmount: true,
+      },
     });
 
     const cardAgg = await prisma.sale.aggregate({
-      where: {
-        tenantId,
-        soldAt: {
-          gte: dateFrom,
-          lte: dateTo
-        }
-      },
+      where: saleWhere,
       _sum: {
-        cardAmount: true
-      }
+        cardAmount: true,
+      },
     });
 
     const cash = Number(cashAgg._sum.cashAmount || 0);
@@ -92,29 +83,42 @@ router.get("/api/v1/dashboard", async (req: Request, res: Response) => {
        SALES PER DAY
     ===================================== */
 
+    const locationFilterSql = locationId ? ` AND "locationId" = '${locationId}'` : "";
+
     const salesPerDay: any = await prisma.$queryRawUnsafe(`
       SELECT
         DATE("soldAt") as day,
         SUM(total) as total
       FROM "Sale"
       WHERE "tenantId" = '${tenantId}'
+      ${locationFilterSql}
       AND "soldAt" BETWEEN '${dateFrom.toISOString()}' AND '${dateTo.toISOString()}'
       GROUP BY day
       ORDER BY day
     `);
 
     /* =====================================
-       TOP PRODUCTS
+       TOP PRODUCTS + REAL PROFIT
+       profit = SUM((net sale price - costPrice) * qty)
+       unitPrice in sale item is treated as gross sale price
+       costPrice in Product is treated as net cost
     ===================================== */
 
     const topProducts: any = await prisma.$queryRawUnsafe(`
       SELECT
         p.name,
-        SUM(si.qty) as qty
+        SUM(si.qty) as qty,
+        SUM(
+          (
+            (COALESCE(si."unitPrice", 0) / NULLIF(1 + (COALESCE(si."vatRate", 0) / 100.0), 0))
+            - COALESCE(p."costPrice", 0)
+          ) * COALESCE(si.qty, 0)
+        ) as profit
       FROM "SaleItem" si
       JOIN "Product" p ON p.id = si."productId"
       JOIN "Sale" s ON s.id = si."saleId"
       WHERE s."tenantId" = '${tenantId}'
+      ${locationFilterSql.replace(/"locationId"/g, 's."locationId"')}
       AND s."soldAt" BETWEEN '${dateFrom.toISOString()}' AND '${dateTo.toISOString()}'
       GROUP BY p.name
       ORDER BY qty DESC
@@ -128,15 +132,16 @@ router.get("/api/v1/dashboard", async (req: Request, res: Response) => {
     const lowStock = await prisma.stockBalance.findMany({
       where: {
         tenantId,
+        ...(locationId ? { locationId } : {}),
         qty: {
-          lte: 5
-        }
+          lte: 5,
+        },
       },
       include: {
         product: true,
-        location: true
+        location: true,
       },
-      take: 10
+      take: 10,
     });
 
     return res.json({
@@ -151,22 +156,26 @@ router.get("/api/v1/dashboard", async (req: Request, res: Response) => {
 
       salesPerDay,
 
-      topProducts,
+      topProducts: Array.isArray(topProducts)
+        ? topProducts.map((item: any) => ({
+            name: item.name,
+            qty: Number(item.qty || 0),
+            profit: Number(item.profit || 0),
+          }))
+        : [],
 
       lowStock: lowStock.map((s) => ({
         product: s.product.name,
         location: s.location.name,
-        qty: Number(s.qty)
-      }))
+        qty: Number(s.qty),
+      })),
     });
-
   } catch (err) {
-
     console.error("DASHBOARD ERROR", err);
 
     return res.status(500).json({
       ok: false,
-      error: "dashboard_failed"
+      error: "dashboard_failed",
     });
   }
 });

@@ -4,12 +4,44 @@
 
 :root {
   color-scheme: light;
+  font-size: 14px;
 }
 
 body {
-  @apply bg-neutral-50 text-neutral-900;
+  @apply bg-white text-neutral-900 leading-snug;
+}
+
+#root {
+  @apply min-h-screen;
+}
+
+button,
+input,
+select,
+textarea {
+  @apply leading-snug;
+}
+
+input,
+select,
+textarea {
+  @apply border-slate-300;
+}
+
+input,
+select {
+  min-height: 2.5rem;
+}
+
+textarea {
+  min-height: 2.75rem;
+}
+
+table th,
+table td {
+  vertical-align: middle;
 }
 
 .card {
-  @apply rounded-2xl bg-white shadow-sm border border-neutral-200;
+  @apply rounded-xl bg-white shadow-sm border border-neutral-200;
 }

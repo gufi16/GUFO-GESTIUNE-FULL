@@ -1,7 +1,16 @@
 import PageHeader from "../components/PageHeader"
-import { useEffect, useState } from "react"
-
-const API = "http://localhost:3001"
+import { useEffect, useMemo, useState } from "react"
+import { Building2, RefreshCw } from "lucide-react"
+import {
+  DocumentField,
+  DocumentMetric,
+  DocumentSection,
+  InlineNotice,
+  documentButtonPrimaryClass,
+  documentButtonSecondaryClass,
+  documentInputClass,
+} from "../components/DocumentUi"
+import { API_BASE as API, getToken } from "../lib/api"
 
 type LocationItem = {
   id: string
@@ -10,10 +19,7 @@ type LocationItem = {
 }
 
 export default function LocatiiPage() {
-  const token =
-    localStorage.getItem("token") ||
-    localStorage.getItem("access_token") ||
-    ""
+  const token = getToken() || ""
 
   const [items, setItems] = useState<LocationItem[]>([])
   const [loading, setLoading] = useState(false)
@@ -23,8 +29,17 @@ export default function LocatiiPage() {
 
   const [form, setForm] = useState({
     name: "",
-    code: ""
+    code: "",
   })
+
+  const stats = useMemo(
+    () => ({
+      total: items.length,
+      codes: items.filter((item) => item.code.trim()).length,
+      newest: items[items.length - 1]?.name || "-",
+    }),
+    [items]
+  )
 
   async function loadLocations() {
     if (!token) {
@@ -38,8 +53,8 @@ export default function LocatiiPage() {
     try {
       const res = await fetch(`${API}/api/v1/meta/locations`, {
         headers: {
-          Authorization: `Bearer ${token}`
-        }
+          Authorization: `Bearer ${token}`,
+        },
       })
 
       const data = await res.json().catch(() => ({}))
@@ -90,9 +105,9 @@ export default function LocatiiPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(form)
+        body: JSON.stringify(form),
       })
 
       const data = await res.json().catch(() => ({}))
@@ -119,216 +134,99 @@ export default function LocatiiPage() {
 
   useEffect(() => {
     loadLocations()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return (
-    <div style={{ padding: 20 }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: 12,
-          flexWrap: "wrap",
-          marginBottom: 20
-        }}
-      >
-        <PageHeader
-          badge="nomenclator"
-          title="Locații"
-          subtitle="Gestionare locații și depozite utilizate în stoc."
-        />
+    <div className="space-y-3">
+      <PageHeader
+        badge="nomenclator"
+        title="Locații"
+        subtitle="Gestionezi magazinele, depozitele și punctele de lucru în același stil curat cu restul ERP-ului."
+      />
 
-        <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={loadLocations} style={btnSecondary}>
-            Refresh
-          </button>
-
-          <button onClick={saveLocation} style={btnPrimary} disabled={saving}>
-            {saving ? "Se salvează..." : "Salvează locația"}
-          </button>
-        </div>
+      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
+        <DocumentMetric title="Locații" value={stats.total} tone="slate" />
+        <DocumentMetric title="Cu cod" value={stats.codes} tone="blue" />
+        <DocumentMetric title="Ultima din listă" value={stats.newest} tone="emerald" />
       </div>
 
-      {error ? <div style={errorBox}>{error}</div> : null}
-      {success ? <div style={successBox}>{success}</div> : null}
+      {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
+      {success ? <InlineNotice tone="success">{success}</InlineNotice> : null}
 
-      <div style={card}>
-        <div style={grid2}>
-          <Field label="Nume locație">
+      <DocumentSection
+        title="Adaugă locație"
+        description="Completezi rapid datele esențiale, iar lista de dedesubt se actualizează imediat."
+        actions={
+          <>
+            <button type="button" onClick={loadLocations} className={documentButtonSecondaryClass}>
+              <RefreshCw size={16} className="mr-2" />
+              {loading ? "Se încarcă..." : "Refresh"}
+            </button>
+            <button type="button" onClick={saveLocation} className={documentButtonPrimaryClass} disabled={saving}>
+              {saving ? "Se salvează..." : "Salvează locația"}
+            </button>
+          </>
+        }
+      >
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <DocumentField label="Nume locație">
             <input
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              style={input}
+              className={documentInputClass}
               placeholder="Ex: Depozit principal"
             />
-          </Field>
+          </DocumentField>
 
-          <Field label="Cod locație">
+          <DocumentField label="Cod locație">
             <input
               value={form.code}
               onChange={(e) => setForm({ ...form, code: e.target.value })}
-              style={input}
+              className={documentInputClass}
               placeholder="Ex: DEP01"
             />
-          </Field>
+          </DocumentField>
         </div>
-      </div>
+      </DocumentSection>
 
-      <div style={{ ...card, marginTop: 20 }}>
-        <div style={sectionTitle}>Locații existente</div>
-
+      <DocumentSection title="Locații existente" description="Ai lista completă a locațiilor salvate și codurile lor operaționale.">
         {loading ? (
-          <div style={infoText}>Se încarcă locațiile...</div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+            Se încarcă locațiile...
+          </div>
         ) : items.length === 0 ? (
-          <div style={emptyBox}>Nu există locații salvate.</div>
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+            Nu există locații salvate.
+          </div>
         ) : (
-          <div style={tableWrap}>
-            <table style={table}>
-              <thead>
+          <div className="overflow-hidden rounded-[16px] border border-slate-200">
+            <table className="w-full text-[13px]">
+              <thead className="bg-slate-50 text-slate-500">
                 <tr>
-                  <th style={th}>Nume</th>
-                  <th style={th}>Cod</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Locație</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Cod</th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((item) => (
-                  <tr key={item.id}>
-                    <td style={td}>{item.name}</td>
-                    <td style={td}>{item.code}</td>
+                  <tr key={item.id} className="border-t border-slate-200">
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-9 w-9 items-center justify-center rounded-[14px] bg-blue-50 text-blue-700">
+                          <Building2 size={18} />
+                        </span>
+                        <span className="font-semibold text-slate-900">{item.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5 text-slate-600">{item.code}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
-      </div>
+      </DocumentSection>
     </div>
   )
-}
-
-function Field({ label, children }: any) {
-  return (
-    <div style={fieldWrap}>
-      <label style={labelStyle}>{label}</label>
-      {children}
-    </div>
-  )
-}
-
-const card: React.CSSProperties = {
-  background: "#fff",
-  border: "1px solid #e2e8f0",
-  borderRadius: 24,
-  padding: 24,
-  boxShadow: "0 1px 2px rgba(15,23,42,0.04)"
-}
-
-const grid2: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-  gap: 16
-}
-
-const fieldWrap: React.CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 6
-}
-
-const labelStyle: React.CSSProperties = {
-  fontSize: 14,
-  fontWeight: 500,
-  color: "#374151"
-}
-
-const input: React.CSSProperties = {
-  width: "100%",
-  padding: "11px 12px",
-  borderRadius: 10,
-  border: "1px solid #cbd5e1",
-  background: "#ffffff",
-  outline: "none",
-  fontSize: 14,
-  boxSizing: "border-box"
-}
-
-const btnPrimary: React.CSSProperties = {
-  padding: "10px 16px",
-  borderRadius: 10,
-  border: "none",
-  background: "#2563eb",
-  color: "#ffffff",
-  cursor: "pointer",
-  fontSize: 14,
-  fontWeight: 600
-}
-
-const btnSecondary: React.CSSProperties = {
-  padding: "10px 16px",
-  borderRadius: 10,
-  border: "1px solid #cbd5e1",
-  background: "#ffffff",
-  color: "#111111",
-  cursor: "pointer",
-  fontSize: 14,
-  fontWeight: 600
-}
-
-const errorBox: React.CSSProperties = {
-  border: "1px solid #fecaca",
-  background: "#fef2f2",
-  color: "#991b1b",
-  borderRadius: 12,
-  padding: 12,
-  marginBottom: 16
-}
-
-const successBox: React.CSSProperties = {
-  border: "1px solid #bfdbfe",
-  background: "#eff6ff",
-  color: "#1d4ed8",
-  borderRadius: 12,
-  padding: 12,
-  marginBottom: 16
-}
-
-const infoText: React.CSSProperties = {
-  color: "#6b7280",
-  fontSize: 14
-}
-
-const emptyBox: React.CSSProperties = {
-  padding: 16,
-  border: "1px dashed #d1d5db",
-  borderRadius: 12,
-  color: "#6b7280"
-}
-
-const sectionTitle: React.CSSProperties = {
-  fontSize: 18,
-  fontWeight: 700
-}
-
-const tableWrap: React.CSSProperties = {
-  overflowX: "auto",
-  marginTop: 18
-}
-
-const table: React.CSSProperties = {
-  width: "100%",
-  borderCollapse: "collapse"
-}
-
-const th: React.CSSProperties = {
-  textAlign: "left",
-  padding: "10px 12px",
-  borderBottom: "1px solid #e5e7eb",
-  background: "#f8fafc"
-}
-
-const td: React.CSSProperties = {
-  padding: "10px 12px",
-  borderBottom: "1px solid #f1f5f9",
-  verticalAlign: "middle"
 }

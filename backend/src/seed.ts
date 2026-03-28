@@ -60,13 +60,13 @@ async function main() {
     company = await prisma.company.create({
       data: {
         tenantId: tenant.id,
-        name: "POSHARD IMPEX SRL",
+        name: "GUFO RETAIL SRL",
         cui: "RO42691617",
         regNo: "J12/2000/2028",
         address: "CALEA FLORESTI 20, CLUJ NAPOCA, CLUJ",
         bank: "Transilvania Cluj",
         iban: "RO74BTRLRONCRT0557477501",
-        email: "ervinarg@poshard.ro",
+        email: "demo@gufo.ro",
         phone: "0733985881"
       }
     })
@@ -74,13 +74,13 @@ async function main() {
     await prisma.company.update({
       where: { id: company.id },
       data: {
-        name: "POSHARD IMPEX SRL",
+        name: "GUFO RETAIL SRL",
         cui: "RO42691617",
         regNo: "J12/2000/2028",
         address: "CALEA FLORESTI 20, CLUJ NAPOCA, CLUJ",
         bank: "Transilvania Cluj",
         iban: "RO74BTRLRONCRT0557477501",
-        email: "ervinarg@poshard.ro",
+        email: "demo@gufo.ro",
         phone: "0733985881"
       }
     })
@@ -117,6 +117,7 @@ async function main() {
         tenantId: tenant.id,
         name: "TVA 19%",
         rate: 19,
+        fiscalCode: "A",
         isActive: true
       }
     })
@@ -135,6 +136,7 @@ async function main() {
         tenantId: tenant.id,
         name: "TVA 9%",
         rate: 9,
+        fiscalCode: "B",
         isActive: true
       }
     })
@@ -153,6 +155,7 @@ async function main() {
         tenantId: tenant.id,
         name: "TVA 5%",
         rate: 5,
+        fiscalCode: "C",
         isActive: true
       }
     })
@@ -171,6 +174,7 @@ async function main() {
         tenantId: tenant.id,
         name: "TVA 0%",
         rate: 0,
+        fiscalCode: "D",
         isActive: true
       }
     })

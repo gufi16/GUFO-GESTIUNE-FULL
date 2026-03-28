@@ -1,17 +1,32 @@
 import { useEffect, useState } from "react"
 import PageHeader from "../components/PageHeader"
-
-const API = "http://localhost:3001"
+import {
+  DocumentField,
+  DocumentMetric,
+  DocumentSection,
+  InlineNotice,
+  documentButtonPrimaryClass,
+  documentInputClass,
+  documentTextareaClass,
+} from "../components/DocumentUi"
+import { API_BASE as API, getToken } from "../lib/api"
+import { hasModule } from "../lib/modules"
 
 type CompanyForm = {
   name: string
   cui: string
   regNo: string
   address: string
+  city: string
+  county: string
+  postalCode: string
+  country: string
   bank: string
   iban: string
   email: string
+  contactEmail: string
   phone: string
+  isVatPayer: boolean
 }
 
 const emptyForm: CompanyForm = {
@@ -19,17 +34,21 @@ const emptyForm: CompanyForm = {
   cui: "",
   regNo: "",
   address: "",
+  city: "",
+  county: "",
+  postalCode: "",
+  country: "RO",
   bank: "",
   iban: "",
   email: "",
-  phone: ""
+  contactEmail: "",
+  phone: "",
+  isVatPayer: true,
 }
 
 export default function FirmaPage() {
-  const token =
-    localStorage.getItem("token") ||
-    localStorage.getItem("access_token") ||
-    ""
+  const token = getToken() || ""
+  const efacturaEnabled = hasModule("efactura")
 
   const [form, setForm] = useState<CompanyForm>(emptyForm)
   const [loading, setLoading] = useState(true)
@@ -39,11 +58,12 @@ export default function FirmaPage() {
 
   useEffect(() => {
     loadCompany()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function loadCompany() {
     if (!token) {
-      setError("Nu există token de autentificare. Fă login din nou.")
+      setError("Nu exista token de autentificare. Fa login din nou.")
       setLoading(false)
       return
     }
@@ -55,14 +75,14 @@ export default function FirmaPage() {
     try {
       const res = await fetch(`${API}/api/v1/company`, {
         headers: {
-          Authorization: `Bearer ${token}`
-        }
+          Authorization: `Bearer ${token}`,
+        },
       })
 
       const data = await res.json().catch(() => ({}))
 
       if (res.status === 401) {
-        setError("Token expirat sau invalid. Fă login din nou.")
+        setError("Token expirat sau invalid. Fa login din nou.")
         setLoading(false)
         return
       }
@@ -73,16 +93,22 @@ export default function FirmaPage() {
           cui: data.company.cui || "",
           regNo: data.company.regNo || "",
           address: data.company.address || "",
+          city: data.company.city || data.company.efacturaSellerCity || "",
+          county: data.company.county || data.company.efacturaSellerCounty || "",
+          postalCode: data.company.postalCode || data.company.efacturaSellerPostalCode || "",
+          country: data.company.country || data.company.efacturaSellerCountryCode || "RO",
           bank: data.company.bank || "",
           iban: data.company.iban || "",
           email: data.company.email || "",
-          phone: data.company.phone || ""
+          contactEmail: data.company.contactEmail || data.company.efacturaContactEmail || "",
+          phone: data.company.phone || "",
+          isVatPayer: data.company.isVatPayer ?? true,
         })
       } else {
         setForm(emptyForm)
       }
     } catch {
-      setError("Nu pot încărca datele firmei.")
+      setError("Nu pot incarca datele firmei.")
     } finally {
       setLoading(false)
     }
@@ -90,7 +116,7 @@ export default function FirmaPage() {
 
   async function saveCompany() {
     if (!token) {
-      setError("Nu există token de autentificare. Fă login din nou.")
+      setError("Nu exista token de autentificare. Fa login din nou.")
       return
     }
 
@@ -99,19 +125,30 @@ export default function FirmaPage() {
     setMessage("")
 
     try {
+      const currentRes = await fetch(`${API}/api/v1/company`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      const currentData = await currentRes.json().catch(() => ({}))
+      const currentCompany = currentData?.company || {}
+
       const res = await fetch(`${API}/api/v1/company`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(form)
+        body: JSON.stringify({
+          ...currentCompany,
+          ...form,
+        }),
       })
 
       const data = await res.json().catch(() => ({}))
 
       if (res.status === 401) {
-        setError("Token expirat sau invalid. Fă login din nou.")
+        setError("Token expirat sau invalid. Fa login din nou.")
         setSaving(false)
         return
       }
@@ -133,229 +170,118 @@ export default function FirmaPage() {
   function updateField<K extends keyof CompanyForm>(key: K, value: CompanyForm[K]) {
     setForm((prev) => ({
       ...prev,
-      [key]: value
+      [key]: value,
     }))
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <PageHeader
         badge="configurare"
-        title="Firmă"
-        subtitle="Datele companiei folosite în documente, print și PDF."
+        title="Firma"
+        subtitle={
+          efacturaEnabled
+            ? "Datele firmei se salveaza o singura data si sunt folosite in documente, PDF si e-Factura."
+            : "Datele firmei se salveaza o singura data si sunt folosite in toate documentele si PDF-urile ERP."
+        }
       />
 
-      {error ? <div style={errorBox}>{error}</div> : null}
-      {message ? <div style={successBox}>{message}</div> : null}
+      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-4">
+        <DocumentMetric title="Denumire" value={form.name || "-"} tone="slate" />
+        <DocumentMetric title="CUI" value={form.cui || "-"} tone="blue" />
+        <DocumentMetric title="TVA" value={form.isVatPayer ? "Platitoare" : "Neplatitoare"} tone="emerald" />
+        <DocumentMetric title="Date firma" value={form.address && form.city && form.county ? "Complete" : "Incomplet"} tone="amber" />
+      </div>
 
-      <div style={card}>
-        <div style={cardHeader}>
-          <div>
-            <div style={cardTitle}>Date firmă</div>
-            <div style={cardSubtitle}>
-              Completează informațiile care apar în documentele generate din aplicație.
-            </div>
-          </div>
-        </div>
+      {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
+      {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
 
+      <DocumentSection
+        title="Date firma"
+        description={
+          efacturaEnabled
+            ? "Aici completezi datele firmei o singura data. Sistemul le foloseste apoi in toate documentele si in e-Factura."
+            : "Aici completezi datele firmei o singura data. Sistemul le foloseste apoi in toate documentele si PDF-urile ERP."
+        }
+        actions={
+          <button onClick={saveCompany} disabled={saving || loading} className={documentButtonPrimaryClass}>
+            {saving ? "Se salveaza..." : "Salveaza"}
+          </button>
+        }
+      >
         {loading ? (
-          <div style={infoText}>Se încarcă datele firmei...</div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+            Se incarca datele firmei...
+          </div>
         ) : (
           <>
-            <div style={grid}>
-              <Field label="Denumire firmă">
-                <input
-                  value={form.name}
-                  onChange={(e) => updateField("name", e.target.value)}
-                  style={input}
-                  placeholder="Ex: POSHARD IMPEX SRL"
-                />
-              </Field>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <DocumentField label="Denumire firma">
+                <input value={form.name} onChange={(e) => updateField("name", e.target.value)} className={documentInputClass} placeholder="Ex: GUFO RETAIL SRL" />
+              </DocumentField>
 
-              <Field label="CUI">
-                <input
-                  value={form.cui}
-                  onChange={(e) => updateField("cui", e.target.value)}
-                  style={input}
-                  placeholder="Ex: RO12345678"
-                />
-              </Field>
+              <DocumentField label="CUI">
+                <input value={form.cui} onChange={(e) => updateField("cui", e.target.value)} className={documentInputClass} placeholder="Ex: RO12345678" />
+              </DocumentField>
 
-              <Field label="Nr. Registru Comerț">
-                <input
-                  value={form.regNo}
-                  onChange={(e) => updateField("regNo", e.target.value)}
-                  style={input}
-                  placeholder="Ex: J40/1234/2010"
-                />
-              </Field>
+              <DocumentField label="Nr. Registru Comert">
+                <input value={form.regNo} onChange={(e) => updateField("regNo", e.target.value)} className={documentInputClass} placeholder="Ex: J40/1234/2010" />
+              </DocumentField>
 
-              <Field label="Bancă">
-                <input
-                  value={form.bank}
-                  onChange={(e) => updateField("bank", e.target.value)}
-                  style={input}
-                  placeholder="Ex: Banca Transilvania"
-                />
-              </Field>
+              <DocumentField label="Banca">
+                <input value={form.bank} onChange={(e) => updateField("bank", e.target.value)} className={documentInputClass} placeholder="Ex: Banca Transilvania" />
+              </DocumentField>
 
-              <Field label="IBAN">
-                <input
-                  value={form.iban}
-                  onChange={(e) => updateField("iban", e.target.value)}
-                  style={input}
-                  placeholder="Ex: RO49AAAA1B31007593840000"
-                />
-              </Field>
+              <DocumentField label="IBAN">
+                <input value={form.iban} onChange={(e) => updateField("iban", e.target.value)} className={documentInputClass} placeholder="Ex: RO49AAAA1B31007593840000" />
+              </DocumentField>
 
-              <Field label="Email">
-                <input
-                  value={form.email}
-                  onChange={(e) => updateField("email", e.target.value)}
-                  style={input}
-                  placeholder="Ex: office@firma.ro"
-                />
-              </Field>
+              <DocumentField label="Email">
+                <input value={form.email} onChange={(e) => updateField("email", e.target.value)} className={documentInputClass} placeholder="Ex: office@firma.ro" />
+              </DocumentField>
 
-              <Field label="Telefon">
-                <input
-                  value={form.phone}
-                  onChange={(e) => updateField("phone", e.target.value)}
-                  style={input}
-                  placeholder="Ex: 0722000000"
-                />
-              </Field>
+              <DocumentField label="Telefon">
+                <input value={form.phone} onChange={(e) => updateField("phone", e.target.value)} className={documentInputClass} placeholder="Ex: 0722000000" />
+              </DocumentField>
 
-              <Field label="Adresă" full>
-                <input
-                  value={form.address}
-                  onChange={(e) => updateField("address", e.target.value)}
-                  style={input}
-                  placeholder="Ex: Str. Exemplu nr. 10, București"
-                />
-              </Field>
+              <DocumentField label="Regim TVA">
+                <label className="flex min-h-10 items-center gap-3 rounded-[14px] border border-slate-200 bg-slate-50 px-3 text-[13px] text-slate-700">
+                  <input type="checkbox" checked={form.isVatPayer} onChange={(e) => updateField("isVatPayer", e.target.checked)} />
+                  <span>Firma este platitoare de TVA</span>
+                </label>
+              </DocumentField>
             </div>
 
-            <div style={actionsRow}>
-              <button onClick={saveCompany} disabled={saving} style={btnPrimary}>
-                {saving ? "Se salvează..." : "Salvează"}
-              </button>
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <DocumentField label="Localitate">
+                <input value={form.city} onChange={(e) => updateField("city", e.target.value)} className={documentInputClass} placeholder="Ex: Cluj-Napoca" />
+              </DocumentField>
+
+              <DocumentField label="Judet">
+                <input value={form.county} onChange={(e) => updateField("county", e.target.value)} className={documentInputClass} placeholder="Ex: Cluj" />
+              </DocumentField>
+
+              <DocumentField label="Cod postal">
+                <input value={form.postalCode} onChange={(e) => updateField("postalCode", e.target.value)} className={documentInputClass} placeholder="Ex: 400000" />
+              </DocumentField>
+
+              <DocumentField label="Tara">
+                <input value={form.country} onChange={(e) => updateField("country", e.target.value.toUpperCase())} className={documentInputClass} placeholder="RO" />
+              </DocumentField>
+
+              <DocumentField label="Email contact">
+                <input value={form.contactEmail} onChange={(e) => updateField("contactEmail", e.target.value)} className={documentInputClass} placeholder="Ex: office@firma.ro" />
+              </DocumentField>
+            </div>
+
+            <div className="mt-4">
+              <DocumentField label="Adresa">
+                <textarea value={form.address} onChange={(e) => updateField("address", e.target.value)} rows={3} className={documentTextareaClass} placeholder="Ex: Calea Floresti 20" />
+              </DocumentField>
             </div>
           </>
         )}
-      </div>
+      </DocumentSection>
     </div>
   )
-}
-
-function Field({
-  label,
-  children,
-  full = false
-}: {
-  label: string
-  children: React.ReactNode
-  full?: boolean
-}) {
-  return (
-    <div style={{ ...fieldWrap, gridColumn: full ? "1 / -1" : undefined }}>
-      <label style={labelStyle}>{label}</label>
-      {children}
-    </div>
-  )
-}
-
-const card: React.CSSProperties = {
-  background: "#ffffff",
-  border: "1px solid #e5e7eb",
-  borderRadius: 18,
-  padding: 24,
-  boxShadow: "0 1px 2px rgba(0,0,0,0.04)"
-}
-
-const cardHeader: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "flex-start",
-  gap: 12,
-  marginBottom: 20
-}
-
-const cardTitle: React.CSSProperties = {
-  fontSize: 18,
-  fontWeight: 700,
-  color: "#111827"
-}
-
-const cardSubtitle: React.CSSProperties = {
-  fontSize: 14,
-  color: "#6b7280",
-  marginTop: 4
-}
-
-const grid: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-  gap: 16
-}
-
-const fieldWrap: React.CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 6
-}
-
-const labelStyle: React.CSSProperties = {
-  fontSize: 14,
-  fontWeight: 500,
-  color: "#374151"
-}
-
-const input: React.CSSProperties = {
-  width: "100%",
-  padding: "11px 12px",
-  borderRadius: 10,
-  border: "1px solid #cbd5e1",
-  background: "#ffffff",
-  outline: "none",
-  fontSize: 14,
-  boxSizing: "border-box"
-}
-
-const actionsRow: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "flex-end",
-  marginTop: 22
-}
-
-const btnPrimary: React.CSSProperties = {
-  padding: "10px 16px",
-  borderRadius: 10,
-  border: "none",
-  background: "#111111",
-  color: "#ffffff",
-  cursor: "pointer",
-  fontSize: 14,
-  fontWeight: 600
-}
-
-const errorBox: React.CSSProperties = {
-  border: "1px solid #fecaca",
-  background: "#fef2f2",
-  color: "#991b1b",
-  borderRadius: 12,
-  padding: 12
-}
-
-const successBox: React.CSSProperties = {
-  border: "1px solid #bbf7d0",
-  background: "#eff6ff",
-  color: "#1d4ed8",
-  borderRadius: 12,
-  padding: 12
-}
-
-const infoText: React.CSSProperties = {
-  color: "#6b7280",
-  fontSize: 14
 }

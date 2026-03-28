@@ -1,0 +1,1 @@
+ALTER TABLE "Company" ADD COLUMN "isVatPayer" BOOLEAN NOT NULL DEFAULT true;

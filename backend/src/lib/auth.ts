@@ -1,4 +1,4 @@
-import jwt from "jsonwebtoken";
+import jwt, { type SignOptions } from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
@@ -12,12 +12,25 @@ export function verifySecret(raw: string, hash: string) {
   return bcrypt.compare(raw, hash);
 }
 
-export function signAccessToken(payload: { tenantId: string; userId: string; role: string }) {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+export function signAccessToken(payload: {
+  tenantId: string
+  userId: string
+  role: string
+  email?: string
+}) {
+  const expiresIn: SignOptions["expiresIn"] = JWT_EXPIRES_IN as SignOptions["expiresIn"]
+  return jwt.sign(payload, JWT_SECRET, { expiresIn });
 }
 
 export function verifyAccessToken(token: string) {
-  return jwt.verify(token, JWT_SECRET) as { tenantId: string; userId: string; role: string; iat: number; exp: number };
+  return jwt.verify(token, JWT_SECRET) as {
+    tenantId: string
+    userId: string
+    role: string
+    email?: string
+    iat: number
+    exp: number
+  };
 }
 
 export function makeLicenseKey(prefix = "PSH") {

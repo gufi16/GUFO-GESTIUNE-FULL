@@ -1,392 +1,401 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { ArrowRight, Printer } from "lucide-react"
+import { useNavigate } from "react-router-dom"
+import PageHeader from "../components/PageHeader"
+import {
+  DocumentMetric,
+  InlineNotice,
+  documentButtonPrimaryClass,
+  documentInputClass,
+} from "../components/DocumentUi"
+import { API_BASE as API, getToken, authHeaders } from "../lib/api"
+import { getActiveLocationId, subscribeToActiveLocation } from "../lib/location"
+import { openPdfInNewTab } from "../lib/pdf"
+import { formatMoneyRo } from "../lib/format"
 
-const API = "http://localhost:3001"
+function formatDate(value: any) {
+  if (!value) return "-"
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return String(value)
+  return d.toLocaleDateString("ro-RO")
+}
+
+function formatMoney(value: any, currency = "RON") {
+  return formatMoneyRo(value, currency)
+}
+
+function normalizeResponse(data: any): any[] {
+  if (Array.isArray(data)) return data
+  if (Array.isArray(data?.items)) return data.items
+  if (Array.isArray(data?.receipts)) return data.receipts
+  if (Array.isArray(data?.data)) return data.data
+  return []
+}
+
+function statusClass(status: string) {
+  if (status === "POSTED") {
+    return "bg-emerald-100 text-emerald-700 border border-emerald-200"
+  }
+
+  if (status === "CANCELLED") {
+    return "bg-red-100 text-red-700 border border-red-200"
+  }
+
+  return "bg-slate-100 text-slate-700 border border-slate-200"
+}
+
+function sourceBadge(row: any) {
+  if (row?.sourceIncomingEInvoiceId || row?.spvDownloadId || row?.spvUploadIndex) {
+    return {
+      label: "SPV",
+      className: "bg-blue-50 text-blue-700 border border-blue-200",
+    }
+  }
+
+  return {
+    label: "Intern",
+    className: "bg-slate-100 text-slate-700 border border-slate-200",
+  }
+}
 
 export default function NirListPage() {
-  const token =
-    localStorage.getItem("token") ||
-    localStorage.getItem("access_token") ||
-    ""
+  const navigate = useNavigate()
+  const token = getToken() || ""
 
-  const [items, setItems] = useState<any[]>([])
-  const [loading, setLoading] = useState(false)
+  const [rows, setRows] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [search, setSearch] = useState("")
+  const [statusFilter, setStatusFilter] = useState("ALL")
+  const [supplierFilter, setSupplierFilter] = useState("ALL")
+  const [locationFilter, setLocationFilter] = useState("ALL")
+  const [activeLocationId, setActiveLocationIdState] = useState(getActiveLocationId())
 
-  const [filters, setFilters] = useState({
-    dateFrom: "",
-    dateTo: "",
-    month: ""
-  })
+  useEffect(() => {
+    loadRows()
+    return subscribeToActiveLocation((locationId) => setActiveLocationIdState(locationId))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  async function loadReceipts() {
-    if (!token) {
-      setError("Nu există token de autentificare. Fă login din nou.")
-      return
-    }
-
+  async function loadRows() {
     setLoading(true)
     setError("")
 
-    const params = new URLSearchParams()
-
-    if (filters.month) {
-      params.set("month", filters.month)
-    } else {
-      if (filters.dateFrom) params.set("dateFrom", filters.dateFrom)
-      if (filters.dateTo) params.set("dateTo", filters.dateTo)
-    }
-
-    const qs = params.toString()
-    const url = `${API}/api/v1/purchase-receipts${qs ? `?${qs}` : ""}`
-
     try {
-      const res = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+      const res = await fetch(`${API}/api/v1/purchase-receipts`, {
+        headers: token
+          ? {
+              Authorization: `Bearer ${token}`,
+            }
+          : {},
       })
 
       const data = await res.json().catch(() => ({}))
 
       if (res.status === 401) {
-        setError("Token expirat sau invalid. Fă login din nou.")
-        setItems([])
+        setError("Token expirat sau invalid. Fa login din nou.")
+        setRows([])
+        setLoading(false)
         return
       }
 
-      if (!data.ok) {
-        setError(data.error || "Nu pot încărca documentele NIR.")
-        setItems([])
+      const list = normalizeResponse(data)
+
+      if (!res.ok) {
+        setError(data?.error || "Nu am putut incarca receptiile NIR.")
+        setRows([])
+        setLoading(false)
         return
       }
 
-      setItems(Array.isArray(data.receipts) ? data.receipts : [])
+      setRows(list)
     } catch {
-      setError("Nu pot încărca documentele NIR.")
-      setItems([])
+      setError("Nu pot incarca lista NIR din backend.")
+      setRows([])
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => {
-    loadReceipts()
-  }, [])
+  async function openReceiptPdf(id: string) {
+    try {
+      const res = await fetch(`${API}/api/v1/purchase-receipts/${id}/pdf`, {
+        headers: authHeaders(),
+      })
 
-  function clearFilters() {
-    setFilters({
-      dateFrom: "",
-      dateTo: "",
-      month: ""
-    })
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        throw new Error(data?.error || "Nu am putut genera PDF-ul receptiei.")
+      }
+
+      await openPdfInNewTab(res)
+    } catch (e: any) {
+      setError(e?.message || "Nu am putut genera PDF-ul receptiei.")
+    }
   }
 
+  const supplierOptions = useMemo(() => {
+    const map = new Map<string, string>()
+    rows.forEach((row) => {
+      const name =
+        row?.supplier?.name ||
+        row?.supplierName ||
+        row?.vendor?.name ||
+        "Furnizor necunoscut"
+      if (!map.has(name)) map.set(name, name)
+    })
+    return Array.from(map.values()).sort((a, b) => a.localeCompare(b))
+  }, [rows])
+
+  const locationOptions = useMemo(() => {
+    const map = new Map<string, string>()
+    rows.forEach((row) => {
+      const name = row?.location?.name || row?.warehouse?.name || "Fara locatie"
+      if (!map.has(name)) map.set(name, name)
+    })
+    return Array.from(map.values()).sort((a, b) => a.localeCompare(b))
+  }, [rows])
+
+  const filteredRows = useMemo(() => {
+    const q = search.trim().toLowerCase()
+
+    return rows.filter((row) => {
+      const docNo = String(row?.docNo || row?.number || "").toLowerCase()
+      const supplier = String(
+        row?.supplier?.name || row?.supplierName || row?.vendor?.name || ""
+      ).toLowerCase()
+      const location = String(
+        row?.location?.name || row?.warehouse?.name || ""
+      ).toLowerCase()
+      const status = String(row?.status || "DRAFT").toUpperCase()
+
+      const matchesSearch = !q || docNo.includes(q) || supplier.includes(q) || location.includes(q)
+      const matchesStatus = statusFilter === "ALL" || status === statusFilter
+
+      const supplierName =
+        row?.supplier?.name ||
+        row?.supplierName ||
+        row?.vendor?.name ||
+        "Furnizor necunoscut"
+
+      const locationName = row?.location?.name || row?.warehouse?.name || "Fara locatie"
+
+      const matchesSupplier = supplierFilter === "ALL" || supplierName === supplierFilter
+      const matchesLocation =
+        (locationFilter === "ALL" || locationName === locationFilter) &&
+        (!activeLocationId || String(row?.location?.id || row?.warehouse?.id || "") === activeLocationId)
+
+      return matchesSearch && matchesStatus && matchesSupplier && matchesLocation
+    })
+  }, [rows, search, statusFilter, supplierFilter, locationFilter, activeLocationId])
+
+  const stats = useMemo(() => {
+    return filteredRows.reduce(
+      (acc, row) => {
+        const total =
+          Number(row?.totalGrossRon) ||
+          Number(row?.totalRon) ||
+          Number(row?.grandTotal) ||
+          Number(row?.total) ||
+          0
+
+        acc.count += 1
+        acc.total += total
+
+        if ((row?.status || "DRAFT") === "POSTED") acc.posted += 1
+        if ((row?.status || "DRAFT") === "DRAFT") acc.draft += 1
+        if ((row?.status || "DRAFT") === "CANCELLED") acc.cancelled += 1
+
+        return acc
+      },
+      { count: 0, total: 0, posted: 0, draft: 0, cancelled: 0 }
+    )
+  }, [filteredRows])
+
   return (
-    <div style={{ padding: 20 }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: 12,
-          flexWrap: "wrap",
-          marginBottom: 20
-        }}
-      >
-        <div>
-          <h1 style={{ margin: 0, fontSize: 28 }}>NIR / Recepții marfă</h1>
-          <p style={{ color: "#666", marginTop: 6 }}>
-            Listă documente recepție
-          </p>
-        </div>
+    <div className="space-y-3">
+      <PageHeader badge="Operatiuni" title="Receptii NIR" />
 
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button style={btnSecondary} onClick={loadReceipts}>
-            Refresh
-          </button>
-
-          <a href="/inregistrare-document/nir/new" style={{ textDecoration: "none" }}>
-            <button style={btnPrimary}>NIR nou</button>
-          </a>
-        </div>
+      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-4">
+        <DocumentMetric title="Documente" value={stats.count} tone="slate" />
+        <DocumentMetric title="Draft" value={stats.draft} tone="amber" />
+        <DocumentMetric title="Postate" value={stats.posted} tone="emerald" />
+        <DocumentMetric title="Total" value={formatMoney(stats.total)} tone="blue" />
       </div>
 
-      {error ? <div style={errorBox}>{error}</div> : null}
+      {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
 
-      <Section title="Filtre după dată">
-        <div style={filtersGrid}>
-          <Field label="Lună">
-            <input
-              type="month"
-              value={filters.month}
-              onChange={(e) =>
-                setFilters({
-                  ...filters,
-                  month: e.target.value,
-                  dateFrom: "",
-                  dateTo: ""
-                })
-              }
-              style={input}
-            />
-          </Field>
+      <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-[minmax(220px,1.1fr)_180px_200px_minmax(240px,1fr)_auto]">
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Cauta dupa numar, furnizor sau locatie..."
+            className={documentInputClass}
+          />
 
-          <Field label="De la">
-            <input
-              type="date"
-              value={filters.dateFrom}
-              onChange={(e) =>
-                setFilters({
-                  ...filters,
-                  dateFrom: e.target.value,
-                  month: ""
-                })
-              }
-              style={input}
-            />
-          </Field>
-
-          <Field label="Până la">
-            <input
-              type="date"
-              value={filters.dateTo}
-              onChange={(e) =>
-                setFilters({
-                  ...filters,
-                  dateTo: e.target.value,
-                  month: ""
-                })
-              }
-              style={input}
-            />
-          </Field>
-        </div>
-
-        <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
-          <button style={btnPrimary} onClick={loadReceipts}>
-            Aplică filtre
-          </button>
-          <button
-            style={btnSecondary}
-            onClick={() => {
-              clearFilters()
-              setTimeout(() => loadReceipts(), 0)
-            }}
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className={documentInputClass}
           >
-            Resetează
-          </button>
-        </div>
-      </Section>
+            <option value="ALL">Toate statusurile</option>
+            <option value="DRAFT">Draft</option>
+            <option value="POSTED">Posted</option>
+            <option value="CANCELLED">Cancelled</option>
+          </select>
 
-      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 24 }}>
-        <Card title="Documente" value={items.length} />
-        <Card title="Draft" value={items.filter((x) => x.status === "DRAFT").length} />
-        <Card title="Postate" value={items.filter((x) => x.status === "POSTED").length} />
+          <select
+            value={supplierFilter}
+            onChange={(e) => setSupplierFilter(e.target.value)}
+            className={documentInputClass}
+          >
+            <option value="ALL">Toti furnizorii</option>
+            {supplierOptions.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+
+          <div className="flex items-center gap-2">
+            <select
+              value={locationFilter}
+              onChange={(e) => setLocationFilter(e.target.value)}
+              className={documentInputClass}
+            >
+              <option value="ALL">Toate locatiile</option>
+              {locationOptions.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+
+          </div>
+
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => navigate("/inregistrare-document/nir/new")}
+              className={documentButtonPrimaryClass}
+            >
+              NIR nou
+            </button>
+          </div>
+        </div>
       </div>
 
-      <Section title="Listă documente NIR">
-        <div style={tableWrap}>
-          <table style={tableStyle}>
-            <thead>
-              <tr>
-                <th style={th}>Nr. document</th>
-                <th style={th}>Data</th>
-                <th style={th}>Furnizor</th>
-                <th style={th}>Locație</th>
-                <th style={th}>Monedă</th>
-                <th style={th}>Net</th>
-                <th style={th}>TVA</th>
-                <th style={th}>Total</th>
-                <th style={th}>Total RON</th>
-                <th style={th}>Status</th>
-                <th style={th}>Acțiune</th>
-              </tr>
-            </thead>
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        <table className="w-full text-[13px]">
+          <thead className="bg-slate-50 text-slate-500">
+            <tr>
+              <th className="px-3 py-2.5 text-left font-medium">Numar</th>
+              <th className="px-3 py-2.5 text-left font-medium">Data</th>
+              <th className="px-3 py-2.5 text-left font-medium">Furnizor</th>
+              <th className="px-3 py-2.5 text-left font-medium">Locatie</th>
+              <th className="px-3 py-2.5 text-left font-medium">Status</th>
+              <th className="px-3 py-2.5 text-left font-medium">Valoare</th>
+              <th className="px-3 py-2.5 text-right font-medium">Actiune</th>
+            </tr>
+          </thead>
 
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td style={td} colSpan={11}>
-                    Se încarcă...
-                  </td>
-                </tr>
-              ) : items.length === 0 ? (
-                <tr>
-                  <td style={td} colSpan={11}>
-                    Nu există documente NIR.
-                  </td>
-                </tr>
-              ) : (
-                items.map((row) => (
-                  <tr key={row.id}>
-                    <td style={td}>{row.docNo}</td>
-                    <td style={td}>
-                      {row.docDate ? new Date(row.docDate).toLocaleDateString() : "-"}
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={7} className="px-3 py-8 text-center text-slate-500">
+                  Se incarca lista NIR...
+                </td>
+              </tr>
+            ) : filteredRows.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-3 py-8 text-center text-slate-500">
+                  Nu exista documente care sa corespunda filtrelor.
+                </td>
+              </tr>
+            ) : (
+              filteredRows.map((row) => {
+                const supplier =
+                  row?.supplier?.name ||
+                  row?.supplierName ||
+                  row?.vendor?.name ||
+                  "Furnizor necunoscut"
+
+                const location =
+                  row?.location?.name ||
+                  row?.warehouse?.name ||
+                  "Fara locatie"
+
+                const status = row?.status || "DRAFT"
+
+                const total =
+                  Number(row?.totalGrossRon) ||
+                  Number(row?.totalRon) ||
+                  Number(row?.grandTotal) ||
+                  Number(row?.total) ||
+                  0
+
+                const currency = row?.currency || "RON"
+                const source = sourceBadge(row)
+
+                return (
+                  <tr key={row?.id || `${row?.docNo}-${row?.docDate}`} className="border-t border-slate-200">
+                    <td className="px-3 py-3">
+                      <div className="font-semibold text-slate-900">{row?.docNo || row?.number || "-"}</div>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                        <span>{row?.note || row?.series || "Receptie NIR"}</span>
+                        <span className={`inline-flex rounded-full px-2 py-0.5 font-semibold ${source.className}`}>
+                          {source.label}
+                        </span>
+                        {row?.spvDownloadId ? <span>ID desc.: {row.spvDownloadId}</span> : null}
+                      </div>
                     </td>
-                    <td style={td}>
-                      {row.supplier?.name || row.supplierName || "-"}
+                    <td className="px-3 py-3 text-slate-600">{formatDate(row?.docDate || row?.date)}</td>
+                    <td className="px-3 py-3">
+                      <div className="font-semibold text-slate-900">{supplier}</div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        {row?.supplier?.code || row?.supplierCode || row?.supplier?.cif || "-"}
+                      </div>
                     </td>
-                    <td style={td}>{row.location?.name || "-"}</td>
-                    <td style={td}>{row.currency || "-"}</td>
-                    <td style={td}>{Number(row.totalNetFc || 0).toFixed(2)}</td>
-                    <td style={td}>{Number(row.totalVatFc || 0).toFixed(2)}</td>
-                    <td style={td}>{Number(row.totalGrossFc || 0).toFixed(2)}</td>
-                    <td style={td}>{Number(row.totalGrossRon || 0).toFixed(2)}</td>
-                    <td style={td}>
-                      <StatusBadge status={row.status} />
+                    <td className="px-3 py-3 text-slate-600">{location}</td>
+                    <td className="px-3 py-3">
+                      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass(status)}`}>
+                        {status}
+                      </span>
                     </td>
-                    <td style={td}>
-                      <a
-                        href={`/inregistrare-document/nir/edit?id=${row.id}`}
-                        style={{ textDecoration: "none" }}
-                      >
-                        <button style={btnSecondarySmall}>Deschide</button>
-                      </a>
+                    <td className="px-3 py-3 text-slate-600">
+                      <div className="font-semibold text-slate-900">{formatMoney(total, currency)}</div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        {row?.itemsCount || row?.linesCount || row?.itemCount || 0} linii
+                      </div>
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openReceiptPdf(row?.id)}
+                          className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                        >
+                          <Printer size={16} />
+                          PDF
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/inregistrare-document/nir/edit?id=${row?.id}`)}
+                          className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-50"
+                        >
+                          Deschide
+                          <ArrowRight size={16} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Section>
+                )
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
-}
-
-function Section({ title, children }: any) {
-  return (
-    <div style={{ marginBottom: 24 }}>
-      <h2 style={{ marginBottom: 12 }}>{title}</h2>
-      {children}
-    </div>
-  )
-}
-
-function Field({ label, children }: any) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <label style={{ fontSize: 14, color: "#555" }}>{label}</label>
-      {children}
-    </div>
-  )
-}
-
-function Card({ title, value }: any) {
-  return (
-    <div
-      style={{
-        border: "1px solid #e5e5e5",
-        borderRadius: 10,
-        padding: 14,
-        minWidth: 160,
-        background: "#fafafa"
-      }}
-    >
-      <div style={{ fontSize: 13, color: "#666" }}>{title}</div>
-      <div style={{ fontSize: 20, fontWeight: 700 }}>{value}</div>
-    </div>
-  )
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const map: any = {
-    DRAFT: { bg: "#fff7ed", color: "#9a3412" },
-    POSTED: { bg: "#ecfdf5", color: "#166534" },
-    CANCELLED: { bg: "#f3f4f6", color: "#374151" }
-  }
-
-  const s = map[status] || { bg: "#f3f4f6", color: "#111827" }
-
-  return (
-    <span
-      style={{
-        background: s.bg,
-        color: s.color,
-        padding: "4px 10px",
-        borderRadius: 999,
-        fontSize: 12,
-        fontWeight: 600
-      }}
-    >
-      {status}
-    </span>
-  )
-}
-
-const filtersGrid: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(3, minmax(0, 220px))",
-  gap: 12
-}
-
-const input: React.CSSProperties = {
-  padding: "9px 11px",
-  borderRadius: 8,
-  border: "1px solid #d1d5db",
-  outline: "none",
-  width: "100%",
-  boxSizing: "border-box"
-}
-
-const btnPrimary: React.CSSProperties = {
-  padding: "9px 14px",
-  borderRadius: 8,
-  border: "none",
-  background: "#111",
-  color: "#fff",
-  cursor: "pointer"
-}
-
-const btnSecondary: React.CSSProperties = {
-  padding: "9px 14px",
-  borderRadius: 8,
-  border: "1px solid #ddd",
-  background: "#fff",
-  cursor: "pointer"
-}
-
-const btnSecondarySmall: React.CSSProperties = {
-  padding: "7px 10px",
-  borderRadius: 8,
-  border: "1px solid #ddd",
-  background: "#fff",
-  cursor: "pointer",
-  fontSize: 12
-}
-
-const errorBox: React.CSSProperties = {
-  border: "1px solid #fecaca",
-  background: "#fef2f2",
-  color: "#991b1b",
-  borderRadius: 10,
-  padding: 12,
-  marginBottom: 16
-}
-
-const tableWrap: React.CSSProperties = {
-  overflowX: "auto",
-  border: "1px solid #e5e5e5",
-  borderRadius: 12,
-  background: "#fff"
-}
-
-const tableStyle: React.CSSProperties = {
-  width: "100%",
-  borderCollapse: "collapse",
-  minWidth: 1100
-}
-
-const th: React.CSSProperties = {
-  textAlign: "left",
-  padding: 12,
-  borderBottom: "1px solid #e5e5e5",
-  background: "#fafafa",
-  fontSize: 13
-}
-
-const td: React.CSSProperties = {
-  padding: 12,
-  borderBottom: "1px solid #f1f5f9",
-  fontSize: 14
 }

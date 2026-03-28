@@ -1,48 +1,47 @@
-import { api, setToken, clearToken } from "./api";
-
-export type MeResponse = {
-  ok: boolean;
-  tenant_id: string;
-  user_id: string;
-  role: string;
-  modules: string[];
-  license: any;
-};
+import { api, setToken, clearToken } from "./api"
 
 type LoginResponse = {
-  ok: boolean;
-  access_token: string;
-};
+  ok: boolean
+  access_token?: string
+  token?: string
+}
+
+type MeResponse = {
+  ok: boolean
+  tenant_id: string
+  user_id: string
+  role: string
+  modules: string[]
+  license: {
+    expiresAt: string
+    limits: {
+      locations: number
+      terminals: number
+    }
+  } | null
+}
 
 export async function login(email: string, password: string) {
-  const r = await api<LoginResponse>("/api/v1/auth/login", {
+  const data = await api<LoginResponse>("/api/v1/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
-  });
+  })
 
-  setToken(r.access_token);
+  const token = data.access_token || data.token
 
-  const meData = await api<MeResponse>("/api/v1/me");
+  if (!token) {
+    throw new Error("Token lipsă în răspunsul de login")
+  }
 
-  localStorage.setItem("tenant_id", meData.tenant_id);
-  localStorage.setItem("user_id", meData.user_id);
-  localStorage.setItem("role", meData.role);
-  localStorage.setItem("modules", JSON.stringify(meData.modules || []));
-
-  return {
-    ...r,
-    me: meData,
-  };
+  localStorage.removeItem("control_token")
+  setToken(token)
+  return data
 }
 
 export async function me() {
-  return api<MeResponse>("/api/v1/me");
+  return await api<MeResponse>("/api/v1/me")
 }
 
 export function logout() {
-  clearToken();
-  localStorage.removeItem("tenant_id");
-  localStorage.removeItem("user_id");
-  localStorage.removeItem("role");
-  localStorage.removeItem("modules");
+  clearToken()
 }

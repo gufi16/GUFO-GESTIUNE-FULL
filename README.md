@@ -1,34 +1,42 @@
-# POSHARD SaaS Multitenant Starter (Admin Web + API)
+# Gufo ERP Multitenant Starter
 
-Acest proiect este un **starter** pentru o aplicație tip Sepi:
-- **Admin Web (React/Vite + Tailwind)** cu meniurile mari: Dashboard, Înregistrare document, Gestiune, Documente, Nomenclator, Setări
-- **API Server (Node/Express)** cu endpoint-uri stub pentru licențiere/sync POS
+ERP multi-tenant cu:
+- frontend React/Vite
+- backend Node/Express
+- PostgreSQL prin Prisma
+- worker separat pentru joburi async
 
-## Cerințe
-- Node.js 18+ (recomandat 20+)
-- npm (sau pnpm/yarn)
+## Rulare locala
 
-## Rulare locală
-
-### 1) API (backend)
+### Backend API
 ```bash
 cd backend
 npm install
 npm run dev
 ```
-API pornește pe: http://localhost:3001  
-Health: http://localhost:3001/health
 
-### 2) Admin Web (frontend)
-În alt terminal:
+API:
+- `http://localhost:3001`
+- health: `http://localhost:3001/health`
+
+### Backend Worker
+```bash
+cd backend
+npm run dev:worker
+```
+
+### Frontend
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-Frontend pornește pe: http://localhost:5173
 
-## Build (pentru deploy)
+Frontend:
+- `http://localhost:5173`
+
+## Build
+
 ### Backend
 ```bash
 cd backend
@@ -43,9 +51,22 @@ npm run build
 npm run preview
 ```
 
-## Unde continuăm de aici (pasul următor)
-- Multi-tenant: adăugăm `tenant_id` în DB și JWT claims
-- Auth real: login + refresh
-- DB: PostgreSQL (Prisma) + migrări
-- Sync POS: /catalog/changes, /inventory/changes, /pos/receipts cu idempotency
+## Deploy pe Railway
 
+Stack recomandat:
+- `gufo-db` -> PostgreSQL
+- `gufo-api` -> API ERP
+- `gufo-worker` -> joburi async
+- `gufo-frontend` -> ERP + Control Panel
+
+Documentatie Railway:
+- [docs/railway-deployment.md](C:\Users\POSHARD\Desktop\poshard-saas-starter\poshard-saas-starter\docs\railway-deployment.md)
+- [docs/railway-env-example.md](C:\Users\POSHARD\Desktop\poshard-saas-starter\poshard-saas-starter\docs\railway-env-example.md)
+
+Arhitectura recomandata:
+- [docs/deployment-architecture.md](C:\Users\POSHARD\Desktop\poshard-saas-starter\poshard-saas-starter\docs\deployment-architecture.md)
+
+## Note
+
+- fisierele `render.yaml` si documentatia Render au ramas doar ca referinta veche
+- directia activa pentru deploy este acum Railway

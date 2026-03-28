@@ -26,7 +26,7 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center p-6">
       <div className="card w-full max-w-md p-6">
-        <h1 className="text-xl font-semibold">POSHARD SaaS</h1>
+        <h1 className="text-xl font-semibold">Gufo ERP</h1>
         <p className="text-sm text-neutral-600 mt-1">Autentificare admin</p>
 
         <form className="mt-6 space-y-3" onSubmit={onSubmit}>

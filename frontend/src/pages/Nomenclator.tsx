@@ -1,86 +1,42 @@
 import { ArrowRight, BookOpen, Boxes, Building2, FolderTree, Package2, Ruler } from "lucide-react"
-import PageHeader from "../components/PageHeader"
 import { useNavigate } from "react-router-dom"
+import PageHeader from "../components/PageHeader"
 
 const items = [
-  {
-    name: "Produse",
-    desc: "Produsele comercializate, rețetare, vizibilitate POS și clasificări.",
-    route: "/nomenclator/produse",
-    icon: Package2,
-  },
-  {
-    name: "Furnizori",
-    desc: "Lista furnizori și datele lor de identificare.",
-    route: "/nomenclator/furnizori",
-    icon: Building2,
-  },
-  {
-    name: "Locații",
-    desc: "Depozite, magazine și puncte de lucru.",
-    route: "/nomenclator/locatii",
-    icon: Boxes,
-  },
-  {
-    name: "Unități de măsură",
-    desc: "UM utilizate în produse, documente și recepții.",
-    route: "/nomenclator/uom",
-    icon: Ruler,
-  },
-  {
-    name: "Departamente",
-    desc: "Organizarea produselor pe departamente.",
-    route: "/nomenclator/departamente",
-    icon: BookOpen,
-  },
-  {
-    name: "Categorii produse",
-    desc: "Categorii pentru structurarea și filtrarea produselor.",
-    route: "/nomenclator/categorii",
-    icon: FolderTree,
-  },
+  { name: "Produse", route: "/nomenclator/produse", icon: Package2 },
+  { name: "Furnizori", route: "/nomenclator/furnizori", icon: Building2 },
+  { name: "Clienti", route: "/nomenclator/clienti", icon: Building2 },
+  { name: "Locatii", route: "/nomenclator/locatii", icon: Boxes },
+  { name: "Unitati de masura", route: "/nomenclator/uom", icon: Ruler },
+  { name: "Departamente", route: "/nomenclator/departamente", icon: BookOpen },
+  { name: "Categorii produse", route: "/nomenclator/categorii", icon: FolderTree },
 ]
 
 export default function Nomenclator() {
   const nav = useNavigate()
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        badge="nomenclator"
-        title="Nomenclatoare"
-        subtitle="Datele de bază utilizate în sistem. Accesează rapid modulele esențiale pentru produse, furnizori, locații și clasificări."
-      />
+    <div className="space-y-3">
+      <PageHeader badge="nomenclator" title="Nomenclatoare" />
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {items.map((i) => {
-          const Icon = i.icon
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {items.map((item) => {
+          const Icon = item.icon
           return (
             <button
-              key={i.name}
+              key={item.name}
               type="button"
-              onClick={() => nav(i.route)}
-              className="group rounded-[28px] border border-slate-200 bg-white p-5 text-left shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-md"
+              onClick={() => nav(item.route)}
+              className="group rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
             >
-              <div className="flex items-start justify-between gap-4">
-                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
-                  <Icon size={20} />
+              <div className="flex items-center justify-between gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-[14px] bg-[#EAF0F6] text-[#17324D]">
+                  <Icon size={18} />
                 </span>
-
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  modul
-                </span>
+                <ArrowRight size={16} className="text-slate-300 transition group-hover:translate-x-1 group-hover:text-[#17324D]" />
               </div>
 
-              <div className="mt-5">
-                <div className="text-lg font-semibold text-slate-900">{i.name}</div>
-                <div className="mt-2 text-sm leading-6 text-slate-500">{i.desc}</div>
-              </div>
-
-              <div className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-blue-700">
-                Deschide
-                <ArrowRight size={16} className="transition-transform duration-200 group-hover:translate-x-1" />
-              </div>
+              <div className="mt-3 text-[15px] font-semibold text-slate-900">{item.name}</div>
             </button>
           )
         })}

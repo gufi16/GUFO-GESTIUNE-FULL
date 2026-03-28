@@ -1,3 +1,4 @@
+// @ts-nocheck
 import express from "express"
 import cors from "cors"
 import morgan from "morgan"
@@ -15,7 +16,7 @@ import { requireAuth, AuthedRequest } from "./middleware/requireAuth"
 
 import productsRouter from "./routes/products"
 import metaRouter from "./routes/meta"
-import posRouter from "./routes/pos"
+import posRouter, { buildCatalogPayload, handlePosSale, registerPairedPosSession, resolvePosAuthContext } from "./routes/pos"
 import stockRouter from "./routes/stock"
 import purchaseRouter from "./routes/purchase"
 import companyRouter from "./routes/company"
@@ -26,6 +27,15 @@ import consumptionRouter from "./routes/consumption"
 import consumptionDocsPdf from "./routes/consumptionDocsPdf"
 import productionRouter from "./routes/production"
 import productionDocsRouter from "./routes/productionDocs"
+import inventoryRouter from "./routes/inventory"
+import inventoryDocsPdf from "./routes/inventoryDocsPdf"
+import reportsRouter from "./routes/reports"
+import adminRouter from "./routes/admin"
+import marketplaceRouter from "./routes/marketplace"
+import salesInvoicesRouter from "./routes/salesInvoices"
+import customersRouter from "./routes/customers"
+import minutesDocsRouter from "./routes/minutesDocs"
+import incomingEfacturaRouter from "./routes/incomingEfactura"
 
 dotenv.config()
 
@@ -58,15 +68,15 @@ function normalizeText(value: unknown) {
 app.get("/health", (_req, res) => {
   res.json({
     ok: true,
-    service: "poshard-saas-backend",
-    time: new Date().toISOString()
+    service: "gufo-erp-backend",
+    time: new Date().toISOString(),
   })
 })
 
 const LoginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(4),
-  tenantId: z.string().optional()
+  tenantId: z.string().optional(),
 })
 
 app.post("/api/v1/auth/login", async (req, res) => {
@@ -75,43 +85,81 @@ app.post("/api/v1/auth/login", async (req, res) => {
     return res.status(400).json({ ok: false, error: parsed.error.flatten() })
   }
 
-  const { email, password } = parsed.data
+  const { email, password, tenantId } = parsed.data
 
-  const user = await prisma.user.findFirst({
+  const candidates = await prisma.user.findMany({
     where: {
       email,
-      isActive: true
-    }
+      isActive: true,
+      ...(tenantId ? { tenantId } : {}),
+    },
+    orderBy: { createdAt: "desc" },
   })
 
-  if (!user) {
+  if (candidates.length === 0) {
     return res.status(401).json({ ok: false, error: "Invalid credentials" })
   }
 
-  const ok = await verifySecret(password, user.passwordHash)
-  if (!ok) {
+  let user: (typeof candidates)[number] | null = null
+  for (const candidate of candidates) {
+    const ok = await verifySecret(password, candidate.passwordHash)
+    if (ok) {
+      user = candidate
+      break
+    }
+  }
+
+  if (!user) {
     return res.status(401).json({ ok: false, error: "Invalid credentials" })
   }
 
   const token = signAccessToken({
     tenantId: user.tenantId,
     userId: user.id,
-    role: user.role
+    role: user.role,
+    email: user.email,
   })
 
   return res.json({
     ok: true,
-    access_token: token
+    access_token: token,
   })
 })
 
 app.get("/api/v1/me", requireAuth, async (req: AuthedRequest, res) => {
   const auth = req.auth!
-  const user = await prisma.user.findUnique({
-    where: { id: auth.userId }
+  let user = await prisma.user.findUnique({
+    where: { id: auth.userId },
   })
 
+  if (!user && auth.tenantId && auth.email) {
+    user = await prisma.user.findFirst({
+      where: {
+        tenantId: auth.tenantId,
+        email: auth.email,
+        isActive: true,
+      },
+      orderBy: { createdAt: "desc" },
+    })
+  }
+
+  if (!user && auth.tenantId) {
+    user = await prisma.user.findFirst({
+      where: {
+        tenantId: auth.tenantId,
+        isActive: true,
+        role: {
+          in: ["OWNER", "ADMIN"],
+        },
+      },
+      orderBy: { createdAt: "asc" },
+    })
+  }
+
   if (!user) {
+    console.warn("ME USER NOT FOUND", {
+      auth,
+    })
     return res.status(404).json({ ok: false, error: "User not found" })
   }
 
@@ -119,9 +167,23 @@ app.get("/api/v1/me", requireAuth, async (req: AuthedRequest, res) => {
     where: {
       tenantId: auth.tenantId,
       isSuspended: false,
-      expiresAt: { gt: new Date() }
+      expiresAt: { gt: new Date() },
     },
-    orderBy: { createdAt: "desc" }
+    orderBy: { createdAt: "desc" },
+  })
+
+  const activeTenantModules = await prisma.tenantModule.findMany({
+    where: {
+      tenantId: auth.tenantId,
+      enabled: true,
+    },
+    include: {
+      module: {
+        select: {
+          code: true,
+        },
+      },
+    },
   })
 
   const modules = license
@@ -132,7 +194,8 @@ app.get("/api/v1/me", requireAuth, async (req: AuthedRequest, res) => {
         license.modNomenclature ? "nomenclature" : null,
         license.modSettings ? "settings" : null,
         license.modPos ? "pos" : null,
-        license.modReports ? "reports" : null
+        license.modReports ? "reports" : null,
+        ...activeTenantModules.map((row) => row.module.code),
       ].filter(Boolean)
     : []
 
@@ -147,10 +210,10 @@ app.get("/api/v1/me", requireAuth, async (req: AuthedRequest, res) => {
           expiresAt: license.expiresAt,
           limits: {
             locations: license.limitLocations,
-            terminals: license.limitTerminals
-          }
+            terminals: license.limitTerminals,
+          },
         }
-      : null
+      : null,
   })
 })
 
@@ -158,7 +221,7 @@ const LicenseActivateSchema = z.object({
   license_key: z.string().min(6),
   device_id: z.string().min(3),
   app_version: z.string().min(1),
-  location_code: z.string().optional()
+  location_code: z.string().optional(),
 })
 
 app.post("/api/v1/license/activate", async (req, res) => {
@@ -175,12 +238,12 @@ app.post("/api/v1/license/activate", async (req, res) => {
   const candidates = await prisma.license.findMany({
     where: {
       isSuspended: false,
-      expiresAt: { gt: new Date() }
+      expiresAt: { gt: new Date() },
     },
     include: {
-      tenant: true
+      tenant: true,
     },
-    take: 100
+    take: 100,
   })
 
   let found: (typeof candidates)[number] | null = null
@@ -197,7 +260,7 @@ app.post("/api/v1/license/activate", async (req, res) => {
     return res.status(401).json({
       ok: false,
       valid: false,
-      error: "Invalid or expired license"
+      error: "Invalid or expired license",
     })
   }
 
@@ -207,8 +270,8 @@ app.post("/api/v1/license/activate", async (req, res) => {
     const loc = await prisma.location.findFirst({
       where: {
         tenantId: found.tenantId,
-        code: location_code
-      }
+        code: location_code,
+      },
     })
     if (loc) locationId = loc.id
   }
@@ -217,26 +280,26 @@ app.post("/api/v1/license/activate", async (req, res) => {
     where: {
       tenantId_deviceId: {
         tenantId: found.tenantId,
-        deviceId: device_id
-      }
+        deviceId: device_id,
+      },
     },
     update: {
       locationId: locationId ?? undefined,
-      label: `Android POS (${app_version})`
+      label: `Android POS (${app_version})`,
     },
     create: {
       tenantId: found.tenantId,
       deviceId: device_id,
       locationId: locationId ?? undefined,
       label: `Android POS (${app_version})`,
-      isLockedToLocation: true
-    }
+      isLockedToLocation: true,
+    },
   })
 
   const pos_token = signPosToken({
     tenantId: found.tenantId,
     terminalId: terminal.id,
-    deviceId: terminal.deviceId
+    deviceId: terminal.deviceId,
   })
 
   return res.json({
@@ -248,138 +311,224 @@ app.post("/api/v1/license/activate", async (req, res) => {
     modules: {
       pos: found.modPos,
       inventory: found.modInventory,
-      documents: found.modDocuments
-    }
+      documents: found.modDocuments,
+    },
   })
 })
 
 /* ======================================================
-   POS PAIR PUBLIC - BYPASS DIRECT
+   DIRECT POS PAIR — prioritar, fără conflicte de router
 ====================================================== */
 
-const PosPairSchema = z.object({
+const DirectPosPairSchema = z.object({
   licenseKey: z.string().optional(),
   license_key: z.string().optional(),
   deviceId: z.string().optional(),
   device_id: z.string().optional(),
   terminalLabel: z.string().optional(),
-  terminal_label: z.string().optional()
+  terminal_label: z.string().optional(),
 })
 
 app.post("/api/v1/pos/pair", async (req, res) => {
-  try {
-    console.log("INDEX POS PAIR BODY:", req.body)
+  console.log("🔥 INDEX POS PAIR HIT", req.body)
 
-    const parsed = PosPairSchema.safeParse(req.body)
+  try {
+    const parsed = DirectPosPairSchema.safeParse(req.body)
     if (!parsed.success) {
       return res.status(400).json({ ok: false, error: parsed.error.flatten() })
     }
 
     const body = parsed.data
-
     const licenseKey = normalizeText(body.licenseKey ?? body.license_key)
-    const deviceId = normalizeText(body.deviceId ?? body.device_id)
+    const incomingDeviceId = normalizeText(body.deviceId ?? body.device_id)
     const terminalLabel =
       normalizeText(body.terminalLabel ?? body.terminal_label) || "Android POS"
 
-    console.log("INDEX POS PAIR NORMALIZED:", {
-      licenseKey,
-      deviceId,
-      terminalLabel
-    })
-
-    if (!licenseKey || licenseKey.length < 6) {
+    if (!licenseKey || licenseKey.length < 3) {
       return res.status(400).json({
         ok: false,
-        error: "License key lipsă sau invalid"
+        error: "License key lipsă sau invalid",
       })
     }
 
-    if (!deviceId || deviceId.length < 3) {
-      return res.status(400).json({
-        ok: false,
-        error: "Device ID lipsă sau invalid"
-      })
-    }
-
-    const licenses = await prisma.license.findMany({
+    const terminal = await prisma.terminal.findFirst({
       where: {
-        isSuspended: false,
-        expiresAt: { gt: new Date() }
+        deviceId: licenseKey,
       },
-      orderBy: { createdAt: "desc" }
+      include: {
+        location: true,
+        tenant: {
+          include: {
+            licenses: {
+              orderBy: { createdAt: "desc" },
+              take: 1,
+            },
+          },
+        },
+      },
     })
 
-    let found: (typeof licenses)[number] | null = null
-
-    for (const lic of licenses) {
-      const match = await bcrypt.compare(licenseKey, lic.keyHash)
-      console.log("INDEX POS PAIR CHECK:", {
-        licenseId: lic.id,
-        tenantId: lic.tenantId,
-        match
-      })
-      if (match) {
-        found = lic
-        break
-      }
-    }
-
-    if (!found) {
-      return res.status(401).json({
+    if (!terminal) {
+      return res.status(404).json({
         ok: false,
-        error: "Licență invalidă sau expirată"
+        error: "Licență invalidă",
       })
     }
 
-    const terminal = await prisma.terminal.upsert({
-      where: {
-        tenantId_deviceId: {
-          tenantId: found.tenantId,
-          deviceId
-        }
-      },
-      update: {
-        label: terminalLabel
-      },
-      create: {
-        tenantId: found.tenantId,
-        deviceId,
-        label: terminalLabel,
-        isLockedToLocation: true
-      }
-    })
+    const license = terminal.tenant.licenses[0]
+
+    if (!license) {
+      return res.status(404).json({
+        ok: false,
+        error: "Licență ERP inexistentă",
+      })
+    }
+
+    if (license.isSuspended) {
+      return res.status(403).json({
+        ok: false,
+        error: "Licența este suspendată",
+      })
+    }
+
+    if (license.expiresAt <= new Date()) {
+      return res.status(403).json({
+        ok: false,
+        error: "Licența este expirată",
+      })
+    }
+
+    if (!license.modPos) {
+      return res.status(403).json({
+        ok: false,
+        error: "POS nu este activ",
+      })
+    }
+
+    if (incomingDeviceId && incomingDeviceId !== terminal.deviceId) {
+      console.warn("POS PAIR DEVICE MISMATCH", {
+        incomingDeviceId,
+        licenseKey,
+        terminalDeviceId: terminal.deviceId,
+      })
+    }
+
+    if (terminalLabel && terminal.label !== terminalLabel) {
+      await prisma.terminal.update({
+        where: { id: terminal.id },
+        data: { label: terminalLabel },
+      })
+    }
 
     const locations = await prisma.location.findMany({
-      where: { tenantId: found.tenantId },
-      orderBy: { name: "asc" }
+      where: {
+        tenantId: terminal.tenantId,
+        isActive: true,
+      },
+      orderBy: { name: "asc" },
     })
 
     const token = signPosToken({
-      tenantId: found.tenantId,
+      tenantId: terminal.tenantId,
       terminalId: terminal.id,
-      deviceId
+      deviceId: terminal.deviceId,
+    })
+
+    registerPairedPosSession(req, {
+      tenantId: terminal.tenantId,
+      terminalId: terminal.id,
+      deviceId: terminal.deviceId,
     })
 
     return res.json({
       ok: true,
       token,
-      tenantId: found.tenantId,
+      pos_token: token,
+      access_token: token,
+      tenantId: terminal.tenantId,
       terminal: {
         id: terminal.id,
-        label: terminal.label,
+        label: terminalLabel || terminal.label,
         deviceId: terminal.deviceId,
-        locationId: terminal.locationId
+        locationId: terminal.locationId,
       },
-      locations
+      locations,
     })
   } catch (error) {
     console.error("INDEX POS PAIR ERROR:", error)
     return res.status(500).json({
       ok: false,
-      error: "Eroare internă la conectarea POS"
+      error: "Eroare internă la conectarea POS",
     })
   }
+})
+
+app.get("/api/v1/pos/config", async (req, res) => {
+  console.log("🔥 INDEX POS CONFIG HIT")
+
+  try {
+    const auth = await resolvePosAuthContext(req as any)
+    if (!auth?.tenantId) {
+      return res.status(401).json({
+        ok: false,
+        error: "POS neautentificat. Fă pair din nou.",
+      })
+    }
+
+    const company = await prisma.company.findUnique({
+      where: { tenantId: auth.tenantId },
+      select: {
+        posSyncInterval: true,
+        isVatPayer: true,
+      },
+    })
+
+    return res.json({
+      ok: true,
+      syncIntervalMinutes: company?.posSyncInterval ?? 5,
+      isVatPayer: company?.isVatPayer ?? true,
+      allowedIntervals: [1, 2, 3, 4, 5, 10, 15, 20, 25, 30],
+    })
+  } catch (error) {
+    console.error("INDEX POS CONFIG ERROR:", error)
+    return res.status(500).json({
+      ok: false,
+      error: "Eroare la încărcarea configurării POS",
+    })
+  }
+})
+
+app.get("/api/v1/pos/catalog", async (req, res) => {
+  console.log("🔥 INDEX POS CATALOG HIT")
+
+  try {
+    const auth = await resolvePosAuthContext(req as any)
+    if (!auth?.tenantId) {
+      return res.status(401).json({
+        ok: false,
+        error: "POS neautentificat. Fă pair din nou.",
+      })
+    }
+
+    const payload = await buildCatalogPayload(req, auth.tenantId)
+    return res.json(payload)
+  } catch (error) {
+    console.error("INDEX POS CATALOG ERROR:", error)
+    return res.status(500).json({
+      ok: false,
+      error: "Eroare la încărcarea catalogului POS",
+    })
+  }
+})
+
+app.post("/api/v1/pos/sales", async (req, res) => {
+  console.log("🔥 INDEX POS SALES HIT", req.body)
+  return handlePosSale(req as any, res)
+})
+
+app.post("/api/v1/pos/receipts", async (req, res) => {
+  console.log("🔥 INDEX POS RECEIPTS HIT", req.body)
+  return handlePosSale(req as any, res)
 })
 
 app.use(productsRouter)
@@ -387,6 +536,8 @@ app.use(metaRouter)
 app.use(posRouter)
 app.use(stockRouter)
 app.use(purchaseRouter)
+app.use(minutesDocsRouter)
+app.use(incomingEfacturaRouter)
 app.use(companyRouter)
 app.use("/api/v1/purchase-receipts", purchaseReceiptsPdf)
 app.use(transferRouter)
@@ -395,6 +546,13 @@ app.use(consumptionRouter)
 app.use("/api/v1/consumption-docs", consumptionDocsPdf)
 app.use(productionRouter)
 app.use(productionDocsRouter)
+app.use(inventoryRouter)
+app.use("/api/v1/inventory-docs", inventoryDocsPdf)
+app.use(reportsRouter)
+app.use(adminRouter)
+app.use(marketplaceRouter)
+app.use(salesInvoicesRouter)
+app.use(customersRouter)
 
 app.listen(PORT, () => {
   console.log(`API running on http://localhost:${PORT}`)

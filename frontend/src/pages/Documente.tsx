@@ -1,17 +1,27 @@
 import { useEffect, useMemo, useState } from "react"
+import { useNavigate, useSearchParams } from "react-router-dom"
 import {
   ArrowRight,
   FileCheck2,
   FilePlus2,
+  Filter,
   PackageSearch,
   Repeat2,
+  Search,
   X,
   Printer,
   Factory,
+  ClipboardList,
+  FileText,
 } from "lucide-react"
 import PageHeader from "../components/PageHeader"
+import { DocumentMetric, InlineNotice, documentInputClass } from "../components/DocumentUi"
+import { API_BASE as API, getToken } from "../lib/api"
+import { getActiveLocationId, setActiveLocationId, subscribeToActiveLocation } from "../lib/location"
+import { openPdfInNewTab } from "../lib/pdf"
+import { hasModule } from "../lib/modules"
+import { formatMoneyRo, formatNumberRo, formatQtyRo } from "../lib/format"
 
-const API = "http://localhost:3001"
 
 type ConsumptionDocListItem = {
   id: string
@@ -141,6 +151,69 @@ type ProductionDocDetail = {
   }>
 }
 
+type InventoryDocListItem = {
+  id: string
+  docNo: string
+  docDate: string
+  note?: string | null
+  status?: "DRAFT" | "FINALIZED" | "CANCELLED"
+  finalizedAt?: string | null
+  createdAt: string
+  updatedAt: string
+  location: {
+    id: string
+    name: string
+    code?: string
+  }
+  itemsCount: number
+  totalSystemQty: number
+  totalCountedQty: number
+  totalDifferenceQty: number
+  positiveItems: number
+  negativeItems: number
+  zeroItems: number
+}
+
+type InventoryDocDetail = {
+  id: string
+  docNo: string
+  docDate: string
+  note?: string | null
+  status?: "DRAFT" | "FINALIZED" | "CANCELLED"
+  finalizedAt?: string | null
+  createdAt: string
+  updatedAt: string
+  location: {
+    id: string
+    name: string
+    code?: string
+  }
+  items: Array<{
+    id: string
+    product: {
+      id: string
+      sku: string
+      name: string
+      class?: string
+      price?: number
+      uom?: {
+        id: string
+        code: string
+        name: string
+      } | null
+    }
+    systemQty: number
+    countedQty: number
+    differenceQty: number
+  }>
+  summary: {
+    itemsCount: number
+    totalSystemQty: number
+    totalCountedQty: number
+    totalDifferenceQty: number
+  }
+}
+
 type ConsumptionListResponse = {
   ok: boolean
   items: ConsumptionDocListItem[]
@@ -161,7 +234,94 @@ type ProductionDetailResponse = {
   item: ProductionDocDetail
 }
 
-type ActiveTab = "consumption" | "production"
+type InventoryListResponse = {
+  ok: boolean
+  items: InventoryDocListItem[]
+}
+
+type InventoryDetailResponse = {
+  ok: boolean
+  item: InventoryDocDetail
+}
+
+type SalesInvoiceListItem = {
+  id: string
+  docNo: string
+  docDate: string
+  dueDate?: string | null
+  customerName: string
+  customerCif?: string | null
+  location?: {
+    id: string
+    name: string
+  } | null
+  currency: string
+  totalGrossFc: number
+  status: string
+  efacturaStatus?: string
+  efacturaUploadIndex?: string | null
+  efacturaDownloadedAt?: string | null
+  itemsCount: number
+}
+
+type ReceiptListItem = {
+  id: string
+  docNo?: string
+  number?: string
+  docDate?: string
+  date?: string
+  note?: string | null
+  series?: string | null
+  status?: string
+  currency?: string
+  totalGrossRon?: number
+  totalRon?: number
+  grandTotal?: number
+  total?: number
+  itemsCount?: number
+  linesCount?: number
+  itemCount?: number
+  supplier?: {
+    name?: string
+    code?: string
+    cif?: string
+  } | null
+  supplierName?: string
+  supplierCode?: string
+  vendor?: {
+    name?: string
+  } | null
+  location?: {
+    id?: string
+    name?: string
+  } | null
+  warehouse?: {
+    id?: string
+    name?: string
+  } | null
+}
+
+type MinutesDocListItem = {
+  id: string
+  docNo: string
+  docDate: string
+  type: "DETERIORATION" | "PRICE_CHANGE"
+  status: "DRAFT" | "POSTED" | "CANCELLED"
+  reasonCode?: string | null
+  note?: string | null
+  totalQty: number
+  totalValue: number
+  createdAt: string
+  updatedAt: string
+  location: {
+    id: string
+    name: string
+    code?: string
+  }
+  itemsCount: number
+}
+
+type ActiveTab = "consumption" | "production" | "inventory" | "invoice" | "receipt" | "minutes"
 
 function formatDate(value?: string | null) {
   if (!value) return "-"
@@ -178,32 +338,77 @@ function formatDateTime(value?: string | null) {
 }
 
 function formatNumber(value?: number | null, digits = 2) {
-  return Number(value || 0).toLocaleString("ro-RO", {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  })
+  return digits >= 3 ? formatQtyRo(value, digits) : formatNumberRo(value, digits)
 }
 
 function formatRon(value?: number | null) {
-  return `${formatNumber(value)} RON`
+  return formatMoneyRo(value, "RON")
 }
 
 function statusClass(status: string) {
-  if (status === "Generat") return "bg-emerald-100 text-emerald-700"
-  if (status === "Produs") return "bg-blue-100 text-blue-700"
-  return "bg-amber-100 text-amber-700"
+  if (status === "Generat") return "bg-[#E5F3E8] text-[#215D2A]"
+  if (status === "Produs") return "bg-slate-100 text-slate-700"
+  if (status === "Finalizat") return "bg-[#E5F3E8] text-[#215D2A]"
+  if (status === "Anulat") return "bg-red-100 text-red-700"
+  return "bg-[#F8F5EF] text-[#17324D]"
+}
+
+function inventoryStatusText(status?: string) {
+  if (status === "FINALIZED") return "Finalizat"
+  if (status === "CANCELLED") return "Anulat"
+  return "În lucru"
+}
+
+function diffClass(value: number) {
+  if (value < 0) return "text-red-600 font-semibold"
+  if (value > 0) return "text-emerald-600 font-semibold"
+  return "text-slate-600"
+}
+
+function efacturaStatusClass(status?: string) {
+  if (status === "ACCEPTED") return "bg-[#E5F3E8] text-[#215D2A]"
+  if (status === "SENT") return "bg-[#E8F0FB] text-[#244A7C]"
+  if (status === "PREPARED" || status === "READY_TO_SEND") return "bg-slate-100 text-slate-700"
+  if (status === "REJECTED" || status === "ERROR") return "bg-red-100 text-red-700"
+  return "bg-[#F8F5EF] text-[#17324D]"
+}
+
+function minutesTypeLabel(type?: string) {
+  return type === "PRICE_CHANGE" ? "Schimbare pret" : "Deteriorare"
+}
+
+function minutesReasonLabel(code?: string | null) {
+  if (code === "EXPIRED") return "Expirat"
+  if (code === "DAMAGE") return "Deteriorat"
+  if (code === "LOSS") return "Pierdere"
+  if (code === "PRICE_UPDATE") return "Schimbare pret"
+  return code || "-"
 }
 
 export default function Documente() {
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const initialTab = (
+    searchParams.get("tab") === "inventory"
+      ? "inventory"
+      : searchParams.get("tab") === "production"
+        ? "production"
+        : searchParams.get("tab") === "invoice"
+          ? "invoice"
+      : searchParams.get("tab") === "receipt"
+            ? "receipt"
+            : searchParams.get("tab") === "minutes"
+              ? "minutes"
+          : "consumption"
+  ) as ActiveTab
   const token =
-    localStorage.getItem("access_token") ||
-    localStorage.getItem("token") ||
-    ""
+    getToken() || ""
+  const efacturaEnabled = hasModule("efactura")
 
   const today = new Date()
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
 
-  const [activeTab, setActiveTab] = useState<ActiveTab>("consumption")
+  const [activeTab, setActiveTab] = useState<ActiveTab>(initialTab)
   const [dateFrom, setDateFrom] = useState(
     `${monthStart.getFullYear()}-${`${monthStart.getMonth() + 1}`.padStart(2, "0")}-${`${monthStart.getDate()}`.padStart(2, "0")}`
   )
@@ -211,11 +416,20 @@ export default function Documente() {
     `${today.getFullYear()}-${`${today.getMonth() + 1}`.padStart(2, "0")}-${`${today.getDate()}`.padStart(2, "0")}`
   )
   const [search, setSearch] = useState("")
+  const [efacturaFilter, setEfacturaFilter] = useState("all")
+  const [minutesFilter, setMinutesFilter] = useState<"all" | "DETERIORATION" | "PRICE_CHANGE">("all")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [message, setMessage] = useState("")
+  const [locations] = useState<Array<{ id: string; name: string; code?: string }>>([])
+  const [selectedLocationId, setSelectedLocationId] = useState(getActiveLocationId())
 
   const [consumptionDocs, setConsumptionDocs] = useState<ConsumptionDocListItem[]>([])
   const [productionDocs, setProductionDocs] = useState<ProductionDocListItem[]>([])
+  const [inventoryDocs, setInventoryDocs] = useState<InventoryDocListItem[]>([])
+  const [invoiceDocs, setInvoiceDocs] = useState<SalesInvoiceListItem[]>([])
+  const [receiptDocs, setReceiptDocs] = useState<ReceiptListItem[]>([])
+  const [minutesDocs, setMinutesDocs] = useState<MinutesDocListItem[]>([])
 
   const [selectedConsumptionDocId, setSelectedConsumptionDocId] = useState<string | null>(null)
   const [selectedConsumptionDoc, setSelectedConsumptionDoc] = useState<ConsumptionDocDetail | null>(null)
@@ -223,15 +437,186 @@ export default function Documente() {
   const [selectedProductionDocId, setSelectedProductionDocId] = useState<string | null>(null)
   const [selectedProductionDoc, setSelectedProductionDoc] = useState<ProductionDocDetail | null>(null)
 
+  const [selectedInventoryDocId, setSelectedInventoryDocId] = useState<string | null>(null)
+  const [selectedInventoryDoc, setSelectedInventoryDoc] = useState<InventoryDocDetail | null>(null)
+
   const [detailLoading, setDetailLoading] = useState(false)
+
+  useEffect(() => {
+    const tab = searchParams.get("tab")
+    if (tab === "inventory" || tab === "production" || tab === "consumption" || tab === "invoice" || tab === "receipt" || tab === "minutes") {
+      setActiveTab(tab as ActiveTab)
+    }
+  }, [searchParams])
+
+  useEffect(() => {
+    return subscribeToActiveLocation((nextLocationId) => {
+      setSelectedLocationId(nextLocationId)
+    })
+  }, [])
 
   useEffect(() => {
     if (activeTab === "consumption") {
       loadConsumptionDocs()
-    } else {
+    } else if (activeTab === "production") {
       loadProductionDocs()
+    } else if (activeTab === "invoice") {
+      loadInvoiceDocs()
+    } else if (activeTab === "receipt") {
+      loadReceiptDocs()
+    } else if (activeTab === "minutes") {
+      loadMinutesDocs()
+    } else {
+      loadInventoryDocs()
     }
-  }, [activeTab, dateFrom, dateTo])
+  }, [activeTab, dateFrom, dateTo, selectedLocationId])
+
+  async function loadMinutesDocs() {
+    if (!token) {
+      setLoading(false)
+      setError("Lipsește sesiunea de autentificare.")
+      return
+    }
+
+    setLoading(true)
+    setError("")
+
+    try {
+      const res = await fetch(`${API}/api/v1/minutes-docs`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Nu am putut încărca procesele verbale.")
+      }
+
+      let items: MinutesDocListItem[] = Array.isArray(data?.items) ? data.items : []
+
+      if (selectedLocationId) {
+        items = items.filter((doc) => String(doc.location?.id || "") === selectedLocationId)
+      }
+
+      if (dateFrom || dateTo) {
+        items = items.filter((doc) => {
+          const value = String(doc.docDate || "").slice(0, 10)
+          const fromOk = !dateFrom || value >= dateFrom
+          const toOk = !dateTo || value <= dateTo
+          return fromOk && toOk
+        })
+      }
+
+      setMinutesDocs(items)
+    } catch (err) {
+      console.error("LOAD MINUTES DOCS ERROR", err)
+      setMinutesDocs([])
+      setError("Nu am putut încărca procesele verbale.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function loadReceiptDocs() {
+    if (!token) {
+      setLoading(false)
+      setError("Lipsește sesiunea de autentificare.")
+      return
+    }
+
+    setLoading(true)
+    setError("")
+
+    try {
+      const res = await fetch(`${API}/api/v1/purchase-receipts`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data?.error || "Nu am putut încărca recepțiile NIR.")
+      }
+
+      let items: ReceiptListItem[] = Array.isArray(data?.receipts)
+        ? data.receipts
+        : Array.isArray(data?.items)
+          ? data.items
+        : Array.isArray(data)
+          ? data
+          : []
+
+      if (selectedLocationId) {
+        items = items.filter((doc) => String(doc?.location?.id || doc?.warehouse?.id || "") === selectedLocationId)
+      }
+
+      if (dateFrom || dateTo) {
+        items = items.filter((doc) => {
+          const value = String(doc.docDate || doc.date || "").slice(0, 10)
+          const fromOk = !dateFrom || value >= dateFrom
+          const toOk = !dateTo || value <= dateTo
+          return fromOk && toOk
+        })
+      }
+
+      setReceiptDocs(items)
+    } catch (err) {
+      console.error("LOAD RECEIPTS ERROR", err)
+      setReceiptDocs([])
+      setError("Nu am putut încărca recepțiile NIR.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function loadInvoiceDocs() {
+    if (!token) {
+      setLoading(false)
+      setError("Lipsește sesiunea de autentificare.")
+      return
+    }
+
+    setLoading(true)
+    setError("")
+
+    try {
+      const res = await fetch(`${API}/api/v1/sales-invoices`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Nu am putut încărca facturile.")
+      }
+
+      let items = Array.isArray(data.invoices) ? data.invoices : []
+
+      if (selectedLocationId) {
+        items = items.filter((doc: SalesInvoiceListItem) => doc.location?.id === selectedLocationId)
+      }
+
+      if (dateFrom || dateTo) {
+        items = items.filter((doc: SalesInvoiceListItem) => {
+          const value = String(doc.docDate || "").slice(0, 10)
+          const fromOk = !dateFrom || value >= dateFrom
+          const toOk = !dateTo || value <= dateTo
+          return fromOk && toOk
+        })
+      }
+
+      setInvoiceDocs(items)
+    } catch (err) {
+      console.error("LOAD SALES INVOICES ERROR", err)
+      setInvoiceDocs([])
+      setError("Nu am putut încărca facturile.")
+    } finally {
+      setLoading(false)
+    }
+  }
 
   async function loadConsumptionDocs() {
     if (!token) {
@@ -247,6 +632,7 @@ export default function Documente() {
       const params = new URLSearchParams()
       if (dateFrom) params.set("dateFrom", `${dateFrom}T00:00:00.000Z`)
       if (dateTo) params.set("dateTo", `${dateTo}T23:59:59.999Z`)
+      if (selectedLocationId) params.set("locationId", selectedLocationId)
       if (search.trim()) params.set("q", search.trim())
 
       const res = await fetch(`${API}/api/v1/consumption-docs?${params.toString()}`, {
@@ -286,6 +672,7 @@ export default function Documente() {
 
     try {
       const params = new URLSearchParams()
+      if (selectedLocationId) params.set("locationId", selectedLocationId)
       if (search.trim()) params.set("q", search.trim())
 
       const res = await fetch(`${API}/api/v1/production-docs?${params.toString()}`, {
@@ -324,11 +711,54 @@ export default function Documente() {
     }
   }
 
+  async function loadInventoryDocs() {
+    if (!token) {
+      setLoading(false)
+      setError("Lipsește sesiunea de autentificare.")
+      return
+    }
+
+    setLoading(true)
+    setError("")
+
+    try {
+      const params = new URLSearchParams()
+      if (selectedLocationId) params.set("locationId", selectedLocationId)
+      if (search.trim()) params.set("q", search.trim())
+      if (dateFrom) params.set("dateFrom", dateFrom)
+      if (dateTo) params.set("dateTo", dateTo)
+
+      const res = await fetch(`${API}/api/v1/inventory-docs?${params.toString()}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      const data: InventoryListResponse = await res.json().catch(() => ({
+        ok: false,
+        items: [],
+      }))
+
+      if (!res.ok || !data.ok) {
+        throw new Error("Nu am putut încărca documentele de inventar.")
+      }
+
+      setInventoryDocs(Array.isArray(data.items) ? data.items : [])
+    } catch (err) {
+      console.error("LOAD INVENTORY DOCS ERROR", err)
+      setInventoryDocs([])
+      setError("Nu am putut încărca documentele de inventar.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
   async function openConsumptionDetail(id: string) {
     if (!token) return
 
     setSelectedConsumptionDocId(id)
     setSelectedProductionDocId(null)
+    setSelectedInventoryDocId(null)
     setDetailLoading(true)
     setSelectedConsumptionDoc(null)
 
@@ -362,6 +792,7 @@ export default function Documente() {
 
     setSelectedProductionDocId(id)
     setSelectedConsumptionDocId(null)
+    setSelectedInventoryDocId(null)
     setDetailLoading(true)
     setSelectedProductionDoc(null)
 
@@ -390,6 +821,40 @@ export default function Documente() {
     }
   }
 
+  async function openInventoryDetail(id: string) {
+    if (!token) return
+
+    setSelectedInventoryDocId(id)
+    setSelectedConsumptionDocId(null)
+    setSelectedProductionDocId(null)
+    setDetailLoading(true)
+    setSelectedInventoryDoc(null)
+
+    try {
+      const res = await fetch(`${API}/api/v1/inventory-docs/${id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      const data: InventoryDetailResponse = await res.json().catch(() => ({
+        ok: false,
+        item: null as never,
+      }))
+
+      if (!res.ok || !data.ok) {
+        throw new Error("Nu am putut încărca documentul de inventar.")
+      }
+
+      setSelectedInventoryDoc(data.item)
+    } catch (err) {
+      console.error("LOAD INVENTORY DOC DETAIL ERROR", err)
+      setSelectedInventoryDoc(null)
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
   async function openPdf(id: string) {
     if (!token) return
 
@@ -404,12 +869,184 @@ export default function Documente() {
         throw new Error("Nu am putut genera PDF.")
       }
 
-      const blob = await res.blob()
-      const url = window.URL.createObjectURL(blob)
-      window.open(url, "_blank")
+      await openPdfInNewTab(res)
     } catch (err) {
       console.error("PDF ERROR", err)
       alert("Nu am putut genera PDF-ul.")
+    }
+  }
+
+  async function openProductionPdf(id: string) {
+    if (!token) return
+
+    try {
+      const res = await fetch(`${API}/api/v1/production-docs/${id}/pdf`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!res.ok) {
+        throw new Error("Nu am putut genera PDF.")
+      }
+
+      await openPdfInNewTab(res)
+    } catch (err) {
+      console.error("PDF PRODUCTION ERROR", err)
+      alert("Nu am putut genera PDF-ul documentului de producție.")
+    }
+  }
+
+  async function openInventoryPdf(id: string) {
+    const authToken = getToken()
+    if (!authToken) return
+
+    try {
+      const res = await fetch(`${API}/api/v1/inventory-docs/${id}/pdf`, {
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
+      })
+
+      if (!res.ok) {
+        throw new Error("Nu am putut genera PDF.")
+      }
+
+      await openPdfInNewTab(res)
+    } catch (err) {
+      console.error("PDF INVENTORY ERROR", err)
+      alert("Nu am putut genera PDF-ul inventarului.")
+    }
+  }
+
+  async function openInvoicePdf(id: string) {
+    if (!token) return
+
+    try {
+      const res = await fetch(`${API}/api/v1/sales-invoices/${id}/pdf`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!res.ok) {
+        throw new Error("Nu am putut genera PDF.")
+      }
+
+      await openPdfInNewTab(res)
+    } catch (err) {
+      console.error("PDF INVOICE ERROR", err)
+      alert("Nu am putut genera PDF-ul facturii.")
+    }
+  }
+
+  async function openReceiptPdf(id: string) {
+    if (!token) return
+
+    try {
+      const res = await fetch(`${API}/api/v1/purchase-receipts/${id}/pdf`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!res.ok) {
+        throw new Error("Nu am putut genera PDF.")
+      }
+
+      await openPdfInNewTab(res)
+    } catch (err) {
+      console.error("PDF RECEIPT ERROR", err)
+      alert("Nu am putut genera PDF-ul receptiei.")
+    }
+  }
+
+  async function openMinutesPdf(id: string) {
+    if (!token) return
+
+    try {
+      const res = await fetch(`${API}/api/v1/minutes-docs/${id}/pdf`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!res.ok) {
+        throw new Error("Nu am putut genera PDF.")
+      }
+
+      await openPdfInNewTab(res)
+    } catch (err) {
+      console.error("PDF MINUTES ERROR", err)
+      alert("Nu am putut genera PDF-ul procesului verbal.")
+    }
+  }
+
+  async function sendInvoiceEfactura(id: string) {
+    if (!token) return
+
+    try {
+      const res = await fetch(`${API}/api/v1/sales-invoices/${id}/efactura/send`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Nu am putut trimite factura la ANAF.")
+      }
+
+      setMessage(data?.message || "Factura a fost transmisa la ANAF.")
+      await loadInvoiceDocs()
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut trimite factura la ANAF.")
+    }
+  }
+
+  async function checkInvoiceEfacturaStatus(id: string) {
+    if (!token) return
+
+    try {
+      const res = await fetch(`${API}/api/v1/sales-invoices/${id}/efactura/status`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Nu am putut verifica starea la ANAF.")
+      }
+
+      setMessage(data?.message || "Starea facturii a fost actualizata.")
+      await loadInvoiceDocs()
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut verifica starea la ANAF.")
+    }
+  }
+
+  async function openInvoiceReceipt(id: string) {
+    if (!token) return
+
+    try {
+      const res = await fetch(`${API}/api/v1/sales-invoices/${id}/efactura/receipt`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data?.error || "Nu am putut descarca recipisa ANAF.")
+      }
+
+      await openPdfInNewTab(res)
+      setMessage("Recipisa ANAF a fost descarcata.")
+      await loadInvoiceDocs()
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut descarca recipisa ANAF.")
     }
   }
 
@@ -447,6 +1084,151 @@ export default function Documente() {
     })
   }, [productionDocs, search])
 
+  const filteredInventoryDocs = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return inventoryDocs
+
+    return inventoryDocs.filter((doc) => {
+      const values = [
+        doc.docNo,
+        doc.note || "",
+        doc.location?.name || "",
+        doc.location?.code || "",
+        doc.status || "",
+      ].join(" ").toLowerCase()
+
+      return values.includes(q)
+    })
+  }, [inventoryDocs, search])
+
+  const filteredInvoiceDocs = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    let items = invoiceDocs
+
+    if (efacturaEnabled && efacturaFilter !== "all") {
+      items = items.filter((doc) => {
+        const status = String(doc.efacturaStatus || "NOT_READY").toUpperCase()
+        return status === efacturaFilter
+      })
+    }
+
+    if (!q) return items
+
+    return items.filter((doc) => {
+      const values = [
+        doc.docNo,
+        doc.customerName || "",
+        doc.customerCif || "",
+        doc.location?.name || "",
+        doc.status || "",
+        doc.efacturaStatus || "",
+      ]
+        .join(" ")
+        .toLowerCase()
+
+      return values.includes(q)
+    })
+  }, [invoiceDocs, search, efacturaEnabled, efacturaFilter])
+
+  const filteredReceiptDocs = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return receiptDocs
+
+    return receiptDocs.filter((doc) => {
+      const values = [
+        doc.docNo,
+        doc.number,
+        doc.supplier?.name,
+        doc.supplierName,
+        doc.supplier?.code,
+        doc.supplierCode,
+        doc.supplier?.cif,
+        doc.location?.name,
+        doc.warehouse?.name,
+        doc.note,
+        doc.series,
+        doc.status,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+
+      return values.includes(q)
+    })
+  }, [receiptDocs, search])
+
+  const filteredMinutesDocs = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    let items = minutesDocs
+
+    if (minutesFilter !== "all") {
+      items = items.filter((doc) => doc.type === minutesFilter)
+    }
+
+    if (!q) return items
+
+    return items.filter((doc) => {
+      const values = [
+        doc.docNo,
+        doc.location?.name,
+        doc.location?.code,
+        doc.reasonCode,
+        doc.note,
+        doc.status,
+        minutesTypeLabel(doc.type),
+        minutesReasonLabel(doc.reasonCode),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+
+      return values.includes(q)
+    })
+  }, [minutesDocs, search, minutesFilter])
+
+  const activeTabMeta =
+    activeTab === "consumption"
+      ? {
+          title: "Istoric bonuri de consum",
+          subtitle: "Vizualizezi documentele generate automat la consumul din retetar.",
+          placeholder: "Nr document, bon POS, produs, nota...",
+          resultCount: filteredConsumptionDocs.length,
+        }
+      : activeTab === "production"
+        ? {
+            title: "Istoric documente productie",
+            subtitle: "Vizualizezi documentele de productie si produsele finite realizate.",
+            placeholder: "Nr document, produs, nota...",
+            resultCount: filteredProductionDocs.length,
+          }
+        : activeTab === "invoice"
+          ? {
+              title: "Istoric facturi",
+              subtitle: "Urmaresti facturile comerciale, clientii si valorile emise in ERP.",
+              placeholder: "Nr factura, client, CIF, locatie...",
+              resultCount: filteredInvoiceDocs.length,
+            }
+          : activeTab === "receipt"
+            ? {
+                title: "Istoric receptii NIR",
+                subtitle: "Urmărești notele de recepție și furnizorii din documente.",
+                placeholder: "Nr document, furnizor, CIF, locatie...",
+                resultCount: filteredReceiptDocs.length,
+              }
+            : activeTab === "minutes"
+              ? {
+                  title: "Procese verbale",
+                  subtitle: "Urmărești deteriorările și schimbările de preț.",
+                  placeholder: "Nr document, tip, motiv, locatie...",
+                  resultCount: filteredMinutesDocs.length,
+                }
+          : {
+              title: "Istoric documente inventar",
+              subtitle: "Vizualizezi inventarele, diferentele si statusul lor.",
+              placeholder: "Nr document, locatie, status, nota...",
+              resultCount: filteredInventoryDocs.length,
+            }
+
   const quickCards =
     activeTab === "consumption"
       ? [
@@ -472,114 +1254,258 @@ export default function Documente() {
             tone: "emerald",
           },
         ]
-      : [
-          {
-            title: "Documente producție",
-            value: String(filteredProductionDocs.length),
-            hint: "Documente generate la producție",
-            icon: Factory,
-            tone: "blue",
-          },
-          {
-            title: "Poziții produse",
-            value: String(filteredProductionDocs.reduce((sum, doc) => sum + doc.itemsCount, 0)),
-            hint: "Produse finite produse",
-            icon: FilePlus2,
-            tone: "slate",
-          },
-          {
-            title: "Cantitate totală",
-            value: formatNumber(filteredProductionDocs.reduce((sum, doc) => sum + doc.totalQty, 0)),
-            hint: "Total cantități produse",
-            icon: FileCheck2,
-            tone: "emerald",
-          },
-        ]
+      : activeTab === "production"
+        ? [
+            {
+              title: "Documente producție",
+              value: String(filteredProductionDocs.length),
+              hint: "Documente generate la producție",
+              icon: Factory,
+              tone: "blue",
+            },
+            {
+              title: "Poziții produse",
+              value: String(filteredProductionDocs.reduce((sum, doc) => sum + doc.itemsCount, 0)),
+              hint: "Produse finite produse",
+              icon: FilePlus2,
+              tone: "slate",
+            },
+            {
+              title: "Cantitate totală",
+              value: formatNumber(filteredProductionDocs.reduce((sum, doc) => sum + doc.totalQty, 0)),
+              hint: "Total cantități produse",
+              icon: FileCheck2,
+              tone: "emerald",
+            },
+          ]
+        : activeTab === "invoice"
+          ? [
+              {
+                title: "Facturi",
+                value: String(filteredInvoiceDocs.length),
+                hint: "Facturi comerciale create în ERP",
+                icon: FilePlus2,
+                tone: "blue",
+              },
+              {
+                title: "Poziții facturate",
+                value: String(filteredInvoiceDocs.reduce((sum, doc) => sum + doc.itemsCount, 0)),
+                hint: "Linii de produse din facturile filtrate",
+                icon: ClipboardList,
+                tone: "slate",
+              },
+              {
+                title: "Valoare totală",
+                value: formatRon(filteredInvoiceDocs.reduce((sum, doc) => sum + Number(doc.totalGrossFc || 0), 0)),
+                hint: "Total facturat pe interval",
+                icon: FileCheck2,
+                tone: "emerald",
+              },
+              ...(efacturaEnabled
+                ? [
+                    {
+                      title: "e-Factura trimise",
+                      value: String(filteredInvoiceDocs.filter((doc) => doc.efacturaStatus === "SENT" || doc.efacturaStatus === "ACCEPTED").length),
+                      hint: "Facturi deja urcate in ANAF",
+                      icon: FileText,
+                      tone: "amber",
+                    },
+                  ]
+                : []),
+            ]
+        : activeTab === "receipt"
+          ? [
+              {
+                title: "Receptii NIR",
+                value: String(filteredReceiptDocs.length),
+                hint: "Documente de recepție",
+                icon: PackageSearch,
+                tone: "blue",
+              },
+              {
+                title: "Pozitii",
+                value: String(filteredReceiptDocs.reduce((sum, doc) => sum + Number(doc.itemsCount || doc.linesCount || doc.itemCount || 0), 0)),
+                hint: "Linii recepționate",
+                icon: FilePlus2,
+                tone: "slate",
+              },
+              {
+                title: "Valoare totală",
+                value: formatRon(filteredReceiptDocs.reduce((sum, doc) => sum + Number(doc.totalGrossRon || doc.totalRon || doc.grandTotal || doc.total || 0), 0)),
+                hint: "Total recepționat",
+                icon: FileCheck2,
+                tone: "emerald",
+              },
+            ]
+          : activeTab === "minutes"
+            ? [
+                {
+                  title: "Procese verbale",
+                  value: String(filteredMinutesDocs.length),
+                  hint: "Documente filtrate",
+                  icon: FileText,
+                  tone: "blue",
+                },
+                {
+                  title: "Pozitii",
+                  value: String(filteredMinutesDocs.reduce((sum, doc) => sum + Number(doc.itemsCount || 0), 0)),
+                  hint: "Produse afectate",
+                  icon: FilePlus2,
+                  tone: "slate",
+                },
+                {
+                  title: "Valoare totală",
+                  value: formatRon(filteredMinutesDocs.reduce((sum, doc) => sum + Number(doc.totalValue || 0), 0)),
+                  hint: "Valoare documente",
+                  icon: FileCheck2,
+                  tone: "emerald",
+                },
+              ]
+        : [
+            {
+              title: "Documente inventar",
+              value: String(filteredInventoryDocs.length),
+              hint: "Inventare create în intervalul selectat",
+              icon: ClipboardList,
+              tone: "blue",
+            },
+            {
+              title: "Poziții inventariate",
+              value: String(filteredInventoryDocs.reduce((sum, doc) => sum + doc.itemsCount, 0)),
+              hint: "Total produse din inventarele filtrate",
+              icon: FilePlus2,
+              tone: "slate",
+            },
+            {
+              title: "Diferență totală",
+              value: formatNumber(filteredInventoryDocs.reduce((sum, doc) => sum + doc.totalDifferenceQty, 0), 3),
+              hint: "Diferență totală dintre scriptic și numărat",
+              icon: FileCheck2,
+              tone: "emerald",
+            },
+          ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <PageHeader
         badge="documente"
         title="Documente"
-        subtitle="Consum și producție în același loc, cu istoric și detalii complete."
       />
 
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-2">
         <button
           type="button"
           onClick={() => setActiveTab("consumption")}
-          className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold transition ${
+          className={`inline-flex items-center gap-1.5 rounded-[14px] px-3 py-1.5 text-[13px] font-semibold transition ${
             activeTab === "consumption"
               ? "bg-slate-900 text-white"
               : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
           }`}
         >
-          <Repeat2 size={16} />
+          <Repeat2 size={15} />
           Bonuri de consum
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab("production")}
-          className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold transition ${
+          className={`inline-flex items-center gap-1.5 rounded-[14px] px-3 py-1.5 text-[13px] font-semibold transition ${
             activeTab === "production"
               ? "bg-slate-900 text-white"
               : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
           }`}
         >
-          <Factory size={16} />
+          <Factory size={15} />
           Producție
         </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("invoice")}
+          className={`inline-flex items-center gap-1.5 rounded-[14px] px-3 py-1.5 text-[13px] font-semibold transition ${
+            activeTab === "invoice"
+              ? "bg-slate-900 text-white"
+              : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+          }`}
+        >
+          <FileText size={15} />
+          Facturi
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("inventory")}
+          className={`inline-flex items-center gap-1.5 rounded-[14px] px-3 py-1.5 text-[13px] font-semibold transition ${
+            activeTab === "inventory"
+              ? "bg-slate-900 text-white"
+              : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+          }`}
+        >
+          <ClipboardList size={15} />
+          Inventare
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("receipt")}
+          className={`inline-flex items-center gap-1.5 rounded-[14px] px-3 py-1.5 text-[13px] font-semibold transition ${
+            activeTab === "receipt"
+              ? "bg-slate-900 text-white"
+              : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+          }`}
+        >
+          <PackageSearch size={15} />
+          Note de recepție
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("minutes")}
+          className={`inline-flex items-center gap-1.5 rounded-[14px] px-3 py-1.5 text-[13px] font-semibold transition ${
+            activeTab === "minutes"
+              ? "bg-slate-900 text-white"
+              : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+          }`}
+        >
+          <FileText size={15} />
+          Procese verbale
+        </button>
+
+        {efacturaEnabled ? (
+          <button
+            type="button"
+            onClick={() => navigate("/documente/facturi-primite-spv")}
+            className="inline-flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-semibold text-slate-700 transition hover:bg-slate-50"
+          >
+            <FileText size={15} />
+            Facturi primite SPV
+          </button>
+        ) : null}
       </div>
 
-      {error ? (
-        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
-      ) : null}
+      {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
+      {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        {quickCards.map((card) => {
-          const Icon = card.icon
-          return (
-            <div key={card.title} className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="text-sm font-medium text-slate-500">{card.title}</div>
-                  <div className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">{card.value}</div>
-                  <div className="mt-2 text-sm text-slate-500">{card.hint}</div>
-                </div>
-
-                <span
-                  className={[
-                    "flex h-12 w-12 items-center justify-center rounded-2xl",
-                    card.tone === "blue" && "bg-blue-50 text-blue-700",
-                    card.tone === "slate" && "bg-slate-900 text-white",
-                    card.tone === "emerald" && "bg-emerald-100 text-emerald-700",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                >
-                  <Icon size={20} />
-                </span>
+      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
+        {quickCards.map((card) => (
+          <DocumentMetric
+            key={card.title}
+            title={card.title}
+            value={
+              <div>
+                <div>{card.value}</div>
+                <div className="mt-1 text-[12px] font-normal text-slate-500">{card.hint}</div>
               </div>
-            </div>
-          )
-        })}
+            }
+            tone={card.tone as "blue" | "slate" | "emerald" | "amber"}
+          />
+        ))}
       </div>
 
-      <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="mb-5 flex flex-col gap-3">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="mb-3 flex flex-col gap-2">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>
-              <div className="text-lg font-semibold text-slate-900">
-                {activeTab === "consumption" ? "Istoric bonuri de consum" : "Istoric documente producție"}
-              </div>
-              <div className="mt-1 text-sm text-slate-500">
-                {activeTab === "consumption"
-                  ? "Vizualizezi documentele generate automat la consumul din rețetar."
-                  : "Vizualizezi documentele de producție și produsele finite realizate."}
-              </div>
+              <div className="text-[15px] font-semibold text-slate-900">{activeTabMeta.title}</div>
             </div>
 
             <button
@@ -587,75 +1513,148 @@ export default function Documente() {
               onClick={() => {
                 if (activeTab === "consumption") {
                   loadConsumptionDocs()
-                } else {
+                } else if (activeTab === "production") {
                   loadProductionDocs()
+                } else if (activeTab === "invoice") {
+                  loadInvoiceDocs()
+                } else if (activeTab === "receipt") {
+                  loadReceiptDocs()
+                } else if (activeTab === "minutes") {
+                  loadMinutesDocs()
+                } else {
+                  loadInventoryDocs()
                 }
               }}
-              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-[13px] font-semibold text-slate-700 transition hover:bg-white"
             >
-              <PackageSearch size={18} />
+              <PackageSearch size={15} />
               Reîncarcă
             </button>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
             <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                De la
-              </label>
+              <select
+                value={selectedLocationId}
+                onChange={(e) => {
+                  const nextLocationId = e.target.value
+                  setSelectedLocationId(nextLocationId)
+                  setActiveLocationId(nextLocationId)
+                }}
+                className="hidden"
+              >
+                <option value="">Toate locaÈ›iile</option>
+                {locations.map((location) => (
+                  <option key={location.id} value={location.id}>
+                    {location.code ? `${location.name} (${location.code})` : location.name}
+                  </option>
+                ))}
+              </select>
               <input
                 type="date"
                 value={dateFrom}
                 onChange={(e) => setDateFrom(e.target.value)}
-                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:bg-white"
+                className={documentInputClass}
               />
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                Până la
-              </label>
               <input
                 type="date"
                 value={dateTo}
                 onChange={(e) => setDateTo(e.target.value)}
-                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:bg-white"
+                className={documentInputClass}
               />
             </div>
 
             <div className="md:col-span-2">
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                Caută
-              </label>
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder={
-                  activeTab === "consumption"
-                    ? "Nr document, bon POS, produs, notă..."
-                    : "Nr document, produs, notă..."
-                }
-                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:bg-white"
+                placeholder={activeTabMeta.placeholder}
+                className={documentInputClass}
               />
             </div>
+          </div>
+
+          {activeTab === "invoice" && efacturaEnabled ? (
+            <div className="mt-1 flex flex-wrap gap-2">
+              {[
+                { value: "all", label: "Toate" },
+                { value: "NOT_READY", label: "Nepregatite" },
+                { value: "PREPARED", label: "Pregatite" },
+                { value: "SENT", label: "Trimise" },
+                { value: "ACCEPTED", label: "Acceptate" },
+                { value: "REJECTED", label: "Respinse" },
+                { value: "ERROR", label: "Erori" },
+              ].map((item) => (
+                <button
+                  key={item.value}
+                  type="button"
+                  onClick={() => setEfacturaFilter(item.value)}
+                  className={`inline-flex items-center rounded-xl px-3 py-1.5 text-[12px] font-semibold transition ${
+                    efacturaFilter === item.value
+                      ? "bg-slate-900 text-white"
+                      : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          {activeTab === "minutes" ? (
+            <div className="mt-1 flex flex-wrap gap-2">
+              {[
+                { value: "all", label: "Toate" },
+                { value: "DETERIORATION", label: "Deteriorare" },
+                { value: "PRICE_CHANGE", label: "Schimbare pret" },
+              ].map((item) => (
+                <button
+                  key={item.value}
+                  type="button"
+                  onClick={() => setMinutesFilter(item.value as typeof minutesFilter)}
+                  className={`inline-flex items-center rounded-xl px-3 py-1.5 text-[12px] font-semibold transition ${
+                    minutesFilter === item.value
+                      ? "bg-slate-900 text-white"
+                      : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[12px] text-slate-600">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1 font-semibold text-slate-700">
+              <Filter size={14} />
+              {selectedLocationId ? "Filtrare din topbar" : "Toate locatiile"}
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1 font-semibold text-slate-700">
+              <Search size={14} />
+              {activeTabMeta.resultCount} documente
+            </span>
+            {search.trim() ? <span className="text-slate-500">Cautare: {search.trim()}</span> : null}
           </div>
         </div>
 
         {activeTab === "consumption" ? (
-          <div className="overflow-hidden rounded-[22px] border border-slate-200">
-            <table className="w-full text-sm">
+          <div className="overflow-hidden rounded-[16px] border border-slate-200">
+            <table className="w-full text-[13px]">
               <thead className="bg-slate-50 text-slate-500">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium">Tip</th>
-                  <th className="px-4 py-3 text-left font-medium">Număr</th>
-                  <th className="px-4 py-3 text-left font-medium">Data</th>
-                  <th className="px-4 py-3 text-left font-medium">Locație</th>
-                  <th className="px-4 py-3 text-left font-medium">Bon POS</th>
-                  <th className="px-4 py-3 text-left font-medium">Produse</th>
-                  <th className="px-4 py-3 text-left font-medium">Cantitate</th>
-                  <th className="px-4 py-3 text-left font-medium">Status</th>
-                  <th className="px-4 py-3 text-right font-medium">Acțiune</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Tip</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Număr</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Data</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Locație</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Bon POS</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Produse</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Cantitate</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Status</th>
+                  <th className="px-3 py-2.5 text-right font-medium">Acțiune</th>
                 </tr>
               </thead>
 
@@ -675,23 +1674,23 @@ export default function Documente() {
                 ) : (
                   filteredConsumptionDocs.map((doc) => (
                     <tr key={doc.id} className="border-t border-slate-200">
-                      <td className="px-4 py-4 text-slate-700">Consum</td>
-                      <td className="px-4 py-4 font-semibold text-slate-900">{doc.docNo}</td>
-                      <td className="px-4 py-4 text-slate-600">{formatDate(doc.docDate)}</td>
-                      <td className="px-4 py-4 text-slate-600">{doc.location?.name || "-"}</td>
-                      <td className="px-4 py-4 text-slate-600">{doc.sale?.receiptNo || "-"}</td>
-                      <td className="px-4 py-4 text-slate-600">
+                      <td className="px-3 py-2.5 text-slate-700">Consum</td>
+                      <td className="px-3 py-2.5 font-semibold text-slate-900">{doc.docNo}</td>
+                      <td className="px-3 py-2.5 text-slate-600">{formatDate(doc.docDate)}</td>
+                      <td className="px-3 py-2.5 text-slate-600">{doc.location?.name || "-"}</td>
+                      <td className="px-3 py-2.5 text-slate-600">{doc.sale?.receiptNo || "-"}</td>
+                      <td className="px-3 py-2.5 text-slate-600">
                         {doc.finishedProducts.length > 0
                           ? doc.finishedProducts.map((p) => p.name).join(", ")
                           : "-"}
                       </td>
-                      <td className="px-4 py-4 text-slate-600">{formatNumber(doc.totalQty)}</td>
-                      <td className="px-4 py-4">
+                      <td className="px-3 py-2.5 text-slate-600">{formatNumber(doc.totalQty)}</td>
+                      <td className="px-3 py-2.5">
                         <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass("Generat")}`}>
                           Generat
                         </span>
                       </td>
-                      <td className="px-4 py-4 text-right">
+                      <td className="px-3 py-2.5 text-right">
                         <div className="flex justify-end gap-2">
                           <button
                             type="button"
@@ -718,19 +1717,94 @@ export default function Documente() {
               </tbody>
             </table>
           </div>
-        ) : (
+        ) : activeTab === "production" ? (
           <div className="overflow-hidden rounded-[22px] border border-slate-200">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-slate-500">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium">Tip</th>
-                  <th className="px-4 py-3 text-left font-medium">Număr</th>
-                  <th className="px-4 py-3 text-left font-medium">Data</th>
-                  <th className="px-4 py-3 text-left font-medium">Locație</th>
-                  <th className="px-4 py-3 text-left font-medium">Produse</th>
-                  <th className="px-4 py-3 text-left font-medium">Cantitate</th>
-                  <th className="px-4 py-3 text-left font-medium">Status</th>
-                  <th className="px-4 py-3 text-right font-medium">Acțiune</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Tip</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Număr</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Data</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Locație</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Produse</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Cantitate</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Status</th>
+                  <th className="px-3 py-2.5 text-right font-medium">Acțiune</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={efacturaEnabled ? 9 : 8} className="px-4 py-8 text-center text-slate-500">
+                      Se încarcă documentele de producție...
+                    </td>
+                  </tr>
+                ) : filteredProductionDocs.length === 0 ? (
+                  <tr>
+                    <td colSpan={efacturaEnabled ? 9 : 8} className="px-4 py-8 text-center text-slate-500">
+                      Nu există documente de producție în intervalul selectat.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredProductionDocs.map((doc) => (
+                    <tr key={doc.id} className="border-t border-slate-200">
+                      <td className="px-3 py-2.5 text-slate-700">Producție</td>
+                      <td className="px-3 py-2.5 font-semibold text-slate-900">{doc.docNo}</td>
+                      <td className="px-3 py-2.5 text-slate-600">{formatDate(doc.docDate)}</td>
+                      <td className="px-3 py-2.5 text-slate-600">{doc.locationName || "-"}</td>
+                      <td className="px-3 py-2.5 text-slate-600">
+                        {doc.products.length > 0
+                          ? doc.products.map((p) => p.name).join(", ")
+                          : "-"}
+                      </td>
+                      <td className="px-3 py-2.5 text-slate-600">{formatNumber(doc.totalQty)}</td>
+                      <td className="px-3 py-2.5">
+                        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass("Produs")}`}>
+                          Produs
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openProductionPdf(doc.id)}
+                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                          >
+                            <Printer size={16} />
+                            PDF
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => openProductionDetail(doc.id)}
+                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-50"
+                          >
+                            Deschide
+                            <ArrowRight size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : activeTab === "invoice" ? (
+          <div className="overflow-hidden rounded-[22px] border border-slate-200">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-slate-500">
+                <tr>
+                  <th className="px-3 py-2.5 text-left font-medium">Număr</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Data</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Client</th>
+                  <th className="px-3 py-2.5 text-left font-medium">CIF</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Locație</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Status</th>
+                  {efacturaEnabled ? <th className="px-3 py-2.5 text-left font-medium">e-Factura</th> : null}
+                  <th className="px-3 py-2.5 text-left font-medium">Valoare</th>
+                  <th className="px-3 py-2.5 text-right font-medium">Acțiune</th>
                 </tr>
               </thead>
 
@@ -738,42 +1812,304 @@ export default function Documente() {
                 {loading ? (
                   <tr>
                     <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
-                      Se încarcă documentele de producție...
+                      Se încarcă facturile...
                     </td>
                   </tr>
-                ) : filteredProductionDocs.length === 0 ? (
+                ) : filteredInvoiceDocs.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
-                      Nu există documente de producție în intervalul selectat.
+                      Nu există facturi în intervalul selectat.
                     </td>
                   </tr>
                 ) : (
-                  filteredProductionDocs.map((doc) => (
+                  filteredInvoiceDocs.map((doc) => (
                     <tr key={doc.id} className="border-t border-slate-200">
-                      <td className="px-4 py-4 text-slate-700">Producție</td>
-                      <td className="px-4 py-4 font-semibold text-slate-900">{doc.docNo}</td>
-                      <td className="px-4 py-4 text-slate-600">{formatDate(doc.docDate)}</td>
-                      <td className="px-4 py-4 text-slate-600">{doc.locationName || "-"}</td>
-                      <td className="px-4 py-4 text-slate-600">
-                        {doc.products.length > 0
-                          ? doc.products.map((p) => p.name).join(", ")
-                          : "-"}
-                      </td>
-                      <td className="px-4 py-4 text-slate-600">{formatNumber(doc.totalQty)}</td>
-                      <td className="px-4 py-4">
-                        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass("Produs")}`}>
-                          Produs
+                      <td className="px-3 py-2.5 font-semibold text-slate-900">{doc.docNo}</td>
+                      <td className="px-3 py-2.5 text-slate-600">{formatDate(doc.docDate)}</td>
+                      <td className="px-3 py-2.5 text-slate-600">{doc.customerName || "-"}</td>
+                      <td className="px-3 py-2.5 text-slate-600">{doc.customerCif || "-"}</td>
+                      <td className="px-3 py-2.5 text-slate-600">{doc.location?.name || "-"}</td>
+                      <td className="px-3 py-2.5">
+                        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass(doc.status === "ISSUED" ? "Generat" : doc.status === "CANCELLED" ? "Anulat" : "Produs")}`}>
+                          {doc.status}
                         </span>
                       </td>
-                      <td className="px-4 py-4 text-right">
-                        <button
-                          type="button"
-                          onClick={() => openProductionDetail(doc.id)}
-                          className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-50"
-                        >
-                          Deschide
-                          <ArrowRight size={16} />
-                        </button>
+                      {efacturaEnabled ? (
+                        <td className="px-3 py-2.5">
+                          <div className="flex flex-col gap-1">
+                            <span className={`inline-flex w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${efacturaStatusClass(doc.efacturaStatus)}`}>
+                              {doc.efacturaStatus || "NOT_READY"}
+                            </span>
+                            {doc.efacturaUploadIndex ? <span className="text-[11px] text-slate-500">ID {doc.efacturaUploadIndex}</span> : null}
+                          </div>
+                        </td>
+                      ) : null}
+                      <td className="px-3 py-2.5 text-slate-600">{formatNumber(doc.totalGrossFc)} {doc.currency}</td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openInvoicePdf(doc.id)}
+                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                          >
+                            <Printer size={16} />
+                            PDF
+                          </button>
+                          {efacturaEnabled ? (
+                            <button
+                              type="button"
+                              onClick={() => sendInvoiceEfactura(doc.id)}
+                              disabled={doc.status !== "ISSUED" || (doc.efacturaStatus !== "PREPARED" && doc.efacturaStatus !== "READY_TO_SEND" && doc.efacturaStatus !== "ERROR" && doc.efacturaStatus !== "REJECTED")}
+                              className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              ANAF
+                            </button>
+                          ) : null}
+                          {efacturaEnabled ? (
+                            <button
+                              type="button"
+                              onClick={() => checkInvoiceEfacturaStatus(doc.id)}
+                              disabled={!doc.efacturaUploadIndex}
+                              className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              Status
+                            </button>
+                          ) : null}
+                          {efacturaEnabled ? (
+                            <button
+                              type="button"
+                              onClick={() => openInvoiceReceipt(doc.id)}
+                              disabled={!doc.efacturaUploadIndex}
+                              className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              Recipisa
+                            </button>
+                          ) : null}
+                          <a
+                            href={`/inregistrare-document/factura/edit?id=${doc.id}`}
+                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-[#17324D] transition hover:bg-[#F4F7FB]"
+                          >
+                            Deschide
+                            <ArrowRight size={16} />
+                          </a>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : activeTab === "receipt" ? (
+          <div className="overflow-hidden rounded-[22px] border border-slate-200">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-slate-500">
+                <tr>
+                  <th className="px-3 py-2.5 text-left font-medium">Număr</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Data</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Furnizor</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Locație</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Status</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Valoare</th>
+                  <th className="px-3 py-2.5 text-right font-medium">Acțiune</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                      Se încarcă recepțiile NIR...
+                    </td>
+                  </tr>
+                ) : filteredReceiptDocs.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                      Nu există note de recepție în intervalul selectat.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredReceiptDocs.map((doc) => (
+                    <tr key={doc.id} className="border-t border-slate-200">
+                      <td className="px-3 py-2.5 font-semibold text-slate-900">{doc.docNo || doc.number || "-"}</td>
+                      <td className="px-3 py-2.5 text-slate-600">{formatDate(doc.docDate || doc.date)}</td>
+                      <td className="px-3 py-2.5 text-slate-600">{doc.supplier?.name || doc.supplierName || doc.vendor?.name || "-"}</td>
+                      <td className="px-3 py-2.5 text-slate-600">{doc.location?.name || doc.warehouse?.name || "-"}</td>
+                      <td className="px-3 py-2.5">
+                        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass((doc.status || "Draft") === "POSTED" ? "Generat" : doc.status || "Draft")}`}>
+                          {doc.status || "DRAFT"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-slate-600">
+                        {formatRon(Number(doc.totalGrossRon || doc.totalRon || doc.grandTotal || doc.total || 0))}
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openReceiptPdf(doc.id)}
+                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                          >
+                            <Printer size={16} />
+                            PDF
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/inregistrare-document/nir/edit?id=${doc.id}`)}
+                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-[#17324D] transition hover:bg-[#F4F7FB]"
+                          >
+                            Deschide
+                            <ArrowRight size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : activeTab === "minutes" ? (
+          <div className="overflow-hidden rounded-[22px] border border-slate-200">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-slate-500">
+                <tr>
+                  <th className="px-3 py-2.5 text-left font-medium">Tip</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Număr</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Data</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Locație</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Motiv</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Status</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Valoare</th>
+                  <th className="px-3 py-2.5 text-right font-medium">Acțiune</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
+                      Se încarcă procesele verbale...
+                    </td>
+                  </tr>
+                ) : filteredMinutesDocs.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
+                      Nu există procese verbale în intervalul selectat.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredMinutesDocs.map((doc) => (
+                    <tr key={doc.id} className="border-t border-slate-200">
+                      <td className="px-3 py-2.5 text-slate-600">{minutesTypeLabel(doc.type)}</td>
+                      <td className="px-3 py-2.5 font-semibold text-slate-900">{doc.docNo}</td>
+                      <td className="px-3 py-2.5 text-slate-600">{formatDate(doc.docDate)}</td>
+                      <td className="px-3 py-2.5 text-slate-600">{doc.location?.name || "-"}</td>
+                      <td className="px-3 py-2.5 text-slate-600">{minutesReasonLabel(doc.reasonCode)}</td>
+                      <td className="px-3 py-2.5">
+                        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass(doc.status === "POSTED" ? "Generat" : doc.status === "CANCELLED" ? "Anulat" : "Draft")}`}>
+                          {doc.status}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-slate-600">{formatRon(Number(doc.totalValue || 0))}</td>
+                      <td className="px-3 py-2.5 text-right">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openMinutesPdf(doc.id)}
+                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                          >
+                            <Printer size={15} />
+                            PDF
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              navigate(
+                                doc.type === "PRICE_CHANGE"
+                                  ? `/inregistrare-document/pv-schimbare-pret/edit?id=${doc.id}`
+                                  : `/inregistrare-document/pv-deteriorare/edit?id=${doc.id}`
+                              )
+                            }
+                            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+                          >
+                            Deschide
+                            <ArrowRight size={15} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-[22px] border border-slate-200">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-slate-500">
+                <tr>
+                  <th className="px-3 py-2.5 text-left font-medium">Tip</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Număr</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Data</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Locație</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Poziții</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Diferență</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Status</th>
+                  <th className="px-3 py-2.5 text-right font-medium">Acțiune</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
+                      Se încarcă documentele de inventar...
+                    </td>
+                  </tr>
+                ) : filteredInventoryDocs.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
+                      Nu există documente de inventar în intervalul selectat.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredInventoryDocs.map((doc) => (
+                    <tr key={doc.id} className="border-t border-slate-200">
+                      <td className="px-3 py-2.5 text-slate-700">Inventar</td>
+                      <td className="px-3 py-2.5 font-semibold text-slate-900">{doc.docNo}</td>
+                      <td className="px-3 py-2.5 text-slate-600">{formatDate(doc.docDate)}</td>
+                      <td className="px-3 py-2.5 text-slate-600">{doc.location?.name || "-"}</td>
+                      <td className="px-3 py-2.5 text-slate-600">{doc.itemsCount}</td>
+                      <td className={`px-3 py-2.5 ${diffClass(doc.totalDifferenceQty)}`}>
+                        {formatNumber(doc.totalDifferenceQty, 3)}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass(inventoryStatusText(doc.status))}`}>
+                          {inventoryStatusText(doc.status)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openInventoryPdf(doc.id)}
+                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                          >
+                            <Printer size={16} />
+                            PDF
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => openInventoryDetail(doc.id)}
+                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-50"
+                          >
+                            Deschide
+                            <ArrowRight size={16} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -786,7 +2122,7 @@ export default function Documente() {
 
       {selectedConsumptionDocId ? (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-950/40 p-4 md:p-8">
-          <div className="max-h-[90vh] w-full max-w-5xl overflow-auto rounded-[28px] border border-slate-200 bg-white p-5 shadow-2xl">
+          <div className="max-h-[88vh] w-full max-w-5xl overflow-auto rounded-2xl border border-slate-200 bg-white p-3 shadow-2xl">
             <div className="mb-5 flex items-start justify-between gap-4">
               <div>
                 <div className="text-lg font-semibold text-slate-900">
@@ -801,7 +2137,7 @@ export default function Documente() {
                 <button
                   type="button"
                   onClick={() => selectedConsumptionDoc && openPdf(selectedConsumptionDoc.id)}
-                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-[13px] font-semibold text-slate-700 hover:bg-white"
                 >
                   <Printer size={16} />
                   PDF
@@ -813,7 +2149,7 @@ export default function Documente() {
                     setSelectedConsumptionDocId(null)
                     setSelectedConsumptionDoc(null)
                   }}
-                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  className="inline-flex items-center gap-1.5 rounded-[14px] border border-[#E8E3DA] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#17324D] hover:bg-[#FCFBF8]"
                 >
                   <X size={16} />
                   Închide
@@ -826,30 +2162,30 @@ export default function Documente() {
                 Se încarcă detaliul documentului...
               </div>
             ) : (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="rounded-[16px] border border-slate-200 bg-slate-50 p-3">
                     <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Număr</div>
                     <div className="mt-2 text-base font-semibold text-slate-900">{selectedConsumptionDoc.docNo}</div>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="rounded-[16px] border border-slate-200 bg-slate-50 p-3">
                     <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Data</div>
                     <div className="mt-2 text-base font-semibold text-slate-900">{formatDateTime(selectedConsumptionDoc.docDate)}</div>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="rounded-[16px] border border-slate-200 bg-slate-50 p-3">
                     <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Locație</div>
                     <div className="mt-2 text-base font-semibold text-slate-900">{selectedConsumptionDoc.location?.name || "-"}</div>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="rounded-[16px] border border-slate-200 bg-slate-50 p-3">
                     <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Cantitate totală</div>
                     <div className="mt-2 text-base font-semibold text-slate-900">{formatNumber(selectedConsumptionDoc.totalQty)}</div>
                   </div>
                 </div>
 
-                <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
                   <div className="mb-4 text-lg font-semibold text-slate-900">Bon POS sursă</div>
 
                   {selectedConsumptionDoc.sale ? (
@@ -880,30 +2216,30 @@ export default function Documente() {
                   )}
                 </div>
 
-                <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
                   <div className="mb-4 text-lg font-semibold text-slate-900">Linii de consum</div>
 
                   <div className="overflow-hidden rounded-[22px] border border-slate-200">
                     <table className="w-full text-sm">
                       <thead className="bg-slate-50 text-slate-500">
                         <tr>
-                          <th className="px-4 py-3 text-left font-medium">Produs finit</th>
-                          <th className="px-4 py-3 text-left font-medium">Ingredient</th>
-                          <th className="px-4 py-3 text-left font-medium">Cantitate</th>
-                          <th className="px-4 py-3 text-left font-medium">Notă</th>
+                          <th className="px-3 py-2.5 text-left font-medium">Produs finit</th>
+                          <th className="px-3 py-2.5 text-left font-medium">Ingredient</th>
+                          <th className="px-3 py-2.5 text-left font-medium">Cantitate</th>
+                          <th className="px-3 py-2.5 text-left font-medium">Notă</th>
                         </tr>
                       </thead>
                       <tbody>
                         {selectedConsumptionDoc.items.map((item) => (
                           <tr key={item.id} className="border-t border-slate-200">
-                            <td className="px-4 py-4 text-slate-700">
+                            <td className="px-3 py-2.5 text-slate-700">
                               {item.finishedProduct ? item.finishedProduct.name : "-"}
                             </td>
-                            <td className="px-4 py-4 font-semibold text-slate-900">
+                            <td className="px-3 py-2.5 font-semibold text-slate-900">
                               {item.ingredient.name}
                             </td>
-                            <td className="px-4 py-4 text-slate-600">{formatNumber(item.qty)}</td>
-                            <td className="px-4 py-4 text-slate-600">{item.note || "-"}</td>
+                            <td className="px-3 py-2.5 text-slate-600">{formatNumber(item.qty)}</td>
+                            <td className="px-3 py-2.5 text-slate-600">{item.note || "-"}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -912,26 +2248,26 @@ export default function Documente() {
                 </div>
 
                 {selectedConsumptionDoc.sale?.items?.length ? (
-                  <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
                     <div className="mb-4 text-lg font-semibold text-slate-900">Linii vânzare</div>
 
                     <div className="overflow-hidden rounded-[22px] border border-slate-200">
                       <table className="w-full text-sm">
                         <thead className="bg-slate-50 text-slate-500">
                           <tr>
-                            <th className="px-4 py-3 text-left font-medium">Produs</th>
-                            <th className="px-4 py-3 text-left font-medium">Cantitate</th>
-                            <th className="px-4 py-3 text-left font-medium">Preț</th>
-                            <th className="px-4 py-3 text-left font-medium">TVA</th>
+                            <th className="px-3 py-2.5 text-left font-medium">Produs</th>
+                            <th className="px-3 py-2.5 text-left font-medium">Cantitate</th>
+                            <th className="px-3 py-2.5 text-left font-medium">Preț</th>
+                            <th className="px-3 py-2.5 text-left font-medium">TVA</th>
                           </tr>
                         </thead>
                         <tbody>
                           {selectedConsumptionDoc.sale.items.map((item) => (
                             <tr key={item.id} className="border-t border-slate-200">
-                              <td className="px-4 py-4 font-semibold text-slate-900">{item.product.name}</td>
-                              <td className="px-4 py-4 text-slate-600">{formatNumber(item.qty)}</td>
-                              <td className="px-4 py-4 text-slate-600">{formatRon(item.unitPrice)}</td>
-                              <td className="px-4 py-4 text-slate-600">{item.vatRate}%</td>
+                              <td className="px-3 py-2.5 font-semibold text-slate-900">{item.product.name}</td>
+                              <td className="px-3 py-2.5 text-slate-600">{formatNumber(item.qty)}</td>
+                              <td className="px-3 py-2.5 text-slate-600">{formatRon(item.unitPrice)}</td>
+                              <td className="px-3 py-2.5 text-slate-600">{item.vatRate}%</td>
                             </tr>
                           ))}
                         </tbody>
@@ -947,7 +2283,7 @@ export default function Documente() {
 
       {selectedProductionDocId ? (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-950/40 p-4 md:p-8">
-          <div className="max-h-[90vh] w-full max-w-5xl overflow-auto rounded-[28px] border border-slate-200 bg-white p-5 shadow-2xl">
+          <div className="max-h-[88vh] w-full max-w-5xl overflow-auto rounded-2xl border border-slate-200 bg-white p-3 shadow-2xl">
             <div className="mb-5 flex items-start justify-between gap-4">
               <div>
                 <div className="text-lg font-semibold text-slate-900">
@@ -958,17 +2294,28 @@ export default function Documente() {
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedProductionDocId(null)
-                  setSelectedProductionDoc(null)
-                }}
-                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                <X size={16} />
-                Închide
-              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => selectedProductionDoc && openProductionPdf(selectedProductionDoc.id)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-[13px] font-semibold text-slate-700 hover:bg-white"
+                >
+                  <Printer size={16} />
+                  PDF
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedProductionDocId(null)
+                    setSelectedProductionDoc(null)
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-[14px] border border-[#E8E3DA] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#17324D] hover:bg-[#FCFBF8]"
+                >
+                  <X size={16} />
+                  Închide
+                </button>
+              </div>
             </div>
 
             {detailLoading || !selectedProductionDoc ? (
@@ -976,31 +2323,31 @@ export default function Documente() {
                 Se încarcă detaliul documentului...
               </div>
             ) : (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="rounded-[16px] border border-slate-200 bg-slate-50 p-3">
                     <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Număr</div>
                     <div className="mt-2 text-base font-semibold text-slate-900">{selectedProductionDoc.docNo}</div>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="rounded-[16px] border border-slate-200 bg-slate-50 p-3">
                     <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Data</div>
                     <div className="mt-2 text-base font-semibold text-slate-900">{formatDateTime(selectedProductionDoc.docDate)}</div>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="rounded-[16px] border border-slate-200 bg-slate-50 p-3">
                     <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Locație</div>
                     <div className="mt-2 text-base font-semibold text-slate-900">{selectedProductionDoc.locationName || "-"}</div>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="rounded-[16px] border border-slate-200 bg-slate-50 p-3">
                     <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Cantitate totală</div>
                     <div className="mt-2 text-base font-semibold text-slate-900">{formatNumber(selectedProductionDoc.totalQty)}</div>
                   </div>
                 </div>
 
                 {selectedProductionDoc.items.map((row) => (
-                  <div key={row.id} className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
+                  <div key={row.id} className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
                     <div className="mb-4 flex items-center justify-between">
                       <div>
                         <div className="text-lg font-semibold text-slate-900">{row.name}</div>
@@ -1014,10 +2361,10 @@ export default function Documente() {
                       <table className="w-full text-sm">
                         <thead className="bg-slate-50 text-slate-500">
                           <tr>
-                            <th className="px-4 py-3 text-left font-medium">Ingredient</th>
-                            <th className="px-4 py-3 text-left font-medium">SKU</th>
-                            <th className="px-4 py-3 text-left font-medium">UM</th>
-                            <th className="px-4 py-3 text-left font-medium">Cantitate</th>
+                            <th className="px-3 py-2.5 text-left font-medium">Ingredient</th>
+                            <th className="px-3 py-2.5 text-left font-medium">SKU</th>
+                            <th className="px-3 py-2.5 text-left font-medium">UM</th>
+                            <th className="px-3 py-2.5 text-left font-medium">Cantitate</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1030,10 +2377,10 @@ export default function Documente() {
                           ) : (
                             row.ingredients.map((ingredient) => (
                               <tr key={ingredient.ingredientId} className="border-t border-slate-200">
-                                <td className="px-4 py-4 font-semibold text-slate-900">{ingredient.name}</td>
-                                <td className="px-4 py-4 text-slate-600">{ingredient.sku}</td>
-                                <td className="px-4 py-4 text-slate-600">{ingredient.uom}</td>
-                                <td className="px-4 py-4 text-slate-600">{formatNumber(ingredient.qty)}</td>
+                                <td className="px-3 py-2.5 font-semibold text-slate-900">{ingredient.name}</td>
+                                <td className="px-3 py-2.5 text-slate-600">{ingredient.sku}</td>
+                                <td className="px-3 py-2.5 text-slate-600">{ingredient.uom}</td>
+                                <td className="px-3 py-2.5 text-slate-600">{formatNumber(ingredient.qty)}</td>
                               </tr>
                             ))
                           )}
@@ -1042,6 +2389,154 @@ export default function Documente() {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {selectedInventoryDocId ? (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-950/40 p-4 md:p-8">
+          <div className="max-h-[88vh] w-full max-w-5xl overflow-auto rounded-2xl border border-slate-200 bg-white p-3 shadow-2xl">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <div className="text-lg font-semibold text-slate-900">
+                  {selectedInventoryDoc ? `Detaliu inventar ${selectedInventoryDoc.docNo}` : "Detaliu inventar"}
+                </div>
+                <div className="mt-1 text-sm text-slate-500">
+                  Vizualizezi pozițiile inventariate, cantitățile scriptice și diferențele.
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => selectedInventoryDoc && openInventoryPdf(selectedInventoryDoc.id)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-[13px] font-semibold text-slate-700 hover:bg-white"
+                >
+                  <Printer size={16} />
+                  PDF
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedInventoryDocId(null)
+                    setSelectedInventoryDoc(null)
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-[14px] border border-[#E8E3DA] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#17324D] hover:bg-[#FCFBF8]"
+                >
+                  <X size={16} />
+                  Închide
+                </button>
+              </div>
+            </div>
+
+            {detailLoading || !selectedInventoryDoc ? (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                Se încarcă detaliul documentului...
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
+                  <div className="rounded-[16px] border border-slate-200 bg-slate-50 p-3">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Număr</div>
+                    <div className="mt-2 text-base font-semibold text-slate-900">{selectedInventoryDoc.docNo}</div>
+                  </div>
+
+                  <div className="rounded-[16px] border border-slate-200 bg-slate-50 p-3">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Data</div>
+                    <div className="mt-2 text-base font-semibold text-slate-900">{formatDateTime(selectedInventoryDoc.docDate)}</div>
+                  </div>
+
+                  <div className="rounded-[16px] border border-slate-200 bg-slate-50 p-3">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Locație</div>
+                    <div className="mt-2 text-base font-semibold text-slate-900">{selectedInventoryDoc.location?.name || "-"}</div>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Status</div>
+                    <div className="mt-2 text-base font-semibold text-slate-900">
+                      {inventoryStatusText(selectedInventoryDoc.status)}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Poziții</div>
+                    <div className="mt-2 text-base font-semibold text-slate-900">{selectedInventoryDoc.summary.itemsCount}</div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <div className="rounded-[16px] border border-slate-200 bg-white p-3 shadow-sm">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Total scriptic</div>
+                    <div className="mt-2 text-lg font-semibold text-slate-900">
+                      {formatNumber(selectedInventoryDoc.summary.totalSystemQty, 3)}
+                    </div>
+                  </div>
+
+                  <div className="rounded-[16px] border border-slate-200 bg-white p-3 shadow-sm">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Total numărat</div>
+                    <div className="mt-2 text-lg font-semibold text-slate-900">
+                      {formatNumber(selectedInventoryDoc.summary.totalCountedQty, 3)}
+                    </div>
+                  </div>
+
+                  <div className="rounded-[16px] border border-slate-200 bg-white p-3 shadow-sm">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Diferență totală</div>
+                    <div className={`mt-2 text-lg font-semibold ${diffClass(selectedInventoryDoc.summary.totalDifferenceQty)}`}>
+                      {formatNumber(selectedInventoryDoc.summary.totalDifferenceQty, 3)}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                  <div className="mb-4 text-lg font-semibold text-slate-900">Poziții inventar</div>
+
+                  <div className="overflow-hidden rounded-[22px] border border-slate-200">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 text-slate-500">
+                        <tr>
+                          <th className="px-3 py-2.5 text-left font-medium">Produs</th>
+                          <th className="px-3 py-2.5 text-left font-medium">SKU</th>
+                          <th className="px-3 py-2.5 text-left font-medium">UM</th>
+                          <th className="px-3 py-2.5 text-left font-medium">Scriptic</th>
+                          <th className="px-3 py-2.5 text-left font-medium">Numărat</th>
+                          <th className="px-3 py-2.5 text-left font-medium">Diferență</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedInventoryDoc.items.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="px-4 py-6 text-center text-slate-500">
+                              Nu există poziții în inventar.
+                            </td>
+                          </tr>
+                        ) : (
+                          selectedInventoryDoc.items.map((item) => (
+                            <tr key={item.id} className="border-t border-slate-200">
+                              <td className="px-3 py-2.5 font-semibold text-slate-900">{item.product.name}</td>
+                              <td className="px-3 py-2.5 text-slate-600">{item.product.sku || "-"}</td>
+                              <td className="px-3 py-2.5 text-slate-600">{item.product.uom?.code || "-"}</td>
+                              <td className="px-3 py-2.5 text-slate-600">{formatNumber(item.systemQty, 3)}</td>
+                              <td className="px-3 py-2.5 text-slate-600">{formatNumber(item.countedQty, 3)}</td>
+                              <td className={`px-3 py-2.5 ${diffClass(item.differenceQty)}`}>
+                                {formatNumber(item.differenceQty, 3)}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {selectedInventoryDoc.note ? (
+                  <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                    <div className="mb-2 text-lg font-semibold text-slate-900">Observații</div>
+                    <div className="text-sm text-slate-600">{selectedInventoryDoc.note}</div>
+                  </div>
+                ) : null}
               </div>
             )}
           </div>

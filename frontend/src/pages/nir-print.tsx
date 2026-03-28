@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
+import { API_BASE as API, getToken, authHeaders } from "../lib/api"
+import { formatNumberRo } from "../lib/format"
 
-const API = "http://localhost:3001"
 
 type PrintRow = {
   no: number
@@ -25,7 +26,7 @@ function getParams() {
 }
 
 function formatNumber(value: any, digits = 2) {
-  return Number(value || 0).toFixed(digits)
+  return formatNumberRo(value, digits)
 }
 
 function formatDate(value: any) {
@@ -56,9 +57,7 @@ function toNumber(value: any) {
 
 export default function NirPrintPage() {
   const token =
-    localStorage.getItem("token") ||
-    localStorage.getItem("access_token") ||
-    ""
+    getToken() || ""
 
   const { id: receiptId, mode } = getParams()
 

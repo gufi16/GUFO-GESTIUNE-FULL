@@ -1,7 +1,15 @@
-import PageHeader from "../components/PageHeader"
 import { useEffect, useMemo, useState } from "react"
-
-const API = "http://localhost:3001"
+import PageHeader from "../components/PageHeader"
+import {
+  InlineNotice,
+  documentButtonPrimaryClass,
+  documentButtonSecondaryClass,
+  documentInputClass,
+  documentTextareaClass,
+  readonlyInputStyle,
+} from "../components/DocumentUi"
+import { API_BASE as API, getToken } from "../lib/api"
+import { getDocumentNumbering, getPreviewValue, type NumberingPayload } from "../lib/numbering"
 
 type Supplier = {
   id: string
@@ -14,107 +22,90 @@ type Supplier = {
   country?: string | null
   phone?: string | null
   email?: string | null
-  isActive?: boolean
 }
 
 function emptyForm() {
-  return {
-    name: "",
-    code: "",
-    cif: "",
-    regCom: "",
-    address: "",
-    city: "",
-    country: "România",
-    phone: "",
-    email: ""
-  }
+  return { id: "", name: "", code: "", cif: "", regCom: "", address: "", city: "", country: "Romania", phone: "", email: "" }
 }
 
 export default function FurnizoriPage() {
-  const token =
-    localStorage.getItem("token") ||
-    localStorage.getItem("access_token") ||
-    ""
-
+  const token = getToken() || ""
   const [items, setItems] = useState<Supplier[]>([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [query, setQuery] = useState("")
   const [error, setError] = useState("")
-  const [success, setSuccess] = useState("")
-
-  const [form, setForm] = useState(emptyForm())
+  const [modalOpen, setModalOpen] = useState(false)
+  const [form, setForm] = useState<any>(emptyForm())
+  const [numbering, setNumbering] = useState<NumberingPayload["previews"] | null>(null)
 
   useEffect(() => {
     loadSuppliers()
+    loadNumbering()
   }, [])
+
+  async function loadNumbering() {
+    try {
+      const data = await getDocumentNumbering()
+      setNumbering(data?.previews || null)
+    } catch {
+      setNumbering(null)
+    }
+  }
 
   async function loadSuppliers(search = "") {
     if (!token) {
-      setError("Nu există token de autentificare. Fă login din nou.")
+      setError("Nu exista token de autentificare. Fa login din nou.")
       return
     }
-
     setLoading(true)
     setError("")
-
     try {
-      const res = await fetch(
-        `${API}/api/v1/meta/suppliers${search ? `?q=${encodeURIComponent(search)}` : ""}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        }
-      )
-
+      const res = await fetch(`${API}/api/v1/meta/suppliers${search ? `?q=${encodeURIComponent(search)}` : ""}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
       const data = await res.json().catch(() => ({}))
-
-      if (res.status === 401) {
-        setError("Token expirat sau invalid. Fă login din nou.")
-        setItems([])
-        return
-      }
-
-      if (!data.ok) {
-        setError(data.error || "Nu pot încărca furnizorii.")
-        setItems([])
-        return
-      }
-
+      if (!res.ok || !data?.ok) throw new Error(data?.error || "Nu pot incarca furnizorii.")
       setItems(Array.isArray(data.suppliers) ? data.suppliers : [])
-    } catch {
-      setError("Nu pot încărca furnizorii.")
+    } catch (e: any) {
+      setError(e?.message || "Nu pot incarca furnizorii.")
       setItems([])
     } finally {
       setLoading(false)
     }
   }
 
+  function openNewModal() {
+    setForm({ ...emptyForm(), code: getPreviewValue(numbering, "supplier") })
+    setModalOpen(true)
+  }
+
+  function openEditModal(item: Supplier) {
+    setForm({
+      id: item.id,
+      name: item.name || "",
+      code: item.code || "",
+      cif: item.cif || "",
+      regCom: item.regCom || "",
+      address: item.address || "",
+      city: item.city || "",
+      country: item.country || "Romania",
+      phone: item.phone || "",
+      email: item.email || "",
+    })
+    setModalOpen(true)
+  }
+
   async function saveSupplier() {
-    setSuccess("")
-    setError("")
-
-    if (!token) {
-      setError("Nu există token de autentificare. Fă login din nou.")
-      return
-    }
-
-    if (!form.name.trim()) {
-      setError("Completează denumirea furnizorului.")
-      return
-    }
+    if (!token) return setError("Nu exista token de autentificare. Fa login din nou.")
+    if (!form.name.trim()) return setError("Completeaza denumirea furnizorului.")
 
     setSaving(true)
-
+    setError("")
     try {
-      const res = await fetch(`${API}/api/v1/meta/suppliers`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
+      const res = await fetch(form.id ? `${API}/api/v1/meta/suppliers/${form.id}` : `${API}/api/v1/meta/suppliers`, {
+        method: form.id ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           name: form.name.trim(),
           code: form.code.trim() || null,
@@ -124,293 +115,142 @@ export default function FurnizoriPage() {
           city: form.city.trim() || null,
           country: form.country.trim() || null,
           phone: form.phone.trim() || null,
-          email: form.email.trim() || null
-        })
+          email: form.email.trim() || null,
+        }),
       })
-
       const data = await res.json().catch(() => ({}))
-
-      if (res.status === 401) {
-        setError("Token expirat sau invalid. Fă login din nou.")
-        return
-      }
-
-      if (!data.ok) {
-        setError(data.error || "Nu am putut salva furnizorul.")
-        return
-      }
-
+      if (!res.ok || !data?.ok) throw new Error(data?.error || "Nu am putut salva furnizorul.")
+      setModalOpen(false)
       setForm(emptyForm())
-      setSuccess("Furnizorul a fost salvat.")
       await loadSuppliers(query.trim())
-    } catch {
-      setError("Nu am putut salva furnizorul.")
+      await loadNumbering()
+    } catch (e: any) {
+      setError(e?.message || "Nu am putut salva furnizorul.")
     } finally {
       setSaving(false)
     }
   }
 
-  const filteredCount = useMemo(() => items.length, [items])
+  const filtered = useMemo(() => items, [items])
 
   return (
-    <div style={{ padding: 20 }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: 12,
-          flexWrap: "wrap",
-          marginBottom: 20
-        }}
-      >
-        <PageHeader badge="nomenclator" title="Furnizori" subtitle="Administrare furnizori utilizați în recepții și documente." />
+    <div className="space-y-3">
+      <PageHeader
+        badge="nomenclator"
+        title="Furnizori"
+      />
 
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <a href="/nomenclator" style={{ textDecoration: "none" }}>
-            <button style={btnSecondary}>Înapoi la nomenclator</button>
-          </a>
-          <button style={btnSecondary} onClick={() => loadSuppliers(query.trim())}>
-            Refresh
-          </button>
-        </div>
-      </div>
+      {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
 
-      {error ? <div style={errorBox}>{error}</div> : null}
-      {success ? <div style={successBox}>{success}</div> : null}
+      <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div className="text-[16px] font-semibold text-[#17324D]">Lista furnizori</div>
+            <div className="mt-1 text-xs text-slate-500">{filtered.length} furnizori</div>
+          </div>
 
-      <Section title="Adaugă furnizor">
-        <div style={grid2}>
-          <Field label="Denumire *">
+          <div className="flex w-full max-w-xl gap-2">
             <input
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              style={input}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Cauta dupa denumire, cod sau CIF..."
+              className={documentInputClass}
             />
-          </Field>
-
-          <Field label="Cod">
-            <input
-              value={form.code}
-              onChange={(e) => setForm({ ...form, code: e.target.value })}
-              style={input}
-            />
-          </Field>
-
-          <Field label="CIF">
-            <input
-              value={form.cif}
-              onChange={(e) => setForm({ ...form, cif: e.target.value })}
-              style={input}
-            />
-          </Field>
-
-          <Field label="Reg. Com.">
-            <input
-              value={form.regCom}
-              onChange={(e) => setForm({ ...form, regCom: e.target.value })}
-              style={input}
-            />
-          </Field>
-
-          <Field label="Adresă">
-            <input
-              value={form.address}
-              onChange={(e) => setForm({ ...form, address: e.target.value })}
-              style={input}
-            />
-          </Field>
-
-          <Field label="Oraș">
-            <input
-              value={form.city}
-              onChange={(e) => setForm({ ...form, city: e.target.value })}
-              style={input}
-            />
-          </Field>
-
-          <Field label="Țară">
-            <input
-              value={form.country}
-              onChange={(e) => setForm({ ...form, country: e.target.value })}
-              style={input}
-            />
-          </Field>
-
-          <Field label="Telefon">
-            <input
-              value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
-              style={input}
-            />
-          </Field>
-
-          <Field label="Email">
-            <input
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              style={input}
-            />
-          </Field>
-        </div>
-
-        <div style={{ marginTop: 14 }}>
-          <button style={btnPrimary} onClick={saveSupplier} disabled={saving}>
-            {saving ? "Se salvează..." : "Salvează furnizor"}
-          </button>
-        </div>
-      </Section>
-
-      <Section title="Listă furnizori">
-        <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Caută după denumire, cod sau CIF..."
-            style={{ ...input, maxWidth: 380 }}
-          />
-          <button style={btnSecondary} onClick={() => loadSuppliers(query.trim())}>
-            Caută
-          </button>
-          <div style={{ alignSelf: "center", color: "#666", fontSize: 14 }}>
-            Rezultate: <b>{filteredCount}</b>
+            <button type="button" onClick={() => loadSuppliers(query.trim())} className={documentButtonSecondaryClass}>
+              Cauta
+            </button>
+            <button type="button" onClick={openNewModal} className={documentButtonPrimaryClass}>
+              Adauga furnizor
+            </button>
           </div>
         </div>
 
-        <div style={tableWrap}>
-          <table style={tableStyle}>
-            <thead>
-              <tr>
-                <th style={th}>Denumire</th>
-                <th style={th}>Cod</th>
-                <th style={th}>CIF</th>
-                <th style={th}>Reg. Com.</th>
-                <th style={th}>Oraș</th>
-                <th style={th}>Telefon</th>
-                <th style={th}>Email</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td style={td} colSpan={7}>Se încarcă...</td>
-                </tr>
-              ) : items.length === 0 ? (
-                <tr>
-                  <td style={td} colSpan={7}>Nu există furnizori.</td>
-                </tr>
-              ) : (
-                items.map((item) => (
-                  <tr key={item.id}>
-                    <td style={td}>{item.name}</td>
-                    <td style={td}>{item.code || "-"}</td>
-                    <td style={td}>{item.cif || "-"}</td>
-                    <td style={td}>{item.regCom || "-"}</td>
-                    <td style={td}>{item.city || "-"}</td>
-                    <td style={td}>{item.phone || "-"}</td>
-                    <td style={td}>{item.email || "-"}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        <div className="mt-4 grid grid-cols-1 gap-2">
+          {loading ? (
+            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-7 text-center text-sm text-slate-500">
+              Se incarca furnizorii...
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-7 text-center text-sm text-slate-500">
+              Nu exista furnizori salvati.
+            </div>
+          ) : (
+            filtered.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => openEditModal(item)}
+                className="grid w-full grid-cols-1 gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-left transition hover:border-slate-300 hover:bg-white md:grid-cols-[minmax(220px,1.4fr)_140px_150px_150px]"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-[#17324D]">{item.name}</div>
+                  <div className="mt-1 truncate text-xs text-slate-500">{item.address || "fara adresa"}</div>
+                </div>
+                <div className="text-sm text-slate-700">{item.cif || "-"}</div>
+                <div className="text-sm text-slate-700">{item.phone || "-"}</div>
+                <div className="text-sm font-medium text-slate-600">{item.code || item.city || "deschide"}</div>
+              </button>
+            ))
+          )}
         </div>
-      </Section>
+      </div>
+
+      {modalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
+          <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-3 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-[18px] font-semibold text-[#17324D]">{form.id ? "Editeaza furnizor" : "Adauga furnizor"}</div>
+              </div>
+              <button type="button" onClick={() => setModalOpen(false)} className={documentButtonSecondaryClass}>
+                Inchide
+              </button>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+              {[
+                ["name", "Denumire furnizor"],
+                ["code", "Cod"],
+                ["cif", "CIF"],
+                ["regCom", "Reg. comertului"],
+                ["city", "Oras"],
+                ["country", "Tara"],
+                ["phone", "Telefon"],
+                ["email", "Email"],
+              ].map(([key, label]) => (
+                <div key={key}>
+                  <label className="mb-1.5 block text-sm font-medium text-[#17324D]">{label}</label>
+                  <input
+                    value={form[key]}
+                    onChange={(e) => setForm((prev: any) => ({ ...prev, [key]: e.target.value }))}
+                    className={documentInputClass}
+                    readOnly={key === "code"}
+                    style={key === "code" ? readonlyInputStyle : undefined}
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4">
+              <label className="mb-1.5 block text-sm font-medium text-[#17324D]">Adresa</label>
+              <textarea
+                value={form.address}
+                onChange={(e) => setForm((prev: any) => ({ ...prev, address: e.target.value }))}
+                className={documentTextareaClass}
+              />
+            </div>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => setModalOpen(false)} className={documentButtonSecondaryClass}>
+                Renunta
+              </button>
+              <button type="button" onClick={saveSupplier} disabled={saving} className={documentButtonPrimaryClass}>
+                {saving ? "Se salveaza..." : "Salveaza furnizor"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
-}
-
-function Section({ title, children }: any) {
-  return (
-    <div style={{ marginBottom: 28 }}>
-      <h2 style={{ marginBottom: 12 }}>{title}</h2>
-      {children}
-    </div>
-  )
-}
-
-function Field({ label, children }: any) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <label style={{ fontSize: 14, color: "#555" }}>{label}</label>
-      {children}
-    </div>
-  )
-}
-
-const grid2: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-  gap: 14
-}
-
-const input: React.CSSProperties = {
-  padding: "9px 11px",
-  borderRadius: 8,
-  border: "1px solid #d1d5db",
-  outline: "none",
-  width: "100%",
-  boxSizing: "border-box"
-}
-
-const btnPrimary: React.CSSProperties = {
-  padding: "9px 14px",
-  borderRadius: 8,
-  border: "none",
-  background: "#111",
-  color: "#fff",
-  cursor: "pointer"
-}
-
-const btnSecondary: React.CSSProperties = {
-  padding: "9px 14px",
-  borderRadius: 8,
-  border: "1px solid #ddd",
-  background: "#fff",
-  cursor: "pointer"
-}
-
-const errorBox: React.CSSProperties = {
-  border: "1px solid #fecaca",
-  background: "#fef2f2",
-  color: "#991b1b",
-  borderRadius: 10,
-  padding: 12,
-  marginBottom: 16
-}
-
-const successBox: React.CSSProperties = {
-  border: "1px solid #bbf7d0",
-  background: "#f0fdf4",
-  color: "#166534",
-  borderRadius: 10,
-  padding: 12,
-  marginBottom: 16
-}
-
-const tableWrap: React.CSSProperties = {
-  overflowX: "auto",
-  border: "1px solid #e5e5e5",
-  borderRadius: 12,
-  background: "#fff"
-}
-
-const tableStyle: React.CSSProperties = {
-  width: "100%",
-  borderCollapse: "collapse",
-  minWidth: 900
-}
-
-const th: React.CSSProperties = {
-  textAlign: "left",
-  padding: 12,
-  borderBottom: "1px solid #e5e5e5",
-  background: "#fafafa",
-  fontSize: 13
-}
-
-const td: React.CSSProperties = {
-  padding: 12,
-  borderBottom: "1px solid #f1f5f9",
-  fontSize: 14
 }
