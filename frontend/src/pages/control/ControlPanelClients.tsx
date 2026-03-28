@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { Building2, Check, Copy, Crown, Filter, LogOut, Plus, RefreshCw, Search, ShieldCheck, Store, Users, Wallet, X } from "lucide-react"
 import { api } from "../../lib/api"
-import { logout, me } from "../../lib/auth"
+import { controlLogout, controlMe } from "../../lib/controlAuth"
 
 type AdminClientItem = {
   id: string
@@ -213,7 +213,7 @@ export default function ControlPanelClients() {
 
   async function loadOwnerProfile() {
     try {
-      const profile = await me()
+      const profile = await controlMe()
       setOwnerEmail(typeof (profile as any)?.email === "string" ? (profile as any).email : "owner@gufo.local")
     } catch {
       setOwnerEmail("owner@gufo.local")
@@ -273,7 +273,7 @@ export default function ControlPanelClients() {
   async function handleLogout() {
     try {
       setLoggingOut(true)
-      logout()
+      controlLogout()
       navigate("/cp/login", { replace: true })
     } finally {
       setLoggingOut(false)

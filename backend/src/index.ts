@@ -79,6 +79,11 @@ const LoginSchema = z.object({
   tenantId: z.string().optional(),
 })
 
+const ControlPanelLoginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(4),
+})
+
 app.post("/api/v1/auth/login", async (req, res) => {
   const parsed = LoginSchema.safeParse(req.body)
   if (!parsed.success) {
@@ -123,6 +128,52 @@ app.post("/api/v1/auth/login", async (req, res) => {
   return res.json({
     ok: true,
     access_token: token,
+  })
+})
+
+app.post("/api/v1/admin/auth/login", async (req, res) => {
+  const parsed = ControlPanelLoginSchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res.status(400).json({ ok: false, error: parsed.error.flatten() })
+  }
+
+  const controlEmail = String(process.env.CONTROL_PANEL_EMAIL || "owner@gufo.local")
+    .trim()
+    .toLowerCase()
+  const controlPassword = String(process.env.CONTROL_PANEL_PASSWORD || "gufo1234")
+
+  if (
+    parsed.data.email.trim().toLowerCase() !== controlEmail ||
+    parsed.data.password !== controlPassword
+  ) {
+    return res.status(401).json({ ok: false, error: "Invalid credentials" })
+  }
+
+  const token = signAccessToken({
+    tenantId: null,
+    userId: "control-panel-owner",
+    role: "OWNER",
+    email: controlEmail,
+  })
+
+  return res.json({
+    ok: true,
+    access_token: token,
+  })
+})
+
+app.get("/api/v1/admin/me", requireAuth, async (req: AuthedRequest, res) => {
+  const auth = req.auth!
+
+  if (auth.role !== "OWNER") {
+    return res.status(403).json({ ok: false, error: "Acces permis doar owner-ului" })
+  }
+
+  return res.json({
+    ok: true,
+    user_id: auth.userId,
+    role: auth.role,
+    email: auth.email || process.env.CONTROL_PANEL_EMAIL || "owner@gufo.local",
   })
 })
 

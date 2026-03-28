@@ -1,22 +1,27 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
+import { controlLogin } from "../../lib/controlAuth"
 
 export default function ControlPanelLogin() {
   const nav = useNavigate()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [err, setErr] = useState("")
+  const [loading, setLoading] = useState(false)
 
-  function onSubmit(e: React.FormEvent) {
+  async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
+    setErr("")
+    setLoading(true)
 
-    if (email === "dev@gufo.ro" && password === "gufo1234") {
-      localStorage.setItem("control_token", "DEV_CONTROL_PANEL_TOKEN")
+    try {
+      await controlLogin(email, password)
       nav("/control-panel/clienti", { replace: true })
-      return
+    } catch {
+      setErr("Login invalid")
+    } finally {
+      setLoading(false)
     }
-
-    setErr("Login invalid")
   }
 
   return (
@@ -27,7 +32,7 @@ export default function ControlPanelLogin() {
         </div>
 
         <h1 className="mt-3 text-2xl font-semibold text-slate-950">
-          Login developer
+          Login control panel
         </h1>
 
         <form className="mt-6 space-y-4" onSubmit={onSubmit}>
@@ -37,18 +42,18 @@ export default function ControlPanelLogin() {
               className="mt-1 h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="dev@gufo.ro"
+              placeholder="owner@gufo.local"
             />
           </div>
 
           <div>
-            <label className="text-xs text-slate-600">Parolă</label>
+            <label className="text-xs text-slate-600">Parola</label>
             <input
               type="password"
               className="mt-1 h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="gufo1234"
+              placeholder="Parola"
             />
           </div>
 
@@ -59,10 +64,11 @@ export default function ControlPanelLogin() {
           ) : null}
 
           <button
-            className="w-full rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white"
+            className="w-full rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
             type="submit"
+            disabled={loading}
           >
-            Intră în Control Panel
+            {loading ? "Se autentifica..." : "Intra in Control Panel"}
           </button>
         </form>
       </div>
