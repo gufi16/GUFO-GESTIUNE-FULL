@@ -1,6 +1,10 @@
+const envApiBase = (import.meta as any)?.env?.VITE_API_URL?.replace(/\/+$/, "")
+const isRailwayHost =
+  typeof window !== "undefined" && /\.railway\.app$/i.test(window.location.hostname || "")
+
 export const API_BASE =
-  (import.meta as any)?.env?.VITE_API_URL?.replace(/\/+$/, "") ||
-  "http://localhost:3001"
+  envApiBase ||
+  (isRailwayHost ? "https://gufo-gestiune-full-production.up.railway.app" : "http://localhost:3001")
 
 export function getToken(): string {
   const pathname =
