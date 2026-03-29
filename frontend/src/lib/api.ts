@@ -1,9 +1,22 @@
 const envApiBase = (import.meta as any)?.env?.VITE_API_URL?.replace(/\/+$/, "")
 const hostname = typeof window !== "undefined" ? window.location.hostname || "" : ""
 const isLocalHost = /^(localhost|127\.0\.0\.1)$/i.test(hostname)
-const railwayApiBase = "https://gufo-gestiune-full-production.up.railway.app"
 
-export const API_BASE = envApiBase || (isLocalHost ? "http://localhost:3001" : railwayApiBase)
+function resolveHostedApiBase() {
+  if (!hostname) return "https://api.gufo.ink"
+
+  if (hostname === "app.gufo.ink" || hostname.endsWith(".gufo.ink")) {
+    return "https://api.gufo.ink"
+  }
+
+  if (hostname.endsWith(".up.railway.app")) {
+    return "https://gufo-gestiune-full-production.up.railway.app"
+  }
+
+  return "https://api.gufo.ink"
+}
+
+export const API_BASE = envApiBase || (isLocalHost ? "http://localhost:3001" : resolveHostedApiBase())
 
 export function getToken(): string {
   const pathname =
