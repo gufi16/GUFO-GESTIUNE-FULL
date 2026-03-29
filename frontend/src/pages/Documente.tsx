@@ -385,6 +385,20 @@ function minutesReasonLabel(code?: string | null) {
   return code || "-"
 }
 
+function MobileTable({
+  children,
+  minWidthClass = "min-w-[680px]",
+}: {
+  children: React.ReactNode
+  minWidthClass?: string
+}) {
+  return (
+    <div className="overflow-x-auto rounded-[22px] border border-slate-200">
+      <div className={minWidthClass}>{children}</div>
+    </div>
+  )
+}
+
 export default function Documente() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -2123,7 +2137,7 @@ export default function Documente() {
       {selectedConsumptionDocId ? (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-950/40 p-4 md:p-8">
           <div className="max-h-[88vh] w-full max-w-5xl overflow-auto rounded-2xl border border-slate-200 bg-white p-3 shadow-2xl">
-            <div className="mb-5 flex items-start justify-between gap-4">
+            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <div className="text-lg font-semibold text-slate-900">
                   {selectedConsumptionDoc ? `Detaliu bon de consum ${selectedConsumptionDoc.docNo}` : "Detaliu bon de consum"}
@@ -2133,7 +2147,7 @@ export default function Documente() {
                 </div>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => selectedConsumptionDoc && openPdf(selectedConsumptionDoc.id)}
@@ -2219,7 +2233,7 @@ export default function Documente() {
                 <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
                   <div className="mb-4 text-lg font-semibold text-slate-900">Linii de consum</div>
 
-                  <div className="overflow-hidden rounded-[22px] border border-slate-200">
+                  <MobileTable minWidthClass="min-w-[720px]">
                     <table className="w-full text-sm">
                       <thead className="bg-slate-50 text-slate-500">
                         <tr>
@@ -2244,14 +2258,14 @@ export default function Documente() {
                         ))}
                       </tbody>
                     </table>
-                  </div>
+                  </MobileTable>
                 </div>
 
                 {selectedConsumptionDoc.sale?.items?.length ? (
                   <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
                     <div className="mb-4 text-lg font-semibold text-slate-900">Linii vânzare</div>
 
-                    <div className="overflow-hidden rounded-[22px] border border-slate-200">
+                    <MobileTable minWidthClass="min-w-[640px]">
                       <table className="w-full text-sm">
                         <thead className="bg-slate-50 text-slate-500">
                           <tr>
@@ -2272,7 +2286,7 @@ export default function Documente() {
                           ))}
                         </tbody>
                       </table>
-                    </div>
+                    </MobileTable>
                   </div>
                 ) : null}
               </div>
@@ -2284,7 +2298,7 @@ export default function Documente() {
       {selectedProductionDocId ? (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-950/40 p-4 md:p-8">
           <div className="max-h-[88vh] w-full max-w-5xl overflow-auto rounded-2xl border border-slate-200 bg-white p-3 shadow-2xl">
-            <div className="mb-5 flex items-start justify-between gap-4">
+            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <div className="text-lg font-semibold text-slate-900">
                   {selectedProductionDoc ? `Detaliu producție ${selectedProductionDoc.docNo}` : "Detaliu producție"}
@@ -2294,7 +2308,7 @@ export default function Documente() {
                 </div>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => selectedProductionDoc && openProductionPdf(selectedProductionDoc.id)}
@@ -2357,7 +2371,7 @@ export default function Documente() {
                       </div>
                     </div>
 
-                    <div className="overflow-hidden rounded-[22px] border border-slate-200">
+                    <MobileTable minWidthClass="min-w-[620px]">
                       <table className="w-full text-sm">
                         <thead className="bg-slate-50 text-slate-500">
                           <tr>
@@ -2386,7 +2400,7 @@ export default function Documente() {
                           )}
                         </tbody>
                       </table>
-                    </div>
+                    </MobileTable>
                   </div>
                 ))}
               </div>
@@ -2398,7 +2412,7 @@ export default function Documente() {
       {selectedInventoryDocId ? (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-950/40 p-4 md:p-8">
           <div className="max-h-[88vh] w-full max-w-5xl overflow-auto rounded-2xl border border-slate-200 bg-white p-3 shadow-2xl">
-            <div className="mb-5 flex items-start justify-between gap-4">
+            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <div className="text-lg font-semibold text-slate-900">
                   {selectedInventoryDoc ? `Detaliu inventar ${selectedInventoryDoc.docNo}` : "Detaliu inventar"}
@@ -2408,7 +2422,7 @@ export default function Documente() {
                 </div>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => selectedInventoryDoc && openInventoryPdf(selectedInventoryDoc.id)}
@@ -2493,7 +2507,7 @@ export default function Documente() {
                 <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
                   <div className="mb-4 text-lg font-semibold text-slate-900">Poziții inventar</div>
 
-                  <div className="overflow-hidden rounded-[22px] border border-slate-200">
+                  <MobileTable minWidthClass="min-w-[760px]">
                     <table className="w-full text-sm">
                       <thead className="bg-slate-50 text-slate-500">
                         <tr>
@@ -2528,7 +2542,7 @@ export default function Documente() {
                         )}
                       </tbody>
                     </table>
-                  </div>
+                  </MobileTable>
                 </div>
 
                 {selectedInventoryDoc.note ? (

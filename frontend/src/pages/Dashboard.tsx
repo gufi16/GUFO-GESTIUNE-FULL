@@ -163,7 +163,7 @@ function SalesChart({
   onDateToChange: (value: string) => void
   onReset: () => void
 }) {
-  const width = 760
+  const width = 640
   const height = 250
   const padding = 28
   const maxValue = Math.max(...data.map((d) => d.value), 1)
@@ -190,8 +190,8 @@ function SalesChart({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-end gap-2">
-          <div>
+        <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-[repeat(2,minmax(0,1fr))_auto] xl:w-auto">
+          <div className="min-w-0">
             <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
               De la
             </label>
@@ -199,11 +199,11 @@ function SalesChart({
               type="date"
               value={dateFrom}
               onChange={(e) => onDateFromChange(e.target.value)}
-              className="h-9 rounded-xl border border-[#E8E3DA] bg-[#FCFBF8] px-3 text-sm text-[#17324D] outline-none transition focus:border-[#F39C12] focus:bg-white focus:ring-2 focus:ring-[#FFF1D6]"
+              className="h-9 w-full rounded-xl border border-[#E8E3DA] bg-[#FCFBF8] px-3 text-sm text-[#17324D] outline-none transition focus:border-[#F39C12] focus:bg-white focus:ring-2 focus:ring-[#FFF1D6]"
             />
           </div>
 
-          <div>
+          <div className="min-w-0">
             <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
               Până la
             </label>
@@ -211,7 +211,7 @@ function SalesChart({
               type="date"
               value={dateTo}
               onChange={(e) => onDateToChange(e.target.value)}
-              className="h-9 rounded-xl border border-[#E8E3DA] bg-[#FCFBF8] px-3 text-sm text-[#17324D] outline-none transition focus:border-[#F39C12] focus:bg-white focus:ring-2 focus:ring-[#FFF1D6]"
+              className="h-9 w-full rounded-xl border border-[#E8E3DA] bg-[#FCFBF8] px-3 text-sm text-[#17324D] outline-none transition focus:border-[#F39C12] focus:bg-white focus:ring-2 focus:ring-[#FFF1D6]"
             />
           </div>
 
@@ -237,8 +237,8 @@ function SalesChart({
         </div>
       </div>
 
-      <div className="w-full overflow-x-auto">
-        <svg viewBox={`0 0 ${width} ${height}`} className="h-[190px] min-w-[640px] w-full">
+      <div className="w-full overflow-hidden">
+        <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="h-[190px] w-full sm:h-[210px]">
           <defs>
             <linearGradient id="salesFill" x1="0" x2="0" y1="0" y2="1">
               <stop offset="0%" stopColor="#F39C12" stopOpacity="0.22" />
@@ -349,7 +349,7 @@ function SectionCard({
 }) {
   return (
     <div className="rounded-[18px] border border-[#E8E3DA] bg-white p-3.5 shadow-sm shadow-[#17324D]/[0.04]">
-      <div className="mb-3 flex items-start justify-between gap-3">
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="text-[15px] font-semibold text-slate-900">{title}</div>
           {subtitle ? <div className="mt-0.5 text-[13px] text-slate-500">{subtitle}</div> : null}
@@ -661,7 +661,7 @@ export default function Dashboard() {
                 <div
                   key={`${item.name}-${index}`}
                   className={[
-                "grid grid-cols-[minmax(150px,1.4fr)_90px_130px] items-center gap-3 rounded-xl border px-3 py-2.5",
+                "grid grid-cols-1 gap-2 rounded-xl border px-3 py-2.5 sm:grid-cols-[minmax(150px,1.4fr)_90px_130px] sm:items-center sm:gap-3",
                     item.profit <= 0
                       ? "border-red-200 bg-red-50"
                       : "border-slate-200 bg-slate-50",
@@ -673,10 +673,10 @@ export default function Dashboard() {
                       <div className="mt-1 text-xs font-semibold text-red-600">neprofitabil</div>
                     ) : null}
                   </div>
-                  <div className="rounded-full bg-[#17324D] px-3 py-1 text-center text-xs font-semibold text-white">
+                  <div className="w-fit rounded-full bg-[#17324D] px-3 py-1 text-center text-xs font-semibold text-white sm:justify-self-center">
                     {formatQtyRo(item.qty || 0)}
                   </div>
-                  <div className={["text-sm font-semibold text-right", item.profit <= 0 ? "text-red-600" : "text-emerald-700"].join(" ")}>
+                  <div className={["text-sm font-semibold sm:text-right", item.profit <= 0 ? "text-red-600" : "text-emerald-700"].join(" ")}>
                     {formatRon(item.profit)}
                   </div>
                 </div>
