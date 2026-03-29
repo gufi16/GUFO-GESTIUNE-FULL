@@ -1138,8 +1138,8 @@ export default function NirPage() {
         />
       </div>
 
-      <div className="no-print" style={topActions}>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+      <div className="no-print" style={isMobileViewport ? topActionsMobile : topActions}>
+        <div style={isMobileViewport ? topActionsGroupMobile : { display: "flex", gap: 10, flexWrap: "wrap" }}>
           <a href="/inregistrare-document/nir" style={{ textDecoration: "none" }}>
             <button style={btnSecondary}>Înapoi la listă</button>
           </a>
@@ -1201,8 +1201,9 @@ export default function NirPage() {
       ) : (
         <>
           <Section title="Antet document">
-            <div style={headerGrid}>
-              <Field label="Locație">
+            <div style={isMobileViewport ? headerGridMobile : headerGrid}>
+              <div style={isMobileViewport ? mobileHeaderPrimaryField : undefined}>
+                <Field label="Locație">
                 <select
                   value={header.locationId}
                   onChange={(e) => {
@@ -1220,7 +1221,8 @@ export default function NirPage() {
                     </option>
                   ))}
                 </select>
-              </Field>
+                </Field>
+              </div>
 
               <Field label="Nr. document">
                 <input
@@ -1241,7 +1243,8 @@ export default function NirPage() {
                 />
               </Field>
 
-              <Field label="Furnizor">
+              <div style={isMobileViewport ? mobileHeaderPrimaryField : undefined}>
+                <Field label="Furnizor">
                 <input
                   type="text"
                   placeholder="Scrie primele 2-3 litere..."
@@ -1298,7 +1301,8 @@ export default function NirPage() {
                     )}
                   </div>
                 )}
-              </Field>
+                </Field>
+              </div>
 
               <Field label="Cod furnizor">
                 <input
@@ -2237,10 +2241,34 @@ const topActions: CSSProperties = {
   flexWrap: "wrap",
 }
 
+const topActionsMobile: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "stretch",
+  marginBottom: 12,
+  gap: 8,
+}
+
+const topActionsGroupMobile: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr",
+  gap: 8,
+}
+
 const headerGrid: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
   gap: 8,
+}
+
+const headerGridMobile: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 10,
+}
+
+const mobileHeaderPrimaryField: CSSProperties = {
+  gridColumn: "1 / -1",
 }
 
 const sectionWrap: CSSProperties = {
