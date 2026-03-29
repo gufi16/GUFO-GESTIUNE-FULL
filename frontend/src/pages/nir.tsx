@@ -2251,7 +2251,7 @@ const topActionsMobile: CSSProperties = {
 
 const topActionsGroupMobile: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "1fr",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
   gap: 8,
 }
 
@@ -2263,7 +2263,7 @@ const headerGrid: CSSProperties = {
 
 const headerGridMobile: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gridTemplateColumns: "1fr",
   gap: 10,
 }
 
