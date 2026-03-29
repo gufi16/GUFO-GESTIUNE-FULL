@@ -163,6 +163,9 @@ export default function NirPage() {
   const token = rawToken()
   const receiptId = getReceiptIdFromUrl()
   const incomingInvoiceId = getIncomingInvoiceIdFromUrl()
+  const [isMobileViewport, setIsMobileViewport] = useState(
+    () => typeof window !== "undefined" && window.innerWidth < 768
+  )
 
   const [products, setProducts] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])
@@ -237,6 +240,16 @@ export default function NirPage() {
     })
     return unsubscribe
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const syncViewport = () => setIsMobileViewport(window.innerWidth < 768)
+
+    syncViewport()
+    window.addEventListener("resize", syncViewport)
+    return () => window.removeEventListener("resize", syncViewport)
   }, [])
 
   useEffect(() => {
@@ -1290,7 +1303,7 @@ export default function NirPage() {
               </div>
             </div>
 
-            <div style={rowsHeader}>
+            <div style={isMobileViewport ? { ...rowsHeader, display: "none" } : rowsHeader}>
               <div>Produs</div>
               <div>Ambalaj</div>
               <div>Cant.</div>
@@ -1301,7 +1314,7 @@ export default function NirPage() {
               <div></div>
             </div>
 
-            <div style={linesViewport}>
+            <div style={isMobileViewport ? { ...linesViewport, ...linesViewportMobile } : linesViewport}>
               <div style={rowsStack}>
                 {lines.map((line) => {
                   const matches = productMatches(line.search)
@@ -1325,8 +1338,14 @@ export default function NirPage() {
                         background: isDuplicate ? "#fffdf5" : rowCard.background,
                       }}
                     >
-                      <div style={rowMain}>
-                        <div style={productCell}>
+                      <div
+                        style={{
+                          ...(isMobileViewport ? rowMainMobile : rowMain),
+                          minWidth: 0,
+                        }}
+                      >
+                        <div style={{ ...productCell, minWidth: 0 }}>
+                          {isMobileViewport && <div style={mobileGridLabel}>Produs</div>}
                           <input
                             data-grid-field="nir"
                             type="text"
@@ -1357,7 +1376,8 @@ export default function NirPage() {
                           )}
                         </div>
 
-                        <div>
+                        <div style={{ minWidth: 0 }}>
+                          {isMobileViewport && <div style={mobileGridLabel}>Ambalaj</div>}
                           <input
                             data-grid-field="nir"
                             type="text"
@@ -1367,7 +1387,8 @@ export default function NirPage() {
                           />
                         </div>
 
-                        <div>
+                        <div style={{ minWidth: 0 }}>
+                          {isMobileViewport && <div style={mobileGridLabel}>Cantitate</div>}
                           <input
                             data-grid-field="nir"
                             type="text"
@@ -1380,7 +1401,8 @@ export default function NirPage() {
                           />
                         </div>
 
-                        <div>
+                        <div style={{ minWidth: 0 }}>
+                          {isMobileViewport && <div style={mobileGridLabel}>Pret/buc</div>}
                           <input
                             data-grid-field="nir"
                             type="text"
@@ -1393,7 +1415,8 @@ export default function NirPage() {
                           />
                         </div>
 
-                        <div>
+                        <div style={{ minWidth: 0 }}>
+                          {isMobileViewport && <div style={mobileGridLabel}>TVA</div>}
                           <input
                             data-grid-field="nir"
                             type="text"
@@ -1406,7 +1429,8 @@ export default function NirPage() {
                           />
                         </div>
 
-                        <div>
+                        <div style={{ minWidth: 0 }}>
+                          {isMobileViewport && <div style={mobileGridLabel}>Cant./ambalaj</div>}
                           <input
                             data-grid-field="nir"
                             type="text"
@@ -1425,17 +1449,36 @@ export default function NirPage() {
                           />
                         </div>
 
-                        <div style={totalCell}>
+                        <div style={{ minWidth: 0 }}>
+                          {isMobileViewport && <div style={mobileGridLabel}>Total</div>}
+                          <div style={totalCell}>
                           <div style={totalValue}>{formatMoneyRo(computed.withSgrFc)}</div>
                           <div style={totalMeta}>
                             {computed.qty.toFixed(2)} amb × {computed.factor.toFixed(2)} ={" "}
                             {computed.qtyBase.toFixed(2)} buc
                           </div>
+                          </div>
                         </div>
 
-                        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 4,
+                            justifyContent: "flex-end",
+                            minWidth: 0,
+                          }}
+                        >
+                          {isMobileViewport && <div style={mobileGridLabel}>Actiuni</div>}
                           {!isPosted && (
-                            <button style={btnDangerIcon} onClick={() => removeLine(line.id)}>
+                            <button
+                              style={
+                                isMobileViewport
+                                  ? { ...btnDangerIcon, width: "100%" }
+                                  : btnDangerIcon
+                              }
+                              onClick={() => removeLine(line.id)}
+                            >
                               ✕
                             </button>
                           )}
@@ -1877,7 +1920,7 @@ const topActions: CSSProperties = {
 
 const headerGrid: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
   gap: 8,
 }
 
@@ -1937,6 +1980,12 @@ const linesViewport: CSSProperties = {
   paddingRight: 4,
 }
 
+const linesViewportMobile: CSSProperties = {
+  maxHeight: "none",
+  overflow: "visible",
+  paddingRight: 0,
+}
+
 const rowsStack: CSSProperties = {
   display: "flex",
   flexDirection: "column",
@@ -1955,6 +2004,13 @@ const rowMain: CSSProperties = {
   gridTemplateColumns: "minmax(260px,2.4fr) 80px 88px 96px 70px 110px 150px 44px",
   gap: 6,
   alignItems: "center",
+}
+
+const rowMainMobile: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr)",
+  gap: 8,
+  alignItems: "stretch",
 }
 
 const rowExtra: CSSProperties = {
@@ -2009,6 +2065,15 @@ const totalMeta: CSSProperties = {
   lineHeight: 1.15,
 }
 
+const mobileGridLabel: CSSProperties = {
+  fontSize: 10,
+  fontWeight: 800,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: 0.3,
+  paddingLeft: 2,
+}
+
 const totalsGrid: CSSProperties = {
   display: "flex",
   gap: 8,
@@ -2042,7 +2107,7 @@ const sgrInlineBox: CSSProperties = {
 
 const quickResultsGrid: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
   gap: 6,
 }
 
@@ -2156,7 +2221,8 @@ const inputCompactReadOnly: CSSProperties = {
 }
 
 const cardSmall: CSSProperties = {
-  minWidth: 160,
+  minWidth: 0,
+  flex: "1 1 160px",
   padding: 12,
   borderRadius: 12,
   border: "1px solid #e5e7eb",
@@ -2242,6 +2308,7 @@ const inlineActionBox: CSSProperties = {
   borderRadius: 8,
   padding: 8,
   background: "#f8fafc",
+  flexWrap: "wrap",
 }
 
 const sgrBadge: CSSProperties = {
@@ -2274,6 +2341,7 @@ const modalCard: CSSProperties = {
   boxShadow: "0 20px 60px rgba(0,0,0,0.18)",
   maxHeight: "90vh",
   overflowY: "auto",
+  overflowX: "hidden",
 }
 
 const modalHeader: CSSProperties = {
@@ -2281,6 +2349,7 @@ const modalHeader: CSSProperties = {
   justifyContent: "space-between",
   gap: 8,
   alignItems: "center",
+  flexWrap: "wrap",
 }
 
 const modalActions: CSSProperties = {
@@ -2288,4 +2357,5 @@ const modalActions: CSSProperties = {
   justifyContent: "flex-end",
   gap: 8,
   marginTop: 12,
+  flexWrap: "wrap",
 }
