@@ -410,6 +410,9 @@ export default function ProcesVerbalPage() {
               <div key={line.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <div className={`grid grid-cols-1 gap-2 ${isDeterioration ? "md:grid-cols-[2fr_110px_120px_1fr_44px]" : "md:grid-cols-[2fr_110px_120px_120px_1fr_44px]"}`}>
                   <div className="space-y-1">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500 md:hidden">
+                      Produs
+                    </div>
                     <input
                       value={line.search}
                       onChange={(e) => setLineValue(line.id, { search: e.target.value, productId: "" })}
@@ -434,6 +437,9 @@ export default function ProcesVerbalPage() {
                     ) : null}
                   </div>
 
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500 md:hidden">
+                    Cantitate
+                  </div>
                   <input
                     value={line.qty}
                     onChange={(e) => setLineValue(line.id, { qty: e.target.value })}
@@ -443,50 +449,75 @@ export default function ProcesVerbalPage() {
                   />
 
                   {isDeterioration ? (
-                    <input
-                      value={line.unitValue}
-                      onChange={(e) => setLineValue(line.id, { unitValue: e.target.value })}
-                      placeholder="Valoare"
-                      className={documentInputClass}
-                      disabled={status === "POSTED"}
-                    />
+                    <div className="space-y-1">
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500 md:hidden">
+                        Valoare
+                      </div>
+                      <input
+                        value={line.unitValue}
+                        onChange={(e) => setLineValue(line.id, { unitValue: e.target.value })}
+                        placeholder="Valoare"
+                        className={documentInputClass}
+                        disabled={status === "POSTED"}
+                      />
+                    </div>
                   ) : (
                     <>
-                      <input
-                        value={line.oldPrice}
-                        onChange={(e) => setLineValue(line.id, { oldPrice: e.target.value })}
-                        placeholder="Pret vechi"
-                        className={documentInputClass}
-                        disabled={status === "POSTED"}
-                      />
-                      <input
-                        value={line.newPrice}
-                        onChange={(e) => setLineValue(line.id, { newPrice: e.target.value })}
-                        placeholder="Pret nou"
-                        className={documentInputClass}
-                        disabled={status === "POSTED"}
-                      />
+                      <div className="space-y-1">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500 md:hidden">
+                          Pret vechi
+                        </div>
+                        <input
+                          value={line.oldPrice}
+                          onChange={(e) => setLineValue(line.id, { oldPrice: e.target.value })}
+                          placeholder="Pret vechi"
+                          className={documentInputClass}
+                          disabled={status === "POSTED"}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500 md:hidden">
+                          Pret nou
+                        </div>
+                        <input
+                          value={line.newPrice}
+                          onChange={(e) => setLineValue(line.id, { newPrice: e.target.value })}
+                          placeholder="Pret nou"
+                          className={documentInputClass}
+                          disabled={status === "POSTED"}
+                        />
+                      </div>
                     </>
                   )}
 
-                  <input
-                    value={
-                      isDeterioration
-                        ? formatMoneyRo(parseLocaleNumber(line.qty) * parseLocaleNumber(line.unitValue), "RON")
-                        : formatMoneyRo(parseLocaleNumber(line.qty) * parseLocaleNumber(line.newPrice), "RON")
-                    }
-                    readOnly
-                    className={`${documentInputClass} bg-slate-100 font-semibold`}
-                  />
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500 md:hidden">
+                      Total
+                    </div>
+                    <input
+                      value={
+                        isDeterioration
+                          ? formatMoneyRo(parseLocaleNumber(line.qty) * parseLocaleNumber(line.unitValue), "RON")
+                          : formatMoneyRo(parseLocaleNumber(line.qty) * parseLocaleNumber(line.newPrice), "RON")
+                      }
+                      readOnly
+                      className={`${documentInputClass} bg-slate-100 font-semibold`}
+                    />
+                  </div>
 
-                  <button
-                    type="button"
-                    onClick={() => setLines((prev) => (prev.length === 1 ? [makeLine()] : prev.filter((item) => item.id !== line.id)))}
-                    className={documentButtonSecondaryClass}
-                    disabled={status === "POSTED"}
-                  >
-                    X
-                  </button>
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500 md:hidden">
+                      Actiuni
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setLines((prev) => (prev.length === 1 ? [makeLine()] : prev.filter((item) => item.id !== line.id)))}
+                      className={`${documentButtonSecondaryClass} w-full justify-center md:w-auto`}
+                      disabled={status === "POSTED"}
+                    >
+                      X
+                    </button>
+                  </div>
                 </div>
               </div>
             )
