@@ -24,7 +24,7 @@ type MeResponse = {
 export async function login(email: string, password: string) {
   const data = await api<LoginResponse>("/api/v1/auth/login", {
     method: "POST",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
   })
 
   const token = data.access_token || data.token

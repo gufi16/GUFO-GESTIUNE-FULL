@@ -16,7 +16,7 @@ type ControlMeResponse = {
 export async function controlLogin(email: string, password: string) {
   const data = await api<ControlLoginResponse>("/api/v1/admin/auth/login", {
     method: "POST",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
   })
 
   const token = data.access_token || data.token
