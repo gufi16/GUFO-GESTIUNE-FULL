@@ -253,35 +253,43 @@ app.post("/api/v1/auth/forgot-password", async (req, res) => {
 
   const resetUrl = `${publicBase}/reset-password?token=${rawToken}`
 
-  await sendMail({
-    to: user.email,
-    subject: "Resetare parola Gufo ERP",
-    text: [
-      `Salut ${user.name},`,
-      "",
-      `Am primit o cerere de resetare a parolei pentru contul tau din ${user.tenant.name}.`,
-      `Acceseaza linkul de mai jos pentru a seta o parola noua:`,
-      resetUrl,
-      "",
-      "Linkul este valabil 60 de minute.",
-      "Daca nu ai cerut resetarea parolei, poti ignora acest mesaj.",
-    ].join("\n"),
-    html: `
-      <div style="font-family:Arial,sans-serif;color:#17324D">
-        <h2 style="margin-bottom:12px">Resetare parola Gufo ERP</h2>
-        <p>Salut <strong>${user.name}</strong>,</p>
-        <p>Am primit o cerere de resetare a parolei pentru contul tau din <strong>${user.tenant.name}</strong>.</p>
-        <p>
-          <a href="${resetUrl}" style="display:inline-block;padding:12px 18px;border-radius:10px;background:#17324D;color:#fff;text-decoration:none;font-weight:700">
-            Reseteaza parola
-          </a>
-        </p>
-        <p style="margin-top:12px">Sau foloseste direct acest link:</p>
-        <p><a href="${resetUrl}">${resetUrl}</a></p>
-        <p>Linkul este valabil 60 de minute.</p>
-      </div>
-    `,
-  })
+    try {
+      await sendMail({
+        to: user.email,
+        subject: "Resetare parola Gufo ERP",
+        text: [
+          `Salut ${user.name},`,
+          "",
+          `Am primit o cerere de resetare a parolei pentru contul tau din ${user.tenant.name}.`,
+          `Acceseaza linkul de mai jos pentru a seta o parola noua:`,
+          resetUrl,
+          "",
+          "Linkul este valabil 60 de minute.",
+          "Daca nu ai cerut resetarea parolei, poti ignora acest mesaj.",
+        ].join("\n"),
+        html: `
+          <div style="font-family:Arial,sans-serif;color:#17324D">
+            <h2 style="margin-bottom:12px">Resetare parola Gufo ERP</h2>
+            <p>Salut <strong>${user.name}</strong>,</p>
+            <p>Am primit o cerere de resetare a parolei pentru contul tau din <strong>${user.tenant.name}</strong>.</p>
+            <p>
+              <a href="${resetUrl}" style="display:inline-block;padding:12px 18px;border-radius:10px;background:#17324D;color:#fff;text-decoration:none;font-weight:700">
+                Reseteaza parola
+              </a>
+            </p>
+            <p style="margin-top:12px">Sau foloseste direct acest link:</p>
+            <p><a href="${resetUrl}">${resetUrl}</a></p>
+            <p>Linkul este valabil 60 de minute.</p>
+          </div>
+        `,
+      })
+    } catch (error) {
+      console.error("FORGOT PASSWORD MAIL ERROR", error)
+      return res.status(502).json({
+        ok: false,
+        error: "Nu am putut trimite emailul de resetare. Verifica setarile SMTP.",
+      })
+    }
 
   return res.json({
     ok: true,
