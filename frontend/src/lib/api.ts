@@ -25,20 +25,10 @@ export function getToken(): string {
     pathname.startsWith("/control-panel") || pathname.startsWith("/cp")
 
   if (isControlPanelRoute) {
-    return (
-      localStorage.getItem("control_token") ||
-      localStorage.getItem("access_token") ||
-      localStorage.getItem("token") ||
-      ""
-    )
+    return localStorage.getItem("control_token") || ""
   }
 
-  return (
-    localStorage.getItem("access_token") ||
-    localStorage.getItem("token") ||
-    localStorage.getItem("control_token") ||
-    ""
-  )
+  return localStorage.getItem("access_token") || localStorage.getItem("token") || ""
 }
 
 export function setToken(token: string) {
