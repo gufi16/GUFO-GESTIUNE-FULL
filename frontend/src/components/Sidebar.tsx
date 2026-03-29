@@ -4,6 +4,7 @@ import {
   BarChart3,
   BookOpen,
   Building2,
+  ChevronLeft,
   FilePlus2,
   FileText,
   LayoutDashboard,
@@ -90,7 +91,103 @@ function SidebarLink({ item }: { item: SidebarItem }) {
   )
 }
 
-export default function Sidebar() {
+function SidebarContent({
+  visibleSections,
+  onNavigate,
+  mobile = false,
+  onCloseMobile,
+}: {
+  visibleSections: SidebarSection[]
+  onNavigate?: () => void
+  mobile?: boolean
+  onCloseMobile?: () => void
+}) {
+  return (
+    <div className="flex h-full w-full flex-col overflow-hidden">
+      <div className="border-b border-slate-200/80 px-4 pb-3 pt-4">
+        {mobile ? (
+          <div className="mb-3 flex items-center justify-between">
+            <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Meniu ERP</div>
+            <button
+              type="button"
+              onClick={onCloseMobile}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500"
+            >
+              <ChevronLeft size={18} />
+            </button>
+          </div>
+        ) : null}
+
+        <div className="rounded-[16px] border border-slate-200 bg-white p-3 shadow-sm shadow-slate-900/[0.03]">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[18px] bg-[#17324D] text-sm font-bold text-white shadow-sm">
+              GF
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-base font-semibold tracking-tight text-[#17324D]">GuFo Gestiune</div>
+              <div className="mt-1 text-xs leading-4.5 text-slate-500">
+                gestiune moderna pentru retail, horeca si depozit
+              </div>
+
+              <div className="mt-2.5 flex items-center gap-2">
+                <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                  <Sparkles size={12} />
+                  UI nou
+                </span>
+                <span className="inline-flex rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600">
+                  GUFO ERP
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+        <div className="space-y-5">
+          {visibleSections.map((section) => (
+            <section key={section.title}>
+              <div className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400">
+                {section.title}
+              </div>
+
+              <div className="space-y-1.5">
+                {section.items.map((item) => (
+                  <div key={`${section.title}-${item.label}`} onClick={onNavigate}>
+                    <SidebarLink item={item} />
+                  </div>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      </div>
+
+      <div className="border-t border-slate-200/80 px-4 py-3">
+        <div className="rounded-[14px] border border-slate-200 bg-white px-3 py-3 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-[18px] bg-[#17324D] text-sm font-bold text-white">
+              DT
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-semibold text-[#17324D]">Tenant activ</div>
+              <div className="mt-1 truncate text-xs text-slate-500">cont conectat</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default function Sidebar({
+  mobileOpen = false,
+  onCloseMobile,
+}: {
+  mobileOpen?: boolean
+  onCloseMobile?: () => void
+}) {
   const visibleSections = sections
     .map((section) => ({
       ...section,
@@ -99,69 +196,33 @@ export default function Sidebar() {
     .filter((section) => section.items.length > 0)
 
   return (
-    <aside className="hidden xl:block xl:w-64 xl:shrink-0">
-      <div className="fixed left-0 top-0 z-40 hidden h-screen w-64 border-r border-slate-200/80 bg-white/95 backdrop-blur xl:flex">
-        <div className="flex h-full w-full flex-col overflow-hidden">
-          <div className="border-b border-slate-200/80 px-4 pb-3 pt-4">
-            <div className="rounded-[16px] border border-slate-200 bg-white p-3 shadow-sm shadow-slate-900/[0.03]">
-              <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[18px] bg-[#17324D] text-sm font-bold text-white shadow-sm">
-                  GF
-                </div>
+    <>
+      {mobileOpen ? (
+        <div
+          className="fixed inset-0 z-50 bg-slate-950/45 backdrop-blur-[1px] xl:hidden"
+          onClick={onCloseMobile}
+        />
+      ) : null}
 
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-base font-semibold tracking-tight text-[#17324D]">GuFo Gestiune</div>
-                  <div className="mt-1 text-xs leading-4.5 text-slate-500">
-                    gestiune moderna pentru retail, horeca si depozit
-                  </div>
-
-                  <div className="mt-2.5 flex items-center gap-2">
-                    <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
-                      <Sparkles size={12} />
-                      UI nou
-                    </span>
-                    <span className="inline-flex rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600">
-                      GUFO ERP
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-            <div className="space-y-5">
-              {visibleSections.map((section) => (
-                <section key={section.title}>
-                  <div className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400">
-                    {section.title}
-                  </div>
-
-                  <div className="space-y-1.5">
-                    {section.items.map((item) => (
-                      <SidebarLink key={`${section.title}-${item.label}`} item={item} />
-                    ))}
-                  </div>
-                </section>
-              ))}
-            </div>
-          </div>
-
-          <div className="border-t border-slate-200/80 px-4 py-3">
-            <div className="rounded-[14px] border border-slate-200 bg-white px-3 py-3 shadow-sm">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-[18px] bg-[#17324D] text-sm font-bold text-white">
-                  DT
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold text-[#17324D]">Tenant activ</div>
-                  <div className="mt-1 truncate text-xs text-slate-500">cont conectat</div>
-                </div>
-              </div>
-            </div>
-          </div>
+      <aside className="hidden xl:block xl:w-64 xl:shrink-0">
+        <div className="fixed left-0 top-0 z-40 hidden h-screen w-64 border-r border-slate-200/80 bg-white/95 backdrop-blur xl:flex">
+          <SidebarContent visibleSections={visibleSections} />
         </div>
+      </aside>
+
+      <div
+        className={clsx(
+          "fixed inset-y-0 left-0 z-[60] w-[88vw] max-w-[320px] border-r border-slate-200 bg-white shadow-2xl transition-transform duration-200 xl:hidden",
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
+        <SidebarContent
+          visibleSections={visibleSections}
+          mobile
+          onCloseMobile={onCloseMobile}
+          onNavigate={onCloseMobile}
+        />
       </div>
-    </aside>
+    </>
   )
 }
