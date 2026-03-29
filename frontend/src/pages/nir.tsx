@@ -1344,7 +1344,7 @@ export default function NirPage() {
                           minWidth: 0,
                         }}
                       >
-                        <div style={{ ...productCell, minWidth: 0 }}>
+                        <div style={{ ...productCell, minWidth: 0, ...(isMobileViewport ? mobileFullSpan : {}) }}>
                           {isMobileViewport && <div style={mobileGridLabel}>Produs</div>}
                           <input
                             data-grid-field="nir"
@@ -1449,7 +1449,7 @@ export default function NirPage() {
                           />
                         </div>
 
-                        <div style={{ minWidth: 0 }}>
+                        <div style={{ minWidth: 0, ...(isMobileViewport ? mobileFullSpan : {}) }}>
                           {isMobileViewport && <div style={mobileGridLabel}>Total</div>}
                           <div style={totalCell}>
                           <div style={totalValue}>{formatMoneyRo(computed.withSgrFc)}</div>
@@ -1467,6 +1467,7 @@ export default function NirPage() {
                             gap: 4,
                             justifyContent: "flex-end",
                             minWidth: 0,
+                            ...(isMobileViewport ? mobileFullSpan : {}),
                           }}
                         >
                           {isMobileViewport && <div style={mobileGridLabel}>Actiuni</div>}
@@ -2008,7 +2009,7 @@ const rowMain: CSSProperties = {
 
 const rowMainMobile: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "minmax(0, 1fr)",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
   gap: 8,
   alignItems: "stretch",
 }
@@ -2072,6 +2073,10 @@ const mobileGridLabel: CSSProperties = {
   textTransform: "uppercase",
   letterSpacing: 0.3,
   paddingLeft: 2,
+}
+
+const mobileFullSpan: CSSProperties = {
+  gridColumn: "1 / -1",
 }
 
 const totalsGrid: CSSProperties = {
