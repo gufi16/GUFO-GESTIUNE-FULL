@@ -201,6 +201,10 @@ export default function NirPage() {
   })
 
   const [lines, setLines] = useState<NirLine[]>([makeLine()])
+  const [lineEditorOpen, setLineEditorOpen] = useState(false)
+  const [lineEditorMode, setLineEditorMode] = useState<"create" | "edit">("create")
+  const [lineDraft, setLineDraft] = useState<NirLine | null>(null)
+  const [lineEditorError, setLineEditorError] = useState("")
 
   const [quickProductOpen, setQuickProductOpen] = useState(false)
   const [quickProductLineId, setQuickProductLineId] = useState("")
@@ -497,6 +501,28 @@ export default function NirPage() {
     )
   }
 
+  function setDraftLineValue(patch: Partial<NirLine>) {
+    setLineDraft((prev) => (prev ? { ...prev, ...patch } : prev))
+  }
+
+  function applyProductSelection(line: NirLine, product: AnyObj): NirLine {
+    const productFactor = Math.max(0.000001, toNumberSafe(product.purchaseFactor || 1))
+
+    return {
+      ...line,
+      productId: product.id,
+      search: product.name,
+      uomId: product.purchaseUom?.id || product.uom?.id || "",
+      uomCode: product.purchaseUom?.code || product.uom?.code || "",
+      factor: String(productFactor),
+      vat: String(product.vatRate?.rate || 19),
+      price: String(product.costPrice ?? line.price ?? "0"),
+      isSgr: Boolean(product.isSgr),
+      sgrValue: String(product.isSgr ? Number(product.sgrValue || 0.5) : 0),
+      autoFactor: true,
+    }
+  }
+
   function normalizeLineValue(id: string, key: keyof NirLine) {
     setLines((prev) =>
       prev.map((line) => {
@@ -511,6 +537,18 @@ export default function NirPage() {
         return line
       })
     )
+  }
+
+  function normalizeDraftLineValue(key: keyof NirLine) {
+    setLineDraft((prev) => {
+      if (!prev) return prev
+      if (key === "qty") return { ...prev, qty: clampPositiveString(prev.qty, "1") }
+      if (key === "price") return { ...prev, price: clampPositiveString(prev.price, "0") }
+      if (key === "vat") return { ...prev, vat: clampPositiveString(prev.vat, "19") }
+      if (key === "factor") return { ...prev, factor: clampStrictPositiveString(prev.factor, "1") }
+      if (key === "sgrValue") return { ...prev, sgrValue: clampPositiveString(prev.sgrValue, "0.50") }
+      return prev
+    })
   }
 
   function addLine() {
@@ -559,24 +597,10 @@ export default function NirPage() {
   }
 
   function chooseProduct(lineId: string, product: AnyObj) {
-    const productFactor = Math.max(0.000001, toNumberSafe(product.purchaseFactor || 1))
-
     setLines((prev) =>
       prev.map((line) => {
         if (line.id !== lineId) return line
-        return {
-          ...line,
-          productId: product.id,
-          search: product.name,
-          uomId: product.purchaseUom?.id || product.uom?.id || "",
-          uomCode: product.purchaseUom?.code || product.uom?.code || "",
-          factor: String(productFactor),
-          vat: String(product.vatRate?.rate || 19),
-          price: String(product.costPrice ?? line.price ?? "0"),
-          isSgr: Boolean(product.isSgr),
-          sgrValue: String(product.isSgr ? Number(product.sgrValue || 0.5) : 0),
-          autoFactor: true,
-        }
+        return applyProductSelection(line, product)
       })
     )
   }
@@ -609,6 +633,69 @@ export default function NirPage() {
       autoFactor: true,
       factor: String(productFactor),
     })
+  }
+
+  function openLineEditor(line?: NirLine) {
+    setLineEditorMode(line ? "edit" : "create")
+    setLineDraft(line ? { ...line } : makeLine())
+    setLineEditorError("")
+    setLineEditorOpen(true)
+  }
+
+  function closeLineEditor() {
+    setLineEditorOpen(false)
+    setLineDraft(null)
+    setLineEditorError("")
+  }
+
+  function toggleDraftFactorMode() {
+    if (!lineDraft?.productId) return
+
+    if (lineDraft.autoFactor) {
+      setDraftLineValue({ autoFactor: false })
+      return
+    }
+
+    const product = products.find((p: AnyObj) => p.id === lineDraft.productId)
+    const productFactor = Math.max(0.000001, toNumberSafe(product?.purchaseFactor || 1))
+    setDraftLineValue({
+      autoFactor: true,
+      factor: String(productFactor),
+    })
+  }
+
+  function chooseProductInDraft(product: AnyObj) {
+    setLineDraft((prev) => (prev ? applyProductSelection(prev, product) : prev))
+    setLineEditorError("")
+  }
+
+  function saveLineDraft() {
+    if (!lineDraft) return
+    if (!lineDraft.productId) {
+      setLineEditorError("Selecteaza un produs din lista inainte sa salvezi linia.")
+      return
+    }
+
+    const normalized: NirLine = {
+      ...lineDraft,
+      qty: clampPositiveString(lineDraft.qty, "1"),
+      price: clampPositiveString(lineDraft.price, "0"),
+      vat: clampPositiveString(lineDraft.vat, "19"),
+      factor: clampStrictPositiveString(lineDraft.factor, "1"),
+      sgrValue: clampPositiveString(lineDraft.sgrValue, "0.50"),
+    }
+
+    setLines((prev) => {
+      if (lineEditorMode === "edit") {
+        return prev.map((line) => (line.id === normalized.id ? normalized : line))
+      }
+      if (prev.length === 1 && !prev[0].productId && !prev[0].search.trim()) {
+        return [normalized]
+      }
+      return [...prev, normalized]
+    })
+
+    closeLineEditor()
   }
 
   function openQuickProduct(line: NirLine) {
@@ -718,7 +805,11 @@ export default function NirPage() {
       }
 
       setProducts((prev) => [created, ...prev])
-      chooseProduct(quickProductLineId, created)
+      if (lineDraft && lineDraft.id === quickProductLineId) {
+        setLineDraft((prev) => (prev ? applyProductSelection(prev, created) : prev))
+      } else {
+        chooseProduct(quickProductLineId, created)
+      }
       setQuickProductLoading(false)
       closeQuickProduct()
     } catch {
@@ -1026,6 +1117,10 @@ export default function NirPage() {
       : "Editare NIR"
 
   const uniqueProductsCount = new Set(validLines.map((x) => x.productId)).size
+  const visibleLines =
+    isMobileViewport && lines.length === 1 && !lines[0].productId && !lines[0].search.trim()
+      ? []
+      : lines
 
   return (
     <div style={pageWrap}>
@@ -1293,10 +1388,14 @@ export default function NirPage() {
 
               <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                 <div style={miniStatPill}>
-                  {lines.length} {lines.length === 1 ? "linie" : "linii"}
+                  {visibleLines.length} {visibleLines.length === 1 ? "linie" : "linii"}
                 </div>
                 {!isPosted && (
-                  <button style={btnPrimary} onClick={addLine} disabled={loadingMeta}>
+                  <button
+                    style={btnPrimary}
+                    onClick={() => (isMobileViewport ? openLineEditor() : addLine())}
+                    disabled={loadingMeta}
+                  >
                     + Adaugă linie
                   </button>
                 )}
@@ -1316,7 +1415,7 @@ export default function NirPage() {
 
             <div style={isMobileViewport ? { ...linesViewport, ...linesViewportMobile } : linesViewport}>
               <div style={rowsStack}>
-                {lines.map((line) => {
+                {visibleLines.map((line) => {
                   const matches = productMatches(line.search)
                   const canAddQuickProduct =
                     !isPosted &&
@@ -1338,9 +1437,50 @@ export default function NirPage() {
                         background: isDuplicate ? "#fffdf5" : rowCard.background,
                       }}
                     >
+                      {isMobileViewport ? (
+                        <div style={mobileLineSummaryCard}>
+                          <div style={mobileLineSummaryTop}>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={mobileLineTitle}>{line.search.trim() || "Linie fara produs"}</div>
+                              <div style={mobileLineMeta}>
+                                Ambalaj {line.uomCode || "-"} · {line.autoFactor ? "factor auto" : "factor manual"}
+                                {line.isSgr ? " · SGR" : ""}
+                              </div>
+                            </div>
+
+                            <div style={mobileLineTotalBox}>
+                              <div style={mobileLineTotalLabel}>Total</div>
+                              <div style={mobileLineTotalValue}>{formatMoneyRo(computed.withSgrFc)}</div>
+                            </div>
+                          </div>
+
+                          <div style={mobileLineFacts}>
+                            <div style={mobileLineFact}><strong>Cant.</strong> {formatQtyRo(computed.qty)}</div>
+                            <div style={mobileLineFact}><strong>Preț</strong> {formatMoneyRo(computed.price)}</div>
+                            <div style={mobileLineFact}><strong>TVA</strong> {formatNumberRo(computed.vat, 0)}%</div>
+                            <div style={mobileLineFact}><strong>Factor</strong> {formatFactorRo(computed.factor)}</div>
+                          </div>
+
+                          {isDuplicate && (
+                            <div style={duplicateMeta}>Atenție: produsul apare și pe altă linie.</div>
+                          )}
+
+                          <div style={mobileLineActions}>
+                            <button type="button" style={btnSecondary} onClick={() => openLineEditor(line)}>
+                              Detalii
+                            </button>
+                            {!isPosted && (
+                              <button type="button" style={btnDangerMobile} onClick={() => removeLine(line.id)}>
+                                Șterge
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                      <>
                       <div
                         style={{
-                          ...(isMobileViewport ? rowMainMobile : rowMain),
+                          ...rowMain,
                           minWidth: 0,
                         }}
                       >
@@ -1562,9 +1702,16 @@ export default function NirPage() {
                           </>
                         )}
                       </div>
+                      </>
+                      )}
                     </div>
                   )
                 })}
+                {visibleLines.length === 0 && (
+                  <div style={emptyMobileLinesBox}>
+                    Nu ai încă nicio linie salvată. Apasă `Adaugă linie` și completează produsul în popup.
+                  </div>
+                )}
               </div>
             </div>
           </Section>
@@ -1586,6 +1733,177 @@ export default function NirPage() {
             </div>
           </Section>
         </>
+      )}
+
+      {lineEditorOpen && lineDraft && (
+        <div style={modalOverlay}>
+          <div style={{ ...modalCard, maxWidth: 720 }}>
+            <div style={modalHeader}>
+              <div>
+                <h3 style={{ margin: 0 }}>
+                  {lineEditorMode === "create" ? "Adaugă linie produs" : "Detalii linie produs"}
+                </h3>
+                <div style={{ color: "#64748b", fontSize: 13, marginTop: 4 }}>
+                  Completezi produsul în popup, apoi în pagină rămâne doar rezumatul curat al liniei.
+                </div>
+              </div>
+
+              <button type="button" onClick={closeLineEditor} style={btnSecondary}>
+                Închide
+              </button>
+            </div>
+
+            {lineEditorError && <div style={{ ...errorBox, marginTop: 14 }}>{lineEditorError}</div>}
+
+            <div style={{ ...headerGrid, marginTop: 16 }}>
+              <Field label="Produs">
+                <input
+                  type="text"
+                  placeholder="Caută produs..."
+                  value={lineDraft.search}
+                  onChange={(e) =>
+                    setDraftLineValue({
+                      search: e.target.value,
+                      productId: "",
+                    })
+                  }
+                  style={input}
+                  disabled={isPosted}
+                />
+              </Field>
+
+              <Field label="Ambalaj">
+                <input value={lineDraft.uomCode} readOnly style={{ ...input, background: "#f8fafc" }} />
+              </Field>
+
+              <Field label="Cantitate">
+                <input
+                  type="text"
+                  value={lineDraft.qty}
+                  onChange={(e) => setDraftLineValue({ qty: e.target.value })}
+                  onBlur={() => normalizeDraftLineValue("qty")}
+                  style={input}
+                  disabled={isPosted}
+                />
+              </Field>
+
+              <Field label="Preț / bucată">
+                <input
+                  type="text"
+                  value={lineDraft.price}
+                  onChange={(e) => setDraftLineValue({ price: e.target.value })}
+                  onBlur={() => normalizeDraftLineValue("price")}
+                  style={input}
+                  disabled={isPosted}
+                />
+              </Field>
+
+              <Field label="TVA">
+                <input
+                  type="text"
+                  value={lineDraft.vat}
+                  onChange={(e) => setDraftLineValue({ vat: e.target.value })}
+                  onBlur={() => normalizeDraftLineValue("vat")}
+                  style={input}
+                  disabled={isPosted}
+                />
+              </Field>
+
+              <Field label="Cant. / ambalaj">
+                <input
+                  type="text"
+                  value={lineDraft.factor}
+                  onChange={(e) => setDraftLineValue({ factor: e.target.value })}
+                  onBlur={() => normalizeDraftLineValue("factor")}
+                  style={{
+                    ...input,
+                    background: lineDraft.productId && lineDraft.autoFactor ? "#f8fafc" : "#fff",
+                    color: lineDraft.productId && lineDraft.autoFactor ? "#64748b" : "#0f172a",
+                  }}
+                  disabled={isPosted || Boolean(lineDraft.productId && lineDraft.autoFactor)}
+                />
+              </Field>
+            </div>
+
+            <div style={{ ...rowExtra, marginTop: 14 }}>
+              <div style={totalCell}>
+                <div style={totalValue}>
+                  {formatMoneyRo(getLineComputed(lineDraft, header.fxRate).withSgrFc)}
+                </div>
+                <div style={totalMeta}>
+                  {formatQtyRo(getLineComputed(lineDraft, header.fxRate).qty)} amb ×{" "}
+                  {formatFactorRo(getLineComputed(lineDraft, header.fxRate).factor)} ={" "}
+                  {formatQtyRo(getLineComputed(lineDraft, header.fxRate).qtyBase)} buc
+                </div>
+              </div>
+
+              {lineDraft.productId && (
+                <div style={lineInsightGrid}>
+                  {lineDraft.isSgr && (
+                    <div style={sgrInlineBox}>
+                      <span style={sgrBadge}>SGR</span>
+                      <span>Produsul are garanție returnabilă activă.</span>
+                    </div>
+                  )}
+                  {!isPosted && (
+                    <button
+                      type="button"
+                      style={lineDraft.autoFactor ? btnSoftAuto : btnSoftManual}
+                      onClick={toggleDraftFactorMode}
+                    >
+                      Factor: {lineDraft.autoFactor ? "Auto" : "Manual"}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {lineDraft.search.trim().length >= 2 && !lineDraft.productId && !isPosted && (
+                <>
+                  {productMatches(lineDraft.search).length > 0 ? (
+                    <div style={quickResultsGrid}>
+                      {productMatches(lineDraft.search).map((p: AnyObj) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          style={resultBtnCompact}
+                          onClick={() => chooseProductInDraft(p)}
+                        >
+                          <div style={{ fontWeight: 600 }}>{p.name}</div>
+                          <div style={{ fontSize: 12, color: "#64748b" }}>
+                            {p.sku || "-"} · Ambalaj {p.purchaseUom?.code || p.uom?.code || "-"} · TVA {p.vatRate?.rate ?? "-"}%
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={quickAddWrap}>
+                      <div style={{ color: "#991b1b", fontSize: 13 }}>
+                        Nu există produse găsite pentru „{lineDraft.search}”
+                      </div>
+
+                      {!isPosted && uoms.length > 0 && vatRates.length > 0 && (
+                        <button type="button" style={btnSecondary} onClick={() => openQuickProduct(lineDraft)}>
+                          Adaugă produs nou
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div style={modalActions}>
+              <button type="button" style={btnSecondary} onClick={closeLineEditor}>
+                Renunță
+              </button>
+              {!isPosted && (
+                <button type="button" style={btnPrimary} onClick={saveLineDraft}>
+                  Salvează linia
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {quickProductOpen && (
@@ -2079,6 +2397,90 @@ const mobileFullSpan: CSSProperties = {
   gridColumn: "1 / -1",
 }
 
+const mobileLineSummaryCard: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 10,
+  padding: 10,
+  borderRadius: 12,
+  background: "#fff",
+  border: "1px solid #e2e8f0",
+}
+
+const mobileLineSummaryTop: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 10,
+}
+
+const mobileLineTitle: CSSProperties = {
+  fontSize: 14,
+  fontWeight: 800,
+  color: "#0f172a",
+  lineHeight: 1.25,
+  wordBreak: "break-word",
+}
+
+const mobileLineMeta: CSSProperties = {
+  marginTop: 4,
+  fontSize: 12,
+  color: "#64748b",
+  lineHeight: 1.3,
+}
+
+const mobileLineTotalBox: CSSProperties = {
+  minWidth: 90,
+  textAlign: "right",
+  flexShrink: 0,
+}
+
+const mobileLineTotalLabel: CSSProperties = {
+  fontSize: 10,
+  fontWeight: 800,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: 0.3,
+}
+
+const mobileLineTotalValue: CSSProperties = {
+  marginTop: 4,
+  fontSize: 14,
+  fontWeight: 800,
+  color: "#1e3a8a",
+}
+
+const mobileLineFacts: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 8,
+}
+
+const mobileLineFact: CSSProperties = {
+  padding: "8px 10px",
+  borderRadius: 10,
+  background: "#f8fafc",
+  border: "1px solid #e2e8f0",
+  fontSize: 12,
+  color: "#0f172a",
+}
+
+const mobileLineActions: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 8,
+}
+
+const emptyMobileLinesBox: CSSProperties = {
+  padding: 14,
+  borderRadius: 12,
+  border: "1px dashed #cbd5e1",
+  background: "#f8fafc",
+  color: "#475569",
+  fontSize: 13,
+  lineHeight: 1.45,
+}
+
 const totalsGrid: CSSProperties = {
   display: "flex",
   gap: 8,
@@ -2189,6 +2591,13 @@ const btnDangerIcon: CSSProperties = {
   cursor: "pointer",
   fontSize: 12,
   fontWeight: 800,
+}
+
+const btnDangerMobile: CSSProperties = {
+  ...btnSecondary,
+  border: "1px solid #fecaca",
+  background: "#fff1f2",
+  color: "#991b1b",
 }
 
 const input: CSSProperties = {
