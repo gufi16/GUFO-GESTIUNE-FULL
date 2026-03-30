@@ -17,7 +17,7 @@ export default function AppShell() {
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar onOpenMenu={() => setMobileSidebarOpen(true)} />
 
-          <main className="flex-1 overflow-x-hidden p-2.5 md:p-3 xl:p-3">
+          <main className="flex-1 overflow-x-hidden p-2 md:p-3 xl:p-3">
             <div className="w-full min-w-0">
               <Outlet />
             </div>

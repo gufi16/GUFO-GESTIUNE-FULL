@@ -1139,7 +1139,59 @@ export default function NirPage() {
       </div>
 
       <div className="no-print" style={isMobileViewport ? topActionsMobile : topActions}>
-        <div style={isMobileViewport ? topActionsGroupMobile : { display: "flex", gap: 10, flexWrap: "wrap" }}>
+        {isMobileViewport ? (
+          <>
+            <div style={topActionsPrimaryMobile}>
+              {!isPosted ? (
+                <>
+                  <button
+                    style={{ ...btnPrimary, width: "100%" }}
+                    onClick={() => saveNir(true)}
+                    disabled={saving || loadingReceipt}
+                  >
+                    {saving ? "Se salvează..." : "Salvează și postează"}
+                  </button>
+                  <button
+                    style={{ ...btnSecondary, width: "100%" }}
+                    onClick={() => saveNir(false)}
+                    disabled={saving || loadingReceipt}
+                  >
+                    {saving ? "Se salvează..." : "Salvează draft"}
+                  </button>
+                </>
+              ) : (
+                <button
+                  style={{ ...btnSecondary, width: "100%" }}
+                  onClick={handlePrint}
+                  disabled={!receiptId || loadingReceipt}
+                >
+                  Printează document
+                </button>
+              )}
+            </div>
+
+            <div style={topActionsCompactRowMobile}>
+              <a href="/inregistrare-document/nir" style={{ textDecoration: "none" }}>
+                <button style={btnGhostMobile}>Înapoi</button>
+              </a>
+              <button
+                style={btnGhostMobile}
+                onClick={handlePrint}
+                disabled={!receiptId || loadingReceipt}
+              >
+                Print
+              </button>
+              <button
+                style={btnGhostMobile}
+                onClick={exportPdf}
+                disabled={!receiptId || loadingReceipt}
+              >
+                PDF
+              </button>
+            </div>
+          </>
+        ) : null}
+        <div style={isMobileViewport ? { display: "none" } : { display: "flex", gap: 10, flexWrap: "wrap" }}>
           <a href="/inregistrare-document/nir" style={{ textDecoration: "none" }}>
             <button style={btnSecondary}>Înapoi la listă</button>
           </a>
@@ -1201,8 +1253,173 @@ export default function NirPage() {
       ) : (
         <>
           <Section title="Antet document">
-            <div style={isMobileViewport ? headerGridMobile : headerGrid}>
-              <div style={isMobileViewport ? mobileHeaderPrimaryField : undefined}>
+            {isMobileViewport ? (
+              <div style={mobileHeaderStack}>
+                <div style={mobileHeaderHeroCard}>
+                  <div style={mobileHeaderHeroLabel}>Furnizor</div>
+                  <Field label="">
+                    <input
+                      type="text"
+                      placeholder="Scrie primele 2-3 litere..."
+                      value={supplierSearch}
+                      onChange={(e) => {
+                        const value = e.target.value
+                        setSupplierSearch(value)
+                        setSupplierChosen(false)
+                        setQuickSupplierOpen(false)
+                        setQuickSupplierError("")
+                        setHeader((prev) => ({
+                          ...prev,
+                          supplierId: "",
+                          supplierName: value,
+                          supplierCode: "",
+                        }))
+                      }}
+                      style={input}
+                      disabled={isPosted}
+                    />
+
+                    {supplierSearch.trim().length >= 2 && !supplierChosen && !isPosted && (
+                      <div style={inlineUnderField}>
+                        {matchedSuppliers.length > 0 ? (
+                          <div style={resultsBox}>
+                            {matchedSuppliers.map((s: AnyObj) => (
+                              <button
+                                key={s.id}
+                                type="button"
+                                style={resultBtn}
+                                onClick={() => chooseSupplier(s)}
+                              >
+                                <div style={{ fontWeight: 600 }}>{s.name}</div>
+                                <div style={{ fontSize: 12, color: "#666" }}>
+                                  {s.code || "-"} Â· CIF {s.cif || "-"}
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={inlineActionBox}>
+                            <div style={{ color: "#991b1b", fontSize: 13 }}>
+                              Nu existÄƒ furnizori gÄƒsiÈ›i pentru â€ž{supplierSearch}â€
+                            </div>
+
+                            <button
+                              type="button"
+                              style={btnSecondary}
+                              onClick={openQuickSupplierModal}
+                            >
+                              AdaugÄƒ furnizor nou
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </Field>
+                </div>
+
+                <div style={mobileHeaderCardGrid}>
+                  <Field label="LocaÈ›ie">
+                    <select
+                      value={header.locationId}
+                      onChange={(e) => {
+                        const nextLocationId = e.target.value
+                        setHeader({ ...header, locationId: nextLocationId })
+                        setActiveLocationId(nextLocationId)
+                      }}
+                      style={input}
+                      disabled={isPosted}
+                    >
+                      <option value="">SelecteazÄƒ locaÈ›ia</option>
+                      {ensureArray(locations).map((l: AnyObj) => (
+                        <option key={l.id} value={l.id}>
+                          {l.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+
+                  <Field label="Nr. document">
+                    <input
+                      value={header.docNo}
+                      onChange={(e) => setHeader({ ...header, docNo: e.target.value })}
+                      style={input}
+                      disabled={isPosted}
+                    />
+                  </Field>
+
+                  <Field label="Data document">
+                    <input
+                      type="date"
+                      value={header.docDate}
+                      onChange={(e) => setHeader({ ...header, docDate: e.target.value })}
+                      style={input}
+                      disabled={isPosted}
+                    />
+                  </Field>
+
+                  <Field label="MonedÄƒ">
+                    <select
+                      value={header.currency}
+                      onChange={(e) => {
+                        const value = e.target.value
+                        setHeader({
+                          ...header,
+                          currency: value,
+                          fxRate: value === "RON" ? "1" : header.fxRate,
+                        })
+                      }}
+                      style={input}
+                      disabled={isPosted}
+                    >
+                      <option value="RON">RON</option>
+                      <option value="EUR">EUR</option>
+                      <option value="USD">USD</option>
+                      <option value="HUF">HUF</option>
+                    </select>
+                  </Field>
+
+                  {header.currency !== "RON" ? (
+                    <Field label="Curs">
+                      <input
+                        type="text"
+                        value={header.fxRate}
+                        onChange={(e) => setHeader({ ...header, fxRate: e.target.value })}
+                        onBlur={() =>
+                          setHeader((prev) => ({
+                            ...prev,
+                            fxRate:
+                              prev.currency === "RON"
+                                ? "1"
+                                : clampStrictPositiveString(prev.fxRate, "1"),
+                          }))
+                        }
+                        style={input}
+                        disabled={isPosted}
+                      />
+                    </Field>
+                  ) : null}
+
+                  <Field label="Cod furnizor">
+                    <input
+                      value={header.supplierCode}
+                      readOnly
+                      style={{ ...input, background: "#f8fafc" }}
+                    />
+                  </Field>
+
+                  <Field label="ObservaÈ›ii">
+                    <input
+                      value={header.note}
+                      onChange={(e) => setHeader({ ...header, note: e.target.value })}
+                      style={input}
+                      disabled={isPosted}
+                    />
+                  </Field>
+                </div>
+              </div>
+            ) : null}
+            <div style={isMobileViewport ? { display: "none" } : headerGrid}>
+              <div>
                 <Field label="Locație">
                 <select
                   value={header.locationId}
@@ -1243,7 +1460,7 @@ export default function NirPage() {
                 />
               </Field>
 
-              <div style={isMobileViewport ? mobileHeaderPrimaryField : undefined}>
+              <div>
                 <Field label="Furnizor">
                 <input
                   type="text"
@@ -2249,9 +2466,15 @@ const topActionsMobile: CSSProperties = {
   gap: 8,
 }
 
-const topActionsGroupMobile: CSSProperties = {
+const topActionsPrimaryMobile: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 8,
+}
+
+const topActionsCompactRowMobile: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
   gap: 8,
 }
 
@@ -2261,14 +2484,32 @@ const headerGrid: CSSProperties = {
   gap: 8,
 }
 
-const headerGridMobile: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "1fr",
-  gap: 10,
+const mobileHeaderStack: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 12,
 }
 
-const mobileHeaderPrimaryField: CSSProperties = {
-  gridColumn: "1 / -1",
+const mobileHeaderHeroCard: CSSProperties = {
+  padding: 12,
+  borderRadius: 12,
+  border: "1px solid #e2e8f0",
+  background: "#f8fafc",
+}
+
+const mobileHeaderHeroLabel: CSSProperties = {
+  marginBottom: 8,
+  fontSize: 11,
+  fontWeight: 800,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: 0.4,
+}
+
+const mobileHeaderCardGrid: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 10,
 }
 
 const sectionWrap: CSSProperties = {
@@ -2585,6 +2826,18 @@ const btnSecondary: CSSProperties = {
   cursor: "pointer",
   fontSize: 13,
   fontWeight: 600,
+}
+
+const btnGhostMobile: CSSProperties = {
+  padding: "9px 10px",
+  borderRadius: 10,
+  border: "1px solid #dbe3ee",
+  background: "#fff",
+  color: "#17324d",
+  cursor: "pointer",
+  fontSize: 12,
+  fontWeight: 700,
+  width: "100%",
 }
 
 const btnSoftAuto: CSSProperties = {

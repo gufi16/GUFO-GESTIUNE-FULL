@@ -1,4 +1,4 @@
-import { Bell, LogOut, MapPin, Menu, Search, Sparkles } from "lucide-react"
+import { Bell, LogOut, MapPin, Menu, Sparkles } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { API_BASE as API, authHeaders } from "../lib/api"
@@ -82,9 +82,8 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
             <Menu size={18} />
           </button>
 
-          <div className="min-w-0 flex-1">
+          <div className="hidden min-w-0 flex-1 md:block">
             <div className="relative w-full max-w-xl">
-              <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 placeholder="Cauta produse, documente, furnizori sau locatii..."
                 className="h-9 w-full rounded-[12px] border border-slate-200 bg-white pl-10 pr-3 text-sm text-[#17324D] outline-none transition focus:border-[#244A7C] focus:bg-white focus:ring-2 focus:ring-[#DCE7F5]"
@@ -92,13 +91,18 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
             </div>
           </div>
 
+          <div className="min-w-0 flex-1 md:hidden">
+            <div className="truncate text-sm font-semibold text-[#17324D]">Gufo ERP</div>
+            <div className="truncate text-[11px] text-slate-500">{selectedLocationLabel}</div>
+          </div>
+
           <button
             type="button"
             onClick={handleLogout}
-            className="inline-flex h-9 items-center justify-center rounded-[12px] border border-rose-200 bg-rose-50 px-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 md:hidden"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-rose-200 bg-rose-50 text-rose-700 transition hover:bg-rose-100 md:hidden"
+            aria-label="Logout"
           >
-            <LogOut size={16} className="mr-2" />
-            Logout
+            <LogOut size={16} />
           </button>
         </div>
 

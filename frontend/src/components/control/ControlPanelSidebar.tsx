@@ -43,27 +43,31 @@ function SidebarContent({
         </div>
       ) : null}
 
-      <div className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex items-start gap-4">
-          <div className="flex h-14 w-14 items-center justify-center rounded-3xl bg-[#17324D] text-base font-bold text-white">
-            GC
-          </div>
-
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <h1 className="truncate text-xl font-semibold tracking-tight text-[#17324D]">GUFO Control Panel</h1>
-              <span className="inline-flex items-center gap-1 rounded-full border border-[#F39C12]/30 bg-[#FFF1D6] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#B56800]">
-                <Sparkles size={11} />
-                Owner
-              </span>
+      {!mobile ? (
+        <div className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-start gap-4">
+            <div className="flex h-14 w-14 items-center justify-center rounded-3xl bg-[#17324D] text-base font-bold text-white">
+              GC
             </div>
 
-            <p className="mt-2 text-sm leading-6 text-slate-500">
-              centru de comanda pentru clienti, licente, integrari, activari POS si billing.
-            </p>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <h1 className="truncate text-xl font-semibold tracking-tight text-[#17324D]">GUFO Control Panel</h1>
+                <span className="inline-flex items-center gap-1 rounded-full border border-[#F39C12]/30 bg-[#FFF1D6] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#B56800]">
+                  <Sparkles size={11} />
+                  Owner
+                </span>
+              </div>
+
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                centru de comanda pentru clienti, licente, integrari, activari POS si billing.
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="px-1 pb-1 text-sm font-semibold text-[#17324D]">GUFO Control Panel</div>
+      )}
 
       <div className="mt-6 flex-1 overflow-y-auto pr-1">
         <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
@@ -136,7 +140,7 @@ function SidebarContent({
         </div>
       </div>
 
-      <div className="mt-6 rounded-[28px] border border-[#17324D]/10 bg-[#17324D] p-5 text-white shadow-sm">
+      <div className={clsx("mt-6 rounded-[28px] border border-[#17324D]/10 bg-[#17324D] p-5 text-white shadow-sm", mobile && "hidden")}>
         <div className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-300">workspace</div>
         <div className="mt-3 text-lg font-semibold tracking-tight">GUFO Ecosystem</div>
         <p className="mt-2 text-sm leading-6 text-slate-200">
@@ -171,7 +175,7 @@ export default function ControlPanelSidebar({
 
       <div
         className={clsx(
-          "fixed inset-y-0 left-0 z-[60] w-[90vw] max-w-[340px] border-r border-slate-200 bg-white shadow-2xl transition-transform duration-200 xl:hidden",
+          "fixed inset-y-0 left-0 z-[60] w-[86vw] max-w-[300px] border-r border-slate-200 bg-white shadow-2xl transition-transform duration-200 xl:hidden",
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >

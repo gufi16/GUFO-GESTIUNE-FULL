@@ -1,4 +1,4 @@
-import { Bell, LogOut, Menu, Search, ShieldCheck, Sparkles } from "lucide-react"
+import { Bell, LogOut, Menu, ShieldCheck, Sparkles } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { controlLogout } from "../../lib/controlAuth"
 
@@ -22,9 +22,8 @@ export default function ControlPanelTopbar({ onOpenMenu }: { onOpenMenu?: () => 
             <Menu size={18} />
           </button>
 
-          <div className="min-w-0 flex-1">
+          <div className="hidden min-w-0 flex-1 md:block">
             <div className="relative w-full max-w-2xl">
-              <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 placeholder="Cauta client, licenta, CUI, email sau terminal POS..."
                 className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm text-slate-700 outline-none transition focus:border-[#17324D] focus:bg-white focus:ring-4 focus:ring-blue-100"
@@ -32,13 +31,18 @@ export default function ControlPanelTopbar({ onOpenMenu }: { onOpenMenu?: () => 
             </div>
           </div>
 
+          <div className="min-w-0 flex-1 md:hidden">
+            <div className="truncate text-sm font-semibold text-[#17324D]">Control Panel</div>
+            <div className="truncate text-[11px] text-slate-500">administrare clienti si licente</div>
+          </div>
+
           <button
             type="button"
             onClick={handleLogout}
-            className="inline-flex h-11 items-center justify-center rounded-2xl border border-rose-200 bg-rose-50 px-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 md:hidden"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-rose-200 bg-rose-50 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 md:hidden"
+            aria-label="Logout"
           >
-            <LogOut size={16} className="mr-2" />
-            Logout
+            <LogOut size={16} />
           </button>
         </div>
 

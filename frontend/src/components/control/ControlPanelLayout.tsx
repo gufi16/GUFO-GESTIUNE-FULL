@@ -17,7 +17,7 @@ export default function ControlPanelLayout() {
         <div className="flex min-w-0 flex-1 flex-col">
           <ControlPanelTopbar onOpenMenu={() => setMobileSidebarOpen(true)} />
 
-          <main className="flex-1 p-3 md:p-6 xl:p-8">
+          <main className="flex-1 p-2.5 md:p-6 xl:p-8">
             <div className="mx-auto w-full max-w-[1600px]">
               <Outlet />
             </div>
