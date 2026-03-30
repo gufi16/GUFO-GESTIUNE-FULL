@@ -55,7 +55,17 @@ const categoryUploadsDir = path.join(uploadsDir, "categories")
 fs.mkdirSync(productUploadsDir, { recursive: true })
 fs.mkdirSync(categoryUploadsDir, { recursive: true })
 
+app.disable("etag")
 app.use(cors({ origin: CORS_ORIGIN, credentials: true }))
+app.use((req, res, next) => {
+  if (req.path === "/health" || req.path.startsWith("/api/")) {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate")
+    res.setHeader("Pragma", "no-cache")
+    res.setHeader("Expires", "0")
+    res.setHeader("Surrogate-Control", "no-store")
+  }
+  next()
+})
 app.use(express.json({ limit: "10mb" }))
 app.use(cookieParser())
 app.use(morgan("dev"))
