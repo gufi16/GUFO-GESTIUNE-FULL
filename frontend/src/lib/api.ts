@@ -70,6 +70,7 @@ export async function api<T = any>(path: string, options: ApiOptions = {}): Prom
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers,
+    cache: "no-store",
   })
 
   if (options.raw) {
