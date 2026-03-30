@@ -30,6 +30,10 @@ function getSmtpHosts() {
     .filter(Boolean)
 }
 
+function getBrevoApiKey() {
+  return String(process.env.BREVO_API_KEY || "").trim()
+}
+
 function getSmtpAttempts() {
   const hosts = getSmtpHosts()
   const preferredPorts = parsePorts(process.env.SMTP_PORT, [587])
@@ -59,11 +63,57 @@ function getSmtpAttempts() {
 
 export function hasSmtpConfig() {
   return Boolean(
+    getBrevoApiKey() ||
     getSmtpHosts().length &&
       process.env.SMTP_USER &&
       process.env.SMTP_PASS &&
       process.env.SMTP_FROM
   )
+}
+
+async function sendViaBrevoApi(input: {
+  to: string
+  subject: string
+  html: string
+  text: string
+}) {
+  const apiKey = getBrevoApiKey()
+  if (!apiKey) {
+    throw new Error("BREVO_API_KEY is not configured")
+  }
+
+  const fromRaw = String(process.env.SMTP_FROM || "").trim()
+  const match = fromRaw.match(/^(.*?)<([^>]+)>$/)
+  const sender = match
+    ? {
+        name: match[1].trim().replace(/^"|"$/g, ""),
+        email: match[2].trim(),
+      }
+    : {
+        name: "Gufo ERP",
+        email: fromRaw,
+      }
+
+  const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      "accept": "application/json",
+      "content-type": "application/json",
+      "api-key": apiKey,
+    },
+    body: JSON.stringify({
+      sender,
+      to: [{ email: input.to }],
+      subject: input.subject,
+      htmlContent: input.html,
+      textContent: input.text,
+    }),
+  })
+
+  if (!response.ok) {
+    const body = await response.text()
+    throw new Error(`Brevo API error ${response.status}: ${body}`)
+  }
 }
 
 export async function sendMail(input: {
@@ -74,6 +124,11 @@ export async function sendMail(input: {
 }) {
   if (!hasSmtpConfig()) {
     throw new Error("SMTP is not configured")
+  }
+
+  if (getBrevoApiKey()) {
+    await sendViaBrevoApi(input)
+    return
   }
 
   const attempts = getSmtpAttempts()
