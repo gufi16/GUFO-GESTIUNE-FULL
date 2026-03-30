@@ -17,8 +17,12 @@ export default function ControlPanelLogin() {
     try {
       await controlLogin(email, password)
       nav("/control-panel/clienti", { replace: true })
-    } catch {
-      setErr("Login invalid")
+    } catch (error: any) {
+      const message =
+        typeof error?.message === "string" && error.message.trim()
+          ? error.message
+          : "Login invalid"
+      setErr(message)
     } finally {
       setLoading(false)
     }

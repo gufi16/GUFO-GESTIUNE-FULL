@@ -16,8 +16,12 @@ export default function Login() {
     try {
       await login(email, password)
       nav("/dashboard")
-    } catch {
-      setErr("Login esuat. Verifica emailul si parola.")
+    } catch (error: any) {
+      const message =
+        typeof error?.message === "string" && error.message.trim()
+          ? error.message
+          : "Login esuat. Verifica emailul si parola."
+      setErr(message)
     } finally {
       setLoading(false)
     }
