@@ -48,6 +48,11 @@ type ResetPasswordResponse = {
   }
 }
 
+type AdminUserMutationResponse = {
+  item?: User
+  temporaryPassword?: string
+}
+
 type CreateLocationResponse = {
   item?: {
     id: string
@@ -158,11 +163,21 @@ export default function ControlPanelClientDetails() {
   const [deletingLocationId, setDeletingLocationId] = useState<string | null>(null)
   const [creatingLocation, setCreatingLocation] = useState(false)
   const [creatingDeviceFor, setCreatingDeviceFor] = useState<string | null>(null)
+  const [savingUser, setSavingUser] = useState(false)
+  const [editingUserId, setEditingUserId] = useState<string | null>(null)
   const [newLocationName, setNewLocationName] = useState("")
   const [deviceForms, setDeviceForms] = useState<Record<string, { label: string }>>({})
   const [openDeviceLocationId, setOpenDeviceLocationId] = useState<string | null>(null)
   const [locationError, setLocationError] = useState<string | null>(null)
   const [deviceError, setDeviceError] = useState<string | null>(null)
+  const [userError, setUserError] = useState<string | null>(null)
+  const [userForm, setUserForm] = useState({
+    name: "",
+    email: "",
+    role: "CASHIER",
+    password: "",
+    isActive: true,
+  })
   const [licenseForm, setLicenseForm] = useState({
     expiresAt: "",
     limitLocations: 1,
@@ -244,6 +259,78 @@ export default function ControlPanelClientDetails() {
       setError(err?.message || "Nu am putut reseta parola.")
     } finally {
       setResettingUserId(null)
+    }
+  }
+
+  function beginCreateUser() {
+    setEditingUserId(null)
+    setUserError(null)
+    setUserForm({
+      name: "",
+      email: "",
+      role: "CASHIER",
+      password: "",
+      isActive: true,
+    })
+  }
+
+  function beginEditUser(user: User) {
+    setEditingUserId(user.id)
+    setUserError(null)
+    setUserForm({
+      name: user.fullName || "",
+      email: user.email || "",
+      role: user.role || "CASHIER",
+      password: "",
+      isActive: true,
+    })
+  }
+
+  async function handleSaveUser() {
+    if (!id) return
+    if (!userForm.name.trim() || !userForm.email.trim()) {
+      setUserError("Completeaza numele si emailul utilizatorului.")
+      return
+    }
+
+    try {
+      setSavingUser(true)
+      setUserError(null)
+      setError(null)
+
+      if (editingUserId) {
+        await api<AdminUserMutationResponse>(`/api/v1/admin/users/${editingUserId}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            name: userForm.name,
+            email: userForm.email,
+            role: userForm.role,
+            isActive: userForm.isActive,
+            password: userForm.password || undefined,
+          }),
+        })
+        setMessage("Utilizatorul a fost actualizat.")
+      } else {
+        const res = await api<AdminUserMutationResponse>(`/api/v1/admin/clients/${id}/users`, {
+          method: "POST",
+          body: JSON.stringify({
+            name: userForm.name,
+            email: userForm.email,
+            role: userForm.role,
+            password: userForm.password || undefined,
+          }),
+        })
+        setResetPassword(res?.temporaryPassword || userForm.password || null)
+        setResetForUser(res?.item?.email || userForm.email)
+        setMessage("Utilizatorul a fost creat.")
+      }
+
+      beginCreateUser()
+      await load()
+    } catch (err: any) {
+      setUserError(err?.message || "Nu am putut salva utilizatorul.")
+    } finally {
+      setSavingUser(false)
     }
   }
 
@@ -447,6 +534,7 @@ export default function ControlPanelClientDetails() {
       {locationError ? <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{locationError}</div> : null}
       {deviceError ? <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{deviceError}</div> : null}
       {copyMessage ? <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">{copyMessage}</div> : null}
+      {userError ? <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{userError}</div> : null}
 
       {resetPassword ? (
         <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
@@ -695,7 +783,93 @@ export default function ControlPanelClientDetails() {
         </div>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[1.1fr_1.2fr]">
+      <section className="grid gap-4 xl:grid-cols-[0.9fr_1.3fr]">
+        <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-sm font-semibold text-[#17324D]">
+              {editingUserId ? "Editeaza utilizator ERP" : "Utilizator ERP nou"}
+            </div>
+            {editingUserId ? (
+              <button
+                onClick={beginCreateUser}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+              >
+                Anuleaza editarea
+              </button>
+            ) : null}
+          </div>
+
+          <div className="mt-4 grid gap-3">
+            <label className="block">
+              <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Nume</div>
+              <input
+                value={userForm.name}
+                onChange={(e) => setUserForm((prev) => ({ ...prev, name: e.target.value }))}
+                placeholder="Nume complet"
+                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+              />
+            </label>
+
+            <label className="block">
+              <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Email</div>
+              <input
+                value={userForm.email}
+                onChange={(e) => setUserForm((prev) => ({ ...prev, email: e.target.value }))}
+                placeholder="user@client.ro"
+                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+              />
+            </label>
+
+            <label className="block">
+              <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Rol</div>
+              <select
+                value={userForm.role}
+                onChange={(e) => setUserForm((prev) => ({ ...prev, role: e.target.value }))}
+                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+              >
+                <option value="OWNER">Owner</option>
+                <option value="ADMIN">Administrator</option>
+                <option value="MANAGER">Manager</option>
+                <option value="CASHIER">Ospatar / Casier</option>
+                <option value="WAREHOUSE">Magazioner</option>
+              </select>
+            </label>
+
+            <label className="block">
+              <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                {editingUserId ? "Parola noua (optional)" : "Parola initiala (optional)"}
+              </div>
+              <input
+                type="password"
+                value={userForm.password}
+                onChange={(e) => setUserForm((prev) => ({ ...prev, password: e.target.value }))}
+                placeholder={editingUserId ? "Lasa gol daca nu o schimbi" : "Lasa gol pentru generare automata"}
+                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+              />
+            </label>
+
+            {editingUserId ? (
+              <label className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={userForm.isActive}
+                  onChange={(e) => setUserForm((prev) => ({ ...prev, isActive: e.target.checked }))}
+                />
+                Utilizator activ
+              </label>
+            ) : null}
+
+            <button
+              onClick={handleSaveUser}
+              disabled={savingUser}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Save size={15} />
+              {savingUser ? "Se salveaza..." : editingUserId ? "Salveaza utilizatorul" : "Creeaza utilizator"}
+            </button>
+          </div>
+        </div>
+
         <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
           <div className="grid gap-3 sm:grid-cols-2">
             {metricCard("Plan", client?.subscription?.plan?.name || "-")}
@@ -733,14 +907,23 @@ export default function ControlPanelClientDetails() {
                       <td className="px-4 py-3 font-medium text-slate-900">{user.fullName}</td>
                       <td className="px-4 py-3 text-slate-600">{user.role}</td>
                       <td className="px-4 py-3">
-                        <button
-                          onClick={() => handleReset(user.id)}
-                          disabled={resettingUserId === user.id}
-                          className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          <KeyRound size={12} />
-                          {resettingUserId === user.id ? "..." : "Reset"}
-                        </button>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => beginEditUser(user)}
+                            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                          >
+                            <Save size={12} />
+                            Editeaza
+                          </button>
+                          <button
+                            onClick={() => handleReset(user.id)}
+                            disabled={resettingUserId === user.id}
+                            className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            <KeyRound size={12} />
+                            {resettingUserId === user.id ? "..." : "Reset"}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))

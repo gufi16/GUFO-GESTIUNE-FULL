@@ -6,6 +6,7 @@ import { z } from "zod"
 
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
+import { hashSecret } from "../lib/auth"
 
 const router = Router()
 
@@ -74,6 +75,15 @@ function moduleMapFromLicense(license: {
 
 function randomChunk(length = 4) {
   return Math.random().toString(36).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, length)
+}
+
+function generateTemporaryPassword(length = 10) {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
+  let value = ""
+  for (let index = 0; index < length; index += 1) {
+    value += alphabet[Math.floor(Math.random() * alphabet.length)]
+  }
+  return value
 }
 
 async function generateUniqueLocationCode(tenantId: string, name: string) {
@@ -152,6 +162,21 @@ const UpdateLicenseSchema = z.object({
 
 const ResetUserPasswordSchema = z.object({
   newPassword: z.string().min(4).optional(),
+})
+
+const AdminCreateUserSchema = z.object({
+  email: z.string().email(),
+  name: z.string().min(2),
+  role: z.nativeEnum(UserRole),
+  password: z.string().min(6).optional(),
+})
+
+const AdminUpdateUserSchema = z.object({
+  email: z.string().email().optional(),
+  name: z.string().min(2).optional(),
+  role: z.nativeEnum(UserRole).optional(),
+  isActive: z.boolean().optional(),
+  password: z.string().min(6).optional(),
 })
 
 const CreateLocationSchema = z.object({
@@ -728,6 +753,202 @@ router.post("/api/v1/admin/clients", requireAuth, requireOwner, async (req: Auth
     return res.status(500).json({
       ok: false,
       error: error?.message || "Nu am putut crea clientul",
+    })
+  }
+})
+
+router.post("/api/v1/admin/clients/:id/users", requireAuth, requireOwner, async (req: AuthedRequest, res) => {
+  const parsed = AdminCreateUserSchema.safeParse(req.body ?? {})
+  if (!parsed.success) {
+    return res.status(400).json({ ok: false, error: parsed.error.flatten() })
+  }
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: req.params.id },
+    select: { id: true, name: true },
+  })
+
+  if (!tenant) {
+    return res.status(404).json({ ok: false, error: "Client inexistent" })
+  }
+
+  const email = parsed.data.email.trim().toLowerCase()
+  const existing = await prisma.user.findFirst({
+    where: {
+      tenantId: tenant.id,
+      email,
+    },
+    select: { id: true },
+  })
+
+  if (existing) {
+    return res.status(409).json({ ok: false, error: "Exista deja un utilizator cu acest email" })
+  }
+
+  const rawPassword = parsed.data.password?.trim() || generateTemporaryPassword()
+
+  try {
+    const user = await prisma.$transaction(async (tx) => {
+      const created = await tx.user.create({
+        data: {
+          tenantId: tenant.id,
+          email,
+          name: parsed.data.name.trim(),
+          role: parsed.data.role,
+          isActive: true,
+          passwordHash: await hashSecret(rawPassword),
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          isActive: true,
+          createdAt: true,
+        },
+      })
+
+      await tx.auditLog.create({
+        data: {
+          tenantId: tenant.id,
+          actorType: "OWNER",
+          actorId: req.auth?.userId,
+          action: "ADMIN_PANEL_USER_CREATED",
+          entityType: "User",
+          entityId: created.id,
+          payload: {
+            tenantId: tenant.id,
+            tenantName: tenant.name,
+            email: created.email,
+            fullName: created.name,
+            role: created.role,
+          },
+        },
+      })
+
+      return created
+    })
+
+    return res.status(201).json({
+      ok: true,
+      item: {
+        ...user,
+        fullName: user.name,
+      },
+      temporaryPassword: rawPassword,
+    })
+  } catch (error: any) {
+    return res.status(500).json({
+      ok: false,
+      error: error?.message || "Nu am putut crea utilizatorul",
+    })
+  }
+})
+
+router.patch("/api/v1/admin/users/:userId", requireAuth, requireOwner, async (req: AuthedRequest, res) => {
+  const parsed = AdminUpdateUserSchema.safeParse(req.body ?? {})
+  if (!parsed.success) {
+    return res.status(400).json({ ok: false, error: parsed.error.flatten() })
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: req.params.userId },
+    select: {
+      id: true,
+      tenantId: true,
+      email: true,
+      name: true,
+      role: true,
+      isActive: true,
+      createdAt: true,
+      tenant: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+  })
+
+  if (!user) {
+    return res.status(404).json({ ok: false, error: "User inexistent" })
+  }
+
+  const nextEmail = parsed.data.email?.trim().toLowerCase()
+  if (nextEmail && nextEmail !== user.email) {
+    const duplicate = await prisma.user.findFirst({
+      where: {
+        tenantId: user.tenantId,
+        email: nextEmail,
+        NOT: { id: user.id },
+      },
+      select: { id: true },
+    })
+
+    if (duplicate) {
+      return res.status(409).json({ ok: false, error: "Exista deja un utilizator cu acest email" })
+    }
+  }
+
+  try {
+    const updated = await prisma.$transaction(async (tx) => {
+      const next = await tx.user.update({
+        where: { id: user.id },
+        data: {
+          email: nextEmail,
+          name: parsed.data.name?.trim(),
+          role: parsed.data.role,
+          isActive: parsed.data.isActive,
+          ...(parsed.data.password?.trim()
+            ? { passwordHash: await hashSecret(parsed.data.password.trim()) }
+            : {}),
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          isActive: true,
+          createdAt: true,
+        },
+      })
+
+      await tx.auditLog.create({
+        data: {
+          tenantId: user.tenantId,
+          actorType: "OWNER",
+          actorId: req.auth?.userId,
+          action: "ADMIN_PANEL_USER_UPDATED",
+          entityType: "User",
+          entityId: user.id,
+          payload: {
+            tenantId: user.tenantId,
+            tenantName: user.tenant?.name,
+            changes: {
+              email: nextEmail,
+              name: parsed.data.name?.trim(),
+              role: parsed.data.role,
+              isActive: parsed.data.isActive,
+              passwordChanged: Boolean(parsed.data.password?.trim()),
+            },
+          },
+        },
+      })
+
+      return next
+    })
+
+    return res.json({
+      ok: true,
+      item: {
+        ...updated,
+        fullName: updated.name,
+      },
+    })
+  } catch (error: any) {
+    return res.status(500).json({
+      ok: false,
+      error: error?.message || "Nu am putut actualiza utilizatorul",
     })
   }
 })
