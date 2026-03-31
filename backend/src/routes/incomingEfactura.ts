@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { requireTenantModule } from "../lib/tenantModules"
 import { reserveNextNumber } from "../lib/numbering"
+import { anafHttpRequest } from "../lib/anafHttp"
 import {
   collectMessageItems,
   extractDownloadId,
@@ -278,13 +279,13 @@ router.post("/api/v1/efactura/incoming/sync", async (req: AuthedRequest, res) =>
   const listUrl = `${baseUrl}/listaMesajeFactura?zile=${days}&cif=${encodeURIComponent(cif)}`
 
   try {
-    const listResponse = await fetch(listUrl, {
+    const listResponse = await anafHttpRequest(listUrl, {
       headers: {
         Authorization: `Bearer ${company.efacturaOauthAccessToken}`,
       },
     })
 
-    const listText = await listResponse.text()
+    const listText = listResponse.text
     const listPayload = parseAnafPayload(listText)
     const messageItems = collectMessageItems(listPayload)
 
@@ -307,7 +308,7 @@ router.post("/api/v1/efactura/incoming/sync", async (req: AuthedRequest, res) =>
       }
 
       const downloadUrl = `${baseUrl}/descarcare?id=${encodeURIComponent(downloadId)}`
-      const downloadResponse = await fetch(downloadUrl, {
+      const downloadResponse = await anafHttpRequest(downloadUrl, {
         headers: {
           Authorization: `Bearer ${company.efacturaOauthAccessToken}`,
         },
@@ -318,7 +319,7 @@ router.post("/api/v1/efactura/incoming/sync", async (req: AuthedRequest, res) =>
         continue
       }
 
-      const buffer = Buffer.from(await downloadResponse.arrayBuffer())
+      const buffer = downloadResponse.buffer
       const { xmlText } = extractXmlFromAnafDownload(buffer)
       const parsedInvoice = parseIncomingEInvoiceXml(xmlText)
 
@@ -338,6 +339,14 @@ router.post("/api/v1/efactura/incoming/sync", async (req: AuthedRequest, res) =>
       message: `Sincronizare SPV finalizata: ${synced} facturi primite actualizate.`,
     })
   } catch (error: any) {
+    console.error("INCOMING EFACTURA SYNC ERROR", {
+      tenantId,
+      cif,
+      environment: company?.efacturaEnvironment || "test",
+      message: error?.message || "unknown error",
+      cause: error?.cause ? String(error.cause) : null,
+      stack: error?.stack || null,
+    })
     return res.status(500).json({
       ok: false,
       error: error?.message || "Eroare la sincronizarea facturilor primite din SPV.",

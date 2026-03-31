@@ -5,6 +5,7 @@ import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { getNextNumberPreview, getNumberingConfig, normalizeNumberingPayload } from "../lib/numbering"
 import { requireTenantModule } from "../lib/tenantModules"
+import { anafHttpRequest } from "../lib/anafHttp"
 
 const router = Router()
 
@@ -395,13 +396,13 @@ router.post("/api/v1/company/efactura/oauth/test", async (req: AuthedRequest, re
   }
 
   try {
-    const response = await fetch(ANAF_TEST_URL, {
+    const response = await anafHttpRequest(ANAF_TEST_URL, {
       headers: {
         Authorization: `Bearer ${company.efacturaOauthAccessToken}`,
       },
     })
 
-    const text = await response.text()
+    const text = response.text
 
     if (!response.ok) {
       await prisma.company.update({

@@ -6,6 +6,7 @@ import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { getNextNumberPreview, reserveNextNumber } from "../lib/numbering"
 import { generateInvoiceEFacturaXml, validateInvoiceForEFactura } from "../lib/efactura"
 import { requireTenantModule } from "../lib/tenantModules"
+import { anafHttpRequest, readAnafHeader } from "../lib/anafHttp"
 
 const router = Router()
 
@@ -242,12 +243,12 @@ async function resolveReceiptDownloadId(company: any, invoice: any) {
 
   const baseUrl = getEfacturaBaseUrl(company?.efacturaEnvironment)
   const listUrl = `${baseUrl}/listaMesajeFactura?zile=60&cif=${encodeURIComponent(cif)}`
-  const response = await fetch(listUrl, {
+  const response = await anafHttpRequest(listUrl, {
     headers: {
       Authorization: `Bearer ${company.efacturaOauthAccessToken}`,
     },
   })
-  const rawText = await response.text()
+  const rawText = response.text
   const payload = parseAnafPayload(rawText)
   const items = collectMessageItems(payload)
   const matched = items.find((item: any) => {
@@ -945,7 +946,7 @@ router.post("/api/v1/sales-invoices/:id/efactura/send", async (req: AuthedReques
   const uploadUrl = `${baseUrl}/upload?standard=UBL&cif=${encodeURIComponent(cif)}`
 
   try {
-    const response = await fetch(uploadUrl, {
+    const response = await anafHttpRequest(uploadUrl, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${company.efacturaOauthAccessToken}`,
@@ -954,7 +955,7 @@ router.post("/api/v1/sales-invoices/:id/efactura/send", async (req: AuthedReques
       body: invoice.efacturaXmlText,
     })
 
-    const rawText = await response.text()
+    const rawText = response.text
     const payload = parseAnafPayload(rawText)
     const uploadIndex = extractUploadIndex(payload, rawText)
     const summary = summarizeAnafResponse(payload, rawText)
@@ -1110,13 +1111,13 @@ router.get("/api/v1/sales-invoices/:id/efactura/status", async (req: AuthedReque
   const statusUrl = `${baseUrl}/stareMesaj?id_incarcare=${encodeURIComponent(invoice.efacturaUploadIndex)}`
 
   try {
-    const response = await fetch(statusUrl, {
+    const response = await anafHttpRequest(statusUrl, {
       headers: {
         Authorization: `Bearer ${company.efacturaOauthAccessToken}`,
       },
     })
 
-    const rawText = await response.text()
+    const rawText = response.text
     const payload = parseAnafPayload(rawText)
     const summary = summarizeAnafResponse(payload, rawText)
     const nextStatus = classifyEfacturaStatus(payload, rawText)
@@ -1253,13 +1254,13 @@ router.get("/api/v1/sales-invoices/:id/efactura/receipt", async (req: AuthedRequ
   const receiptUrl = `${baseUrl}/descarcare?id=${encodeURIComponent(downloadId)}`
 
   try {
-    const response = await fetch(receiptUrl, {
+    const response = await anafHttpRequest(receiptUrl, {
       headers: {
         Authorization: `Bearer ${company.efacturaOauthAccessToken}`,
       },
     })
 
-    const buffer = Buffer.from(await response.arrayBuffer())
+    const buffer = response.buffer
     const rawText = buffer.toString("utf8")
     const payload = parseAnafPayload(rawText)
     const summary = response.ok ? "Recipisa ANAF a fost descarcata." : summarizeAnafResponse(payload, rawText)
@@ -1303,7 +1304,7 @@ router.get("/api/v1/sales-invoices/:id/efactura/receipt", async (req: AuthedRequ
     })
 
     const fileNameBase = `Recipisa_eFactura_${safeFilePart(invoice.docNo)}_${safeFilePart(invoice.customerName)}`
-    const contentType = response.headers.get("content-type") || "application/octet-stream"
+    const contentType = readAnafHeader(response.headers, "content-type") || "application/octet-stream"
     const extension =
       contentType.includes("zip") ? "zip" :
       contentType.includes("pdf") ? "pdf" :
