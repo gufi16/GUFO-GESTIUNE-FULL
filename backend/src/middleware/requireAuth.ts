@@ -11,6 +11,10 @@ export interface AuthedRequest extends Request {
 }
 
 export function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
+  if (req.path === "/api/v1/company/efactura/oauth/callback") {
+    return next()
+  }
+
   const authHeader = req.headers.authorization
 
   if (!authHeader?.startsWith("Bearer ")) {

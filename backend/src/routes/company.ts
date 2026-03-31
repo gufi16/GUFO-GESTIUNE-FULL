@@ -60,7 +60,7 @@ function decodeTokenExpiry(token: string | null | undefined) {
   return new Date(decoded.exp * 1000)
 }
 
-router.get("/api/v1/company/efactura/oauth/callback", async (req, res) => {
+export async function handleAnafOauthCallback(req, res) {
   const code = String(req.query.code || "")
   const stateRaw = String(req.query.state || "")
 
@@ -140,7 +140,9 @@ router.get("/api/v1/company/efactura/oauth/callback", async (req, res) => {
 
     return res.redirect(`${state.returnTo}${state.returnTo.includes("?") ? "&" : "?"}oauth=error`)
   }
-})
+}
+
+router.get("/api/v1/company/efactura/oauth/callback", handleAnafOauthCallback)
 
 router.use(requireAuth)
 

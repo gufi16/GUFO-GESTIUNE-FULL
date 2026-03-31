@@ -21,7 +21,7 @@ import metaRouter from "./routes/meta"
 import posRouter, { buildCatalogPayload, handlePosSale, registerPairedPosSession, resolvePosAuthContext } from "./routes/pos"
 import stockRouter from "./routes/stock"
 import purchaseRouter from "./routes/purchase"
-import companyRouter from "./routes/company"
+import companyRouter, { handleAnafOauthCallback } from "./routes/company"
 import purchaseReceiptsPdf from "./routes/purchaseReceiptsPdf"
 import transferRouter from "./routes/transfer"
 import dashboardRoutes from "./routes/dashboard"
@@ -89,6 +89,8 @@ app.get("/health", (_req, res) => {
     time: new Date().toISOString(),
   })
 })
+
+app.get("/api/v1/company/efactura/oauth/callback", handleAnafOauthCallback)
 
 const LoginSchema = z.object({
   email: z.string().email(),
