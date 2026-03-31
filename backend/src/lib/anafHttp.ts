@@ -40,6 +40,8 @@ export async function anafHttpRequest(url: string, options: AnafRequestOptions =
         headers: options.headers,
         family: 4,
         servername: parsed.hostname,
+        minVersion: "TLSv1.2",
+        maxVersion: "TLSv1.2",
       },
       (res) => {
         const chunks: Buffer[] = []
