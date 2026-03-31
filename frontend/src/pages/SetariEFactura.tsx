@@ -63,6 +63,7 @@ export default function SetariEFacturaPage() {
     const oauth = params.get("oauth")
     if (oauth === "success") setMessage("Conectarea ANAF a fost realizata.")
     if (oauth === "error") setError("Conectarea ANAF nu a putut fi finalizata.")
+    if (oauth === "denied") setError("Autorizarea ANAF a fost anulata sau refuzata.")
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

@@ -63,9 +63,11 @@ function decodeTokenExpiry(token: string | null | undefined) {
 
 export async function handleAnafOauthCallback(req, res) {
   const code = String(req.query.code || "")
+  const error = String(req.query.error || "")
+  const errorDescription = String(req.query.error_description || "")
   const stateRaw = String(req.query.state || "")
 
-  if (!code || !stateRaw) {
+  if (!stateRaw) {
     return res.status(400).send("Lipsesc parametrii OAuth ANAF.")
   }
 
@@ -85,6 +87,28 @@ export async function handleAnafOauthCallback(req, res) {
 
   if (!oauthConfig.clientId || !oauthConfig.clientSecret || !oauthConfig.redirectUri) {
     return res.status(400).send("Configuratia ANAF nu este completa.")
+  }
+
+  if (error) {
+    const nextError =
+      error === "access_denied"
+        ? "Autorizarea ANAF a fost anulata sau refuzata."
+        : errorDescription || error || "Autorizarea ANAF nu a putut fi finalizata."
+
+    await prisma.company.update({
+      where: { tenantId: state.tenantId },
+      data: {
+        efacturaOauthLastError: nextError,
+      },
+    })
+
+    return res.redirect(
+      `${state.returnTo}${state.returnTo.includes("?") ? "&" : "?"}oauth=denied`,
+    )
+  }
+
+  if (!code) {
+    return res.status(400).send("Lipsesc parametrii OAuth ANAF.")
   }
 
   try {
