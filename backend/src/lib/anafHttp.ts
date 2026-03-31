@@ -1,3 +1,4 @@
+import crypto from "crypto"
 import https from "https"
 
 type AnafRequestOptions = {
@@ -42,6 +43,8 @@ export async function anafHttpRequest(url: string, options: AnafRequestOptions =
         servername: parsed.hostname,
         minVersion: "TLSv1.2",
         maxVersion: "TLSv1.2",
+        ciphers: "DEFAULT@SECLEVEL=1",
+        secureOptions: crypto.constants.SSL_OP_LEGACY_SERVER_CONNECT,
       },
       (res) => {
         const chunks: Buffer[] = []
