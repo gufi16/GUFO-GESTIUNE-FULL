@@ -36,9 +36,12 @@ export function setToken(token: string) {
   localStorage.setItem("token", token)
 }
 
-export function clearToken() {
+export function clearErpToken() {
   localStorage.removeItem("access_token")
   localStorage.removeItem("token")
+}
+
+export function clearControlToken() {
   localStorage.removeItem("control_token")
 }
 

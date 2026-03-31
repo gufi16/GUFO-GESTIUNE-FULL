@@ -1,4 +1,4 @@
-import { api } from "./api"
+import { api, clearControlToken } from "./api"
 
 type ControlLoginResponse = {
   ok: boolean
@@ -24,8 +24,6 @@ export async function controlLogin(email: string, password: string) {
     throw new Error("Token lipsa in raspunsul de login")
   }
 
-  localStorage.removeItem("access_token")
-  localStorage.removeItem("token")
   localStorage.setItem("control_token", token)
   return data
 }
@@ -35,5 +33,5 @@ export async function controlMe() {
 }
 
 export function controlLogout() {
-  localStorage.removeItem("control_token")
+  clearControlToken()
 }

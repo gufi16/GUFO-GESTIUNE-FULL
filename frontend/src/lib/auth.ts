@@ -1,4 +1,4 @@
-import { api, setToken, clearToken } from "./api"
+import { api, setToken, clearErpToken } from "./api"
 
 type LoginResponse = {
   ok: boolean
@@ -33,7 +33,6 @@ export async function login(email: string, password: string) {
     throw new Error("Token lipsă în răspunsul de login")
   }
 
-  localStorage.removeItem("control_token")
   setToken(token)
   return data
 }
@@ -43,5 +42,5 @@ export async function me() {
 }
 
 export function logout() {
-  clearToken()
+  clearErpToken()
 }
