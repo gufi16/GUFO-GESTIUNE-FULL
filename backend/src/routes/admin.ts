@@ -7,6 +7,7 @@ import { z } from "zod"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { hashSecret } from "../lib/auth"
+import { buildTenantExportZip } from "../lib/tenantExport"
 
 const router = Router()
 
@@ -633,6 +634,35 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
       })),
     },
   })
+})
+
+router.get("/api/v1/admin/clients/:id/export", requireAuth, requireOwner, async (req: AuthedRequest, res) => {
+  try {
+    const { zip, filename } = await buildTenantExportZip(req.params.id)
+
+    await prisma.auditLog.create({
+      data: {
+        tenantId: req.params.id,
+        actorType: "OWNER",
+        actorId: req.auth?.userId,
+        action: "TENANT_EXPORT_CREATED",
+        entityType: "Tenant",
+        entityId: req.params.id,
+        payload: {
+          filename,
+        },
+      },
+    })
+
+    res.setHeader("Content-Type", "application/zip")
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`)
+    return res.send(zip.toBuffer())
+  } catch (error: any) {
+    return res.status(500).json({
+      ok: false,
+      error: error?.message || "Nu am putut genera exportul clientului.",
+    })
+  }
 })
 
 router.post("/api/v1/admin/clients", requireAuth, requireOwner, async (req: AuthedRequest, res) => {

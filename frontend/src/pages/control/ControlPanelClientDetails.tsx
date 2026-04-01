@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useParams } from "react-router-dom"
 import {
   Copy,
+  Download,
   KeyRound,
   MapPin,
   PauseCircle,
@@ -164,6 +165,7 @@ export default function ControlPanelClientDetails() {
   const [creatingLocation, setCreatingLocation] = useState(false)
   const [creatingDeviceFor, setCreatingDeviceFor] = useState<string | null>(null)
   const [savingUser, setSavingUser] = useState(false)
+  const [exportingClient, setExportingClient] = useState(false)
   const [editingUserId, setEditingUserId] = useState<string | null>(null)
   const [newLocationName, setNewLocationName] = useState("")
   const [deviceForms, setDeviceForms] = useState<Record<string, { label: string }>>({})
@@ -476,6 +478,39 @@ export default function ControlPanelClientDetails() {
     }
   }
 
+  async function handleExportClient() {
+    if (!id) return
+    try {
+      setExportingClient(true)
+      setError(null)
+      const response = await api<Response>(`/api/v1/admin/clients/${id}/export`, {
+        raw: true,
+      })
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}))
+        throw new Error(payload?.error || "Nu am putut genera exportul clientului.")
+      }
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      const disposition = response.headers.get("content-disposition") || ""
+      const match = disposition.match(/filename=\"?([^\";]+)\"?/)
+      link.href = url
+      link.download = match?.[1] || `tenant-export-${id}.zip`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+      setMessage("Exportul clientului a fost generat.")
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut genera exportul clientului.")
+    } finally {
+      setExportingClient(false)
+    }
+  }
+
   const infoRows = [
     ["Firma", client?.company?.name || "-"],
     ["CUI", client?.company?.cui || "-"],
@@ -511,6 +546,14 @@ export default function ControlPanelClientDetails() {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <button
+            onClick={handleExportClient}
+            disabled={exportingClient || loading}
+            className="inline-flex items-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Download size={15} />
+            {exportingClient ? "Se pregateste..." : "Export client"}
+          </button>
           <button
             onClick={handleToggleLicenseSuspended}
             disabled={!client?.license?.id || licenseBusy}
