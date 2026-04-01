@@ -82,6 +82,7 @@ async function anafCurlRequest(url: string, options: AnafRequestOptions = {}): P
       "--silent",
       "--show-error",
       "--location",
+      "-4",
       "--http1.1",
       "--tlsv1.2",
       "--tls-max",
