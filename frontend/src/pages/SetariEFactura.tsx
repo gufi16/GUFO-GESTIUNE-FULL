@@ -210,6 +210,7 @@ export default function SetariEFacturaPage() {
     try {
       const returnTo = `${window.location.origin}/setari/efactura`
       const res = await fetch(`${API}/api/v1/company/efactura/oauth/start?returnTo=${encodeURIComponent(returnTo)}`, {
+        credentials: "include",
         headers: {
           Authorization: `Bearer ${token}`,
         },

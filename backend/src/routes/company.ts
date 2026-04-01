@@ -13,6 +13,7 @@ const ANAF_AUTH_URL = "https://logincert.anaf.ro/anaf-oauth2/v1/authorize"
 const ANAF_TOKEN_URL = "https://logincert.anaf.ro/anaf-oauth2/v1/token"
 const ANAF_TEST_URL = "https://api.anaf.ro/TestOauth/jaxrs/hello?name=GuFo%20ERP"
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret"
+const ANAF_OAUTH_CTX_COOKIE = "gufo_anaf_oauth_ctx"
 
 async function getEffectiveAnafOauthConfig(tenantId: string) {
   const [company, platform] = await Promise.all([
@@ -66,14 +67,23 @@ export async function handleAnafOauthCallback(req, res) {
   const error = String(req.query.error || "")
   const errorDescription = String(req.query.error_description || "")
   const stateRaw = String(req.query.state || "")
+  const cookieStateRaw = String(req.cookies?.[ANAF_OAUTH_CTX_COOKIE] || "")
+  const effectiveStateRaw = cookieStateRaw || stateRaw
 
-  if (!stateRaw) {
+  res.clearCookie(ANAF_OAUTH_CTX_COOKIE, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/api/v1/company/efactura/oauth/callback",
+  })
+
+  if (!effectiveStateRaw) {
     return res.status(400).send("Lipsesc parametrii OAuth ANAF.")
   }
 
   let state: { tenantId: string; returnTo: string } | null = null
   try {
-    state = jwt.verify(stateRaw, JWT_SECRET) as { tenantId: string; returnTo: string }
+    state = jwt.verify(effectiveStateRaw, JWT_SECRET) as { tenantId: string; returnTo: string }
   } catch {
     return res.status(400).send("State OAuth invalid sau expirat.")
   }
@@ -378,11 +388,18 @@ router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, re
     { expiresIn: "15m" },
   )
 
+  res.cookie(ANAF_OAUTH_CTX_COOKIE, state, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/api/v1/company/efactura/oauth/callback",
+    maxAge: 15 * 60 * 1000,
+  })
+
   const params = new URLSearchParams({
     response_type: "code",
     client_id: oauthConfig.clientId,
     redirect_uri: oauthConfig.redirectUri,
-    state,
     token_content_type: "jwt",
   })
 
