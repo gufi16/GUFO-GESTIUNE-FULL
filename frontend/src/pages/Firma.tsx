@@ -27,6 +27,11 @@ type CompanyForm = {
   contactEmail: string
   phone: string
   isVatPayer: boolean
+  efacturaSellerCity: string
+  efacturaSellerCounty: string
+  efacturaSellerPostalCode: string
+  efacturaSellerCountryCode: string
+  efacturaContactEmail: string
 }
 
 const emptyForm: CompanyForm = {
@@ -44,6 +49,11 @@ const emptyForm: CompanyForm = {
   contactEmail: "",
   phone: "",
   isVatPayer: true,
+  efacturaSellerCity: "",
+  efacturaSellerCounty: "",
+  efacturaSellerPostalCode: "",
+  efacturaSellerCountryCode: "RO",
+  efacturaContactEmail: "",
 }
 
 export default function FirmaPage() {
@@ -53,6 +63,7 @@ export default function FirmaPage() {
   const [form, setForm] = useState<CompanyForm>(emptyForm)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [lookupBusy, setLookupBusy] = useState(false)
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
 
@@ -103,6 +114,11 @@ export default function FirmaPage() {
           contactEmail: data.company.contactEmail || data.company.efacturaContactEmail || "",
           phone: data.company.phone || "",
           isVatPayer: data.company.isVatPayer ?? true,
+          efacturaSellerCity: data.company.efacturaSellerCity || data.company.city || "",
+          efacturaSellerCounty: data.company.efacturaSellerCounty || data.company.county || "",
+          efacturaSellerPostalCode: data.company.efacturaSellerPostalCode || data.company.postalCode || "",
+          efacturaSellerCountryCode: data.company.efacturaSellerCountryCode || data.company.country || "RO",
+          efacturaContactEmail: data.company.efacturaContactEmail || data.company.contactEmail || "",
         })
       } else {
         setForm(emptyForm)
@@ -174,6 +190,56 @@ export default function FirmaPage() {
     }))
   }
 
+  async function lookupByCui() {
+    if (!token) {
+      setError("Nu exista token de autentificare. Fa login din nou.")
+      return
+    }
+
+    if (!form.cui.trim()) {
+      setError("Completeaza mai intai CUI-ul.")
+      return
+    }
+
+    setLookupBusy(true)
+    setError("")
+    setMessage("")
+    try {
+      const res = await fetch(`${API}/api/v1/company/cui-lookup?cui=${encodeURIComponent(form.cui)}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok || !data?.ok || !data?.company) {
+        throw new Error(data?.error || "Nu am putut obtine datele firmei dupa CUI.")
+      }
+
+      setForm((prev) => ({
+        ...prev,
+        name: data.company.name || prev.name,
+        cui: data.company.cui || prev.cui,
+        regNo: data.company.regNo || prev.regNo,
+        address: data.company.address || prev.address,
+        city: data.company.city || prev.city,
+        county: data.company.county || prev.county,
+        postalCode: data.company.postalCode || prev.postalCode,
+        country: data.company.country || prev.country,
+        isVatPayer: data.company.isVatPayer ?? prev.isVatPayer,
+        efacturaSellerCity: data.company.city || prev.efacturaSellerCity,
+        efacturaSellerCounty: data.company.county || prev.efacturaSellerCounty,
+        efacturaSellerPostalCode: data.company.postalCode || prev.efacturaSellerPostalCode,
+        efacturaSellerCountryCode: data.company.country || prev.efacturaSellerCountryCode,
+      }))
+      setMessage("Datele firmei au fost completate automat dupa CUI.")
+    } catch (e: any) {
+      setError(e?.message || "Nu am putut obtine datele firmei dupa CUI.")
+    } finally {
+      setLookupBusy(false)
+    }
+  }
+
   return (
     <div className="space-y-3">
       <PageHeader
@@ -204,9 +270,19 @@ export default function FirmaPage() {
             : "Aici completezi datele firmei o singura data. Sistemul le foloseste apoi in toate documentele si PDF-urile ERP."
         }
         actions={
-          <button onClick={saveCompany} disabled={saving || loading} className={documentButtonPrimaryClass}>
-            {saving ? "Se salveaza..." : "Salveaza"}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={lookupByCui}
+              disabled={lookupBusy || loading || !form.cui.trim()}
+              className={documentButtonPrimaryClass.replace("bg-[#1D4E89] text-white shadow-[0_16px_30px_rgba(29,78,137,0.18)] hover:bg-[#173E6C]", "border border-slate-200 bg-white text-slate-900 hover:bg-slate-50 shadow-none")}
+            >
+              {lookupBusy ? "Caut..." : "Completeaza dupa CUI"}
+            </button>
+            <button onClick={saveCompany} disabled={saving || loading} className={documentButtonPrimaryClass}>
+              {saving ? "Se salveaza..." : "Salveaza"}
+            </button>
+          </div>
         }
       >
         {loading ? (
@@ -279,6 +355,33 @@ export default function FirmaPage() {
                 <textarea value={form.address} onChange={(e) => updateField("address", e.target.value)} rows={3} className={documentTextareaClass} placeholder="Ex: Calea Floresti 20" />
               </DocumentField>
             </div>
+
+            {efacturaEnabled ? (
+              <div className="mt-4">
+                <DocumentSection
+                  title="Date emitent e-Factura"
+                  description="Aceste campuri sunt folosite direct in XML-ul ANAF. Daca le lasi goale, sistemul foloseste valorile generale ale firmei."
+                >
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    <DocumentField label="Localitate emitent">
+                      <input value={form.efacturaSellerCity} onChange={(e) => updateField("efacturaSellerCity", e.target.value)} className={documentInputClass} placeholder="Ex: Cluj-Napoca" />
+                    </DocumentField>
+                    <DocumentField label="Judet emitent">
+                      <input value={form.efacturaSellerCounty} onChange={(e) => updateField("efacturaSellerCounty", e.target.value)} className={documentInputClass} placeholder="Ex: Cluj" />
+                    </DocumentField>
+                    <DocumentField label="Cod postal emitent">
+                      <input value={form.efacturaSellerPostalCode} onChange={(e) => updateField("efacturaSellerPostalCode", e.target.value)} className={documentInputClass} placeholder="Ex: 400000" />
+                    </DocumentField>
+                    <DocumentField label="Tara emitent">
+                      <input value={form.efacturaSellerCountryCode} onChange={(e) => updateField("efacturaSellerCountryCode", e.target.value.toUpperCase())} className={documentInputClass} placeholder="RO" />
+                    </DocumentField>
+                    <DocumentField label="Email contact e-Factura">
+                      <input value={form.efacturaContactEmail} onChange={(e) => updateField("efacturaContactEmail", e.target.value)} className={documentInputClass} placeholder="Ex: efactura@firma.ro" />
+                    </DocumentField>
+                  </div>
+                </DocumentSection>
+              </div>
+            ) : null}
           </>
         )}
       </DocumentSection>
