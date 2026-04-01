@@ -57,10 +57,13 @@ export default function SetariEFacturaPage() {
     expiresAt: "",
     lastError: "",
   })
+
   useEffect(() => {
     loadSettings()
+
     const params = new URLSearchParams(window.location.search)
     const oauth = params.get("oauth")
+
     if (oauth === "success") setMessage("Conectarea ANAF a fost realizata.")
     if (oauth === "error") setError("Conectarea ANAF nu a putut fi finalizata.")
     if (oauth === "denied") setError("Autorizarea ANAF a fost anulata sau refuzata.")
@@ -96,12 +99,29 @@ export default function SetariEFacturaPage() {
         efacturaPlatformConfigured: Boolean(data?.company?.efacturaPlatformConfigured),
         efacturaUsesPlatformConfig: Boolean(data?.company?.efacturaUsesPlatformConfig),
       })
+
+      const connected = Boolean(data?.company?.efacturaOauthAccessToken)
+
       setOauthStatus({
-        connected: Boolean(data?.company?.efacturaOauthAccessToken),
+        connected,
         connectedAt: data?.company?.efacturaOauthConnectedAt || "",
         expiresAt: data?.company?.efacturaOauthAccessTokenExpiresAt || "",
         lastError: data?.company?.efacturaOauthLastError || "",
       })
+
+      if (connected) {
+        setError("")
+
+        const params = new URLSearchParams(window.location.search)
+        const oauth = params.get("oauth")
+
+        if (oauth === "denied" || oauth === "error") {
+          params.delete("oauth")
+          const qs = params.toString()
+          const nextUrl = `${window.location.pathname}${qs ? `?${qs}` : ""}`
+          window.history.replaceState({}, "", nextUrl)
+        }
+      }
     } catch (e: any) {
       setError(e?.message || "Nu am putut incarca setarile e-Factura.")
     } finally {
