@@ -1,11 +1,21 @@
 // @ts-nocheck
 import { Router } from "express"
 import jwt from "jsonwebtoken"
+import fs from "fs"
+import multer from "multer"
+import path from "path"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { getNextNumberPreview, getNumberingConfig, normalizeNumberingPayload } from "../lib/numbering"
 import { requireTenantModule } from "../lib/tenantModules"
 import { anafHttpRequest } from "../lib/anafHttp"
+import {
+  deleteEfacturaCertificateFile,
+  encryptSecret,
+  ensureEfacturaCertDir,
+  getEfacturaCertPath,
+  hasEfacturaCertificateFile,
+} from "../lib/efacturaCertificate"
 
 const router = Router()
 
@@ -15,6 +25,48 @@ const ANAF_TEST_URL = "https://api.anaf.ro/TestOauth/jaxrs/hello?name=GuFo%20ERP
 const ANAF_CUI_LOOKUP_URL = "https://webservicesp.anaf.ro/api/PlatitorTvaRest/v9/tva"
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret"
 const ANAF_OAUTH_CTX_COOKIE = "gufo_anaf_oauth_ctx"
+const certUploadsDir = ensureEfacturaCertDir()
+
+const certStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, certUploadsDir)
+  },
+  filename: (req: AuthedRequest, file, cb) => {
+    cb(null, path.basename(getEfacturaCertPath(req.auth!.tenantId, file.originalname)))
+  },
+})
+
+const certUpload = multer({
+  storage: certStorage,
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+  },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname || "").toLowerCase()
+    if (ext !== ".p12" && ext !== ".pfx") {
+      cb(new Error("Sunt permise doar certificate .p12 sau .pfx."))
+      return
+    }
+    cb(null, true)
+  },
+})
+
+function normalizeOptionalText(value: unknown) {
+  const text = String(value || "").trim()
+  return text || null
+}
+
+function mapCompanyResponse(company: any, oauthConfig: any) {
+  const hasStoredCertificate = hasEfacturaCertificateFile(company?.tenantId, company?.efacturaCertFilename)
+
+  return {
+    ...company,
+    efacturaPlatformConfigured: oauthConfig.platformConfigured,
+    efacturaUsesPlatformConfig: oauthConfig.usesPlatformConfig,
+    efacturaCertHasFile: hasStoredCertificate,
+    efacturaCertPasswordConfigured: Boolean(company?.efacturaCertPasswordEnc),
+  }
+}
 
 async function getEffectiveAnafOauthConfig(tenantId: string) {
   const [company, platform] = await Promise.all([
@@ -267,11 +319,7 @@ router.get("/api/v1/company", async (req: AuthedRequest, res) => {
 
     return res.json({
       ok: true,
-      company: {
-        ...company,
-        efacturaPlatformConfigured: oauthConfig.platformConfigured,
-        efacturaUsesPlatformConfig: oauthConfig.usesPlatformConfig,
-      }
+      company: company ? mapCompanyResponse(company, oauthConfig) : null
     })
   } catch (e: any) {
     return res.status(500).json({
@@ -360,6 +408,8 @@ router.post("/api/v1/company", async (req: AuthedRequest, res) => {
     efacturaSellerCounty,
     efacturaSellerPostalCode,
     efacturaContactEmail,
+    efacturaCertSerial,
+    efacturaCertPassword,
     efacturaOauthClientId,
     efacturaOauthClientSecret,
     efacturaOauthRedirectUri
@@ -419,6 +469,13 @@ router.post("/api/v1/company", async (req: AuthedRequest, res) => {
         efacturaSellerCounty: String(efacturaSellerCounty || county || existing?.efacturaSellerCounty || existing?.county || "").trim() || null,
         efacturaSellerPostalCode: String(efacturaSellerPostalCode || postalCode || existing?.efacturaSellerPostalCode || existing?.postalCode || "").trim() || null,
         efacturaContactEmail: String(efacturaContactEmail || contactEmail || existing?.efacturaContactEmail || existing?.contactEmail || "").trim() || null,
+        efacturaCertSerial: Object.prototype.hasOwnProperty.call(req.body || {}, "efacturaCertSerial")
+          ? normalizeOptionalText(efacturaCertSerial)
+          : existing?.efacturaCertSerial ?? null,
+        efacturaCertPasswordEnc:
+          typeof efacturaCertPassword === "string" && efacturaCertPassword.trim()
+            ? encryptSecret(String(efacturaCertPassword).trim())
+            : existing?.efacturaCertPasswordEnc ?? null,
         efacturaOauthClientId: efacturaOauthClientId ? String(efacturaOauthClientId).trim() : null,
         efacturaOauthClientSecret: efacturaOauthClientSecret ? String(efacturaOauthClientSecret).trim() : null,
         efacturaOauthRedirectUri: efacturaOauthRedirectUri ? String(efacturaOauthRedirectUri).trim() : null,
@@ -456,6 +513,11 @@ router.post("/api/v1/company", async (req: AuthedRequest, res) => {
         efacturaSellerCounty: String(efacturaSellerCounty || county || "").trim() || null,
         efacturaSellerPostalCode: String(efacturaSellerPostalCode || postalCode || "").trim() || null,
         efacturaContactEmail: String(efacturaContactEmail || contactEmail || "").trim() || null,
+        efacturaCertSerial: normalizeOptionalText(efacturaCertSerial),
+        efacturaCertPasswordEnc:
+          typeof efacturaCertPassword === "string" && efacturaCertPassword.trim()
+            ? encryptSecret(String(efacturaCertPassword).trim())
+            : null,
         efacturaOauthClientId: efacturaOauthClientId ? String(efacturaOauthClientId).trim() : null,
         efacturaOauthClientSecret: efacturaOauthClientSecret ? String(efacturaOauthClientSecret).trim() : null,
         efacturaOauthRedirectUri: efacturaOauthRedirectUri ? String(efacturaOauthRedirectUri).trim() : null,
@@ -472,12 +534,117 @@ router.post("/api/v1/company", async (req: AuthedRequest, res) => {
 
     return res.json({
       ok: true,
-      company
+      company: mapCompanyResponse(company, await getEffectiveAnafOauthConfig(tenantId))
     })
   } catch (e: any) {
     return res.status(500).json({
       ok: false,
       error: e?.message || "Eroare la salvarea firmei"
+    })
+  }
+})
+
+router.post(
+  "/api/v1/company/efactura/certificate",
+  requireAuth,
+  certUpload.single("certificate"),
+  async (req: AuthedRequest, res) => {
+    const tenantId = req.auth!.tenantId
+
+    try {
+      if (!req.file) {
+        return res.status(400).json({
+          ok: false,
+          error: "Nu ai selectat niciun certificat .p12/.pfx.",
+        })
+      }
+
+      const serial = normalizeOptionalText(req.body?.efacturaCertSerial)
+      const password = String(req.body?.efacturaCertPassword || "").trim()
+      if (!password) {
+        fs.unlinkSync(req.file.path)
+        return res.status(400).json({
+          ok: false,
+          error: "Parola certificatului este obligatorie la upload.",
+        })
+      }
+
+      const existing = await prisma.company.findUnique({
+        where: { tenantId },
+        select: {
+          tenantId: true,
+          name: true,
+          efacturaCertFilename: true,
+        },
+      })
+
+      if (existing?.efacturaCertFilename && existing.efacturaCertFilename !== req.file.filename) {
+        deleteEfacturaCertificateFile(tenantId, existing.efacturaCertFilename)
+      }
+
+      const company = await prisma.company.upsert({
+        where: { tenantId },
+        update: {
+          efacturaCertFilename: req.file.filename,
+          efacturaCertUploadedAt: new Date(),
+          efacturaCertSerial: serial,
+          efacturaCertPasswordEnc: encryptSecret(password),
+        },
+        create: {
+          tenantId,
+          name: existing?.name || "Companie",
+          efacturaCertFilename: req.file.filename,
+          efacturaCertUploadedAt: new Date(),
+          efacturaCertSerial: serial,
+          efacturaCertPasswordEnc: encryptSecret(password),
+        },
+      })
+
+      return res.json({
+        ok: true,
+        company: mapCompanyResponse(company, await getEffectiveAnafOauthConfig(tenantId)),
+      })
+    } catch (error: any) {
+      if (req.file?.path && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path)
+      }
+      return res.status(400).json({
+        ok: false,
+        error: error?.message || "Nu am putut salva certificatul e-Factura.",
+      })
+    }
+  }
+)
+
+router.delete("/api/v1/company/efactura/certificate", requireAuth, async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+
+  try {
+    const company = await prisma.company.findUnique({
+      where: { tenantId },
+      select: {
+        efacturaCertFilename: true,
+      },
+    })
+
+    deleteEfacturaCertificateFile(tenantId, company?.efacturaCertFilename)
+
+    const updated = await prisma.company.update({
+      where: { tenantId },
+      data: {
+        efacturaCertFilename: null,
+        efacturaCertUploadedAt: null,
+      },
+    })
+
+    return res.json({
+      ok: true,
+      company: mapCompanyResponse(updated, await getEffectiveAnafOauthConfig(tenantId)),
+    })
+  } catch (error: any) {
+    return res.status(400).json({
+      ok: false,
+      error: error?.message || "Nu am putut sterge certificatul e-Factura.",
     })
   }
 })

@@ -7,6 +7,7 @@ import { getNextNumberPreview, reserveNextNumber } from "../lib/numbering"
 import { generateInvoiceEFacturaXml, validateInvoiceForEFactura } from "../lib/efactura"
 import { requireTenantModule } from "../lib/tenantModules"
 import { anafHttpRequest, readAnafHeader } from "../lib/anafHttp"
+import { getAnafCertificateOptions } from "../lib/efacturaCertificate"
 
 const router = Router()
 
@@ -243,10 +244,12 @@ async function resolveReceiptDownloadId(company: any, invoice: any) {
 
   const baseUrl = getEfacturaBaseUrl(company?.efacturaEnvironment)
   const listUrl = `${baseUrl}/listaMesajeFactura?zile=60&cif=${encodeURIComponent(cif)}`
+  const certOptions = getAnafCertificateOptions(company)
   const response = await anafHttpRequest(listUrl, {
     headers: {
       Authorization: `Bearer ${company.efacturaOauthAccessToken}`,
     },
+    ...certOptions,
   })
   const rawText = response.text
   const payload = parseAnafPayload(rawText)
@@ -927,9 +930,12 @@ router.post("/api/v1/sales-invoices/:id/efactura/send", async (req: AuthedReques
   const company = await prisma.company.findUnique({
     where: { tenantId },
     select: {
+      tenantId: true,
       cui: true,
       efacturaEnvironment: true,
       efacturaOauthAccessToken: true,
+      efacturaCertFilename: true,
+      efacturaCertPasswordEnc: true,
     },
   })
 
@@ -946,6 +952,7 @@ router.post("/api/v1/sales-invoices/:id/efactura/send", async (req: AuthedReques
   const uploadUrl = `${baseUrl}/upload?standard=UBL&cif=${encodeURIComponent(cif)}`
 
   try {
+    const certOptions = getAnafCertificateOptions(company)
     const response = await anafHttpRequest(uploadUrl, {
       method: "POST",
       headers: {
@@ -953,6 +960,7 @@ router.post("/api/v1/sales-invoices/:id/efactura/send", async (req: AuthedReques
         "Content-Type": "application/xml; charset=utf-8",
       },
       body: invoice.efacturaXmlText,
+      ...certOptions,
     })
 
     const rawText = response.text
@@ -1098,8 +1106,11 @@ router.get("/api/v1/sales-invoices/:id/efactura/status", async (req: AuthedReque
   const company = await prisma.company.findUnique({
     where: { tenantId },
     select: {
+      tenantId: true,
       efacturaEnvironment: true,
       efacturaOauthAccessToken: true,
+      efacturaCertFilename: true,
+      efacturaCertPasswordEnc: true,
     },
   })
 
@@ -1111,10 +1122,12 @@ router.get("/api/v1/sales-invoices/:id/efactura/status", async (req: AuthedReque
   const statusUrl = `${baseUrl}/stareMesaj?id_incarcare=${encodeURIComponent(invoice.efacturaUploadIndex)}`
 
   try {
+    const certOptions = getAnafCertificateOptions(company)
     const response = await anafHttpRequest(statusUrl, {
       headers: {
         Authorization: `Bearer ${company.efacturaOauthAccessToken}`,
       },
+      ...certOptions,
     })
 
     const rawText = response.text
@@ -1231,9 +1244,12 @@ router.get("/api/v1/sales-invoices/:id/efactura/receipt", async (req: AuthedRequ
   const company = await prisma.company.findUnique({
     where: { tenantId },
     select: {
+      tenantId: true,
       cui: true,
       efacturaEnvironment: true,
       efacturaOauthAccessToken: true,
+      efacturaCertFilename: true,
+      efacturaCertPasswordEnc: true,
     },
   })
 
@@ -1254,10 +1270,12 @@ router.get("/api/v1/sales-invoices/:id/efactura/receipt", async (req: AuthedRequ
   const receiptUrl = `${baseUrl}/descarcare?id=${encodeURIComponent(downloadId)}`
 
   try {
+    const certOptions = getAnafCertificateOptions(company)
     const response = await anafHttpRequest(receiptUrl, {
       headers: {
         Authorization: `Bearer ${company.efacturaOauthAccessToken}`,
       },
+      ...certOptions,
     })
 
     const buffer = response.buffer

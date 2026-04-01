@@ -32,6 +32,14 @@ type CompanyForm = {
   efacturaSellerPostalCode: string
   efacturaSellerCountryCode: string
   efacturaContactEmail: string
+  efacturaCertSerial: string
+}
+
+type CompanyCertificateState = {
+  hasFile: boolean
+  filename: string
+  uploadedAt: string
+  passwordConfigured: boolean
 }
 
 const emptyForm: CompanyForm = {
@@ -54,6 +62,7 @@ const emptyForm: CompanyForm = {
   efacturaSellerPostalCode: "",
   efacturaSellerCountryCode: "RO",
   efacturaContactEmail: "",
+  efacturaCertSerial: "",
 }
 
 export default function FirmaPage() {
@@ -64,6 +73,15 @@ export default function FirmaPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [lookupBusy, setLookupBusy] = useState(false)
+  const [certBusy, setCertBusy] = useState(false)
+  const [certPassword, setCertPassword] = useState("")
+  const [certFile, setCertFile] = useState<File | null>(null)
+  const [certState, setCertState] = useState<CompanyCertificateState>({
+    hasFile: false,
+    filename: "",
+    uploadedAt: "",
+    passwordConfigured: false,
+  })
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
 
@@ -119,9 +137,22 @@ export default function FirmaPage() {
           efacturaSellerPostalCode: data.company.efacturaSellerPostalCode || data.company.postalCode || "",
           efacturaSellerCountryCode: data.company.efacturaSellerCountryCode || data.company.country || "RO",
           efacturaContactEmail: data.company.efacturaContactEmail || data.company.contactEmail || "",
+          efacturaCertSerial: data.company.efacturaCertSerial || "",
+        })
+        setCertState({
+          hasFile: Boolean(data.company.efacturaCertHasFile),
+          filename: data.company.efacturaCertFilename || "",
+          uploadedAt: data.company.efacturaCertUploadedAt || "",
+          passwordConfigured: Boolean(data.company.efacturaCertPasswordConfigured),
         })
       } else {
         setForm(emptyForm)
+        setCertState({
+          hasFile: false,
+          filename: "",
+          uploadedAt: "",
+          passwordConfigured: false,
+        })
       }
     } catch {
       setError("Nu pot incarca datele firmei.")
@@ -158,6 +189,7 @@ export default function FirmaPage() {
         body: JSON.stringify({
           ...currentCompany,
           ...form,
+          ...(certPassword.trim() ? { efacturaCertPassword: certPassword.trim() } : {}),
         }),
       })
 
@@ -175,11 +207,97 @@ export default function FirmaPage() {
         return
       }
 
+      setCertPassword("")
       setMessage("Datele firmei au fost salvate.")
     } catch {
       setError("Eroare la salvarea firmei.")
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function uploadCertificate() {
+    if (!token) {
+      setError("Nu exista token de autentificare. Fa login din nou.")
+      return
+    }
+
+    if (!certFile) {
+      setError("Selecteaza certificatul .p12/.pfx.")
+      return
+    }
+
+    if (!certPassword.trim()) {
+      setError("Completeaza parola certificatului.")
+      return
+    }
+
+    setCertBusy(true)
+    setError("")
+    setMessage("")
+
+    try {
+      const body = new FormData()
+      body.append("certificate", certFile)
+      body.append("efacturaCertPassword", certPassword.trim())
+      if (form.efacturaCertSerial.trim()) {
+        body.append("efacturaCertSerial", form.efacturaCertSerial.trim())
+      }
+
+      const res = await fetch(`${API}/api/v1/company/efactura/certificate`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body,
+      })
+
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Nu am putut incarca certificatul e-Factura.")
+      }
+
+      setCertFile(null)
+      setCertPassword("")
+      await loadCompany()
+      setMessage("Certificatul e-Factura a fost incarcat pe server.")
+    } catch (e: any) {
+      setError(e?.message || "Nu am putut incarca certificatul e-Factura.")
+    } finally {
+      setCertBusy(false)
+    }
+  }
+
+  async function removeCertificate() {
+    if (!token) {
+      setError("Nu exista token de autentificare. Fa login din nou.")
+      return
+    }
+
+    setCertBusy(true)
+    setError("")
+    setMessage("")
+
+    try {
+      const res = await fetch(`${API}/api/v1/company/efactura/certificate`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Nu am putut sterge certificatul e-Factura.")
+      }
+
+      setCertFile(null)
+      setCertPassword("")
+      await loadCompany()
+      setMessage("Certificatul e-Factura a fost sters de pe server.")
+    } catch (e: any) {
+      setError(e?.message || "Nu am putut sterge certificatul e-Factura.")
+    } finally {
+      setCertBusy(false)
     }
   }
 
@@ -256,7 +374,11 @@ export default function FirmaPage() {
         <DocumentMetric title="Denumire" value={form.name || "-"} tone="slate" />
         <DocumentMetric title="CUI" value={form.cui || "-"} tone="blue" />
         <DocumentMetric title="TVA" value={form.isVatPayer ? "Platitoare" : "Neplatitoare"} tone="emerald" />
-        <DocumentMetric title="Date firma" value={form.address && form.city && form.county ? "Complete" : "Incomplet"} tone="amber" />
+        <DocumentMetric
+          title="Certificat SPV"
+          value={certState.hasFile ? "Incarcat" : "Lipsa"}
+          tone={certState.hasFile ? "emerald" : "amber"}
+        />
       </div>
 
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
@@ -378,8 +500,77 @@ export default function FirmaPage() {
                     <DocumentField label="Email contact e-Factura">
                       <input value={form.efacturaContactEmail} onChange={(e) => updateField("efacturaContactEmail", e.target.value)} className={documentInputClass} placeholder="Ex: efactura@firma.ro" />
                     </DocumentField>
+                    <DocumentField label="Serial certificat">
+                      <input value={form.efacturaCertSerial} onChange={(e) => updateField("efacturaCertSerial", e.target.value)} className={documentInputClass} placeholder="Ex: 201104209404..." />
+                    </DocumentField>
                   </div>
                 </DocumentSection>
+
+                <div className="mt-4">
+                  <DocumentSection
+                    title="Certificat SPV pe server"
+                    description="Varianta A: incarci certificatul .p12/.pfx pe serverul Gufo, iar sincronizarea SPV si apelurile ANAF ruleaza direct din Hetzner."
+                    actions={
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={uploadCertificate}
+                          disabled={certBusy || loading}
+                          className={documentButtonPrimaryClass}
+                        >
+                          {certBusy ? "Se incarca..." : "Incarca certificat"}
+                        </button>
+                        {certState.hasFile ? (
+                          <button
+                            type="button"
+                            onClick={removeCertificate}
+                            disabled={certBusy || loading}
+                            className={documentButtonPrimaryClass.replace("bg-[#1D4E89] text-white shadow-[0_16px_30px_rgba(29,78,137,0.18)] hover:bg-[#173E6C]", "border border-rose-200 bg-white text-rose-700 hover:bg-rose-50 shadow-none")}
+                          >
+                            Sterge certificat
+                          </button>
+                        ) : null}
+                      </div>
+                    }
+                  >
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                      <DocumentField label="Fisier certificat (.p12 / .pfx)">
+                        <input
+                          type="file"
+                          accept=".p12,.pfx,application/x-pkcs12"
+                          onChange={(e) => setCertFile(e.target.files?.[0] || null)}
+                          className={documentInputClass}
+                        />
+                      </DocumentField>
+                      <DocumentField label="Parola certificat">
+                        <input
+                          type="password"
+                          value={certPassword}
+                          onChange={(e) => setCertPassword(e.target.value)}
+                          className={documentInputClass}
+                          placeholder={certState.passwordConfigured ? "Parola este deja salvata pe server" : "Introdu parola certificatului"}
+                        />
+                      </DocumentField>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-3">
+                      <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-700">
+                        <div className="text-[11px] uppercase tracking-[0.24em] text-slate-400">Status</div>
+                        <div className="mt-1 font-medium text-slate-900">{certState.hasFile ? "Certificat incarcat" : "Fara certificat pe server"}</div>
+                      </div>
+                      <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-700">
+                        <div className="text-[11px] uppercase tracking-[0.24em] text-slate-400">Fisier</div>
+                        <div className="mt-1 truncate font-medium text-slate-900">{certState.filename || "-"}</div>
+                      </div>
+                      <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-700">
+                        <div className="text-[11px] uppercase tracking-[0.24em] text-slate-400">Incarcat la</div>
+                        <div className="mt-1 font-medium text-slate-900">
+                          {certState.uploadedAt ? new Date(certState.uploadedAt).toLocaleString("ro-RO") : "-"}
+                        </div>
+                      </div>
+                    </div>
+                  </DocumentSection>
+                </div>
               </div>
             ) : null}
           </>

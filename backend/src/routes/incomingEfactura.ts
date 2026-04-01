@@ -5,6 +5,7 @@ import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { requireTenantModule } from "../lib/tenantModules"
 import { reserveNextNumber } from "../lib/numbering"
 import { anafHttpRequest } from "../lib/anafHttp"
+import { getAnafCertificateOptions } from "../lib/efacturaCertificate"
 import {
   collectMessageItems,
   extractDownloadId,
@@ -43,10 +44,13 @@ async function getAnafCompanyContext(tenantId: string) {
   return prisma.company.findUnique({
     where: { tenantId },
     select: {
+      tenantId: true,
       cui: true,
       efacturaEnvironment: true,
       efacturaOauthAccessToken: true,
       efacturaOauthLastError: true,
+      efacturaCertFilename: true,
+      efacturaCertPasswordEnc: true,
     },
   })
 }
@@ -279,10 +283,12 @@ router.post("/api/v1/efactura/incoming/sync", async (req: AuthedRequest, res) =>
   const listUrl = `${baseUrl}/listaMesajeFactura?zile=${days}&cif=${encodeURIComponent(cif)}`
 
   try {
+    const certOptions = getAnafCertificateOptions(company)
     const listResponse = await anafHttpRequest(listUrl, {
       headers: {
         Authorization: `Bearer ${company.efacturaOauthAccessToken}`,
       },
+      ...certOptions,
     })
 
     const listText = listResponse.text
@@ -312,6 +318,7 @@ router.post("/api/v1/efactura/incoming/sync", async (req: AuthedRequest, res) =>
         headers: {
           Authorization: `Bearer ${company.efacturaOauthAccessToken}`,
         },
+        ...certOptions,
       })
 
       if (!downloadResponse.ok) {

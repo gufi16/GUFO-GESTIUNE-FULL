@@ -10,6 +10,8 @@ type AnafRequestOptions = {
   headers?: Record<string, string>
   body?: string | Buffer
   timeoutMs?: number
+  pfx?: Buffer
+  passphrase?: string
 }
 
 export type AnafHttpResponse = {
@@ -104,6 +106,14 @@ async function anafCurlRequest(url: string, options: AnafRequestOptions = {}): P
       args.push("-H", `${name}: ${value}`)
     }
 
+    if (options.pfx) {
+      const certPath = path.join(tempDir, "client-cert.p12")
+      await fs.writeFile(certPath, options.pfx)
+      args.push("--cert-type", "P12")
+      args.push("--cert", certPath)
+      args.push("--pass", `pass:${options.passphrase || ""}`)
+    }
+
     if (options.body) {
       const bodyBuffer = Buffer.isBuffer(options.body) ? options.body : Buffer.from(options.body)
       await fs.writeFile(requestBodyPath, bodyBuffer)
@@ -151,6 +161,8 @@ function anafNodeRequest(url: string, options: AnafRequestOptions = {}) {
         maxVersion: "TLSv1.2",
         ciphers: "DEFAULT@SECLEVEL=1",
         secureOptions: crypto.constants.SSL_OP_LEGACY_SERVER_CONNECT,
+        pfx: options.pfx,
+        passphrase: options.passphrase,
       },
       (res) => {
         const chunks: Buffer[] = []

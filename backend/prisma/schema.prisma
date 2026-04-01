@@ -270,6 +270,10 @@ model Company {
   efacturaSellerCounty               String?
   efacturaSellerPostalCode           String?
   efacturaContactEmail               String?
+  efacturaCertSerial                 String?
+  efacturaCertPasswordEnc            String?
+  efacturaCertFilename               String?
+  efacturaCertUploadedAt             DateTime?
   efacturaOauthClientId              String?
   efacturaOauthClientSecret          String?
   efacturaOauthRedirectUri           String?
