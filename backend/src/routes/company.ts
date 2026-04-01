@@ -36,9 +36,24 @@ async function getEffectiveAnafOauthConfig(tenantId: string) {
   ])
 
   return {
-    clientId: company?.efacturaOauthClientId || platform?.efacturaOauthClientId || "",
-    clientSecret: company?.efacturaOauthClientSecret || platform?.efacturaOauthClientSecret || "",
-    redirectUri: company?.efacturaOauthRedirectUri || platform?.efacturaOauthRedirectUri || "",
+    clientId:
+      company?.efacturaOauthClientId &&
+      company?.efacturaOauthClientSecret &&
+      company?.efacturaOauthRedirectUri
+        ? company.efacturaOauthClientId
+        : platform?.efacturaOauthClientId || "",
+    clientSecret:
+      company?.efacturaOauthClientId &&
+      company?.efacturaOauthClientSecret &&
+      company?.efacturaOauthRedirectUri
+        ? company.efacturaOauthClientSecret
+        : platform?.efacturaOauthClientSecret || "",
+    redirectUri:
+      company?.efacturaOauthClientId &&
+      company?.efacturaOauthClientSecret &&
+      company?.efacturaOauthRedirectUri
+        ? company.efacturaOauthRedirectUri
+        : platform?.efacturaOauthRedirectUri || "",
     platformConfigured: Boolean(
       platform?.efacturaOauthClientId &&
         platform?.efacturaOauthClientSecret &&
@@ -401,6 +416,13 @@ router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, re
     client_id: oauthConfig.clientId,
     redirect_uri: oauthConfig.redirectUri,
     token_content_type: "jwt",
+  })
+
+  console.log("ANAF OAUTH START", {
+    tenantId,
+    usesPlatformConfig: oauthConfig.usesPlatformConfig,
+    clientIdSuffix: oauthConfig.clientId ? oauthConfig.clientId.slice(-8) : "",
+    redirectUri: oauthConfig.redirectUri,
   })
 
   return res.json({
