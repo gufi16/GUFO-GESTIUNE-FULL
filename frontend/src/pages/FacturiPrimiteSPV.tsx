@@ -680,9 +680,9 @@ export default function FacturiPrimiteSPVPage() {
               type="button"
               onClick={() => void syncItems()}
               className={documentButtonPrimaryClass}
-              disabled={syncing || (spvStatus ? !spvStatus.implemented : false)}
+              disabled={syncing || (!bridgeToken.trim() && (spvStatus ? !spvStatus.implemented : false))}
             >
-              {syncing ? "Sincronizare..." : spvStatus?.implemented ? "Sincronizeaza SPV" : "SPVWS2 separat"}
+              {syncing ? "Sincronizare..." : bridgeToken.trim() ? "Sincronizeaza SPV" : spvStatus?.implemented ? "Sincronizeaza SPV" : "SPVWS2 separat"}
             </button>
           </div>
         </div>
