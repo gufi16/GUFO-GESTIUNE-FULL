@@ -712,11 +712,15 @@ async function listIncomingEfacturaMessages(serial, accessToken, environment, ci
   const safeDays = Math.max(1, Math.min(365, Number(days || 30)))
   const url = getEfacturaListMessagesUrl(environment, safeDays, cif)
   console.log(`[gufo-spv-bridge] listIncomingEfacturaMessages serial=${normalizeSerial(serial)} env=${environment} cif=${cif} days=${safeDays}`)
-  return invokeAuthenticatedEfacturaRequest({
+  const response = await invokeAuthenticatedEfacturaRequest({
     serial,
     accessToken,
     url,
   })
+  console.log(
+    `[gufo-spv-bridge] listIncomingEfacturaMessages finish ok=${Boolean(response?.result?.ok)} status=${response?.result?.status ?? "null"}`
+  )
+  return response
 }
 
 async function downloadIncomingEfacturaMessage(serial, accessToken, environment, id) {
@@ -809,10 +813,14 @@ catch [System.Net.WebException] {
 }
 `.trim()
   const raw = await runPowerShell(script)
-  return {
+  const response = {
     certificate: cert,
     result: JSON.parse(raw),
   }
+  console.log(
+    `[gufo-spv-bridge] downloadIncomingEfacturaMessage finish ok=${Boolean(response?.result?.ok)} status=${response?.result?.status ?? "null"} id=${normalizedId}`
+  )
+  return response
 }
 
 const server = http.createServer(async (req, res) => {
