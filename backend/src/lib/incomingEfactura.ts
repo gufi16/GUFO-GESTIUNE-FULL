@@ -118,6 +118,32 @@ function numberValue(value: any): number {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+function attrValue(value: any, key: string): string {
+  if (!value || typeof value !== "object") return ""
+  return textValue(value[key] ?? value[`@_${key}`])
+}
+
+function parseAddress(address: any) {
+  if (!address || typeof address !== "object") return null
+  return {
+    street: textValue(address.StreetName),
+    additionalStreet: textValue(address.AdditionalStreetName),
+    city: textValue(address.CityName),
+    postalCode: textValue(address.PostalZone),
+    region: textValue(address.CountrySubentity),
+    country: textValue(address.Country?.IdentificationCode || address.Country?.Name),
+  }
+}
+
+function parseContact(contact: any) {
+  if (!contact || typeof contact !== "object") return null
+  return {
+    name: textValue(contact.Name),
+    phone: textValue(contact.Telephone),
+    email: textValue(contact.ElectronicMail),
+  }
+}
+
 function firstDefined(...values: any[]) {
   for (const value of values) {
     if (value === undefined || value === null) continue
@@ -254,6 +280,26 @@ export function parseIncomingEInvoiceXml(xmlText: string) {
   const customerLegal = customerParty?.PartyLegalEntity as AnyObj | undefined
   const supplierTax = supplierParty?.PartyTaxScheme as AnyObj | undefined
   const customerTax = customerParty?.PartyTaxScheme as AnyObj | undefined
+  const supplierAddress = parseAddress(supplierParty?.PostalAddress)
+  const customerAddress = parseAddress(customerParty?.PostalAddress)
+  const supplierContact = parseContact(supplierParty?.Contact)
+  const customerContact = parseContact(customerParty?.Contact)
+  const paymentMeans = firstDefined(invoice.PaymentMeans) as AnyObj | null
+  const paymentAccount = paymentMeans?.PayeeFinancialAccount as AnyObj | undefined
+  const taxTotalNode = firstDefined(invoice.TaxTotal) as AnyObj | null
+  const taxSubtotals = asArray(taxTotalNode?.TaxSubtotal).map((subtotal: AnyObj) => ({
+    taxableAmount: numberValue(subtotal?.TaxableAmount),
+    taxAmount: numberValue(subtotal?.TaxAmount),
+    categoryId: textValue(subtotal?.TaxCategory?.ID),
+    vatRate: numberValue(subtotal?.TaxCategory?.Percent),
+    taxCode: textValue(subtotal?.TaxCategory?.TaxScheme?.ID),
+    exemptionReason: textValue(
+      firstDefined(
+        subtotal?.TaxCategory?.TaxExemptionReason,
+        subtotal?.TaxCategory?.TaxExemptionReasonCode
+      )
+    ),
+  }))
 
   const lineNodes = asArray(firstDefined(invoice.InvoiceLine, invoice.CreditNoteLine))
   const lines = lineNodes.map((line: AnyObj, index) => {
@@ -275,6 +321,8 @@ export function parseIncomingEInvoiceXml(xmlText: string) {
       externalCode: textValue(item?.SellersItemIdentification?.ID),
       barcode: textValue(item?.StandardItemIdentification?.ID),
       uomCode: textValue(invoicedQuantity?.unitCode || invoicedQuantity?.["@_unitCode"] || invoicedQuantity?.["unitCode"]),
+      uomRawCode: attrValue(invoicedQuantity, "unitCode"),
+      description: textValue(firstDefined(item?.Description, item?.Name)),
       qty,
       unitPrice,
       vatRate,
@@ -287,19 +335,39 @@ export function parseIncomingEInvoiceXml(xmlText: string) {
   const legalTotals = invoice.LegalMonetaryTotal || {}
   const totalNet = numberValue(firstDefined(legalTotals.LineExtensionAmount, legalTotals.TaxExclusiveAmount))
   const totalGross = numberValue(firstDefined(legalTotals.PayableAmount, legalTotals.TaxInclusiveAmount))
-  const totalVat = totalGross - totalNet
+  const totalVat = numberValue(firstDefined(taxTotalNode?.TaxAmount)) || totalGross - totalNet
 
   return {
     invoiceNo: textValue(invoice.ID),
     invoiceDate: textValue(firstDefined(invoice.IssueDate, invoice.TaxPointDate)),
+    dueDate: textValue(firstDefined(invoice.DueDate)),
+    invoiceTypeCode: textValue(invoice.InvoiceTypeCode),
     currency: textValue(firstDefined(invoice.DocumentCurrencyCode, legalTotals.PayableAmount?.currencyID)) || "RON",
     totalNet,
     totalVat,
     totalGross,
+    payableAmount: numberValue(legalTotals.PayableAmount),
+    taxExclusiveAmount: numberValue(legalTotals.TaxExclusiveAmount),
+    taxInclusiveAmount: numberValue(legalTotals.TaxInclusiveAmount),
+    prepaidAmount: numberValue(legalTotals.PrepaidAmount),
+    roundingAmount: numberValue(legalTotals.PayableRoundingAmount),
     supplierName: textValue(firstDefined(supplierLegal?.RegistrationName, supplierParty?.PartyName?.Name)),
     supplierCif: normalizeCompanyCui(textValue(firstDefined(supplierTax?.CompanyID, supplierLegal?.CompanyID))),
+    supplierIdentifier: textValue(firstDefined(supplierParty?.EndpointID, supplierTax?.CompanyID, supplierLegal?.CompanyID)),
+    supplierAddress,
+    supplierContact,
     customerName: textValue(firstDefined(customerLegal?.RegistrationName, customerParty?.PartyName?.Name)),
     customerCif: normalizeCompanyCui(textValue(firstDefined(customerTax?.CompanyID, customerLegal?.CompanyID))),
+    customerIdentifier: textValue(firstDefined(customerParty?.EndpointID, customerTax?.CompanyID, customerLegal?.CompanyID)),
+    customerAddress,
+    customerContact,
+    paymentMeansCode: textValue(paymentMeans?.PaymentMeansCode),
+    paymentMeansName: attrValue(paymentMeans?.PaymentMeansCode, "name"),
+    paymentId: textValue(paymentMeans?.PaymentID),
+    iban: textValue(paymentAccount?.ID),
+    bankCode: textValue(firstDefined(paymentAccount?.FinancialInstitutionBranch?.ID, paymentAccount?.FinancialInstitutionBranch?.Name)),
+    paymentNote: textValue(firstDefined(invoice.PaymentTerms?.Note, invoice.Note)),
+    taxBreakdown: taxSubtotals,
     lines,
   }
 }

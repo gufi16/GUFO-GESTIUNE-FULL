@@ -51,6 +51,40 @@ function fmtMoney(value: any) {
   return Number(value || 0).toFixed(2)
 }
 
+function fmtMoneyRo(value: any) {
+  return new Intl.NumberFormat("ro-RO", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number(value || 0))
+}
+
+function fmtQtyRo(value: any) {
+  return new Intl.NumberFormat("ro-RO", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 3,
+  }).format(Number(value || 0))
+}
+
+function fmtDateRo(value: any) {
+  const date = toDateOrNull(value)
+  return date ? date.toLocaleDateString("ro-RO") : "-"
+}
+
+function joinAddressParts(address: any) {
+  if (!address) return "-"
+  return [
+    address.street,
+    address.additionalStreet,
+    address.city,
+    address.postalCode,
+    address.region,
+    address.country,
+  ]
+    .map((part) => String(part || "").trim())
+    .filter(Boolean)
+    .join(", ")
+}
+
 function safeFilePart(value: string) {
   return String(value || "")
     .trim()
@@ -434,10 +468,22 @@ router.get("/api/v1/efactura/incoming/:id/pdf", async (req: AuthedRequest, res) 
     return res.status(404).json({ ok: false, error: "Factura primita SPV nu a fost gasita." })
   }
 
-  const filename = `Factura_SPV_${safeFilePart(String(item.invoiceNo || item.spvDownloadId || "document"))}.pdf`
+  const parsed = item.xmlText ? parseIncomingEInvoiceXml(String(item.xmlText)) : null
+  const filename = `Factura_SPV_${safeFilePart(String(parsed?.invoiceNo || item.invoiceNo || item.spvDownloadId || "document"))}.pdf`
+  const currency = parsed?.currency || item.currency || "RON"
+  const lines = Array.isArray(parsed?.lines) && parsed.lines.length ? parsed.lines : item.items
+  const supplierName = parsed?.supplierName || item.supplierName || "-"
+  const supplierCif = parsed?.supplierCif || item.supplierCif || "-"
+  const customerName = parsed?.customerName || "-"
+  const customerCif = parsed?.customerCif || "-"
+  const taxBreakdown =
+    Array.isArray(parsed?.taxBreakdown) && parsed.taxBreakdown.length
+      ? parsed.taxBreakdown
+      : [{ categoryId: "-", taxableAmount: item.totalNet || 0, taxAmount: item.totalVat || 0, taxCode: "VAT", exemptionReason: "" }]
+
   const doc = new PDFDocument({
     size: "A4",
-    margin: 36,
+    margin: 28,
     bufferPages: true,
     autoFirstPage: true,
   })
@@ -449,114 +495,237 @@ router.get("/api/v1/efactura/incoming/:id/pdf", async (req: AuthedRequest, res) 
 
   const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right
   const startX = doc.page.margins.left
-  const colWidths = [24, 144, 36, 42, 58, 58, 38, 50, 54]
-  const colX = colWidths.reduce<number[]>((acc, width, index) => {
-    if (index === 0) return [startX]
-    acc.push(acc[index - 1] + colWidths[index - 1])
-    return acc
-  }, [])
+  const pageRight = startX + pageWidth
 
   function ensureSpace(requiredHeight: number) {
-    if (doc.y + requiredHeight <= doc.page.height - doc.page.margins.bottom) return
+    if (doc.y + requiredHeight <= doc.page.height - doc.page.margins.bottom - 30) return
     doc.addPage()
-    doc.font(fonts.regular).fontSize(10)
+    doc.font(fonts.regular).fontSize(10).fillColor("#111111")
   }
 
-  doc.font(fonts.bold).fontSize(20).fillColor("#0f172a").text("Factura primita e-Factura", startX, doc.y)
-  doc.moveDown(0.4)
+  function row(label: string, value: string, x: number, y: number, labelWidth: number, valueWidth: number) {
+    doc.font(fonts.bold).fontSize(8).fillColor("#111111").text(label, x, y, { width: labelWidth })
+    doc.font(fonts.regular).fontSize(8).fillColor("#111111").text(value || "-", x + labelWidth + 4, y, { width: valueWidth })
+  }
+
+  function drawParty(title: string, party: any, x: number, y: number, width: number) {
+    doc.font(fonts.bold).fontSize(11).fillColor("#111111").text(title, x, y, { width })
+    const rows = [
+      ["Nume", party?.name || "-"],
+      ["Nr. inregistrare", party?.registration || "-"],
+      ["Identificatorul TVA", party?.vat || "-"],
+      ["Strada", [party?.street, party?.additionalStreet].filter(Boolean).join(", ") || "-"],
+      ["Oras", party?.city || "-"],
+      ["Cod", party?.postalCode || "-"],
+      ["Regiune", party?.region || "-"],
+      ["Tara", party?.country || "-"],
+      ["Telefon", party?.phone || "-"],
+      ["E-mail", party?.email || "-"],
+    ]
+    let currentY = y + 16
+    rows.forEach(([label, value]) => {
+      row(String(label), String(value || "-"), x, currentY, 76, width - 80)
+      currentY += 15
+    })
+    return currentY
+  }
 
   const topY = doc.y
-  const leftBoxWidth = pageWidth * 0.48
-  const rightBoxX = startX + leftBoxWidth + 16
-  const rightBoxWidth = pageWidth - leftBoxWidth - 16
+  const leftWidth = 238
+  const rightWidth = 238
+  const centerWidth = pageWidth - leftWidth - rightWidth
+  const centerX = startX + leftWidth
+  const rightX = centerX + centerWidth
 
-  doc.roundedRect(startX, topY, leftBoxWidth, 102, 10).stroke("#cbd5e1")
-  doc.roundedRect(rightBoxX, topY, rightBoxWidth, 102, 10).stroke("#cbd5e1")
+  const supplierBottom = drawParty("VANZATOR", {
+    name: supplierName,
+    registration: parsed?.supplierIdentifier || supplierCif,
+    vat: supplierCif ? `RO${supplierCif}` : "-",
+    street: parsed?.supplierAddress?.street,
+    additionalStreet: parsed?.supplierAddress?.additionalStreet,
+    city: parsed?.supplierAddress?.city,
+    postalCode: parsed?.supplierAddress?.postalCode,
+    region: parsed?.supplierAddress?.region,
+    country: parsed?.supplierAddress?.country,
+    phone: parsed?.supplierContact?.phone,
+    email: parsed?.supplierContact?.email,
+  }, startX, topY, leftWidth - 6)
 
-  doc.font(fonts.bold).fontSize(11).text("Furnizor", startX + 12, topY + 10)
-  doc.font(fonts.regular).fontSize(10)
-  doc.text(String(item.supplierName || "-"), startX + 12, topY + 30, { width: leftBoxWidth - 24 })
-  doc.text(`CIF: ${String(item.supplierCif || "-")}`, startX + 12, topY + 47, { width: leftBoxWidth - 24 })
-  doc.text(`Cod furnizor: ${String(item.supplierCode || "-")}`, startX + 12, topY + 64, { width: leftBoxWidth - 24 })
+  const customerBottom = drawParty("CUMPARATOR", {
+    name: customerName,
+    registration: parsed?.customerIdentifier || customerCif,
+    vat: customerCif ? `RO${customerCif}` : "-",
+    street: parsed?.customerAddress?.street,
+    additionalStreet: parsed?.customerAddress?.additionalStreet,
+    city: parsed?.customerAddress?.city,
+    postalCode: parsed?.customerAddress?.postalCode,
+    region: parsed?.customerAddress?.region,
+    country: parsed?.customerAddress?.country,
+    phone: parsed?.customerContact?.phone,
+    email: parsed?.customerContact?.email,
+  }, rightX, topY, rightWidth - 6)
 
-  doc.font(fonts.bold).fontSize(11).text("Factura", rightBoxX + 12, topY + 10)
-  doc.font(fonts.regular).fontSize(10)
-  doc.text(`Numar: ${String(item.invoiceNo || "-")}`, rightBoxX + 12, topY + 30, { width: rightBoxWidth - 24 })
-  doc.text(`Data: ${toDateOrNull(item.invoiceDate)?.toLocaleDateString("ro-RO") || "-"}`, rightBoxX + 12, topY + 47, { width: rightBoxWidth - 24 })
-  doc.text(`Moneda: ${String(item.currency || "RON")}`, rightBoxX + 12, topY + 64, { width: rightBoxWidth - 24 })
-  doc.text(`SPV: ${String(item.spvDownloadId || "-")}`, rightBoxX + 12, topY + 81, { width: rightBoxWidth - 24 })
-
-  doc.y = topY + 118
-  doc.font(fonts.bold).fontSize(11).text("Sumar", startX, doc.y)
-  doc.moveDown(0.35)
-  doc.font(fonts.regular).fontSize(10)
-  doc.text(`Total fara TVA: ${fmtMoney(item.totalNet)} ${item.currency}`)
-  doc.text(`Total TVA: ${fmtMoney(item.totalVat)} ${item.currency}`)
-  doc.text(`Total cu TVA: ${fmtMoney(item.totalGross)} ${item.currency}`)
-
-  doc.moveDown(0.8)
-  ensureSpace(36)
-  const headerY = doc.y
-  doc.save()
-  doc.rect(startX, headerY, pageWidth, 24).fill("#f8fafc")
-  doc.restore()
-  doc.font(fonts.bold).fontSize(8).fillColor("#475569")
-  ;["#", "Produs", "UM", "Cant.", "Pret fara TVA", "Pret cu TVA", "TVA%", "TVA", "Total"].forEach((label, index) => {
-    doc.text(label, colX[index] + 4, headerY + 8, {
-      width: colWidths[index] - 8,
-      align: index === 0 ? "center" : "left",
-    })
+  doc.font(fonts.bold).fontSize(22).fillColor("#111111").text("RO eFactura", centerX, topY + 18, {
+    width: centerWidth,
+    align: "center",
   })
-  doc.y = headerY + 26
+  const metaY = topY + 54
+  ;[
+    ["Nr. factura", parsed?.invoiceNo || item.invoiceNo || "-"],
+    ["Codul tipului", parsed?.invoiceTypeCode || "-"],
+    ["Data emiterii", fmtDateRo(parsed?.invoiceDate || item.invoiceDate)],
+    ["Data scadenta", fmtDateRo(parsed?.dueDate)],
+    ["Moneda facturii", currency],
+  ].forEach(([label, value], index) => {
+    row(String(label), String(value || "-"), centerX + 10, metaY + index * 16, 80, centerWidth - 94)
+  })
 
-  doc.font(fonts.regular).fontSize(9).fillColor("#111827")
-  for (const line of item.items) {
-    const cells = [
-      String(line.lineIndex || "-"),
-      String(line.productName || "-"),
-      String(line.uomCode || "-"),
-      String(toNumber(line.qty).toFixed(2)),
-      `${fmtMoney(line.unitPrice)} ${item.currency}`,
-      `${fmtMoney(toNumber(line.unitPrice) * (1 + toNumber(line.vatRate) / 100))} ${item.currency}`,
-      fmtMoney(line.vatRate),
-      `${fmtMoney(line.lineVat)} ${item.currency}`,
-      `${fmtMoney(line.lineGross)} ${item.currency}`,
+  doc.y = Math.max(supplierBottom, customerBottom) + 18
+  ensureSpace(110)
+
+  const totalLabels = [
+    ["TOTAL NET", 86],
+    ["VALOARE TOTALA fara TVA", 124],
+    ["VALOARE TOTALA cu TVA", 124],
+    ["TOTAL DEDUCERI", 96],
+    ["TOTAL TAXE SUPLIMENTARE", 110],
+    ["SUMA PLATITA", 98],
+    ["VALOARE DE ROTUNJIRE", 110],
+  ] as const
+  const totalValues = [
+    fmtMoneyRo(parsed?.totalNet || item.totalNet || 0),
+    fmtMoneyRo(parsed?.taxExclusiveAmount || parsed?.totalNet || item.totalNet || 0),
+    fmtMoneyRo(parsed?.taxInclusiveAmount || parsed?.totalGross || item.totalGross || 0),
+    fmtMoneyRo(parsed?.prepaidAmount || 0),
+    "0,00",
+    fmtMoneyRo(parsed?.prepaidAmount || 0),
+    fmtMoneyRo(parsed?.roundingAmount || 0),
+  ]
+  let x = startX
+  totalLabels.forEach(([label, width]) => {
+    doc.font(fonts.bold).fontSize(8).text(label, x, doc.y, { width, align: "center" })
+    x += width
+  })
+  doc.moveTo(startX, doc.y + 12).lineTo(pageRight, doc.y + 12).stroke("#333333")
+  x = startX
+  totalValues.forEach((value, index) => {
+    const width = totalLabels[index][1]
+    doc.font(fonts.regular).fontSize(9).text(value, x + 4, doc.y + 16, { width: width - 8 })
+    x += width
+  })
+  doc.moveTo(startX, doc.y + 32).lineTo(pageRight, doc.y + 32).stroke("#333333")
+
+  doc.y += 38
+  doc.font(fonts.bold).fontSize(11).text("TOTAL PLATA", startX, doc.y)
+  doc.text(`${fmtMoneyRo(parsed?.payableAmount || parsed?.totalGross || item.totalGross || 0)} ${currency}`, startX + 112, doc.y)
+  doc.moveTo(startX, doc.y + 14).lineTo(startX + 190, doc.y + 14).stroke("#333333")
+
+  doc.y += 24
+  doc.font(fonts.bold).fontSize(11).text("TOTAL TVA", startX, doc.y)
+  doc.font(fonts.regular).fontSize(10).text(`${fmtMoneyRo(parsed?.totalVat || item.totalVat || 0)} ${currency}`, startX + 95, doc.y)
+
+  doc.y += 18
+  doc.font(fonts.bold).fontSize(9).text("Detalierea TVA", startX, doc.y)
+  const taxHeaderY = doc.y + 14
+  ;[
+    ["Codul categoriei", startX, 90],
+    ["Baza de calcul", startX + 92, 84],
+    ["Valoare TVA", startX + 180, 72],
+    ["Codul", startX + 256, 52],
+    ["motivului", startX + 312, 72],
+    ["Motivul scutirii", startX + 388, 160],
+  ].forEach(([label, posX, width]) => {
+    doc.font(fonts.bold).fontSize(8).text(String(label), Number(posX), taxHeaderY, { width: Number(width) })
+  })
+  let taxY = taxHeaderY + 14
+  taxBreakdown.forEach((tax: any) => {
+    ensureSpace(16)
+    doc.font(fonts.regular).fontSize(8)
+    doc.text(String(tax.categoryId || "-"), startX, taxY, { width: 90 })
+    doc.text(fmtMoneyRo(tax.taxableAmount || 0), startX + 92, taxY, { width: 84 })
+    doc.text(fmtMoneyRo(tax.taxAmount || 0), startX + 180, taxY, { width: 72 })
+    doc.text(String(tax.taxCode || "-"), startX + 256, taxY, { width: 52 })
+    doc.text(tax.exemptionReason ? "da" : "-", startX + 312, taxY, { width: 72 })
+    doc.text(String(tax.exemptionReason || "-"), startX + 388, taxY, { width: 160 })
+    taxY += 14
+  })
+  doc.y = taxY + 8
+
+  ensureSpace(44)
+  const lineCols = [
+    ["Linia", 38],
+    ["Nume articol/Descriere articol", 250],
+    ["Tara provenient", 58],
+    ["Pretul net al articolului", 76],
+    ["Moneda", 44],
+    ["Cantitate de baza", 62],
+    ["Cantitate facturata", 64],
+    ["UM", 34],
+    ["Cota TVA", 40],
+    ["Valoare neta", 60],
+  ] as const
+  let lineHeaderX = startX
+  lineCols.forEach(([label, width]) => {
+    doc.font(fonts.bold).fontSize(8).text(label, lineHeaderX + 2, doc.y, { width: width - 4 })
+    lineHeaderX += width
+  })
+  doc.moveTo(startX, doc.y + 12).lineTo(pageRight, doc.y + 12).stroke("#333333")
+  doc.y += 16
+
+  lines.forEach((line: any, index: number) => {
+    const description = String(line.description || line.productName || "-")
+    const rowHeight = Math.max(18, doc.heightOfString(description, { width: 246 }) + 4)
+    ensureSpace(rowHeight + 4)
+    let lineX = startX
+    const values = [
+      String(line.lineIndex || index + 1),
+      description,
+      "-",
+      fmtMoneyRo(line.unitPrice || 0),
+      currency,
+      fmtQtyRo(line.qty || 0),
+      fmtQtyRo(line.qty || 0),
+      String(line.uomCode || line.uomRawCode || "-"),
+      fmtQtyRo(line.vatRate || 0),
+      fmtMoneyRo(line.lineNet || 0),
     ]
-    const rowHeight =
-      Math.max(
-        22,
-        doc.heightOfString(cells[1], { width: colWidths[1] - 8, align: "left" }) + 10
-      )
-    ensureSpace(rowHeight + 2)
-    const rowY = doc.y
-    doc.save()
-    doc.rect(startX, rowY, pageWidth, rowHeight).stroke("#e2e8f0")
-    doc.restore()
-    cells.forEach((cell, index) => {
-      doc.text(cell, colX[index] + 4, rowY + 5, {
-        width: colWidths[index] - 8,
-        align: index === 0 ? "center" : "left",
+    values.forEach((value, valueIndex) => {
+      const width = lineCols[valueIndex][1]
+      doc.font(fonts.regular).fontSize(8).text(String(value), lineX + 2, doc.y, {
+        width: width - 4,
+        align: valueIndex === 0 ? "center" : "left",
       })
+      lineX += width
     })
-    doc.y = rowY + rowHeight
-  }
+    doc.moveTo(startX, doc.y + rowHeight).lineTo(pageRight, doc.y + rowHeight).stroke("#c7c7c7")
+    doc.y += rowHeight + 2
+  })
 
-  if (!item.items.length) {
-    ensureSpace(30)
-    doc.font(fonts.regular).fontSize(10).fillColor("#64748b").text("Factura nu are pozitii importate.", startX, doc.y)
-    doc.moveDown(1)
-  }
+  doc.y += 10
+  ensureSpace(80)
+  doc.font(fonts.bold).fontSize(9).text("Instructiuni de plata", startX, doc.y)
+  doc.moveDown(0.35)
+  ;[
+    ["Nota privind instrumentul de plata", parsed?.paymentMeansName || parsed?.paymentMeansCode || "-"],
+    ["Nr. cont de plata", parsed?.iban || "-"],
+    ["Explicatii privind instrumentul de plata", parsed?.paymentNote || "-"],
+    ["Banca", parsed?.bankCode || "-"],
+    ["Nr. contract", parsed?.paymentId || "-"],
+  ].forEach(([label, value]) => {
+    const currentY = doc.y
+    doc.font(fonts.bold).fontSize(8).text(String(label), startX, currentY, { width: 156 })
+    doc.font(fonts.regular).fontSize(8).text(String(value || "-"), startX + 160, currentY, { width: pageWidth - 160 })
+    doc.moveDown(0.5)
+  })
 
   const pages = doc.bufferedPageRange()
   for (let i = 0; i < pages.count; i += 1) {
     doc.switchToPage(i)
-    doc.font(fonts.regular).fontSize(8).fillColor("#64748b")
-    doc.text(
-      `Factura ${String(item.invoiceNo || item.spvDownloadId || "-")} • Pagina ${i + 1} / ${pages.count}`,
-      startX,
-      doc.page.height - 24,
-      { width: pageWidth, align: "right" }
-    )
+    doc.font(fonts.regular).fontSize(10).fillColor("#111111")
+    doc.text("Pagina", startX + pageWidth / 2 - 48, doc.page.height - 34, { width: 46, align: "center" })
+    doc.text(String(i + 1), startX + pageWidth / 2, doc.page.height - 34, { width: 18, align: "center" })
+    doc.text("din", startX + pageWidth / 2 + 24, doc.page.height - 34, { width: 18, align: "center" })
+    doc.text(String(pages.count), startX + pageWidth / 2 + 46, doc.page.height - 34, { width: 20, align: "center" })
   }
 
   doc.end()

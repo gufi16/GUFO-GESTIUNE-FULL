@@ -6,6 +6,7 @@ import { DocumentMetric, InlineNotice, documentButtonPrimaryClass, documentButto
 import { API_BASE, getToken } from "../lib/api"
 import { formatMoneyRo, formatQtyRo } from "../lib/format"
 import { hasModule } from "../lib/modules"
+import { downloadPdfFile } from "../lib/pdf"
 
 type IncomingInvoiceItem = {
   id: string
@@ -789,50 +790,52 @@ export default function FacturiPrimiteSPVPage() {
   async function downloadInvoicePdf(item: IncomingInvoice) {
     if (!token) return
     try {
-      if (!bridgeToken.trim()) {
-        throw new Error("PDF-ul original din ANAF se descarca prin bridge-ul local activ.")
+      if (bridgeToken.trim()) {
+        const bridgeConfig = await loadBridgeConfig()
+        const trimmedBridgeUrl = bridgeUrl.trim().replace(/\/+$/, "")
+        const res = await fetch(`${trimmedBridgeUrl}/api/v1/efactura/download-message`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${bridgeToken.trim()}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            id: item.spvDownloadId,
+            accessToken: bridgeConfig.accessToken,
+            environment: bridgeConfig.environment,
+          }),
+        })
+        const data = await res.json().catch(() => ({}))
+        const pdfBase64 = data?.response?.artifacts?.pdfBase64
+        const pdfFileName = data?.response?.artifacts?.pdfFileName || `factura-spv-${item.spvDownloadId}.pdf`
+        if (res.ok && data?.ok && data?.response?.ok && pdfBase64) {
+          const binary = atob(pdfBase64)
+          const bytes = new Uint8Array(binary.length)
+          for (let index = 0; index < binary.length; index += 1) {
+            bytes[index] = binary.charCodeAt(index)
+          }
+          const blob = new Blob([bytes], { type: "application/pdf" })
+          const url = URL.createObjectURL(blob)
+          const link = document.createElement("a")
+          link.href = url
+          link.download = pdfFileName
+          document.body.appendChild(link)
+          link.click()
+          link.remove()
+          setTimeout(() => URL.revokeObjectURL(url), 60_000)
+          return
+        }
       }
 
-      const bridgeConfig = await loadBridgeConfig()
-      const trimmedBridgeUrl = bridgeUrl.trim().replace(/\/+$/, "")
-      const res = await fetch(`${trimmedBridgeUrl}/api/v1/efactura/download-message`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${bridgeToken.trim()}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          id: item.spvDownloadId,
-          accessToken: bridgeConfig.accessToken,
-          environment: bridgeConfig.environment,
-        }),
+      const fallbackRes = await fetch(`${API_BASE}/api/v1/efactura/incoming/${item.id}/pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
       })
-      const data = await res.json().catch(() => ({}))
-      const pdfBase64 = data?.response?.artifacts?.pdfBase64
-      const pdfFileName = data?.response?.artifacts?.pdfFileName || `factura-spv-${item.spvDownloadId}.pdf`
-      if (!res.ok || !data?.ok || !data?.response?.ok) {
-        throw new Error(data?.response?.error || data?.error || "Nu am putut descarca factura din ANAF.")
+      if (!fallbackRes.ok) {
+        throw new Error("Nu am putut genera PDF-ul facturii din XML.")
       }
-      if (!pdfBase64) {
-        throw new Error("Mesajul ANAF nu contine PDF-ul original al facturii.")
-      }
-
-      const binary = atob(pdfBase64)
-      const bytes = new Uint8Array(binary.length)
-      for (let index = 0; index < binary.length; index += 1) {
-        bytes[index] = binary.charCodeAt(index)
-      }
-      const blob = new Blob([bytes], { type: "application/pdf" })
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement("a")
-      link.href = url
-      link.download = pdfFileName
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      setTimeout(() => URL.revokeObjectURL(url), 60_000)
-    } catch {
-      setError("Nu am putut descarca PDF-ul original al facturii din ANAF.")
+      await downloadPdfFile(fallbackRes, `factura-spv-${item.invoiceNo || item.spvDownloadId}.pdf`)
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut descarca PDF-ul facturii.")
     }
   }
 
