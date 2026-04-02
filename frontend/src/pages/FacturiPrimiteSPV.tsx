@@ -79,6 +79,8 @@ type BridgeSpvMessage = {
   detalii?: string | null
 }
 
+type BridgeMessageFilter = "all" | "invoice" | "receipt"
+
 const SPV_BRIDGE_URL_KEY = "gufo_spv_bridge_url"
 const SPV_BRIDGE_TOKEN_KEY = "gufo_spv_bridge_token"
 const DEFAULT_SPV_BRIDGE_URL = "http://127.0.0.1:48521"
@@ -148,6 +150,7 @@ export default function FacturiPrimiteSPVPage() {
   const [bridgeToken, setBridgeToken] = useState("")
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthValue())
   const [bridgeMessages, setBridgeMessages] = useState<BridgeSpvMessage[]>([])
+  const [bridgeMessageFilter, setBridgeMessageFilter] = useState<BridgeMessageFilter>("all")
   const [spvModeMessage] = useState(
     "Ecranul acesta tine de SPV clasic (SPVWS2), separat de fluxul OAuth e-Factura. Tokenul ANAF activ nu este suficient singur pentru sincronizarea de aici."
   )
@@ -594,6 +597,18 @@ export default function FacturiPrimiteSPVPage() {
     0
   )
 
+  const filteredBridgeMessages = useMemo(() => {
+    if (bridgeMessageFilter === "all") return bridgeMessages
+    if (bridgeMessageFilter === "invoice") {
+      return bridgeMessages.filter((entry) => {
+        const tip = String(entry.tip || "").toUpperCase()
+        const details = String(entry.detalii || "").toLowerCase()
+        return tip === "FACTURA" || details.includes("factura")
+      })
+    }
+    return bridgeMessages.filter((entry) => String(entry.tip || "").toUpperCase() === "RECIPISA")
+  }, [bridgeMessages, bridgeMessageFilter])
+
   function toggleExpanded(id: string) {
     setExpandedIds((prev) => (prev.includes(id) ? prev.filter((entry) => entry !== id) : [...prev, id]))
   }
@@ -743,8 +758,30 @@ export default function FacturiPrimiteSPVPage() {
 
       {bridgeMessages.length ? (
         <div className="overflow-hidden rounded-[20px] border border-slate-200 bg-white">
-          <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900">
-            Mesaje returnate din SPV pentru luna selectata
+          <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="text-sm font-semibold text-slate-900">
+              Mesaje returnate din SPV pentru luna selectata
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {[
+                { value: "all", label: "Toate" },
+                { value: "invoice", label: "Facturi" },
+                { value: "receipt", label: "Recipise" },
+              ].map((entry) => (
+                <button
+                  key={entry.value}
+                  type="button"
+                  onClick={() => setBridgeMessageFilter(entry.value as BridgeMessageFilter)}
+                  className={`inline-flex items-center gap-1.5 rounded-[14px] px-3 py-1.5 text-[13px] font-semibold transition ${
+                    bridgeMessageFilter === entry.value
+                      ? "bg-slate-900 text-white"
+                      : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  {entry.label}
+                </button>
+              ))}
+            </div>
           </div>
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-slate-500">
@@ -757,7 +794,7 @@ export default function FacturiPrimiteSPVPage() {
               </tr>
             </thead>
             <tbody>
-              {bridgeMessages.map((entry) => (
+              {filteredBridgeMessages.map((entry) => (
                 <tr key={`${entry.id}-${entry.data_creare || ""}`} className="border-t border-slate-200">
                   <td className="px-3 py-2.5 text-slate-700">{entry.id || "-"}</td>
                   <td className="px-3 py-2.5 text-slate-700">{entry.tip || "-"}</td>
@@ -766,6 +803,13 @@ export default function FacturiPrimiteSPVPage() {
                   <td className="px-3 py-2.5 text-slate-700">{entry.detalii || "-"}</td>
                 </tr>
               ))}
+              {!filteredBridgeMessages.length ? (
+                <tr className="border-t border-slate-200">
+                  <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
+                    Nu exista mesaje pentru filtrul selectat.
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>
