@@ -107,8 +107,15 @@ function getCurrentMonthValue() {
 function parseSpvMessageDate(value?: string | null) {
   const raw = String(value || "").trim()
   const match = raw.match(/^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}):(\d{2}):(\d{2}))?$/)
-  if (!match) return null
-  const [, dd, mm, yyyy, hh = "00", mi = "00", ss = "00"] = match
+  if (match) {
+    const [, dd, mm, yyyy, hh = "00", mi = "00", ss = "00"] = match
+    const date = new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss))
+    return Number.isNaN(date.getTime()) ? null : date
+  }
+
+  const compactMatch = raw.match(/^(\d{4})(\d{2})(\d{2})(?:[T\s]?(\d{2})(\d{2})(\d{2})?)?$/)
+  if (!compactMatch) return null
+  const [, yyyy, mm, dd, hh = "00", mi = "00", ss = "00"] = compactMatch
   const date = new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss))
   return Number.isNaN(date.getTime()) ? null : date
 }
