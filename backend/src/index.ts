@@ -38,6 +38,7 @@ import salesInvoicesRouter from "./routes/salesInvoices"
 import customersRouter from "./routes/customers"
 import minutesDocsRouter from "./routes/minutesDocs"
 import incomingEfacturaRouter from "./routes/incomingEfactura"
+import spvClassicRouter from "./routes/spvClassic"
 import usersRouter from "./routes/users"
 
 dotenv.config()
@@ -776,6 +777,7 @@ app.use(stockRouter)
 app.use(purchaseRouter)
 app.use(minutesDocsRouter)
 app.use(incomingEfacturaRouter)
+app.use(spvClassicRouter)
 app.use(usersRouter)
 app.use(companyRouter)
 app.use("/api/v1/purchase-receipts", purchaseReceiptsPdf)

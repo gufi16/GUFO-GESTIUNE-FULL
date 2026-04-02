@@ -4,7 +4,6 @@ import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { requireTenantModule } from "../lib/tenantModules"
 import { reserveNextNumber } from "../lib/numbering"
-import { getSpvClassicStatus } from "../lib/spvClassic"
 import {
   extractDownloadId,
   readStringField,
@@ -236,32 +235,6 @@ async function upsertIncomingInvoice(
     },
   })
 }
-
-router.post("/api/v1/efactura/incoming/sync", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const moduleCheck = await requireTenantModule(tenantId, "efactura")
-  if (!moduleCheck.enabled) {
-    return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
-  }
-
-  return res.status(501).json({
-    ok: false,
-    ...getSpvClassicStatus(),
-  })
-})
-
-router.get("/api/v1/spv-classic/status", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const moduleCheck = await requireTenantModule(tenantId, "efactura")
-  if (!moduleCheck.enabled) {
-    return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
-  }
-
-  return res.json({
-    ok: true,
-    status: getSpvClassicStatus(),
-  })
-})
 
 router.get("/api/v1/efactura/incoming", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId

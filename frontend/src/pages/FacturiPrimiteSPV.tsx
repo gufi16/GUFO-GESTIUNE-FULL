@@ -130,7 +130,7 @@ export default function FacturiPrimiteSPVPage() {
     setError("")
     setMessage("")
     try {
-      const res = await fetch(`${API_BASE}/api/v1/efactura/incoming/sync`, {
+      const res = await fetch(`${API_BASE}/api/v1/spv-classic/sync`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
