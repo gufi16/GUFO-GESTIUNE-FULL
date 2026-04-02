@@ -77,6 +77,27 @@ export function getAnafTokenDiagnostics(accessToken: string) {
   }
 }
 
+export function getAnafCompanyDiagnostics(company: any) {
+  const tokenDiagnostics = getAnafTokenDiagnostics(String(company?.efacturaOauthAccessToken || ""))
+  const certOptions = getAnafCertificateOptions(company)
+
+  return {
+    tenantId: company?.tenantId || null,
+    environment: company?.efacturaEnvironment || "test",
+    cif: normalizeCompanyCui(company?.cui),
+    hasAccessToken: Boolean(company?.efacturaOauthAccessToken),
+    hasCertificateFile: Boolean(company?.efacturaCertFilename),
+    usingClientCertificate: Boolean(certOptions?.pfx),
+    certSerialConfigured: company?.efacturaCertSerial || null,
+    tokenIssuer: tokenDiagnostics.tokenIssuer,
+    tokenClientAppId: tokenDiagnostics.tokenClientAppId,
+    tokenSerial: tokenDiagnostics.tokenSerial,
+    tokenScopes: tokenDiagnostics.tokenScopes,
+    tokenRoles: tokenDiagnostics.tokenRoles,
+    tokenExp: tokenDiagnostics.tokenExp,
+  }
+}
+
 export function requireAnafReadyCompany(company: any, actionLabel = "operatiunea ANAF") {
   const cif = normalizeCompanyCui(company?.cui)
   if (!cif) {

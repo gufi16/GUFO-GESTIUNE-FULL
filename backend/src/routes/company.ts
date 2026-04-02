@@ -9,6 +9,7 @@ import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { getNextNumberPreview, getNumberingConfig, normalizeNumberingPayload } from "../lib/numbering"
 import { requireTenantModule } from "../lib/tenantModules"
 import { anafHttpRequest } from "../lib/anafHttp"
+import { getAnafCompanyDiagnostics } from "../lib/anafClient"
 import {
   deleteEfacturaCertificateFile,
   encryptSecret,
@@ -783,6 +784,43 @@ router.post("/api/v1/company/efactura/oauth/test", async (req: AuthedRequest, re
     return res.status(500).json({
       ok: false,
       error: error?.message || "Eroare la testarea conexiunii ANAF.",
+    })
+  }
+})
+
+router.get("/api/v1/company/efactura/diagnostics", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const moduleCheck = await requireTenantModule(tenantId, "efactura")
+
+  if (!moduleCheck.enabled) {
+    return res.status(403).json({
+      ok: false,
+      error: "Modulul e-Factura nu este activ pe licenta acestui client.",
+    })
+  }
+
+  try {
+    const company = await prisma.company.findUnique({
+      where: { tenantId },
+      select: {
+        tenantId: true,
+        cui: true,
+        efacturaEnvironment: true,
+        efacturaOauthAccessToken: true,
+        efacturaCertSerial: true,
+        efacturaCertFilename: true,
+        efacturaCertPasswordEnc: true,
+      },
+    })
+
+    return res.json({
+      ok: true,
+      diagnostics: getAnafCompanyDiagnostics(company),
+    })
+  } catch (error: any) {
+    return res.status(500).json({
+      ok: false,
+      error: error?.message || "Nu am putut incarca diagnosticul ANAF.",
     })
   }
 })

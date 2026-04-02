@@ -13,6 +13,7 @@ import {
   anafListMessages,
   anafUploadXml,
   loadAnafCompanyContext,
+  logAnafRouteError,
 } from "../lib/anafClient"
 import {
   extractDownloadId,
@@ -956,6 +957,13 @@ router.post("/api/v1/sales-invoices/:id/efactura/send", async (req: AuthedReques
     })
   } catch (error: any) {
     const message = error?.message || "Eroare la trimiterea facturii catre ANAF."
+    logAnafRouteError("SALES EFACTURA SEND ERROR", {
+      tenantId,
+      invoiceId: id,
+      uploadIndex: null,
+      message,
+      stack: error?.stack || null,
+    })
     await prisma.eFacturaLog.create({
       data: {
         tenantId,
@@ -1094,6 +1102,13 @@ router.get("/api/v1/sales-invoices/:id/efactura/status", async (req: AuthedReque
     })
   } catch (error: any) {
     const message = error?.message || "Eroare la verificarea starii in ANAF."
+    logAnafRouteError("SALES EFACTURA STATUS ERROR", {
+      tenantId,
+      invoiceId: id,
+      uploadIndex: invoice.efacturaUploadIndex || null,
+      message,
+      stack: error?.stack || null,
+    })
     await prisma.eFacturaLog.create({
       data: {
         tenantId,
@@ -1209,6 +1224,13 @@ router.get("/api/v1/sales-invoices/:id/efactura/receipt", async (req: AuthedRequ
     return res.send(buffer)
   } catch (error: any) {
     const message = error?.message || "Eroare la descarcarea recipisei ANAF."
+    logAnafRouteError("SALES EFACTURA RECEIPT ERROR", {
+      tenantId,
+      invoiceId: id,
+      downloadId: downloadId || null,
+      message,
+      stack: error?.stack || null,
+    })
     await prisma.eFacturaLog.create({
       data: {
         tenantId,

@@ -27,6 +27,22 @@ type EFacturaForm = {
   contactEmail: string
 }
 
+type EFacturaDiagnostics = {
+  tenantId: string | null
+  environment: string
+  cif: string | null
+  hasAccessToken: boolean
+  hasCertificateFile: boolean
+  usingClientCertificate: boolean
+  certSerialConfigured: string | null
+  tokenIssuer: string | null
+  tokenClientAppId: string | null
+  tokenSerial: string | null
+  tokenScopes: string[]
+  tokenRoles: string[]
+  tokenExp: string | null
+}
+
 const emptyForm: EFacturaForm = {
   efacturaEnabled: false,
   efacturaEnvironment: "test",
@@ -63,8 +79,10 @@ export default function SetariEFacturaPage() {
   const [saving, setSaving] = useState(false)
   const [connecting, setConnecting] = useState(false)
   const [testing, setTesting] = useState(false)
+  const [loadingDiagnostics, setLoadingDiagnostics] = useState(false)
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
+  const [diagnostics, setDiagnostics] = useState<EFacturaDiagnostics | null>(null)
   const [oauthStatus, setOauthStatus] = useState({
     connected: false,
     connectedAt: "",
@@ -283,6 +301,32 @@ export default function SetariEFacturaPage() {
     }
   }
 
+  async function loadDiagnostics() {
+    if (!token) {
+      setError("Nu exista token de autentificare. Fa login din nou.")
+      return
+    }
+
+    setLoadingDiagnostics(true)
+    setError("")
+    try {
+      const res = await fetch(`${API}/api/v1/company/efactura/diagnostics`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Nu am putut incarca diagnosticul ANAF.")
+      }
+      setDiagnostics(data?.diagnostics || null)
+    } catch (e: any) {
+      setError(e?.message || "Nu am putut incarca diagnosticul ANAF.")
+    } finally {
+      setLoadingDiagnostics(false)
+    }
+  }
+
   return (
     <div className="space-y-3">
       <PageHeader
@@ -367,9 +411,12 @@ export default function SetariEFacturaPage() {
 
       <DocumentSection
         title="2. Autorizare ANAF"
-        description="Dupa ce certificatul este pregatit pe server, generezi tokenul ANAF pentru firma si verifici conexiunea."
+        description="Generezi tokenul ANAF pentru firma, verifici conexiunea si vezi rapid contextul tehnic real al integrarii."
         actions={
           <div className="flex gap-2">
+            <button type="button" onClick={loadDiagnostics} className={documentButtonSecondaryClass} disabled={loadingDiagnostics || loading}>
+              {loadingDiagnostics ? "Diagnoza..." : "Vezi diagnoza"}
+            </button>
             <button type="button" onClick={testOauthConnection} className={documentButtonSecondaryClass} disabled={testing || loading || !oauthStatus.connected}>
               {testing ? "Testare..." : "Testeaza conexiunea"}
             </button>
@@ -396,6 +443,29 @@ export default function SetariEFacturaPage() {
             Dupa ce tokenul este activ, trimiterea si sincronizarea trebuie sa ramana in fluxul web.
           </div>
         </div>
+
+        {diagnostics ? (
+          <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+              Certificat client folosit: <span className="font-semibold text-slate-900">{diagnostics.usingClientCertificate ? "Da" : "Nu"}</span>
+            </div>
+            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+              Certificat incarcat: <span className="font-semibold text-slate-900">{diagnostics.hasCertificateFile ? "Da" : "Nu"}</span>
+            </div>
+            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+              Serial in token: <span className="font-semibold text-slate-900">{diagnostics.tokenSerial || "-"}</span>
+            </div>
+            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+              Serial configurat: <span className="font-semibold text-slate-900">{diagnostics.certSerialConfigured || "-"}</span>
+            </div>
+            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+              Roluri token: <span className="font-semibold text-slate-900">{diagnostics.tokenRoles.length ? diagnostics.tokenRoles.join(", ") : "-"}</span>
+            </div>
+            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+              Expira token: <span className="font-semibold text-slate-900">{diagnostics.tokenExp ? new Date(diagnostics.tokenExp).toLocaleString("ro-RO") : "-"}</span>
+            </div>
+          </div>
+        ) : null}
       </DocumentSection>
 
       <DocumentSection title="Ordinea corecta" description="Flux simplu, clar, fara pasi tehnici inutili in fata utilizatorului.">
