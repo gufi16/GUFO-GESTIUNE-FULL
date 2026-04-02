@@ -146,6 +146,14 @@ function getDaysNeededForMonth(monthValue: string) {
   return Math.max(1, Math.min(365, days))
 }
 
+function isIncomingEfacturaMessage(entry: any) {
+  const tip = String(entry?.tip || "").trim().toUpperCase()
+  const details = String(entry?.detalii || "").trim().toLowerCase()
+  if (tip.includes("PRIMITA")) return true
+  if (tip === "RECIPISA") return false
+  return details.includes("cif_beneficiar")
+}
+
 export default function FacturiPrimiteSPVPage() {
   const navigate = useNavigate()
   const token = getToken() || ""
@@ -271,10 +279,7 @@ export default function FacturiPrimiteSPVPage() {
           }))
         )
 
-        const invoiceMessages = messages.filter((entry: any) => {
-          const tip = String(entry?.tip || "").toUpperCase()
-          return tip !== "RECIPISA"
-        })
+        const invoiceMessages = messages.filter((entry: any) => isIncomingEfacturaMessage(entry))
 
         if (!invoiceMessages.length) {
           setMessage(`Bridge local conectat, dar in e-Factura nu exista facturi de importat pentru ${selectedMonth}.`)
@@ -644,11 +649,7 @@ export default function FacturiPrimiteSPVPage() {
   const filteredBridgeMessages = useMemo(() => {
     if (bridgeMessageFilter === "all") return bridgeMessages
     if (bridgeMessageFilter === "invoice") {
-      return bridgeMessages.filter((entry) => {
-        const tip = String(entry.tip || "").toUpperCase()
-        const details = String(entry.detalii || "").toLowerCase()
-        return tip === "FACTURA" || details.includes("factura")
-      })
+      return bridgeMessages.filter((entry) => isIncomingEfacturaMessage(entry))
     }
     return bridgeMessages.filter((entry) => String(entry.tip || "").toUpperCase() === "RECIPISA")
   }, [bridgeMessages, bridgeMessageFilter])
