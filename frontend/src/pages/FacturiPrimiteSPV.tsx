@@ -131,6 +131,18 @@ function getMonthKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
 }
 
+function parseInvoiceMonthKey(value?: string | null) {
+  const raw = String(value || "").trim()
+  if (!raw) return ""
+  const parsed = new Date(raw)
+  if (!Number.isNaN(parsed.getTime())) {
+    return getMonthKey(parsed)
+  }
+  const compactMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (compactMatch) return `${compactMatch[1]}-${compactMatch[2]}`
+  return ""
+}
+
 function filterMessagesForMonth(messages: any[], monthValue: string) {
   if (!monthValue) return messages
   return messages.filter((entry) => {
@@ -681,7 +693,8 @@ export default function FacturiPrimiteSPVPage() {
 
   function getInvoiceState(item: IncomingInvoice) {
     if (item.linkedReceiptId) return "linked" as const
-    if (!item.supplierId) return "needs-supplier" as const
+    const hasSupplierIdentity = Boolean(item.supplierId || String(item.supplierName || "").trim())
+    if (!hasSupplierIdentity) return "needs-supplier" as const
     const matchedLines = item.items.filter((line) => Boolean(line.matchedProductId)).length
     if (!item.items.length) return "partial" as const
     if (matchedLines === item.items.length) return "ready" as const
@@ -706,7 +719,11 @@ export default function FacturiPrimiteSPVPage() {
 
   const filteredItems = useMemo(() => {
     const q = search.trim().toLowerCase()
-    let next = !q ? items : items.filter((item) =>
+    let next = items.filter((item) => {
+      if (!selectedMonth) return true
+      return parseInvoiceMonthKey(item.invoiceDate) === selectedMonth
+    })
+    next = !q ? next : next.filter((item) =>
       [
         item.invoiceNo,
         item.supplierName,
@@ -721,7 +738,7 @@ export default function FacturiPrimiteSPVPage() {
       next = next.filter((item) => getInvoiceState(item) === filter)
     }
     return next
-  }, [items, search, filter])
+  }, [items, search, filter, selectedMonth])
 
   const totalMatched = filteredItems.reduce(
     (sum, item) => sum + item.items.filter((line) => Boolean(line.matchedProductId)).length,

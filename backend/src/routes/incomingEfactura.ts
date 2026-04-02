@@ -483,6 +483,7 @@ router.get("/api/v1/efactura/incoming/:id/pdf", async (req: AuthedRequest, res) 
 
   const doc = new PDFDocument({
     size: "A4",
+    layout: "landscape",
     margin: 28,
     bufferPages: true,
     autoFirstPage: true,
