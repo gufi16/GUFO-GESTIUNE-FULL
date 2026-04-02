@@ -63,6 +63,9 @@ export default function FacturiPrimiteSPVPage() {
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
   const [expandedIds, setExpandedIds] = useState<string[]>([])
+  const [spvModeMessage] = useState(
+    "Ecranul acesta tine de SPV clasic (SPVWS2), separat de fluxul OAuth e-Factura. Tokenul ANAF activ nu este suficient singur pentru sincronizarea de aici."
+  )
 
   useEffect(() => {
     void loadItems()
@@ -109,7 +112,7 @@ export default function FacturiPrimiteSPVPage() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data?.ok) {
-        throw new Error(data?.error || "Nu am putut sincroniza facturile primite din SPV.")
+        throw new Error(data?.message || data?.error || "Nu am putut sincroniza facturile primite din SPV.")
       }
       setMessage(data?.message || "Sincronizarea SPV a fost finalizata.")
       await loadItems()
@@ -231,6 +234,7 @@ export default function FacturiPrimiteSPVPage() {
         />
       </div>
 
+      <InlineNotice>{spvModeMessage}</InlineNotice>
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
 

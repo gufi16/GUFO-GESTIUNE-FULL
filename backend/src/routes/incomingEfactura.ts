@@ -4,17 +4,9 @@ import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { requireTenantModule } from "../lib/tenantModules"
 import { reserveNextNumber } from "../lib/numbering"
-import {
-  anafDownloadById,
-  anafListMessages,
-  loadAnafCompanyContext,
-  logAnafRouteError,
-  requireAnafReadyCompany,
-} from "../lib/anafClient"
+import { getSpvClassicStatus } from "../lib/spvClassic"
 import {
   extractDownloadId,
-  extractXmlFromAnafDownload,
-  parseIncomingEInvoiceXml,
   readStringField,
 } from "../lib/incomingEfactura"
 
@@ -252,71 +244,10 @@ router.post("/api/v1/efactura/incoming/sync", async (req: AuthedRequest, res) =>
     return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
   }
 
-  const company = await loadAnafCompanyContext(tenantId)
-
-  try {
-    const ready = requireAnafReadyCompany(company, "sincronizarea facturilor primite")
-    const listResult = await anafListMessages(company, {
-      days: Number(req.body?.days || req.query.days || 30),
-    })
-
-    if (!listResult.response.ok) {
-      return res.status(400).json({
-        ok: false,
-        error: listResult.summary || "Nu am putut citi lista facturilor din SPV.",
-      })
-    }
-
-    let synced = 0
-    let skipped = 0
-
-    for (const item of listResult.items) {
-      const rawItemText = JSON.stringify(item || {})
-      const downloadId = extractDownloadId(item, rawItemText)
-      if (!downloadId) {
-        skipped += 1
-        continue
-      }
-
-      const downloadResult = await anafDownloadById(company, downloadId)
-      if (!downloadResult.response.ok) {
-        skipped += 1
-        continue
-      }
-
-      const buffer = downloadResult.response.buffer
-      const { xmlText } = extractXmlFromAnafDownload(buffer)
-      const parsedInvoice = parseIncomingEInvoiceXml(xmlText)
-
-      if (String(parsedInvoice.customerCif || "") !== ready.cif) {
-        skipped += 1
-        continue
-      }
-
-      await upsertIncomingInvoice(tenantId, item, xmlText, parsedInvoice)
-      synced += 1
-    }
-
-    return res.json({
-      ok: true,
-      synced,
-      skipped,
-      message: `Sincronizare SPV finalizata: ${synced} facturi primite actualizate.`,
-    })
-  } catch (error: any) {
-    logAnafRouteError("INCOMING EFACTURA SYNC ERROR", {
-      tenantId,
-      cif: company?.cui || null,
-      environment: company?.efacturaEnvironment || "test",
-      message: error?.message || "unknown error",
-      cause: error?.cause ? String(error.cause) : null,
-      stack: error?.stack || null,
-    })
-    return res.status(500).json({
-      ok: false,
-      error: error?.message || "Eroare la sincronizarea facturilor primite din SPV.",
-    })
-  }
+  return res.status(501).json({
+    ok: false,
+    ...getSpvClassicStatus(),
+  })
 })
 
 router.get("/api/v1/efactura/incoming", async (req: AuthedRequest, res) => {
