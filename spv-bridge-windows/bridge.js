@@ -717,8 +717,19 @@ async function listIncomingEfacturaMessages(serial, accessToken, environment, ci
     accessToken,
     url,
   })
+  const parsed = parseResponseContent(response?.result?.content)
+  const messages = Array.isArray(parsed?.mesaje)
+    ? parsed.mesaje
+    : Array.isArray(parsed?.facturi)
+      ? parsed.facturi
+      : Array.isArray(parsed)
+        ? parsed
+        : []
   console.log(
     `[gufo-spv-bridge] listIncomingEfacturaMessages finish ok=${Boolean(response?.result?.ok)} status=${response?.result?.status ?? "null"}`
+  )
+  console.log(
+    `[gufo-spv-bridge] listIncomingEfacturaMessages payload messages=${messages.length} preview=${String(response?.result?.content || "").slice(0, 220)}`
   )
   return response
 }
