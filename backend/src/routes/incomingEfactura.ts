@@ -1,5 +1,7 @@
 // @ts-nocheck
+import fs from "fs"
 import { Router } from "express"
+import PDFDocument from "pdfkit"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { requireTenantModule } from "../lib/tenantModules"
@@ -17,6 +19,46 @@ import {
 const router = Router()
 
 router.use(requireAuth)
+
+function registerFonts(doc: PDFKit.PDFDocument) {
+  const regularCandidates = [
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+    "/Library/Fonts/Arial Unicode.ttf",
+    "C:\\Windows\\Fonts\\arial.ttf",
+  ]
+
+  const boldCandidates = [
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+    "/Library/Fonts/Arial Bold.ttf",
+    "C:\\Windows\\Fonts\\arialbd.ttf",
+  ]
+
+  const regularPath = regularCandidates.find((path) => fs.existsSync(path))
+  const boldPath = boldCandidates.find((path) => fs.existsSync(path))
+
+  if (regularPath) doc.registerFont("IncomingEfacturaRegular", regularPath)
+  if (boldPath) doc.registerFont("IncomingEfacturaBold", boldPath)
+
+  return {
+    regular: regularPath ? "IncomingEfacturaRegular" : "Helvetica",
+    bold: boldPath ? "IncomingEfacturaBold" : "Helvetica-Bold",
+  }
+}
+
+function fmtMoney(value: any) {
+  return Number(value || 0).toFixed(2)
+}
+
+function safeFilePart(value: string) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-zA-Z0-9\-_.]/g, "")
+    .replace(/\-+/g, "-")
+    .replace(/^[-_.]+|[-_.]+$/g, "")
+}
 
 function toDateOrNull(value: any) {
   if (!value) return null
@@ -335,6 +377,154 @@ router.get("/api/v1/efactura/incoming/:id", async (req: AuthedRequest, res) => {
   }
 
   return res.json({ ok: true, item })
+})
+
+router.get("/api/v1/efactura/incoming/:id/pdf", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const moduleCheck = await requireTenantModule(tenantId, "efactura")
+  if (!moduleCheck.enabled) {
+    return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
+  }
+
+  const item = await prisma.incomingEInvoice.findFirst({
+    where: { tenantId, id: req.params.id },
+    include: {
+      items: {
+        orderBy: { lineIndex: "asc" },
+      },
+    },
+  })
+
+  if (!item) {
+    return res.status(404).json({ ok: false, error: "Factura primita SPV nu a fost gasita." })
+  }
+
+  const filename = `Factura_SPV_${safeFilePart(String(item.invoiceNo || item.spvDownloadId || "document"))}.pdf`
+  const doc = new PDFDocument({
+    size: "A4",
+    margin: 36,
+    bufferPages: true,
+    autoFirstPage: true,
+  })
+  const fonts = registerFonts(doc)
+
+  res.setHeader("Content-Type", "application/pdf")
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`)
+  doc.pipe(res)
+
+  const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right
+  const startX = doc.page.margins.left
+  const colWidths = [24, 144, 36, 42, 58, 58, 38, 50, 54]
+  const colX = colWidths.reduce<number[]>((acc, width, index) => {
+    if (index === 0) return [startX]
+    acc.push(acc[index - 1] + colWidths[index - 1])
+    return acc
+  }, [])
+
+  function ensureSpace(requiredHeight: number) {
+    if (doc.y + requiredHeight <= doc.page.height - doc.page.margins.bottom) return
+    doc.addPage()
+    doc.font(fonts.regular).fontSize(10)
+  }
+
+  doc.font(fonts.bold).fontSize(20).fillColor("#0f172a").text("Factura primita e-Factura", startX, doc.y)
+  doc.moveDown(0.4)
+
+  const topY = doc.y
+  const leftBoxWidth = pageWidth * 0.48
+  const rightBoxX = startX + leftBoxWidth + 16
+  const rightBoxWidth = pageWidth - leftBoxWidth - 16
+
+  doc.roundedRect(startX, topY, leftBoxWidth, 102, 10).stroke("#cbd5e1")
+  doc.roundedRect(rightBoxX, topY, rightBoxWidth, 102, 10).stroke("#cbd5e1")
+
+  doc.font(fonts.bold).fontSize(11).text("Furnizor", startX + 12, topY + 10)
+  doc.font(fonts.regular).fontSize(10)
+  doc.text(String(item.supplierName || "-"), startX + 12, topY + 30, { width: leftBoxWidth - 24 })
+  doc.text(`CIF: ${String(item.supplierCif || "-")}`, startX + 12, topY + 47, { width: leftBoxWidth - 24 })
+  doc.text(`Cod furnizor: ${String(item.supplierCode || "-")}`, startX + 12, topY + 64, { width: leftBoxWidth - 24 })
+
+  doc.font(fonts.bold).fontSize(11).text("Factura", rightBoxX + 12, topY + 10)
+  doc.font(fonts.regular).fontSize(10)
+  doc.text(`Numar: ${String(item.invoiceNo || "-")}`, rightBoxX + 12, topY + 30, { width: rightBoxWidth - 24 })
+  doc.text(`Data: ${toDateOrNull(item.invoiceDate)?.toLocaleDateString("ro-RO") || "-"}`, rightBoxX + 12, topY + 47, { width: rightBoxWidth - 24 })
+  doc.text(`Moneda: ${String(item.currency || "RON")}`, rightBoxX + 12, topY + 64, { width: rightBoxWidth - 24 })
+  doc.text(`SPV: ${String(item.spvDownloadId || "-")}`, rightBoxX + 12, topY + 81, { width: rightBoxWidth - 24 })
+
+  doc.y = topY + 118
+  doc.font(fonts.bold).fontSize(11).text("Sumar", startX, doc.y)
+  doc.moveDown(0.35)
+  doc.font(fonts.regular).fontSize(10)
+  doc.text(`Total fara TVA: ${fmtMoney(item.totalNet)} ${item.currency}`)
+  doc.text(`Total TVA: ${fmtMoney(item.totalVat)} ${item.currency}`)
+  doc.text(`Total cu TVA: ${fmtMoney(item.totalGross)} ${item.currency}`)
+
+  doc.moveDown(0.8)
+  ensureSpace(36)
+  const headerY = doc.y
+  doc.save()
+  doc.rect(startX, headerY, pageWidth, 24).fill("#f8fafc")
+  doc.restore()
+  doc.font(fonts.bold).fontSize(8).fillColor("#475569")
+  ;["#", "Produs", "UM", "Cant.", "Pret fara TVA", "Pret cu TVA", "TVA%", "TVA", "Total"].forEach((label, index) => {
+    doc.text(label, colX[index] + 4, headerY + 8, {
+      width: colWidths[index] - 8,
+      align: index === 0 ? "center" : "left",
+    })
+  })
+  doc.y = headerY + 26
+
+  doc.font(fonts.regular).fontSize(9).fillColor("#111827")
+  for (const line of item.items) {
+    const cells = [
+      String(line.lineIndex || "-"),
+      String(line.productName || "-"),
+      String(line.uomCode || "-"),
+      String(toNumber(line.qty).toFixed(2)),
+      `${fmtMoney(line.unitPrice)} ${item.currency}`,
+      `${fmtMoney(toNumber(line.unitPrice) * (1 + toNumber(line.vatRate) / 100))} ${item.currency}`,
+      fmtMoney(line.vatRate),
+      `${fmtMoney(line.lineVat)} ${item.currency}`,
+      `${fmtMoney(line.lineGross)} ${item.currency}`,
+    ]
+    const rowHeight =
+      Math.max(
+        22,
+        doc.heightOfString(cells[1], { width: colWidths[1] - 8, align: "left" }) + 10
+      )
+    ensureSpace(rowHeight + 2)
+    const rowY = doc.y
+    doc.save()
+    doc.rect(startX, rowY, pageWidth, rowHeight).stroke("#e2e8f0")
+    doc.restore()
+    cells.forEach((cell, index) => {
+      doc.text(cell, colX[index] + 4, rowY + 5, {
+        width: colWidths[index] - 8,
+        align: index === 0 ? "center" : "left",
+      })
+    })
+    doc.y = rowY + rowHeight
+  }
+
+  if (!item.items.length) {
+    ensureSpace(30)
+    doc.font(fonts.regular).fontSize(10).fillColor("#64748b").text("Factura nu are pozitii importate.", startX, doc.y)
+    doc.moveDown(1)
+  }
+
+  const pages = doc.bufferedPageRange()
+  for (let i = 0; i < pages.count; i += 1) {
+    doc.switchToPage(i)
+    doc.font(fonts.regular).fontSize(8).fillColor("#64748b")
+    doc.text(
+      `Factura ${String(item.invoiceNo || item.spvDownloadId || "-")} • Pagina ${i + 1} / ${pages.count}`,
+      startX,
+      doc.page.height - 24,
+      { width: pageWidth, align: "right" }
+    )
+  }
+
+  doc.end()
 })
 
 router.get("/api/v1/efactura/incoming/:id/xml", async (req: AuthedRequest, res) => {

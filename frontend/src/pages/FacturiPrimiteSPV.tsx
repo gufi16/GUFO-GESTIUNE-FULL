@@ -18,6 +18,8 @@ type IncomingInvoiceItem = {
   qty?: number
   unitPrice?: number
   vatRate?: number
+  lineNet?: number
+  lineVat?: number
   lineGross?: number
   matchedProductId?: string | null
   matchedProduct?: {
@@ -36,6 +38,8 @@ type IncomingInvoice = {
   supplierCode?: string | null
   supplierCif?: string | null
   currency: string
+  totalNet?: number
+  totalVat?: number
   totalGross: number
   spvDownloadId: string
   spvUploadIndex?: string | null
@@ -174,6 +178,12 @@ function isUsableImportedInvoice(item: IncomingInvoice) {
   )
 }
 
+function getUnitPriceWithVat(line: IncomingInvoiceItem) {
+  const net = Number(line.unitPrice || 0)
+  const vatRate = Number(line.vatRate || 0)
+  return net + (net * vatRate) / 100
+}
+
 export default function FacturiPrimiteSPVPage() {
   const navigate = useNavigate()
   const token = getToken() || ""
@@ -196,6 +206,9 @@ export default function FacturiPrimiteSPVPage() {
   const [bridgeMessagesPage, setBridgeMessagesPage] = useState(1)
   const [importedInvoicesPage, setImportedInvoicesPage] = useState(1)
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null)
+  const isDebugMode =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("debugSpv") === "1"
   const [spvModeMessage] = useState(
     "Pagina foloseste bridge-ul local Windows pentru a citi facturile primite din e-Factura cu certificatul digital local."
   )
@@ -774,101 +787,25 @@ export default function FacturiPrimiteSPVPage() {
     setSelectedInvoiceId(null)
   }
 
-  function openInvoicePdfPreview(item: IncomingInvoice) {
-    if (typeof window === "undefined") return
-    const popup = window.open("", "_blank", "noopener,noreferrer,width=1100,height=800")
-    if (!popup) {
-      setError("Browserul a blocat fereastra de PDF. Permite popup-ul si incearca din nou.")
-      return
-    }
-
-    const supplierBlock = [
-      item.supplierName || "-",
-      item.supplierCif ? `CIF: ${item.supplierCif}` : "",
-      item.supplierCode ? `Cod furnizor: ${item.supplierCode}` : "",
-    ]
-      .filter(Boolean)
-      .join("<br />")
-
-    const rows = item.items
-      .map((line, index) => {
-        const total = Number(line.lineGross ?? line.qty ?? 0)
-        return `
-          <tr>
-            <td>${index + 1}</td>
-            <td>${escapeHtml(line.productName || "-")}<br /><span class="muted">${escapeHtml(
-              [line.productCode, line.externalCode, line.barcode].filter(Boolean).join(" | ") || "fara cod"
-            )}</span></td>
-            <td>${escapeHtml(line.uomCode || "-")}</td>
-            <td>${formatQtyRo(line.qty || 0)}</td>
-            <td>${formatMoneyRo(line.unitPrice || 0, item.currency)} ${item.currency}</td>
-            <td>${formatMoneyRo(total || 0, item.currency)} ${item.currency}</td>
-          </tr>
-        `
+  async function downloadInvoicePdf(id: string) {
+    if (!token) return
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/efactura/incoming/${id}/pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
       })
-      .join("")
-
-    popup.document.write(`
-      <!doctype html>
-      <html lang="ro">
-        <head>
-          <meta charset="utf-8" />
-          <title>Factura ${escapeHtml(item.invoiceNo || item.spvDownloadId)}</title>
-          <style>
-            body { font-family: Arial, sans-serif; margin: 32px; color: #0f172a; }
-            .header { display:flex; justify-content:space-between; gap:24px; margin-bottom:24px; }
-            .card { border:1px solid #cbd5e1; border-radius:16px; padding:16px; flex:1; }
-            h1 { margin:0 0 8px; font-size:28px; }
-            h2 { margin:0 0 10px; font-size:14px; text-transform:uppercase; letter-spacing:.08em; color:#475569; }
-            .meta { font-size:14px; line-height:1.6; }
-            .muted { color:#64748b; font-size:12px; }
-            table { width:100%; border-collapse:collapse; margin-top:20px; }
-            th, td { border:1px solid #cbd5e1; padding:10px; text-align:left; vertical-align:top; }
-            th { background:#f8fafc; font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:#475569; }
-            .footer { margin-top:20px; display:flex; justify-content:flex-end; }
-            .total { width:320px; }
-            .total-row { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid #e2e8f0; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div class="card">
-              <h2>Factura primita</h2>
-              <h1>${escapeHtml(item.invoiceNo || "-")}</h1>
-              <div class="meta">
-                Data: ${escapeHtml(formatDate(item.invoiceDate))}<br />
-                Moneda: ${escapeHtml(item.currency || "RON")}<br />
-                SPV Download ID: ${escapeHtml(item.spvDownloadId || "-")}
-              </div>
-            </div>
-            <div class="card">
-              <h2>Furnizor</h2>
-              <div class="meta">${supplierBlock}</div>
-            </div>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Produs</th>
-                <th>UM</th>
-                <th>Cantitate</th>
-                <th>Pret</th>
-                <th>Total</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-          <div class="footer">
-            <div class="total">
-              <div class="total-row"><strong>Total</strong><strong>${formatMoneyRo(item.totalGross || 0, item.currency)} ${escapeHtml(item.currency || "RON")}</strong></div>
-            </div>
-          </div>
-          <script>window.onload = function(){ window.print(); }</script>
-        </body>
-      </html>
-    `)
-    popup.document.close()
+      if (!res.ok) throw new Error()
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = ""
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch {
+      setError("Nu am putut descarca PDF-ul facturii din SPV.")
+    }
   }
 
   if (!hasModule("efactura")) {
@@ -896,7 +833,7 @@ export default function FacturiPrimiteSPVPage() {
       <InlineNotice>{spvModeMessage}</InlineNotice>
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
-      {spvTestResult ? (
+      {isDebugMode && spvTestResult ? (
         <div className={`rounded-[20px] border p-4 shadow-[0_8px_30px_rgba(15,23,42,0.06)] ${
           spvTestResult.tone === "success"
             ? "border-emerald-200 bg-emerald-50/70"
@@ -924,7 +861,7 @@ export default function FacturiPrimiteSPVPage() {
         </div>
       ) : null}
 
-      {spvStatus ? (
+      {isDebugMode && spvStatus ? (
         <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
           <DocumentMetric title="Mod SPV" value={String(spvStatus.mode || "-").toUpperCase()} tone="slate" />
           <DocumentMetric title="Autentificare" value={spvStatus.authType === "qualified_certificate" ? "Certificat calificat" : "-"} tone="blue" />
@@ -936,7 +873,7 @@ export default function FacturiPrimiteSPVPage() {
         </div>
       ) : null}
 
-      {spvStatus?.diagnostics ? (
+      {isDebugMode && spvStatus?.diagnostics ? (
         <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
           <DocumentMetric title="Fisier certificat" value={spvStatus.diagnostics.hasCertificateFile ? "Da" : "Nu"} tone="slate" />
           <DocumentMetric title="Parola certificat" value={spvStatus.diagnostics.hasCertificatePassword ? "Da" : "Nu"} tone="slate" />
@@ -944,7 +881,7 @@ export default function FacturiPrimiteSPVPage() {
         </div>
       ) : null}
 
-      {spvStatus?.requirements?.length ? (
+      {isDebugMode && spvStatus?.requirements?.length ? (
         <div className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-[0_8px_30px_rgba(15,23,42,0.06)]">
           <div className="text-sm font-semibold text-slate-900">Ce cere SPV clasic acum</div>
           <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-3">
@@ -958,37 +895,72 @@ export default function FacturiPrimiteSPVPage() {
       ) : null}
 
       <div className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-[0_8px_30px_rgba(15,23,42,0.06)]">
-        <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
-          <div className="text-sm font-semibold text-slate-900">Bridge local Windows</div>
-          <div className="text-xs text-slate-500">
-            Daca bridge-ul ruleaza pe acest PC, testul din pagina merge direct prin certificatul local.
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-[220px_auto] md:items-end">
+            <div>
+              <div className="mb-1 text-sm font-semibold text-slate-900">Luna facturilor</div>
+              <input
+                type="month"
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className={documentInputClass}
+              />
+            </div>
+            <div className="text-xs text-slate-500">
+              Dupa sincronizare vezi doar facturile importate, cu deschidere, XML, PDF si receptie.
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => void loadItems()} className={documentButtonSecondaryClass}>
+              Reincarca
+            </button>
+            {isDebugMode ? (
+              <button
+                type="button"
+                onClick={() => void testClassicListMessages()}
+                className={documentButtonSecondaryClass}
+                disabled={testingClassic}
+              >
+                {testingClassic ? "Testare..." : bridgeToken.trim() ? "Testeaza bridge local" : "Testeaza listaMesaje"}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => void syncItems()}
+              className={documentButtonPrimaryClass}
+              disabled={syncing || (!bridgeToken.trim() && (spvStatus ? !spvStatus.implemented : false))}
+            >
+              {syncing ? "Sincronizare..." : "Sincronizeaza SPV"}
+            </button>
           </div>
         </div>
-        <div className="mt-3 grid grid-cols-1 gap-2.5 md:grid-cols-[minmax(280px,1fr)_minmax(260px,1fr)_auto]">
-          <input
-            value={bridgeUrl}
-            onChange={(e) => setBridgeUrl(e.target.value)}
-            placeholder="http://127.0.0.1:48521"
-            className={documentInputClass}
-          />
-          <input
-            value={bridgeToken}
-            onChange={(e) => setBridgeToken(e.target.value)}
-            placeholder="Token bridge local"
-            className={documentInputClass}
-          />
-          <button type="button" onClick={saveBridgeSettings} className={documentButtonSecondaryClass}>
-            Salveaza bridge
-          </button>
-        </div>
-        <div className="mt-3 max-w-xs">
-          <input
-            type="month"
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(e.target.value)}
-            className={documentInputClass}
-          />
-        </div>
+        {isDebugMode ? (
+          <div className="mt-4 border-t border-slate-200 pt-4">
+            <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+              <div className="text-sm font-semibold text-slate-900">Setari bridge local Windows</div>
+              <div className="text-xs text-slate-500">
+                Daca bridge-ul ruleaza pe acest PC, testul din pagina merge direct prin certificatul local.
+              </div>
+            </div>
+            <div className="mt-3 grid grid-cols-1 gap-2.5 md:grid-cols-[minmax(280px,1fr)_minmax(260px,1fr)_auto]">
+              <input
+                value={bridgeUrl}
+                onChange={(e) => setBridgeUrl(e.target.value)}
+                placeholder="http://127.0.0.1:48521"
+                className={documentInputClass}
+              />
+              <input
+                value={bridgeToken}
+                onChange={(e) => setBridgeToken(e.target.value)}
+                placeholder="Token bridge local"
+                className={documentInputClass}
+              />
+              <button type="button" onClick={saveBridgeSettings} className={documentButtonSecondaryClass}>
+                Salveaza bridge
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -1014,7 +986,7 @@ export default function FacturiPrimiteSPVPage() {
         ))}
       </div>
 
-      {bridgeMessages.length ? (
+      {isDebugMode && bridgeMessages.length ? (
         <div className="overflow-hidden rounded-[20px] border border-slate-200 bg-white">
           <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
             <div className="text-sm font-semibold text-slate-900">
@@ -1098,39 +1070,23 @@ export default function FacturiPrimiteSPVPage() {
         </div>
       ) : null}
 
-      <div className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-[0_8px_30px_rgba(15,23,42,0.06)]">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Factura, furnizor, CIF, ID descarcare..."
-            className={`${documentInputClass} md:max-w-md`}
-          />
-          <div className="flex gap-2">
-            <button type="button" onClick={() => void loadItems()} className={documentButtonSecondaryClass}>
-              Reincarca
-            </button>
-            <button
-              type="button"
-              onClick={() => void testClassicListMessages()}
-              className={documentButtonSecondaryClass}
-              disabled={testingClassic}
-            >
-              {testingClassic ? "Testare..." : bridgeToken.trim() ? "Testeaza bridge local" : "Testeaza listaMesaje"}
-            </button>
-            <button
-              type="button"
-              onClick={() => void syncItems()}
-              className={documentButtonPrimaryClass}
-              disabled={syncing || (!bridgeToken.trim() && (spvStatus ? !spvStatus.implemented : false))}
-            >
-              {syncing ? "Sincronizare..." : bridgeToken.trim() ? "Sincronizeaza SPV" : spvStatus?.implemented ? "Sincronizeaza SPV" : "SPVWS2 separat"}
-            </button>
+      <div className="overflow-hidden rounded-[20px] border border-slate-200 bg-white">
+        <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="text-sm font-semibold text-slate-900">Facturi importate</div>
+              <div className="mt-1 text-xs text-slate-500">
+                Deschizi factura, vezi continutul complet si poti crea receptia direct din ea.
+              </div>
+            </div>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Factura, furnizor, CIF, ID descarcare..."
+              className={`${documentInputClass} md:max-w-md`}
+            />
           </div>
         </div>
-      </div>
-
-      <div className="overflow-hidden rounded-[20px] border border-slate-200 bg-white">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-slate-500">
             <tr>
@@ -1191,6 +1147,9 @@ export default function FacturiPrimiteSPVPage() {
                       </td>
                       <td className="px-3 py-2.5 text-slate-700">
                         <div className="font-semibold text-slate-900">{formatMoneyRo(item.totalGross)} {item.currency}</div>
+                        <div className="text-xs text-slate-500">
+                          Net {formatMoneyRo(item.totalNet || 0)} • TVA {formatMoneyRo(item.totalVat || 0)}
+                        </div>
                         <div className="text-xs text-slate-500">{item.items.length} pozitii</div>
                       </td>
                       <td className="px-3 py-2.5 text-slate-700">
@@ -1210,18 +1169,18 @@ export default function FacturiPrimiteSPVPage() {
                         <div className="flex justify-end gap-2">
                           <button
                             type="button"
+                            onClick={() => void downloadInvoicePdf(item.id)}
+                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-[#17324D] transition hover:bg-[#F4F7FB]"
+                          >
+                            <FileText size={16} />
+                            PDF
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => openInvoiceDetails(item.id)}
                             className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-[#17324D] transition hover:bg-[#F4F7FB]"
                           >
                             {isExpanded && selectedInvoiceId === item.id ? "Deschis" : "Deschide"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => openXml(item.id)}
-                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-[#17324D] transition hover:bg-[#F4F7FB]"
-                          >
-                            <FileCode2 size={16} />
-                            XML
                           </button>
                           {!item.supplierId ? (
                             <button
@@ -1258,11 +1217,13 @@ export default function FacturiPrimiteSPVPage() {
                       <tr className="border-t border-slate-100 bg-slate-50/60">
                         <td colSpan={7} className="px-4 py-3">
                           <div className="rounded-2xl border border-slate-200 bg-white">
-                            <div className="grid grid-cols-[minmax(220px,2fr)_120px_96px_120px_180px] gap-0 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                            <div className="grid grid-cols-[minmax(220px,2fr)_88px_88px_120px_120px_120px_180px] gap-0 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                               <div>Produs SPV</div>
                               <div>UM</div>
                               <div>Cant.</div>
-                              <div>Pret</div>
+                              <div>Pret fara TVA</div>
+                              <div>Pret cu TVA</div>
+                              <div>Total cu TVA</div>
                               <div>Mapare ERP</div>
                             </div>
                             <div className="divide-y divide-slate-100">
@@ -1271,7 +1232,7 @@ export default function FacturiPrimiteSPVPage() {
                                 return (
                                   <div
                                     key={line.id}
-                                    className="grid grid-cols-[minmax(220px,2fr)_120px_96px_120px_180px] gap-0 px-3 py-2 text-sm"
+                                    className="grid grid-cols-[minmax(220px,2fr)_88px_88px_120px_120px_120px_180px] gap-0 px-3 py-2 text-sm"
                                   >
                                     <div>
                                       <div className="font-medium text-slate-900">{line.productName || "-"}</div>
@@ -1283,6 +1244,12 @@ export default function FacturiPrimiteSPVPage() {
                                     <div className="text-slate-700">{formatQtyRo(line.qty || 0)}</div>
                                     <div className="text-slate-700">
                                       {formatMoneyRo(line.unitPrice || 0, item.currency)} {item.currency}
+                                    </div>
+                                    <div className="text-slate-700">
+                                      {formatMoneyRo(getUnitPriceWithVat(line), item.currency)} {item.currency}
+                                    </div>
+                                    <div className="text-slate-700">
+                                      {formatMoneyRo(line.lineGross || 0, item.currency)} {item.currency}
                                     </div>
                                     <div>
                                       <span
@@ -1368,6 +1335,12 @@ export default function FacturiPrimiteSPVPage() {
                 <DocumentMetric title="Total" value={`${formatMoneyRo(selectedInvoice.totalGross)} ${selectedInvoice.currency}`} tone="emerald" />
               </div>
 
+              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+                <DocumentMetric title="Total fara TVA" value={`${formatMoneyRo(selectedInvoice.totalNet || 0)} ${selectedInvoice.currency}`} tone="slate" />
+                <DocumentMetric title="TVA" value={`${formatMoneyRo(selectedInvoice.totalVat || 0)} ${selectedInvoice.currency}`} tone="slate" />
+                <DocumentMetric title="Pozitii" value={String(selectedInvoice.items.length)} tone="blue" />
+              </div>
+
               <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
                 <div className="rounded-[18px] border border-slate-200 bg-white p-4">
                   <div className="text-sm font-semibold text-slate-900">Furnizor</div>
@@ -1387,7 +1360,7 @@ export default function FacturiPrimiteSPVPage() {
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => openInvoicePdfPreview(selectedInvoice)}
+                      onClick={() => void downloadInvoicePdf(selectedInvoice.id)}
                       className={documentButtonSecondaryClass}
                     >
                       <FileText size={16} />
@@ -1442,8 +1415,10 @@ export default function FacturiPrimiteSPVPage() {
                       <th className="px-3 py-2.5 text-left font-medium">Coduri</th>
                       <th className="px-3 py-2.5 text-left font-medium">UM</th>
                       <th className="px-3 py-2.5 text-left font-medium">Cant.</th>
-                      <th className="px-3 py-2.5 text-left font-medium">Pret</th>
-                      <th className="px-3 py-2.5 text-left font-medium">Total</th>
+                      <th className="px-3 py-2.5 text-left font-medium">Pret fara TVA</th>
+                      <th className="px-3 py-2.5 text-left font-medium">Pret cu TVA</th>
+                      <th className="px-3 py-2.5 text-left font-medium">TVA</th>
+                      <th className="px-3 py-2.5 text-left font-medium">Total cu TVA</th>
                       <th className="px-3 py-2.5 text-left font-medium">Mapare</th>
                     </tr>
                   </thead>
@@ -1459,6 +1434,11 @@ export default function FacturiPrimiteSPVPage() {
                         <td className="px-3 py-2.5 text-slate-700">{line.uomCode || "-"}</td>
                         <td className="px-3 py-2.5 text-slate-700">{formatQtyRo(line.qty || 0)}</td>
                         <td className="px-3 py-2.5 text-slate-700">{formatMoneyRo(line.unitPrice || 0, selectedInvoice.currency)} {selectedInvoice.currency}</td>
+                        <td className="px-3 py-2.5 text-slate-700">{formatMoneyRo(getUnitPriceWithVat(line), selectedInvoice.currency)} {selectedInvoice.currency}</td>
+                        <td className="px-3 py-2.5 text-slate-700">
+                          <div>{formatMoneyRo(line.lineVat || 0, selectedInvoice.currency)} {selectedInvoice.currency}</div>
+                          <div className="text-xs text-slate-500">{formatQtyRo(line.vatRate || 0)}%</div>
+                        </td>
                         <td className="px-3 py-2.5 text-slate-700">{formatMoneyRo(line.lineGross || 0, selectedInvoice.currency)} {selectedInvoice.currency}</td>
                         <td className="px-3 py-2.5">
                           <span
@@ -1475,7 +1455,7 @@ export default function FacturiPrimiteSPVPage() {
                     ))}
                     {!selectedInvoice.items.length ? (
                       <tr className="border-t border-slate-200">
-                        <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                        <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
                           Factura nu are linii importate.
                         </td>
                       </tr>
