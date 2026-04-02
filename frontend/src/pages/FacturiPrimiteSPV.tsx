@@ -81,6 +81,7 @@ export default function FacturiPrimiteSPVPage() {
   const [filter, setFilter] = useState<IncomingFilter>("all")
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
+  const [testingClassic, setTestingClassic] = useState(false)
   const [expandedIds, setExpandedIds] = useState<string[]>([])
   const [spvStatus, setSpvStatus] = useState<SpvClassicStatus | null>(null)
   const [spvModeMessage] = useState(
@@ -155,6 +156,40 @@ export default function FacturiPrimiteSPVPage() {
       setError(err?.message || "Nu am putut sincroniza facturile primite din SPV.")
     } finally {
       setSyncing(false)
+    }
+  }
+
+  async function testClassicListMessages() {
+    if (!token) return
+    setTestingClassic(true)
+    setError("")
+    setMessage("")
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/spv-classic/test-list-messages`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ days: 30 }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Nu am putut testa listaMesaje din SPV clasic.")
+      }
+
+      const summary = data?.summary || {}
+      if (summary?.error) {
+        setMessage(`SPVWS2 a raspuns: ${summary.error}`)
+      } else {
+        setMessage(
+          `Test SPVWS2 ok. Mesaje: ${summary?.messageCount ?? 0}${summary?.firstMessageType ? `, primul tip: ${summary.firstMessageType}` : ""}.`
+        )
+      }
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut testa listaMesaje din SPV clasic.")
+    } finally {
+      setTestingClassic(false)
     }
   }
 
@@ -340,6 +375,14 @@ export default function FacturiPrimiteSPVPage() {
           <div className="flex gap-2">
             <button type="button" onClick={() => void loadItems()} className={documentButtonSecondaryClass}>
               Reincarca
+            </button>
+            <button
+              type="button"
+              onClick={() => void testClassicListMessages()}
+              className={documentButtonSecondaryClass}
+              disabled={testingClassic}
+            >
+              {testingClassic ? "Testare..." : "Testeaza listaMesaje"}
             </button>
             <button
               type="button"
