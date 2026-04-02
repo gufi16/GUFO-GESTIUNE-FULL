@@ -55,6 +55,13 @@ type SpvClassicStatus = {
   }
   requirements?: string[]
   message?: string
+  diagnostics?: {
+    cui?: string | null
+    certSerialConfigured?: string | null
+    hasCertificateFile?: boolean
+    hasCertificatePassword?: boolean
+    canUseServerCertificate?: boolean
+  }
 }
 
 function formatDate(value?: string | null) {
@@ -270,7 +277,19 @@ export default function FacturiPrimiteSPVPage() {
         <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
           <DocumentMetric title="Mod SPV" value={String(spvStatus.mode || "-").toUpperCase()} tone="slate" />
           <DocumentMetric title="Autentificare" value={spvStatus.authType === "qualified_certificate" ? "Certificat calificat" : "-"} tone="blue" />
-          <DocumentMetric title="Implementare" value={spvStatus.implemented ? "Activa" : "Separata"} tone="amber" />
+          <DocumentMetric
+            title="Certificat server"
+            value={spvStatus.diagnostics?.canUseServerCertificate ? "Pregatit" : "Lipsa"}
+            tone={spvStatus.diagnostics?.canUseServerCertificate ? "emerald" : "amber"}
+          />
+        </div>
+      ) : null}
+
+      {spvStatus?.diagnostics ? (
+        <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
+          <DocumentMetric title="Fisier certificat" value={spvStatus.diagnostics.hasCertificateFile ? "Da" : "Nu"} tone="slate" />
+          <DocumentMetric title="Parola certificat" value={spvStatus.diagnostics.hasCertificatePassword ? "Da" : "Nu"} tone="slate" />
+          <DocumentMetric title="CUI firma" value={spvStatus.diagnostics.cui || "-"} tone="blue" />
         </div>
       ) : null}
 
