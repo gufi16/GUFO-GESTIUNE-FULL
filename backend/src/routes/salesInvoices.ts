@@ -6,8 +6,21 @@ import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { getNextNumberPreview, reserveNextNumber } from "../lib/numbering"
 import { generateInvoiceEFacturaXml, validateInvoiceForEFactura } from "../lib/efactura"
 import { requireTenantModule } from "../lib/tenantModules"
-import { anafHttpRequest, readAnafHeader } from "../lib/anafHttp"
-import { getAnafCertificateOptions } from "../lib/efacturaCertificate"
+import { readAnafHeader } from "../lib/anafHttp"
+import {
+  anafCheckUploadStatus,
+  anafDownloadById,
+  anafListMessages,
+  anafUploadXml,
+  loadAnafCompanyContext,
+} from "../lib/anafClient"
+import {
+  extractDownloadId,
+  extractUploadIndex,
+  normalizeCompanyCui,
+  parseAnafPayload,
+  summarizeAnafResponse,
+} from "../lib/incomingEfactura"
 
 const router = Router()
 
@@ -168,72 +181,11 @@ function enrichInvoice(invoice: any) {
   }
 }
 
-function normalizeCompanyCui(value: string | null | undefined) {
-  return String(value || "")
-    .trim()
-    .replace(/^RO/i, "")
-    .replace(/\D+/g, "")
-}
-
-function getEfacturaBaseUrl(environment: string | null | undefined) {
-  return String(environment || "test").toLowerCase() === "prod"
-    ? "https://webserviceapl.anaf.ro/prod/FCTEL/rest"
-    : "https://webserviceapl.anaf.ro/test/FCTEL/rest"
-}
-
-function parseAnafPayload(rawText: string) {
-  try {
-    return JSON.parse(rawText)
-  } catch {
-    return null
-  }
-}
-
-function readStringField(source: any, keys: string[]) {
-  for (const key of keys) {
-    const value = source?.[key]
-    if (value !== undefined && value !== null && String(value).trim()) {
-      return String(value).trim()
-    }
-  }
-  return ""
-}
-
-function extractUploadIndex(payload: any, rawText: string) {
-  const direct = readStringField(payload, ["index_incarcare", "indexIncarcare", "uploadIndex", "id_incarcare"])
-  if (direct) return direct
-  const match = rawText.match(/(?:index_incarcare|id_incarcare)["'=:\s>]+([0-9]+)/i)
-  return match?.[1] || ""
-}
-
-function extractDownloadId(payload: any, rawText: string) {
-  const direct = readStringField(payload, ["id_descarcare", "idDescarcare", "downloadId", "id"])
-  if (direct) return direct
-  const match = rawText.match(/(?:id_descarcare|downloadId|id)["'=:\s>]+([0-9]+)/i)
-  return match?.[1] || ""
-}
-
-function summarizeAnafResponse(payload: any, rawText: string) {
-  return (
-    readStringField(payload, ["message", "mesaj", "details", "detalii", "title"]) ||
-    rawText.slice(0, 1000)
-  )
-}
-
 function classifyEfacturaStatus(payload: any, rawText: string) {
   const text = `${JSON.stringify(payload || {})} ${rawText}`.toLowerCase()
   if (/(nok|respins|rejected|eroare|error|invalid)/i.test(text)) return "REJECTED"
   if (/(ok|acceptat|accepted|validat|disponibil|descarcare)/i.test(text)) return "ACCEPTED"
   return "SENT"
-}
-
-function collectMessageItems(payload: any) {
-  if (Array.isArray(payload)) return payload
-  const keys = ["mesaje", "messages", "lista", "items", "facturi", "messageList"]
-  for (const key of keys) {
-    if (Array.isArray(payload?.[key])) return payload[key]
-  }
-  return []
 }
 
 async function resolveReceiptDownloadId(company: any, invoice: any) {
@@ -242,26 +194,15 @@ async function resolveReceiptDownloadId(company: any, invoice: any) {
     return ""
   }
 
-  const baseUrl = getEfacturaBaseUrl(company?.efacturaEnvironment)
-  const listUrl = `${baseUrl}/listaMesajeFactura?zile=60&cif=${encodeURIComponent(cif)}`
-  const certOptions = getAnafCertificateOptions(company)
-  const response = await anafHttpRequest(listUrl, {
-    headers: {
-      Authorization: `Bearer ${company.efacturaOauthAccessToken}`,
-    },
-    ...certOptions,
-  })
-  const rawText = response.text
-  const payload = parseAnafPayload(rawText)
-  const items = collectMessageItems(payload)
-  const matched = items.find((item: any) => {
+  const listResult = await anafListMessages(company, { days: 60, cif })
+  const matched = listResult.items.find((item: any) => {
     const blob = JSON.stringify(item || {}).toLowerCase()
     return blob.includes(String(invoice.efacturaUploadIndex).toLowerCase())
   })
 
   return (
     extractDownloadId(matched, JSON.stringify(matched || {})) ||
-    extractDownloadId(payload, rawText)
+    extractDownloadId(listResult.payload, listResult.rawText)
   )
 }
 
@@ -927,17 +868,7 @@ router.post("/api/v1/sales-invoices/:id/efactura/send", async (req: AuthedReques
     return res.status(400).json({ ok: false, error: "Factura nu are inca XML e-Factura pregatit. Ruleaza mai intai Pregateste e-Factura." })
   }
 
-  const company = await prisma.company.findUnique({
-    where: { tenantId },
-    select: {
-      tenantId: true,
-      cui: true,
-      efacturaEnvironment: true,
-      efacturaOauthAccessToken: true,
-      efacturaCertFilename: true,
-      efacturaCertPasswordEnc: true,
-    },
-  })
+  const company = await loadAnafCompanyContext(tenantId)
 
   const cif = normalizeCompanyCui(company?.cui)
   if (!cif) {
@@ -948,27 +879,12 @@ router.post("/api/v1/sales-invoices/:id/efactura/send", async (req: AuthedReques
     return res.status(400).json({ ok: false, error: "Nu exista token ANAF salvat pentru aceasta firma. Genereaza mai intai tokenul ANAF." })
   }
 
-  const baseUrl = getEfacturaBaseUrl(company?.efacturaEnvironment)
-  const uploadUrl = `${baseUrl}/upload?standard=UBL&cif=${encodeURIComponent(cif)}`
-
   try {
-    const certOptions = getAnafCertificateOptions(company)
-    const response = await anafHttpRequest(uploadUrl, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${company.efacturaOauthAccessToken}`,
-        "Content-Type": "application/xml; charset=utf-8",
-      },
-      body: invoice.efacturaXmlText,
-      ...certOptions,
-    })
+    const uploadResult = await anafUploadXml(company, invoice.efacturaXmlText)
+    const uploadIndex = uploadResult.uploadIndex
+    const summary = uploadResult.summary
 
-    const rawText = response.text
-    const payload = parseAnafPayload(rawText)
-    const uploadIndex = extractUploadIndex(payload, rawText)
-    const summary = summarizeAnafResponse(payload, rawText)
-
-    if (!response.ok || !uploadIndex) {
+    if (!uploadResult.response.ok || !uploadIndex) {
       await prisma.eFacturaLog.create({
         data: {
           tenantId,
@@ -976,7 +892,7 @@ router.post("/api/v1/sales-invoices/:id/efactura/send", async (req: AuthedReques
           stage: "SEND",
           success: false,
           message: summary || "ANAF a respins upload-ul e-Factura.",
-          payload: payload || { rawText },
+          payload: uploadResult.payload || { rawText: uploadResult.rawText, url: uploadResult.url },
         },
       })
 
@@ -1028,7 +944,7 @@ router.post("/api/v1/sales-invoices/:id/efactura/send", async (req: AuthedReques
         stage: "SEND",
         success: true,
         message: summary || "Factura a fost transmisa la ANAF.",
-        payload: payload || { rawText, uploadIndex },
+        payload: uploadResult.payload || { rawText: uploadResult.rawText, uploadIndex, url: uploadResult.url },
       },
     })
 
@@ -1103,40 +1019,19 @@ router.get("/api/v1/sales-invoices/:id/efactura/status", async (req: AuthedReque
     return res.status(400).json({ ok: false, error: "Factura nu a fost transmisa inca la ANAF." })
   }
 
-  const company = await prisma.company.findUnique({
-    where: { tenantId },
-    select: {
-      tenantId: true,
-      efacturaEnvironment: true,
-      efacturaOauthAccessToken: true,
-      efacturaCertFilename: true,
-      efacturaCertPasswordEnc: true,
-    },
-  })
+  const company = await loadAnafCompanyContext(tenantId)
 
   if (!company?.efacturaOauthAccessToken) {
     return res.status(400).json({ ok: false, error: "Nu exista token ANAF salvat pentru aceasta firma." })
   }
 
-  const baseUrl = getEfacturaBaseUrl(company?.efacturaEnvironment)
-  const statusUrl = `${baseUrl}/stareMesaj?id_incarcare=${encodeURIComponent(invoice.efacturaUploadIndex)}`
-
   try {
-    const certOptions = getAnafCertificateOptions(company)
-    const response = await anafHttpRequest(statusUrl, {
-      headers: {
-        Authorization: `Bearer ${company.efacturaOauthAccessToken}`,
-      },
-      ...certOptions,
-    })
+    const statusResult = await anafCheckUploadStatus(company, invoice.efacturaUploadIndex)
+    const summary = statusResult.summary
+    const nextStatus = classifyEfacturaStatus(statusResult.payload, statusResult.rawText)
+    const downloadId = statusResult.downloadId || invoice.efacturaDownloadId || null
 
-    const rawText = response.text
-    const payload = parseAnafPayload(rawText)
-    const summary = summarizeAnafResponse(payload, rawText)
-    const nextStatus = classifyEfacturaStatus(payload, rawText)
-    const downloadId = extractDownloadId(payload, rawText) || invoice.efacturaDownloadId || null
-
-    if (!response.ok) {
+    if (!statusResult.response.ok) {
       await prisma.eFacturaLog.create({
         data: {
           tenantId,
@@ -1144,7 +1039,7 @@ router.get("/api/v1/sales-invoices/:id/efactura/status", async (req: AuthedReque
           stage: "STATUS",
           success: false,
           message: summary || "Nu am putut verifica starea la ANAF.",
-          payload: payload || { rawText },
+          payload: statusResult.payload || { rawText: statusResult.rawText, url: statusResult.url },
         },
       })
 
@@ -1186,7 +1081,7 @@ router.get("/api/v1/sales-invoices/:id/efactura/status", async (req: AuthedReque
         stage: "STATUS",
         success: true,
         message: summary || "Starea facturii a fost verificata la ANAF.",
-        payload: payload || { rawText, downloadId },
+        payload: statusResult.payload || { rawText: statusResult.rawText, downloadId, url: statusResult.url },
       },
     })
 
@@ -1241,17 +1136,7 @@ router.get("/api/v1/sales-invoices/:id/efactura/receipt", async (req: AuthedRequ
     return res.status(404).json({ ok: false, error: "Factura nu a fost gasita." })
   }
 
-  const company = await prisma.company.findUnique({
-    where: { tenantId },
-    select: {
-      tenantId: true,
-      cui: true,
-      efacturaEnvironment: true,
-      efacturaOauthAccessToken: true,
-      efacturaCertFilename: true,
-      efacturaCertPasswordEnc: true,
-    },
-  })
+  const company = await loadAnafCompanyContext(tenantId)
 
   if (!company?.efacturaOauthAccessToken) {
     return res.status(400).json({ ok: false, error: "Nu exista token ANAF salvat pentru aceasta firma." })
@@ -1266,24 +1151,14 @@ router.get("/api/v1/sales-invoices/:id/efactura/receipt", async (req: AuthedRequ
     return res.status(400).json({ ok: false, error: "Recipisa nu este inca disponibila pentru aceasta factura." })
   }
 
-  const baseUrl = getEfacturaBaseUrl(company?.efacturaEnvironment)
-  const receiptUrl = `${baseUrl}/descarcare?id=${encodeURIComponent(downloadId)}`
-
   try {
-    const certOptions = getAnafCertificateOptions(company)
-    const response = await anafHttpRequest(receiptUrl, {
-      headers: {
-        Authorization: `Bearer ${company.efacturaOauthAccessToken}`,
-      },
-      ...certOptions,
-    })
-
-    const buffer = response.buffer
+    const receiptResult = await anafDownloadById(company, downloadId)
+    const buffer = receiptResult.response.buffer
     const rawText = buffer.toString("utf8")
     const payload = parseAnafPayload(rawText)
-    const summary = response.ok ? "Recipisa ANAF a fost descarcata." : summarizeAnafResponse(payload, rawText)
+    const summary = receiptResult.response.ok ? "Recipisa ANAF a fost descarcata." : summarizeAnafResponse(payload, rawText)
 
-    if (!response.ok) {
+    if (!receiptResult.response.ok) {
       await prisma.eFacturaLog.create({
         data: {
           tenantId,
@@ -1291,7 +1166,7 @@ router.get("/api/v1/sales-invoices/:id/efactura/receipt", async (req: AuthedRequ
           stage: "DOWNLOAD",
           success: false,
           message: summary || "Nu am putut descarca recipisa ANAF.",
-          payload: payload || { rawText },
+          payload: payload || { rawText, url: receiptResult.url },
         },
       })
 
@@ -1317,12 +1192,12 @@ router.get("/api/v1/sales-invoices/:id/efactura/receipt", async (req: AuthedRequ
         stage: "DOWNLOAD",
         success: true,
         message: "Recipisa ANAF a fost descarcata.",
-        payload: { downloadId },
+        payload: { downloadId, url: receiptResult.url },
       },
     })
 
     const fileNameBase = `Recipisa_eFactura_${safeFilePart(invoice.docNo)}_${safeFilePart(invoice.customerName)}`
-    const contentType = readAnafHeader(response.headers, "content-type") || "application/octet-stream"
+    const contentType = readAnafHeader(receiptResult.response.headers, "content-type") || "application/octet-stream"
     const extension =
       contentType.includes("zip") ? "zip" :
       contentType.includes("pdf") ? "pdf" :

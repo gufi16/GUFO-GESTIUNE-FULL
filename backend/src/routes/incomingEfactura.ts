@@ -4,19 +4,18 @@ import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { requireTenantModule } from "../lib/tenantModules"
 import { reserveNextNumber } from "../lib/numbering"
-import { anafHttpRequest } from "../lib/anafHttp"
-import { getAnafCertificateOptions } from "../lib/efacturaCertificate"
 import {
-  collectMessageItems,
+  anafDownloadById,
+  anafListMessages,
+  loadAnafCompanyContext,
+  logAnafRouteError,
+  requireAnafReadyCompany,
+} from "../lib/anafClient"
+import {
   extractDownloadId,
-  extractUploadIndex,
   extractXmlFromAnafDownload,
-  getEfacturaBaseUrl,
-  normalizeCompanyCui,
-  parseAnafPayload,
   parseIncomingEInvoiceXml,
   readStringField,
-  summarizeAnafResponse,
 } from "../lib/incomingEfactura"
 
 const router = Router()
@@ -38,21 +37,6 @@ function normalizeCurrency(value: any): "RON" | "EUR" | "USD" | "HUF" {
   const current = String(value || "RON").toUpperCase()
   if (current === "EUR" || current === "USD" || current === "HUF") return current
   return "RON"
-}
-
-async function getAnafCompanyContext(tenantId: string) {
-  return prisma.company.findUnique({
-    where: { tenantId },
-    select: {
-      tenantId: true,
-      cui: true,
-      efacturaEnvironment: true,
-      efacturaOauthAccessToken: true,
-      efacturaOauthLastError: true,
-      efacturaCertFilename: true,
-      efacturaCertPasswordEnc: true,
-    },
-  })
 }
 
 async function matchSupplier(tenantId: string, supplierCif: string, supplierName: string) {
@@ -268,44 +252,25 @@ router.post("/api/v1/efactura/incoming/sync", async (req: AuthedRequest, res) =>
     return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
   }
 
-  const company = await getAnafCompanyContext(tenantId)
-  const cif = normalizeCompanyCui(company?.cui)
-
-  if (!cif || !company?.efacturaOauthAccessToken) {
-    return res.status(400).json({
-      ok: false,
-      error: "Firma nu are CUI sau token ANAF activ pentru sincronizarea facturilor primite.",
-    })
-  }
-
-  const days = Math.min(60, Math.max(1, Number(req.body?.days || req.query.days || 30)))
-  const baseUrl = getEfacturaBaseUrl(company.efacturaEnvironment)
-  const listUrl = `${baseUrl}/listaMesajeFactura?zile=${days}&cif=${encodeURIComponent(cif)}`
+  const company = await loadAnafCompanyContext(tenantId)
 
   try {
-    const certOptions = getAnafCertificateOptions(company)
-    const listResponse = await anafHttpRequest(listUrl, {
-      headers: {
-        Authorization: `Bearer ${company.efacturaOauthAccessToken}`,
-      },
-      ...certOptions,
+    const ready = requireAnafReadyCompany(company, "sincronizarea facturilor primite")
+    const listResult = await anafListMessages(company, {
+      days: Number(req.body?.days || req.query.days || 30),
     })
 
-    const listText = listResponse.text
-    const listPayload = parseAnafPayload(listText)
-    const messageItems = collectMessageItems(listPayload)
-
-    if (!listResponse.ok) {
+    if (!listResult.response.ok) {
       return res.status(400).json({
         ok: false,
-        error: summarizeAnafResponse(listPayload, listText) || "Nu am putut citi lista facturilor din SPV.",
+        error: listResult.summary || "Nu am putut citi lista facturilor din SPV.",
       })
     }
 
     let synced = 0
     let skipped = 0
 
-    for (const item of messageItems) {
+    for (const item of listResult.items) {
       const rawItemText = JSON.stringify(item || {})
       const downloadId = extractDownloadId(item, rawItemText)
       if (!downloadId) {
@@ -313,24 +278,17 @@ router.post("/api/v1/efactura/incoming/sync", async (req: AuthedRequest, res) =>
         continue
       }
 
-      const downloadUrl = `${baseUrl}/descarcare?id=${encodeURIComponent(downloadId)}`
-      const downloadResponse = await anafHttpRequest(downloadUrl, {
-        headers: {
-          Authorization: `Bearer ${company.efacturaOauthAccessToken}`,
-        },
-        ...certOptions,
-      })
-
-      if (!downloadResponse.ok) {
+      const downloadResult = await anafDownloadById(company, downloadId)
+      if (!downloadResult.response.ok) {
         skipped += 1
         continue
       }
 
-      const buffer = downloadResponse.buffer
+      const buffer = downloadResult.response.buffer
       const { xmlText } = extractXmlFromAnafDownload(buffer)
       const parsedInvoice = parseIncomingEInvoiceXml(xmlText)
 
-      if (normalizeCompanyCui(parsedInvoice.customerCif) !== cif) {
+      if (String(parsedInvoice.customerCif || "") !== ready.cif) {
         skipped += 1
         continue
       }
@@ -346,9 +304,9 @@ router.post("/api/v1/efactura/incoming/sync", async (req: AuthedRequest, res) =>
       message: `Sincronizare SPV finalizata: ${synced} facturi primite actualizate.`,
     })
   } catch (error: any) {
-    console.error("INCOMING EFACTURA SYNC ERROR", {
+    logAnafRouteError("INCOMING EFACTURA SYNC ERROR", {
       tenantId,
-      cif,
+      cif: company?.cui || null,
       environment: company?.efacturaEnvironment || "test",
       message: error?.message || "unknown error",
       cause: error?.cause ? String(error.cause) : null,
