@@ -102,8 +102,12 @@ function textValue(value: any): string {
     return String(value).trim()
   }
   if (typeof value === "object") {
-    if (typeof value["#text"] === "string") return value["#text"].trim()
-    if (typeof value.text === "string") return value.text.trim()
+    if (typeof value["#text"] === "string" || typeof value["#text"] === "number" || typeof value["#text"] === "boolean") {
+      return String(value["#text"]).trim()
+    }
+    if (typeof value.text === "string" || typeof value.text === "number" || typeof value.text === "boolean") {
+      return String(value.text).trim()
+    }
   }
   return ""
 }
@@ -116,7 +120,12 @@ function numberValue(value: any): number {
 
 function firstDefined(...values: any[]) {
   for (const value of values) {
-    if (value !== undefined && value !== null && textValue(value)) return value
+    if (value === undefined || value === null) continue
+    if (typeof value === "object") {
+      if (Array.isArray(value) ? value.length > 0 : Object.keys(value).length > 0) return value
+      continue
+    }
+    if (textValue(value)) return value
   }
   return null
 }
