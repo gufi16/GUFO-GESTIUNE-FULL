@@ -102,6 +102,18 @@ function firstDefined(...values: any[]) {
   return null
 }
 
+function isInvoiceLikeXml(xmlText: string) {
+  const sample = String(xmlText || "").slice(0, 4000).toLowerCase()
+  return (
+    sample.includes("<invoice") ||
+    sample.includes(":invoice") ||
+    sample.includes("<creditnote") ||
+    sample.includes(":creditnote") ||
+    sample.includes("accountingsupplierparty") ||
+    sample.includes("invoiceline")
+  )
+}
+
 export function extractXmlFromAnafDownload(buffer: Buffer) {
   const rawText = buffer.toString("utf8")
   const trimmed = rawText.trim()
@@ -126,12 +138,31 @@ export function extractXmlFromAnafDownload(buffer: Buffer) {
 
   if (buffer.length >= 2 && buffer[0] === 0x50 && buffer[1] === 0x4b) {
     const zip = new AdmZip(buffer)
-    const entry = zip
+    const xmlEntries = zip
       .getEntries()
-      .find((item) => !item.isDirectory && item.entryName.toLowerCase().endsWith(".xml"))
+      .filter((item) => !item.isDirectory && item.entryName.toLowerCase().endsWith(".xml"))
 
-    if (entry) {
-      const xmlText = entry.getData().toString("utf8")
+    const bestEntry =
+      xmlEntries.find((item) => {
+        const name = item.entryName.toLowerCase()
+        if (name.includes("semn") || name.includes("signature")) return false
+        try {
+          return isInvoiceLikeXml(item.getData().toString("utf8"))
+        } catch {
+          return false
+        }
+      }) ||
+      xmlEntries.find((item) => {
+        try {
+          return isInvoiceLikeXml(item.getData().toString("utf8"))
+        } catch {
+          return false
+        }
+      }) ||
+      xmlEntries.sort((a, b) => b.header.size - a.header.size)[0]
+
+    if (bestEntry) {
+      const xmlText = bestEntry.getData().toString("utf8")
       return { xmlText, rawDownloadText: rawText, rawDownloadPayload: payload }
     }
   }

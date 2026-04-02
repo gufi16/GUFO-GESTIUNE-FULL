@@ -165,6 +165,15 @@ function escapeHtml(value: string) {
     .replace(/'/g, "&#39;")
 }
 
+function isUsableImportedInvoice(item: IncomingInvoice) {
+  return Boolean(
+    String(item.invoiceNo || "").trim() ||
+    String(item.supplierName || "").trim() ||
+    (Array.isArray(item.items) && item.items.length > 0) ||
+    Number(item.totalGross || 0) > 0
+  )
+}
+
 export default function FacturiPrimiteSPVPage() {
   const navigate = useNavigate()
   const token = getToken() || ""
@@ -294,7 +303,12 @@ export default function FacturiPrimiteSPVPage() {
           }))
         )
 
-        const existingDownloadIds = new Set(items.map((entry) => String(entry.spvDownloadId || "").trim()).filter(Boolean))
+        const existingDownloadIds = new Set(
+          items
+            .filter((entry) => isUsableImportedInvoice(entry))
+            .map((entry) => String(entry.spvDownloadId || "").trim())
+            .filter(Boolean)
+        )
         const invoiceMessages = messages.filter((entry: any) => isIncomingEfacturaMessage(entry))
         const newInvoiceMessages = invoiceMessages.filter((entry: any) => !existingDownloadIds.has(String(entry?.id || "").trim()))
 
