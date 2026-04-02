@@ -71,6 +71,10 @@ type SpvClassicTestResult = {
   lines: string[]
 }
 
+const SPV_BRIDGE_URL_KEY = "gufo_spv_bridge_url"
+const SPV_BRIDGE_TOKEN_KEY = "gufo_spv_bridge_token"
+const DEFAULT_SPV_BRIDGE_URL = "http://127.0.0.1:48521"
+
 function formatDate(value?: string | null) {
   if (!value) return "-"
   const date = new Date(value)
@@ -92,11 +96,17 @@ export default function FacturiPrimiteSPVPage() {
   const [expandedIds, setExpandedIds] = useState<string[]>([])
   const [spvStatus, setSpvStatus] = useState<SpvClassicStatus | null>(null)
   const [spvTestResult, setSpvTestResult] = useState<SpvClassicTestResult | null>(null)
+  const [bridgeUrl, setBridgeUrl] = useState(DEFAULT_SPV_BRIDGE_URL)
+  const [bridgeToken, setBridgeToken] = useState("")
   const [spvModeMessage] = useState(
     "Ecranul acesta tine de SPV clasic (SPVWS2), separat de fluxul OAuth e-Factura. Tokenul ANAF activ nu este suficient singur pentru sincronizarea de aici."
   )
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      setBridgeUrl(window.localStorage.getItem(SPV_BRIDGE_URL_KEY) || DEFAULT_SPV_BRIDGE_URL)
+      setBridgeToken(window.localStorage.getItem(SPV_BRIDGE_TOKEN_KEY) || "")
+    }
     void loadSpvStatus()
     void loadItems()
   }, [])
@@ -174,6 +184,67 @@ export default function FacturiPrimiteSPVPage() {
     setMessage("")
     setSpvTestResult(null)
     try {
+      if (bridgeToken.trim()) {
+        const trimmedBridgeUrl = bridgeUrl.trim().replace(/\/+$/, "")
+        const bridgeRes = await fetch(`${trimmedBridgeUrl}/api/v1/spvws2/list-messages-test`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${bridgeToken.trim()}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ days: 30 }),
+        })
+        const bridgeData = await bridgeRes.json().catch(() => ({}))
+        if (!bridgeRes.ok) {
+          throw new Error(bridgeData?.error || "Bridge-ul local nu a raspuns corect.")
+        }
+
+        const trace = Array.isArray(bridgeData?.response?.trace) ? bridgeData.response.trace : []
+        const parsedContent = bridgeData?.response?.parsedContent || {}
+        const messages = Array.isArray(parsedContent?.mesaje) ? parsedContent.mesaje : []
+        const firstMessage = messages[0] || null
+
+        if (!bridgeData?.ok || !bridgeData?.response?.ok) {
+          const lines = [
+            `Rută testată: bridge local -> listaMesaje SPVWS2`,
+            `Bridge URL: ${trimmedBridgeUrl}`,
+            `Final URL: ${bridgeData?.response?.finalUrl || "-"}`,
+            `HTTP status SPV: ${bridgeData?.response?.status ?? "-"}`,
+            `Eroare: ${bridgeData?.response?.error || "Necunoscuta"}`,
+          ]
+          trace.slice(0, 4).forEach((step: any, index: number) => {
+            lines.push(`Pas ${index + 1}: ${step?.status ?? "-"} -> ${step?.resolvedLocation || step?.location || step?.url || "-"}`)
+          })
+          setSpvTestResult({
+            ok: false,
+            title: "Bridge local conectat, dar fluxul SPV a raspuns cu eroare",
+            tone: "error",
+            lines,
+          })
+          setError(bridgeData?.response?.error || "Bridge-ul local nu a finalizat listaMesaje.")
+          return
+        }
+
+        setSpvTestResult({
+          ok: true,
+          title: "Bridge local SPVWS2 conectat cu succes",
+          tone: "success",
+          lines: [
+            "Rută testată: bridge local -> listaMesaje SPVWS2",
+            `Bridge URL: ${trimmedBridgeUrl}`,
+            `HTTP status SPV: ${bridgeData?.response?.status ?? "-"}`,
+            `Mesaje găsite: ${messages.length}`,
+            `Primul tip mesaj: ${firstMessage?.tip || "-"}`,
+            `Primul ID mesaj: ${firstMessage?.id || "-"}`,
+            `Serial certificat: ${bridgeData?.certificate?.serialNumber || "-"}`,
+          ],
+        })
+        setMessage(
+          `Bridge local conectat. SPVWS2 a raspuns cu ${messages.length} mesaje${firstMessage?.tip ? `, primul tip: ${firstMessage.tip}` : ""}.`
+        )
+        return
+      }
+
       const res = await fetch(`${API_BASE}/api/v1/spv-classic/test-list-messages`, {
         method: "POST",
         headers: {
@@ -241,6 +312,14 @@ export default function FacturiPrimiteSPVPage() {
     } finally {
       setTestingClassic(false)
     }
+  }
+
+  function saveBridgeSettings() {
+    if (typeof window === "undefined") return
+    window.localStorage.setItem(SPV_BRIDGE_URL_KEY, bridgeUrl.trim() || DEFAULT_SPV_BRIDGE_URL)
+    window.localStorage.setItem(SPV_BRIDGE_TOKEN_KEY, bridgeToken.trim())
+    setMessage(bridgeToken.trim() ? "Configurația bridge-ului local a fost salvată în browser." : "Configurația bridge-ului local a fost resetată.")
+    setError("")
   }
 
   async function openXml(id: string) {
@@ -418,6 +497,32 @@ export default function FacturiPrimiteSPVPage() {
         </div>
       ) : null}
 
+      <div className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-[0_8px_30px_rgba(15,23,42,0.06)]">
+        <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+          <div className="text-sm font-semibold text-slate-900">Bridge local Windows</div>
+          <div className="text-xs text-slate-500">
+            Daca bridge-ul ruleaza pe acest PC, testul din pagina merge direct prin certificatul local.
+          </div>
+        </div>
+        <div className="mt-3 grid grid-cols-1 gap-2.5 md:grid-cols-[minmax(280px,1fr)_minmax(260px,1fr)_auto]">
+          <input
+            value={bridgeUrl}
+            onChange={(e) => setBridgeUrl(e.target.value)}
+            placeholder="http://127.0.0.1:48521"
+            className={documentInputClass}
+          />
+          <input
+            value={bridgeToken}
+            onChange={(e) => setBridgeToken(e.target.value)}
+            placeholder="Token bridge local"
+            className={documentInputClass}
+          />
+          <button type="button" onClick={saveBridgeSettings} className={documentButtonSecondaryClass}>
+            Salveaza bridge
+          </button>
+        </div>
+      </div>
+
       <div className="flex flex-wrap gap-2">
         {[
           { value: "all", label: "Toate" },
@@ -459,7 +564,7 @@ export default function FacturiPrimiteSPVPage() {
               className={documentButtonSecondaryClass}
               disabled={testingClassic}
             >
-              {testingClassic ? "Testare..." : "Testeaza listaMesaje"}
+              {testingClassic ? "Testare..." : bridgeToken.trim() ? "Testeaza bridge local" : "Testeaza listaMesaje"}
             </button>
             <button
               type="button"
