@@ -834,6 +834,130 @@ catch [System.Net.WebException] {
   return response
 }
 
+async function downloadManyIncomingEfacturaMessages(serial, accessToken, environment, ids) {
+  const normalizedSerial = normalizeSerial(serial)
+  const bearerToken = String(accessToken || "").trim()
+  const cleanIds = Array.isArray(ids)
+    ? ids.map((entry) => String(entry || "").trim()).filter(Boolean)
+    : []
+  if (!cleanIds.length) {
+    throw new Error("Nu exista ID-uri de descarcare pentru lotul e-Factura.")
+  }
+
+  console.log(
+    `[gufo-spv-bridge] downloadManyIncomingEfacturaMessages start serial=${normalizedSerial} env=${environment} count=${cleanIds.length}`
+  )
+
+  const cert = await resolveCertificate(serial)
+  const escapedToken = bearerToken.replace(/'/g, "''")
+  const normalizedEnvironment = String(environment || "prod").trim().toLowerCase() === "test" ? "test" : "prod"
+  const baseUrl = normalizedEnvironment === "test" ? EFACTURA_DOWNLOAD_TEST_URL : EFACTURA_DOWNLOAD_PROD_URL
+  const idsJson = JSON.stringify(cleanIds).replace(/'/g, "''")
+
+  const script = `
+$serial = '${normalizedSerial}'
+$accessToken = '${escapedToken}'
+$baseUrl = '${baseUrl}'
+$ids = ConvertFrom-Json @'
+${idsJson}
+'@
+$stores = @('Cert:\\CurrentUser\\My', 'Cert:\\LocalMachine\\My')
+$cert = $null
+foreach ($store in $stores) {
+  $candidate = Get-ChildItem -Path $store -ErrorAction SilentlyContinue | Where-Object {
+    ($_.SerialNumber -replace '[^A-Fa-f0-9]', '').ToUpper() -eq $serial
+  } | Select-Object -First 1
+  if ($candidate) {
+    $cert = $candidate
+    break
+  }
+}
+if (-not $cert) {
+  throw "Certificatul cu serialul $serial nu a fost gasit."
+}
+
+function Read-ResponseBytes {
+  param([System.Net.WebResponse]$Response)
+  $stream = $Response.GetResponseStream()
+  $memory = New-Object System.IO.MemoryStream
+  $stream.CopyTo($memory)
+  $bytes = $memory.ToArray()
+  $memory.Dispose()
+  $stream.Dispose()
+  return ,$bytes
+}
+
+$results = New-Object System.Collections.ArrayList
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+foreach ($messageId in $ids) {
+  $url = $baseUrl + '?id=' + [System.Uri]::EscapeDataString([string]$messageId)
+  $request = [System.Net.HttpWebRequest]::Create($url)
+  $request.Method = 'GET'
+  $request.Timeout = 45000
+  $request.ReadWriteTimeout = 45000
+  $request.AllowAutoRedirect = $false
+  $request.KeepAlive = $true
+  $request.UserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) GufoSPVBridge/1.0'
+  $request.Headers['Authorization'] = 'Bearer ' + $accessToken
+  [void]$request.ClientCertificates.Add($cert)
+
+  try {
+    $response = [System.Net.HttpWebResponse]$request.GetResponse()
+    $statusCode = [int]$response.StatusCode
+    $contentType = $response.ContentType
+    $bytes = Read-ResponseBytes -Response $response
+    $response.Close()
+    [void]$results.Add([PSCustomObject]@{
+      id = [string]$messageId
+      ok = ($statusCode -ge 200 -and $statusCode -lt 300)
+      status = $statusCode
+      contentType = $contentType
+      base64Content = [Convert]::ToBase64String($bytes)
+      error = $null
+    })
+  }
+  catch [System.Net.WebException] {
+    $statusCode = $null
+    $contentType = $null
+    $responseBytes = $null
+    $content = $null
+    if ($_.Exception.Response) {
+      try { $statusCode = [int]$_.Exception.Response.StatusCode.value__ } catch {}
+      try { $contentType = $_.Exception.Response.ContentType } catch {}
+      try {
+        $responseBytes = Read-ResponseBytes -Response $_.Exception.Response
+        $content = [System.Text.Encoding]::UTF8.GetString($responseBytes)
+      } catch {}
+    }
+    [void]$results.Add([PSCustomObject]@{
+      id = [string]$messageId
+      ok = $false
+      status = $statusCode
+      contentType = $contentType
+      base64Content = if ($responseBytes) { [Convert]::ToBase64String($responseBytes) } else { $null }
+      error = if ($content) { $content } else { $_.Exception.Message }
+    })
+  }
+}
+
+[PSCustomObject]@{
+  ok = $true
+  items = $results
+} | ConvertTo-Json -Compress -Depth 6
+`.trim()
+
+  const raw = await runPowerShell(script)
+  const response = {
+    certificate: cert,
+    result: JSON.parse(raw),
+  }
+  console.log(
+    `[gufo-spv-bridge] downloadManyIncomingEfacturaMessages finish ok=${Boolean(response?.result?.ok)} count=${Array.isArray(response?.result?.items) ? response.result.items.length : 0}`
+  )
+  return response
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || `${HOST}:${PORT}`}`)
 
@@ -1019,6 +1143,36 @@ const server = http.createServer(async (req, res) => {
       })
     } catch (error) {
       console.error(`[gufo-spv-bridge] HTTP efactura download-message error`, error)
+      sendJson(res, 400, {
+        ok: false,
+        error: String(error.message || error),
+      })
+    }
+    return
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/v1/efactura/download-many") {
+    try {
+      const body = await readJsonBody(req)
+      const serial = normalizeSerial(body.serial || DEFAULT_CERT_SERIAL)
+      const accessToken = String(body.accessToken || "").trim()
+      const environment = String(body.environment || "prod").trim().toLowerCase()
+      const ids = Array.isArray(body.ids) ? body.ids : []
+      console.log(
+        `[gufo-spv-bridge] HTTP efactura download-many serial=${serial} env=${environment} count=${ids.length}`
+      )
+      const data = await downloadManyIncomingEfacturaMessages(serial, accessToken, environment, ids)
+      sendJson(res, 200, {
+        ok: Boolean(data.result.ok),
+        request: { environment, count: ids.length },
+        certificate: data.certificate,
+        response: {
+          ok: Boolean(data.result.ok),
+          items: Array.isArray(data.result.items) ? data.result.items : [],
+        },
+      })
+    } catch (error) {
+      console.error(`[gufo-spv-bridge] HTTP efactura download-many error`, error)
       sendJson(res, 400, {
         ok: false,
         error: String(error.message || error),

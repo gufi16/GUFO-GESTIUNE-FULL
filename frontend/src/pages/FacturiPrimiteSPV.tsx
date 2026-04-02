@@ -91,6 +91,8 @@ type BridgeMessageFilter = "all" | "invoice" | "receipt"
 const SPV_BRIDGE_URL_KEY = "gufo_spv_bridge_url"
 const SPV_BRIDGE_TOKEN_KEY = "gufo_spv_bridge_token"
 const DEFAULT_SPV_BRIDGE_URL = "http://127.0.0.1:48521"
+const RAW_MESSAGES_PAGE_SIZE = 20
+const IMPORTED_INVOICES_PAGE_SIZE = 20
 
 function formatDate(value?: string | null) {
   if (!value) return "-"
@@ -172,7 +174,9 @@ export default function FacturiPrimiteSPVPage() {
   const [bridgeToken, setBridgeToken] = useState("")
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthValue())
   const [bridgeMessages, setBridgeMessages] = useState<BridgeSpvMessage[]>([])
-  const [bridgeMessageFilter, setBridgeMessageFilter] = useState<BridgeMessageFilter>("all")
+  const [bridgeMessageFilter, setBridgeMessageFilter] = useState<BridgeMessageFilter>("invoice")
+  const [bridgeMessagesPage, setBridgeMessagesPage] = useState(1)
+  const [importedInvoicesPage, setImportedInvoicesPage] = useState(1)
   const [spvModeMessage] = useState(
     "Pagina foloseste bridge-ul local Windows pentru a citi facturile primite din e-Factura cu certificatul digital local."
   )
@@ -242,6 +246,7 @@ export default function FacturiPrimiteSPVPage() {
     setError("")
     setMessage("")
     setBridgeMessages([])
+    setBridgeMessagesPage(1)
     try {
       if (bridgeToken.trim()) {
         const trimmedBridgeUrl = bridgeUrl.trim().replace(/\/+$/, "")
@@ -304,25 +309,35 @@ export default function FacturiPrimiteSPVPage() {
         let imported = 0
         let skipped = 0
         let lastImportedInvoiceNo = "-"
+        const downloadIds = invoiceMessages
+          .map((message: any) => String(message?.id || "").trim())
+          .filter(Boolean)
+
+        const batchDownloadRes = await fetch(`${trimmedBridgeUrl}/api/v1/efactura/download-many`, {
+          method: "POST",
+          headers: bridgeHeaders,
+          body: JSON.stringify({
+            ids: downloadIds,
+            accessToken: bridgeConfig.accessToken,
+            environment: bridgeConfig.environment,
+          }),
+        })
+        const batchDownloadData = await batchDownloadRes.json().catch(() => ({}))
+        if (!batchDownloadRes.ok || !batchDownloadData?.ok || !batchDownloadData?.response?.items) {
+          throw new Error(batchDownloadData?.error || "Bridge-ul local nu a putut descarca lotul de facturi e-Factura.")
+        }
+
+        const downloadsById = new Map<string, any>(
+          (Array.isArray(batchDownloadData.response.items) ? batchDownloadData.response.items : []).map((entry: any) => [
+            String(entry?.id || "").trim(),
+            entry,
+          ])
+        )
 
         for (const message of invoiceMessages) {
           const messageId = String(message?.id || "").trim()
-          if (!messageId) {
-            skipped += 1
-            continue
-          }
-
-          const downloadRes = await fetch(`${trimmedBridgeUrl}/api/v1/efactura/download-message`, {
-            method: "POST",
-            headers: bridgeHeaders,
-            body: JSON.stringify({
-              id: messageId,
-              accessToken: bridgeConfig.accessToken,
-              environment: bridgeConfig.environment,
-            }),
-          })
-          const downloadData = await downloadRes.json().catch(() => ({}))
-          if (!downloadRes.ok || !downloadData?.ok || !downloadData?.response?.base64Content) {
+          const downloadData = downloadsById.get(messageId)
+          if (!messageId || !downloadData?.ok || !downloadData?.base64Content) {
             skipped += 1
             continue
           }
@@ -335,7 +350,7 @@ export default function FacturiPrimiteSPVPage() {
             },
             body: JSON.stringify({
               message,
-              downloadBase64: downloadData.response.base64Content,
+              downloadBase64: downloadData.base64Content,
             }),
           })
           const importData = await importRes.json().catch(() => ({}))
@@ -404,6 +419,7 @@ export default function FacturiPrimiteSPVPage() {
     setMessage("")
     setSpvTestResult(null)
     setBridgeMessages([])
+    setBridgeMessagesPage(1)
     try {
       if (bridgeToken.trim()) {
         const trimmedBridgeUrl = bridgeUrl.trim().replace(/\/+$/, "")
@@ -654,6 +670,39 @@ export default function FacturiPrimiteSPVPage() {
     return bridgeMessages.filter((entry) => String(entry.tip || "").toUpperCase() === "RECIPISA")
   }, [bridgeMessages, bridgeMessageFilter])
 
+  const bridgeMessagesPageCount = Math.max(1, Math.ceil(filteredBridgeMessages.length / RAW_MESSAGES_PAGE_SIZE))
+  const importedInvoicesPageCount = Math.max(1, Math.ceil(filteredItems.length / IMPORTED_INVOICES_PAGE_SIZE))
+
+  const paginatedBridgeMessages = useMemo(() => {
+    const start = (bridgeMessagesPage - 1) * RAW_MESSAGES_PAGE_SIZE
+    return filteredBridgeMessages.slice(start, start + RAW_MESSAGES_PAGE_SIZE)
+  }, [filteredBridgeMessages, bridgeMessagesPage])
+
+  const paginatedImportedItems = useMemo(() => {
+    const start = (importedInvoicesPage - 1) * IMPORTED_INVOICES_PAGE_SIZE
+    return filteredItems.slice(start, start + IMPORTED_INVOICES_PAGE_SIZE)
+  }, [filteredItems, importedInvoicesPage])
+
+  useEffect(() => {
+    setBridgeMessagesPage(1)
+  }, [bridgeMessageFilter, selectedMonth, bridgeMessages.length])
+
+  useEffect(() => {
+    setImportedInvoicesPage(1)
+  }, [search, filter, items.length])
+
+  useEffect(() => {
+    if (bridgeMessagesPage > bridgeMessagesPageCount) {
+      setBridgeMessagesPage(bridgeMessagesPageCount)
+    }
+  }, [bridgeMessagesPage, bridgeMessagesPageCount])
+
+  useEffect(() => {
+    if (importedInvoicesPage > importedInvoicesPageCount) {
+      setImportedInvoicesPage(importedInvoicesPageCount)
+    }
+  }, [importedInvoicesPage, importedInvoicesPageCount])
+
   function toggleExpanded(id: string) {
     setExpandedIds((prev) => (prev.includes(id) ? prev.filter((entry) => entry !== id) : [...prev, id]))
   }
@@ -839,7 +888,7 @@ export default function FacturiPrimiteSPVPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredBridgeMessages.map((entry) => (
+              {paginatedBridgeMessages.map((entry) => (
                 <tr key={`${entry.id}-${entry.data_creare || ""}`} className="border-t border-slate-200">
                   <td className="px-3 py-2.5 text-slate-700">{entry.id || "-"}</td>
                   <td className="px-3 py-2.5 text-slate-700">{entry.tip || "-"}</td>
@@ -848,7 +897,7 @@ export default function FacturiPrimiteSPVPage() {
                   <td className="px-3 py-2.5 text-slate-700">{entry.detalii || "-"}</td>
                 </tr>
               ))}
-              {!filteredBridgeMessages.length ? (
+              {!paginatedBridgeMessages.length ? (
                 <tr className="border-t border-slate-200">
                   <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
                     Nu exista mesaje pentru filtrul selectat.
@@ -857,6 +906,31 @@ export default function FacturiPrimiteSPVPage() {
               ) : null}
             </tbody>
           </table>
+          {filteredBridgeMessages.length ? (
+            <div className="flex items-center justify-between border-t border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+              <div>
+                Pagina {bridgeMessagesPage} din {bridgeMessagesPageCount} · {filteredBridgeMessages.length} mesaje
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setBridgeMessagesPage((prev) => Math.max(1, prev - 1))}
+                  disabled={bridgeMessagesPage <= 1}
+                  className={documentButtonSecondaryClass}
+                >
+                  Inapoi
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBridgeMessagesPage((prev) => Math.min(bridgeMessagesPageCount, prev + 1))}
+                  disabled={bridgeMessagesPage >= bridgeMessagesPageCount}
+                  className={documentButtonSecondaryClass}
+                >
+                  Inainte
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -919,7 +993,7 @@ export default function FacturiPrimiteSPVPage() {
                 </td>
               </tr>
             ) : (
-              filteredItems.map((item) => {
+              paginatedImportedItems.map((item) => {
                 const matchedLines = item.items.filter((line) => Boolean(line.matchedProductId)).length
                 const isExpanded = expandedIds.includes(item.id)
                 return (
@@ -936,7 +1010,13 @@ export default function FacturiPrimiteSPVPage() {
                             {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                           </button>
                           <div>
-                            <div className="font-semibold text-slate-900">{item.invoiceNo || "-"}</div>
+                            <button
+                              type="button"
+                              onClick={() => toggleExpanded(item.id)}
+                              className="text-left font-semibold text-slate-900 underline-offset-2 hover:text-[#17324D] hover:underline"
+                            >
+                              {item.invoiceNo || "-"}
+                            </button>
                             <div className="text-xs text-slate-500">{formatDate(item.invoiceDate)}</div>
                           </div>
                         </div>
@@ -964,6 +1044,13 @@ export default function FacturiPrimiteSPVPage() {
                       </td>
                       <td className="px-3 py-2.5">
                         <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => toggleExpanded(item.id)}
+                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-[#17324D] transition hover:bg-[#F4F7FB]"
+                          >
+                            {isExpanded ? "Ascunde" : "Deschide"}
+                          </button>
                           <button
                             type="button"
                             onClick={() => openXml(item.id)}
@@ -1064,6 +1151,31 @@ export default function FacturiPrimiteSPVPage() {
             )}
           </tbody>
         </table>
+        {filteredItems.length ? (
+          <div className="flex items-center justify-between border-t border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+            <div>
+              Pagina {importedInvoicesPage} din {importedInvoicesPageCount} · {filteredItems.length} facturi
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setImportedInvoicesPage((prev) => Math.max(1, prev - 1))}
+                disabled={importedInvoicesPage <= 1}
+                className={documentButtonSecondaryClass}
+              >
+                Inapoi
+              </button>
+              <button
+                type="button"
+                onClick={() => setImportedInvoicesPage((prev) => Math.min(importedInvoicesPageCount, prev + 1))}
+                disabled={importedInvoicesPage >= importedInvoicesPageCount}
+                className={documentButtonSecondaryClass}
+              >
+                Inainte
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   )
