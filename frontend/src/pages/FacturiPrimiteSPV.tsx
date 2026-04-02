@@ -79,6 +79,13 @@ type BridgeSpvMessage = {
   detalii?: string | null
 }
 
+type EfacturaBridgeConfig = {
+  accessToken: string
+  cif: string
+  environment: "prod" | "test"
+  expiresAt?: string | null
+}
+
 type BridgeMessageFilter = "all" | "invoice" | "receipt"
 
 const SPV_BRIDGE_URL_KEY = "gufo_spv_bridge_url"
@@ -152,7 +159,7 @@ export default function FacturiPrimiteSPVPage() {
   const [bridgeMessages, setBridgeMessages] = useState<BridgeSpvMessage[]>([])
   const [bridgeMessageFilter, setBridgeMessageFilter] = useState<BridgeMessageFilter>("all")
   const [spvModeMessage] = useState(
-    "Ecranul acesta tine de SPV clasic (SPVWS2), separat de fluxul OAuth e-Factura. Tokenul ANAF activ nu este suficient singur pentru sincronizarea de aici."
+    "Pagina foloseste bridge-ul local Windows pentru a citi facturile primite din e-Factura cu certificatul digital local."
   )
 
   useEffect(() => {
@@ -163,6 +170,17 @@ export default function FacturiPrimiteSPVPage() {
     void loadSpvStatus()
     void loadItems()
   }, [])
+
+  async function loadBridgeConfig() {
+    const res = await fetch(`${API_BASE}/api/v1/efactura/incoming/bridge-config`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data?.ok || !data?.bridgeConfig?.accessToken) {
+      throw new Error(data?.error || "Nu am putut pregati tokenul ANAF pentru bridge.")
+    }
+    return data.bridgeConfig as EfacturaBridgeConfig
+  }
 
   async function loadSpvStatus() {
     if (!token) return
@@ -213,19 +231,25 @@ export default function FacturiPrimiteSPVPage() {
       if (bridgeToken.trim()) {
         const trimmedBridgeUrl = bridgeUrl.trim().replace(/\/+$/, "")
         const requestedDays = getDaysNeededForMonth(selectedMonth)
+        const bridgeConfig = await loadBridgeConfig()
         const bridgeHeaders = {
           Authorization: `Bearer ${bridgeToken.trim()}`,
           "Content-Type": "application/json",
         }
 
-        const listRes = await fetch(`${trimmedBridgeUrl}/api/v1/spvws2/list-messages-test`, {
+        const listRes = await fetch(`${trimmedBridgeUrl}/api/v1/efactura/list-messages`, {
           method: "POST",
           headers: bridgeHeaders,
-          body: JSON.stringify({ days: requestedDays }),
+          body: JSON.stringify({
+            days: requestedDays,
+            accessToken: bridgeConfig.accessToken,
+            cif: bridgeConfig.cif,
+            environment: bridgeConfig.environment,
+          }),
         })
         const listData = await listRes.json().catch(() => ({}))
         if (!listRes.ok || !listData?.ok || !listData?.response?.ok) {
-          throw new Error(listData?.response?.error || listData?.error || "Bridge-ul local nu a putut lista mesajele SPV.")
+          throw new Error(listData?.response?.error || listData?.error || "Bridge-ul local nu a putut lista mesajele e-Factura.")
         }
 
         const payload = listData?.response?.parsedContent || {}
@@ -242,20 +266,21 @@ export default function FacturiPrimiteSPVPage() {
 
         const invoiceMessages = messages.filter((entry: any) => {
           const tip = String(entry?.tip || "").toUpperCase()
-          const details = String(entry?.detalii || "").toLowerCase()
-          return tip === "FACTURA" || details.includes("factura")
+          return tip !== "RECIPISA"
         })
 
         if (!invoiceMessages.length) {
-          setMessage(`Bridge local conectat, dar in SPV nu exista facturi de importat pentru ${selectedMonth}.`)
+          setMessage(`Bridge local conectat, dar in e-Factura nu exista facturi de importat pentru ${selectedMonth}.`)
           setSpvTestResult({
             ok: true,
-            title: "Bridge local SPVWS2 conectat cu succes",
+            title: "Bridge local e-Factura conectat cu succes",
             tone: "success",
             lines: [
               "Rută testată: bridge local -> sincronizare SPVWS2",
               `Bridge URL: ${trimmedBridgeUrl}`,
               `Luna selectata: ${selectedMonth}`,
+              `Mediu ANAF: ${bridgeConfig.environment}`,
+              `CUI: ${bridgeConfig.cif}`,
               `Mesaje totale: ${messages.length}`,
               "Facturi importabile: 0",
             ],
@@ -275,10 +300,14 @@ export default function FacturiPrimiteSPVPage() {
             continue
           }
 
-          const downloadRes = await fetch(`${trimmedBridgeUrl}/api/v1/spvws2/download-message`, {
+          const downloadRes = await fetch(`${trimmedBridgeUrl}/api/v1/efactura/download-message`, {
             method: "POST",
             headers: bridgeHeaders,
-            body: JSON.stringify({ id: messageId }),
+            body: JSON.stringify({
+              id: messageId,
+              accessToken: bridgeConfig.accessToken,
+              environment: bridgeConfig.environment,
+            }),
           })
           const downloadData = await downloadRes.json().catch(() => ({}))
           if (!downloadRes.ok || !downloadData?.ok || !downloadData?.response?.base64Content) {
@@ -309,12 +338,14 @@ export default function FacturiPrimiteSPVPage() {
 
         setSpvTestResult({
           ok: imported > 0,
-          title: imported > 0 ? "Sincronizare SPV prin bridge finalizata" : "Sincronizare SPV fara facturi noi",
+          title: imported > 0 ? "Sincronizare e-Factura prin bridge finalizata" : "Sincronizare e-Factura fara facturi noi",
           tone: imported > 0 ? "success" : "error",
           lines: [
             "Rută testată: bridge local -> listaMesaje + descarcare + import Gufo",
             `Bridge URL: ${trimmedBridgeUrl}`,
             `Luna selectata: ${selectedMonth}`,
+            `Mediu ANAF: ${bridgeConfig.environment}`,
+            `CUI: ${bridgeConfig.cif}`,
             `Mesaje totale: ${messages.length}`,
             `Facturi importabile: ${invoiceMessages.length}`,
             `Facturi importate: ${imported}`,
@@ -324,9 +355,9 @@ export default function FacturiPrimiteSPVPage() {
         })
 
         if (imported > 0) {
-          setMessage(`Sincronizare SPV finalizata prin bridge local pentru ${selectedMonth}. Facturi importate: ${imported}.`)
+          setMessage(`Sincronizare e-Factura finalizata prin bridge local pentru ${selectedMonth}. Facturi importate: ${imported}.`)
         } else {
-          setError(`Bridge-ul a raspuns, dar nu am importat nicio factura noua din SPV pentru ${selectedMonth}.`)
+          setError(`Bridge-ul a raspuns, dar nu am importat nicio factura noua din e-Factura pentru ${selectedMonth}.`)
         }
 
         await loadItems()
@@ -365,13 +396,19 @@ export default function FacturiPrimiteSPVPage() {
       if (bridgeToken.trim()) {
         const trimmedBridgeUrl = bridgeUrl.trim().replace(/\/+$/, "")
         const requestedDays = getDaysNeededForMonth(selectedMonth)
-        const bridgeRes = await fetch(`${trimmedBridgeUrl}/api/v1/spvws2/list-messages-test`, {
+        const bridgeConfig = await loadBridgeConfig()
+        const bridgeRes = await fetch(`${trimmedBridgeUrl}/api/v1/efactura/list-messages`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${bridgeToken.trim()}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ days: requestedDays }),
+          body: JSON.stringify({
+            days: requestedDays,
+            accessToken: bridgeConfig.accessToken,
+            cif: bridgeConfig.cif,
+            environment: bridgeConfig.environment,
+          }),
         })
         const bridgeData = await bridgeRes.json().catch(() => ({}))
         if (!bridgeRes.ok) {
@@ -406,17 +443,17 @@ export default function FacturiPrimiteSPVPage() {
           })
           setSpvTestResult({
             ok: false,
-            title: "Bridge local conectat, dar fluxul SPV a raspuns cu eroare",
+            title: "Bridge local conectat, dar e-Factura a raspuns cu eroare",
             tone: "error",
             lines,
           })
-          setError(bridgeData?.response?.error || "Bridge-ul local nu a finalizat listaMesaje.")
+          setError(bridgeData?.response?.error || "Bridge-ul local nu a finalizat listaMesajeFactura.")
           return
         }
 
         setSpvTestResult({
           ok: true,
-          title: "Bridge local SPVWS2 conectat cu succes",
+          title: "Bridge local e-Factura conectat cu succes",
           tone: "success",
           lines: [
             "Rută testată: bridge local -> listaMesaje SPVWS2",
@@ -430,7 +467,7 @@ export default function FacturiPrimiteSPVPage() {
           ],
         })
         setMessage(
-          `Bridge local conectat. SPVWS2 a raspuns cu ${messages.length} mesaje pentru ${selectedMonth}${firstMessage?.tip ? `, primul tip: ${firstMessage.tip}` : ""}.`
+          `Bridge local conectat. e-Factura a raspuns cu ${messages.length} mesaje pentru ${selectedMonth}${firstMessage?.tip ? `, primul tip: ${firstMessage.tip}` : ""}.`
         )
         return
       }
@@ -760,7 +797,7 @@ export default function FacturiPrimiteSPVPage() {
         <div className="overflow-hidden rounded-[20px] border border-slate-200 bg-white">
           <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
             <div className="text-sm font-semibold text-slate-900">
-              Mesaje returnate din SPV pentru luna selectata
+              Mesaje returnate din e-Factura pentru luna selectata
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               {[

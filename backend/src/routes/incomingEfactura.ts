@@ -7,6 +7,8 @@ import { reserveNextNumber } from "../lib/numbering"
 import {
   extractDownloadId,
   extractXmlFromAnafDownload,
+  getEfacturaBaseUrl,
+  normalizeCompanyCui,
   parseIncomingEInvoiceXml,
   readStringField,
 } from "../lib/incomingEfactura"
@@ -261,6 +263,43 @@ router.get("/api/v1/efactura/incoming", async (req: AuthedRequest, res) => {
   })
 
   return res.json({ ok: true, items })
+})
+
+router.get("/api/v1/efactura/incoming/bridge-config", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const moduleCheck = await requireTenantModule(tenantId, "efactura")
+  if (!moduleCheck.enabled) {
+    return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
+  }
+
+  const company = await prisma.company.findUnique({
+    where: { tenantId },
+    select: {
+      cui: true,
+      efacturaEnvironment: true,
+      efacturaOauthAccessToken: true,
+      efacturaOauthAccessTokenExpiresAt: true,
+    },
+  })
+
+  const cif = normalizeCompanyCui(company?.cui)
+  if (!cif) {
+    return res.status(400).json({ ok: false, error: "Firma nu are CUI valid pentru facturile primite e-Factura." })
+  }
+  if (!company?.efacturaOauthAccessToken) {
+    return res.status(400).json({ ok: false, error: "Nu exista token ANAF activ pentru firma." })
+  }
+
+  return res.json({
+    ok: true,
+    bridgeConfig: {
+      cif,
+      environment: String(company?.efacturaEnvironment || "test").toLowerCase() === "prod" ? "prod" : "test",
+      accessToken: String(company.efacturaOauthAccessToken),
+      expiresAt: company.efacturaOauthAccessTokenExpiresAt,
+      baseUrl: getEfacturaBaseUrl(company?.efacturaEnvironment),
+    },
+  })
 })
 
 router.get("/api/v1/efactura/incoming/:id", async (req: AuthedRequest, res) => {

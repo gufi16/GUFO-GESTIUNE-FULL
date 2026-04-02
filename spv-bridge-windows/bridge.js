@@ -7,6 +7,10 @@ const DEFAULT_PORT = 48521
 const DEFAULT_HOST = "127.0.0.1"
 const SPV_LIST_MESSAGES_URL = "https://webserviced.anaf.ro/SPVWS2/rest/listaMesaje"
 const SPV_DOWNLOAD_MESSAGE_URL = "https://webserviced.anaf.ro/SPVWS2/rest/descarcare"
+const EFACTURA_LIST_MESSAGES_PROD_URL = "https://webserviceapl.anaf.ro/prod/FCTEL/rest/listaMesajeFactura"
+const EFACTURA_LIST_MESSAGES_TEST_URL = "https://webserviceapl.anaf.ro/test/FCTEL/rest/listaMesajeFactura"
+const EFACTURA_DOWNLOAD_PROD_URL = "https://webserviceapl.anaf.ro/prod/FCTEL/rest/descarcare"
+const EFACTURA_DOWNLOAD_TEST_URL = "https://webserviceapl.anaf.ro/test/FCTEL/rest/descarcare"
 const POWERSHELL_TIMEOUT_MS = 90000
 
 loadEnv(path.join(__dirname, ".env"))
@@ -604,6 +608,213 @@ function resolveRedirectUrl(baseUrl, location) {
   }
 }
 
+function getEfacturaListMessagesUrl(environment, days, cui) {
+  const normalizedEnvironment = String(environment || "prod").trim().toLowerCase() === "test" ? "test" : "prod"
+  const baseUrl = normalizedEnvironment === "test" ? EFACTURA_LIST_MESSAGES_TEST_URL : EFACTURA_LIST_MESSAGES_PROD_URL
+  return `${baseUrl}?zile=${Math.max(1, Math.min(365, Number(days || 30)))}&cif=${encodeURIComponent(String(cui || "").trim())}`
+}
+
+function getEfacturaDownloadUrl(environment, id) {
+  const normalizedEnvironment = String(environment || "prod").trim().toLowerCase() === "test" ? "test" : "prod"
+  const baseUrl = normalizedEnvironment === "test" ? EFACTURA_DOWNLOAD_TEST_URL : EFACTURA_DOWNLOAD_PROD_URL
+  return `${baseUrl}?id=${encodeURIComponent(String(id || "").trim())}`
+}
+
+async function invokeAuthenticatedEfacturaRequest({ serial, url, accessToken }) {
+  const normalizedSerial = normalizeSerial(serial)
+  const bearerToken = String(accessToken || "").trim()
+  if (!bearerToken) {
+    throw new Error("Lipseste tokenul ANAF pentru apelul e-Factura.")
+  }
+
+  const cert = await resolveCertificate(normalizedSerial)
+  const escapedUrl = url.replace(/'/g, "''")
+  const escapedToken = bearerToken.replace(/'/g, "''")
+
+  const script = `
+$serial = '${normalizedSerial}'
+$url = '${escapedUrl}'
+$accessToken = '${escapedToken}'
+$stores = @('Cert:\\CurrentUser\\My', 'Cert:\\LocalMachine\\My')
+$cert = $null
+foreach ($store in $stores) {
+  $candidate = Get-ChildItem -Path $store -ErrorAction SilentlyContinue | Where-Object {
+    ($_.SerialNumber -replace '[^A-Fa-f0-9]', '').ToUpper() -eq $serial
+  } | Select-Object -First 1
+  if ($candidate) {
+    $cert = $candidate
+    break
+  }
+}
+if (-not $cert) {
+  throw "Certificatul cu serialul $serial nu a fost gasit."
+}
+
+$request = [System.Net.HttpWebRequest]::Create($url)
+$request.Method = 'GET'
+$request.Timeout = 45000
+$request.ReadWriteTimeout = 45000
+$request.AllowAutoRedirect = $false
+$request.KeepAlive = $true
+$request.UserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) GufoSPVBridge/1.0'
+$request.Headers['Authorization'] = 'Bearer ' + $accessToken
+[void]$request.ClientCertificates.Add($cert)
+
+try {
+  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+  $response = [System.Net.HttpWebResponse]$request.GetResponse()
+  $statusCode = [int]$response.StatusCode
+  $contentType = $response.ContentType
+  $reader = New-Object System.IO.StreamReader($response.GetResponseStream())
+  $content = $reader.ReadToEnd()
+  $reader.Close()
+  $response.Close()
+  [PSCustomObject]@{
+    ok = ($statusCode -ge 200 -and $statusCode -lt 300)
+    status = $statusCode
+    contentType = $contentType
+    content = $content
+    url = $url
+  } | ConvertTo-Json -Compress -Depth 6
+}
+catch [System.Net.WebException] {
+  $statusCode = $null
+  $contentType = $null
+  $content = $null
+  if ($_.Exception.Response) {
+    try { $statusCode = [int]$_.Exception.Response.StatusCode.value__ } catch {}
+    try { $contentType = $_.Exception.Response.ContentType } catch {}
+    try {
+      $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
+      $content = $reader.ReadToEnd()
+      $reader.Close()
+    } catch {}
+  }
+  [PSCustomObject]@{
+    ok = $false
+    status = $statusCode
+    contentType = $contentType
+    error = $_.Exception.Message
+    content = $content
+    url = $url
+  } | ConvertTo-Json -Compress -Depth 6
+}
+`.trim()
+
+  const raw = await runPowerShell(script)
+  return {
+    certificate: cert,
+    result: JSON.parse(raw),
+  }
+}
+
+async function listIncomingEfacturaMessages(serial, accessToken, environment, cif, days) {
+  const safeDays = Math.max(1, Math.min(365, Number(days || 30)))
+  const url = getEfacturaListMessagesUrl(environment, safeDays, cif)
+  console.log(`[gufo-spv-bridge] listIncomingEfacturaMessages serial=${normalizeSerial(serial)} env=${environment} cif=${cif} days=${safeDays}`)
+  return invokeAuthenticatedEfacturaRequest({
+    serial,
+    accessToken,
+    url,
+  })
+}
+
+async function downloadIncomingEfacturaMessage(serial, accessToken, environment, id) {
+  const normalizedId = String(id || "").trim()
+  if (!normalizedId) {
+    throw new Error("Lipseste ID-ul de descarcare ANAF.")
+  }
+  const cert = await resolveCertificate(serial)
+  const url = getEfacturaDownloadUrl(environment, normalizedId)
+  const escapedUrl = url.replace(/'/g, "''")
+  const escapedToken = String(accessToken || "").trim().replace(/'/g, "''")
+  const normalizedSerial = normalizeSerial(serial)
+  const script = `
+$serial = '${normalizedSerial}'
+$url = '${escapedUrl}'
+$accessToken = '${escapedToken}'
+$stores = @('Cert:\\CurrentUser\\My', 'Cert:\\LocalMachine\\My')
+$cert = $null
+foreach ($store in $stores) {
+  $candidate = Get-ChildItem -Path $store -ErrorAction SilentlyContinue | Where-Object {
+    ($_.SerialNumber -replace '[^A-Fa-f0-9]', '').ToUpper() -eq $serial
+  } | Select-Object -First 1
+  if ($candidate) {
+    $cert = $candidate
+    break
+  }
+}
+if (-not $cert) {
+  throw "Certificatul cu serialul $serial nu a fost gasit."
+}
+
+$request = [System.Net.HttpWebRequest]::Create($url)
+$request.Method = 'GET'
+$request.Timeout = 45000
+$request.ReadWriteTimeout = 45000
+$request.AllowAutoRedirect = $false
+$request.KeepAlive = $true
+$request.UserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) GufoSPVBridge/1.0'
+$request.Headers['Authorization'] = 'Bearer ' + $accessToken
+[void]$request.ClientCertificates.Add($cert)
+
+function Read-ResponseBytes {
+  param([System.Net.WebResponse]$Response)
+  $stream = $Response.GetResponseStream()
+  $memory = New-Object System.IO.MemoryStream
+  $stream.CopyTo($memory)
+  $bytes = $memory.ToArray()
+  $memory.Dispose()
+  $stream.Dispose()
+  return ,$bytes
+}
+
+try {
+  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+  $response = [System.Net.HttpWebResponse]$request.GetResponse()
+  $statusCode = [int]$response.StatusCode
+  $contentType = $response.ContentType
+  $bytes = Read-ResponseBytes -Response $response
+  $response.Close()
+  [PSCustomObject]@{
+    ok = ($statusCode -ge 200 -and $statusCode -lt 300)
+    status = $statusCode
+    contentType = $contentType
+    base64Content = [Convert]::ToBase64String($bytes)
+    url = $url
+  } | ConvertTo-Json -Compress -Depth 6
+}
+catch [System.Net.WebException] {
+  $statusCode = $null
+  $contentType = $null
+  $responseBytes = $null
+  $content = $null
+  if ($_.Exception.Response) {
+    try { $statusCode = [int]$_.Exception.Response.StatusCode.value__ } catch {}
+    try { $contentType = $_.Exception.Response.ContentType } catch {}
+    try {
+      $responseBytes = Read-ResponseBytes -Response $_.Exception.Response
+      $content = [System.Text.Encoding]::UTF8.GetString($responseBytes)
+    } catch {}
+  }
+  [PSCustomObject]@{
+    ok = $false
+    status = $statusCode
+    contentType = $contentType
+    error = $_.Exception.Message
+    base64Content = if ($responseBytes) { [Convert]::ToBase64String($responseBytes) } else { $null }
+    content = $content
+    url = $url
+  } | ConvertTo-Json -Compress -Depth 6
+}
+`.trim()
+  const raw = await runPowerShell(script)
+  return {
+    certificate: cert,
+    result: JSON.parse(raw),
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || `${HOST}:${PORT}`}`)
 
@@ -723,6 +934,72 @@ const server = http.createServer(async (req, res) => {
       })
     } catch (error) {
       console.error(`[gufo-spv-bridge] HTTP download-message error`, error)
+      sendJson(res, 400, {
+        ok: false,
+        error: String(error.message || error),
+      })
+    }
+    return
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/v1/efactura/list-messages") {
+    try {
+      const body = await readJsonBody(req)
+      const serial = normalizeSerial(body.serial || DEFAULT_CERT_SERIAL)
+      const accessToken = String(body.accessToken || "").trim()
+      const environment = String(body.environment || "prod").trim().toLowerCase()
+      const cif = String(body.cif || "").trim()
+      const days = Number(body.days || 30)
+      console.log(`[gufo-spv-bridge] HTTP efactura list-messages serial=${serial} env=${environment} cif=${cif} days=${days}`)
+      const data = await listIncomingEfacturaMessages(serial, accessToken, environment, cif, days)
+      const parsedContent = parseResponseContent(data.result.content)
+      sendJson(res, 200, {
+        ok: Boolean(data.result.ok),
+        request: { days, environment, cif, url: data.result.url },
+        certificate: data.certificate,
+        response: {
+          ok: Boolean(data.result.ok),
+          status: data.result.status ?? null,
+          error: data.result.error || null,
+          contentType: data.result.contentType || null,
+          parsedContent,
+          rawContent: typeof parsedContent === "string" ? parsedContent : null,
+        },
+      })
+    } catch (error) {
+      console.error(`[gufo-spv-bridge] HTTP efactura list-messages error`, error)
+      sendJson(res, 400, {
+        ok: false,
+        error: String(error.message || error),
+      })
+    }
+    return
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/v1/efactura/download-message") {
+    try {
+      const body = await readJsonBody(req)
+      const serial = normalizeSerial(body.serial || DEFAULT_CERT_SERIAL)
+      const accessToken = String(body.accessToken || "").trim()
+      const environment = String(body.environment || "prod").trim().toLowerCase()
+      const id = String(body.id || "").trim()
+      console.log(`[gufo-spv-bridge] HTTP efactura download-message serial=${serial} env=${environment} id=${id}`)
+      const data = await downloadIncomingEfacturaMessage(serial, accessToken, environment, id)
+      sendJson(res, 200, {
+        ok: Boolean(data.result.ok),
+        request: { id, environment, url: data.result.url },
+        certificate: data.certificate,
+        response: {
+          ok: Boolean(data.result.ok),
+          status: data.result.status ?? null,
+          error: data.result.error || null,
+          contentType: data.result.contentType || null,
+          base64Content: data.result.base64Content || null,
+          rawContent: data.result.content || null,
+        },
+      })
+    } catch (error) {
+      console.error(`[gufo-spv-bridge] HTTP efactura download-message error`, error)
       sendJson(res, 400, {
         ok: false,
         error: String(error.message || error),
