@@ -1,0 +1,10 @@
+{
+  "name": "gufo-spv-bridge-windows",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bridge local Windows pentru SPVWS2 folosind certificatul din Windows Certificate Store/token USB.",
+  "main": "bridge.js",
+  "scripts": {
+    "start": "node bridge.js"
+  }
+}
