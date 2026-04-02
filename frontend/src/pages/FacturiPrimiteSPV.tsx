@@ -64,6 +64,13 @@ type SpvClassicStatus = {
   }
 }
 
+type SpvClassicTestResult = {
+  ok: boolean
+  title: string
+  tone: "success" | "error"
+  lines: string[]
+}
+
 function formatDate(value?: string | null) {
   if (!value) return "-"
   const date = new Date(value)
@@ -84,6 +91,7 @@ export default function FacturiPrimiteSPVPage() {
   const [testingClassic, setTestingClassic] = useState(false)
   const [expandedIds, setExpandedIds] = useState<string[]>([])
   const [spvStatus, setSpvStatus] = useState<SpvClassicStatus | null>(null)
+  const [spvTestResult, setSpvTestResult] = useState<SpvClassicTestResult | null>(null)
   const [spvModeMessage] = useState(
     "Ecranul acesta tine de SPV clasic (SPVWS2), separat de fluxul OAuth e-Factura. Tokenul ANAF activ nu este suficient singur pentru sincronizarea de aici."
   )
@@ -164,6 +172,7 @@ export default function FacturiPrimiteSPVPage() {
     setTestingClassic(true)
     setError("")
     setMessage("")
+    setSpvTestResult(null)
     try {
       const res = await fetch(`${API_BASE}/api/v1/spv-classic/test-list-messages`, {
         method: "POST",
@@ -179,14 +188,55 @@ export default function FacturiPrimiteSPVPage() {
       }
 
       const summary = data?.summary || {}
+      const diagnostics = data?.diagnostics || {}
+      const lines = [
+        `Rută testată: listaMesaje SPVWS2`,
+        `CUI: ${diagnostics?.cui || "-"}`,
+        `Fișier certificat pe server: ${diagnostics?.hasCertificateFile ? "Da" : "Nu"}`,
+        `Parolă certificat: ${diagnostics?.hasCertificatePassword ? "Da" : "Nu"}`,
+        `HTTP status: ${data?.response?.status ?? "-"}`,
+      ]
       if (summary?.error) {
+        setSpvTestResult({
+          ok: false,
+          title: "Test SPVWS2 cu răspuns de eroare",
+          tone: "error",
+          lines: [...lines, `Răspuns SPV: ${summary.error}`],
+        })
         setMessage(`SPVWS2 a raspuns: ${summary.error}`)
       } else {
+        setSpvTestResult({
+          ok: true,
+          title: "Test SPVWS2 reușit",
+          tone: "success",
+          lines: [
+            ...lines,
+            `Mesaje găsite: ${summary?.messageCount ?? 0}`,
+            `Primul tip mesaj: ${summary?.firstMessageType || "-"}`,
+            `Primul ID mesaj: ${summary?.firstMessageId || "-"}`,
+          ],
+        })
         setMessage(
           `Test SPVWS2 ok. Mesaje: ${summary?.messageCount ?? 0}${summary?.firstMessageType ? `, primul tip: ${summary.firstMessageType}` : ""}.`
         )
       }
     } catch (err: any) {
+      const missingServerCert =
+        spvStatus?.diagnostics && !spvStatus.diagnostics.canUseServerCertificate
+      setSpvTestResult({
+        ok: false,
+        title: "Test SPVWS2 blocat",
+        tone: "error",
+        lines: [
+          "Rută testată: listaMesaje SPVWS2",
+          `CUI: ${spvStatus?.diagnostics?.cui || "-"}`,
+          `Fișier certificat pe server: ${spvStatus?.diagnostics?.hasCertificateFile ? "Da" : "Nu"}`,
+          `Parolă certificat: ${spvStatus?.diagnostics?.hasCertificatePassword ? "Da" : "Nu"}`,
+          missingServerCert
+            ? "Blocaj curent: serverul nu are un certificat client utilizabil pentru SPVWS2."
+            : `Blocaj curent: ${err?.message || "Nu am putut testa listaMesaje din SPV clasic."}`,
+        ],
+      })
       setError(err?.message || "Nu am putut testa listaMesaje din SPV clasic.")
     } finally {
       setTestingClassic(false)
@@ -307,6 +357,33 @@ export default function FacturiPrimiteSPVPage() {
       <InlineNotice>{spvModeMessage}</InlineNotice>
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
+      {spvTestResult ? (
+        <div className={`rounded-[20px] border p-4 shadow-[0_8px_30px_rgba(15,23,42,0.06)] ${
+          spvTestResult.tone === "success"
+            ? "border-emerald-200 bg-emerald-50/70"
+            : "border-rose-200 bg-rose-50/70"
+        }`}>
+          <div className={`text-sm font-semibold ${
+            spvTestResult.tone === "success" ? "text-emerald-800" : "text-rose-800"
+          }`}>
+            {spvTestResult.title}
+          </div>
+          <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
+            {spvTestResult.lines.map((line) => (
+              <div
+                key={line}
+                className={`rounded-[14px] border px-3 py-2 text-sm ${
+                  spvTestResult.tone === "success"
+                    ? "border-emerald-200 bg-white text-emerald-900"
+                    : "border-rose-200 bg-white text-rose-900"
+                }`}
+              >
+                {line}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {spvStatus ? (
         <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
