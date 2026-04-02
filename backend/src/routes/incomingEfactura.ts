@@ -6,6 +6,7 @@ import { requireTenantModule } from "../lib/tenantModules"
 import { reserveNextNumber } from "../lib/numbering"
 import {
   extractDownloadId,
+  extractUploadIndex,
   extractXmlFromAnafDownload,
   getEfacturaBaseUrl,
   normalizeCompanyCui,

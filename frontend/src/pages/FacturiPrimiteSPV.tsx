@@ -342,6 +342,7 @@ export default function FacturiPrimiteSPVPage() {
         let imported = 0
         let skipped = 0
         let lastImportedInvoiceNo = "-"
+        const importErrors: string[] = []
         const downloadIds = newInvoiceMessages
           .map((message: any) => String(message?.id || "").trim())
           .filter(Boolean)
@@ -389,6 +390,9 @@ export default function FacturiPrimiteSPVPage() {
           const importData = await importRes.json().catch(() => ({}))
           if (!importRes.ok || !importData?.ok) {
             skipped += 1
+            if (importErrors.length < 3) {
+              importErrors.push(importData?.error || `Importul a esuat pentru mesajul ${messageId}.`)
+            }
             continue
           }
 
@@ -412,13 +416,14 @@ export default function FacturiPrimiteSPVPage() {
             `Facturi importate: ${imported}`,
             `Mesaje sărite/eroare: ${skipped}`,
             `Ultima factura importata: ${lastImportedInvoiceNo}`,
+            ...(importErrors.length ? [`Prima eroare: ${importErrors[0]}`] : []),
           ],
         })
 
         if (imported > 0) {
           setMessage(`Sincronizare e-Factura finalizata prin bridge local pentru ${selectedMonth}. Facturi importate: ${imported}.`)
         } else {
-          setError(`Bridge-ul a raspuns, dar nu am importat nicio factura noua din e-Factura pentru ${selectedMonth}.`)
+          setError(importErrors[0] || `Bridge-ul a raspuns, dar nu am importat nicio factura noua din e-Factura pentru ${selectedMonth}.`)
         }
 
         await loadItems()
