@@ -6,6 +6,7 @@ const path = require("path")
 const DEFAULT_PORT = 48521
 const DEFAULT_HOST = "127.0.0.1"
 const SPV_LIST_MESSAGES_URL = "https://webserviced.anaf.ro/SPVWS2/rest/listaMesaje"
+const SPV_DOWNLOAD_MESSAGE_URL = "https://webserviced.anaf.ro/SPVWS2/rest/descarcare"
 const POWERSHELL_TIMEOUT_MS = 90000
 
 loadEnv(path.join(__dirname, ".env"))
@@ -169,14 +170,13 @@ $found | ConvertTo-Json -Compress
 }
 
 async function testListMessages(serial, days) {
-  console.log(
-    `[gufo-spv-bridge] testListMessages start serial=${normalizeSerial(serial)} days=${days}`
-  )
+  const normalizedSerial = normalizeSerial(serial)
+  console.log(`[gufo-spv-bridge] testListMessages start serial=${normalizedSerial} days=${days}`)
   const cert = await resolveCertificate(serial)
   const safeDays = Math.max(1, Math.min(365, Number(days || 30)))
 
   const script = `
-$serial = '${normalizeSerial(serial)}'
+$serial = '${normalizedSerial}'
 $days = ${safeDays}
 $stores = @('Cert:\\CurrentUser\\My', 'Cert:\\LocalMachine\\My')
 $cert = $null
@@ -205,7 +205,6 @@ function Add-TraceStep {
     [string]$Preview,
     [int]$CookieCount
   )
-
   [void]$trace.Add([PSCustomObject]@{
     url = $RequestUrl
     status = $Status
@@ -363,6 +362,229 @@ catch {
   }
 }
 
+async function downloadMessage(serial, messageId) {
+  const normalizedSerial = normalizeSerial(serial)
+  const normalizedId = String(messageId || "").trim()
+  if (!normalizedId) {
+    throw new Error("Lipseste ID-ul mesajului SPV.")
+  }
+
+  console.log(
+    `[gufo-spv-bridge] downloadMessage start serial=${normalizedSerial} id=${normalizedId}`
+  )
+  const cert = await resolveCertificate(serial)
+
+  const script = `
+$serial = '${normalizedSerial}'
+$messageId = '${normalizedId}'
+$stores = @('Cert:\\CurrentUser\\My', 'Cert:\\LocalMachine\\My')
+$cert = $null
+foreach ($store in $stores) {
+  $candidate = Get-ChildItem -Path $store -ErrorAction SilentlyContinue | Where-Object {
+    ($_.SerialNumber -replace '[^A-Fa-f0-9]', '').ToUpper() -eq $serial
+  } | Select-Object -First 1
+  if ($candidate) {
+    $cert = $candidate
+    break
+  }
+}
+if (-not $cert) {
+  throw "Certificatul cu serialul $serial nu a fost gasit."
+}
+$url = "${SPV_DOWNLOAD_MESSAGE_URL}?id=$messageId"
+$cookieContainer = New-Object System.Net.CookieContainer
+$trace = New-Object System.Collections.ArrayList
+
+function Add-TraceStep {
+  param(
+    [string]$RequestUrl,
+    [int]$Status,
+    [string]$Location,
+    [string]$ContentType,
+    [string]$Preview,
+    [int]$CookieCount
+  )
+  [void]$trace.Add([PSCustomObject]@{
+    url = $RequestUrl
+    status = $Status
+    location = $Location
+    contentType = $ContentType
+    preview = $Preview
+    cookieCount = $CookieCount
+  })
+}
+
+function Get-CookieCount {
+  param([System.Net.CookieContainer]$Container, [string]$Uri)
+  try {
+    $cookieCollection = $Container.GetCookies([System.Uri]$Uri)
+    if ($cookieCollection) { return $cookieCollection.Count }
+  } catch {}
+  return 0
+}
+
+function Read-ResponseBytes {
+  param([System.Net.WebResponse]$Response)
+  $stream = $Response.GetResponseStream()
+  $memory = New-Object System.IO.MemoryStream
+  $stream.CopyTo($memory)
+  $bytes = $memory.ToArray()
+  $memory.Dispose()
+  $stream.Dispose()
+  return ,$bytes
+}
+
+function Get-PreviewFromBytes {
+  param([byte[]]$Bytes)
+  if (-not $Bytes -or $Bytes.Length -eq 0) { return '' }
+  try {
+    $text = [System.Text.Encoding]::UTF8.GetString($Bytes)
+    if ($text.Length -gt 240) { return $text.Substring(0, 240) }
+    return $text
+  } catch {
+    return ''
+  }
+}
+
+function Invoke-SpvDownloadRequest {
+  param(
+    [string]$StartUrl,
+    [System.Security.Cryptography.X509Certificates.X509Certificate2]$ClientCertificate,
+    [System.Net.CookieContainer]$Cookies
+  )
+
+  $currentUrl = $StartUrl
+  for ($i = 0; $i -lt 10; $i++) {
+    $request = [System.Net.HttpWebRequest]::Create($currentUrl)
+    $request.Method = 'GET'
+    $request.Timeout = 45000
+    $request.ReadWriteTimeout = 45000
+    $request.AllowAutoRedirect = $false
+    $request.CookieContainer = $Cookies
+    $request.KeepAlive = $true
+    $request.UserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) GufoSPVBridge/1.0'
+    [void]$request.ClientCertificates.Add($ClientCertificate)
+
+    try {
+      $response = [System.Net.HttpWebResponse]$request.GetResponse()
+      $statusCode = [int]$response.StatusCode
+      $location = $response.Headers['Location']
+      $contentType = $response.ContentType
+      $bytes = Read-ResponseBytes -Response $response
+      $preview = Get-PreviewFromBytes -Bytes $bytes
+      $cookieCount = Get-CookieCount -Container $Cookies -Uri $currentUrl
+      Add-TraceStep -RequestUrl $currentUrl -Status $statusCode -Location $location -ContentType $contentType -Preview $preview -CookieCount $cookieCount
+      $response.Close()
+
+      if ($statusCode -in 301,302,303,307,308 -and $location) {
+        $nextUri = New-Object System.Uri([System.Uri]$currentUrl, $location)
+        $currentUrl = $nextUri.AbsoluteUri
+        continue
+      }
+
+      return [PSCustomObject]@{
+        ok = ($statusCode -ge 200 -and $statusCode -lt 300)
+        status = $statusCode
+        contentType = $contentType
+        base64Content = [Convert]::ToBase64String($bytes)
+        preview = $preview
+        url = $currentUrl
+        trace = $trace
+      }
+    }
+    catch [System.Net.WebException] {
+      $statusCode = $null
+      $responseBytes = $null
+      $responseText = $null
+      $location = $null
+      $contentType = $null
+      if ($_.Exception.Response) {
+        try { $statusCode = [int]$_.Exception.Response.StatusCode.value__ } catch {}
+        try { $location = $_.Exception.Response.Headers['Location'] } catch {}
+        try { $contentType = $_.Exception.Response.ContentType } catch {}
+        try {
+          $responseBytes = Read-ResponseBytes -Response $_.Exception.Response
+          $responseText = Get-PreviewFromBytes -Bytes $responseBytes
+        } catch {}
+      }
+      $preview = if ($responseText) { $responseText } else { $_.Exception.Message }
+      $cookieCount = Get-CookieCount -Container $Cookies -Uri $currentUrl
+      $traceStatus = 0
+      if ($null -ne $statusCode) { $traceStatus = [int]$statusCode }
+      Add-TraceStep -RequestUrl $currentUrl -Status $traceStatus -Location $location -ContentType $contentType -Preview $preview -CookieCount $cookieCount
+
+      if ($statusCode -in 301,302,303,307,308 -and $location) {
+        $nextUri = New-Object System.Uri([System.Uri]$currentUrl, $location)
+        $currentUrl = $nextUri.AbsoluteUri
+        continue
+      }
+
+      return [PSCustomObject]@{
+        ok = $false
+        status = $statusCode
+        error = $_.Exception.Message
+        contentType = $contentType
+        base64Content = if ($responseBytes) { [Convert]::ToBase64String($responseBytes) } else { $null }
+        preview = $preview
+        url = $currentUrl
+        trace = $trace
+      }
+    }
+  }
+
+  return [PSCustomObject]@{
+    ok = $false
+    status = $null
+    error = 'Prea multe redirect-uri in fluxul SPVWS2 pentru descarcare.'
+    contentType = $null
+    base64Content = $null
+    preview = $null
+    url = $currentUrl
+    trace = $trace
+  }
+}
+
+try {
+  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+  Invoke-SpvDownloadRequest -StartUrl $url -ClientCertificate $cert -Cookies $cookieContainer | ConvertTo-Json -Compress -Depth 8
+}
+catch {
+  $statusCode = $null
+  $responseText = $null
+  if ($_.Exception.Response) {
+    try { $statusCode = [int]$_.Exception.Response.StatusCode.value__ } catch {}
+    try {
+      $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
+      $responseText = $reader.ReadToEnd()
+      $reader.Close()
+    } catch {}
+  }
+  if (-not $responseText -and $_.Exception.InnerException) {
+    try { $responseText = $_.Exception.InnerException.Message } catch {}
+  }
+  [PSCustomObject]@{
+    ok = $false
+    status = $statusCode
+    error = $_.Exception.Message
+    preview = $responseText
+    base64Content = $null
+    url = $url
+    trace = $trace
+  } | ConvertTo-Json -Compress -Depth 5
+}
+`.trim()
+
+  const raw = await runPowerShell(script)
+  const result = JSON.parse(raw)
+  console.log(
+    `[gufo-spv-bridge] downloadMessage finish ok=${Boolean(result.ok)} status=${result.status ?? "null"}`
+  )
+  return {
+    certificate: cert,
+    result,
+  }
+}
+
 function parseResponseContent(content) {
   const text = String(content || "").trim()
   if (!text) return null
@@ -462,6 +684,45 @@ const server = http.createServer(async (req, res) => {
       })
     } catch (error) {
       console.error(`[gufo-spv-bridge] HTTP list-messages-test error`, error)
+      sendJson(res, 400, {
+        ok: false,
+        error: String(error.message || error),
+      })
+    }
+    return
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/v1/spvws2/download-message") {
+    try {
+      const body = await readJsonBody(req)
+      const serial = normalizeSerial(body.serial || DEFAULT_CERT_SERIAL)
+      const id = String(body.id || "").trim()
+      console.log(`[gufo-spv-bridge] HTTP download-message serial=${serial} id=${id}`)
+      const data = await downloadMessage(serial, id)
+      sendJson(res, 200, {
+        ok: Boolean(data.result.ok),
+        request: {
+          id,
+          url: data.result.url,
+        },
+        certificate: data.certificate,
+        response: {
+          ok: Boolean(data.result.ok),
+          status: data.result.status ?? null,
+          error: data.result.error || null,
+          contentType: data.result.contentType || null,
+          preview: data.result.preview || null,
+          base64Content: data.result.base64Content || null,
+          trace: Array.isArray(data.result.trace)
+            ? data.result.trace.map((step) => ({
+                ...step,
+                resolvedLocation: resolveRedirectUrl(step.url, step.location),
+              }))
+            : [],
+        },
+      })
+    } catch (error) {
+      console.error(`[gufo-spv-bridge] HTTP download-message error`, error)
       sendJson(res, 400, {
         ok: false,
         error: String(error.message || error),

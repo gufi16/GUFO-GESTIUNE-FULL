@@ -156,6 +156,116 @@ export default function FacturiPrimiteSPVPage() {
     setError("")
     setMessage("")
     try {
+      if (bridgeToken.trim()) {
+        const trimmedBridgeUrl = bridgeUrl.trim().replace(/\/+$/, "")
+        const bridgeHeaders = {
+          Authorization: `Bearer ${bridgeToken.trim()}`,
+          "Content-Type": "application/json",
+        }
+
+        const listRes = await fetch(`${trimmedBridgeUrl}/api/v1/spvws2/list-messages-test`, {
+          method: "POST",
+          headers: bridgeHeaders,
+          body: JSON.stringify({ days: 30 }),
+        })
+        const listData = await listRes.json().catch(() => ({}))
+        if (!listRes.ok || !listData?.ok || !listData?.response?.ok) {
+          throw new Error(listData?.response?.error || listData?.error || "Bridge-ul local nu a putut lista mesajele SPV.")
+        }
+
+        const payload = listData?.response?.parsedContent || {}
+        const messages = Array.isArray(payload?.mesaje) ? payload.mesaje : []
+        const invoiceMessages = messages.filter((entry: any) => {
+          const tip = String(entry?.tip || "").toUpperCase()
+          const details = String(entry?.detalii || "").toLowerCase()
+          return tip === "FACTURA" || details.includes("factura")
+        })
+
+        if (!invoiceMessages.length) {
+          setMessage("Bridge local conectat, dar in lista curenta SPV nu exista facturi de importat.")
+          setSpvTestResult({
+            ok: true,
+            title: "Bridge local SPVWS2 conectat cu succes",
+            tone: "success",
+            lines: [
+              "Rută testată: bridge local -> sincronizare SPVWS2",
+              `Bridge URL: ${trimmedBridgeUrl}`,
+              `Mesaje totale: ${messages.length}`,
+              "Facturi importabile: 0",
+            ],
+          })
+          await loadItems()
+          return
+        }
+
+        let imported = 0
+        let skipped = 0
+        let lastImportedInvoiceNo = "-"
+
+        for (const message of invoiceMessages) {
+          const messageId = String(message?.id || "").trim()
+          if (!messageId) {
+            skipped += 1
+            continue
+          }
+
+          const downloadRes = await fetch(`${trimmedBridgeUrl}/api/v1/spvws2/download-message`, {
+            method: "POST",
+            headers: bridgeHeaders,
+            body: JSON.stringify({ id: messageId }),
+          })
+          const downloadData = await downloadRes.json().catch(() => ({}))
+          if (!downloadRes.ok || !downloadData?.ok || !downloadData?.response?.base64Content) {
+            skipped += 1
+            continue
+          }
+
+          const importRes = await fetch(`${API_BASE}/api/v1/efactura/incoming/import-from-spv-bridge`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              message,
+              downloadBase64: downloadData.response.base64Content,
+            }),
+          })
+          const importData = await importRes.json().catch(() => ({}))
+          if (!importRes.ok || !importData?.ok) {
+            skipped += 1
+            continue
+          }
+
+          imported += 1
+          lastImportedInvoiceNo = importData?.invoiceNo || importData?.spvDownloadId || lastImportedInvoiceNo
+        }
+
+        setSpvTestResult({
+          ok: imported > 0,
+          title: imported > 0 ? "Sincronizare SPV prin bridge finalizata" : "Sincronizare SPV fara facturi noi",
+          tone: imported > 0 ? "success" : "error",
+          lines: [
+            "Rută testată: bridge local -> listaMesaje + descarcare + import Gufo",
+            `Bridge URL: ${trimmedBridgeUrl}`,
+            `Mesaje totale: ${messages.length}`,
+            `Facturi importabile: ${invoiceMessages.length}`,
+            `Facturi importate: ${imported}`,
+            `Mesaje sărite/eroare: ${skipped}`,
+            `Ultima factura importata: ${lastImportedInvoiceNo}`,
+          ],
+        })
+
+        if (imported > 0) {
+          setMessage(`Sincronizare SPV finalizata prin bridge local. Facturi importate: ${imported}.`)
+        } else {
+          setError("Bridge-ul a raspuns, dar nu am importat nicio factura noua din SPV.")
+        }
+
+        await loadItems()
+        return
+      }
+
       const res = await fetch(`${API_BASE}/api/v1/spv-classic/sync`, {
         method: "POST",
         headers: {

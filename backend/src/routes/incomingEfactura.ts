@@ -6,6 +6,8 @@ import { requireTenantModule } from "../lib/tenantModules"
 import { reserveNextNumber } from "../lib/numbering"
 import {
   extractDownloadId,
+  extractXmlFromAnafDownload,
+  parseIncomingEInvoiceXml,
   readStringField,
 } from "../lib/incomingEfactura"
 
@@ -321,6 +323,44 @@ router.get("/api/v1/efactura/incoming/:id/xml", async (req: AuthedRequest, res) 
     `inline; filename=\"factura-spv-${String(item.invoiceNo || item.spvDownloadId || "document").replace(/[^a-zA-Z0-9._-]/g, "-")}.xml\"`
   )
   return res.send(item.xmlText)
+})
+
+router.post("/api/v1/efactura/incoming/import-from-spv-bridge", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const moduleCheck = await requireTenantModule(tenantId, "efactura")
+  if (!moduleCheck.enabled) {
+    return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
+  }
+
+  const rawMessage = req.body?.message || null
+  const downloadBase64 = String(req.body?.downloadBase64 || "").trim()
+
+  if (!rawMessage || typeof rawMessage !== "object") {
+    return res.status(400).json({ ok: false, error: "Mesajul SPV lipseste." })
+  }
+
+  if (!downloadBase64) {
+    return res.status(400).json({ ok: false, error: "Continutul descarcat din SPV lipseste." })
+  }
+
+  try {
+    const buffer = Buffer.from(downloadBase64, "base64")
+    const extracted = extractXmlFromAnafDownload(buffer)
+    const parsedInvoice = parseIncomingEInvoiceXml(extracted.xmlText)
+    const item = await upsertIncomingInvoice(tenantId, rawMessage, extracted.xmlText, parsedInvoice)
+    return res.json({
+      ok: true,
+      item,
+      invoiceNo: parsedInvoice.invoiceNo || null,
+      supplierName: parsedInvoice.supplierName || null,
+      spvDownloadId: item?.spvDownloadId || extractDownloadId(rawMessage, JSON.stringify(rawMessage || {})) || null,
+    })
+  } catch (error: any) {
+    return res.status(400).json({
+      ok: false,
+      error: error?.message || "Nu am putut importa factura din bridge-ul SPV.",
+    })
+  }
 })
 
 router.post("/api/v1/efactura/incoming/:id/create-supplier", async (req: AuthedRequest, res) => {
