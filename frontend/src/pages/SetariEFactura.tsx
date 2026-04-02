@@ -18,6 +18,21 @@ type EFacturaForm = {
   efacturaEnvironment: string
   efacturaPlatformConfigured: boolean
   efacturaUsesPlatformConfig: boolean
+  companyName: string
+  companyCui: string
+  companyCity: string
+  companyCounty: string
+  companyPostalCode: string
+  companyCountry: string
+  contactEmail: string
+  efacturaCertSerial: string
+}
+
+type CertificateStatus = {
+  hasFile: boolean
+  filename: string
+  uploadedAt: string
+  passwordConfigured: boolean
 }
 
 const emptyForm: EFacturaForm = {
@@ -25,6 +40,14 @@ const emptyForm: EFacturaForm = {
   efacturaEnvironment: "test",
   efacturaPlatformConfigured: false,
   efacturaUsesPlatformConfig: false,
+  companyName: "",
+  companyCui: "",
+  companyCity: "",
+  companyCounty: "",
+  companyPostalCode: "",
+  companyCountry: "RO",
+  contactEmail: "",
+  efacturaCertSerial: "",
 }
 
 function normalizeAnafMessage(message: string) {
@@ -49,6 +72,15 @@ export default function SetariEFacturaPage() {
   const [saving, setSaving] = useState(false)
   const [connecting, setConnecting] = useState(false)
   const [testing, setTesting] = useState(false)
+  const [certBusy, setCertBusy] = useState(false)
+  const [certPassword, setCertPassword] = useState("")
+  const [certFile, setCertFile] = useState<File | null>(null)
+  const [certStatus, setCertStatus] = useState<CertificateStatus>({
+    hasFile: false,
+    filename: "",
+    uploadedAt: "",
+    passwordConfigured: false,
+  })
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
   const [oauthStatus, setOauthStatus] = useState({
@@ -98,6 +130,21 @@ export default function SetariEFacturaPage() {
         efacturaEnvironment: data?.company?.efacturaEnvironment || "test",
         efacturaPlatformConfigured: Boolean(data?.company?.efacturaPlatformConfigured),
         efacturaUsesPlatformConfig: Boolean(data?.company?.efacturaUsesPlatformConfig),
+        companyName: data?.company?.name || "",
+        companyCui: data?.company?.cui || "",
+        companyCity: data?.company?.efacturaSellerCity || data?.company?.city || "",
+        companyCounty: data?.company?.efacturaSellerCounty || data?.company?.county || "",
+        companyPostalCode: data?.company?.efacturaSellerPostalCode || data?.company?.postalCode || "",
+        companyCountry: data?.company?.efacturaSellerCountryCode || data?.company?.country || "RO",
+        contactEmail: data?.company?.efacturaContactEmail || data?.company?.contactEmail || "",
+        efacturaCertSerial: data?.company?.efacturaCertSerial || "",
+      })
+
+      setCertStatus({
+        hasFile: Boolean(data?.company?.efacturaCertHasFile),
+        filename: data?.company?.efacturaCertFilename || "",
+        uploadedAt: data?.company?.efacturaCertUploadedAt || "",
+        passwordConfigured: Boolean(data?.company?.efacturaCertPasswordConfigured),
       })
 
       const connected = Boolean(data?.company?.efacturaOauthAccessToken)
@@ -163,14 +210,20 @@ export default function SetariEFacturaPage() {
           cui: company.cui || "",
           regNo: company.regNo || "",
           address: company.address || "",
+          city: company.city || "",
+          county: company.county || "",
+          country: company.country || "RO",
+          postalCode: company.postalCode || "",
           bank: company.bank || "",
           iban: company.iban || "",
           email: company.email || "",
+          contactEmail: company.contactEmail || "",
           phone: company.phone || "",
           isVatPayer: company.isVatPayer ?? true,
           posSyncInterval: company.posSyncInterval ?? 5,
           efacturaEnabled: form.efacturaEnabled,
           efacturaEnvironment: form.efacturaEnvironment,
+          efacturaCertSerial: form.efacturaCertSerial,
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -179,6 +232,7 @@ export default function SetariEFacturaPage() {
       }
 
       setMessage("Setarile e-Factura au fost salvate.")
+      await loadSettings()
     } catch (e: any) {
       setError(e?.message || "Nu am putut salva setarile e-Factura.")
     } finally {
@@ -191,6 +245,89 @@ export default function SetariEFacturaPage() {
       ...prev,
       [key]: value,
     }))
+  }
+
+  async function uploadCertificate() {
+    if (!token) {
+      setError("Nu exista token de autentificare. Fa login din nou.")
+      return
+    }
+
+    if (!certFile) {
+      setError("Selecteaza certificatul .p12/.pfx.")
+      return
+    }
+
+    if (!certPassword.trim()) {
+      setError("Completeaza parola certificatului.")
+      return
+    }
+
+    setCertBusy(true)
+    setError("")
+    setMessage("")
+
+    try {
+      const body = new FormData()
+      body.append("certificate", certFile)
+      body.append("efacturaCertPassword", certPassword.trim())
+      if (form.efacturaCertSerial.trim()) {
+        body.append("efacturaCertSerial", form.efacturaCertSerial.trim())
+      }
+
+      const res = await fetch(`${API}/api/v1/company/efactura/certificate`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body,
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Nu am putut incarca certificatul e-Factura.")
+      }
+
+      setCertFile(null)
+      setCertPassword("")
+      await loadSettings()
+      setMessage("Certificatul SPV a fost incarcat pe server.")
+    } catch (e: any) {
+      setError(e?.message || "Nu am putut incarca certificatul e-Factura.")
+    } finally {
+      setCertBusy(false)
+    }
+  }
+
+  async function removeCertificate() {
+    if (!token) {
+      setError("Nu exista token de autentificare. Fa login din nou.")
+      return
+    }
+
+    setCertBusy(true)
+    setError("")
+    setMessage("")
+    try {
+      const res = await fetch(`${API}/api/v1/company/efactura/certificate`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Nu am putut sterge certificatul e-Factura.")
+      }
+
+      setCertFile(null)
+      setCertPassword("")
+      await loadSettings()
+      setMessage("Certificatul SPV a fost sters de pe server.")
+    } catch (e: any) {
+      setError(e?.message || "Nu am putut sterge certificatul e-Factura.")
+    } finally {
+      setCertBusy(false)
+    }
   }
 
   async function startOauthConnect() {
@@ -261,31 +398,45 @@ export default function SetariEFacturaPage() {
       <PageHeader
         badge="configurare"
         title="Setari e-Factura"
-        subtitle="Aici activezi modulul si generezi tokenul ANAF pentru firma care este inregistrata in SPV si transmite e-Factura cu certificatul digital."
+        subtitle="Aici ai tot fluxul intr-un singur loc: activare, certificat SPV pe server, token ANAF si verificarea configurarii firmei."
       />
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-4">
         <DocumentMetric title="Flux e-Factura" value={form.efacturaEnabled ? "Activat" : "Oprit"} tone="amber" />
         <DocumentMetric title="Mediu" value={form.efacturaEnvironment === "prod" ? "Productie" : "Test"} tone="blue" />
-        <DocumentMetric title="Token ANAF" value={oauthStatus.connected ? "Activ" : "Neactiv"} tone="emerald" />
-        <DocumentMetric title="Conectare ANAF" value={oauthStatus.connected ? "Autorizata" : "Neconectata"} tone="slate" />
+        <DocumentMetric title="Certificat SPV" value={certStatus.hasFile ? "Incarcat" : "Lipsa"} tone={certStatus.hasFile ? "emerald" : "slate"} />
+        <DocumentMetric title="Token ANAF" value={oauthStatus.connected ? "Activ" : "Neactiv"} tone={oauthStatus.connected ? "emerald" : "slate"} />
       </div>
 
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
-      {oauthStatus.lastError ? <InlineNotice tone="error">{oauthStatus.lastError}</InlineNotice> : null}
-      <InlineNotice>
-        Datele firmei emitente se completeaza in pagina <strong>Firma</strong>. Aici ramai doar cu activarea si autorizarea ANAF pentru firma din SPV.
-      </InlineNotice>
+      {oauthStatus.lastError && !oauthStatus.connected ? <InlineNotice tone="error">{oauthStatus.lastError}</InlineNotice> : null}
       {!form.efacturaPlatformConfigured ? (
         <InlineNotice>
-          Aplicatia ANAF se configureaza centralizat in <strong>Control Panel</strong>. Dupa ce este setata acolo, aici ramane doar generarea tokenului pentru firma din SPV.
+          Aplicatia ANAF se configureaza centralizat in <strong>Control Panel</strong>. Dupa ce este setata acolo, aici ramane doar configurarea firmei si generarea tokenului.
         </InlineNotice>
       ) : null}
 
+      <DocumentSection title="Rezumat firma emitenta">
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-600">
+            Firma: <span className="font-semibold text-slate-900">{form.companyName || "-"}</span>
+          </div>
+          <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-600">
+            CUI: <span className="font-semibold text-slate-900">{form.companyCui || "-"}</span>
+          </div>
+          <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-600">
+            Emitent: <span className="font-semibold text-slate-900">{[form.companyCity, form.companyCounty].filter(Boolean).join(", ") || "-"}</span>
+          </div>
+          <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-600">
+            Email e-Factura: <span className="font-semibold text-slate-900">{form.contactEmail || "-"}</span>
+          </div>
+        </div>
+      </DocumentSection>
+
       <DocumentSection
-        title="Modul e-Factura"
-        description="Activezi functia pentru firma curenta si alegi mediul de lucru folosit la conectarea cu ANAF."
+        title="1. Activare si mediu ANAF"
+        description="Pornesti fluxul pentru firma curenta si alegi mediul in care lucrezi."
         actions={
           <div className="flex gap-2">
             <button type="button" onClick={loadSettings} className={documentButtonSecondaryClass} disabled={loading || saving}>
@@ -302,7 +453,7 @@ export default function SetariEFacturaPage() {
             Se incarca setarile e-Factura...
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             <DocumentField label="Activare flux e-Factura">
               <label className="flex min-h-10 items-center gap-3 rounded-[14px] border border-slate-200 bg-slate-50 px-3 text-[13px] text-slate-700">
                 <input type="checkbox" checked={form.efacturaEnabled} onChange={(e) => updateField("efacturaEnabled", e.target.checked)} />
@@ -316,13 +467,66 @@ export default function SetariEFacturaPage() {
                 <option value="prod">Productie</option>
               </select>
             </DocumentField>
+
+            <DocumentField label="Serial certificat">
+              <input
+                value={form.efacturaCertSerial}
+                onChange={(e) => updateField("efacturaCertSerial", e.target.value)}
+                className={documentInputClass}
+                placeholder="Ex: 201104209404..."
+              />
+            </DocumentField>
           </div>
         )}
       </DocumentSection>
 
       <DocumentSection
-        title="Autorizare ANAF"
-        description="Firma se autentifica in SPV cu certificatul digital si autorizeaza aplicatia pentru transmiterea facturilor."
+        title="2. Certificat SPV pe server"
+        description="Incarci certificatul .p12/.pfx si parola lui. Serverul Gufo le foloseste la sincronizarea SPV si la apelurile ANAF."
+        actions={
+          <div className="flex gap-2">
+            {certStatus.hasFile ? (
+              <button type="button" onClick={removeCertificate} className={documentButtonSecondaryClass} disabled={certBusy}>
+                {certBusy ? "Se sterge..." : "Sterge certificat"}
+              </button>
+            ) : null}
+            <button type="button" onClick={uploadCertificate} className={documentButtonPrimaryClass} disabled={certBusy || loading}>
+              {certBusy ? "Se incarca..." : "Incarca certificat"}
+            </button>
+          </div>
+        }
+      >
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <DocumentField label="Fisier certificat (.p12 / .pfx)">
+            <input
+              type="file"
+              accept=".p12,.pfx,application/x-pkcs12"
+              onChange={(e) => setCertFile(e.target.files?.[0] || null)}
+              className={documentInputClass}
+            />
+          </DocumentField>
+
+          <DocumentField label="Parola certificat">
+            <input
+              type="password"
+              value={certPassword}
+              onChange={(e) => setCertPassword(e.target.value)}
+              className={documentInputClass}
+              placeholder={certStatus.passwordConfigured ? "Parola este deja salvata pe server" : "Introdu parola certificatului"}
+            />
+          </DocumentField>
+
+          <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-600">
+            <div>Status certificat: <span className="font-semibold text-slate-900">{certStatus.hasFile ? "Incarcat" : "Lipsa"}</span></div>
+            <div className="mt-2">Fisier: <span className="font-semibold text-slate-900">{certStatus.filename || "-"}</span></div>
+            <div className="mt-2">Incarcat la: <span className="font-semibold text-slate-900">{certStatus.uploadedAt ? new Date(certStatus.uploadedAt).toLocaleString("ro-RO") : "-"}</span></div>
+          </div>
+        </div>
+      </DocumentSection>
+
+      <DocumentSection
+        title="3. Autorizare ANAF"
+        description="Dupa ce certificatul este pregatit pe server, generezi tokenul ANAF pentru firma si verifici conexiunea."
         actions={
           <div className="flex gap-2">
             <button type="button" onClick={testOauthConnection} className={documentButtonSecondaryClass} disabled={testing || loading || !oauthStatus.connected}>
@@ -356,16 +560,19 @@ export default function SetariEFacturaPage() {
         </div>
       </DocumentSection>
 
-      <DocumentSection title="Cum functioneaza" description="Fluxul pentru client trebuie sa fie simplu si usor de urmarit.">
-        <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+      <DocumentSection title="Ordinea corecta" description="Flux simplu, clar, fara sa te mai plimbi intre pagini.">
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
           <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-600">
-            1. Completezi datele emitentului in pagina Firma.
+            1. Verifici firma, emitentul si serialul certificatului.
           </div>
           <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-600">
-            2. Generezi tokenul ANAF cu semnatura electronica a firmei.
+            2. Incarci certificatul .p12/.pfx si parola lui pe server.
           </div>
           <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-600">
-            3. Din factura trimiti, verifici starea si descarci recipisa.
+            3. Generezi tokenul ANAF.
+          </div>
+          <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-600">
+            4. Trimiti, verifici starea si sincronizezi SPV.
           </div>
         </div>
       </DocumentSection>
