@@ -77,6 +77,25 @@ function asArray<T>(value: T | T[] | null | undefined): T[] {
   return value === undefined || value === null ? [] : [value]
 }
 
+function walkObject(value: any, visitor: (node: any) => boolean): any {
+  if (value === undefined || value === null) return null
+  if (visitor(value)) return value
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = walkObject(item, visitor)
+      if (found) return found
+    }
+    return null
+  }
+  if (typeof value === "object") {
+    for (const child of Object.values(value)) {
+      const found = walkObject(child, visitor)
+      if (found) return found
+    }
+  }
+  return null
+}
+
 function textValue(value: any): string {
   if (value === undefined || value === null) return ""
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
@@ -100,6 +119,36 @@ function firstDefined(...values: any[]) {
     if (value !== undefined && value !== null && textValue(value)) return value
   }
   return null
+}
+
+function findInvoiceNode(root: any) {
+  return (
+    root?.Invoice ||
+    root?.CreditNote ||
+    root?.["ns2:Invoice"] ||
+    root?.["ns2:CreditNote"] ||
+    walkObject(root, (node) => {
+      if (!node || typeof node !== "object" || Array.isArray(node)) return false
+      return Boolean(
+        node.InvoiceLine ||
+        node.CreditNoteLine ||
+        node.AccountingSupplierParty ||
+        node.LegalMonetaryTotal
+      )
+    }) ||
+    root
+  )
+}
+
+function scoreParsedInvoice(parsed: any) {
+  if (!parsed) return -1
+  let score = 0
+  if (String(parsed.invoiceNo || "").trim()) score += 10
+  if (String(parsed.supplierName || "").trim()) score += 20
+  if (String(parsed.supplierCif || "").trim()) score += 10
+  if (Number(parsed.totalGross || 0) > 0) score += 20
+  if (Array.isArray(parsed.lines) && parsed.lines.length > 0) score += 10 + parsed.lines.length
+  return score
 }
 
 function isInvoiceLikeXml(xmlText: string) {
@@ -142,28 +191,34 @@ export function extractXmlFromAnafDownload(buffer: Buffer) {
       .getEntries()
       .filter((item) => !item.isDirectory && item.entryName.toLowerCase().endsWith(".xml"))
 
-    const bestEntry =
-      xmlEntries.find((item) => {
-        const name = item.entryName.toLowerCase()
-        if (name.includes("semn") || name.includes("signature")) return false
-        try {
-          return isInvoiceLikeXml(item.getData().toString("utf8"))
-        } catch {
-          return false
+    const scoredEntries = xmlEntries.map((item) => {
+      try {
+        const xmlText = item.getData().toString("utf8")
+        const parsed = parseIncomingEInvoiceXml(xmlText)
+        return {
+          item,
+          xmlText,
+          score: scoreParsedInvoice(parsed),
         }
-      }) ||
-      xmlEntries.find((item) => {
+      } catch {
         try {
-          return isInvoiceLikeXml(item.getData().toString("utf8"))
+          const xmlText = item.getData().toString("utf8")
+          const name = item.entryName.toLowerCase()
+          const score =
+            (isInvoiceLikeXml(xmlText) ? 5 : 0) +
+            (name.includes("semn") || name.includes("signature") ? -10 : 0) +
+            Math.min(5, Math.floor(xmlText.length / 10000))
+          return { item, xmlText, score }
         } catch {
-          return false
+          return { item, xmlText: "", score: -100 }
         }
-      }) ||
-      xmlEntries.sort((a, b) => b.header.size - a.header.size)[0]
+      }
+    })
 
-    if (bestEntry) {
-      const xmlText = bestEntry.getData().toString("utf8")
-      return { xmlText, rawDownloadText: rawText, rawDownloadPayload: payload }
+    const bestEntry = scoredEntries.sort((a, b) => b.score - a.score)[0]
+
+    if (bestEntry?.xmlText) {
+      return { xmlText: bestEntry.xmlText, rawDownloadText: rawText, rawDownloadPayload: payload }
     }
   }
 
@@ -172,7 +227,7 @@ export function extractXmlFromAnafDownload(buffer: Buffer) {
 
 export function parseIncomingEInvoiceXml(xmlText: string) {
   const parsed = xmlParser.parse(xmlText) as AnyObj
-  const invoice = parsed?.Invoice || parsed?.CreditNote || parsed?.["ns2:Invoice"] || parsed
+  const invoice = findInvoiceNode(parsed)
   if (!invoice || typeof invoice !== "object") {
     throw new Error("XML-ul facturii nu a putut fi interpretat.")
   }
@@ -191,7 +246,7 @@ export function parseIncomingEInvoiceXml(xmlText: string) {
   const supplierTax = supplierParty?.PartyTaxScheme as AnyObj | undefined
   const customerTax = customerParty?.PartyTaxScheme as AnyObj | undefined
 
-  const lineNodes = asArray(invoice.InvoiceLine)
+  const lineNodes = asArray(firstDefined(invoice.InvoiceLine, invoice.CreditNoteLine))
   const lines = lineNodes.map((line: AnyObj, index) => {
     const item = line?.Item || {}
     const price = line?.Price || {}
