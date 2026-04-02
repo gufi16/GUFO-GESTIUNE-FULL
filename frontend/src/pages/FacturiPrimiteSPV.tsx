@@ -96,7 +96,7 @@ const SPV_BRIDGE_URL_KEY = "gufo_spv_bridge_url"
 const SPV_BRIDGE_TOKEN_KEY = "gufo_spv_bridge_token"
 const DEFAULT_SPV_BRIDGE_URL = "http://127.0.0.1:48521"
 const RAW_MESSAGES_PAGE_SIZE = 20
-const IMPORTED_INVOICES_PAGE_SIZE = 20
+const IMPORTED_INVOICES_PAGE_SIZE = 15
 
 function formatDate(value?: string | null) {
   if (!value) return "-"
@@ -787,24 +787,53 @@ export default function FacturiPrimiteSPVPage() {
     setSelectedInvoiceId(null)
   }
 
-  async function downloadInvoicePdf(id: string) {
+  async function downloadInvoicePdf(item: IncomingInvoice) {
     if (!token) return
     try {
-      const res = await fetch(`${API_BASE}/api/v1/efactura/incoming/${id}/pdf`, {
-        headers: { Authorization: `Bearer ${token}` },
+      if (!bridgeToken.trim()) {
+        throw new Error("PDF-ul original din ANAF se descarca prin bridge-ul local activ.")
+      }
+
+      const bridgeConfig = await loadBridgeConfig()
+      const trimmedBridgeUrl = bridgeUrl.trim().replace(/\/+$/, "")
+      const res = await fetch(`${trimmedBridgeUrl}/api/v1/efactura/download-message`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${bridgeToken.trim()}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: item.spvDownloadId,
+          accessToken: bridgeConfig.accessToken,
+          environment: bridgeConfig.environment,
+        }),
       })
-      if (!res.ok) throw new Error()
-      const blob = await res.blob()
+      const data = await res.json().catch(() => ({}))
+      const pdfBase64 = data?.response?.artifacts?.pdfBase64
+      const pdfFileName = data?.response?.artifacts?.pdfFileName || `factura-spv-${item.spvDownloadId}.pdf`
+      if (!res.ok || !data?.ok || !data?.response?.ok) {
+        throw new Error(data?.response?.error || data?.error || "Nu am putut descarca factura din ANAF.")
+      }
+      if (!pdfBase64) {
+        throw new Error("Mesajul ANAF nu contine PDF-ul original al facturii.")
+      }
+
+      const binary = atob(pdfBase64)
+      const bytes = new Uint8Array(binary.length)
+      for (let index = 0; index < binary.length; index += 1) {
+        bytes[index] = binary.charCodeAt(index)
+      }
+      const blob = new Blob([bytes], { type: "application/pdf" })
       const url = URL.createObjectURL(blob)
       const link = document.createElement("a")
       link.href = url
-      link.download = ""
+      link.download = pdfFileName
       document.body.appendChild(link)
       link.click()
       link.remove()
       setTimeout(() => URL.revokeObjectURL(url), 60_000)
     } catch {
-      setError("Nu am putut descarca PDF-ul facturii din SPV.")
+      setError("Nu am putut descarca PDF-ul original al facturii din ANAF.")
     }
   }
 
@@ -1169,7 +1198,7 @@ export default function FacturiPrimiteSPVPage() {
                         <div className="flex justify-end gap-2">
                           <button
                             type="button"
-                            onClick={() => void downloadInvoicePdf(item.id)}
+                            onClick={() => void downloadInvoicePdf(item)}
                             className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-[#17324D] transition hover:bg-[#F4F7FB]"
                           >
                             <FileText size={16} />
@@ -1360,7 +1389,7 @@ export default function FacturiPrimiteSPVPage() {
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => void downloadInvoicePdf(selectedInvoice.id)}
+                      onClick={() => void downloadInvoicePdf(selectedInvoice)}
                       className={documentButtonSecondaryClass}
                     >
                       <FileText size={16} />

@@ -283,6 +283,37 @@ async function upsertIncomingInvoice(
   })
 }
 
+function isMalformedIncomingInvoice(entry: any) {
+  const itemsCount = Array.isArray(entry?.items) ? entry.items.length : 0
+  return (
+    !String(entry?.invoiceNo || "").trim() ||
+    !String(entry?.supplierName || "").trim() ||
+    Number(entry?.totalGross || 0) <= 0 ||
+    itemsCount === 0
+  )
+}
+
+async function repairIncomingInvoiceIfNeeded(tenantId: string, entry: any) {
+  if (!entry?.xmlText || !isMalformedIncomingInvoice(entry)) return entry
+  try {
+    const parsedInvoice = parseIncomingEInvoiceXml(String(entry.xmlText))
+    const repaired = await upsertIncomingInvoice(
+      tenantId,
+      entry.rawPayload || {
+        id: entry.spvMessageId || entry.spvDownloadId,
+        downloadId: entry.spvDownloadId,
+        uploadIndex: entry.spvUploadIndex,
+        data_creare: entry.spvCommunicationDate,
+      },
+      String(entry.xmlText),
+      parsedInvoice
+    )
+    return repaired || entry
+  } catch {
+    return entry
+  }
+}
+
 router.get("/api/v1/efactura/incoming", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
@@ -305,7 +336,9 @@ router.get("/api/v1/efactura/incoming", async (req: AuthedRequest, res) => {
     orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
   })
 
-  return res.json({ ok: true, items })
+  const repairedItems = await Promise.all(items.map((entry) => repairIncomingInvoiceIfNeeded(tenantId, entry)))
+
+  return res.json({ ok: true, items: repairedItems })
 })
 
 router.get("/api/v1/efactura/incoming/bridge-config", async (req: AuthedRequest, res) => {
@@ -376,7 +409,9 @@ router.get("/api/v1/efactura/incoming/:id", async (req: AuthedRequest, res) => {
     return res.status(404).json({ ok: false, error: "Factura primita SPV nu a fost gasita." })
   }
 
-  return res.json({ ok: true, item })
+  const repaired = await repairIncomingInvoiceIfNeeded(tenantId, item)
+
+  return res.json({ ok: true, item: repaired })
 })
 
 router.get("/api/v1/efactura/incoming/:id/pdf", async (req: AuthedRequest, res) => {
