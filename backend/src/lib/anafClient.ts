@@ -42,6 +42,13 @@ function decodeJwtPayload(token: string) {
   }
 }
 
+function normalizeCertificateSerial(value: unknown) {
+  return String(value || "")
+    .trim()
+    .replace(/[:\s]/g, "")
+    .toUpperCase()
+}
+
 export function getAnafTokenDiagnostics(accessToken: string) {
   const payload = decodeJwtPayload(accessToken)
   if (!payload) {
@@ -80,6 +87,10 @@ export function getAnafTokenDiagnostics(accessToken: string) {
 export function getAnafCompanyDiagnostics(company: any) {
   const tokenDiagnostics = getAnafTokenDiagnostics(String(company?.efacturaOauthAccessToken || ""))
   const certOptions = getAnafCertificateOptions(company)
+  const certSerialConfigured = company?.efacturaCertSerial || null
+  const tokenSerial = tokenDiagnostics.tokenSerial || null
+  const certSerialNormalized = normalizeCertificateSerial(certSerialConfigured)
+  const tokenSerialNormalized = normalizeCertificateSerial(tokenSerial)
 
   return {
     tenantId: company?.tenantId || null,
@@ -88,10 +99,13 @@ export function getAnafCompanyDiagnostics(company: any) {
     hasAccessToken: Boolean(company?.efacturaOauthAccessToken),
     hasCertificateFile: Boolean(company?.efacturaCertFilename),
     usingClientCertificate: Boolean(certOptions?.pfx),
-    certSerialConfigured: company?.efacturaCertSerial || null,
+    certSerialConfigured,
+    certSerialNormalized: certSerialNormalized || null,
     tokenIssuer: tokenDiagnostics.tokenIssuer,
     tokenClientAppId: tokenDiagnostics.tokenClientAppId,
-    tokenSerial: tokenDiagnostics.tokenSerial,
+    tokenSerial,
+    tokenSerialNormalized: tokenSerialNormalized || null,
+    serialsMatch: Boolean(certSerialNormalized && tokenSerialNormalized && certSerialNormalized === tokenSerialNormalized),
     tokenScopes: tokenDiagnostics.tokenScopes,
     tokenRoles: tokenDiagnostics.tokenRoles,
     tokenExp: tokenDiagnostics.tokenExp,

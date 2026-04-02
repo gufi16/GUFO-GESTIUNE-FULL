@@ -35,9 +35,12 @@ type EFacturaDiagnostics = {
   hasCertificateFile: boolean
   usingClientCertificate: boolean
   certSerialConfigured: string | null
+  certSerialNormalized: string | null
   tokenIssuer: string | null
   tokenClientAppId: string | null
   tokenSerial: string | null
+  tokenSerialNormalized: string | null
+  serialsMatch: boolean
   tokenScopes: string[]
   tokenRoles: string[]
   tokenExp: string | null
@@ -457,6 +460,9 @@ export default function SetariEFacturaPage() {
             </div>
             <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
               Serial configurat: <span className="font-semibold text-slate-900">{diagnostics.certSerialConfigured || "-"}</span>
+            </div>
+            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+              Seriale aliniate: <span className="font-semibold text-slate-900">{diagnostics.serialsMatch ? "Da" : "Nu"}</span>
             </div>
             <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
               Roluri token: <span className="font-semibold text-slate-900">{diagnostics.tokenRoles.length ? diagnostics.tokenRoles.join(", ") : "-"}</span>
