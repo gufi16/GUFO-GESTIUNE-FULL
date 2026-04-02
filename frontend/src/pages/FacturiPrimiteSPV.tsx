@@ -294,7 +294,9 @@ export default function FacturiPrimiteSPVPage() {
           }))
         )
 
+        const existingDownloadIds = new Set(items.map((entry) => String(entry.spvDownloadId || "").trim()).filter(Boolean))
         const invoiceMessages = messages.filter((entry: any) => isIncomingEfacturaMessage(entry))
+        const newInvoiceMessages = invoiceMessages.filter((entry: any) => !existingDownloadIds.has(String(entry?.id || "").trim()))
 
         if (!invoiceMessages.length) {
           setMessage(`Bridge local conectat, dar in e-Factura nu exista facturi de importat pentru ${selectedMonth}.`)
@@ -316,10 +318,31 @@ export default function FacturiPrimiteSPVPage() {
           return
         }
 
+        if (!newInvoiceMessages.length) {
+          setMessage(`Facturile pentru ${selectedMonth} sunt deja sincronizate in Gufo.`)
+          setSpvTestResult({
+            ok: true,
+            title: "Facturile din e-Factura sunt deja in Gufo",
+            tone: "success",
+            lines: [
+              "Ruta testata: bridge local -> listaMesaje + verificare duplicat",
+              `Bridge URL: ${trimmedBridgeUrl}`,
+              `Luna selectata: ${selectedMonth}`,
+              `Mediu ANAF: ${bridgeConfig.environment}`,
+              `CUI: ${bridgeConfig.cif}`,
+              `Mesaje totale: ${messages.length}`,
+              `Facturi gasite: ${invoiceMessages.length}`,
+              "Facturi noi de importat: 0",
+            ],
+          })
+          await loadItems()
+          return
+        }
+
         let imported = 0
         let skipped = 0
         let lastImportedInvoiceNo = "-"
-        const downloadIds = invoiceMessages
+        const downloadIds = newInvoiceMessages
           .map((message: any) => String(message?.id || "").trim())
           .filter(Boolean)
 
@@ -344,7 +367,7 @@ export default function FacturiPrimiteSPVPage() {
           ])
         )
 
-        for (const message of invoiceMessages) {
+        for (const message of newInvoiceMessages) {
           const messageId = String(message?.id || "").trim()
           const downloadData = downloadsById.get(messageId)
           if (!messageId || !downloadData?.ok || !downloadData?.base64Content) {
@@ -384,7 +407,8 @@ export default function FacturiPrimiteSPVPage() {
             `Mediu ANAF: ${bridgeConfig.environment}`,
             `CUI: ${bridgeConfig.cif}`,
             `Mesaje totale: ${messages.length}`,
-            `Facturi importabile: ${invoiceMessages.length}`,
+            `Facturi gasite: ${invoiceMessages.length}`,
+            `Facturi noi de importat: ${newInvoiceMessages.length}`,
             `Facturi importate: ${imported}`,
             `Mesaje sărite/eroare: ${skipped}`,
             `Ultima factura importata: ${lastImportedInvoiceNo}`,
