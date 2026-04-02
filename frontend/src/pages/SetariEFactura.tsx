@@ -25,6 +25,7 @@ type EFacturaForm = {
   companyPostalCode: string
   companyCountry: string
   contactEmail: string
+  efacturaCertSerial: string
 }
 
 type EFacturaDiagnostics = {
@@ -46,6 +47,13 @@ type EFacturaDiagnostics = {
   tokenExp: string | null
 }
 
+type EFacturaCertificateState = {
+  hasFile: boolean
+  filename: string
+  uploadedAt: string
+  passwordConfigured: boolean
+}
+
 const emptyForm: EFacturaForm = {
   efacturaEnabled: false,
   efacturaEnvironment: "test",
@@ -58,6 +66,7 @@ const emptyForm: EFacturaForm = {
   companyPostalCode: "",
   companyCountry: "RO",
   contactEmail: "",
+  efacturaCertSerial: "",
 }
 
 function normalizeAnafMessage(message: string) {
@@ -83,9 +92,18 @@ export default function SetariEFacturaPage() {
   const [connecting, setConnecting] = useState(false)
   const [testing, setTesting] = useState(false)
   const [loadingDiagnostics, setLoadingDiagnostics] = useState(false)
+  const [certBusy, setCertBusy] = useState(false)
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
   const [diagnostics, setDiagnostics] = useState<EFacturaDiagnostics | null>(null)
+  const [certFile, setCertFile] = useState<File | null>(null)
+  const [certPassword, setCertPassword] = useState("")
+  const [certState, setCertState] = useState<EFacturaCertificateState>({
+    hasFile: false,
+    filename: "",
+    uploadedAt: "",
+    passwordConfigured: false,
+  })
   const [oauthStatus, setOauthStatus] = useState({
     connected: false,
     connectedAt: "",
@@ -140,6 +158,13 @@ export default function SetariEFacturaPage() {
         companyPostalCode: data?.company?.efacturaSellerPostalCode || data?.company?.postalCode || "",
         companyCountry: data?.company?.efacturaSellerCountryCode || data?.company?.country || "RO",
         contactEmail: data?.company?.efacturaContactEmail || data?.company?.contactEmail || "",
+        efacturaCertSerial: data?.company?.efacturaCertSerial || "",
+      })
+      setCertState({
+        hasFile: Boolean(data?.company?.efacturaCertHasFile),
+        filename: data?.company?.efacturaCertFilename || "",
+        uploadedAt: data?.company?.efacturaCertUploadedAt || "",
+        passwordConfigured: Boolean(data?.company?.efacturaCertPasswordConfigured),
       })
 
       const connected = Boolean(data?.company?.efacturaOauthAccessToken)
@@ -218,6 +243,7 @@ export default function SetariEFacturaPage() {
           posSyncInterval: company.posSyncInterval ?? 5,
           efacturaEnabled: form.efacturaEnabled,
           efacturaEnvironment: form.efacturaEnvironment,
+          efacturaCertSerial: form.efacturaCertSerial,
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -330,6 +356,90 @@ export default function SetariEFacturaPage() {
     }
   }
 
+  async function uploadCertificate() {
+    if (!token) {
+      setError("Nu exista token de autentificare. Fa login din nou.")
+      return
+    }
+    if (!certFile) {
+      setError("Selecteaza certificatul .p12/.pfx.")
+      return
+    }
+    if (!certPassword.trim()) {
+      setError("Completeaza parola certificatului.")
+      return
+    }
+
+    setCertBusy(true)
+    setError("")
+    setMessage("")
+
+    try {
+      const body = new FormData()
+      body.append("certificate", certFile)
+      body.append("efacturaCertPassword", certPassword.trim())
+      if (form.efacturaCertSerial.trim()) {
+        body.append("efacturaCertSerial", form.efacturaCertSerial.trim())
+      }
+
+      const res = await fetch(`${API}/api/v1/company/efactura/certificate`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body,
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Nu am putut incarca certificatul SPV.")
+      }
+
+      setCertFile(null)
+      setCertPassword("")
+      setMessage("Certificatul SPV a fost incarcat pe server.")
+      await loadSettings()
+      await loadDiagnostics()
+    } catch (e: any) {
+      setError(e?.message || "Nu am putut incarca certificatul SPV.")
+    } finally {
+      setCertBusy(false)
+    }
+  }
+
+  async function removeCertificate() {
+    if (!token) {
+      setError("Nu exista token de autentificare. Fa login din nou.")
+      return
+    }
+
+    setCertBusy(true)
+    setError("")
+    setMessage("")
+
+    try {
+      const res = await fetch(`${API}/api/v1/company/efactura/certificate`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Nu am putut sterge certificatul SPV.")
+      }
+
+      setCertFile(null)
+      setCertPassword("")
+      setMessage("Certificatul SPV a fost sters de pe server.")
+      await loadSettings()
+      await loadDiagnostics()
+    } catch (e: any) {
+      setError(e?.message || "Nu am putut sterge certificatul SPV.")
+    } finally {
+      setCertBusy(false)
+    }
+  }
+
   return (
     <div className="space-y-3">
       <PageHeader
@@ -355,7 +465,7 @@ export default function SetariEFacturaPage() {
         </InlineNotice>
       ) : null}
       <InlineNotice>
-        In mod normal aici nu trebuie sa incarci certificat sau sa completezi date tehnice suplimentare. Daca tokenul este activ, fluxul principal ramane web.
+        Fluxul principal ramane web, pe baza tokenului ANAF. Pentru SPV, daca anumite endpointuri cer certificat client la handshake, ai mai jos o sectiune avansata pentru certificat.
       </InlineNotice>
 
       <DocumentSection title="Rezumat firma emitenta">
@@ -472,6 +582,63 @@ export default function SetariEFacturaPage() {
             </div>
           </div>
         ) : null}
+      </DocumentSection>
+
+      <DocumentSection
+        title="3. Certificat client SPV"
+        description="Sectiune avansata. O folosesti doar daca sincronizarea SPV cere certificat client TLS pe server."
+        actions={
+          <div className="flex gap-2">
+            <button type="button" onClick={uploadCertificate} className={documentButtonPrimaryClass} disabled={certBusy || loading}>
+              {certBusy ? "Se incarca..." : "Incarca certificat"}
+            </button>
+            {certState.hasFile ? (
+              <button type="button" onClick={removeCertificate} className={documentButtonSecondaryClass} disabled={certBusy || loading}>
+                Sterge certificat
+              </button>
+            ) : null}
+          </div>
+        }
+      >
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <DocumentField label="Serial certificat">
+            <input
+              value={form.efacturaCertSerial}
+              onChange={(e) => updateField("efacturaCertSerial", e.target.value)}
+              className={documentInputClass}
+              placeholder="Ex: 201104209404..."
+            />
+          </DocumentField>
+          <DocumentField label="Fisier certificat (.p12 / .pfx)">
+            <input
+              type="file"
+              accept=".p12,.pfx,application/x-pkcs12"
+              onChange={(e) => setCertFile(e.target.files?.[0] || null)}
+              className={documentInputClass}
+            />
+          </DocumentField>
+          <DocumentField label="Parola certificat">
+            <input
+              type="password"
+              value={certPassword}
+              onChange={(e) => setCertPassword(e.target.value)}
+              className={documentInputClass}
+              placeholder={certState.passwordConfigured ? "Parola este deja salvata pe server" : "Introdu parola certificatului"}
+            />
+          </DocumentField>
+        </div>
+
+        <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-3">
+          <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+            Status certificat: <span className="font-semibold text-slate-900">{certState.hasFile ? "Incarcat" : "Lipsa"}</span>
+          </div>
+          <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+            Fisier: <span className="font-semibold text-slate-900">{certState.filename || "-"}</span>
+          </div>
+          <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+            Incarcat la: <span className="font-semibold text-slate-900">{certState.uploadedAt ? new Date(certState.uploadedAt).toLocaleString("ro-RO") : "-"}</span>
+          </div>
+        </div>
       </DocumentSection>
 
       <DocumentSection title="Ordinea corecta" description="Flux simplu, clar, fara pasi tehnici inutili in fata utilizatorului.">
