@@ -71,6 +71,14 @@ type SpvClassicTestResult = {
   lines: string[]
 }
 
+type BridgeSpvMessage = {
+  id: string
+  tip?: string | null
+  cif?: string | null
+  data_creare?: string | null
+  detalii?: string | null
+}
+
 const SPV_BRIDGE_URL_KEY = "gufo_spv_bridge_url"
 const SPV_BRIDGE_TOKEN_KEY = "gufo_spv_bridge_token"
 const DEFAULT_SPV_BRIDGE_URL = "http://127.0.0.1:48521"
@@ -139,6 +147,7 @@ export default function FacturiPrimiteSPVPage() {
   const [bridgeUrl, setBridgeUrl] = useState(DEFAULT_SPV_BRIDGE_URL)
   const [bridgeToken, setBridgeToken] = useState("")
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthValue())
+  const [bridgeMessages, setBridgeMessages] = useState<BridgeSpvMessage[]>([])
   const [spvModeMessage] = useState(
     "Ecranul acesta tine de SPV clasic (SPVWS2), separat de fluxul OAuth e-Factura. Tokenul ANAF activ nu este suficient singur pentru sincronizarea de aici."
   )
@@ -196,6 +205,7 @@ export default function FacturiPrimiteSPVPage() {
     setSyncing(true)
     setError("")
     setMessage("")
+    setBridgeMessages([])
     try {
       if (bridgeToken.trim()) {
         const trimmedBridgeUrl = bridgeUrl.trim().replace(/\/+$/, "")
@@ -217,6 +227,16 @@ export default function FacturiPrimiteSPVPage() {
 
         const payload = listData?.response?.parsedContent || {}
         const messages = filterMessagesForMonth(Array.isArray(payload?.mesaje) ? payload.mesaje : [], selectedMonth)
+        setBridgeMessages(
+          messages.map((entry: any) => ({
+            id: String(entry?.id || ""),
+            tip: entry?.tip || null,
+            cif: entry?.cif || null,
+            data_creare: entry?.data_creare || null,
+            detalii: entry?.detalii || null,
+          }))
+        )
+
         const invoiceMessages = messages.filter((entry: any) => {
           const tip = String(entry?.tip || "").toUpperCase()
           const details = String(entry?.detalii || "").toLowerCase()
@@ -337,6 +357,7 @@ export default function FacturiPrimiteSPVPage() {
     setError("")
     setMessage("")
     setSpvTestResult(null)
+    setBridgeMessages([])
     try {
       if (bridgeToken.trim()) {
         const trimmedBridgeUrl = bridgeUrl.trim().replace(/\/+$/, "")
@@ -358,6 +379,15 @@ export default function FacturiPrimiteSPVPage() {
         const parsedContent = bridgeData?.response?.parsedContent || {}
         const messages = filterMessagesForMonth(Array.isArray(parsedContent?.mesaje) ? parsedContent.mesaje : [], selectedMonth)
         const firstMessage = messages[0] || null
+        setBridgeMessages(
+          messages.map((entry: any) => ({
+            id: String(entry?.id || ""),
+            tip: entry?.tip || null,
+            cif: entry?.cif || null,
+            data_creare: entry?.data_creare || null,
+            detalii: entry?.detalii || null,
+          }))
+        )
 
         if (!bridgeData?.ok || !bridgeData?.response?.ok) {
           const lines = [
@@ -710,6 +740,36 @@ export default function FacturiPrimiteSPVPage() {
           </button>
         ))}
       </div>
+
+      {bridgeMessages.length ? (
+        <div className="overflow-hidden rounded-[20px] border border-slate-200 bg-white">
+          <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900">
+            Mesaje returnate din SPV pentru luna selectata
+          </div>
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-slate-500">
+              <tr>
+                <th className="px-3 py-2.5 text-left font-medium">ID</th>
+                <th className="px-3 py-2.5 text-left font-medium">Tip</th>
+                <th className="px-3 py-2.5 text-left font-medium">CUI</th>
+                <th className="px-3 py-2.5 text-left font-medium">Data</th>
+                <th className="px-3 py-2.5 text-left font-medium">Detalii</th>
+              </tr>
+            </thead>
+            <tbody>
+              {bridgeMessages.map((entry) => (
+                <tr key={`${entry.id}-${entry.data_creare || ""}`} className="border-t border-slate-200">
+                  <td className="px-3 py-2.5 text-slate-700">{entry.id || "-"}</td>
+                  <td className="px-3 py-2.5 text-slate-700">{entry.tip || "-"}</td>
+                  <td className="px-3 py-2.5 text-slate-700">{entry.cif || "-"}</td>
+                  <td className="px-3 py-2.5 text-slate-700">{entry.data_creare || "-"}</td>
+                  <td className="px-3 py-2.5 text-slate-700">{entry.detalii || "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
 
       <div className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-[0_8px_30px_rgba(15,23,42,0.06)]">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
