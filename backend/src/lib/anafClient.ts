@@ -130,6 +130,7 @@ export async function anafListMessages(company: any, options: { days?: number; c
     days,
     url,
     hasCertificateFile: Boolean(company?.efacturaCertFilename),
+    usingClientCertificate: Boolean(ready.certOptions?.pfx),
     certSerialConfigured: company?.efacturaCertSerial || null,
     tokenSerial: tokenDiagnostics.tokenSerial,
     tokenScopes: tokenDiagnostics.tokenScopes,
@@ -168,6 +169,7 @@ export async function anafDownloadById(company: any, downloadId: string) {
     environment: company?.efacturaEnvironment || "test",
     downloadId,
     url,
+    usingClientCertificate: Boolean(ready.certOptions?.pfx),
   })
   const response = await anafHttpRequest(url, {
     headers: buildAnafAuthHeaders(ready.accessToken),
@@ -201,6 +203,7 @@ export async function anafUploadXml(company: any, xmlText: string) {
     cif: ready.cif,
     url,
     xmlSize: Buffer.byteLength(xmlText, "utf8"),
+    usingClientCertificate: Boolean(ready.certOptions?.pfx),
   })
   const response = await anafHttpRequest(url, {
     method: "POST",
@@ -239,6 +242,7 @@ export async function anafCheckUploadStatus(company: any, uploadIndex: string) {
     environment: company?.efacturaEnvironment || "test",
     uploadIndex,
     url,
+    usingClientCertificate: Boolean(ready.certOptions?.pfx),
   })
   const response = await anafHttpRequest(url, {
     headers: buildAnafAuthHeaders(ready.accessToken),

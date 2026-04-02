@@ -87,17 +87,17 @@ export function getAnafCertificateOptions(company: {
 }) {
   const tenantId = String(company?.tenantId || "").trim()
   if (!tenantId) {
-    throw new Error("Tenant invalid pentru certificatul e-Factura.")
+    return {}
   }
 
   const pfx = readEfacturaCertificateFile(tenantId, company?.efacturaCertFilename)
   if (!pfx) {
-    throw new Error("Nu exista certificat e-Factura incarcat pentru aceasta firma.")
+    return {}
   }
 
   const passphrase = decryptSecret(company?.efacturaCertPasswordEnc)
   if (!passphrase) {
-    throw new Error("Parola certificatului e-Factura lipseste sau nu poate fi decriptata.")
+    return {}
   }
 
   return {
