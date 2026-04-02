@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { Navigate, useNavigate } from "react-router-dom"
-import { ArrowRight, ChevronDown, ChevronUp, Download, FileCode2 } from "lucide-react"
+import { ArrowRight, ChevronDown, ChevronUp, Download, FileCode2, FileText, X } from "lucide-react"
 import PageHeader from "../components/PageHeader"
 import { DocumentMetric, InlineNotice, documentButtonPrimaryClass, documentButtonSecondaryClass, documentInputClass } from "../components/DocumentUi"
 import { API_BASE, getToken } from "../lib/api"
@@ -156,6 +156,15 @@ function isIncomingEfacturaMessage(entry: any) {
   return details.includes("cif_beneficiar")
 }
 
+function escapeHtml(value: string) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+}
+
 export default function FacturiPrimiteSPVPage() {
   const navigate = useNavigate()
   const token = getToken() || ""
@@ -177,6 +186,7 @@ export default function FacturiPrimiteSPVPage() {
   const [bridgeMessageFilter, setBridgeMessageFilter] = useState<BridgeMessageFilter>("invoice")
   const [bridgeMessagesPage, setBridgeMessagesPage] = useState(1)
   const [importedInvoicesPage, setImportedInvoicesPage] = useState(1)
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null)
   const [spvModeMessage] = useState(
     "Pagina foloseste bridge-ul local Windows pentru a citi facturile primite din e-Factura cu certificatul digital local."
   )
@@ -683,6 +693,11 @@ export default function FacturiPrimiteSPVPage() {
     return filteredItems.slice(start, start + IMPORTED_INVOICES_PAGE_SIZE)
   }, [filteredItems, importedInvoicesPage])
 
+  const selectedInvoice = useMemo(
+    () => items.find((entry) => entry.id === selectedInvoiceId) || null,
+    [items, selectedInvoiceId]
+  )
+
   useEffect(() => {
     setBridgeMessagesPage(1)
   }, [bridgeMessageFilter, selectedMonth, bridgeMessages.length])
@@ -705,6 +720,112 @@ export default function FacturiPrimiteSPVPage() {
 
   function toggleExpanded(id: string) {
     setExpandedIds((prev) => (prev.includes(id) ? prev.filter((entry) => entry !== id) : [...prev, id]))
+  }
+
+  function openInvoiceDetails(id: string) {
+    setSelectedInvoiceId(id)
+    setExpandedIds((prev) => (prev.includes(id) ? prev : [...prev, id]))
+  }
+
+  function closeInvoiceDetails() {
+    setSelectedInvoiceId(null)
+  }
+
+  function openInvoicePdfPreview(item: IncomingInvoice) {
+    if (typeof window === "undefined") return
+    const popup = window.open("", "_blank", "noopener,noreferrer,width=1100,height=800")
+    if (!popup) {
+      setError("Browserul a blocat fereastra de PDF. Permite popup-ul si incearca din nou.")
+      return
+    }
+
+    const supplierBlock = [
+      item.supplierName || "-",
+      item.supplierCif ? `CIF: ${item.supplierCif}` : "",
+      item.supplierCode ? `Cod furnizor: ${item.supplierCode}` : "",
+    ]
+      .filter(Boolean)
+      .join("<br />")
+
+    const rows = item.items
+      .map((line, index) => {
+        const total = Number(line.lineGross ?? line.qty ?? 0)
+        return `
+          <tr>
+            <td>${index + 1}</td>
+            <td>${escapeHtml(line.productName || "-")}<br /><span class="muted">${escapeHtml(
+              [line.productCode, line.externalCode, line.barcode].filter(Boolean).join(" | ") || "fara cod"
+            )}</span></td>
+            <td>${escapeHtml(line.uomCode || "-")}</td>
+            <td>${formatQtyRo(line.qty || 0)}</td>
+            <td>${formatMoneyRo(line.unitPrice || 0, item.currency)} ${item.currency}</td>
+            <td>${formatMoneyRo(total || 0, item.currency)} ${item.currency}</td>
+          </tr>
+        `
+      })
+      .join("")
+
+    popup.document.write(`
+      <!doctype html>
+      <html lang="ro">
+        <head>
+          <meta charset="utf-8" />
+          <title>Factura ${escapeHtml(item.invoiceNo || item.spvDownloadId)}</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 32px; color: #0f172a; }
+            .header { display:flex; justify-content:space-between; gap:24px; margin-bottom:24px; }
+            .card { border:1px solid #cbd5e1; border-radius:16px; padding:16px; flex:1; }
+            h1 { margin:0 0 8px; font-size:28px; }
+            h2 { margin:0 0 10px; font-size:14px; text-transform:uppercase; letter-spacing:.08em; color:#475569; }
+            .meta { font-size:14px; line-height:1.6; }
+            .muted { color:#64748b; font-size:12px; }
+            table { width:100%; border-collapse:collapse; margin-top:20px; }
+            th, td { border:1px solid #cbd5e1; padding:10px; text-align:left; vertical-align:top; }
+            th { background:#f8fafc; font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:#475569; }
+            .footer { margin-top:20px; display:flex; justify-content:flex-end; }
+            .total { width:320px; }
+            .total-row { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid #e2e8f0; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="card">
+              <h2>Factura primita</h2>
+              <h1>${escapeHtml(item.invoiceNo || "-")}</h1>
+              <div class="meta">
+                Data: ${escapeHtml(formatDate(item.invoiceDate))}<br />
+                Moneda: ${escapeHtml(item.currency || "RON")}<br />
+                SPV Download ID: ${escapeHtml(item.spvDownloadId || "-")}
+              </div>
+            </div>
+            <div class="card">
+              <h2>Furnizor</h2>
+              <div class="meta">${supplierBlock}</div>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Produs</th>
+                <th>UM</th>
+                <th>Cantitate</th>
+                <th>Pret</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+          <div class="footer">
+            <div class="total">
+              <div class="total-row"><strong>Total</strong><strong>${formatMoneyRo(item.totalGross || 0, item.currency)} ${escapeHtml(item.currency || "RON")}</strong></div>
+            </div>
+          </div>
+          <script>window.onload = function(){ window.print(); }</script>
+        </body>
+      </html>
+    `)
+    popup.document.close()
   }
 
   if (!hasModule("efactura")) {
@@ -1010,12 +1131,12 @@ export default function FacturiPrimiteSPVPage() {
                             {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                           </button>
                           <div>
-                            <button
-                              type="button"
-                              onClick={() => toggleExpanded(item.id)}
-                              className="text-left font-semibold text-slate-900 underline-offset-2 hover:text-[#17324D] hover:underline"
-                            >
-                              {item.invoiceNo || "-"}
+                          <button
+                            type="button"
+                            onClick={() => openInvoiceDetails(item.id)}
+                            className="text-left font-semibold text-slate-900 underline-offset-2 hover:text-[#17324D] hover:underline"
+                          >
+                            {item.invoiceNo || "-"}
                             </button>
                             <div className="text-xs text-slate-500">{formatDate(item.invoiceDate)}</div>
                           </div>
@@ -1046,10 +1167,10 @@ export default function FacturiPrimiteSPVPage() {
                         <div className="flex justify-end gap-2">
                           <button
                             type="button"
-                            onClick={() => toggleExpanded(item.id)}
+                            onClick={() => openInvoiceDetails(item.id)}
                             className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-[#17324D] transition hover:bg-[#F4F7FB]"
                           >
-                            {isExpanded ? "Ascunde" : "Deschide"}
+                            {isExpanded && selectedInvoiceId === item.id ? "Deschis" : "Deschide"}
                           </button>
                           <button
                             type="button"
@@ -1177,6 +1298,152 @@ export default function FacturiPrimiteSPVPage() {
           </div>
         ) : null}
       </div>
+
+      {selectedInvoice ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4">
+          <div className="max-h-[92vh] w-full max-w-6xl overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)]">
+            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-5 py-4">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Factura primita</div>
+                <div className="mt-1 text-xl font-semibold text-slate-900">{selectedInvoice.invoiceNo || "-"}</div>
+              </div>
+              <button
+                type="button"
+                onClick={closeInvoiceDetails}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-600 transition hover:bg-white"
+                aria-label="Inchide"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="max-h-[calc(92vh-84px)] overflow-y-auto px-5 py-5">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                <DocumentMetric title="Factura" value={selectedInvoice.invoiceNo || "-"} tone="blue" />
+                <DocumentMetric title="Data" value={formatDate(selectedInvoice.invoiceDate)} tone="slate" />
+                <DocumentMetric title="Furnizor" value={selectedInvoice.supplierName || "-"} tone="slate" />
+                <DocumentMetric title="Total" value={`${formatMoneyRo(selectedInvoice.totalGross)} ${selectedInvoice.currency}`} tone="emerald" />
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div className="rounded-[18px] border border-slate-200 bg-white p-4">
+                  <div className="text-sm font-semibold text-slate-900">Furnizor</div>
+                  <div className="mt-2 text-sm text-slate-700">{selectedInvoice.supplierName || "-"}</div>
+                  <div className="mt-1 text-xs text-slate-500">CIF: {selectedInvoice.supplierCif || "-"}</div>
+                  <div className="mt-1 text-xs text-slate-500">Cod: {selectedInvoice.supplierCode || "-"}</div>
+                </div>
+                <div className="rounded-[18px] border border-slate-200 bg-white p-4">
+                  <div className="text-sm font-semibold text-slate-900">SPV</div>
+                  <div className="mt-2 text-xs text-slate-500">Download ID</div>
+                  <div className="text-sm text-slate-700">{selectedInvoice.spvDownloadId || "-"}</div>
+                  <div className="mt-2 text-xs text-slate-500">Upload ID</div>
+                  <div className="text-sm text-slate-700">{selectedInvoice.spvUploadIndex || "-"}</div>
+                </div>
+                <div className="rounded-[18px] border border-slate-200 bg-white p-4">
+                  <div className="text-sm font-semibold text-slate-900">Actiuni</div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openInvoicePdfPreview(selectedInvoice)}
+                      className={documentButtonSecondaryClass}
+                    >
+                      <FileText size={16} />
+                      PDF
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openXml(selectedInvoice.id)}
+                      className={documentButtonSecondaryClass}
+                    >
+                      <FileCode2 size={16} />
+                      XML
+                    </button>
+                    {!selectedInvoice.supplierId ? (
+                      <button
+                        type="button"
+                        onClick={() => void createSupplier(selectedInvoice.id)}
+                        className={documentButtonSecondaryClass}
+                      >
+                        Furnizor
+                      </button>
+                    ) : null}
+                    {selectedInvoice.linkedReceiptId ? (
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/inregistrare-document/nir/edit?id=${selectedInvoice.linkedReceiptId}`)}
+                        className={documentButtonPrimaryClass}
+                      >
+                        Receptie
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/inregistrare-document/nir/new?incomingInvoiceId=${selectedInvoice.id}`)}
+                        className={documentButtonPrimaryClass}
+                      >
+                        Creeaza receptie
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 overflow-hidden rounded-[20px] border border-slate-200 bg-white">
+                <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900">
+                  Continut factura
+                </div>
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 text-slate-500">
+                    <tr>
+                      <th className="px-3 py-2.5 text-left font-medium">Produs</th>
+                      <th className="px-3 py-2.5 text-left font-medium">Coduri</th>
+                      <th className="px-3 py-2.5 text-left font-medium">UM</th>
+                      <th className="px-3 py-2.5 text-left font-medium">Cant.</th>
+                      <th className="px-3 py-2.5 text-left font-medium">Pret</th>
+                      <th className="px-3 py-2.5 text-left font-medium">Total</th>
+                      <th className="px-3 py-2.5 text-left font-medium">Mapare</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedInvoice.items.map((line) => (
+                      <tr key={line.id} className="border-t border-slate-200">
+                        <td className="px-3 py-2.5 text-slate-700">
+                          <div className="font-medium text-slate-900">{line.productName || "-"}</div>
+                        </td>
+                        <td className="px-3 py-2.5 text-xs text-slate-500">
+                          {[line.productCode, line.externalCode, line.barcode].filter(Boolean).join(" | ") || "-"}
+                        </td>
+                        <td className="px-3 py-2.5 text-slate-700">{line.uomCode || "-"}</td>
+                        <td className="px-3 py-2.5 text-slate-700">{formatQtyRo(line.qty || 0)}</td>
+                        <td className="px-3 py-2.5 text-slate-700">{formatMoneyRo(line.unitPrice || 0, selectedInvoice.currency)} {selectedInvoice.currency}</td>
+                        <td className="px-3 py-2.5 text-slate-700">{formatMoneyRo(line.lineGross || 0, selectedInvoice.currency)} {selectedInvoice.currency}</td>
+                        <td className="px-3 py-2.5">
+                          <span
+                            className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+                              line.matchedProductId
+                                ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                                : "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+                            }`}
+                          >
+                            {line.matchedProduct?.name || "Nemapat"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                    {!selectedInvoice.items.length ? (
+                      <tr className="border-t border-slate-200">
+                        <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                          Factura nu are linii importate.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
