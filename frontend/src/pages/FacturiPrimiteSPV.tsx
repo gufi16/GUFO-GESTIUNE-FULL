@@ -170,12 +170,11 @@ function escapeHtml(value: string) {
 }
 
 function isUsableImportedInvoice(item: IncomingInvoice) {
-  return Boolean(
-    String(item.invoiceNo || "").trim() ||
-    String(item.supplierName || "").trim() ||
-    (Array.isArray(item.items) && item.items.length > 0) ||
-    Number(item.totalGross || 0) > 0
-  )
+  const hasInvoiceNo = Boolean(String(item.invoiceNo || "").trim())
+  const hasSupplier = Boolean(String(item.supplierName || "").trim())
+  const hasItems = Array.isArray(item.items) && item.items.length > 0
+  const hasGross = Number(item.totalGross || 0) > 0
+  return hasInvoiceNo && hasSupplier && hasItems && hasGross
 }
 
 function getUnitPriceWithVat(line: IncomingInvoiceItem) {

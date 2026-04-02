@@ -2,6 +2,7 @@ const http = require("http")
 const { execFile } = require("child_process")
 const fs = require("fs")
 const path = require("path")
+const AdmZip = require("../backend/node_modules/adm-zip")
 
 const DEFAULT_PORT = 48521
 const DEFAULT_HOST = "127.0.0.1"
@@ -32,98 +33,68 @@ async function extractAnafArtifacts(base64Content) {
     }
   }
 
-  const escapedBase64 = base64.replace(/'/g, "''")
-  const script = `
-$base64 = @'
-${escapedBase64}
-'@
-$bytes = [Convert]::FromBase64String($base64)
-
-function Get-TextPreview {
-  param([byte[]]$InputBytes)
-  try {
-    return [System.Text.Encoding]::UTF8.GetString($InputBytes)
-  } catch {
-    return ''
+  const bytes = Buffer.from(base64, "base64")
+  const result = {
+    pdfBase64: null,
+    pdfFileName: null,
+    xmlBase64: null,
+    xmlFileName: null,
   }
-}
 
-$result = [PSCustomObject]@{
-  pdfBase64 = $null
-  pdfFileName = $null
-  xmlBase64 = $null
-  xmlFileName = $null
-}
+  if (bytes.length >= 4 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46) {
+    result.pdfBase64 = base64
+    result.pdfFileName = "factura-spv.pdf"
+    return result
+  }
 
-if ($bytes.Length -ge 4 -and $bytes[0] -eq 0x25 -and $bytes[1] -eq 0x50 -and $bytes[2] -eq 0x44 -and $bytes[3] -eq 0x46) {
-  $result.pdfBase64 = $base64
-  $result.pdfFileName = 'factura-spv.pdf'
-  $result | ConvertTo-Json -Compress -Depth 6
-  return
-}
+  const text = bytes.toString("utf8")
+  if (text.trimStart().startsWith("<")) {
+    result.xmlBase64 = base64
+    result.xmlFileName = "factura-spv.xml"
+    return result
+  }
 
-$text = Get-TextPreview -InputBytes $bytes
-if ($text.TrimStart().StartsWith('<')) {
-  $result.xmlBase64 = $base64
-  $result.xmlFileName = 'factura-spv.xml'
-  $result | ConvertTo-Json -Compress -Depth 6
-  return
-}
+  if (bytes.length >= 2 && bytes[0] === 0x50 && bytes[1] === 0x4b) {
+    const zip = new AdmZip(bytes)
+    const entries = zip.getEntries().filter((entry) => !entry.isDirectory)
+    const xmlCandidates = []
 
-if ($bytes.Length -ge 2 -and $bytes[0] -eq 0x50 -and $bytes[1] -eq 0x4B) {
-  Add-Type -AssemblyName System.IO.Compression
-  $memory = New-Object System.IO.MemoryStream(,$bytes)
-  $zip = New-Object System.IO.Compression.ZipArchive($memory, [System.IO.Compression.ZipArchiveMode]::Read)
-  $xmlCandidates = New-Object System.Collections.ArrayList
+    for (const entry of entries) {
+      const name = String(entry.entryName || "")
+      const lowerName = name.toLowerCase()
+      const entryBytes = entry.getData()
 
-  foreach ($entry in $zip.Entries) {
-    $name = [string]$entry.FullName
-    $lowerName = $name.ToLowerInvariant()
-    $stream = $entry.Open()
-    $entryMemory = New-Object System.IO.MemoryStream
-    $stream.CopyTo($entryMemory)
-    $entryBytes = $entryMemory.ToArray()
-    $entryMemory.Dispose()
-    $stream.Dispose()
+      if (!result.pdfBase64 && lowerName.endsWith(".pdf")) {
+        result.pdfBase64 = entryBytes.toString("base64")
+        result.pdfFileName = name
+        continue
+      }
 
-    if (-not $result.pdfBase64 -and $lowerName.EndsWith('.pdf')) {
-      $result.pdfBase64 = [Convert]::ToBase64String($entryBytes)
-      $result.pdfFileName = $name
-      continue
+      if (lowerName.endsWith(".xml")) {
+        const entryText = entryBytes.toString("utf8")
+        let score = 0
+        if (entryText.includes("<Invoice") || entryText.includes(":Invoice")) score += 5
+        if (entryText.includes("<CreditNote") || entryText.includes(":CreditNote")) score += 5
+        if (entryText.includes("AccountingSupplierParty")) score += 3
+        if (entryText.includes("InvoiceLine")) score += 3
+        if (lowerName.includes("semn") || lowerName.includes("signature")) score -= 10
+        xmlCandidates.push({
+          name,
+          score,
+          length: entryBytes.length,
+          base64: entryBytes.toString("base64"),
+        })
+      }
     }
 
-    if ($lowerName.EndsWith('.xml')) {
-      $entryText = Get-TextPreview -InputBytes $entryBytes
-      $score = 0
-      if ($entryText -match '<Invoice' -or $entryText -match ':Invoice') { $score += 5 }
-      if ($entryText -match '<CreditNote' -or $entryText -match ':CreditNote') { $score += 5 }
-      if ($entryText -match 'AccountingSupplierParty') { $score += 3 }
-      if ($entryText -match 'InvoiceLine') { $score += 3 }
-      if ($lowerName -match 'semn|signature') { $score -= 10 }
-      [void]$xmlCandidates.Add([PSCustomObject]@{
-        name = $name
-        score = $score
-        length = $entryBytes.Length
-        base64 = [Convert]::ToBase64String($entryBytes)
-      })
+    if (xmlCandidates.length) {
+      xmlCandidates.sort((a, b) => b.score - a.score || b.length - a.length)
+      result.xmlBase64 = xmlCandidates[0].base64
+      result.xmlFileName = xmlCandidates[0].name
     }
   }
 
-  $zip.Dispose()
-  $memory.Dispose()
-
-  if ($xmlCandidates.Count -gt 0) {
-    $bestXml = $xmlCandidates | Sort-Object -Property @{Expression='score';Descending=$true}, @{Expression='length';Descending=$true} | Select-Object -First 1
-    $result.xmlBase64 = $bestXml.base64
-    $result.xmlFileName = $bestXml.name
-  }
-}
-
-$result | ConvertTo-Json -Compress -Depth 6
-`.trim()
-
-  const raw = await runPowerShell(script)
-  return JSON.parse(raw)
+  return result
 }
 
 function loadEnv(filePath) {
