@@ -34,6 +34,7 @@ type IncomingInvoice = {
   id: string
   invoiceNo?: string | null
   invoiceDate?: string | null
+  spvCommunicationDate?: string | null
   supplierId?: string | null
   supplierName?: string | null
   supplierCode?: string | null
@@ -141,6 +142,14 @@ function parseInvoiceMonthKey(value?: string | null) {
   const compactMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/)
   if (compactMatch) return `${compactMatch[1]}-${compactMatch[2]}`
   return ""
+}
+
+function getInvoiceSelectedMonthKey(item: IncomingInvoice) {
+  return (
+    parseInvoiceMonthKey(item.spvCommunicationDate) ||
+    parseInvoiceMonthKey(item.invoiceDate) ||
+    ""
+  )
 }
 
 function filterMessagesForMonth(messages: any[], monthValue: string) {
@@ -721,7 +730,7 @@ export default function FacturiPrimiteSPVPage() {
     const q = search.trim().toLowerCase()
     let next = items.filter((item) => {
       if (!selectedMonth) return true
-      return parseInvoiceMonthKey(item.invoiceDate) === selectedMonth
+      return getInvoiceSelectedMonthKey(item) === selectedMonth
     })
     next = !q ? next : next.filter((item) =>
       [
@@ -744,6 +753,7 @@ export default function FacturiPrimiteSPVPage() {
     (sum, item) => sum + item.items.filter((line) => Boolean(line.matchedProductId)).length,
     0
   )
+  const totalVisibleInvoices = filteredItems.length
 
   const filteredBridgeMessages = useMemo(() => {
     if (bridgeMessageFilter === "all") return bridgeMessages
