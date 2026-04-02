@@ -82,6 +82,46 @@ function formatDate(value?: string | null) {
   return date.toLocaleDateString("ro-RO")
 }
 
+function getCurrentMonthValue() {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
+}
+
+function parseSpvMessageDate(value?: string | null) {
+  const raw = String(value || "").trim()
+  const match = raw.match(/^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}):(\d{2}):(\d{2}))?$/)
+  if (!match) return null
+  const [, dd, mm, yyyy, hh = "00", mi = "00", ss = "00"] = match
+  const date = new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss))
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function getMonthKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
+}
+
+function filterMessagesForMonth(messages: any[], monthValue: string) {
+  if (!monthValue) return messages
+  return messages.filter((entry) => {
+    const parsedDate = parseSpvMessageDate(entry?.data_creare)
+    if (!parsedDate) return false
+    return getMonthKey(parsedDate) === monthValue
+  })
+}
+
+function getDaysNeededForMonth(monthValue: string) {
+  if (!monthValue) return 30
+  const [yearRaw, monthRaw] = monthValue.split("-")
+  const year = Number(yearRaw)
+  const month = Number(monthRaw)
+  if (!Number.isFinite(year) || !Number.isFinite(month)) return 30
+  const start = new Date(year, month - 1, 1, 0, 0, 0, 0)
+  const now = new Date()
+  const diffMs = now.getTime() - start.getTime()
+  const days = Math.ceil(diffMs / 86_400_000) + 1
+  return Math.max(1, Math.min(365, days))
+}
+
 export default function FacturiPrimiteSPVPage() {
   const navigate = useNavigate()
   const token = getToken() || ""
@@ -98,6 +138,7 @@ export default function FacturiPrimiteSPVPage() {
   const [spvTestResult, setSpvTestResult] = useState<SpvClassicTestResult | null>(null)
   const [bridgeUrl, setBridgeUrl] = useState(DEFAULT_SPV_BRIDGE_URL)
   const [bridgeToken, setBridgeToken] = useState("")
+  const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthValue())
   const [spvModeMessage] = useState(
     "Ecranul acesta tine de SPV clasic (SPVWS2), separat de fluxul OAuth e-Factura. Tokenul ANAF activ nu este suficient singur pentru sincronizarea de aici."
   )
@@ -158,6 +199,7 @@ export default function FacturiPrimiteSPVPage() {
     try {
       if (bridgeToken.trim()) {
         const trimmedBridgeUrl = bridgeUrl.trim().replace(/\/+$/, "")
+        const requestedDays = getDaysNeededForMonth(selectedMonth)
         const bridgeHeaders = {
           Authorization: `Bearer ${bridgeToken.trim()}`,
           "Content-Type": "application/json",
@@ -166,7 +208,7 @@ export default function FacturiPrimiteSPVPage() {
         const listRes = await fetch(`${trimmedBridgeUrl}/api/v1/spvws2/list-messages-test`, {
           method: "POST",
           headers: bridgeHeaders,
-          body: JSON.stringify({ days: 30 }),
+          body: JSON.stringify({ days: requestedDays }),
         })
         const listData = await listRes.json().catch(() => ({}))
         if (!listRes.ok || !listData?.ok || !listData?.response?.ok) {
@@ -174,7 +216,7 @@ export default function FacturiPrimiteSPVPage() {
         }
 
         const payload = listData?.response?.parsedContent || {}
-        const messages = Array.isArray(payload?.mesaje) ? payload.mesaje : []
+        const messages = filterMessagesForMonth(Array.isArray(payload?.mesaje) ? payload.mesaje : [], selectedMonth)
         const invoiceMessages = messages.filter((entry: any) => {
           const tip = String(entry?.tip || "").toUpperCase()
           const details = String(entry?.detalii || "").toLowerCase()
@@ -182,7 +224,7 @@ export default function FacturiPrimiteSPVPage() {
         })
 
         if (!invoiceMessages.length) {
-          setMessage("Bridge local conectat, dar in lista curenta SPV nu exista facturi de importat.")
+          setMessage(`Bridge local conectat, dar in SPV nu exista facturi de importat pentru ${selectedMonth}.`)
           setSpvTestResult({
             ok: true,
             title: "Bridge local SPVWS2 conectat cu succes",
@@ -190,6 +232,7 @@ export default function FacturiPrimiteSPVPage() {
             lines: [
               "Rută testată: bridge local -> sincronizare SPVWS2",
               `Bridge URL: ${trimmedBridgeUrl}`,
+              `Luna selectata: ${selectedMonth}`,
               `Mesaje totale: ${messages.length}`,
               "Facturi importabile: 0",
             ],
@@ -248,6 +291,7 @@ export default function FacturiPrimiteSPVPage() {
           lines: [
             "Rută testată: bridge local -> listaMesaje + descarcare + import Gufo",
             `Bridge URL: ${trimmedBridgeUrl}`,
+            `Luna selectata: ${selectedMonth}`,
             `Mesaje totale: ${messages.length}`,
             `Facturi importabile: ${invoiceMessages.length}`,
             `Facturi importate: ${imported}`,
@@ -257,9 +301,9 @@ export default function FacturiPrimiteSPVPage() {
         })
 
         if (imported > 0) {
-          setMessage(`Sincronizare SPV finalizata prin bridge local. Facturi importate: ${imported}.`)
+          setMessage(`Sincronizare SPV finalizata prin bridge local pentru ${selectedMonth}. Facturi importate: ${imported}.`)
         } else {
-          setError("Bridge-ul a raspuns, dar nu am importat nicio factura noua din SPV.")
+          setError(`Bridge-ul a raspuns, dar nu am importat nicio factura noua din SPV pentru ${selectedMonth}.`)
         }
 
         await loadItems()
@@ -296,13 +340,14 @@ export default function FacturiPrimiteSPVPage() {
     try {
       if (bridgeToken.trim()) {
         const trimmedBridgeUrl = bridgeUrl.trim().replace(/\/+$/, "")
+        const requestedDays = getDaysNeededForMonth(selectedMonth)
         const bridgeRes = await fetch(`${trimmedBridgeUrl}/api/v1/spvws2/list-messages-test`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${bridgeToken.trim()}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ days: 30 }),
+          body: JSON.stringify({ days: requestedDays }),
         })
         const bridgeData = await bridgeRes.json().catch(() => ({}))
         if (!bridgeRes.ok) {
@@ -311,13 +356,14 @@ export default function FacturiPrimiteSPVPage() {
 
         const trace = Array.isArray(bridgeData?.response?.trace) ? bridgeData.response.trace : []
         const parsedContent = bridgeData?.response?.parsedContent || {}
-        const messages = Array.isArray(parsedContent?.mesaje) ? parsedContent.mesaje : []
+        const messages = filterMessagesForMonth(Array.isArray(parsedContent?.mesaje) ? parsedContent.mesaje : [], selectedMonth)
         const firstMessage = messages[0] || null
 
         if (!bridgeData?.ok || !bridgeData?.response?.ok) {
           const lines = [
             `Rută testată: bridge local -> listaMesaje SPVWS2`,
             `Bridge URL: ${trimmedBridgeUrl}`,
+            `Luna selectata: ${selectedMonth}`,
             `Final URL: ${bridgeData?.response?.finalUrl || "-"}`,
             `HTTP status SPV: ${bridgeData?.response?.status ?? "-"}`,
             `Eroare: ${bridgeData?.response?.error || "Necunoscuta"}`,
@@ -342,6 +388,7 @@ export default function FacturiPrimiteSPVPage() {
           lines: [
             "Rută testată: bridge local -> listaMesaje SPVWS2",
             `Bridge URL: ${trimmedBridgeUrl}`,
+            `Luna selectata: ${selectedMonth}`,
             `HTTP status SPV: ${bridgeData?.response?.status ?? "-"}`,
             `Mesaje găsite: ${messages.length}`,
             `Primul tip mesaj: ${firstMessage?.tip || "-"}`,
@@ -350,7 +397,7 @@ export default function FacturiPrimiteSPVPage() {
           ],
         })
         setMessage(
-          `Bridge local conectat. SPVWS2 a raspuns cu ${messages.length} mesaje${firstMessage?.tip ? `, primul tip: ${firstMessage.tip}` : ""}.`
+          `Bridge local conectat. SPVWS2 a raspuns cu ${messages.length} mesaje pentru ${selectedMonth}${firstMessage?.tip ? `, primul tip: ${firstMessage.tip}` : ""}.`
         )
         return
       }
@@ -630,6 +677,14 @@ export default function FacturiPrimiteSPVPage() {
           <button type="button" onClick={saveBridgeSettings} className={documentButtonSecondaryClass}>
             Salveaza bridge
           </button>
+        </div>
+        <div className="mt-3 max-w-xs">
+          <input
+            type="month"
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+            className={documentInputClass}
+          />
         </div>
       </div>
 
