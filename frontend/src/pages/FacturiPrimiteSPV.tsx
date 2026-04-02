@@ -45,6 +45,18 @@ type IncomingInvoice = {
 
 type IncomingFilter = "all" | "needs-supplier" | "partial" | "ready" | "linked"
 
+type SpvClassicStatus = {
+  mode: string
+  authType: string
+  implemented: boolean
+  endpoints?: {
+    listMessages?: string
+    download?: string
+  }
+  requirements?: string[]
+  message?: string
+}
+
 function formatDate(value?: string | null) {
   if (!value) return "-"
   const date = new Date(value)
@@ -63,13 +75,29 @@ export default function FacturiPrimiteSPVPage() {
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
   const [expandedIds, setExpandedIds] = useState<string[]>([])
+  const [spvStatus, setSpvStatus] = useState<SpvClassicStatus | null>(null)
   const [spvModeMessage] = useState(
     "Ecranul acesta tine de SPV clasic (SPVWS2), separat de fluxul OAuth e-Factura. Tokenul ANAF activ nu este suficient singur pentru sincronizarea de aici."
   )
 
   useEffect(() => {
+    void loadSpvStatus()
     void loadItems()
   }, [])
+
+  async function loadSpvStatus() {
+    if (!token) return
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/spv-classic/status`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) return
+      setSpvStatus(data.status || null)
+    } catch {
+      // Keep the page usable even if the status endpoint is temporarily unavailable.
+    }
+  }
 
   async function loadItems() {
     if (!token) {
@@ -238,6 +266,27 @@ export default function FacturiPrimiteSPVPage() {
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
 
+      {spvStatus ? (
+        <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
+          <DocumentMetric title="Mod SPV" value={String(spvStatus.mode || "-").toUpperCase()} tone="slate" />
+          <DocumentMetric title="Autentificare" value={spvStatus.authType === "qualified_certificate" ? "Certificat calificat" : "-"} tone="blue" />
+          <DocumentMetric title="Implementare" value={spvStatus.implemented ? "Activa" : "Separata"} tone="amber" />
+        </div>
+      ) : null}
+
+      {spvStatus?.requirements?.length ? (
+        <div className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-[0_8px_30px_rgba(15,23,42,0.06)]">
+          <div className="text-sm font-semibold text-slate-900">Ce cere SPV clasic acum</div>
+          <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-3">
+            {spvStatus.requirements.map((entry) => (
+              <div key={entry} className="rounded-[16px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-600">
+                {entry}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap gap-2">
         {[
           { value: "all", label: "Toate" },
@@ -273,8 +322,13 @@ export default function FacturiPrimiteSPVPage() {
             <button type="button" onClick={() => void loadItems()} className={documentButtonSecondaryClass}>
               Reincarca
             </button>
-            <button type="button" onClick={() => void syncItems()} className={documentButtonPrimaryClass} disabled={syncing}>
-              {syncing ? "Sincronizare..." : "Sincronizeaza SPV"}
+            <button
+              type="button"
+              onClick={() => void syncItems()}
+              className={documentButtonPrimaryClass}
+              disabled={syncing || (spvStatus ? !spvStatus.implemented : false)}
+            >
+              {syncing ? "Sincronizare..." : spvStatus?.implemented ? "Sincronizeaza SPV" : "SPVWS2 separat"}
             </button>
           </div>
         </div>
