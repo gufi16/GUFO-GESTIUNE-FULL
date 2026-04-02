@@ -80,6 +80,7 @@ export default function ClientiPage() {
   const [search, setSearch] = useState("")
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [lookupBusy, setLookupBusy] = useState(false)
   const [error, setError] = useState("")
   const [modalOpen, setModalOpen] = useState(false)
   const [form, setForm] = useState<CustomerForm>(emptyForm)
@@ -187,6 +188,48 @@ export default function ClientiPage() {
       setError(e?.message || "Nu am putut salva clientul.")
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function lookupByCui() {
+    if (!token) {
+      setError("Nu exista token de autentificare. Fa login din nou.")
+      return
+    }
+    if (!form.cif.trim()) {
+      setError("Completeaza mai intai CUI-ul clientului.")
+      return
+    }
+
+    setLookupBusy(true)
+    setError("")
+    try {
+      const res = await fetch(`${API}/api/v1/company/cui-lookup?cui=${encodeURIComponent(form.cif)}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok || !data?.company) {
+        throw new Error(data?.error || "Nu am putut obtine datele clientului dupa CUI.")
+      }
+
+      setForm((prev) => ({
+        ...prev,
+        name: data.company.name || prev.name,
+        cif: data.company.cui || prev.cif,
+        regNo: data.company.regNo || prev.regNo,
+        address: data.company.address || prev.address,
+        city: data.company.city || prev.city,
+        county: data.company.county || prev.county,
+        postalCode: data.company.postalCode || prev.postalCode,
+        country: data.company.country || prev.country,
+        vatPayer: data.company.isVatPayer ?? prev.vatPayer,
+      }))
+    } catch (e: any) {
+      setError(e?.message || "Nu am putut obtine datele clientului dupa CUI.")
+    } finally {
+      setLookupBusy(false)
     }
   }
 
@@ -345,6 +388,9 @@ export default function ClientiPage() {
                 </div>
               ) : <div />}
               <div className="flex gap-2">
+                <button type="button" onClick={lookupByCui} disabled={lookupBusy || saving || !form.cif.trim()} className={documentButtonSecondaryClass}>
+                  {lookupBusy ? "Caut..." : "Completeaza dupa CUI"}
+                </button>
                 <button type="button" onClick={() => setModalOpen(false)} className={documentButtonSecondaryClass}>
                   Renunta
                 </button>

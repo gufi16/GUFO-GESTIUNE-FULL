@@ -33,6 +33,7 @@ export default function FurnizoriPage() {
   const [items, setItems] = useState<Supplier[]>([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [lookupBusy, setLookupBusy] = useState(false)
   const [query, setQuery] = useState("")
   const [error, setError] = useState("")
   const [modalOpen, setModalOpen] = useState(false)
@@ -128,6 +129,37 @@ export default function FurnizoriPage() {
       setError(e?.message || "Nu am putut salva furnizorul.")
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function lookupByCui() {
+    if (!token) return setError("Nu exista token de autentificare. Fa login din nou.")
+    if (!form.cif.trim()) return setError("Completeaza mai intai CUI-ul furnizorului.")
+
+    setLookupBusy(true)
+    setError("")
+    try {
+      const res = await fetch(`${API}/api/v1/company/cui-lookup?cui=${encodeURIComponent(form.cif)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok || !data?.company) {
+        throw new Error(data?.error || "Nu am putut obtine datele furnizorului dupa CUI.")
+      }
+
+      setForm((prev: any) => ({
+        ...prev,
+        name: data.company.name || prev.name,
+        cif: data.company.cui || prev.cif,
+        regCom: data.company.regNo || prev.regCom,
+        address: data.company.address || prev.address,
+        city: data.company.city || prev.city,
+        country: data.company.country === "RO" ? "Romania" : (data.company.country || prev.country),
+      }))
+    } catch (e: any) {
+      setError(e?.message || "Nu am putut obtine datele furnizorului dupa CUI.")
+    } finally {
+      setLookupBusy(false)
     }
   }
 
@@ -241,6 +273,9 @@ export default function FurnizoriPage() {
             </div>
 
             <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={lookupByCui} disabled={lookupBusy || saving || !form.cif.trim()} className={documentButtonSecondaryClass}>
+                {lookupBusy ? "Caut..." : "Completeaza dupa CUI"}
+              </button>
               <button type="button" onClick={() => setModalOpen(false)} className={documentButtonSecondaryClass}>
                 Renunta
               </button>
