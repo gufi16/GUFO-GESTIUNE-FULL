@@ -96,6 +96,8 @@ if (-not $newReleaseDir) {
   throw "Nu am putut identifica folderul nou de release pentru Gufo e-Factura."
 }
 
+$env:ReleaseSource = $newReleaseDir.FullName
+
 $candidates = @(
   "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
   "${env:ProgramFiles}\Inno Setup 6\ISCC.exe",
@@ -149,7 +151,7 @@ if (-not $iscc) {
 }
 
 $baseName = "Gufo-eFactura-Setup-$timestamp"
-$null = & $iscc "/O$installerOutputDir" "/F$baseName" "/DReleaseSource=$($newReleaseDir.FullName)" $issPath
+$null = & $iscc "/O$installerOutputDir" "/F$baseName" $issPath
 if ($LASTEXITCODE -ne 0) {
   throw "Build-ul installerului a esuat. Verifica erorile ISCC de mai sus."
 }
