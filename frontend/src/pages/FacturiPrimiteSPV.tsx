@@ -231,7 +231,7 @@ export default function FacturiPrimiteSPVPage() {
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("debugSpv") === "1"
   const [spvModeMessage] = useState(
-    "Pagina foloseste bridge-ul local Windows pentru a citi facturile primite din e-Factura cu certificatul digital local."
+    "Sincronizezi facturile primite din e-Factura si lucrezi direct pe documentele importate."
   )
 
   useEffect(() => {
@@ -965,7 +965,7 @@ export default function FacturiPrimiteSPVPage() {
               />
             </div>
             <div className="text-xs text-slate-500">
-              Dupa sincronizare vezi doar facturile importate, cu deschidere, XML, PDF si receptie.
+              Dupa sincronizare vezi doar facturile importate si lucrezi direct pe ele.
             </div>
           </div>
           <div className="flex gap-2">
@@ -1225,14 +1225,6 @@ export default function FacturiPrimiteSPVPage() {
                       </td>
                       <td className="px-3 py-2.5">
                         <div className="flex justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => void downloadInvoicePdf(item)}
-                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-[#17324D] transition hover:bg-[#F4F7FB]"
-                          >
-                            <FileText size={16} />
-                            PDF
-                          </button>
                           <button
                             type="button"
                             onClick={() => openInvoiceDetails(item.id)}

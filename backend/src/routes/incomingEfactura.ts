@@ -1,5 +1,6 @@
 // @ts-nocheck
 import fs from "fs"
+import path from "path"
 import { Router } from "express"
 import PDFDocument from "pdfkit"
 import { prisma } from "../lib/prisma"
@@ -19,6 +20,9 @@ import {
 const router = Router()
 
 router.use(requireAuth)
+
+const incomingEfacturaPdfDir = path.join(process.cwd(), "uploads", "incoming-efactura-pdfs")
+fs.mkdirSync(incomingEfacturaPdfDir, { recursive: true })
 
 function registerFonts(doc: PDFKit.PDFDocument) {
   const regularCandidates = [
@@ -83,6 +87,12 @@ function joinAddressParts(address: any) {
     .map((part) => String(part || "").trim())
     .filter(Boolean)
     .join(", ")
+}
+
+function getIncomingInvoicePdfPath(tenantId: string, invoiceId: string) {
+  const tenantDir = path.join(incomingEfacturaPdfDir, tenantId)
+  fs.mkdirSync(tenantDir, { recursive: true })
+  return path.join(tenantDir, `${invoiceId}.pdf`)
 }
 
 function safeFilePart(value: string) {
@@ -342,136 +352,19 @@ async function repairIncomingInvoiceIfNeeded(tenantId: string, entry: any) {
       String(entry.xmlText),
       parsedInvoice
     )
+    if (repaired) {
+      await ensureIncomingInvoicePdfSaved(repaired)
+    }
     return repaired || entry
   } catch {
     return entry
   }
 }
 
-router.get("/api/v1/efactura/incoming", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const moduleCheck = await requireTenantModule(tenantId, "efactura")
-  if (!moduleCheck.enabled) {
-    return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
-  }
-
-  const items = await prisma.incomingEInvoice.findMany({
-    where: { tenantId },
-    include: {
-      supplier: true,
-      linkedReceipt: true,
-      items: {
-        include: {
-          matchedProduct: true,
-        },
-        orderBy: { lineIndex: "asc" },
-      },
-    },
-    orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
-  })
-
-  const repairedItems = await Promise.all(items.map((entry) => repairIncomingInvoiceIfNeeded(tenantId, entry)))
-
-  return res.json({ ok: true, items: repairedItems })
-})
-
-router.get("/api/v1/efactura/incoming/bridge-config", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const moduleCheck = await requireTenantModule(tenantId, "efactura")
-  if (!moduleCheck.enabled) {
-    return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
-  }
-
-  const company = await prisma.company.findUnique({
-    where: { tenantId },
-    select: {
-      cui: true,
-      efacturaEnvironment: true,
-      efacturaOauthAccessToken: true,
-      efacturaOauthAccessTokenExpiresAt: true,
-    },
-  })
-
-  const cif = normalizeCompanyCui(company?.cui)
-  if (!cif) {
-    return res.status(400).json({ ok: false, error: "Firma nu are CUI valid pentru facturile primite e-Factura." })
-  }
-  if (!company?.efacturaOauthAccessToken) {
-    return res.status(400).json({ ok: false, error: "Nu exista token ANAF activ pentru firma." })
-  }
-
-  return res.json({
-    ok: true,
-    bridgeConfig: {
-      cif,
-      environment: String(company?.efacturaEnvironment || "test").toLowerCase() === "prod" ? "prod" : "test",
-      accessToken: String(company.efacturaOauthAccessToken),
-      expiresAt: company.efacturaOauthAccessTokenExpiresAt,
-      baseUrl: getEfacturaBaseUrl(company?.efacturaEnvironment),
-    },
-  })
-})
-
-router.get("/api/v1/efactura/incoming/:id", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const moduleCheck = await requireTenantModule(tenantId, "efactura")
-  if (!moduleCheck.enabled) {
-    return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
-  }
-
-  const item = await prisma.incomingEInvoice.findFirst({
-    where: { tenantId, id: req.params.id },
-    include: {
-      supplier: true,
-      linkedReceipt: true,
-      items: {
-        include: {
-          matchedProduct: {
-            include: {
-              purchaseUom: true,
-              uom: true,
-              vatRate: true,
-            },
-          },
-        },
-        orderBy: { lineIndex: "asc" },
-      },
-    },
-  })
-
-  if (!item) {
-    return res.status(404).json({ ok: false, error: "Factura primita SPV nu a fost gasita." })
-  }
-
-  const repaired = await repairIncomingInvoiceIfNeeded(tenantId, item)
-
-  return res.json({ ok: true, item: repaired })
-})
-
-router.get("/api/v1/efactura/incoming/:id/pdf", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const moduleCheck = await requireTenantModule(tenantId, "efactura")
-  if (!moduleCheck.enabled) {
-    return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
-  }
-
-  const item = await prisma.incomingEInvoice.findFirst({
-    where: { tenantId, id: req.params.id },
-    include: {
-      items: {
-        orderBy: { lineIndex: "asc" },
-      },
-    },
-  })
-
-  if (!item) {
-    return res.status(404).json({ ok: false, error: "Factura primita SPV nu a fost gasita." })
-  }
-
-  const parsed = item.xmlText ? parseIncomingEInvoiceXml(String(item.xmlText)) : null
-  const filename = `Factura_SPV_${safeFilePart(String(parsed?.invoiceNo || item.invoiceNo || item.spvDownloadId || "document"))}.pdf`
+async function generateIncomingInvoicePdfBuffer(item: any) {
+  const parsed = item?.xmlText ? parseIncomingEInvoiceXml(String(item.xmlText)) : null
   const currency = parsed?.currency || item.currency || "RON"
-  const lines = Array.isArray(parsed?.lines) && parsed.lines.length ? parsed.lines : item.items
+  const lines = Array.isArray(parsed?.lines) && parsed.lines.length ? parsed.lines : item.items || []
   const supplierName = parsed?.supplierName || item.supplierName || "-"
   const supplierCif = parsed?.supplierCif || item.supplierCif || "-"
   const customerName = parsed?.customerName || "-"
@@ -489,10 +382,13 @@ router.get("/api/v1/efactura/incoming/:id/pdf", async (req: AuthedRequest, res) 
     autoFirstPage: true,
   })
   const fonts = registerFonts(doc)
+  const chunks: Buffer[] = []
 
-  res.setHeader("Content-Type", "application/pdf")
-  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`)
-  doc.pipe(res)
+  const done = new Promise<Buffer>((resolve, reject) => {
+    doc.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)))
+    doc.on("end", () => resolve(Buffer.concat(chunks)))
+    doc.on("error", reject)
+  })
 
   const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right
   const startX = doc.page.margins.left
@@ -730,6 +626,143 @@ router.get("/api/v1/efactura/incoming/:id/pdf", async (req: AuthedRequest, res) 
   }
 
   doc.end()
+  return done
+}
+
+async function ensureIncomingInvoicePdfSaved(item: any) {
+  const pdfPath = getIncomingInvoicePdfPath(item.tenantId, item.id)
+  const buffer = await generateIncomingInvoicePdfBuffer(item)
+  fs.writeFileSync(pdfPath, buffer)
+  return pdfPath
+}
+
+router.get("/api/v1/efactura/incoming", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const moduleCheck = await requireTenantModule(tenantId, "efactura")
+  if (!moduleCheck.enabled) {
+    return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
+  }
+
+  const items = await prisma.incomingEInvoice.findMany({
+    where: { tenantId },
+    include: {
+      supplier: true,
+      linkedReceipt: true,
+      items: {
+        include: {
+          matchedProduct: true,
+        },
+        orderBy: { lineIndex: "asc" },
+      },
+    },
+    orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
+  })
+
+  const repairedItems = await Promise.all(items.map((entry) => repairIncomingInvoiceIfNeeded(tenantId, entry)))
+
+  return res.json({ ok: true, items: repairedItems })
+})
+
+router.get("/api/v1/efactura/incoming/bridge-config", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const moduleCheck = await requireTenantModule(tenantId, "efactura")
+  if (!moduleCheck.enabled) {
+    return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
+  }
+
+  const company = await prisma.company.findUnique({
+    where: { tenantId },
+    select: {
+      cui: true,
+      efacturaEnvironment: true,
+      efacturaOauthAccessToken: true,
+      efacturaOauthAccessTokenExpiresAt: true,
+    },
+  })
+
+  const cif = normalizeCompanyCui(company?.cui)
+  if (!cif) {
+    return res.status(400).json({ ok: false, error: "Firma nu are CUI valid pentru facturile primite e-Factura." })
+  }
+  if (!company?.efacturaOauthAccessToken) {
+    return res.status(400).json({ ok: false, error: "Nu exista token ANAF activ pentru firma." })
+  }
+
+  return res.json({
+    ok: true,
+    bridgeConfig: {
+      cif,
+      environment: String(company?.efacturaEnvironment || "test").toLowerCase() === "prod" ? "prod" : "test",
+      accessToken: String(company.efacturaOauthAccessToken),
+      expiresAt: company.efacturaOauthAccessTokenExpiresAt,
+      baseUrl: getEfacturaBaseUrl(company?.efacturaEnvironment),
+    },
+  })
+})
+
+router.get("/api/v1/efactura/incoming/:id", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const moduleCheck = await requireTenantModule(tenantId, "efactura")
+  if (!moduleCheck.enabled) {
+    return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
+  }
+
+  const item = await prisma.incomingEInvoice.findFirst({
+    where: { tenantId, id: req.params.id },
+    include: {
+      supplier: true,
+      linkedReceipt: true,
+      items: {
+        include: {
+          matchedProduct: {
+            include: {
+              purchaseUom: true,
+              uom: true,
+              vatRate: true,
+            },
+          },
+        },
+        orderBy: { lineIndex: "asc" },
+      },
+    },
+  })
+
+  if (!item) {
+    return res.status(404).json({ ok: false, error: "Factura primita SPV nu a fost gasita." })
+  }
+
+  const repaired = await repairIncomingInvoiceIfNeeded(tenantId, item)
+
+  return res.json({ ok: true, item: repaired })
+})
+
+router.get("/api/v1/efactura/incoming/:id/pdf", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const moduleCheck = await requireTenantModule(tenantId, "efactura")
+  if (!moduleCheck.enabled) {
+    return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
+  }
+
+  const item = await prisma.incomingEInvoice.findFirst({
+    where: { tenantId, id: req.params.id },
+    include: {
+      items: {
+        orderBy: { lineIndex: "asc" },
+      },
+    },
+  })
+
+  if (!item) {
+    return res.status(404).json({ ok: false, error: "Factura primita SPV nu a fost gasita." })
+  }
+
+  const parsed = item.xmlText ? parseIncomingEInvoiceXml(String(item.xmlText)) : null
+  const filename = `Factura_SPV_${safeFilePart(String(parsed?.invoiceNo || item.invoiceNo || item.spvDownloadId || "document"))}.pdf`
+  const pdfPath = await ensureIncomingInvoicePdfSaved(item)
+  const buffer = fs.readFileSync(pdfPath)
+  res.setHeader("Content-Type", "application/pdf")
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`)
+  return res.send(buffer)
 })
 
 router.get("/api/v1/efactura/incoming/:id/xml", async (req: AuthedRequest, res) => {
@@ -783,6 +816,7 @@ router.post("/api/v1/efactura/incoming/import-from-spv-bridge", async (req: Auth
     const extracted = extractXmlFromAnafDownload(buffer)
     const parsedInvoice = parseIncomingEInvoiceXml(extracted.xmlText)
     const item = await upsertIncomingInvoice(tenantId, rawMessage, extracted.xmlText, parsedInvoice)
+    await ensureIncomingInvoicePdfSaved(item)
     return res.json({
       ok: true,
       item,
