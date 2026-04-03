@@ -2,12 +2,13 @@
   "name": "gufo-efactura-agent",
   "version": "0.1.0",
   "private": true,
+  "author": "Gufo",
   "description": "Agent local Windows pentru Gufo e-Factura folosind certificatul din Windows Certificate Store/token USB.",
   "main": "desktop-main.js",
   "scripts": {
     "start": "node bridge.js",
     "desktop": "electron .",
-    "desktop:pack": "electron-builder --dir",
+    "desktop:pack": "electron-packager . \"Gufo e-Factura\" --platform=win32 --arch=x64 --out=release-desktop --overwrite --asar --icon=branding/gufo-efactura.ico --prune=true --ignore=release --ignore=release-desktop --ignore=installer --ignore=agent\\.stdout\\.log --ignore=agent\\.stderr\\.log",
     "desktop:dist": "electron-builder --win nsis",
     "agent:install": "powershell -ExecutionPolicy Bypass -File .\\install-agent.ps1",
     "agent:uninstall": "powershell -ExecutionPolicy Bypass -File .\\uninstall-agent.ps1",
@@ -18,7 +19,8 @@
   },
   "devDependencies": {
     "electron": "^36.1.0",
-    "electron-builder": "^26.0.12"
+    "electron-builder": "^26.0.12",
+    "electron-packager": "^17.1.2"
   },
   "build": {
     "appId": "ink.gufo.efactura",

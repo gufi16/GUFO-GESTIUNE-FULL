@@ -100,7 +100,13 @@ Rezultatul merge in:
 spv-bridge-windows\release-desktop
 ```
 
-Acesta este fluxul care duce spre aplicatia Windows reala `Gufo e-Factura`, cu tray, fereastra proprie si packaging desktop.
+Buildul desktop curent genereaza folderul aplicatiei Windows cu:
+- `Gufo e-Factura.exe`
+- tray
+- fereastra proprie
+- bridge local pornit din aplicatie
+
+Acesta este fluxul stabil de test pentru aplicatia Windows reala `Gufo e-Factura`. Peste el putem pune apoi installerul final.
 
 ## Varianta portabila recomandata daca installerul `.exe` nu e stabil
 

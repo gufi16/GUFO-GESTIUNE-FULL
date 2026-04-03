@@ -14,7 +14,7 @@ if (-not (Test-Path (Join-Path $scriptDir "branding\gufo-efactura.ico"))) {
 
 Write-Host ""
 Write-Host "Build desktop Gufo e-Factura..." -ForegroundColor Cyan
-cmd /c npm run desktop:dist
+cmd /c npm run desktop:pack
 
 if ($LASTEXITCODE -ne 0) {
   throw "Buildul desktop Gufo e-Factura a esuat."
