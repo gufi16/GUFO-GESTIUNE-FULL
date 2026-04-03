@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$taskName = "Gufo SPV Agent"
+$taskName = "Gufo e-Factura"
 $launcherPath = Join-Path $scriptDir "bridge-launcher.vbs"
 $nodeCmd = (Get-Command node -ErrorAction Stop).Source
 $bridgePath = Join-Path $scriptDir "bridge.js"
@@ -38,7 +38,7 @@ Register-ScheduledTask `
   -Action $action `
   -Trigger $trigger `
   -Settings $settings `
-  -Description "Porneste automat Gufo SPV Agent pentru certificatul local din Windows Store." `
+  -Description "Porneste automat Gufo e-Factura pentru certificatul local din Windows Store." `
   -User $env:USERNAME `
   -RunLevel Limited `
   -Force | Out-Null
@@ -46,7 +46,7 @@ Register-ScheduledTask `
 Start-ScheduledTask -TaskName $taskName
 
 Write-Host ""
-Write-Host "Gufo SPV Agent a fost instalat." -ForegroundColor Green
+Write-Host "Gufo e-Factura a fost instalat." -ForegroundColor Green
 Write-Host "Task: $taskName"
 Write-Host "Launcher: $launcherPath"
 Write-Host "Health: http://127.0.0.1:48521/health"

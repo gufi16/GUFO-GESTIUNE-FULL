@@ -1,10 +1,10 @@
 $ErrorActionPreference = "Stop"
 
-$taskName = "Gufo SPV Agent"
+$taskName = "Gufo e-Factura"
 
 try {
   Start-ScheduledTask -TaskName $taskName
-  Write-Host "Gufo SPV Agent a fost pornit." -ForegroundColor Green
+  Write-Host "Gufo e-Factura a fost pornit." -ForegroundColor Green
 } catch {
   throw "Task-ul '$taskName' nu este instalat. Ruleaza mai intai .\install-agent.ps1"
 }

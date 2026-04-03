@@ -1,4 +1,4 @@
-# Gufo SPV Agent Windows
+# Gufo e-Factura
 
 Agent local pentru Windows care foloseste certificatul digital din `Cert:\CurrentUser\My` sau `Cert:\LocalMachine\My` fara `.pfx` exportat.
 
@@ -28,7 +28,7 @@ Sau:
 npm run agent:install
 ```
 
-Scriptul creeaza un Scheduled Task numit `Gufo SPV Agent` care porneste automat la logon pentru utilizatorul curent.
+Scriptul creeaza un Scheduled Task numit `Gufo e-Factura` care porneste automat la logon pentru utilizatorul curent.
 
 ## Comenzi utile
 

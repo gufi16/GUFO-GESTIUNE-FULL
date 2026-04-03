@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$taskName = "Gufo SPV Agent"
+$taskName = "Gufo e-Factura"
 $launcherPath = Join-Path $scriptDir "bridge-launcher.vbs"
 
 try {
@@ -18,4 +18,4 @@ if (Test-Path $launcherPath) {
   Remove-Item $launcherPath -Force
 }
 
-Write-Host "Gufo SPV Agent a fost dezinstalat." -ForegroundColor Yellow
+Write-Host "Gufo e-Factura a fost dezinstalat." -ForegroundColor Yellow
