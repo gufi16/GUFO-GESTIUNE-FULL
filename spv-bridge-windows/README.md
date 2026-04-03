@@ -8,6 +8,11 @@ Agent local pentru Windows care foloseste certificatul digital din `Cert:\Curren
 - porneste automat la logon
 - expune bridge-ul local pentru Gufo
 - foloseste certificatul din Windows Store pentru SPV/e-Factura
+- ofera o pagina locala de configurare pentru:
+  - `ERP URL`
+  - `License key`
+  - `Bridge token`
+  - `Serial certificat`
 
 ## Instalare o singura data
 
@@ -78,6 +83,16 @@ spv-bridge-windows\release\Gufo-eFactura-Setup.exe
 ```powershell
 Invoke-RestMethod -Method GET -Uri "http://127.0.0.1:48521/health"
 ```
+
+## Configurare locala
+
+Dupa pornirea agentului, deschizi:
+
+```text
+http://127.0.0.1:48521/
+```
+
+De acolo poti salva configuratia fara sa mai editezi manual `.env`.
 
 ## Endpointuri
 

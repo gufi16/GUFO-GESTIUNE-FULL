@@ -13,14 +13,24 @@ const EFACTURA_LIST_MESSAGES_TEST_URL = "https://webserviceapl.anaf.ro/test/FCTE
 const EFACTURA_DOWNLOAD_PROD_URL = "https://webserviceapl.anaf.ro/prod/FCTEL/rest/descarcare"
 const EFACTURA_DOWNLOAD_TEST_URL = "https://webserviceapl.anaf.ro/test/FCTEL/rest/descarcare"
 const POWERSHELL_TIMEOUT_MS = 90000
+const CONFIG_PATH = path.join(__dirname, "agent-config.json")
 
 loadEnv(path.join(__dirname, ".env"))
 
-const PORT = Number(process.env.BRIDGE_PORT || DEFAULT_PORT)
-const HOST = process.env.BRIDGE_HOST || DEFAULT_HOST
-const BRIDGE_TOKEN = String(process.env.BRIDGE_TOKEN || "").trim()
-const DEFAULT_CERT_SERIAL = normalizeSerial(process.env.SPV_CERT_SERIAL || "")
-const SHOW_POWERSHELL_WINDOW = String(process.env.BRIDGE_SHOW_POWERSHELL_WINDOW || "true").trim().toLowerCase() !== "false"
+const persistedConfig = loadAgentConfig(CONFIG_PATH)
+
+let PORT = Number(persistedConfig.bridgePort || process.env.BRIDGE_PORT || DEFAULT_PORT)
+let HOST = persistedConfig.bridgeHost || process.env.BRIDGE_HOST || DEFAULT_HOST
+let BRIDGE_TOKEN = String(persistedConfig.bridgeToken || process.env.BRIDGE_TOKEN || "").trim()
+let DEFAULT_CERT_SERIAL = normalizeSerial(persistedConfig.certSerial || process.env.SPV_CERT_SERIAL || "")
+let SHOW_POWERSHELL_WINDOW =
+  String(
+    persistedConfig.showPowerShellWindow ?? process.env.BRIDGE_SHOW_POWERSHELL_WINDOW ?? "true"
+  )
+    .trim()
+    .toLowerCase() !== "false"
+let ERP_URL = String(persistedConfig.erpUrl || "").trim()
+let LICENSE_KEY = String(persistedConfig.licenseKey || "").trim()
 
 async function extractAnafArtifacts(base64Content) {
   const base64 = String(base64Content || "").trim()
@@ -111,6 +121,128 @@ function loadEnv(filePath) {
       process.env[key] = value
     }
   }
+}
+
+function loadAgentConfig(filePath) {
+  try {
+    if (!fs.existsSync(filePath)) return {}
+    return JSON.parse(fs.readFileSync(filePath, "utf8"))
+  } catch {
+    return {}
+  }
+}
+
+function saveAgentConfig() {
+  const payload = {
+    bridgePort: PORT,
+    bridgeHost: HOST,
+    bridgeToken: BRIDGE_TOKEN,
+    certSerial: DEFAULT_CERT_SERIAL,
+    showPowerShellWindow: SHOW_POWERSHELL_WINDOW,
+    erpUrl: ERP_URL,
+    licenseKey: LICENSE_KEY,
+  }
+  fs.writeFileSync(CONFIG_PATH, `${JSON.stringify(payload, null, 2)}\n`, "utf8")
+}
+
+function renderSetupPage() {
+  const escape = (value) =>
+    String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+
+  return `<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gufo e-Factura</title>
+  <style>
+    body { font-family: Segoe UI, Arial, sans-serif; background:#f4f7fb; margin:0; color:#17324D; }
+    .wrap { max-width: 820px; margin: 32px auto; padding: 0 20px; }
+    .card { background:#fff; border:1px solid #d8e2ee; border-radius:20px; box-shadow:0 12px 32px rgba(23,50,77,.08); padding:24px; }
+    h1 { margin:0 0 6px; font-size:28px; }
+    p { margin:0 0 18px; color:#567; }
+    .grid { display:grid; gap:14px; grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .full { grid-column: 1 / -1; }
+    label { display:block; font-size:13px; font-weight:600; margin-bottom:6px; }
+    input { width:100%; box-sizing:border-box; border:1px solid #c8d5e3; border-radius:12px; padding:12px 14px; font-size:14px; }
+    .actions { margin-top:18px; display:flex; gap:12px; align-items:center; }
+    button { background:#17324D; color:#fff; border:none; border-radius:12px; padding:12px 18px; font-weight:700; cursor:pointer; }
+    .muted { font-size:12px; color:#66788a; }
+    .pill { display:inline-block; border-radius:999px; padding:6px 10px; background:#eef6ee; color:#216e39; font-size:12px; font-weight:700; }
+    .row { margin-top:16px; display:flex; flex-wrap:wrap; gap:12px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Gufo e-Factura</h1>
+      <p>Configurezi agentul local o singura data, apoi ERP-ul foloseste certificatul local fara comenzi manuale.</p>
+      <div class="row">
+        <span class="pill">Health: http://${escape(HOST)}:${escape(PORT)}/health</span>
+      </div>
+      <form id="config-form" class="grid" style="margin-top:18px">
+        <div class="full">
+          <label for="erpUrl">ERP URL</label>
+          <input id="erpUrl" name="erpUrl" value="${escape(ERP_URL)}" placeholder="https://app.gufo.ink" />
+        </div>
+        <div class="full">
+          <label for="licenseKey">License key</label>
+          <input id="licenseKey" name="licenseKey" value="${escape(LICENSE_KEY)}" placeholder="Licenta / cheia clientului" />
+        </div>
+        <div class="full">
+          <label for="bridgeToken">Bridge token</label>
+          <input id="bridgeToken" name="bridgeToken" value="${escape(BRIDGE_TOKEN)}" placeholder="Tokenul local folosit de ERP pentru conectare" />
+        </div>
+        <div class="full">
+          <label for="certSerial">Serial certificat</label>
+          <input id="certSerial" name="certSerial" value="${escape(DEFAULT_CERT_SERIAL)}" placeholder="Serialul certificatului din Windows Store" />
+        </div>
+        <div>
+          <label for="bridgeHost">Host local</label>
+          <input id="bridgeHost" name="bridgeHost" value="${escape(HOST)}" />
+        </div>
+        <div>
+          <label for="bridgePort">Port local</label>
+          <input id="bridgePort" name="bridgePort" value="${escape(PORT)}" />
+        </div>
+        <div class="actions full">
+          <button type="submit">Salveaza configuratia</button>
+          <div id="result" class="muted">Config curent salvat in <code>agent-config.json</code>.</div>
+        </div>
+      </form>
+    </div>
+  </div>
+  <script>
+    document.getElementById('config-form').addEventListener('submit', async function (event) {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const payload = {
+        erpUrl: form.erpUrl.value.trim(),
+        licenseKey: form.licenseKey.value.trim(),
+        bridgeToken: form.bridgeToken.value.trim(),
+        certSerial: form.certSerial.value.trim(),
+        bridgeHost: form.bridgeHost.value.trim(),
+        bridgePort: form.bridgePort.value.trim(),
+      };
+      const result = document.getElementById('result');
+      result.textContent = 'Se salveaza...';
+      const response = await fetch('/agent/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json().catch(() => ({}));
+      result.textContent = response.ok && data.ok
+        ? 'Configuratia a fost salvata. Daca ai schimbat host sau port, reporneste agentul.'
+        : (data.error || 'Nu am putut salva configuratia.');
+    });
+  </script>
+</body>
+</html>`
 }
 
 function normalizeSerial(value) {
@@ -1048,14 +1180,64 @@ const server = http.createServer(async (req, res) => {
     return
   }
 
+  if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/setup")) {
+    res.writeHead(200, {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+    })
+    res.end(renderSetupPage())
+    return
+  }
+
+  if (req.method === "GET" && url.pathname === "/agent/config") {
+    sendJson(res, 200, {
+      ok: true,
+      config: {
+        erpUrl: ERP_URL || "",
+        licenseKey: LICENSE_KEY || "",
+        bridgeToken: BRIDGE_TOKEN || "",
+        certSerial: DEFAULT_CERT_SERIAL || "",
+        bridgeHost: HOST,
+        bridgePort: PORT,
+        showPowerShellWindow: SHOW_POWERSHELL_WINDOW,
+      },
+    })
+    return
+  }
+
+  if (req.method === "POST" && url.pathname === "/agent/config") {
+    try {
+      const body = await readJsonBody(req)
+      ERP_URL = String(body.erpUrl || "").trim()
+      LICENSE_KEY = String(body.licenseKey || "").trim()
+      BRIDGE_TOKEN = String(body.bridgeToken || "").trim()
+      DEFAULT_CERT_SERIAL = normalizeSerial(body.certSerial || "")
+      HOST = String(body.bridgeHost || DEFAULT_HOST).trim() || DEFAULT_HOST
+      PORT = Math.max(1, Math.min(65535, Number(body.bridgePort || DEFAULT_PORT) || DEFAULT_PORT))
+      saveAgentConfig()
+      sendJson(res, 200, {
+        ok: true,
+        message: "Configuratia agentului a fost salvata.",
+      })
+    } catch (error) {
+      sendJson(res, 400, {
+        ok: false,
+        error: String(error.message || error),
+      })
+    }
+    return
+  }
+
   if (req.method === "GET" && url.pathname === "/health") {
     sendJson(res, 200, {
       ok: true,
-      service: "gufo-spv-bridge-windows",
+      service: "gufo-efactura",
       host: HOST,
       port: PORT,
       hasBridgeToken: Boolean(BRIDGE_TOKEN),
       defaultCertSerial: DEFAULT_CERT_SERIAL || null,
+      erpUrl: ERP_URL || null,
+      hasLicenseKey: Boolean(LICENSE_KEY),
       time: new Date().toISOString(),
     })
     return
