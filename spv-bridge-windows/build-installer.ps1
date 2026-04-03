@@ -32,8 +32,17 @@ if (-not $iscc) {
       Select-Object -First 1
 
     if ($entry) {
-      $fromLocation = Join-Path (String($entry.InstallLocation || "")) "ISCC.exe"
-      $fromIcon = String($entry.DisplayIcon || "")
+      $installLocation = ""
+      $displayIcon = ""
+      if ($null -ne $entry.InstallLocation) {
+        $installLocation = [string]$entry.InstallLocation
+      }
+      if ($null -ne $entry.DisplayIcon) {
+        $displayIcon = [string]$entry.DisplayIcon
+      }
+
+      $fromLocation = if ($installLocation) { Join-Path $installLocation "ISCC.exe" } else { "" }
+      $fromIcon = $displayIcon
       if ((Test-Path $fromLocation)) {
         $iscc = $fromLocation
         break
