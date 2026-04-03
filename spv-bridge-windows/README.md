@@ -1,24 +1,53 @@
-# Gufo SPV Bridge Windows
+# Gufo SPV Agent Windows
 
-Bridge local pentru Windows care foloseste certificatul digital din `Cert:\CurrentUser\My` sau `Cert:\LocalMachine\My` prin PowerShell, fara `.pfx` exportat.
+Agent local pentru Windows care foloseste certificatul digital din `Cert:\CurrentUser\My` sau `Cert:\LocalMachine\My` fara `.pfx` exportat.
 
-## Ce face acum
+## Scop
 
-- porneste un server local HTTP
-- verifica daca exista certificatul dupa `serial`
-- testeaza `SPVWS2/rest/listaMesaje`
+- ruleaza local pe PC-ul clientului
+- porneste automat la logon
+- expune bridge-ul local pentru Gufo
+- foloseste certificatul din Windows Store pentru SPV/e-Factura
 
-## Configurare rapida
+## Instalare o singura data
 
 1. Copiezi `.env.example` in `.env`
 2. Completezi:
    - `BRIDGE_TOKEN`
    - `SPV_CERT_SERIAL`
-3. Pornesti:
+3. Rulezi:
 
 ```powershell
 cd spv-bridge-windows
-node bridge.js
+powershell -ExecutionPolicy Bypass -File .\install-agent.ps1
+```
+
+Sau:
+
+```powershell
+npm run agent:install
+```
+
+Scriptul creeaza un Scheduled Task numit `Gufo SPV Agent` care porneste automat la logon pentru utilizatorul curent.
+
+## Comenzi utile
+
+Pornire manuala agent:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\start-agent.ps1
+```
+
+Dezinstalare:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\uninstall-agent.ps1
+```
+
+## Health check
+
+```powershell
+Invoke-RestMethod -Method GET -Uri "http://127.0.0.1:48521/health"
 ```
 
 ## Endpointuri
@@ -26,22 +55,12 @@ node bridge.js
 - `GET /health`
 - `GET /api/v1/certificates/resolve?serial=...`
 - `POST /api/v1/spvws2/list-messages-test`
+- `POST /api/v1/efactura/list-messages`
+- `POST /api/v1/efactura/download-message`
+- `POST /api/v1/efactura/download-many`
 
 Toate endpointurile API, in afara de `/health`, cer:
 
 ```http
 Authorization: Bearer <BRIDGE_TOKEN>
-```
-
-## Exemplu test
-
-```powershell
-$headers = @{ Authorization = "Bearer TOKENUL_TAU" }
-Invoke-RestMethod -Method GET -Headers $headers -Uri "http://127.0.0.1:48521/api/v1/certificates/resolve?serial=201104209404011B9F6D1518659BE0CF"
-```
-
-```powershell
-$headers = @{ Authorization = "Bearer TOKENUL_TAU"; "Content-Type" = "application/json" }
-$body = @{ days = 30 } | ConvertTo-Json
-Invoke-RestMethod -Method POST -Headers $headers -Body $body -Uri "http://127.0.0.1:48521/api/v1/spvws2/list-messages-test"
 ```

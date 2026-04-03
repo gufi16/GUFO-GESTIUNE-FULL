@@ -5,6 +5,9 @@
   "description": "Bridge local Windows pentru SPVWS2 folosind certificatul din Windows Certificate Store/token USB.",
   "main": "bridge.js",
   "scripts": {
-    "start": "node bridge.js"
+    "start": "node bridge.js",
+    "agent:install": "powershell -ExecutionPolicy Bypass -File .\\install-agent.ps1",
+    "agent:uninstall": "powershell -ExecutionPolicy Bypass -File .\\uninstall-agent.ps1",
+    "agent:start": "powershell -ExecutionPolicy Bypass -File .\\start-agent.ps1"
   }
 }
