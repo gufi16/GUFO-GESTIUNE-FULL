@@ -1,6 +1,9 @@
 $ErrorActionPreference = "Stop"
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+$desktopOutputRoot = Join-Path $scriptDir "release-desktop"
+$desktopOutputDir = Join-Path $desktopOutputRoot $timestamp
 
 Set-Location $scriptDir
 
@@ -36,13 +39,13 @@ if (Test-IcoFile $iconPath) {
 
 Write-Host ""
 Write-Host "Build desktop Gufo e-Factura..." -ForegroundColor Cyan
+New-Item -ItemType Directory -Force -Path $desktopOutputDir | Out-Null
 & ".\node_modules\.bin\electron-packager.cmd" `
   "." `
   "Gufo e-Factura" `
   "--platform=win32" `
   "--arch=x64" `
-  "--out=release-desktop" `
-  "--overwrite" `
+  "--out=$desktopOutputDir" `
   "--asar" `
   "--prune=true" `
   "--ignore=release" `
@@ -58,4 +61,4 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host ""
 Write-Host "Build desktop finalizat." -ForegroundColor Green
-Write-Host "Folder output: $(Join-Path $scriptDir 'release-desktop')"
+Write-Host "Folder output: $desktopOutputDir"
