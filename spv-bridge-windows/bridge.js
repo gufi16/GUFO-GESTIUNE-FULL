@@ -1,5 +1,6 @@
 const http = require("http")
 const { execFile } = require("child_process")
+const crypto = require("crypto")
 const fs = require("fs")
 const path = require("path")
 const AdmZip = require(path.join(__dirname, "vendor", "adm-zip"))
@@ -31,6 +32,12 @@ let SHOW_POWERSHELL_WINDOW =
     .toLowerCase() !== "false"
 let ERP_URL = String(persistedConfig.erpUrl || "").trim()
 let LICENSE_KEY = String(persistedConfig.licenseKey || "").trim()
+let GENERATED_TOKEN_ON_BOOT = false
+
+if (!BRIDGE_TOKEN) {
+  BRIDGE_TOKEN = crypto.randomBytes(24).toString("hex")
+  GENERATED_TOKEN_ON_BOOT = true
+}
 
 async function extractAnafArtifacts(base64Content) {
   const base64 = String(base64Content || "").trim()
@@ -145,6 +152,39 @@ function saveAgentConfig() {
   fs.writeFileSync(CONFIG_PATH, `${JSON.stringify(payload, null, 2)}\n`, "utf8")
 }
 
+if (GENERATED_TOKEN_ON_BOOT) {
+  saveAgentConfig()
+}
+
+function getConfiguredErpOrigin() {
+  if (!ERP_URL) return ""
+  try {
+    return new URL(ERP_URL).origin
+  } catch {
+    return ""
+  }
+}
+
+function isLocalOrigin(origin) {
+  return /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(String(origin || "").trim())
+}
+
+function isTrustedOrigin(origin) {
+  const normalizedOrigin = String(origin || "").trim()
+  if (!normalizedOrigin) return true
+  if (isLocalOrigin(normalizedOrigin)) return true
+  const configuredOrigin = getConfiguredErpOrigin()
+  return Boolean(configuredOrigin && normalizedOrigin === configuredOrigin)
+}
+
+function getCorsOrigin(req) {
+  const origin = String(req.headers.origin || "").trim()
+  if (isTrustedOrigin(origin)) {
+    return origin || "*"
+  }
+  return "null"
+}
+
 function renderSetupPage() {
   const escape = (value) =>
     String(value || "")
@@ -194,10 +234,6 @@ function renderSetupPage() {
           <input id="licenseKey" name="licenseKey" value="${escape(LICENSE_KEY)}" placeholder="Licenta / cheia clientului" />
         </div>
         <div class="full">
-          <label for="bridgeToken">Bridge token</label>
-          <input id="bridgeToken" name="bridgeToken" value="${escape(BRIDGE_TOKEN)}" placeholder="Tokenul local folosit de ERP pentru conectare" />
-        </div>
-        <div class="full">
           <label for="certSerial">Serial certificat</label>
           <input id="certSerial" name="certSerial" value="${escape(DEFAULT_CERT_SERIAL)}" placeholder="Serialul certificatului din Windows Store" />
         </div>
@@ -213,6 +249,7 @@ function renderSetupPage() {
           <button type="submit">Salveaza configuratia</button>
           <div id="result" class="muted">Config curent salvat in <code>agent-config.json</code>.</div>
         </div>
+        <div class="full muted">Tokenul local este generat automat de agent si nu trebuie completat de client.</div>
       </form>
     </div>
   </div>
@@ -223,7 +260,6 @@ function renderSetupPage() {
       const payload = {
         erpUrl: form.erpUrl.value.trim(),
         licenseKey: form.licenseKey.value.trim(),
-        bridgeToken: form.bridgeToken.value.trim(),
         certSerial: form.certSerial.value.trim(),
         bridgeHost: form.bridgeHost.value.trim(),
         bridgePort: form.bridgePort.value.trim(),
@@ -253,13 +289,15 @@ function normalizeSerial(value) {
 }
 
 function sendJson(res, status, payload) {
+  const origin = getCorsOrigin(res.req || { headers: {} })
   const body = JSON.stringify(payload)
   res.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store",
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Headers": "Authorization, Content-Type",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Vary": "Origin",
   })
   res.end(body)
 }
@@ -1170,11 +1208,13 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || `${HOST}:${PORT}`}`)
 
   if (req.method === "OPTIONS") {
+    const corsOrigin = getCorsOrigin(req)
     res.writeHead(204, {
-      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Origin": corsOrigin,
       "Access-Control-Allow-Headers": "Authorization, Content-Type",
       "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
       "Access-Control-Max-Age": "86400",
+      "Vary": "Origin",
     })
     res.end()
     return
@@ -1192,13 +1232,12 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "GET" && url.pathname === "/agent/config") {
     sendJson(res, 200, {
       ok: true,
-      config: {
-        erpUrl: ERP_URL || "",
-        licenseKey: LICENSE_KEY || "",
-        bridgeToken: BRIDGE_TOKEN || "",
-        certSerial: DEFAULT_CERT_SERIAL || "",
-        bridgeHost: HOST,
-        bridgePort: PORT,
+        config: {
+          erpUrl: ERP_URL || "",
+          licenseKey: LICENSE_KEY || "",
+          certSerial: DEFAULT_CERT_SERIAL || "",
+          bridgeHost: HOST,
+          bridgePort: PORT,
         showPowerShellWindow: SHOW_POWERSHELL_WINDOW,
       },
     })
@@ -1210,7 +1249,6 @@ const server = http.createServer(async (req, res) => {
       const body = await readJsonBody(req)
       ERP_URL = String(body.erpUrl || "").trim()
       LICENSE_KEY = String(body.licenseKey || "").trim()
-      BRIDGE_TOKEN = String(body.bridgeToken || "").trim()
       DEFAULT_CERT_SERIAL = normalizeSerial(body.certSerial || "")
       HOST = String(body.bridgeHost || DEFAULT_HOST).trim() || DEFAULT_HOST
       PORT = Math.max(1, Math.min(65535, Number(body.bridgePort || DEFAULT_PORT) || DEFAULT_PORT))
@@ -1225,6 +1263,29 @@ const server = http.createServer(async (req, res) => {
         error: String(error.message || error),
       })
     }
+    return
+  }
+
+  if (req.method === "GET" && url.pathname === "/agent/pairing") {
+    if (!isTrustedOrigin(req.headers.origin)) {
+      sendJson(res, 403, {
+        ok: false,
+        error: "Originea ERP-ului nu este autorizata pentru pairing.",
+      })
+      return
+    }
+    sendJson(res, 200, {
+      ok: true,
+      agent: {
+        service: "gufo-efactura",
+        erpUrl: ERP_URL || null,
+        erpOrigin: getConfiguredErpOrigin() || null,
+        bridgeUrl: `http://${HOST}:${PORT}`,
+        bridgeToken: BRIDGE_TOKEN,
+        certSerial: DEFAULT_CERT_SERIAL || null,
+        hasLicenseKey: Boolean(LICENSE_KEY),
+      },
+    })
     return
   }
 

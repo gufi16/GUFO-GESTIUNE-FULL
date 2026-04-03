@@ -93,9 +93,12 @@ type EfacturaBridgeConfig = {
 }
 
 type BridgeMessageFilter = "all" | "invoice" | "receipt"
+type LocalAgentPairing = {
+  bridgeUrl: string
+  bridgeToken: string
+}
 
 const SPV_BRIDGE_URL_KEY = "gufo_spv_bridge_url"
-const SPV_BRIDGE_TOKEN_KEY = "gufo_spv_bridge_token"
 const DEFAULT_SPV_BRIDGE_URL = "http://127.0.0.1:48521"
 const RAW_MESSAGES_PAGE_SIZE = 20
 const IMPORTED_INVOICES_PAGE_SIZE = 15
@@ -233,11 +236,49 @@ export default function FacturiPrimiteSPVPage() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       setBridgeUrl(window.localStorage.getItem(SPV_BRIDGE_URL_KEY) || DEFAULT_SPV_BRIDGE_URL)
-      setBridgeToken(window.localStorage.getItem(SPV_BRIDGE_TOKEN_KEY) || "")
     }
+    void discoverLocalAgent()
     void loadSpvStatus()
     void loadItems()
   }, [])
+
+  async function discoverLocalAgent(preferredUrl?: string) {
+    const trimmedBridgeUrl = (preferredUrl || bridgeUrl || DEFAULT_SPV_BRIDGE_URL).trim().replace(/\/+$/, "")
+    try {
+      const res = await fetch(`${trimmedBridgeUrl}/agent/pairing`, {
+        headers: { Accept: "application/json" },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok || !data?.agent?.bridgeToken) {
+        return null
+      }
+      const nextBridgeUrl = String(data.agent.bridgeUrl || trimmedBridgeUrl).trim() || trimmedBridgeUrl
+      const nextBridgeToken = String(data.agent.bridgeToken || "").trim()
+      setBridgeUrl(nextBridgeUrl)
+      setBridgeToken(nextBridgeToken)
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(SPV_BRIDGE_URL_KEY, nextBridgeUrl)
+      }
+      return {
+        bridgeUrl: nextBridgeUrl,
+        bridgeToken: nextBridgeToken,
+      } satisfies LocalAgentPairing
+    } catch {
+      return null
+    }
+  }
+
+  async function getLocalAgentConnection() {
+    const trimmedBridgeUrl = bridgeUrl.trim().replace(/\/+$/, "") || DEFAULT_SPV_BRIDGE_URL
+    const trimmedBridgeToken = bridgeToken.trim()
+    if (trimmedBridgeToken) {
+      return {
+        bridgeUrl: trimmedBridgeUrl,
+        bridgeToken: trimmedBridgeToken,
+      } satisfies LocalAgentPairing
+    }
+    return discoverLocalAgent(trimmedBridgeUrl)
+  }
 
   async function loadBridgeConfig() {
     const res = await fetch(`${API_BASE}/api/v1/efactura/incoming/bridge-config`, {
@@ -297,12 +338,13 @@ export default function FacturiPrimiteSPVPage() {
     setBridgeMessages([])
     setBridgeMessagesPage(1)
     try {
-      if (bridgeToken.trim()) {
-        const trimmedBridgeUrl = bridgeUrl.trim().replace(/\/+$/, "")
+      const localAgent = await getLocalAgentConnection()
+      if (localAgent?.bridgeToken) {
+        const trimmedBridgeUrl = localAgent.bridgeUrl
         const requestedDays = getDaysNeededForMonth(selectedMonth)
         const bridgeConfig = await loadBridgeConfig()
         const bridgeHeaders = {
-          Authorization: `Bearer ${bridgeToken.trim()}`,
+          Authorization: `Bearer ${localAgent.bridgeToken}`,
           "Content-Type": "application/json",
         }
 
@@ -504,14 +546,15 @@ export default function FacturiPrimiteSPVPage() {
     setBridgeMessages([])
     setBridgeMessagesPage(1)
     try {
-      if (bridgeToken.trim()) {
-        const trimmedBridgeUrl = bridgeUrl.trim().replace(/\/+$/, "")
+      const localAgent = await getLocalAgentConnection()
+      if (localAgent?.bridgeToken) {
+        const trimmedBridgeUrl = localAgent.bridgeUrl
         const requestedDays = getDaysNeededForMonth(selectedMonth)
         const bridgeConfig = await loadBridgeConfig()
         const bridgeRes = await fetch(`${trimmedBridgeUrl}/api/v1/efactura/list-messages`, {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${bridgeToken.trim()}`,
+            Authorization: `Bearer ${localAgent.bridgeToken}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -655,9 +698,9 @@ export default function FacturiPrimiteSPVPage() {
   function saveBridgeSettings() {
     if (typeof window === "undefined") return
     window.localStorage.setItem(SPV_BRIDGE_URL_KEY, bridgeUrl.trim() || DEFAULT_SPV_BRIDGE_URL)
-    window.localStorage.setItem(SPV_BRIDGE_TOKEN_KEY, bridgeToken.trim())
-    setMessage(bridgeToken.trim() ? "Configurația bridge-ului local a fost salvată în browser." : "Configurația bridge-ului local a fost resetată.")
+    setMessage("Adresa agentului local a fost salvata in browser.")
     setError("")
+    void discoverLocalAgent(bridgeUrl.trim() || DEFAULT_SPV_BRIDGE_URL)
   }
 
   async function openXml(id: string) {
@@ -813,13 +856,14 @@ export default function FacturiPrimiteSPVPage() {
   async function downloadInvoicePdf(item: IncomingInvoice) {
     if (!token) return
     try {
-      if (bridgeToken.trim()) {
+      const localAgent = await getLocalAgentConnection()
+      if (localAgent?.bridgeToken) {
         const bridgeConfig = await loadBridgeConfig()
-        const trimmedBridgeUrl = bridgeUrl.trim().replace(/\/+$/, "")
+        const trimmedBridgeUrl = localAgent.bridgeUrl
         const res = await fetch(`${trimmedBridgeUrl}/api/v1/efactura/download-message`, {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${bridgeToken.trim()}`,
+            Authorization: `Bearer ${localAgent.bridgeToken}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -977,14 +1021,14 @@ export default function FacturiPrimiteSPVPage() {
                 className={documentButtonSecondaryClass}
                 disabled={testingClassic}
               >
-                {testingClassic ? "Testare..." : bridgeToken.trim() ? "Testeaza bridge local" : "Testeaza listaMesaje"}
+                {testingClassic ? "Testare..." : bridgeToken.trim() ? "Testeaza agentul local" : "Testeaza conexiunea locala"}
               </button>
             ) : null}
             <button
               type="button"
               onClick={() => void syncItems()}
               className={documentButtonPrimaryClass}
-              disabled={syncing || (!bridgeToken.trim() && (spvStatus ? !spvStatus.implemented : false))}
+              disabled={syncing || (!bridgeToken.trim() && (spvStatus ? !spvStatus.implemented && !isDebugMode : false))}
             >
               {syncing ? "Sincronizare..." : "Sincronizeaza SPV"}
             </button>
@@ -998,22 +1042,19 @@ export default function FacturiPrimiteSPVPage() {
                 Daca bridge-ul ruleaza pe acest PC, testul din pagina merge direct prin certificatul local.
               </div>
             </div>
-            <div className="mt-3 grid grid-cols-1 gap-2.5 md:grid-cols-[minmax(280px,1fr)_minmax(260px,1fr)_auto]">
+            <div className="mt-3 grid grid-cols-1 gap-2.5 md:grid-cols-[minmax(280px,1fr)_auto]">
               <input
                 value={bridgeUrl}
                 onChange={(e) => setBridgeUrl(e.target.value)}
                 placeholder="http://127.0.0.1:48521"
                 className={documentInputClass}
               />
-              <input
-                value={bridgeToken}
-                onChange={(e) => setBridgeToken(e.target.value)}
-                placeholder="Token bridge local"
-                className={documentInputClass}
-              />
               <button type="button" onClick={saveBridgeSettings} className={documentButtonSecondaryClass}>
-                Salveaza bridge
+                Salveaza agent
               </button>
+            </div>
+            <div className="mt-2 text-xs text-slate-500">
+              Tokenul local este descoperit automat din Gufo e-Factura daca agentul este configurat pe acest PC.
             </div>
           </div>
         ) : null}
