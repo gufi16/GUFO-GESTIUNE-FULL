@@ -8,6 +8,8 @@
     "start": "node bridge.js",
     "agent:install": "powershell -ExecutionPolicy Bypass -File .\\install-agent.ps1",
     "agent:uninstall": "powershell -ExecutionPolicy Bypass -File .\\uninstall-agent.ps1",
-    "agent:start": "powershell -ExecutionPolicy Bypass -File .\\start-agent.ps1"
+    "agent:start": "powershell -ExecutionPolicy Bypass -File .\\start-agent.ps1",
+    "build:release": "powershell -ExecutionPolicy Bypass -File .\\build-release.ps1",
+    "build:installer": "powershell -ExecutionPolicy Bypass -File .\\build-installer.ps1"
   }
 }

@@ -44,6 +44,35 @@ Dezinstalare:
 powershell -ExecutionPolicy Bypass -File .\uninstall-agent.ps1
 ```
 
+## Build installer `.exe`
+
+1. Exporti logo-ul in:
+
+```text
+spv-bridge-windows\branding\gufo-efactura.ico
+```
+
+2. Instalezi `Inno Setup 6`
+
+3. Rulezi:
+
+```powershell
+cd spv-bridge-windows
+powershell -ExecutionPolicy Bypass -File .\build-installer.ps1
+```
+
+Sau:
+
+```powershell
+npm run build:installer
+```
+
+Daca `Inno Setup` este instalat, scriptul genereaza:
+
+```text
+spv-bridge-windows\release\Gufo-eFactura-Setup.exe
+```
+
 ## Health check
 
 ```powershell
