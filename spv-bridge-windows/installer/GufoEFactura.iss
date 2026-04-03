@@ -18,9 +18,10 @@ SetupIconFile=..\branding\gufo-efactura-setup.ico
 Source: "{#GetEnv('ReleaseSource')}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\Gufo e-Factura"; Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\start-agent.ps1"""; IconFilename: "{app}\branding\gufo-efactura-setup.ico"
+Name: "{group}\Gufo e-Factura"; Filename: "wscript.exe"; Parameters: """{app}\open-gufo-efactura.vbs"""; IconFilename: "{app}\branding\gufo-efactura-setup.ico"
 Name: "{group}\Dezinstaleaza Gufo e-Factura"; Filename: "{app}\uninstall-agent.ps1"; IconFilename: "{app}\branding\gufo-efactura-setup.ico"
+Name: "{autodesktop}\Gufo e-Factura"; Filename: "wscript.exe"; Parameters: """{app}\open-gufo-efactura.vbs"""; IconFilename: "{app}\branding\gufo-efactura-setup.ico"
 
 [Run]
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\install-agent.ps1"""; Flags: postinstall waituntilterminated
-Filename: "http://127.0.0.1:48521/"; Flags: shellexec postinstall skipifsilent
+Filename: "wscript.exe"; Parameters: """{app}\open-gufo-efactura.vbs"""; Flags: postinstall skipifsilent

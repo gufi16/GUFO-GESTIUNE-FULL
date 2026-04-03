@@ -41,8 +41,7 @@ if (Test-Path $brandingDir) {
 $configureCmd = @"
 @echo off
 cd /d "%~dp0"
-start "" http://127.0.0.1:48521/
-powershell -ExecutionPolicy Bypass -File ".\start-agent.ps1"
+wscript.exe ".\open-gufo-efactura.vbs"
 pause
 "@
 
@@ -57,13 +56,34 @@ pause
 $startCmd = @"
 @echo off
 cd /d "%~dp0"
-powershell -ExecutionPolicy Bypass -File ".\start-agent.ps1"
+wscript.exe ".\open-gufo-efactura.vbs"
 pause
 "@
 
 Set-Content -Path (Join-Path $appDir "Configureaza Gufo e-Factura.cmd") -Value $configureCmd -Encoding ASCII
 Set-Content -Path (Join-Path $appDir "Instaleaza Gufo e-Factura.cmd") -Value $installCmd -Encoding ASCII
 Set-Content -Path (Join-Path $appDir "Porneste Gufo e-Factura.cmd") -Value $startCmd -Encoding ASCII
+
+$openUiVbs = @"
+Set shell = CreateObject("WScript.Shell")
+appUrl = "http://127.0.0.1:48521/"
+
+shell.Run "schtasks /run /TN ""Gufo e-Factura""", 0, False
+WScript.Sleep 1500
+
+edgePath = shell.ExpandEnvironmentStrings("%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe")
+If edgePath = "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" Then
+  edgePath = shell.ExpandEnvironmentStrings("%ProgramFiles%\Microsoft\Edge\Application\msedge.exe")
+End If
+
+If CreateObject("Scripting.FileSystemObject").FileExists(edgePath) Then
+  shell.Run Chr(34) & edgePath & Chr(34) & " --app=" & appUrl, 1, False
+Else
+  shell.Run appUrl, 1, False
+End If
+"@
+
+Set-Content -Path (Join-Path $appDir "open-gufo-efactura.vbs") -Value $openUiVbs -Encoding ASCII
 
 Write-Host ""
 Write-Host "Release folder pregatit:" -ForegroundColor Green
