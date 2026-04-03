@@ -13,10 +13,38 @@ if (-not (Test-Path $brandingIcon)) {
 
 $candidates = @(
   "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
-  "${env:ProgramFiles}\Inno Setup 6\ISCC.exe"
+  "${env:ProgramFiles}\Inno Setup 6\ISCC.exe",
+  "${env:LOCALAPPDATA}\Programs\Inno Setup 6\ISCC.exe"
 )
 
 $iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+if (-not $iscc) {
+  $registryKeys = @(
+    "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+    "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
+    "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
+  )
+
+  foreach ($key in $registryKeys) {
+    $entry = Get-ItemProperty $key -ErrorAction SilentlyContinue |
+      Where-Object { $_.DisplayName -like "*Inno Setup*" } |
+      Select-Object -First 1
+
+    if ($entry) {
+      $fromLocation = Join-Path (String($entry.InstallLocation || "")) "ISCC.exe"
+      $fromIcon = String($entry.DisplayIcon || "")
+      if ((Test-Path $fromLocation)) {
+        $iscc = $fromLocation
+        break
+      }
+      if ($fromIcon -and (Test-Path $fromIcon)) {
+        $iscc = $fromIcon
+        break
+      }
+    }
+  }
+}
 
 if (-not $iscc) {
   Write-Host ""
