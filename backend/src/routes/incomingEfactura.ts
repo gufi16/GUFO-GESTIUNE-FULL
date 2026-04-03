@@ -394,7 +394,8 @@ async function generateIncomingInvoicePdfBuffer(item: any) {
   const startX = doc.page.margins.left
   const pageRight = startX + pageWidth
   const topY = doc.page.margins.top
-  const pageBottom = doc.page.height - doc.page.margins.bottom - 24
+  const footerY = doc.page.height - 30
+  const pageBottom = footerY - 12
 
   function money(value: any, includeCurrency = false) {
     const amount = fmtMoneyRo(value)
@@ -407,15 +408,15 @@ async function generateIncomingInvoicePdfBuffer(item: any) {
     doc.font(fonts.regular).fontSize(8).fillColor("#111111")
   }
 
-  function drawRule(y: number, color = "#222222", width = 0.8) {
+  function drawRule(y: number, color = "#222222", width = 0.8, fromX = startX, toX = pageRight) {
     doc.save()
-    doc.lineWidth(width).strokeColor(color).moveTo(startX, y).lineTo(pageRight, y).stroke()
+    doc.lineWidth(width).strokeColor(color).moveTo(fromX, y).lineTo(toX, y).stroke()
     doc.restore()
   }
 
-  function writeCell(label: string, value: string, x: number, y: number, labelWidth: number, valueWidth: number) {
+  function writeCell(label: string, value: string, x: number, y: number, labelWidth: number, valueWidth: number, valueSize = 8) {
     doc.font(fonts.bold).fontSize(8).fillColor("#111111").text(label, x, y, { width: labelWidth })
-    doc.font(fonts.regular).fontSize(8).fillColor("#111111").text(value || "-", x + labelWidth + 4, y, { width: valueWidth })
+    doc.font(fonts.regular).fontSize(valueSize).fillColor("#111111").text(value || "-", x + labelWidth + 4, y, { width: valueWidth })
   }
 
   function drawParty(title: string, rows: Array<[string, string]>, x: number, y: number, width: number) {
@@ -433,6 +434,9 @@ async function generateIncomingInvoicePdfBuffer(item: any) {
   const centerWidth = pageWidth - leftWidth - rightWidth
   const centerX = startX + leftWidth
   const rightX = centerX + centerWidth
+  const invoiceDate = fmtDateRo(parsed?.invoiceDate || item.invoiceDate)
+  const dueDate = fmtDateRo(parsed?.dueDate)
+  const payableAmount = parsed?.payableAmount || parsed?.totalGross || item.totalGross || 0
 
   const supplierRows: Array<[string, string]> = [
     ["Nume", supplierName],
@@ -470,24 +474,24 @@ async function generateIncomingInvoicePdfBuffer(item: any) {
   ;[
     ["Nr. factura", parsed?.invoiceNo || item.invoiceNo || "-"],
     ["Codul tipului", parsed?.invoiceTypeCode || "-"],
-    ["Data emiterii", fmtDateRo(parsed?.invoiceDate || item.invoiceDate)],
-    ["Data scadenta", fmtDateRo(parsed?.dueDate)],
+    ["Data emiterii", invoiceDate],
+    ["Data scadenta", dueDate],
     ["Moneda facturii", currency],
   ].forEach(([label, value], index) => {
     writeCell(String(label), String(value || "-"), centerX + 10, metaY + index * 14, 84, centerWidth - 98)
   })
 
-  doc.y = Math.max(supplierBottom, customerBottom) + 18
-  ensureSpace(96)
+  doc.y = Math.max(supplierBottom, customerBottom) + 22
+  ensureSpace(110)
 
   const totalCols = [
-    { label: "TOTAL NET", width: 116, value: money(parsed?.totalNet || item.totalNet || 0) },
-    { label: "VALOARE TOTALA fara TVA", width: 142, value: money(parsed?.taxExclusiveAmount || parsed?.totalNet || item.totalNet || 0) },
-    { label: "VALOARE TOTALA cu TVA", width: 142, value: money(parsed?.taxInclusiveAmount || parsed?.totalGross || item.totalGross || 0) },
+    { label: "TOTAL NET", width: 110, value: money(parsed?.totalNet || item.totalNet || 0) },
+    { label: "VALOARE TOTALA fara TVA", width: 136, value: money(parsed?.taxExclusiveAmount || parsed?.totalNet || item.totalNet || 0) },
+    { label: "VALOARE TOTALA cu TVA", width: 136, value: money(parsed?.taxInclusiveAmount || parsed?.totalGross || item.totalGross || 0) },
     { label: "TOTAL DEDUCERI", width: 114, value: money(parsed?.prepaidAmount || 0) },
-    { label: "TOTAL TAXE SUPLIMENTARE", width: 126, value: "0,00" },
+    { label: "TOTAL TAXE\nSUPLIMENTARE", width: 120, value: "0,00" },
     { label: "SUMA PLATITA", width: 112, value: money(parsed?.prepaidAmount || 0) },
-    { label: "VALOARE DE ROTUNJIRE", width: 122, value: money(parsed?.roundingAmount || 0) },
+    { label: "VALOARE DE\nROTUNJIRE", width: 122, value: money(parsed?.roundingAmount || 0) },
   ]
   let totalX = startX
   totalCols.forEach((column) => {
@@ -497,7 +501,7 @@ async function generateIncomingInvoicePdfBuffer(item: any) {
     })
     totalX += column.width
   })
-  drawRule(doc.y + 15)
+  drawRule(doc.y + 16)
   totalX = startX
   totalCols.forEach((column) => {
     doc.font(fonts.regular).fontSize(9).text(column.value, totalX + 3, doc.y + 18, {
@@ -506,14 +510,14 @@ async function generateIncomingInvoicePdfBuffer(item: any) {
     })
     totalX += column.width
   })
-  drawRule(doc.y + 33)
+  drawRule(doc.y + 34)
 
-  doc.y += 40
+  doc.y += 42
   doc.font(fonts.bold).fontSize(10).text("TOTAL PLATA", startX, doc.y)
-  doc.font(fonts.bold).fontSize(10).text(money(parsed?.payableAmount || parsed?.totalGross || item.totalGross || 0), startX + 96, doc.y)
-  drawRule(doc.y + 15)
+  doc.font(fonts.bold).fontSize(10).text(money(payableAmount), startX + 96, doc.y)
+  drawRule(doc.y + 15, "#222222", 0.8, startX, startX + 260)
 
-  doc.y += 22
+  doc.y += 24
   doc.font(fonts.bold).fontSize(10).text("TOTAL TVA", startX, doc.y)
   doc.font(fonts.regular).fontSize(10).text(money(parsed?.totalVat || item.totalVat || 0, true), startX + 82, doc.y)
 
@@ -521,17 +525,17 @@ async function generateIncomingInvoicePdfBuffer(item: any) {
   doc.font(fonts.bold).fontSize(9).text("Detalierea TVA", startX, doc.y)
   const taxHeaderY = doc.y + 14
   const taxCols = [
-    { label: "Codul categoriei", x: startX, width: 108 },
-    { label: "Baza de calcul", x: startX + 110, width: 92 },
-    { label: "Valoare TVA", x: startX + 204, width: 82 },
-    { label: "Codul", x: startX + 288, width: 56 },
-    { label: "motivului", x: startX + 346, width: 68 },
-    { label: "Motivul scutirii", x: startX + 416, width: 220 },
+    { label: "Codul\ncategoriei", x: startX, width: 92 },
+    { label: "Baza de calcul", x: startX + 94, width: 88 },
+    { label: "Valoare TVA", x: startX + 184, width: 74 },
+    { label: "Codul", x: startX + 260, width: 48 },
+    { label: "motivului", x: startX + 310, width: 48 },
+    { label: "Motivul scutirii", x: startX + 360, width: 188 },
   ]
   taxCols.forEach((col) => {
     doc.font(fonts.bold).fontSize(8).text(col.label, col.x, taxHeaderY, { width: col.width })
   })
-  let taxY = taxHeaderY + 14
+  let taxY = taxHeaderY + 16
   taxBreakdown.forEach((tax: any) => {
     ensureSpace(18)
     doc.font(fonts.regular).fontSize(8)
@@ -545,18 +549,18 @@ async function generateIncomingInvoicePdfBuffer(item: any) {
   })
   doc.y = taxY + 8
 
-  ensureSpace(50)
+  ensureSpace(64)
   const lineCols = [
-    { label: "Linia", width: 40 },
-    { label: "Nume articol/Descriere articol", width: 306 },
-    { label: "Tara\nprovenient", width: 62 },
-    { label: "Pretul net al\narticolului", width: 80 },
-    { label: "Moneda", width: 48 },
-    { label: "Cantitate de baza", width: 76 },
-    { label: "Cantitate\nfacturata", width: 70 },
-    { label: "UM", width: 38 },
-    { label: "Cota\nTVA", width: 42 },
-    { label: "Valoare neta", width: 72 },
+    { label: "Linia", width: 38 },
+    { label: "Nume articol/Descriere articol", width: 330 },
+    { label: "Tara\nprovenient", width: 66 },
+    { label: "Pretul net al\narticolului", width: 76 },
+    { label: "Moneda", width: 46 },
+    { label: "Cantitate de baza", width: 74 },
+    { label: "Cantitate\nfacturata", width: 72 },
+    { label: "UM", width: 34 },
+    { label: "Cota\nTVA", width: 40 },
+    { label: "Valoare neta", width: 68 },
   ]
   let lineHeaderX = startX
   lineCols.forEach((col) => {
@@ -617,11 +621,10 @@ async function generateIncomingInvoicePdfBuffer(item: any) {
   for (let i = 0; i < pages.count; i += 1) {
     doc.switchToPage(i)
     doc.font(fonts.regular).fontSize(10).fillColor("#111111")
-    const footerY = doc.page.height - 24
-    doc.text("Pagina", startX + pageWidth / 2 - 56, footerY, { width: 48, align: "center" })
+    doc.text("Pagina", startX + pageWidth / 2 - 54, footerY, { width: 48, align: "center" })
     doc.text(String(i + 1), startX + pageWidth / 2 - 2, footerY, { width: 18, align: "center" })
-    doc.text("din", startX + pageWidth / 2 + 20, footerY, { width: 18, align: "center" })
-    doc.text(String(pages.count), startX + pageWidth / 2 + 42, footerY, { width: 18, align: "center" })
+    doc.text("din", startX + pageWidth / 2 + 22, footerY, { width: 18, align: "center" })
+    doc.text(String(pages.count), startX + pageWidth / 2 + 44, footerY, { width: 18, align: "center" })
   }
 
   doc.end()
