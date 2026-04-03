@@ -54,6 +54,38 @@ type EFacturaCertificateState = {
   passwordConfigured: boolean
 }
 
+type LocalAgentCertificateStatus = {
+  configuredSerial: string | null
+  detected: boolean
+  hasPrivateKey: boolean
+  subject: string | null
+  issuer: string | null
+  thumbprint: string | null
+  store: string | null
+  notBefore: string | null
+  notAfter: string | null
+  expiresInDays: number | null
+  expired: boolean
+  expiringSoon: boolean
+  error: string | null
+}
+
+type LocalAgentStatus = {
+  ok: boolean
+  agent: {
+    service: string
+    bridgeUrl: string
+    host: string
+    port: number
+    erpUrl: string | null
+    erpOrigin: string | null
+    hasLicenseKey: boolean
+  }
+  certificate: LocalAgentCertificateStatus
+}
+
+const DEFAULT_LOCAL_AGENT_URL = "http://127.0.0.1:48521"
+
 const emptyForm: EFacturaForm = {
   efacturaEnabled: false,
   efacturaEnvironment: "test",
@@ -110,9 +142,14 @@ export default function SetariEFacturaPage() {
     expiresAt: "",
     lastError: "",
   })
+  const [localAgentUrl, setLocalAgentUrl] = useState(DEFAULT_LOCAL_AGENT_URL)
+  const [localAgentLoading, setLocalAgentLoading] = useState(false)
+  const [localAgentError, setLocalAgentError] = useState("")
+  const [localAgentStatus, setLocalAgentStatus] = useState<LocalAgentStatus | null>(null)
 
   useEffect(() => {
     loadSettings()
+    void loadLocalAgentStatus()
 
     const params = new URLSearchParams(window.location.search)
     const oauth = params.get("oauth")
@@ -193,6 +230,30 @@ export default function SetariEFacturaPage() {
       setError(e?.message || "Nu am putut incarca setarile e-Factura.")
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function loadLocalAgentStatus(preferredUrl?: string) {
+    const agentUrl = String(preferredUrl || localAgentUrl || DEFAULT_LOCAL_AGENT_URL).trim().replace(/\/+$/, "") || DEFAULT_LOCAL_AGENT_URL
+    setLocalAgentLoading(true)
+    setLocalAgentError("")
+    try {
+      const res = await fetch(`${agentUrl}/agent/status`, {
+        headers: {
+          Accept: "application/json",
+        },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Nu am putut citi starea agentului local Gufo e-Factura.")
+      }
+      setLocalAgentUrl(agentUrl)
+      setLocalAgentStatus(data as LocalAgentStatus)
+    } catch (e: any) {
+      setLocalAgentStatus(null)
+      setLocalAgentError(e?.message || "Nu am putut citi starea agentului local Gufo e-Factura.")
+    } finally {
+      setLocalAgentLoading(false)
     }
   }
 
@@ -440,6 +501,22 @@ export default function SetariEFacturaPage() {
     }
   }
 
+  const localCertificate = localAgentStatus?.certificate || null
+  const localCertificateExpiryText = localCertificate?.notAfter
+    ? new Date(localCertificate.notAfter).toLocaleString("ro-RO")
+    : "-"
+  const localCertificateWarning =
+    localCertificate?.expired
+      ? "Certificatul local este expirat."
+      : localCertificate?.expiringSoon && typeof localCertificate?.expiresInDays === "number"
+        ? `Certificatul local expira in ${localCertificate.expiresInDays} zile.`
+        : ""
+  const localAgentConnected = Boolean(localAgentStatus?.ok)
+  const localAgentSerialMatches =
+    Boolean(localCertificate?.configuredSerial) &&
+    Boolean(form.efacturaCertSerial.trim()) &&
+    String(localCertificate?.configuredSerial || "").trim().toUpperCase() === form.efacturaCertSerial.trim().toUpperCase()
+
   return (
     <div className="space-y-3">
       <PageHeader
@@ -638,6 +715,91 @@ export default function SetariEFacturaPage() {
           <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
             Incarcat la: <span className="font-semibold text-slate-900">{certState.uploadedAt ? new Date(certState.uploadedAt).toLocaleString("ro-RO") : "-"}</span>
           </div>
+        </div>
+      </DocumentSection>
+
+      <DocumentSection
+        title="4. Gufo e-Factura local"
+        actions={
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => void loadLocalAgentStatus()}
+              className={documentButtonSecondaryClass}
+              disabled={localAgentLoading}
+            >
+              {localAgentLoading ? "Detectare..." : "Detecteaza agentul"}
+            </button>
+            <button
+              type="button"
+              onClick={() => window.open(localAgentUrl, "_blank", "noopener,noreferrer")}
+              className={documentButtonPrimaryClass}
+            >
+              Deschide aplicatia locala
+            </button>
+          </div>
+        }
+      >
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
+          <DocumentMetric title="Agent local" value={localAgentConnected ? "Conectat" : "Neconectat"} tone={localAgentConnected ? "emerald" : "slate"} />
+          <DocumentMetric title="ERP in agent" value={localAgentStatus?.agent?.erpUrl || "-"} tone="blue" />
+          <DocumentMetric title="Certificat local" value={localCertificate?.configuredSerial || "-"} tone="slate" />
+          <DocumentMetric title="Expira la" value={localCertificateExpiryText} tone={localCertificate?.expired ? "amber" : localCertificate?.expiringSoon ? "amber" : "slate"} />
+        </div>
+
+        {localAgentError ? <div className="mt-3"><InlineNotice tone="error">{localAgentError}</InlineNotice></div> : null}
+        {localCertificateWarning ? <div className="mt-3"><InlineNotice tone="error">{localCertificateWarning}</InlineNotice></div> : null}
+        {localCertificate?.error && !localCertificate?.detected ? (
+          <div className="mt-3">
+            <InlineNotice tone="error">{localCertificate.error}</InlineNotice>
+          </div>
+        ) : null}
+        {localAgentConnected && localAgentSerialMatches ? (
+          <div className="mt-3">
+            <InlineNotice tone="success">Serialul certificatului din agent este aliniat cu serialul salvat in ERP.</InlineNotice>
+          </div>
+        ) : null}
+        {localAgentConnected && localCertificate?.configuredSerial && form.efacturaCertSerial.trim() && !localAgentSerialMatches ? (
+          <div className="mt-3">
+            <InlineNotice>
+              Serialul din agentul local este diferit de serialul salvat in ERP. Daca acesta este certificatul bun, copiaza-l si salveaza-l si in setarile firmei.
+            </InlineNotice>
+          </div>
+        ) : null}
+
+        <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+          <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+            URL local: <span className="font-semibold text-slate-900">{localAgentStatus?.agent?.bridgeUrl || localAgentUrl}</span>
+          </div>
+          <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+            Store certificat: <span className="font-semibold text-slate-900">{localCertificate?.store || "-"}</span>
+          </div>
+          <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+            Cheie privata: <span className="font-semibold text-slate-900">{localCertificate?.hasPrivateKey ? "Da" : "Nu"}</span>
+          </div>
+        </div>
+
+        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+          <DocumentField label="URL agent local">
+            <input
+              value={localAgentUrl}
+              onChange={(e) => setLocalAgentUrl(e.target.value)}
+              className={documentInputClass}
+              placeholder={DEFAULT_LOCAL_AGENT_URL}
+            />
+          </DocumentField>
+          <DocumentField label="Serial detectat din agent">
+            <input
+              value={localCertificate?.configuredSerial || ""}
+              readOnly
+              className={documentInputClass}
+              placeholder="Se completeaza dupa detectare"
+            />
+          </DocumentField>
+        </div>
+
+        <div className="mt-3 rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600">
+          Instalarea clientului trebuie sa ramana simpla: rulezi <strong>Gufo e-Factura</strong>, completezi URL-ul ERP si certificatul local, apoi ERP-ul doar vede starea agentului si a certificatului.
         </div>
       </DocumentSection>
 

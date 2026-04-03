@@ -14,7 +14,9 @@ New-Item -ItemType Directory -Force -Path $vendorDir | Out-Null
 
 $files = @(
   "bridge.js",
+  "desktop-main.js",
   "package.json",
+  "preload.js",
   ".env.example",
   "README.md",
   "install-agent.ps1",

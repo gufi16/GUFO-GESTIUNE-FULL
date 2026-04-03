@@ -230,10 +230,6 @@ function renderSetupPage() {
           <input id="erpUrl" name="erpUrl" value="${escape(ERP_URL)}" placeholder="https://app.gufo.ink" />
         </div>
         <div class="full">
-          <label for="licenseKey">License key</label>
-          <input id="licenseKey" name="licenseKey" value="${escape(LICENSE_KEY)}" placeholder="Licenta / cheia clientului" />
-        </div>
-        <div class="full">
           <label for="certSerial">Serial certificat</label>
           <input id="certSerial" name="certSerial" value="${escape(DEFAULT_CERT_SERIAL)}" placeholder="Serialul certificatului din Windows Store" />
         </div>
@@ -259,7 +255,6 @@ function renderSetupPage() {
       const form = event.currentTarget;
       const payload = {
         erpUrl: form.erpUrl.value.trim(),
-        licenseKey: form.licenseKey.value.trim(),
         certSerial: form.certSerial.value.trim(),
         bridgeHost: form.bridgeHost.value.trim(),
         bridgePort: form.bridgePort.value.trim(),
@@ -319,6 +314,78 @@ function readJsonBody(req) {
     })
     req.on("error", reject)
   })
+}
+
+function getCertificateStatusPayload(certificate, error) {
+  const configuredSerial = DEFAULT_CERT_SERIAL || null
+  if (!configuredSerial && !certificate) {
+    return {
+      configuredSerial: null,
+      detected: false,
+      hasPrivateKey: false,
+      subject: null,
+      issuer: null,
+      thumbprint: null,
+      store: null,
+      notBefore: null,
+      notAfter: null,
+      expiresInDays: null,
+      expired: false,
+      expiringSoon: false,
+      error: error ? String(error.message || error) : null,
+    }
+  }
+
+  const notAfterRaw = certificate?.notAfter || null
+  const notAfterDate = notAfterRaw ? new Date(notAfterRaw) : null
+  const now = Date.now()
+  const expiresInDays =
+    notAfterDate && !Number.isNaN(notAfterDate.getTime())
+      ? Math.ceil((notAfterDate.getTime() - now) / 86_400_000)
+      : null
+
+  return {
+    configuredSerial,
+    detected: Boolean(certificate),
+    hasPrivateKey: Boolean(certificate?.hasPrivateKey),
+    subject: certificate?.subject || null,
+    issuer: certificate?.issuer || null,
+    thumbprint: certificate?.thumbprint || null,
+    store: certificate?.store || null,
+    notBefore: certificate?.notBefore || null,
+    notAfter: notAfterRaw,
+    expiresInDays,
+    expired: typeof expiresInDays === "number" ? expiresInDays < 0 : false,
+    expiringSoon: typeof expiresInDays === "number" ? expiresInDays <= 30 : false,
+    error: error ? String(error.message || error) : null,
+  }
+}
+
+async function getLocalAgentStatus() {
+  let certificate = null
+  let certError = null
+
+  if (DEFAULT_CERT_SERIAL) {
+    try {
+      certificate = await resolveCertificate(DEFAULT_CERT_SERIAL)
+    } catch (error) {
+      certError = error
+    }
+  }
+
+  return {
+    ok: true,
+    agent: {
+      service: "gufo-efactura",
+      bridgeUrl: `http://${HOST}:${PORT}`,
+      host: HOST,
+      port: PORT,
+      erpUrl: ERP_URL || null,
+      erpOrigin: getConfiguredErpOrigin() || null,
+      hasLicenseKey: Boolean(LICENSE_KEY),
+    },
+    certificate: getCertificateStatusPayload(certificate, certError),
+  }
 }
 
 function requireAuth(req, res) {
@@ -1289,7 +1356,27 @@ const server = http.createServer(async (req, res) => {
     return
   }
 
+  if (req.method === "GET" && url.pathname === "/agent/status") {
+    if (!isTrustedOrigin(req.headers.origin)) {
+      sendJson(res, 403, {
+        ok: false,
+        error: "Originea ERP-ului nu este autorizata pentru statusul agentului.",
+      })
+      return
+    }
+    try {
+      sendJson(res, 200, await getLocalAgentStatus())
+    } catch (error) {
+      sendJson(res, 500, {
+        ok: false,
+        error: String(error.message || error),
+      })
+    }
+    return
+  }
+
   if (req.method === "GET" && url.pathname === "/health") {
+    const statusPayload = await getLocalAgentStatus()
     sendJson(res, 200, {
       ok: true,
       service: "gufo-efactura",
@@ -1299,6 +1386,7 @@ const server = http.createServer(async (req, res) => {
       defaultCertSerial: DEFAULT_CERT_SERIAL || null,
       erpUrl: ERP_URL || null,
       hasLicenseKey: Boolean(LICENSE_KEY),
+      certificate: statusPayload.certificate,
       time: new Date().toISOString(),
     })
     return
