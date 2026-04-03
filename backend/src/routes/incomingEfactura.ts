@@ -395,11 +395,22 @@ async function generateIncomingInvoicePdfBuffer(item: any) {
   const pageRight = startX + pageWidth
   const topY = doc.page.margins.top
   const footerY = doc.page.height - 30
-  const pageBottom = footerY - 12
+  const pageBottom = footerY - 14
 
   function money(value: any, includeCurrency = false) {
     const amount = fmtMoneyRo(value)
     return includeCurrency ? `${amount} ${currency}` : amount
+  }
+
+  function writePair(label: string, value: string, x: number, y: number, labelWidth: number, valueWidth: number) {
+    doc.font(fonts.bold).fontSize(8).fillColor("#111111").text(label, x, y, { width: labelWidth })
+    doc.font(fonts.regular).fontSize(8).fillColor("#111111").text(value || "-", x + labelWidth + 4, y, { width: valueWidth })
+  }
+
+  function drawLine(y: number, x1 = startX, x2 = pageRight, width = 0.9, color = "#222222") {
+    doc.save()
+    doc.lineWidth(width).strokeColor(color).moveTo(x1, y).lineTo(x2, y).stroke()
+    doc.restore()
   }
 
   function ensureSpace(requiredHeight: number) {
@@ -408,136 +419,131 @@ async function generateIncomingInvoicePdfBuffer(item: any) {
     doc.font(fonts.regular).fontSize(8).fillColor("#111111")
   }
 
-  function drawRule(y: number, color = "#222222", width = 0.8, fromX = startX, toX = pageRight) {
-    doc.save()
-    doc.lineWidth(width).strokeColor(color).moveTo(fromX, y).lineTo(toX, y).stroke()
-    doc.restore()
-  }
-
-  function writeCell(label: string, value: string, x: number, y: number, labelWidth: number, valueWidth: number, valueSize = 8) {
-    doc.font(fonts.bold).fontSize(8).fillColor("#111111").text(label, x, y, { width: labelWidth })
-    doc.font(fonts.regular).fontSize(valueSize).fillColor("#111111").text(value || "-", x + labelWidth + 4, y, { width: valueWidth })
-  }
-
-  function drawParty(title: string, rows: Array<[string, string]>, x: number, y: number, width: number) {
-    doc.font(fonts.bold).fontSize(10).fillColor("#111111").text(title, x, y, { width })
-    let currentY = y + 14
+  function drawPartyBlock(title: string, rows: Array<[string, string]>, x: number, y: number, width: number) {
+    doc.font(fonts.bold).fontSize(10).text(title, x, y, { width })
+    let cursorY = y + 14
     rows.forEach(([label, value]) => {
-      writeCell(label, value || "-", x, currentY, 76, width - 80)
-      currentY += 12
+      writePair(label, value || "-", x, cursorY, 76, width - 80)
+      cursorY += 12
     })
-    return currentY
+    return cursorY
   }
 
-  const leftWidth = 252
-  const rightWidth = 252
+  const leftWidth = 245
+  const rightWidth = 245
   const centerWidth = pageWidth - leftWidth - rightWidth
   const centerX = startX + leftWidth
   const rightX = centerX + centerWidth
-  const invoiceDate = fmtDateRo(parsed?.invoiceDate || item.invoiceDate)
-  const dueDate = fmtDateRo(parsed?.dueDate)
-  const payableAmount = parsed?.payableAmount || parsed?.totalGross || item.totalGross || 0
 
-  const supplierRows: Array<[string, string]> = [
-    ["Nume", supplierName],
-    ["Nr. inregistrare", parsed?.supplierIdentifier || "-"],
-    ["Informatii juridice", parsed?.supplierIdentifier || "-"],
-    ["Identificatorul TVA", supplierCif ? `RO${supplierCif}` : "-"],
-    ["Strada", [parsed?.supplierAddress?.street, parsed?.supplierAddress?.additionalStreet].filter(Boolean).join(", ") || "-"],
-    ["Oras", parsed?.supplierAddress?.city || "-"],
-    ["Cod", parsed?.supplierAddress?.postalCode || "-"],
-    ["Regiune", parsed?.supplierAddress?.region || "-"],
-    ["Tara", parsed?.supplierAddress?.country || "-"],
-  ]
+  const supplierBottom = drawPartyBlock(
+    "VANZATOR",
+    [
+      ["Nume", supplierName],
+      ["Nr. inregistrare", parsed?.supplierIdentifier || "-"],
+      ["Informatii juridice", parsed?.supplierIdentifier || "-"],
+      ["Identificatorul TVA", supplierCif ? `RO${supplierCif}` : "-"],
+      ["Strada", [parsed?.supplierAddress?.street, parsed?.supplierAddress?.additionalStreet].filter(Boolean).join(", ") || "-"],
+      ["Oras", parsed?.supplierAddress?.city || "-"],
+      ["Cod", parsed?.supplierAddress?.postalCode || "-"],
+      ["Regiune", parsed?.supplierAddress?.region || "-"],
+      ["Tara", parsed?.supplierAddress?.country || "-"],
+    ],
+    startX,
+    topY + 2,
+    leftWidth - 8
+  )
 
-  const customerRows: Array<[string, string]> = [
-    ["Nume", customerName],
-    ["Nr. inregistrare", parsed?.customerIdentifier || "-"],
-    ["Identificator", customerCif ? `RO${customerCif}` : "-"],
-    ["Strada", [parsed?.customerAddress?.street, parsed?.customerAddress?.additionalStreet].filter(Boolean).join(", ") || "-"],
-    ["Oras", parsed?.customerAddress?.city || "-"],
-    ["Cod", parsed?.customerAddress?.postalCode || "-"],
-    ["Regiune", parsed?.customerAddress?.region || "-"],
-    ["Tara", parsed?.customerAddress?.country || "-"],
-    ["E-mail", parsed?.customerContact?.email || "-"],
-  ]
+  const customerBottom = drawPartyBlock(
+    "CUMPARATOR",
+    [
+      ["Nume", customerName],
+      ["Nr. inregistrare", parsed?.customerIdentifier || "-"],
+      ["Identificator", customerCif ? `RO${customerCif}` : "-"],
+      ["Strada", [parsed?.customerAddress?.street, parsed?.customerAddress?.additionalStreet].filter(Boolean).join(", ") || "-"],
+      ["Oras", parsed?.customerAddress?.city || "-"],
+      ["Cod", parsed?.customerAddress?.postalCode || "-"],
+      ["Regiune", parsed?.customerAddress?.region || "-"],
+      ["Tara", parsed?.customerAddress?.country || "-"],
+      ["E-mail", parsed?.customerContact?.email || "-"],
+    ],
+    rightX,
+    topY + 2,
+    rightWidth - 8
+  )
 
-  const supplierBottom = drawParty("VANZATOR", supplierRows, startX, topY + 2, leftWidth - 8)
-  const customerBottom = drawParty("CUMPARATOR", customerRows, rightX, topY + 2, rightWidth - 8)
-
-  doc.font(fonts.bold).fontSize(22).fillColor("#111111").text("RO eFactura", centerX, topY + 18, {
+  doc.font(fonts.bold).fontSize(22).text("RO eFactura", centerX, topY + 18, {
     width: centerWidth,
     align: "center",
   })
 
+  const metaX = centerX + 12
   const metaY = topY + 52
   ;[
     ["Nr. factura", parsed?.invoiceNo || item.invoiceNo || "-"],
     ["Codul tipului", parsed?.invoiceTypeCode || "-"],
-    ["Data emiterii", invoiceDate],
-    ["Data scadenta", dueDate],
+    ["Data emiterii", fmtDateRo(parsed?.invoiceDate || item.invoiceDate)],
+    ["Data scadenta", fmtDateRo(parsed?.dueDate)],
     ["Moneda facturii", currency],
   ].forEach(([label, value], index) => {
-    writeCell(String(label), String(value || "-"), centerX + 10, metaY + index * 14, 84, centerWidth - 98)
+    writePair(String(label), String(value || "-"), metaX, metaY + index * 14, 82, centerWidth - 98)
   })
 
-  doc.y = Math.max(supplierBottom, customerBottom) + 22
-  ensureSpace(110)
+  doc.y = Math.max(supplierBottom, customerBottom) + 20
+  ensureSpace(120)
 
-  const totalCols = [
-    { label: "TOTAL NET", width: 110, value: money(parsed?.totalNet || item.totalNet || 0) },
-    { label: "VALOARE TOTALA fara TVA", width: 136, value: money(parsed?.taxExclusiveAmount || parsed?.totalNet || item.totalNet || 0) },
-    { label: "VALOARE TOTALA cu TVA", width: 136, value: money(parsed?.taxInclusiveAmount || parsed?.totalGross || item.totalGross || 0) },
-    { label: "TOTAL DEDUCERI", width: 114, value: money(parsed?.prepaidAmount || 0) },
+  const totalColumns = [
+    { label: "TOTAL NET", width: 126, value: money(parsed?.totalNet || item.totalNet || 0) },
+    { label: "VALOARE TOTALA fara TVA", width: 132, value: money(parsed?.taxExclusiveAmount || parsed?.totalNet || item.totalNet || 0) },
+    { label: "VALOARE TOTALA cu TVA", width: 132, value: money(parsed?.taxInclusiveAmount || parsed?.totalGross || item.totalGross || 0) },
+    { label: "TOTAL DEDUCERI", width: 118, value: money(parsed?.prepaidAmount || 0) },
     { label: "TOTAL TAXE\nSUPLIMENTARE", width: 120, value: "0,00" },
-    { label: "SUMA PLATITA", width: 112, value: money(parsed?.prepaidAmount || 0) },
-    { label: "VALOARE DE\nROTUNJIRE", width: 122, value: money(parsed?.roundingAmount || 0) },
+    { label: "SUMA PLATITA", width: 120, value: money(parsed?.prepaidAmount || 0) },
+    { label: "VALOARE DE\nROTUNJIRE", width: 110, value: money(parsed?.roundingAmount || 0) },
   ]
-  let totalX = startX
-  totalCols.forEach((column) => {
-    doc.font(fonts.bold).fontSize(8).text(column.label, totalX + 2, doc.y, {
+  let currentX = startX
+  totalColumns.forEach((column) => {
+    doc.font(fonts.bold).fontSize(8).text(column.label, currentX + 2, doc.y, {
       width: column.width - 4,
       align: "center",
     })
-    totalX += column.width
+    currentX += column.width
   })
-  drawRule(doc.y + 16)
-  totalX = startX
-  totalCols.forEach((column) => {
-    doc.font(fonts.regular).fontSize(9).text(column.value, totalX + 3, doc.y + 18, {
+  drawLine(doc.y + 16)
+  currentX = startX
+  totalColumns.forEach((column) => {
+    doc.font(fonts.regular).fontSize(9).text(column.value, currentX + 3, doc.y + 19, {
       width: column.width - 6,
-      align: "left",
     })
-    totalX += column.width
+    currentX += column.width
   })
-  drawRule(doc.y + 34)
+  drawLine(doc.y + 35)
 
   doc.y += 42
   doc.font(fonts.bold).fontSize(10).text("TOTAL PLATA", startX, doc.y)
-  doc.font(fonts.bold).fontSize(10).text(money(payableAmount), startX + 96, doc.y)
-  drawRule(doc.y + 15, "#222222", 0.8, startX, startX + 260)
+  doc.font(fonts.bold).fontSize(10).text(money(parsed?.payableAmount || parsed?.totalGross || item.totalGross || 0), startX + 96, doc.y)
+  drawLine(doc.y + 15, startX, startX + 260)
 
   doc.y += 24
   doc.font(fonts.bold).fontSize(10).text("TOTAL TVA", startX, doc.y)
-  doc.font(fonts.regular).fontSize(10).text(money(parsed?.totalVat || item.totalVat || 0, true), startX + 82, doc.y)
+  doc.font(fonts.regular).fontSize(10).text(money(parsed?.totalVat || item.totalVat || 0, true), startX + 84, doc.y)
 
   doc.y += 18
   doc.font(fonts.bold).fontSize(9).text("Detalierea TVA", startX, doc.y)
-  const taxHeaderY = doc.y + 14
+  const taxHeadY = doc.y + 14
   const taxCols = [
-    { label: "Codul\ncategoriei", x: startX, width: 92 },
-    { label: "Baza de calcul", x: startX + 94, width: 88 },
-    { label: "Valoare TVA", x: startX + 184, width: 74 },
-    { label: "Codul", x: startX + 260, width: 48 },
-    { label: "motivului", x: startX + 310, width: 48 },
-    { label: "Motivul scutirii", x: startX + 360, width: 188 },
+    { x: startX, width: 86, label: "Codul\ncategoriei" },
+    { x: startX + 88, width: 86, label: "Baza de calcul" },
+    { x: startX + 176, width: 78, label: "Valoare TVA" },
+    { x: startX + 256, width: 56, label: "Codul" },
+    { x: startX + 314, width: 72, label: "motivului" },
+    { x: startX + 388, width: 210, label: "Motivul scutirii" },
   ]
   taxCols.forEach((col) => {
-    doc.font(fonts.bold).fontSize(8).text(col.label, col.x, taxHeaderY, { width: col.width })
+    doc.font(fonts.bold).fontSize(8).text(col.label, col.x, taxHeadY, { width: col.width })
   })
-  let taxY = taxHeaderY + 16
+  let taxY = taxHeadY + 16
   taxBreakdown.forEach((tax: any) => {
-    ensureSpace(18)
+    ensureSpace(16)
     doc.font(fonts.regular).fontSize(8)
     doc.text(String(tax.categoryId || "-"), taxCols[0].x, taxY, { width: taxCols[0].width })
     doc.text(money(tax.taxableAmount || 0), taxCols[1].x, taxY, { width: taxCols[1].width })
@@ -545,38 +551,47 @@ async function generateIncomingInvoicePdfBuffer(item: any) {
     doc.text(String(tax.taxCode || "-"), taxCols[3].x, taxY, { width: taxCols[3].width })
     doc.text(tax.exemptionReason ? "da" : "-", taxCols[4].x, taxY, { width: taxCols[4].width })
     doc.text(String(tax.exemptionReason || "-"), taxCols[5].x, taxY, { width: taxCols[5].width })
-    taxY += 13
+    taxY += 12
   })
-  doc.y = taxY + 8
+  doc.y = taxY + 10
 
-  ensureSpace(64)
-  const lineCols = [
-    { label: "Linia", width: 38 },
-    { label: "Nume articol/Descriere articol", width: 330 },
-    { label: "Tara\nprovenient", width: 66 },
-    { label: "Pretul net al\narticolului", width: 76 },
-    { label: "Moneda", width: 46 },
-    { label: "Cantitate de baza", width: 74 },
-    { label: "Cantitate\nfacturata", width: 72 },
-    { label: "UM", width: 34 },
-    { label: "Cota\nTVA", width: 40 },
-    { label: "Valoare neta", width: 68 },
+  const lineColumns = [
+    { width: 38, label: "Linia" },
+    { width: 322, label: "Nume articol/Descriere articol" },
+    { width: 62, label: "Tara\nprovenient" },
+    { width: 80, label: "Pretul net al\narticolului" },
+    { width: 44, label: "Moneda" },
+    { width: 78, label: "Cantitate de baza" },
+    { width: 72, label: "Cantitate\nfacturata" },
+    { width: 34, label: "UM" },
+    { width: 40, label: "Cota\nTVA" },
+    { width: 70, label: "Valoare neta" },
   ]
-  let lineHeaderX = startX
-  lineCols.forEach((col) => {
-    doc.font(fonts.bold).fontSize(7.6).text(col.label, lineHeaderX + 2, doc.y, {
-      width: col.width - 4,
+
+  function drawLineHeader() {
+    let x = startX
+    lineColumns.forEach((column) => {
+      doc.font(fonts.bold).fontSize(7.5).text(column.label, x + 2, doc.y, { width: column.width - 4 })
+      x += column.width
     })
-    lineHeaderX += col.width
-  })
-  drawRule(doc.y + 14)
-  doc.y += 18
+    drawLine(doc.y + 14)
+    doc.y += 18
+  }
+
+  ensureSpace(56)
+  drawLineHeader()
 
   lines.forEach((line: any, index: number) => {
     const description = String(line.description || line.productName || "-")
-    const rowHeight = Math.max(18, doc.heightOfString(description, { width: lineCols[1].width - 4 }) + 4)
-    ensureSpace(rowHeight + 6)
-    let lineX = startX
+    const rowHeight = Math.max(18, doc.heightOfString(description, { width: lineColumns[1].width - 4 }) + 4)
+    ensureSpace(rowHeight + 10)
+    if (doc.y + rowHeight > pageBottom) {
+      doc.addPage()
+      doc.font(fonts.regular).fontSize(8).fillColor("#111111")
+      doc.y = topY
+      drawLineHeader()
+    }
+    let x = startX
     const values = [
       String(line.lineIndex || index + 1),
       description,
@@ -590,19 +605,19 @@ async function generateIncomingInvoicePdfBuffer(item: any) {
       money(line.lineNet || 0),
     ]
     values.forEach((value, valueIndex) => {
-      const width = lineCols[valueIndex].width
-      doc.font(fonts.regular).fontSize(8).text(String(value), lineX + 2, doc.y, {
+      const width = lineColumns[valueIndex].width
+      doc.font(fonts.regular).fontSize(8).text(String(value), x + 2, doc.y, {
         width: width - 4,
         align: valueIndex === 0 ? "center" : "left",
       })
-      lineX += width
+      x += width
     })
-    drawRule(doc.y + rowHeight, "#d1d5db", 0.5)
+    drawLine(doc.y + rowHeight, startX, pageRight, 0.5, "#c7c7c7")
     doc.y += rowHeight + 2
   })
 
   doc.y += 10
-  ensureSpace(82)
+  ensureSpace(80)
   doc.font(fonts.bold).fontSize(9).text("Instructiuni de plata", startX, doc.y)
   let paymentY = doc.y + 14
   ;[
@@ -612,7 +627,7 @@ async function generateIncomingInvoicePdfBuffer(item: any) {
     ["Nota", parsed?.bankCode || "-"],
     ["Nr. contract", parsed?.paymentId || "-"],
   ].forEach(([label, value]) => {
-    writeCell(String(label), String(value || "-"), startX, paymentY, 152, pageWidth - 156)
+    writePair(String(label), String(value || "-"), startX, paymentY, 152, pageWidth - 156)
     paymentY += 12
   })
   doc.y = paymentY
