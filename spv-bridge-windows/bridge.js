@@ -3,7 +3,12 @@ const { execFile } = require("child_process")
 const crypto = require("crypto")
 const fs = require("fs")
 const path = require("path")
-const AdmZip = require(path.join(__dirname, "vendor", "adm-zip"))
+let AdmZip
+try {
+  AdmZip = require("adm-zip")
+} catch {
+  AdmZip = require(path.join(__dirname, "vendor", "adm-zip"))
+}
 
 const DEFAULT_PORT = 48521
 const DEFAULT_HOST = "127.0.0.1"
