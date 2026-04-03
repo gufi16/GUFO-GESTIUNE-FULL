@@ -1204,9 +1204,9 @@ export default function FacturiPrimiteSPVPage() {
                         <div className="text-xs text-slate-500">{item.supplierCif || "-"}</div>
                       </td>
                       <td className="px-3 py-2.5 text-slate-700">
-                        <div className="font-semibold text-slate-900">{formatMoneyRo(item.totalGross)} {item.currency}</div>
+                        <div className="font-semibold text-slate-900">{formatMoneyRo(item.totalGross, item.currency)}</div>
                         <div className="text-xs text-slate-500">
-                          Net {formatMoneyRo(item.totalNet || 0)} • TVA {formatMoneyRo(item.totalVat || 0)}
+                          Net {formatMoneyRo(item.totalNet || 0, item.currency)} • TVA {formatMoneyRo(item.totalVat || 0, item.currency)}
                         </div>
                         <div className="text-xs text-slate-500">{item.items.length} pozitii</div>
                       </td>
@@ -1293,13 +1293,13 @@ export default function FacturiPrimiteSPVPage() {
                                     <div className="text-slate-700">{line.uomCode || "-"}</div>
                                     <div className="text-slate-700">{formatQtyRo(line.qty || 0)}</div>
                                     <div className="text-slate-700">
-                                      {formatMoneyRo(line.unitPrice || 0, item.currency)} {item.currency}
+                                      {formatMoneyRo(line.unitPrice || 0, item.currency)}
                                     </div>
                                     <div className="text-slate-700">
-                                      {formatMoneyRo(getUnitPriceWithVat(line), item.currency)} {item.currency}
+                                      {formatMoneyRo(getUnitPriceWithVat(line), item.currency)}
                                     </div>
                                     <div className="text-slate-700">
-                                      {formatMoneyRo(line.lineGross || 0, item.currency)} {item.currency}
+                                      {formatMoneyRo(line.lineGross || 0, item.currency)}
                                     </div>
                                     <div>
                                       <span
@@ -1382,12 +1382,12 @@ export default function FacturiPrimiteSPVPage() {
                 <DocumentMetric title="Factura" value={selectedInvoice.invoiceNo || "-"} tone="blue" />
                 <DocumentMetric title="Data" value={formatDate(selectedInvoice.invoiceDate)} tone="slate" />
                 <DocumentMetric title="Furnizor" value={selectedInvoice.supplierName || "-"} tone="slate" />
-                <DocumentMetric title="Total" value={`${formatMoneyRo(selectedInvoice.totalGross)} ${selectedInvoice.currency}`} tone="emerald" />
+                <DocumentMetric title="Total" value={formatMoneyRo(selectedInvoice.totalGross, selectedInvoice.currency)} tone="emerald" />
               </div>
 
               <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
-                <DocumentMetric title="Total fara TVA" value={`${formatMoneyRo(selectedInvoice.totalNet || 0)} ${selectedInvoice.currency}`} tone="slate" />
-                <DocumentMetric title="TVA" value={`${formatMoneyRo(selectedInvoice.totalVat || 0)} ${selectedInvoice.currency}`} tone="slate" />
+                <DocumentMetric title="Total fara TVA" value={formatMoneyRo(selectedInvoice.totalNet || 0, selectedInvoice.currency)} tone="slate" />
+                <DocumentMetric title="TVA" value={formatMoneyRo(selectedInvoice.totalVat || 0, selectedInvoice.currency)} tone="slate" />
                 <DocumentMetric title="Pozitii" value={String(selectedInvoice.items.length)} tone="blue" />
               </div>
 
@@ -1483,13 +1483,13 @@ export default function FacturiPrimiteSPVPage() {
                         </td>
                         <td className="px-3 py-2.5 text-slate-700">{line.uomCode || "-"}</td>
                         <td className="px-3 py-2.5 text-slate-700">{formatQtyRo(line.qty || 0)}</td>
-                        <td className="px-3 py-2.5 text-slate-700">{formatMoneyRo(line.unitPrice || 0, selectedInvoice.currency)} {selectedInvoice.currency}</td>
-                        <td className="px-3 py-2.5 text-slate-700">{formatMoneyRo(getUnitPriceWithVat(line), selectedInvoice.currency)} {selectedInvoice.currency}</td>
+                        <td className="px-3 py-2.5 text-slate-700">{formatMoneyRo(line.unitPrice || 0, selectedInvoice.currency)}</td>
+                        <td className="px-3 py-2.5 text-slate-700">{formatMoneyRo(getUnitPriceWithVat(line), selectedInvoice.currency)}</td>
                         <td className="px-3 py-2.5 text-slate-700">
-                          <div>{formatMoneyRo(line.lineVat || 0, selectedInvoice.currency)} {selectedInvoice.currency}</div>
+                          <div>{formatMoneyRo(line.lineVat || 0, selectedInvoice.currency)}</div>
                           <div className="text-xs text-slate-500">{formatQtyRo(line.vatRate || 0)}%</div>
                         </td>
-                        <td className="px-3 py-2.5 text-slate-700">{formatMoneyRo(line.lineGross || 0, selectedInvoice.currency)} {selectedInvoice.currency}</td>
+                        <td className="px-3 py-2.5 text-slate-700">{formatMoneyRo(line.lineGross || 0, selectedInvoice.currency)}</td>
                         <td className="px-3 py-2.5">
                           <span
                             className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
