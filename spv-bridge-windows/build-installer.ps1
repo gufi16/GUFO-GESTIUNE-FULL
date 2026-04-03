@@ -5,6 +5,8 @@ $releaseScript = Join-Path $scriptDir "build-release.ps1"
 $issPath = Join-Path $scriptDir "installer\GufoEFactura.iss"
 $brandingIcon = Join-Path $scriptDir "branding\gufo-efactura.ico"
 $setupIcon = Join-Path $scriptDir "branding\gufo-efactura-setup.ico"
+$installerOutputDir = Join-Path $scriptDir "release\installer"
+$timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 
 if (-not (Test-Path $brandingIcon)) {
   throw "Lipseste branding\gufo-efactura.ico. Pune iconul in format .ico in acest folder inainte de build."
@@ -127,11 +129,12 @@ if (-not $iscc) {
   exit 0
 }
 
-$null = & $iscc $issPath
+$baseName = "Gufo-eFactura-Setup-$timestamp"
+$null = & $iscc "/O$installerOutputDir" "/F$baseName" $issPath
 if ($LASTEXITCODE -ne 0) {
   throw "Build-ul installerului a esuat. Verifica erorile ISCC de mai sus."
 }
 
 Write-Host ""
 Write-Host "Installerul Gufo e-Factura a fost generat." -ForegroundColor Green
-Write-Host "Folder output: $(Join-Path $scriptDir 'release')"
+Write-Host "Fisier: $(Join-Path $installerOutputDir ($baseName + '.exe'))"
