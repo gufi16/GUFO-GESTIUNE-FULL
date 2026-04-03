@@ -1,8 +1,10 @@
 // @ts-nocheck
+import { execFile } from "child_process"
 import fs from "fs"
 import path from "path"
 import { Router } from "express"
 import PDFDocument from "pdfkit"
+import { promisify } from "util"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { requireTenantModule } from "../lib/tenantModules"
@@ -18,6 +20,7 @@ import {
 } from "../lib/incomingEfactura"
 
 const router = Router()
+const execFileAsync = promisify(execFile)
 
 router.use(requireAuth)
 
@@ -646,9 +649,86 @@ async function generateIncomingInvoicePdfBuffer(item: any) {
   return done
 }
 
+async function generateIncomingInvoiceOfficialPdfBuffer(item: any) {
+  const xmlText = String(item?.xmlText || "").trim()
+  if (!xmlText) {
+    throw new Error("Factura nu are XML disponibil pentru conversia ANAF.")
+  }
+
+  const parsed = parseIncomingEInvoiceXml(xmlText)
+  const uploadXmlUrl = "https://www.anaf.ro/uploadxml/"
+  const downloadPdfUrl = "https://www.anaf.ro/uploadxml/download"
+  const docKind =
+    String(parsed?.invoiceTypeCode || "").trim() === "381" || xmlText.includes("<CreditNote")
+      ? "FCN"
+      : "FACT1"
+
+  const tempDir = fs.mkdtempSync(path.join(incomingEfacturaPdfDir, "anaf-uploadxml-"))
+  const xmlPath = path.join(tempDir, "invoice.xml")
+  const postPath = path.join(tempDir, "post.html")
+  const cookiePath = path.join(tempDir, "cookies.txt")
+  const pdfPath = path.join(tempDir, "invoice.pdf")
+
+  try {
+    fs.writeFileSync(xmlPath, xmlText, "utf8")
+
+    await execFileAsync("curl", [
+      "-sS",
+      "-L",
+      "-c",
+      cookiePath,
+      "-b",
+      cookiePath,
+      "-F",
+      `fisier=@${xmlPath};type=text/xml`,
+      "-F",
+      "select=",
+      "-F",
+      `select2=${docKind}`,
+      uploadXmlUrl,
+      "-o",
+      postPath,
+    ])
+
+    await execFileAsync("curl", [
+      "-sS",
+      "-L",
+      "-c",
+      cookiePath,
+      "-b",
+      cookiePath,
+      downloadPdfUrl,
+      "-o",
+      pdfPath,
+    ])
+
+    if (!fs.existsSync(pdfPath)) {
+      throw new Error("ANAF nu a returnat fisierul PDF.")
+    }
+
+    const buffer = fs.readFileSync(pdfPath)
+    if (buffer.length < 1000 || buffer.subarray(0, 4).toString("utf8") !== "%PDF") {
+      throw new Error("Fisierul intors de ANAF nu pare a fi PDF valid.")
+    }
+
+    return buffer
+  } finally {
+    try {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    } catch {
+      // ignore cleanup failures
+    }
+  }
+}
+
 async function ensureIncomingInvoicePdfSaved(item: any) {
   const pdfPath = getIncomingInvoicePdfPath(item.tenantId, item.id)
-  const buffer = await generateIncomingInvoicePdfBuffer(item)
+  let buffer: Buffer
+  try {
+    buffer = await generateIncomingInvoiceOfficialPdfBuffer(item)
+  } catch {
+    buffer = await generateIncomingInvoicePdfBuffer(item)
+  }
   fs.writeFileSync(pdfPath, buffer)
   return pdfPath
 }
