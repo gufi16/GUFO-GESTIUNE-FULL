@@ -230,10 +230,6 @@ export default function FacturiPrimiteSPVPage() {
   const isDebugMode =
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("debugSpv") === "1"
-  const [spvModeMessage] = useState(
-    "Sincronizezi facturile primite din e-Factura si lucrezi direct pe documentele importate."
-  )
-
   useEffect(() => {
     if (typeof window !== "undefined") {
       setBridgeUrl(window.localStorage.getItem(SPV_BRIDGE_URL_KEY) || DEFAULT_SPV_BRIDGE_URL)
@@ -888,7 +884,9 @@ export default function FacturiPrimiteSPVPage() {
         />
       </div>
 
-      <InlineNotice>{spvModeMessage}</InlineNotice>
+      {isDebugMode ? (
+        <InlineNotice>Pagina foloseste bridge-ul local Windows pentru a citi facturile primite din e-Factura.</InlineNotice>
+      ) : null}
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
       {isDebugMode && spvTestResult ? (
