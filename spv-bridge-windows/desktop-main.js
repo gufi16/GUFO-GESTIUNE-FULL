@@ -1,5 +1,5 @@
-const { app, BrowserWindow, Menu, Tray, shell, nativeImage } = require("electron")
-const { spawn } = require("child_process")
+const { app, BrowserWindow, Menu, Tray, shell, nativeImage, dialog } = require("electron")
+const { fork } = require("child_process")
 const fs = require("fs")
 const path = require("path")
 
@@ -15,14 +15,27 @@ function getAppIconPath() {
 
 function startBridgeProcess() {
   if (bridgeProcess) return
-  bridgeProcess = spawn(process.execPath, [path.join(__dirname, "bridge.js")], {
-    cwd: __dirname,
+  const bridgeEntry = path.join(app.getAppPath(), "bridge.js")
+  bridgeProcess = fork(bridgeEntry, [], {
+    cwd: path.dirname(bridgeEntry),
+    env: {
+      ...process.env,
+      ELECTRON_RUN_AS_NODE: "1",
+    },
+    execPath: process.execPath,
     windowsHide: true,
     stdio: "ignore",
   })
 
   bridgeProcess.on("exit", () => {
     bridgeProcess = null
+  })
+
+  bridgeProcess.on("error", (error) => {
+    dialog.showErrorBox(
+      "Gufo e-Factura",
+      `Nu am putut porni agentul local.\n\n${String(error.message || error)}`
+    )
   })
 }
 
