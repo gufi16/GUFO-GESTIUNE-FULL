@@ -4,10 +4,74 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $releaseScript = Join-Path $scriptDir "build-release.ps1"
 $issPath = Join-Path $scriptDir "installer\GufoEFactura.iss"
 $brandingIcon = Join-Path $scriptDir "branding\gufo-efactura.ico"
+$setupIcon = Join-Path $scriptDir "branding\gufo-efactura-setup.ico"
 
 if (-not (Test-Path $brandingIcon)) {
   throw "Lipseste branding\gufo-efactura.ico. Pune iconul in format .ico in acest folder inainte de build."
 }
+
+Add-Type -AssemblyName System.Drawing
+
+function New-OptimizedSetupIcon {
+  param(
+    [string]$SourcePath,
+    [string]$OutputPath
+  )
+
+  $image = [System.Drawing.Image]::FromFile($SourcePath)
+  try {
+    $bitmap = New-Object System.Drawing.Bitmap 256, 256
+    try {
+      $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+      try {
+        $graphics.Clear([System.Drawing.Color]::Transparent)
+        $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+        $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
+        $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+        $graphics.DrawImage($image, 0, 0, 256, 256)
+      } finally {
+        $graphics.Dispose()
+      }
+
+      $pngStream = New-Object System.IO.MemoryStream
+      try {
+        $bitmap.Save($pngStream, [System.Drawing.Imaging.ImageFormat]::Png)
+        $pngBytes = $pngStream.ToArray()
+
+        $fileStream = [System.IO.File]::Create($OutputPath)
+        try {
+          $writer = New-Object System.IO.BinaryWriter($fileStream)
+          try {
+            $writer.Write([UInt16]0)
+            $writer.Write([UInt16]1)
+            $writer.Write([UInt16]1)
+            $writer.Write([byte]0)
+            $writer.Write([byte]0)
+            $writer.Write([byte]0)
+            $writer.Write([byte]0)
+            $writer.Write([UInt16]1)
+            $writer.Write([UInt16]32)
+            $writer.Write([UInt32]$pngBytes.Length)
+            $writer.Write([UInt32]22)
+            $writer.Write($pngBytes)
+          } finally {
+            $writer.Dispose()
+          }
+        } finally {
+          $fileStream.Dispose()
+        }
+      } finally {
+        $pngStream.Dispose()
+      }
+    } finally {
+      $bitmap.Dispose()
+    }
+  } finally {
+    $image.Dispose()
+  }
+}
+
+New-OptimizedSetupIcon -SourcePath $brandingIcon -OutputPath $setupIcon
 
 & powershell -ExecutionPolicy Bypass -File $releaseScript
 

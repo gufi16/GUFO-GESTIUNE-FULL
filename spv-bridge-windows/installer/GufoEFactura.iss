@@ -11,13 +11,15 @@ OutputBaseFilename=Gufo-eFactura-Setup
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
+UninstallDisplayIcon={app}\branding\gufo-efactura-setup.ico
+SetupIconFile=..\branding\gufo-efactura-setup.ico
 
 [Files]
 Source: "..\release\Gufo e-Factura\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\Gufo e-Factura"; Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\start-agent.ps1"""; IconFilename: "{app}\branding\gufo-efactura.ico"
-Name: "{group}\Dezinstaleaza Gufo e-Factura"; Filename: "{app}\uninstall-agent.ps1"; IconFilename: "{app}\branding\gufo-efactura.ico"
+Name: "{group}\Gufo e-Factura"; Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\start-agent.ps1"""; IconFilename: "{app}\branding\gufo-efactura-setup.ico"
+Name: "{group}\Dezinstaleaza Gufo e-Factura"; Filename: "{app}\uninstall-agent.ps1"; IconFilename: "{app}\branding\gufo-efactura-setup.ico"
 
 [Run]
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\install-agent.ps1"""; Flags: runhidden postinstall waituntilterminated
