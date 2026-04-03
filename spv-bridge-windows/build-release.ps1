@@ -26,6 +26,8 @@ foreach ($file in $files) {
   Copy-Item (Join-Path $scriptDir $file) (Join-Path $appDir $file) -Force
 }
 
+Copy-Item (Join-Path $scriptDir ".env.example") (Join-Path $appDir ".env") -Force
+
 Copy-Item $nodeSource (Join-Path $appDir "node.exe") -Force
 Copy-Item $admZipSource (Join-Path $vendorDir "adm-zip") -Recurse -Force
 
@@ -33,6 +35,33 @@ $brandingDir = Join-Path $scriptDir "branding"
 if (Test-Path $brandingDir) {
   Copy-Item $brandingDir (Join-Path $appDir "branding") -Recurse -Force
 }
+
+$configureCmd = @"
+@echo off
+cd /d "%~dp0"
+start "" http://127.0.0.1:48521/
+powershell -ExecutionPolicy Bypass -File ".\start-agent.ps1"
+pause
+"@
+
+$installCmd = @"
+@echo off
+cd /d "%~dp0"
+powershell -ExecutionPolicy Bypass -File ".\install-agent.ps1"
+start "" http://127.0.0.1:48521/
+pause
+"@
+
+$startCmd = @"
+@echo off
+cd /d "%~dp0"
+powershell -ExecutionPolicy Bypass -File ".\start-agent.ps1"
+pause
+"@
+
+Set-Content -Path (Join-Path $appDir "Configureaza Gufo e-Factura.cmd") -Value $configureCmd -Encoding ASCII
+Set-Content -Path (Join-Path $appDir "Instaleaza Gufo e-Factura.cmd") -Value $installCmd -Encoding ASCII
+Set-Content -Path (Join-Path $appDir "Porneste Gufo e-Factura.cmd") -Value $startCmd -Encoding ASCII
 
 Write-Host ""
 Write-Host "Release folder pregatit:" -ForegroundColor Green

@@ -78,6 +78,26 @@ Daca `Inno Setup` este instalat, scriptul genereaza:
 spv-bridge-windows\release\Gufo-eFactura-Setup.exe
 ```
 
+## Varianta portabila recomandata daca installerul `.exe` nu e stabil
+
+Rulezi:
+
+```powershell
+cd spv-bridge-windows
+powershell -ExecutionPolicy Bypass -File .\build-release.ps1
+```
+
+In folderul nou de release ai direct:
+
+- `Instaleaza Gufo e-Factura.cmd`
+- `Configureaza Gufo e-Factura.cmd`
+- `Porneste Gufo e-Factura.cmd`
+
+Pentru client:
+1. copiezi folderul de release pe PC
+2. rulezi `Instaleaza Gufo e-Factura.cmd`
+3. se deschide setup-ul local la `http://127.0.0.1:48521/`
+
 ## Health check
 
 ```powershell
