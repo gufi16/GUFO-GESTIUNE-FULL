@@ -10,9 +10,9 @@ Agent local pentru Windows care foloseste certificatul digital din `Cert:\Curren
 - foloseste certificatul din Windows Store pentru SPV/e-Factura
 - ofera o pagina locala de configurare pentru:
   - `ERP URL`
-  - `License key`
-  - `Bridge token`
   - `Serial certificat`
+  - `Host local`
+  - `Port local`
 
 ## Instalare o singura data
 
@@ -75,8 +75,32 @@ npm run build:installer
 Daca `Inno Setup` este instalat, scriptul genereaza:
 
 ```text
-spv-bridge-windows\release\Gufo-eFactura-Setup.exe
+spv-bridge-windows\release\installer\Gufo-eFactura-Setup-YYYYMMDD-HHMMSS.exe
 ```
+
+Installerul actual:
+- instaleaza agentul local
+- creeaza shortcut `Gufo e-Factura`
+- deschide aplicatia in fereastra dedicata tip app-window
+- nu mai lasa utilizatorul in PowerShell sau browser clasic
+
+## Build desktop dedicat
+
+Pentru pasul urmator, exista si shell desktop dedicat:
+
+```powershell
+cd spv-bridge-windows
+npm install
+powershell -ExecutionPolicy Bypass -File .\build-desktop.ps1
+```
+
+Rezultatul merge in:
+
+```text
+spv-bridge-windows\release-desktop
+```
+
+Acesta este fluxul care duce spre aplicatia Windows reala `Gufo e-Factura`, cu tray, fereastra proprie si packaging desktop.
 
 ## Varianta portabila recomandata daca installerul `.exe` nu e stabil
 
@@ -96,7 +120,8 @@ In folderul nou de release ai direct:
 Pentru client:
 1. copiezi folderul de release pe PC
 2. rulezi `Instaleaza Gufo e-Factura.cmd`
-3. se deschide setup-ul local la `http://127.0.0.1:48521/`
+3. se deschide `Gufo e-Factura` ca fereastra de aplicatie
+4. configurezi local agentul si certificatul
 
 ## Health check
 

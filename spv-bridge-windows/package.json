@@ -7,13 +7,48 @@
   "scripts": {
     "start": "node bridge.js",
     "desktop": "electron .",
+    "desktop:pack": "electron-builder --dir",
+    "desktop:dist": "electron-builder --win nsis",
     "agent:install": "powershell -ExecutionPolicy Bypass -File .\\install-agent.ps1",
     "agent:uninstall": "powershell -ExecutionPolicy Bypass -File .\\uninstall-agent.ps1",
     "agent:start": "powershell -ExecutionPolicy Bypass -File .\\start-agent.ps1",
     "build:release": "powershell -ExecutionPolicy Bypass -File .\\build-release.ps1",
-    "build:installer": "powershell -ExecutionPolicy Bypass -File .\\build-installer.ps1"
+    "build:installer": "powershell -ExecutionPolicy Bypass -File .\\build-installer.ps1",
+    "build:desktop": "powershell -ExecutionPolicy Bypass -File .\\build-desktop.ps1"
   },
   "devDependencies": {
-    "electron": "^36.1.0"
+    "electron": "^36.1.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "ink.gufo.efactura",
+    "productName": "Gufo e-Factura",
+    "directories": {
+      "output": "release-desktop"
+    },
+    "files": [
+      "bridge.js",
+      "desktop-main.js",
+      "preload.js",
+      "package.json",
+      "branding/**/*",
+      "vendor/**/*",
+      ".env.example"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "branding/gufo-efactura.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Gufo e-Factura"
+    }
   }
 }
