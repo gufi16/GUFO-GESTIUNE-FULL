@@ -2,7 +2,7 @@ const http = require("http")
 const { execFile } = require("child_process")
 const fs = require("fs")
 const path = require("path")
-const AdmZip = require("../backend/node_modules/adm-zip")
+const AdmZip = require(path.join(__dirname, "vendor", "adm-zip"))
 
 const DEFAULT_PORT = 48521
 const DEFAULT_HOST = "127.0.0.1"

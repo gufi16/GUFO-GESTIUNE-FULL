@@ -3,7 +3,8 @@ $ErrorActionPreference = "Stop"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $taskName = "Gufo e-Factura"
 $launcherPath = Join-Path $scriptDir "bridge-launcher.vbs"
-$nodeCmd = (Get-Command node -ErrorAction Stop).Source
+$bundledNode = Join-Path $scriptDir "node.exe"
+$nodeCmd = if (Test-Path $bundledNode) { $bundledNode } else { (Get-Command node -ErrorAction Stop).Source }
 $bridgePath = Join-Path $scriptDir "bridge.js"
 $stdoutLog = Join-Path $scriptDir "agent.stdout.log"
 $stderrLog = Join-Path $scriptDir "agent.stderr.log"
@@ -50,3 +51,4 @@ Write-Host "Gufo e-Factura a fost instalat." -ForegroundColor Green
 Write-Host "Task: $taskName"
 Write-Host "Launcher: $launcherPath"
 Write-Host "Health: http://127.0.0.1:48521/health"
+Write-Host "Setup: http://127.0.0.1:48521/"

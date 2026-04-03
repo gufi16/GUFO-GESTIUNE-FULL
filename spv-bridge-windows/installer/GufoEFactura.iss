@@ -22,4 +22,5 @@ Name: "{group}\Gufo e-Factura"; Filename: "powershell.exe"; Parameters: "-Execut
 Name: "{group}\Dezinstaleaza Gufo e-Factura"; Filename: "{app}\uninstall-agent.ps1"; IconFilename: "{app}\branding\gufo-efactura-setup.ico"
 
 [Run]
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\install-agent.ps1"""; Flags: runhidden postinstall waituntilterminated
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\install-agent.ps1"""; Flags: postinstall waituntilterminated
+Filename: "http://127.0.0.1:48521/"; Flags: shellexec postinstall skipifsilent
