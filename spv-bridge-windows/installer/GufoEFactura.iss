@@ -11,8 +11,6 @@ OutputBaseFilename=Gufo-eFactura-Setup
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
-UninstallDisplayIcon={app}\branding\gufo-efactura.ico
-SetupIconFile=..\branding\gufo-efactura.ico
 
 [Files]
 Source: "..\release\Gufo e-Factura\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

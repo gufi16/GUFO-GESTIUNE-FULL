@@ -63,7 +63,10 @@ if (-not $iscc) {
   exit 0
 }
 
-& $iscc $issPath
+$null = & $iscc $issPath
+if ($LASTEXITCODE -ne 0) {
+  throw "Build-ul installerului a esuat. Verifica erorile ISCC de mai sus."
+}
 
 Write-Host ""
 Write-Host "Installerul Gufo e-Factura a fost generat." -ForegroundColor Green
