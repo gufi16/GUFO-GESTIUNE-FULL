@@ -7,6 +7,7 @@ $brandingIcon = Join-Path $scriptDir "branding\gufo-efactura.ico"
 $setupIcon = Join-Path $scriptDir "branding\gufo-efactura-setup.ico"
 $installerOutputDir = Join-Path $scriptDir "release\installer"
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+$releaseRoot = Join-Path $scriptDir "release"
 
 if (-not (Test-Path $brandingIcon)) {
   throw "Lipseste branding\gufo-efactura.ico. Pune iconul in format .ico in acest folder inainte de build."
@@ -75,7 +76,25 @@ function New-OptimizedSetupIcon {
 
 New-OptimizedSetupIcon -SourcePath $brandingIcon -OutputPath $setupIcon
 
+if (-not (Test-Path $installerOutputDir)) {
+  New-Item -ItemType Directory -Force -Path $installerOutputDir | Out-Null
+}
+
+$beforeDirs = @{}
+Get-ChildItem $releaseRoot -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+  $beforeDirs[$_.FullName] = $true
+}
+
 & powershell -ExecutionPolicy Bypass -File $releaseScript
+
+$newReleaseDir = Get-ChildItem $releaseRoot -Directory -ErrorAction SilentlyContinue |
+  Where-Object { -not $beforeDirs.ContainsKey($_.FullName) } |
+  Sort-Object LastWriteTime -Descending |
+  Select-Object -First 1
+
+if (-not $newReleaseDir) {
+  throw "Nu am putut identifica folderul nou de release pentru Gufo e-Factura."
+}
 
 $candidates = @(
   "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
@@ -130,7 +149,7 @@ if (-not $iscc) {
 }
 
 $baseName = "Gufo-eFactura-Setup-$timestamp"
-$null = & $iscc "/O$installerOutputDir" "/F$baseName" $issPath
+$null = & $iscc "/O$installerOutputDir" "/F$baseName" "/DReleaseSource=$($newReleaseDir.FullName)" $issPath
 if ($LASTEXITCODE -ne 0) {
   throw "Build-ul installerului a esuat. Verifica erorile ISCC de mai sus."
 }

@@ -2,15 +2,12 @@ $ErrorActionPreference = "Stop"
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $releaseRoot = Join-Path $scriptDir "release"
-$appDir = Join-Path $releaseRoot "Gufo e-Factura"
+$timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+$appDir = Join-Path $releaseRoot "Gufo e-Factura $timestamp"
 $repoRoot = Split-Path -Parent $scriptDir
 $vendorDir = Join-Path $appDir "vendor"
 $nodeSource = (Get-Command node -ErrorAction Stop).Source
 $admZipSource = Join-Path $repoRoot "backend\node_modules\adm-zip"
-
-if (Test-Path $appDir) {
-  Remove-Item $appDir -Recurse -Force
-}
 
 New-Item -ItemType Directory -Force -Path $appDir | Out-Null
 New-Item -ItemType Directory -Force -Path $vendorDir | Out-Null
