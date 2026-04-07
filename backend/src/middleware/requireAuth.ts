@@ -15,6 +15,10 @@ export function requireAuth(req: AuthedRequest, res: Response, next: NextFunctio
     return next()
   }
 
+  if (req.path === "/api/v1/public/efactura/agent-download") {
+    return next()
+  }
+
   const authHeader = req.headers.authorization
 
   if (!authHeader?.startsWith("Bearer ")) {
