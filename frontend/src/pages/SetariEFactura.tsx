@@ -528,12 +528,11 @@ export default function SetariEFacturaPage() {
         subtitle="Pastrezi aici doar ce conteaza: activare, conectarea ANAF si starea aplicatiei locale Gufo e-Factura."
       />
 
-      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
         <DocumentMetric title="Flux e-Factura" value={form.efacturaEnabled ? "Activat" : "Oprit"} tone="amber" />
         <DocumentMetric title="Mediu" value={form.efacturaEnvironment === "prod" ? "Productie" : "Test"} tone="blue" />
         <DocumentMetric title="Token ANAF" value={oauthStatus.connected ? "Activ" : "Neactiv"} tone={oauthStatus.connected ? "emerald" : "slate"} />
-        <DocumentMetric title="Configurare platforma" value={form.efacturaPlatformConfigured ? "Pregatita" : "Lipsa"} tone="slate" />
-        <DocumentMetric title="Sursa configurare" value={form.efacturaUsesPlatformConfig ? "Control Panel" : "Locala"} tone="slate" />
+        <DocumentMetric title="Agent local" value={localAgentConnected ? "Conectat" : "Neconectat"} tone={localAgentConnected ? "emerald" : "slate"} />
       </div>
 
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
@@ -544,23 +543,6 @@ export default function SetariEFacturaPage() {
           Aplicatia ANAF se configureaza centralizat in <strong>Control Panel</strong>. Dupa ce este setata acolo, aici ramane doar configurarea firmei si generarea tokenului.
         </InlineNotice>
       ) : null}
-
-      <DocumentSection title="Rezumat firma emitenta">
-        <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-600">
-            Firma: <span className="font-semibold text-slate-900">{form.companyName || "-"}</span>
-          </div>
-          <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-600">
-            CUI: <span className="font-semibold text-slate-900">{form.companyCui || "-"}</span>
-          </div>
-          <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-600">
-            Emitent: <span className="font-semibold text-slate-900">{[form.companyCity, form.companyCounty].filter(Boolean).join(", ") || "-"}</span>
-          </div>
-          <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-600">
-            Email e-Factura: <span className="font-semibold text-slate-900">{form.contactEmail || "-"}</span>
-          </div>
-        </div>
-      </DocumentSection>
 
       <DocumentSection
         title="1. Activare si mediu ANAF"
@@ -581,7 +563,7 @@ export default function SetariEFacturaPage() {
             Se incarca setarile e-Factura...
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[1.2fr_0.8fr]">
             <DocumentField label="Activare flux e-Factura">
               <label className="flex min-h-10 items-center gap-3 rounded-[14px] border border-slate-200 bg-slate-50 px-3 text-[13px] text-slate-700">
                 <input type="checkbox" checked={form.efacturaEnabled} onChange={(e) => updateField("efacturaEnabled", e.target.checked)} />
@@ -595,6 +577,18 @@ export default function SetariEFacturaPage() {
                 <option value="prod">Productie</option>
               </select>
             </DocumentField>
+
+            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600 md:col-span-2">
+              <div>
+                Firma: <span className="font-semibold text-slate-900">{form.companyName || "-"}</span>
+              </div>
+              <div className="mt-1">
+                CUI: <span className="font-semibold text-slate-900">{form.companyCui || "-"}</span>
+              </div>
+              <div className="mt-1">
+                Emitent: <span className="font-semibold text-slate-900">{[form.companyCity, form.companyCounty].filter(Boolean).join(", ") || "-"}</span>
+              </div>
+            </div>
           </div>
         )}
       </DocumentSection>
@@ -618,7 +612,7 @@ export default function SetariEFacturaPage() {
           </div>
         }
       >
-        <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-3">
+        <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
           <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-600">
             Status token: <span className="font-semibold text-slate-900">{oauthStatus.connected ? "Activ" : "Neactiv"}</span>
           </div>
@@ -680,8 +674,7 @@ export default function SetariEFacturaPage() {
           </div>
         }
       >
-        <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
-          <DocumentMetric title="Agent local" value={localAgentConnected ? "Conectat" : "Neconectat"} tone={localAgentConnected ? "emerald" : "slate"} />
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
           <DocumentMetric title="ERP in agent" value={localAgentStatus?.agent?.erpUrl || "-"} tone="blue" />
           <DocumentMetric title="Certificat local" value={localCertificate?.configuredSerial || "-"} tone="slate" />
           <DocumentMetric title="Expira la" value={localCertificateExpiryText} tone={localCertificate?.expired ? "amber" : localCertificate?.expiringSoon ? "amber" : "slate"} />
@@ -707,15 +700,12 @@ export default function SetariEFacturaPage() {
           </div>
         ) : null}
 
-        <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
           <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
             URL local: <span className="font-semibold text-slate-900">{localAgentStatus?.agent?.bridgeUrl || localAgentUrl}</span>
           </div>
           <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
             Store certificat: <span className="font-semibold text-slate-900">{localCertificate?.store || "-"}</span>
-          </div>
-          <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-            Cheie privata: <span className="font-semibold text-slate-900">{localCertificate?.hasPrivateKey ? "Da" : "Nu"}</span>
           </div>
         </div>
 
