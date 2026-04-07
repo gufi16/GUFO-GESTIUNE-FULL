@@ -194,14 +194,6 @@ function escapeHtml(value: string) {
     .replace(/'/g, "&#39;")
 }
 
-function isUsableImportedInvoice(item: IncomingInvoice) {
-  const hasInvoiceNo = Boolean(String(item.invoiceNo || "").trim())
-  const hasSupplier = Boolean(String(item.supplierName || "").trim())
-  const hasItems = Array.isArray(item.items) && item.items.length > 0
-  const hasGross = Number(item.totalGross || 0) > 0
-  return hasInvoiceNo && hasSupplier && hasItems && hasGross
-}
-
 function getUnitPriceWithVat(line: IncomingInvoiceItem) {
   const net = Number(line.unitPrice || 0)
   const vatRate = Number(line.vatRate || 0)
@@ -377,7 +369,6 @@ export default function FacturiPrimiteSPVPage() {
 
         const existingDownloadIds = new Set(
           items
-            .filter((entry) => isUsableImportedInvoice(entry))
             .map((entry) => String(entry.spvDownloadId || "").trim())
             .filter(Boolean)
         )

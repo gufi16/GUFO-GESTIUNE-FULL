@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, Tray, shell, nativeImage, dialog } = require("electron")
+const { app, BrowserWindow, Menu, Tray, shell, nativeImage } = require("electron")
 const fs = require("fs")
 const path = require("path")
 
@@ -16,10 +16,7 @@ function startBridgeProcess() {
     const bridgeEntry = path.join(app.getAppPath(), "bridge.js")
     require(bridgeEntry)
   } catch (error) {
-    dialog.showErrorBox(
-      "Gufo e-Factura",
-      `Nu am putut porni agentul local.\n\n${String(error.message || error)}`
-    )
+    console.error("[gufo-e-factura] agent startup warning", error)
   }
 }
 
