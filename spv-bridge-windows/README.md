@@ -106,7 +106,13 @@ Buildul desktop curent genereaza folderul aplicatiei Windows cu:
 - fereastra proprie
 - bridge local pornit din aplicatie
 
-Acesta este fluxul stabil de test pentru aplicatia Windows reala `Gufo e-Factura`. Peste el putem pune apoi installerul final.
+Daca `Inno Setup 6` este instalat, acelasi script genereaza si installerul real:
+
+```text
+spv-bridge-windows\release-desktop\installer\Gufo-eFactura-Setup-YYYYMMDD-HHMMSS.exe
+```
+
+Acesta este acum fluxul recomandat pentru livrarea aplicatiei Windows `Gufo e-Factura`.
 
 ## Varianta portabila recomandata daca installerul `.exe` nu e stabil
 
