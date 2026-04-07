@@ -240,6 +240,7 @@ function renderSetupPage() {
     .metric.blue { background:var(--blue-soft); }
     .metric.green { background:var(--green-soft); }
     .metric.amber { background:var(--amber-soft); }
+    .metric.slate { background:#f9fbfd; }
     .section-title { margin:0 0 6px; font-size:18px; font-weight:800; }
     .section-copy { margin:0 0 16px; color:#5e7388; font-size:14px; }
     label { display:block; font-size:13px; font-weight:700; margin-bottom:6px; }
@@ -259,6 +260,8 @@ function renderSetupPage() {
     .status-item .k { font-size:12px; color:#6d8093; margin-bottom:6px; }
     .status-item .v { font-size:14px; font-weight:700; color:var(--text); word-break:break-word; }
     .notice { border:1px solid var(--line); border-radius:16px; padding:12px 14px; background:#f9fbfd; color:var(--text); font-size:13px; }
+    .notice.error { background:#fff1f2; border-color:#fecdd3; color:#9f1239; }
+    .notice.success { background:#ecfdf3; border-color:#bbf7d0; color:#166534; }
     @media (max-width: 900px) {
       .metrics { grid-template-columns: repeat(2, minmax(0,1fr)); }
       .status-list { grid-template-columns: 1fr; }
@@ -300,7 +303,7 @@ function renderSetupPage() {
           <div class="value" id="metric-health">Online</div>
           <div class="hint">${escape(healthUrl)}</div>
         </div>
-        <div class="metric amber">
+        <div class="metric amber" id="metric-expiry-card">
           <div class="label">Expirare</div>
           <div class="value" id="metric-expiry">Se verifica...</div>
           <div class="hint" id="metric-expiry-hint">Statusul certificatului local</div>
@@ -386,6 +389,8 @@ function renderSetupPage() {
       const agent = data && data.agent ? data.agent : {};
       const certificate = data && data.certificate ? data.certificate : {};
       const expiry = formatExpiryLabel(certificate);
+      const expiryMetric = document.getElementById('metric-expiry-card');
+      const statusNote = document.getElementById('status-note');
       document.getElementById('metric-erp').textContent = agent.erpOrigin || agent.erpUrl || '-';
       document.getElementById('metric-cert').textContent = certificate.configuredSerial || '-';
       document.getElementById('metric-health').textContent = data && data.ok ? 'Online' : 'Offline';
@@ -395,16 +400,40 @@ function renderSetupPage() {
       document.getElementById('status-store').textContent = certificate.store || '-';
       document.getElementById('status-key').textContent = certificate.hasPrivateKey ? 'Da' : 'Nu';
       document.getElementById('status-expiry').textContent = expiry.hint;
-      document.getElementById('status-note').textContent =
+      statusNote.textContent =
         certificate.error
           ? certificate.error
           : (certificate.detected
             ? 'Certificatul local este detectat si pregatit pentru SPV.'
             : 'Completeaza serialul certificatului si salveaza configuratia.');
+      statusNote.className =
+        'notice ' + (
+          certificate.error || certificate.expired
+            ? 'error'
+            : certificate.detected
+              ? 'success'
+              : ''
+        );
       document.getElementById('agent-state-pill').textContent =
         certificate.detected ? 'Agent conectat' : 'Configurare necesara';
       document.getElementById('agent-state-pill').className =
-        'pill ' + (certificate.detected ? 'green' : 'amber');
+        'pill ' + (
+          certificate.error || certificate.expired
+            ? 'amber'
+            : certificate.detected
+              ? 'green'
+              : 'amber'
+        );
+      expiryMetric.className =
+        'metric ' + (
+          certificate.expired || certificate.error
+            ? 'amber'
+            : certificate.expiringSoon
+              ? 'amber'
+              : certificate.detected
+                ? 'green'
+                : 'slate'
+        );
     }
 
     async function refreshStatus() {

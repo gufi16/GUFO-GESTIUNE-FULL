@@ -514,6 +514,14 @@ export default function SetariEFacturaPage() {
       : localCertificate?.expiringSoon && typeof localCertificate?.expiresInDays === "number"
         ? `Certificatul local expira in ${localCertificate.expiresInDays} zile.`
         : ""
+  const localCertificateStatusText =
+    localCertificate?.expired
+      ? "Expirat"
+      : localCertificate?.expiringSoon && typeof localCertificate?.expiresInDays === "number"
+        ? `In ${localCertificate.expiresInDays} zile`
+        : localCertificate?.detected
+          ? "Valid"
+          : "Nedetectat"
   const localAgentConnected = Boolean(localAgentStatus?.ok)
   const localAgentSerialMatches =
     Boolean(localCertificate?.configuredSerial) &&
@@ -542,6 +550,10 @@ export default function SetariEFacturaPage() {
         <InlineNotice>
           Aplicatia ANAF se configureaza centralizat in <strong>Control Panel</strong>. Dupa ce este setata acolo, aici ramane doar configurarea firmei si generarea tokenului.
         </InlineNotice>
+      ) : null}
+      {localCertificateWarning ? <InlineNotice tone="error">{localCertificateWarning}</InlineNotice> : null}
+      {localAgentConnected && localCertificate?.detected && !localCertificateWarning ? (
+        <InlineNotice tone="success">Agentul local este conectat si certificatul este pregatit pentru SPV.</InlineNotice>
       ) : null}
 
       <DocumentSection
@@ -677,11 +689,10 @@ export default function SetariEFacturaPage() {
         <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
           <DocumentMetric title="ERP in agent" value={localAgentStatus?.agent?.erpUrl || "-"} tone="blue" />
           <DocumentMetric title="Certificat local" value={localCertificate?.configuredSerial || "-"} tone="slate" />
-          <DocumentMetric title="Expira la" value={localCertificateExpiryText} tone={localCertificate?.expired ? "amber" : localCertificate?.expiringSoon ? "amber" : "slate"} />
+          <DocumentMetric title="Status certificat" value={localCertificateStatusText} tone={localCertificate?.expired ? "amber" : localCertificate?.expiringSoon ? "amber" : localCertificate?.detected ? "emerald" : "slate"} />
         </div>
 
         {localAgentError ? <div className="mt-3"><InlineNotice tone="error">{localAgentError}</InlineNotice></div> : null}
-        {localCertificateWarning ? <div className="mt-3"><InlineNotice tone="error">{localCertificateWarning}</InlineNotice></div> : null}
         {localCertificate?.error && !localCertificate?.detected ? (
           <div className="mt-3">
             <InlineNotice tone="error">{localCertificate.error}</InlineNotice>
@@ -705,7 +716,13 @@ export default function SetariEFacturaPage() {
             URL local: <span className="font-semibold text-slate-900">{localAgentStatus?.agent?.bridgeUrl || localAgentUrl}</span>
           </div>
           <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+            Expira la: <span className="font-semibold text-slate-900">{localCertificateExpiryText}</span>
+          </div>
+          <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
             Store certificat: <span className="font-semibold text-slate-900">{localCertificate?.store || "-"}</span>
+          </div>
+          <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+            Cheie privata: <span className="font-semibold text-slate-900">{localCertificate?.hasPrivateKey ? "Da" : "Nu"}</span>
           </div>
         </div>
 
