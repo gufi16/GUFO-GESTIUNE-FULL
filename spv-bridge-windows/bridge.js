@@ -1482,6 +1482,190 @@ foreach ($messageId in $ids) {
   return response
 }
 
+async function syncIncomingEfacturaMessages(serial, accessToken, environment, cif, days, existingIds) {
+  const normalizedSerial = normalizeSerial(serial)
+  const bearerToken = String(accessToken || "").trim()
+  const normalizedEnvironment = String(environment || "prod").trim().toLowerCase() === "test" ? "test" : "prod"
+  const companyCif = String(cif || "").trim()
+  const safeDays = Math.max(1, Math.min(365, Number(days || 30)))
+  const listUrl = getEfacturaListUrl(normalizedEnvironment, companyCif, safeDays)
+  const downloadBaseUrl = normalizedEnvironment === "test" ? EFACTURA_DOWNLOAD_TEST_URL : EFACTURA_DOWNLOAD_PROD_URL
+  const cleanExistingIds = Array.isArray(existingIds)
+    ? existingIds.map((entry) => String(entry || "").trim()).filter(Boolean)
+    : []
+
+  console.log(
+    `[gufo-spv-bridge] syncIncomingEfacturaMessages start serial=${normalizedSerial} env=${normalizedEnvironment} cif=${companyCif} days=${safeDays} existing=${cleanExistingIds.length}`
+  )
+
+  const cert = await resolveCertificate(serial)
+  const escapedToken = bearerToken.replace(/'/g, "''")
+  const escapedListUrl = listUrl.replace(/'/g, "''")
+  const escapedDownloadBaseUrl = downloadBaseUrl.replace(/'/g, "''")
+  const existingIdsJson = JSON.stringify(cleanExistingIds).replace(/'/g, "''")
+
+  const script = `
+$serial = '${normalizedSerial}'
+$accessToken = '${escapedToken}'
+$listUrl = '${escapedListUrl}'
+$downloadBaseUrl = '${escapedDownloadBaseUrl}'
+$existingIds = ConvertFrom-Json @'
+${existingIdsJson}
+'@
+$existingLookup = @{}
+foreach ($existingId in $existingIds) {
+  $normalizedId = [string]$existingId
+  if (-not [string]::IsNullOrWhiteSpace($normalizedId)) {
+    $existingLookup[$normalizedId] = $true
+  }
+}
+$stores = @('Cert:\\CurrentUser\\My', 'Cert:\\LocalMachine\\My')
+$cert = $null
+foreach ($store in $stores) {
+  $candidate = Get-ChildItem -Path $store -ErrorAction SilentlyContinue | Where-Object {
+    ($_.SerialNumber -replace '[^A-Fa-f0-9]', '').ToUpper() -eq $serial
+  } | Select-Object -First 1
+  if ($candidate) {
+    $cert = $candidate
+    break
+  }
+}
+if (-not $cert) {
+  throw "Certificatul cu serialul $serial nu a fost gasit."
+}
+
+function Read-ResponseBytes {
+  param([System.Net.WebResponse]$Response)
+  $stream = $Response.GetResponseStream()
+  $memory = New-Object System.IO.MemoryStream
+  $stream.CopyTo($memory)
+  $bytes = $memory.ToArray()
+  $memory.Dispose()
+  $stream.Dispose()
+  return ,$bytes
+}
+
+function Invoke-EfacturaRequest {
+  param(
+    [string]$Url,
+    [string]$AccessToken,
+    [System.Security.Cryptography.X509Certificates.X509Certificate2]$ClientCertificate
+  )
+
+  $request = [System.Net.HttpWebRequest]::Create($Url)
+  $request.Method = 'GET'
+  $request.Timeout = 45000
+  $request.ReadWriteTimeout = 45000
+  $request.AllowAutoRedirect = $false
+  $request.KeepAlive = $true
+  $request.UserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) GufoSPVBridge/1.0'
+  $request.Headers['Authorization'] = 'Bearer ' + $AccessToken
+  [void]$request.ClientCertificates.Add($ClientCertificate)
+
+  try {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    $response = [System.Net.HttpWebResponse]$request.GetResponse()
+    $statusCode = [int]$response.StatusCode
+    $contentType = $response.ContentType
+    $bytes = Read-ResponseBytes -Response $response
+    $response.Close()
+    return [PSCustomObject]@{
+      ok = ($statusCode -ge 200 -and $statusCode -lt 300)
+      status = $statusCode
+      contentType = $contentType
+      base64Content = [Convert]::ToBase64String($bytes)
+      content = [System.Text.Encoding]::UTF8.GetString($bytes)
+      error = $null
+      url = $Url
+    }
+  }
+  catch [System.Net.WebException] {
+    $statusCode = $null
+    $contentType = $null
+    $responseBytes = $null
+    $content = $null
+    if ($_.Exception.Response) {
+      try { $statusCode = [int]$_.Exception.Response.StatusCode.value__ } catch {}
+      try { $contentType = $_.Exception.Response.ContentType } catch {}
+      try {
+        $responseBytes = Read-ResponseBytes -Response $_.Exception.Response
+        $content = [System.Text.Encoding]::UTF8.GetString($responseBytes)
+      } catch {}
+    }
+    return [PSCustomObject]@{
+      ok = $false
+      status = $statusCode
+      contentType = $contentType
+      base64Content = if ($responseBytes) { [Convert]::ToBase64String($responseBytes) } else { $null }
+      content = $content
+      error = if ($content) { $content } else { $_.Exception.Message }
+      url = $Url
+    }
+  }
+}
+
+$listResult = Invoke-EfacturaRequest -Url $listUrl -AccessToken $accessToken -ClientCertificate $cert
+$downloads = New-Object System.Collections.ArrayList
+
+if ($listResult.ok -and $listResult.content) {
+  $listPayload = $null
+  try {
+    $listPayload = $listResult.content | ConvertFrom-Json -Depth 20
+  } catch {}
+
+  $messages = @()
+  if ($listPayload -and $listPayload.mesaje) {
+    $messages = @($listPayload.mesaje)
+  }
+
+  foreach ($message in $messages) {
+    $messageId = [string]$message.id
+    if ([string]::IsNullOrWhiteSpace($messageId)) {
+      continue
+    }
+    $tip = ([string]$message.tip).Trim().ToUpper()
+    $detalii = ([string]$message.detalii).Trim().ToLower()
+    $isIncomingInvoice =
+      $tip.Contains('PRIMITA') -or
+      (($tip -ne 'RECIPISA') -and $detalii.Contains('cif_beneficiar'))
+    if (-not $isIncomingInvoice) {
+      continue
+    }
+    if ($existingLookup.ContainsKey($messageId)) {
+      continue
+    }
+
+    $downloadUrl = $downloadBaseUrl + '?id=' + [System.Uri]::EscapeDataString($messageId)
+    $downloadResult = Invoke-EfacturaRequest -Url $downloadUrl -AccessToken $accessToken -ClientCertificate $cert
+    [void]$downloads.Add([PSCustomObject]@{
+      id = $messageId
+      ok = $downloadResult.ok
+      status = $downloadResult.status
+      contentType = $downloadResult.contentType
+      base64Content = $downloadResult.base64Content
+      error = $downloadResult.error
+    })
+  }
+}
+
+[PSCustomObject]@{
+  ok = $true
+  list = $listResult
+  items = $downloads
+} | ConvertTo-Json -Compress -Depth 8
+`.trim()
+
+  const raw = await runPowerShell(script)
+  const response = {
+    certificate: cert,
+    result: JSON.parse(raw),
+  }
+  console.log(
+    `[gufo-spv-bridge] syncIncomingEfacturaMessages finish listOk=${Boolean(response?.result?.list?.ok)} downloaded=${Array.isArray(response?.result?.items) ? response.result.items.length : 0}`
+  )
+  return response
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || `${HOST}:${PORT}`}`)
 
@@ -1798,6 +1982,39 @@ const server = http.createServer(async (req, res) => {
       })
     } catch (error) {
       console.error(`[gufo-spv-bridge] HTTP efactura download-many error`, error)
+      sendJson(res, 400, {
+        ok: false,
+        error: String(error.message || error),
+      })
+    }
+    return
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/v1/efactura/sync-batch") {
+    try {
+      const body = await readJsonBody(req)
+      const serial = normalizeSerial(body.serial || DEFAULT_CERT_SERIAL)
+      const accessToken = String(body.accessToken || "").trim()
+      const environment = String(body.environment || "prod").trim().toLowerCase()
+      const cif = String(body.cif || "").trim()
+      const days = Number(body.days || 30)
+      const existingIds = Array.isArray(body.existingIds) ? body.existingIds : []
+      console.log(
+        `[gufo-spv-bridge] HTTP efactura sync-batch serial=${serial} env=${environment} cif=${cif} days=${days} existing=${existingIds.length}`
+      )
+      const data = await syncIncomingEfacturaMessages(serial, accessToken, environment, cif, days, existingIds)
+      sendJson(res, 200, {
+        ok: Boolean(data.result.ok),
+        request: { environment, cif, days, existingIds: existingIds.length },
+        certificate: data.certificate,
+        response: {
+          ok: Boolean(data.result.ok),
+          list: data.result.list || null,
+          items: Array.isArray(data.result.items) ? data.result.items : [],
+        },
+      })
+    } catch (error) {
+      console.error(`[gufo-spv-bridge] HTTP efactura sync-batch error`, error)
       sendJson(res, 400, {
         ok: false,
         error: String(error.message || error),
