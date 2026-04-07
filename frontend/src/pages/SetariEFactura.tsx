@@ -146,6 +146,9 @@ export default function SetariEFacturaPage() {
   const [localAgentLoading, setLocalAgentLoading] = useState(false)
   const [localAgentError, setLocalAgentError] = useState("")
   const [localAgentStatus, setLocalAgentStatus] = useState<LocalAgentStatus | null>(null)
+  const isDebugMode =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("debugSpv") === "1"
 
   useEffect(() => {
     loadSettings()
@@ -522,7 +525,7 @@ export default function SetariEFacturaPage() {
       <PageHeader
         badge="configurare"
         title="Setari e-Factura"
-        subtitle="Aici pastrezi fluxul simplu: activare, mediu ANAF si autorizarea aplicatiei pentru firma ta."
+        subtitle="Pastrezi aici doar ce conteaza: activare, conectarea ANAF si starea aplicatiei locale Gufo e-Factura."
       />
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-4">
@@ -541,9 +544,6 @@ export default function SetariEFacturaPage() {
           Aplicatia ANAF se configureaza centralizat in <strong>Control Panel</strong>. Dupa ce este setata acolo, aici ramane doar configurarea firmei si generarea tokenului.
         </InlineNotice>
       ) : null}
-      <InlineNotice>
-        Fluxul principal ramane web, pe baza tokenului ANAF. Pentru SPV, daca anumite endpointuri cer certificat client la handshake, ai mai jos o sectiune avansata pentru certificat.
-      </InlineNotice>
 
       <DocumentSection title="Rezumat firma emitenta">
         <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">
@@ -600,13 +600,15 @@ export default function SetariEFacturaPage() {
       </DocumentSection>
 
       <DocumentSection
-        title="2. Autorizare ANAF"
-        description="Generezi tokenul ANAF pentru firma, verifici conexiunea si vezi rapid contextul tehnic real al integrarii."
+        title="2. Conectare ANAF"
+        description="Generezi tokenul ANAF pentru firma si verifici rapid daca legatura este activa."
         actions={
           <div className="flex gap-2">
-            <button type="button" onClick={loadDiagnostics} className={documentButtonSecondaryClass} disabled={loadingDiagnostics || loading}>
-              {loadingDiagnostics ? "Diagnoza..." : "Vezi diagnoza"}
-            </button>
+            {isDebugMode ? (
+              <button type="button" onClick={loadDiagnostics} className={documentButtonSecondaryClass} disabled={loadingDiagnostics || loading}>
+                {loadingDiagnostics ? "Diagnoza..." : "Vezi diagnoza"}
+              </button>
+            ) : null}
             <button type="button" onClick={testOauthConnection} className={documentButtonSecondaryClass} disabled={testing || loading || !oauthStatus.connected}>
               {testing ? "Testare..." : "Testeaza conexiunea"}
             </button>
@@ -628,13 +630,7 @@ export default function SetariEFacturaPage() {
           </div>
         </div>
 
-        <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
-          <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-            Dupa ce tokenul este activ, trimiterea si sincronizarea trebuie sa ramana in fluxul web.
-          </div>
-        </div>
-
-        {diagnostics ? (
+        {isDebugMode && diagnostics ? (
           <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
             <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
               Certificat client folosit: <span className="font-semibold text-slate-900">{diagnostics.usingClientCertificate ? "Da" : "Nu"}</span>
@@ -662,64 +658,8 @@ export default function SetariEFacturaPage() {
       </DocumentSection>
 
       <DocumentSection
-        title="3. Certificat client SPV"
-        description="Sectiune avansata. O folosesti doar daca sincronizarea SPV cere certificat client TLS pe server."
-        actions={
-          <div className="flex gap-2">
-            <button type="button" onClick={uploadCertificate} className={documentButtonPrimaryClass} disabled={certBusy || loading}>
-              {certBusy ? "Se incarca..." : "Incarca certificat"}
-            </button>
-            {certState.hasFile ? (
-              <button type="button" onClick={removeCertificate} className={documentButtonSecondaryClass} disabled={certBusy || loading}>
-                Sterge certificat
-              </button>
-            ) : null}
-          </div>
-        }
-      >
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          <DocumentField label="Serial certificat">
-            <input
-              value={form.efacturaCertSerial}
-              onChange={(e) => updateField("efacturaCertSerial", e.target.value)}
-              className={documentInputClass}
-              placeholder="Ex: 201104209404..."
-            />
-          </DocumentField>
-          <DocumentField label="Fisier certificat (.p12 / .pfx)">
-            <input
-              type="file"
-              accept=".p12,.pfx,application/x-pkcs12"
-              onChange={(e) => setCertFile(e.target.files?.[0] || null)}
-              className={documentInputClass}
-            />
-          </DocumentField>
-          <DocumentField label="Parola certificat">
-            <input
-              type="password"
-              value={certPassword}
-              onChange={(e) => setCertPassword(e.target.value)}
-              className={documentInputClass}
-              placeholder={certState.passwordConfigured ? "Parola este deja salvata pe server" : "Introdu parola certificatului"}
-            />
-          </DocumentField>
-        </div>
-
-        <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-3">
-          <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-            Status certificat: <span className="font-semibold text-slate-900">{certState.hasFile ? "Incarcat" : "Lipsa"}</span>
-          </div>
-          <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-            Fisier: <span className="font-semibold text-slate-900">{certState.filename || "-"}</span>
-          </div>
-          <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-            Incarcat la: <span className="font-semibold text-slate-900">{certState.uploadedAt ? new Date(certState.uploadedAt).toLocaleString("ro-RO") : "-"}</span>
-          </div>
-        </div>
-      </DocumentSection>
-
-      <DocumentSection
-        title="4. Gufo e-Factura local"
+        title="3. Gufo e-Factura local"
+        description="Aici vezi daca aplicatia Windows este conectata si daca certificatul local este pregatit pentru SPV."
         actions={
           <div className="flex gap-2">
             <button
@@ -803,19 +743,80 @@ export default function SetariEFacturaPage() {
         </div>
       </DocumentSection>
 
-      <DocumentSection title="Ordinea corecta" description="Flux simplu, clar, fara pasi tehnici inutili in fata utilizatorului.">
-        <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-          <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-600">
-            1. Verifici firma si mediul ANAF.
-          </div>
-          <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-600">
-            2. Generezi tokenul ANAF.
-          </div>
-          <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-600">
-            3. Trimiti, verifici starea si sincronizezi SPV direct din web.
-          </div>
-        </div>
-      </DocumentSection>
+      {isDebugMode ? (
+        <>
+          <DocumentSection
+            title="Debug certificat server"
+            description="Sectiune tehnica. O folosesti doar daca vrei certificat client TLS pe server."
+            actions={
+              <div className="flex gap-2">
+                <button type="button" onClick={uploadCertificate} className={documentButtonPrimaryClass} disabled={certBusy || loading}>
+                  {certBusy ? "Se incarca..." : "Incarca certificat"}
+                </button>
+                {certState.hasFile ? (
+                  <button type="button" onClick={removeCertificate} className={documentButtonSecondaryClass} disabled={certBusy || loading}>
+                    Sterge certificat
+                  </button>
+                ) : null}
+              </div>
+            }
+          >
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <DocumentField label="Serial certificat">
+                <input
+                  value={form.efacturaCertSerial}
+                  onChange={(e) => updateField("efacturaCertSerial", e.target.value)}
+                  className={documentInputClass}
+                  placeholder="Ex: 201104209404..."
+                />
+              </DocumentField>
+              <DocumentField label="Fisier certificat (.p12 / .pfx)">
+                <input
+                  type="file"
+                  accept=".p12,.pfx,application/x-pkcs12"
+                  onChange={(e) => setCertFile(e.target.files?.[0] || null)}
+                  className={documentInputClass}
+                />
+              </DocumentField>
+              <DocumentField label="Parola certificat">
+                <input
+                  type="password"
+                  value={certPassword}
+                  onChange={(e) => setCertPassword(e.target.value)}
+                  className={documentInputClass}
+                  placeholder={certState.passwordConfigured ? "Parola este deja salvata pe server" : "Introdu parola certificatului"}
+                />
+              </DocumentField>
+            </div>
+
+            <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-3">
+              <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                Status certificat: <span className="font-semibold text-slate-900">{certState.hasFile ? "Incarcat" : "Lipsa"}</span>
+              </div>
+              <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                Fisier: <span className="font-semibold text-slate-900">{certState.filename || "-"}</span>
+              </div>
+              <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                Incarcat la: <span className="font-semibold text-slate-900">{certState.uploadedAt ? new Date(certState.uploadedAt).toLocaleString("ro-RO") : "-"}</span>
+              </div>
+            </div>
+          </DocumentSection>
+
+          <DocumentSection title="Ordinea corecta" description="Flux simplu, clar, fara pasi tehnici inutili in fata utilizatorului.">
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+              <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-600">
+                1. Verifici firma si mediul ANAF.
+              </div>
+              <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-600">
+                2. Generezi tokenul ANAF.
+              </div>
+              <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-600">
+                3. Trimiti, verifici starea si sincronizezi SPV direct din web.
+              </div>
+            </div>
+          </DocumentSection>
+        </>
+      ) : null}
     </div>
   )
 }
