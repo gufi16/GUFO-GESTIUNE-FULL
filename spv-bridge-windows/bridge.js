@@ -1606,6 +1606,14 @@ const server = http.createServer(async (req, res) => {
   })
 })
 
+server.on("error", (error) => {
+  if (error && error.code === "EADDRINUSE") {
+    console.warn(`[gufo-spv-bridge] port already in use on http://${HOST}:${PORT}; using existing local agent instance`)
+    return
+  }
+  throw error
+})
+
 server.listen(PORT, HOST, () => {
   console.log(`[gufo-spv-bridge] running on http://${HOST}:${PORT}`)
 })
