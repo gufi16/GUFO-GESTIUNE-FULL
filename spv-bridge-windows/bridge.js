@@ -3,6 +3,7 @@ const { execFile } = require("child_process")
 const crypto = require("crypto")
 const fs = require("fs")
 const path = require("path")
+const packageJson = require("./package.json")
 let AdmZip
 try {
   AdmZip = require("adm-zip")
@@ -22,6 +23,7 @@ const EFACTURA_DOWNLOAD_TEST_URL = "https://webserviceapl.anaf.ro/test/FCTEL/res
 const POWERSHELL_TIMEOUT_MS = 90000
 const CONFIG_DIR = resolveConfigDir()
 const CONFIG_PATH = path.join(CONFIG_DIR, "agent-config.json")
+const AGENT_APP_VERSION = String(packageJson.version || "0.0.0")
 
 loadEnv(path.join(__dirname, ".env"))
 
@@ -352,6 +354,7 @@ function renderSetupPage() {
       <div>
         <h1>Gufo e-Factura</h1>
         <p>Aplicatia locala foloseste certificatul digital de pe Windows si lucreaza cu ERP-ul fara pasi tehnici inutili.</p>
+        <p class="muted" style="margin-top:8px;">Versiune agent: ${escape(AGENT_APP_VERSION)}</p>
       </div>
       <div class="row">
         <span class="pill ${statusTone === "configured" ? "green" : "amber"}" id="agent-state-pill">${DEFAULT_CERT_SERIAL ? "Agent configurat" : "Configurare necesara"}</span>

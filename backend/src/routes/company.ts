@@ -124,6 +124,28 @@ function getEfacturaAgentDownloadSource() {
   }
 }
 
+function getEfacturaAgentDownloadFileName(source: {
+  fileName?: string | null
+  updatedAt?: string | null
+}) {
+  const originalName = String(source.fileName || "Gufo-eFactura-Setup.exe").trim() || "Gufo-eFactura-Setup.exe"
+  const extension = path.extname(originalName) || ".exe"
+  const baseName = path.basename(originalName, extension) || "Gufo-eFactura-Setup"
+  const updatedAt = String(source.updatedAt || "").trim()
+
+  if (!updatedAt) {
+    return `${baseName}${extension}`
+  }
+
+  const compactStamp = updatedAt
+    .replace(/[-:]/g, "")
+    .replace("T", "-")
+    .replace(/\.\d+Z$/, "")
+    .replace(/Z$/, "")
+
+  return `${baseName}-${compactStamp}${extension}`
+}
+
 function createEfacturaAgentDownloadTicket(tenantId: string) {
   return jwt.sign(
     {
@@ -454,7 +476,10 @@ router.get("/api/v1/public/efactura/agent-download", async (req, res) => {
 
   if (source.type === "local" && source.fullPath) {
     res.setHeader("Content-Type", "application/octet-stream")
-    res.setHeader("Content-Disposition", `attachment; filename="${source.fileName}"`)
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate")
+    res.setHeader("Pragma", "no-cache")
+    res.setHeader("Expires", "0")
+    res.setHeader("Content-Disposition", `attachment; filename="${getEfacturaAgentDownloadFileName(source)}"`)
     return res.sendFile(source.fullPath)
   }
 
@@ -1054,7 +1079,10 @@ router.get("/api/v1/company/efactura/agent-download", requireAuth, async (req: A
 
   if (source.type === "local" && source.fullPath) {
     res.setHeader("Content-Type", "application/octet-stream")
-    res.setHeader("Content-Disposition", `attachment; filename="${source.fileName}"`)
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate")
+    res.setHeader("Pragma", "no-cache")
+    res.setHeader("Expires", "0")
+    res.setHeader("Content-Disposition", `attachment; filename="${getEfacturaAgentDownloadFileName(source)}"`)
     return res.sendFile(source.fullPath)
   }
 
@@ -1095,7 +1123,7 @@ router.get("/api/v1/company/efactura/agent-download-link", requireAuth, async (r
   return res.json({
     ok: true,
     url: `/api/v1/public/efactura/agent-download?ticket=${encodeURIComponent(createEfacturaAgentDownloadTicket(tenantId || ""))}`,
-    fileName: source.fileName || "Gufo-eFactura-Setup.exe",
+    fileName: getEfacturaAgentDownloadFileName(source),
   })
 })
 
