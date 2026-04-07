@@ -135,6 +135,29 @@ function createEfacturaAgentDownloadTicket(tenantId: string) {
   )
 }
 
+function getDefaultEfacturaAppUrl() {
+  return String(process.env.GUFO_EFACTURA_APP_URL || process.env.CORS_ORIGIN || "https://app.gufo.ink")
+    .trim()
+    .replace(/\/+$/, "")
+}
+
+function createEfacturaAgentPairingCode(payload: {
+  tenantId: string
+  erpUrl: string
+  certSerial: string | null
+}) {
+  return jwt.sign(
+    {
+      tenantId: payload.tenantId,
+      erpUrl: payload.erpUrl,
+      certSerial: payload.certSerial,
+      purpose: "efactura-agent-pairing",
+    },
+    JWT_SECRET,
+    { expiresIn: "7d" },
+  )
+}
+
 function mapCompanyResponse(company: any, oauthConfig: any) {
   const hasStoredCertificate = hasEfacturaCertificateFile(company?.tenantId, company?.efacturaCertFilename)
 
@@ -438,6 +461,67 @@ router.get("/api/v1/public/efactura/agent-download", async (req, res) => {
   return res.status(404).json({
     ok: false,
     error: "Installerul Gufo e-Factura nu este disponibil.",
+  })
+})
+
+router.get("/api/v1/public/efactura/agent-pairing/resolve", async (req, res) => {
+  const code = String(req.query.code || "").trim()
+
+  if (!code) {
+    return res.status(400).json({
+      ok: false,
+      error: "Lipseste codul de pairing.",
+    })
+  }
+
+  let payload: { tenantId?: string | null; erpUrl?: string | null; certSerial?: string | null; purpose?: string; exp?: number } | null = null
+  try {
+    payload = jwt.verify(code, JWT_SECRET) as {
+      tenantId?: string | null
+      erpUrl?: string | null
+      certSerial?: string | null
+      purpose?: string
+      exp?: number
+    }
+  } catch {
+    return res.status(401).json({
+      ok: false,
+      error: "Codul de pairing este invalid sau expirat.",
+    })
+  }
+
+  if (payload?.purpose !== "efactura-agent-pairing" || !payload?.tenantId) {
+    return res.status(401).json({
+      ok: false,
+      error: "Codul de pairing este invalid.",
+    })
+  }
+
+  const moduleCheck = await requireTenantModule(payload.tenantId, "efactura")
+  if (!moduleCheck.enabled) {
+    return res.status(403).json({
+      ok: false,
+      error: "Modulul e-Factura nu este activ pe licenta acestui client.",
+    })
+  }
+
+  const company = await prisma.company.findUnique({
+    where: { tenantId: payload.tenantId },
+    select: {
+      name: true,
+      efacturaCertSerial: true,
+    },
+  })
+
+  return res.json({
+    ok: true,
+    pairing: {
+      tenantId: payload.tenantId,
+      companyName: company?.name || null,
+      erpUrl: String(payload.erpUrl || getDefaultEfacturaAppUrl()),
+      certSerial: normalizeOptionalText(payload.certSerial) || company?.efacturaCertSerial || null,
+      expiresAt: payload?.exp ? new Date(payload.exp * 1000).toISOString() : null,
+    },
   })
 })
 
@@ -1012,6 +1096,46 @@ router.get("/api/v1/company/efactura/agent-download-link", requireAuth, async (r
     ok: true,
     url: `/api/v1/public/efactura/agent-download?ticket=${encodeURIComponent(createEfacturaAgentDownloadTicket(tenantId || ""))}`,
     fileName: source.fileName || "Gufo-eFactura-Setup.exe",
+  })
+})
+
+router.post("/api/v1/company/efactura/agent-pairing-code", requireAuth, async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const moduleCheck = await requireTenantModule(tenantId, "efactura")
+
+  if (!moduleCheck.enabled) {
+    return res.status(403).json({
+      ok: false,
+      error: "Modulul e-Factura nu este activ pe licenta acestui client.",
+    })
+  }
+
+  const company = await prisma.company.findUnique({
+    where: { tenantId },
+    select: {
+      name: true,
+      efacturaCertSerial: true,
+    },
+  })
+
+  const erpUrl = getDefaultEfacturaAppUrl()
+  const certSerial = normalizeOptionalText(company?.efacturaCertSerial)
+  const code = createEfacturaAgentPairingCode({
+    tenantId: tenantId || "",
+    erpUrl,
+    certSerial,
+  })
+  const decoded = jwt.decode(code) as { exp?: number } | null
+
+  return res.json({
+    ok: true,
+    pairing: {
+      code,
+      erpUrl,
+      certSerial,
+      companyName: company?.name || null,
+      expiresAt: decoded?.exp ? new Date(decoded.exp * 1000).toISOString() : null,
+    },
   })
 })
 

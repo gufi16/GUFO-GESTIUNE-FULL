@@ -12,6 +12,7 @@ try {
 
 const DEFAULT_PORT = 48521
 const DEFAULT_HOST = "127.0.0.1"
+const DEFAULT_ERP_URL = String(process.env.GUFO_DEFAULT_ERP_URL || "https://app.gufo.ink").trim()
 const SPV_LIST_MESSAGES_URL = "https://webserviced.anaf.ro/SPVWS2/rest/listaMesaje"
 const SPV_DOWNLOAD_MESSAGE_URL = "https://webserviced.anaf.ro/SPVWS2/rest/descarcare"
 const EFACTURA_LIST_MESSAGES_PROD_URL = "https://webserviceapl.anaf.ro/prod/FCTEL/rest/listaMesajeFactura"
@@ -162,12 +163,43 @@ if (GENERATED_TOKEN_ON_BOOT) {
 }
 
 function getConfiguredErpOrigin() {
-  if (!ERP_URL) return ""
+  const effectiveUrl = ERP_URL || DEFAULT_ERP_URL
+  if (!effectiveUrl) return ""
   try {
-    return new URL(ERP_URL).origin
+    return new URL(effectiveUrl).origin
   } catch {
     return ""
   }
+}
+
+async function resolvePairingCode(pairingCode, fallbackErpUrl) {
+  const normalizedCode = String(pairingCode || "").trim()
+  if (!normalizedCode) {
+    throw new Error("Codul de pairing lipseste.")
+  }
+
+  const baseUrl = String(fallbackErpUrl || ERP_URL || DEFAULT_ERP_URL).trim().replace(/\/+$/, "")
+  if (!baseUrl) {
+    throw new Error("Lipseste ERP URL-ul pentru rezolvarea codului de pairing.")
+  }
+
+  let response
+  try {
+    response = await fetch(`${baseUrl}/api/v1/public/efactura/agent-pairing/resolve?code=${encodeURIComponent(normalizedCode)}`, {
+      headers: {
+        Accept: "application/json",
+      },
+    })
+  } catch (error) {
+    throw new Error("Nu am putut contacta ERP-ul pentru codul de pairing.")
+  }
+
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok || !data?.ok || !data?.pairing) {
+    throw new Error(data?.error || "Codul de pairing nu a putut fi validat.")
+  }
+
+  return data.pairing
 }
 
 function isLocalOrigin(origin) {
@@ -312,31 +344,40 @@ function renderSetupPage() {
 
       <div class="card">
         <div class="section-title">Configurare agent</div>
-        <div class="section-copy">Completezi o singura data adresa ERP-ului si serialul certificatului, iar apoi agentul ramane disponibil local.</div>
+        <div class="section-copy">Clientul completeaza codul de pairing din ERP si serialul certificatului, iar agentul isi ia singur configurarea necesara.</div>
         <form id="config-form" class="grid">
           <div class="full">
-            <label for="erpUrl">ERP URL</label>
-            <input id="erpUrl" name="erpUrl" value="${escape(ERP_URL)}" placeholder="https://app.gufo.ink" />
+            <label for="pairingCode">Cod pairing</label>
+            <input id="pairingCode" name="pairingCode" placeholder="Lipit din ERP > Setari e-Factura" />
           </div>
           <div class="full">
             <label for="certSerial">Serial certificat</label>
             <input id="certSerial" name="certSerial" value="${escape(DEFAULT_CERT_SERIAL)}" placeholder="Serialul certificatului din Windows Store" />
           </div>
-          <div>
-            <label for="bridgeHost">Host local</label>
-            <input id="bridgeHost" name="bridgeHost" value="${escape(HOST)}" />
-          </div>
-          <div>
-            <label for="bridgePort">Port local</label>
-            <input id="bridgePort" name="bridgePort" value="${escape(PORT)}" />
-          </div>
+          <details class="full">
+            <summary>Setari avansate</summary>
+            <div class="grid" style="margin-top:12px;">
+              <div class="full">
+                <label for="erpUrl">ERP URL</label>
+                <input id="erpUrl" name="erpUrl" value="${escape(ERP_URL || DEFAULT_ERP_URL)}" placeholder="https://app.gufo.ink" />
+              </div>
+              <div>
+                <label for="bridgeHost">Host local</label>
+                <input id="bridgeHost" name="bridgeHost" value="${escape(HOST)}" />
+              </div>
+              <div>
+                <label for="bridgePort">Port local</label>
+                <input id="bridgePort" name="bridgePort" value="${escape(PORT)}" />
+              </div>
+            </div>
+          </details>
           <div class="actions full">
             <button type="submit">Salveaza configuratia</button>
             <button type="button" class="secondary" id="refresh-status">Actualizeaza statusul</button>
             <button type="button" class="link" id="open-erp">Deschide ERP</button>
             <div id="result" class="muted">Config curent salvat in <code>agent-config.json</code>.</div>
           </div>
-          <div class="full muted">Tokenul local este generat automat de agent si nu trebuie completat de client.</div>
+          <div class="full muted">Tokenul local este generat automat de agent. Hostul si portul local raman pe valorile default in aproape toate instalarile.</div>
         </form>
       </div>
 
@@ -453,6 +494,7 @@ function renderSetupPage() {
       event.preventDefault();
       const form = event.currentTarget;
       const payload = {
+        pairingCode: form.pairingCode.value.trim(),
         erpUrl: form.erpUrl.value.trim(),
         certSerial: form.certSerial.value.trim(),
         bridgeHost: form.bridgeHost.value.trim(),
@@ -469,6 +511,13 @@ function renderSetupPage() {
         ? 'Configuratia a fost salvata. Daca ai schimbat host sau port, reporneste agentul.'
         : (data.error || 'Nu am putut salva configuratia.');
       if (response.ok && data.ok) {
+        if (data.config && data.config.erpUrl) {
+          document.getElementById('erpUrl').value = data.config.erpUrl;
+        }
+        if (data.config && data.config.certSerial) {
+          document.getElementById('certSerial').value = data.config.certSerial;
+        }
+        document.getElementById('pairingCode').value = '';
         refreshStatus();
       }
     });
@@ -1709,15 +1758,30 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "POST" && url.pathname === "/agent/config") {
     try {
       const body = await readJsonBody(req)
-      ERP_URL = String(body.erpUrl || "").trim()
+      const manualErpUrl = String(body.erpUrl || "").trim()
+      const pairingCode = String(body.pairingCode || "").trim()
+      let resolvedPairing = null
+
+      if (pairingCode) {
+        resolvedPairing = await resolvePairingCode(pairingCode, manualErpUrl || ERP_URL || DEFAULT_ERP_URL)
+      }
+
+      ERP_URL = String(resolvedPairing?.erpUrl || manualErpUrl || ERP_URL || DEFAULT_ERP_URL).trim()
       LICENSE_KEY = String(body.licenseKey || "").trim()
-      DEFAULT_CERT_SERIAL = normalizeSerial(body.certSerial || "")
+      DEFAULT_CERT_SERIAL = normalizeSerial(body.certSerial || resolvedPairing?.certSerial || "")
       HOST = String(body.bridgeHost || DEFAULT_HOST).trim() || DEFAULT_HOST
       PORT = Math.max(1, Math.min(65535, Number(body.bridgePort || DEFAULT_PORT) || DEFAULT_PORT))
       saveAgentConfig()
       sendJson(res, 200, {
         ok: true,
         message: "Configuratia agentului a fost salvata.",
+        config: {
+          erpUrl: ERP_URL,
+          certSerial: DEFAULT_CERT_SERIAL || "",
+          bridgeHost: HOST,
+          bridgePort: PORT,
+        },
+        pairing: resolvedPairing,
       })
     } catch (error) {
       sendJson(res, 400, {

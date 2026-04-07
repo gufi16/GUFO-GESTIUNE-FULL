@@ -94,6 +94,14 @@ type AgentDownloadInfo = {
   error?: string | null
 }
 
+type AgentPairingCodeState = {
+  code: string
+  expiresAt: string | null
+  erpUrl: string
+  certSerial: string | null
+  companyName: string | null
+}
+
 const DEFAULT_LOCAL_AGENT_URL = "http://127.0.0.1:48521"
 
 type ActiveModal = null | "flow" | "agent" | "debug"
@@ -186,6 +194,8 @@ export default function SetariEFacturaPage() {
   const [localAgentStatus, setLocalAgentStatus] = useState<LocalAgentStatus | null>(null)
   const [agentDownloadLoading, setAgentDownloadLoading] = useState(false)
   const [agentDownloadInfo, setAgentDownloadInfo] = useState<AgentDownloadInfo | null>(null)
+  const [agentPairingBusy, setAgentPairingBusy] = useState(false)
+  const [agentPairing, setAgentPairing] = useState<AgentPairingCodeState | null>(null)
   const [activeModal, setActiveModal] = useState<ActiveModal>(null)
   const isDebugMode =
     typeof window !== "undefined" &&
@@ -365,6 +375,35 @@ export default function SetariEFacturaPage() {
       setMessage("Descarcarea installerului Gufo e-Factura a fost pornita.")
     } catch (e: any) {
       setError(e?.message || "Nu am putut descarca installerul Gufo e-Factura.")
+    }
+  }
+
+  async function generateAgentPairingCode() {
+    if (!token) {
+      setError("Nu exista token de autentificare. Fa login din nou.")
+      return
+    }
+
+    setAgentPairingBusy(true)
+    setError("")
+    setMessage("")
+    try {
+      const res = await fetch(`${API}/api/v1/company/efactura/agent-pairing-code`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok || !data?.pairing?.code) {
+        throw new Error(data?.error || "Nu am putut genera codul de pairing pentru Gufo e-Factura.")
+      }
+      setAgentPairing(data.pairing as AgentPairingCodeState)
+      setMessage("Codul de pairing pentru Gufo e-Factura a fost generat.")
+    } catch (e: any) {
+      setError(e?.message || "Nu am putut genera codul de pairing pentru Gufo e-Factura.")
+    } finally {
+      setAgentPairingBusy(false)
     }
   }
 
@@ -727,6 +766,9 @@ export default function SetariEFacturaPage() {
               >
                 Descarca agent
               </button>
+              <button type="button" onClick={generateAgentPairingCode} className={documentButtonSecondaryClass} disabled={agentPairingBusy}>
+                {agentPairingBusy ? "Generez..." : "Genereaza cod"}
+              </button>
               <button
                 type="button"
                 onClick={() => void loadLocalAgentStatus()}
@@ -749,6 +791,9 @@ export default function SetariEFacturaPage() {
               Installer: <span className="font-semibold text-slate-900">{agentDownloadInfo?.available ? agentDownloadInfo.fileName || "Disponibil" : "Indisponibil"}</span>
             </div>
             <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
+              Pairing: <span className="font-semibold text-slate-900">{agentPairing?.code ? `${agentPairing.code.slice(0, 18)}...` : "Genereaza cod"}</span>
+            </div>
+            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
               Certificat: <span className="font-semibold text-slate-900">{localCertificate?.configuredSerial || "-"}</span>
             </div>
             <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
@@ -762,6 +807,19 @@ export default function SetariEFacturaPage() {
             </div>
           ) : agentDownloadInfo?.error ? (
             <div className="mt-2 text-xs text-amber-700">{agentDownloadInfo.error}</div>
+          ) : null}
+          {agentPairing?.code ? (
+            <div className="mt-2 rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-600">
+              <div>
+                Cod pairing: <span className="break-all font-mono font-semibold text-slate-900">{agentPairing.code}</span>
+              </div>
+              <div className="mt-1">
+                Expira: <span className="font-semibold text-slate-900">{agentPairing.expiresAt ? new Date(agentPairing.expiresAt).toLocaleString("ro-RO") : "-"}</span>
+              </div>
+              <div className="mt-1">
+                In agent clientul completeaza codul de pairing si verifica serialul certificatului.
+              </div>
+            </div>
           ) : null}
         </DocumentSection>
       </div>
