@@ -86,6 +86,8 @@ type LocalAgentStatus = {
 
 const DEFAULT_LOCAL_AGENT_URL = "http://127.0.0.1:48521"
 
+type ActiveModal = null | "flow" | "agent" | "debug"
+
 const emptyForm: EFacturaForm = {
   efacturaEnabled: false,
   efacturaEnvironment: "test",
@@ -110,6 +112,32 @@ function normalizeAnafMessage(message: string) {
     return "Nu exista token ANAF salvat pentru aceasta firma. Genereaza mai intai tokenul cu certificatul digital."
   }
   return text
+}
+
+function SettingsModal({
+  title,
+  onClose,
+  children,
+}: {
+  title: string
+  onClose: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6">
+      <div className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-2xl shadow-slate-950/20">
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+          <div>
+            <h2 className="text-lg font-semibold text-[#17324D]">{title}</h2>
+          </div>
+          <button type="button" onClick={onClose} className={documentButtonSecondaryClass}>
+            Inchide
+          </button>
+        </div>
+        <div className="max-h-[calc(90vh-84px)] overflow-y-auto px-5 py-4">{children}</div>
+      </div>
+    </div>
+  )
 }
 
 export default function SetariEFacturaPage() {
@@ -146,6 +174,7 @@ export default function SetariEFacturaPage() {
   const [localAgentLoading, setLocalAgentLoading] = useState(false)
   const [localAgentError, setLocalAgentError] = useState("")
   const [localAgentStatus, setLocalAgentStatus] = useState<LocalAgentStatus | null>(null)
+  const [activeModal, setActiveModal] = useState<ActiveModal>(null)
   const isDebugMode =
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("debugSpv") === "1"
@@ -556,202 +585,93 @@ export default function SetariEFacturaPage() {
         <InlineNotice tone="success">Agentul local este conectat si certificatul este pregatit pentru SPV.</InlineNotice>
       ) : null}
 
-      <DocumentSection
-        title="1. Activare si mediu ANAF"
-        description="Pornesti fluxul pentru firma curenta si alegi mediul in care lucrezi."
-        actions={
-          <div className="flex gap-2">
-            <button type="button" onClick={loadSettings} className={documentButtonSecondaryClass} disabled={loading || saving}>
-              Reincarca
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
+        <DocumentSection
+          title="Flux firma"
+          actions={
+            <button type="button" onClick={() => setActiveModal("flow")} className={documentButtonPrimaryClass}>
+              Configureaza
             </button>
-            <button type="button" onClick={saveSettings} className={documentButtonPrimaryClass} disabled={loading || saving}>
-              {saving ? "Se salveaza..." : "Salveaza"}
-            </button>
-          </div>
-        }
-      >
-        {loading ? (
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-            Se incarca setarile e-Factura...
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[1.2fr_0.8fr]">
-            <DocumentField label="Activare flux e-Factura">
-              <label className="flex min-h-10 items-center gap-3 rounded-[14px] border border-slate-200 bg-slate-50 px-3 text-[13px] text-slate-700">
-                <input type="checkbox" checked={form.efacturaEnabled} onChange={(e) => updateField("efacturaEnabled", e.target.checked)} />
-                <span>Firma foloseste e-Factura</span>
-              </label>
-            </DocumentField>
-
-            <DocumentField label="Mediu ANAF">
-              <select value={form.efacturaEnvironment} onChange={(e) => updateField("efacturaEnvironment", e.target.value)} className={documentInputClass}>
-                <option value="test">Test</option>
-                <option value="prod">Productie</option>
-              </select>
-            </DocumentField>
-
-            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600 md:col-span-2">
-              <div>
-                Firma: <span className="font-semibold text-slate-900">{form.companyName || "-"}</span>
-              </div>
-              <div className="mt-1">
-                CUI: <span className="font-semibold text-slate-900">{form.companyCui || "-"}</span>
-              </div>
-              <div className="mt-1">
-                Emitent: <span className="font-semibold text-slate-900">{[form.companyCity, form.companyCounty].filter(Boolean).join(", ") || "-"}</span>
-              </div>
+          }
+        >
+          <div className="space-y-2 text-sm text-slate-600">
+            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
+              Activ: <span className="font-semibold text-slate-900">{form.efacturaEnabled ? "Da" : "Nu"}</span>
+            </div>
+            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
+              Mediu: <span className="font-semibold text-slate-900">{form.efacturaEnvironment === "prod" ? "Productie" : "Test"}</span>
+            </div>
+            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
+              Firma: <span className="font-semibold text-slate-900">{form.companyName || "-"}</span>
             </div>
           </div>
-        )}
-      </DocumentSection>
+        </DocumentSection>
 
-      <DocumentSection
-        title="2. Conectare ANAF"
-        description="Generezi tokenul ANAF pentru firma si verifici rapid daca legatura este activa."
-        actions={
-          <div className="flex gap-2">
-            {isDebugMode ? (
-              <button type="button" onClick={loadDiagnostics} className={documentButtonSecondaryClass} disabled={loadingDiagnostics || loading}>
-                {loadingDiagnostics ? "Diagnoza..." : "Vezi diagnoza"}
+        <DocumentSection
+          title="Conectare ANAF"
+          actions={
+            <div className="flex gap-2">
+              <button type="button" onClick={testOauthConnection} className={documentButtonSecondaryClass} disabled={testing || loading || !oauthStatus.connected}>
+                {testing ? "Testare..." : "Testeaza"}
               </button>
-            ) : null}
-            <button type="button" onClick={testOauthConnection} className={documentButtonSecondaryClass} disabled={testing || loading || !oauthStatus.connected}>
-              {testing ? "Testare..." : "Testeaza conexiunea"}
-            </button>
-            <button type="button" onClick={startOauthConnect} className={documentButtonPrimaryClass} disabled={connecting || loading}>
-              {connecting ? "Redirectionare..." : "Genereaza token ANAF"}
-            </button>
+              <button type="button" onClick={startOauthConnect} className={documentButtonPrimaryClass} disabled={connecting || loading}>
+                {connecting ? "Se deschide..." : "Genereaza token"}
+              </button>
+            </div>
+          }
+        >
+          <div className="space-y-2 text-sm text-slate-600">
+            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
+              Status: <span className="font-semibold text-slate-900">{oauthStatus.connected ? "Conectat" : "Neconectat"}</span>
+            </div>
+            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
+              Generat la: <span className="font-semibold text-slate-900">{oauthStatus.connectedAt ? new Date(oauthStatus.connectedAt).toLocaleString("ro-RO") : "-"}</span>
+            </div>
+            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
+              Expira: <span className="font-semibold text-slate-900">{oauthStatus.expiresAt ? new Date(oauthStatus.expiresAt).toLocaleString("ro-RO") : "-"}</span>
+            </div>
           </div>
-        }
-      >
-        <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
-          <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-600">
-            Status token: <span className="font-semibold text-slate-900">{oauthStatus.connected ? "Activ" : "Neactiv"}</span>
-          </div>
-          <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-600">
-            Generat la: <span className="font-semibold text-slate-900">{oauthStatus.connectedAt ? new Date(oauthStatus.connectedAt).toLocaleString("ro-RO") : "-"}</span>
-          </div>
-          <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-600">
-            Expira token: <span className="font-semibold text-slate-900">{oauthStatus.expiresAt ? new Date(oauthStatus.expiresAt).toLocaleString("ro-RO") : "-"}</span>
-          </div>
-        </div>
+        </DocumentSection>
 
-        {isDebugMode && diagnostics ? (
-          <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
-            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-              Certificat client folosit: <span className="font-semibold text-slate-900">{diagnostics.usingClientCertificate ? "Da" : "Nu"}</span>
+        <DocumentSection
+          title="Gufo e-Factura local"
+          actions={
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => void loadLocalAgentStatus()}
+                className={documentButtonSecondaryClass}
+                disabled={localAgentLoading}
+              >
+                {localAgentLoading ? "Detectare..." : "Actualizeaza"}
+              </button>
+              <button type="button" onClick={() => setActiveModal("agent")} className={documentButtonPrimaryClass}>
+                Detalii agent
+              </button>
             </div>
-            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-              Certificat incarcat: <span className="font-semibold text-slate-900">{diagnostics.hasCertificateFile ? "Da" : "Nu"}</span>
+          }
+        >
+          <div className="space-y-2 text-sm text-slate-600">
+            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
+              Agent: <span className="font-semibold text-slate-900">{localAgentConnected ? "Conectat" : "Neconectat"}</span>
             </div>
-            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-              Serial in token: <span className="font-semibold text-slate-900">{diagnostics.tokenSerial || "-"}</span>
+            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
+              Certificat: <span className="font-semibold text-slate-900">{localCertificate?.configuredSerial || "-"}</span>
             </div>
-            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-              Serial configurat: <span className="font-semibold text-slate-900">{diagnostics.certSerialConfigured || "-"}</span>
-            </div>
-            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-              Seriale aliniate: <span className="font-semibold text-slate-900">{diagnostics.serialsMatch ? "Da" : "Nu"}</span>
-            </div>
-            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-              Roluri token: <span className="font-semibold text-slate-900">{diagnostics.tokenRoles.length ? diagnostics.tokenRoles.join(", ") : "-"}</span>
-            </div>
-            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-              Expira token: <span className="font-semibold text-slate-900">{diagnostics.tokenExp ? new Date(diagnostics.tokenExp).toLocaleString("ro-RO") : "-"}</span>
+            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
+              Expira: <span className="font-semibold text-slate-900">{localCertificateExpiryText}</span>
             </div>
           </div>
-        ) : null}
-      </DocumentSection>
-
-      <DocumentSection
-        title="3. Gufo e-Factura local"
-        description="Aici vezi daca aplicatia Windows este conectata si daca certificatul local este pregatit pentru SPV."
-        actions={
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => void loadLocalAgentStatus()}
-              className={documentButtonSecondaryClass}
-              disabled={localAgentLoading}
-            >
-              {localAgentLoading ? "Detectare..." : "Detecteaza agentul"}
-            </button>
-            <button
-              type="button"
-              onClick={() => window.open(localAgentUrl, "_blank", "noopener,noreferrer")}
-              className={documentButtonPrimaryClass}
-            >
-              Deschide aplicatia locala
-            </button>
-          </div>
-        }
-      >
-        <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-          <DocumentMetric title="ERP in agent" value={localAgentStatus?.agent?.erpUrl || "-"} tone="blue" />
-          <DocumentMetric title="Certificat local" value={localCertificate?.configuredSerial || "-"} tone="slate" />
-          <DocumentMetric title="Status certificat" value={localCertificateStatusText} tone={localCertificate?.expired ? "amber" : localCertificate?.expiringSoon ? "amber" : localCertificate?.detected ? "emerald" : "slate"} />
-        </div>
-
-        {localAgentError ? <div className="mt-3"><InlineNotice tone="error">{localAgentError}</InlineNotice></div> : null}
-        {localCertificate?.error && !localCertificate?.detected ? (
-          <div className="mt-3">
-            <InlineNotice tone="error">{localCertificate.error}</InlineNotice>
-          </div>
-        ) : null}
-        {localAgentConnected && localAgentSerialMatches ? (
-          <div className="mt-3">
-            <InlineNotice tone="success">Serialul certificatului din agent este aliniat cu serialul salvat in ERP.</InlineNotice>
-          </div>
-        ) : null}
-        {localAgentConnected && localCertificate?.configuredSerial && form.efacturaCertSerial.trim() && !localAgentSerialMatches ? (
-          <div className="mt-3">
-            <InlineNotice>
-              Serialul din agentul local este diferit de serialul salvat in ERP. Daca acesta este certificatul bun, copiaza-l si salveaza-l si in setarile firmei.
-            </InlineNotice>
-          </div>
-        ) : null}
-
-        <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
-          <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-            URL local: <span className="font-semibold text-slate-900">{localAgentStatus?.agent?.bridgeUrl || localAgentUrl}</span>
-          </div>
-          <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-            Expira la: <span className="font-semibold text-slate-900">{localCertificateExpiryText}</span>
-          </div>
-          <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-            Store certificat: <span className="font-semibold text-slate-900">{localCertificate?.store || "-"}</span>
-          </div>
-          <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-            Cheie privata: <span className="font-semibold text-slate-900">{localCertificate?.hasPrivateKey ? "Da" : "Nu"}</span>
-          </div>
-        </div>
-
-        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-          <DocumentField label="URL agent local">
-            <input
-              value={localAgentUrl}
-              onChange={(e) => setLocalAgentUrl(e.target.value)}
-              className={documentInputClass}
-              placeholder={DEFAULT_LOCAL_AGENT_URL}
-            />
-          </DocumentField>
-          <DocumentField label="Serial detectat din agent">
-            <input
-              value={localCertificate?.configuredSerial || ""}
-              readOnly
-              className={documentInputClass}
-              placeholder="Se completeaza dupa detectare"
-            />
-          </DocumentField>
-        </div>
-
-        <div className="mt-3 rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600">
-          Instalarea clientului trebuie sa ramana simpla: rulezi <strong>Gufo e-Factura</strong>, completezi URL-ul ERP si certificatul local, apoi ERP-ul doar vede starea agentului si a certificatului.
-        </div>
-      </DocumentSection>
+        </DocumentSection>
+      </div>
 
       {isDebugMode ? (
         <>
+          <div className="flex justify-end">
+            <button type="button" onClick={() => setActiveModal("debug")} className={documentButtonSecondaryClass}>
+              Debug avansat
+            </button>
+          </div>
           <DocumentSection
             title="Debug certificat server"
             description="Sectiune tehnica. O folosesti doar daca vrei certificat client TLS pe server."
@@ -823,6 +743,204 @@ export default function SetariEFacturaPage() {
             </div>
           </DocumentSection>
         </>
+      ) : null}
+
+      {activeModal === "flow" ? (
+        <SettingsModal title="Configurare flux e-Factura" onClose={() => setActiveModal(null)}>
+          {loading ? (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+              Se incarca setarile e-Factura...
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <DocumentField label="Activare flux e-Factura">
+                  <label className="flex min-h-10 items-center gap-3 rounded-[14px] border border-slate-200 bg-slate-50 px-3 text-[13px] text-slate-700">
+                    <input type="checkbox" checked={form.efacturaEnabled} onChange={(e) => updateField("efacturaEnabled", e.target.checked)} />
+                    <span>Firma foloseste e-Factura</span>
+                  </label>
+                </DocumentField>
+
+                <DocumentField label="Mediu ANAF">
+                  <select value={form.efacturaEnvironment} onChange={(e) => updateField("efacturaEnvironment", e.target.value)} className={documentInputClass}>
+                    <option value="test">Test</option>
+                    <option value="prod">Productie</option>
+                  </select>
+                </DocumentField>
+
+                <DocumentField label="Serial certificat salvat in ERP">
+                  <input
+                    value={form.efacturaCertSerial}
+                    onChange={(e) => updateField("efacturaCertSerial", e.target.value)}
+                    className={documentInputClass}
+                    placeholder="Ex: 201104209404..."
+                  />
+                </DocumentField>
+              </div>
+
+              <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600">
+                <div>
+                  Firma: <span className="font-semibold text-slate-900">{form.companyName || "-"}</span>
+                </div>
+                <div className="mt-1">
+                  CUI: <span className="font-semibold text-slate-900">{form.companyCui || "-"}</span>
+                </div>
+                <div className="mt-1">
+                  Emitent: <span className="font-semibold text-slate-900">{[form.companyCity, form.companyCounty].filter(Boolean).join(", ") || "-"}</span>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <button type="button" onClick={() => setActiveModal(null)} className={documentButtonSecondaryClass}>
+                  Anuleaza
+                </button>
+                <button type="button" onClick={saveSettings} className={documentButtonPrimaryClass} disabled={saving}>
+                  {saving ? "Se salveaza..." : "Salveaza"}
+                </button>
+              </div>
+            </div>
+          )}
+        </SettingsModal>
+      ) : null}
+
+      {activeModal === "agent" ? (
+        <SettingsModal title="Detalii Gufo e-Factura local" onClose={() => setActiveModal(null)}>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+              <DocumentMetric title="ERP in agent" value={localAgentStatus?.agent?.erpUrl || "-"} tone="blue" />
+              <DocumentMetric title="Certificat local" value={localCertificate?.configuredSerial || "-"} tone="slate" />
+              <DocumentMetric title="Status certificat" value={localCertificateStatusText} tone={localCertificate?.expired ? "amber" : localCertificate?.expiringSoon ? "amber" : localCertificate?.detected ? "emerald" : "slate"} />
+            </div>
+
+            {localAgentError ? <InlineNotice tone="error">{localAgentError}</InlineNotice> : null}
+            {localCertificate?.error && !localCertificate?.detected ? <InlineNotice tone="error">{localCertificate.error}</InlineNotice> : null}
+            {localAgentConnected && localAgentSerialMatches ? <InlineNotice tone="success">Serialul certificatului din agent este aliniat cu serialul salvat in ERP.</InlineNotice> : null}
+            {localAgentConnected && localCertificate?.configuredSerial && form.efacturaCertSerial.trim() && !localAgentSerialMatches ? (
+              <InlineNotice>Serialul din agentul local este diferit de serialul salvat in ERP. Daca acesta este certificatul bun, copiaza-l si salveaza-l si in setarile firmei.</InlineNotice>
+            ) : null}
+
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+              <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                URL local: <span className="font-semibold text-slate-900">{localAgentStatus?.agent?.bridgeUrl || localAgentUrl}</span>
+              </div>
+              <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                Expira la: <span className="font-semibold text-slate-900">{localCertificateExpiryText}</span>
+              </div>
+              <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                Store certificat: <span className="font-semibold text-slate-900">{localCertificate?.store || "-"}</span>
+              </div>
+              <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                Cheie privata: <span className="font-semibold text-slate-900">{localCertificate?.hasPrivateKey ? "Da" : "Nu"}</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <DocumentField label="URL agent local">
+                <input
+                  value={localAgentUrl}
+                  onChange={(e) => setLocalAgentUrl(e.target.value)}
+                  className={documentInputClass}
+                  placeholder={DEFAULT_LOCAL_AGENT_URL}
+                />
+              </DocumentField>
+              <DocumentField label="Serial detectat din agent">
+                <input value={localCertificate?.configuredSerial || ""} readOnly className={documentInputClass} placeholder="Se completeaza dupa detectare" />
+              </DocumentField>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => void loadLocalAgentStatus()} className={documentButtonSecondaryClass} disabled={localAgentLoading}>
+                {localAgentLoading ? "Detectare..." : "Actualizeaza statusul"}
+              </button>
+              <button type="button" onClick={() => window.open(localAgentUrl, "_blank", "noopener,noreferrer")} className={documentButtonPrimaryClass}>
+                Deschide aplicatia locala
+              </button>
+            </div>
+          </div>
+        </SettingsModal>
+      ) : null}
+
+      {activeModal === "debug" && isDebugMode ? (
+        <SettingsModal title="Debug e-Factura" onClose={() => setActiveModal(null)}>
+          <div className="space-y-4">
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={loadDiagnostics} className={documentButtonSecondaryClass} disabled={loadingDiagnostics || loading}>
+                {loadingDiagnostics ? "Diagnoza..." : "Vezi diagnoza"}
+              </button>
+              <button type="button" onClick={uploadCertificate} className={documentButtonPrimaryClass} disabled={certBusy || loading}>
+                {certBusy ? "Se incarca..." : "Incarca certificat"}
+              </button>
+              {certState.hasFile ? (
+                <button type="button" onClick={removeCertificate} className={documentButtonSecondaryClass} disabled={certBusy || loading}>
+                  Sterge certificat
+                </button>
+              ) : null}
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <DocumentField label="Serial certificat">
+                <input
+                  value={form.efacturaCertSerial}
+                  onChange={(e) => updateField("efacturaCertSerial", e.target.value)}
+                  className={documentInputClass}
+                  placeholder="Ex: 201104209404..."
+                />
+              </DocumentField>
+              <DocumentField label="Fisier certificat (.p12 / .pfx)">
+                <input
+                  type="file"
+                  accept=".p12,.pfx,application/x-pkcs12"
+                  onChange={(e) => setCertFile(e.target.files?.[0] || null)}
+                  className={documentInputClass}
+                />
+              </DocumentField>
+              <DocumentField label="Parola certificat">
+                <input
+                  type="password"
+                  value={certPassword}
+                  onChange={(e) => setCertPassword(e.target.value)}
+                  className={documentInputClass}
+                  placeholder={certState.passwordConfigured ? "Parola este deja salvata pe server" : "Introdu parola certificatului"}
+                />
+              </DocumentField>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+              <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                Status certificat: <span className="font-semibold text-slate-900">{certState.hasFile ? "Incarcat" : "Lipsa"}</span>
+              </div>
+              <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                Fisier: <span className="font-semibold text-slate-900">{certState.filename || "-"}</span>
+              </div>
+              <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                Incarcat la: <span className="font-semibold text-slate-900">{certState.uploadedAt ? new Date(certState.uploadedAt).toLocaleString("ro-RO") : "-"}</span>
+              </div>
+            </div>
+
+            {diagnostics ? (
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+                <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                  Certificat client folosit: <span className="font-semibold text-slate-900">{diagnostics.usingClientCertificate ? "Da" : "Nu"}</span>
+                </div>
+                <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                  Certificat incarcat: <span className="font-semibold text-slate-900">{diagnostics.hasCertificateFile ? "Da" : "Nu"}</span>
+                </div>
+                <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                  Serial in token: <span className="font-semibold text-slate-900">{diagnostics.tokenSerial || "-"}</span>
+                </div>
+                <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                  Serial configurat: <span className="font-semibold text-slate-900">{diagnostics.certSerialConfigured || "-"}</span>
+                </div>
+                <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                  Seriale aliniate: <span className="font-semibold text-slate-900">{diagnostics.serialsMatch ? "Da" : "Nu"}</span>
+                </div>
+                <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                  Roluri token: <span className="font-semibold text-slate-900">{diagnostics.tokenRoles.length ? diagnostics.tokenRoles.join(", ") : "-"}</span>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </SettingsModal>
       ) : null}
     </div>
   )
