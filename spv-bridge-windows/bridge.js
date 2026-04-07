@@ -198,6 +198,9 @@ function renderSetupPage() {
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
 
+  const erpOrigin = getConfiguredErpOrigin()
+  const healthUrl = `http://${HOST}:${PORT}/health`
+  const statusTone = DEFAULT_CERT_SERIAL ? "configured" : "attention"
   return `<!doctype html>
 <html lang="ro">
 <head>
@@ -205,56 +208,218 @@ function renderSetupPage() {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Gufo e-Factura</title>
   <style>
-    body { font-family: Segoe UI, Arial, sans-serif; background:#f4f7fb; margin:0; color:#17324D; }
-    .wrap { max-width: 820px; margin: 32px auto; padding: 0 20px; }
-    .card { background:#fff; border:1px solid #d8e2ee; border-radius:20px; box-shadow:0 12px 32px rgba(23,50,77,.08); padding:24px; }
-    h1 { margin:0 0 6px; font-size:28px; }
-    p { margin:0 0 18px; color:#567; }
+    :root {
+      --bg:#eff4fa;
+      --card:#ffffff;
+      --line:#d8e2ee;
+      --text:#17324D;
+      --muted:#66788a;
+      --blue:#17324D;
+      --blue-soft:#e9f0f8;
+      --green:#216e39;
+      --green-soft:#ecf8ef;
+      --amber:#9a6700;
+      --amber-soft:#fff6e5;
+      --shadow:0 18px 48px rgba(23,50,77,.10);
+    }
+    * { box-sizing:border-box; }
+    body { font-family: Segoe UI, Arial, sans-serif; background:linear-gradient(180deg,#f5f8fc 0%, var(--bg) 100%); margin:0; color:var(--text); }
+    .wrap { max-width: 980px; margin: 28px auto; padding: 0 20px 28px; }
+    .hero { display:flex; justify-content:space-between; gap:18px; align-items:flex-start; margin-bottom:18px; }
+    .hero h1 { margin:0 0 6px; font-size:34px; line-height:1.05; }
+    .hero p { margin:0; color:#5e7388; max-width:640px; }
+    .shell { display:grid; gap:16px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:24px; box-shadow:var(--shadow); padding:24px; }
     .grid { display:grid; gap:14px; grid-template-columns: repeat(2, minmax(0,1fr)); }
     .full { grid-column: 1 / -1; }
-    label { display:block; font-size:13px; font-weight:600; margin-bottom:6px; }
-    input { width:100%; box-sizing:border-box; border:1px solid #c8d5e3; border-radius:12px; padding:12px 14px; font-size:14px; }
-    .actions { margin-top:18px; display:flex; gap:12px; align-items:center; }
-    button { background:#17324D; color:#fff; border:none; border-radius:12px; padding:12px 18px; font-weight:700; cursor:pointer; }
-    .muted { font-size:12px; color:#66788a; }
-    .pill { display:inline-block; border-radius:999px; padding:6px 10px; background:#eef6ee; color:#216e39; font-size:12px; font-weight:700; }
+    .metrics { display:grid; gap:14px; grid-template-columns: repeat(4, minmax(0,1fr)); }
+    .metric { border:1px solid var(--line); border-radius:18px; padding:16px; background:#f9fbfd; min-height:104px; }
+    .metric .label { font-size:11px; text-transform:uppercase; letter-spacing:.16em; color:#6d8093; font-weight:700; }
+    .metric .value { margin-top:10px; font-size:20px; font-weight:800; color:var(--text); word-break:break-word; }
+    .metric .hint { margin-top:6px; font-size:12px; color:var(--muted); }
+    .metric.blue { background:var(--blue-soft); }
+    .metric.green { background:var(--green-soft); }
+    .metric.amber { background:var(--amber-soft); }
+    .section-title { margin:0 0 6px; font-size:18px; font-weight:800; }
+    .section-copy { margin:0 0 16px; color:#5e7388; font-size:14px; }
+    label { display:block; font-size:13px; font-weight:700; margin-bottom:6px; }
+    input { width:100%; border:1px solid #c8d5e3; border-radius:14px; padding:13px 14px; font-size:14px; background:#fff; }
+    input:focus { outline:none; border-color:#89a8c8; box-shadow:0 0 0 4px rgba(23,50,77,.08); }
+    .actions { margin-top:18px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    button { background:var(--blue); color:#fff; border:none; border-radius:14px; padding:12px 18px; font-weight:800; cursor:pointer; }
+    button.secondary { background:#edf3f9; color:var(--blue); }
+    button.link { background:transparent; color:var(--blue); border:1px solid var(--line); }
+    .muted { font-size:12px; color:var(--muted); }
+    .pill { display:inline-flex; align-items:center; gap:8px; border-radius:999px; padding:8px 12px; font-size:12px; font-weight:800; }
+    .pill.green { background:var(--green-soft); color:var(--green); }
+    .pill.amber { background:var(--amber-soft); color:var(--amber); }
     .row { margin-top:16px; display:flex; flex-wrap:wrap; gap:12px; }
+    .status-list { display:grid; gap:10px; grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .status-item { border:1px solid var(--line); border-radius:16px; padding:14px; background:#f9fbfd; }
+    .status-item .k { font-size:12px; color:#6d8093; margin-bottom:6px; }
+    .status-item .v { font-size:14px; font-weight:700; color:var(--text); word-break:break-word; }
+    .notice { border:1px solid var(--line); border-radius:16px; padding:12px 14px; background:#f9fbfd; color:var(--text); font-size:13px; }
+    @media (max-width: 900px) {
+      .metrics { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .status-list { grid-template-columns: 1fr; }
+      .hero { flex-direction:column; }
+    }
+    @media (max-width: 640px) {
+      .wrap { padding: 0 14px 20px; }
+      .grid, .metrics { grid-template-columns: 1fr; }
+      .hero h1 { font-size:30px; }
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <div class="card">
-      <h1>Gufo e-Factura</h1>
-      <p>Configurezi agentul local o singura data, apoi ERP-ul foloseste certificatul local fara comenzi manuale.</p>
-      <div class="row">
-        <span class="pill">Health: http://${escape(HOST)}:${escape(PORT)}/health</span>
+    <div class="hero">
+      <div>
+        <h1>Gufo e-Factura</h1>
+        <p>Aplicatia locala foloseste certificatul digital de pe Windows si lucreaza cu ERP-ul fara pasi tehnici inutili.</p>
       </div>
-      <form id="config-form" class="grid" style="margin-top:18px">
-        <div class="full">
-          <label for="erpUrl">ERP URL</label>
-          <input id="erpUrl" name="erpUrl" value="${escape(ERP_URL)}" placeholder="https://app.gufo.ink" />
+      <div class="row">
+        <span class="pill ${statusTone === "configured" ? "green" : "amber"}" id="agent-state-pill">${DEFAULT_CERT_SERIAL ? "Agent configurat" : "Configurare necesara"}</span>
+      </div>
+    </div>
+
+    <div class="shell">
+      <div class="metrics">
+        <div class="metric blue">
+          <div class="label">ERP</div>
+          <div class="value" id="metric-erp">${escape(erpOrigin || ERP_URL || "-")}</div>
+          <div class="hint">ERP conectat la agent</div>
         </div>
-        <div class="full">
-          <label for="certSerial">Serial certificat</label>
-          <input id="certSerial" name="certSerial" value="${escape(DEFAULT_CERT_SERIAL)}" placeholder="Serialul certificatului din Windows Store" />
+        <div class="metric">
+          <div class="label">Certificat</div>
+          <div class="value" id="metric-cert">${escape(DEFAULT_CERT_SERIAL || "-")}</div>
+          <div class="hint">Serial configurat local</div>
         </div>
-        <div>
-          <label for="bridgeHost">Host local</label>
-          <input id="bridgeHost" name="bridgeHost" value="${escape(HOST)}" />
+        <div class="metric green">
+          <div class="label">Health</div>
+          <div class="value" id="metric-health">Online</div>
+          <div class="hint">${escape(healthUrl)}</div>
         </div>
-        <div>
-          <label for="bridgePort">Port local</label>
-          <input id="bridgePort" name="bridgePort" value="${escape(PORT)}" />
+        <div class="metric amber">
+          <div class="label">Expirare</div>
+          <div class="value" id="metric-expiry">Se verifica...</div>
+          <div class="hint" id="metric-expiry-hint">Statusul certificatului local</div>
         </div>
-        <div class="actions full">
-          <button type="submit">Salveaza configuratia</button>
-          <div id="result" class="muted">Config curent salvat in <code>agent-config.json</code>.</div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">Configurare agent</div>
+        <div class="section-copy">Completezi o singura data adresa ERP-ului si serialul certificatului, iar apoi agentul ramane disponibil local.</div>
+        <form id="config-form" class="grid">
+          <div class="full">
+            <label for="erpUrl">ERP URL</label>
+            <input id="erpUrl" name="erpUrl" value="${escape(ERP_URL)}" placeholder="https://app.gufo.ink" />
+          </div>
+          <div class="full">
+            <label for="certSerial">Serial certificat</label>
+            <input id="certSerial" name="certSerial" value="${escape(DEFAULT_CERT_SERIAL)}" placeholder="Serialul certificatului din Windows Store" />
+          </div>
+          <div>
+            <label for="bridgeHost">Host local</label>
+            <input id="bridgeHost" name="bridgeHost" value="${escape(HOST)}" />
+          </div>
+          <div>
+            <label for="bridgePort">Port local</label>
+            <input id="bridgePort" name="bridgePort" value="${escape(PORT)}" />
+          </div>
+          <div class="actions full">
+            <button type="submit">Salveaza configuratia</button>
+            <button type="button" class="secondary" id="refresh-status">Actualizeaza statusul</button>
+            <button type="button" class="link" id="open-erp">Deschide ERP</button>
+            <div id="result" class="muted">Config curent salvat in <code>agent-config.json</code>.</div>
+          </div>
+          <div class="full muted">Tokenul local este generat automat de agent si nu trebuie completat de client.</div>
+        </form>
+      </div>
+
+      <div class="card">
+        <div class="section-title">Stare curenta</div>
+        <div class="section-copy">Verifici rapid daca certificatul este detectat, daca are cheie privata si cand expira.</div>
+        <div class="status-list">
+          <div class="status-item">
+            <div class="k">Subiect certificat</div>
+            <div class="v" id="status-subject">Se verifica...</div>
+          </div>
+          <div class="status-item">
+            <div class="k">Store Windows</div>
+            <div class="v" id="status-store">Se verifica...</div>
+          </div>
+          <div class="status-item">
+            <div class="k">Cheie privata</div>
+            <div class="v" id="status-key">Se verifica...</div>
+          </div>
+          <div class="status-item">
+            <div class="k">Expira la</div>
+            <div class="v" id="status-expiry">Se verifica...</div>
+          </div>
         </div>
-        <div class="full muted">Tokenul local este generat automat de agent si nu trebuie completat de client.</div>
-      </form>
+        <div class="row">
+          <div class="notice" id="status-note">Starea agentului se actualizeaza local.</div>
+        </div>
+      </div>
     </div>
   </div>
   <script>
+    const result = document.getElementById('result');
+    const refreshButton = document.getElementById('refresh-status');
+    const openErpButton = document.getElementById('open-erp');
+
+    function formatExpiryLabel(certificate) {
+      if (!certificate || !certificate.notAfter) return { title: '-', hint: 'Certificatul nu este detectat inca.' };
+      const date = new Date(certificate.notAfter);
+      const label = isNaN(date.getTime()) ? certificate.notAfter : date.toLocaleString('ro-RO');
+      if (certificate.expired) {
+        return { title: 'Expirat', hint: label };
+      }
+      if (certificate.expiringSoon && typeof certificate.expiresInDays === 'number') {
+        return { title: 'In ' + certificate.expiresInDays + ' zile', hint: label };
+      }
+      return { title: 'Valid', hint: label };
+    }
+
+    function updateStatusUi(data) {
+      const agent = data && data.agent ? data.agent : {};
+      const certificate = data && data.certificate ? data.certificate : {};
+      const expiry = formatExpiryLabel(certificate);
+      document.getElementById('metric-erp').textContent = agent.erpOrigin || agent.erpUrl || '-';
+      document.getElementById('metric-cert').textContent = certificate.configuredSerial || '-';
+      document.getElementById('metric-health').textContent = data && data.ok ? 'Online' : 'Offline';
+      document.getElementById('metric-expiry').textContent = expiry.title;
+      document.getElementById('metric-expiry-hint').textContent = expiry.hint;
+      document.getElementById('status-subject').textContent = certificate.subject || 'Certificat nedetectat';
+      document.getElementById('status-store').textContent = certificate.store || '-';
+      document.getElementById('status-key').textContent = certificate.hasPrivateKey ? 'Da' : 'Nu';
+      document.getElementById('status-expiry').textContent = expiry.hint;
+      document.getElementById('status-note').textContent =
+        certificate.error
+          ? certificate.error
+          : (certificate.detected
+            ? 'Certificatul local este detectat si pregatit pentru SPV.'
+            : 'Completeaza serialul certificatului si salveaza configuratia.');
+      document.getElementById('agent-state-pill').textContent =
+        certificate.detected ? 'Agent conectat' : 'Configurare necesara';
+      document.getElementById('agent-state-pill').className =
+        'pill ' + (certificate.detected ? 'green' : 'amber');
+    }
+
+    async function refreshStatus() {
+      try {
+        const response = await fetch('/agent/status', { headers: { Accept: 'application/json' } });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.ok) {
+          throw new Error(data.error || 'Nu am putut citi starea agentului.');
+        }
+        updateStatusUi(data);
+      } catch (error) {
+        document.getElementById('status-note').textContent = error.message || String(error);
+      }
+    }
+
     document.getElementById('config-form').addEventListener('submit', async function (event) {
       event.preventDefault();
       const form = event.currentTarget;
@@ -264,7 +429,6 @@ function renderSetupPage() {
         bridgeHost: form.bridgeHost.value.trim(),
         bridgePort: form.bridgePort.value.trim(),
       };
-      const result = document.getElementById('result');
       result.textContent = 'Se salveaza...';
       const response = await fetch('/agent/config', {
         method: 'POST',
@@ -275,7 +439,20 @@ function renderSetupPage() {
       result.textContent = response.ok && data.ok
         ? 'Configuratia a fost salvata. Daca ai schimbat host sau port, reporneste agentul.'
         : (data.error || 'Nu am putut salva configuratia.');
+      if (response.ok && data.ok) {
+        refreshStatus();
+      }
     });
+
+    refreshButton.addEventListener('click', refreshStatus);
+    openErpButton.addEventListener('click', function () {
+      const value = document.getElementById('erpUrl').value.trim();
+      if (value) {
+        window.open(value, '_blank');
+      }
+    });
+
+    refreshStatus();
   </script>
 </body>
 </html>`
