@@ -84,6 +84,16 @@ type LocalAgentStatus = {
   certificate: LocalAgentCertificateStatus
 }
 
+type AgentDownloadInfo = {
+  available: boolean
+  type: "external" | "local" | "missing"
+  fileName?: string | null
+  updatedAt?: string | null
+  size?: number | null
+  url?: string | null
+  error?: string | null
+}
+
 const DEFAULT_LOCAL_AGENT_URL = "http://127.0.0.1:48521"
 
 type ActiveModal = null | "flow" | "agent" | "debug"
@@ -174,6 +184,8 @@ export default function SetariEFacturaPage() {
   const [localAgentLoading, setLocalAgentLoading] = useState(false)
   const [localAgentError, setLocalAgentError] = useState("")
   const [localAgentStatus, setLocalAgentStatus] = useState<LocalAgentStatus | null>(null)
+  const [agentDownloadLoading, setAgentDownloadLoading] = useState(false)
+  const [agentDownloadInfo, setAgentDownloadInfo] = useState<AgentDownloadInfo | null>(null)
   const [activeModal, setActiveModal] = useState<ActiveModal>(null)
   const isDebugMode =
     typeof window !== "undefined" &&
@@ -182,6 +194,7 @@ export default function SetariEFacturaPage() {
   useEffect(() => {
     loadSettings()
     void loadLocalAgentStatus()
+    void loadAgentDownloadInfo()
 
     const params = new URLSearchParams(window.location.search)
     const oauth = params.get("oauth")
@@ -286,6 +299,70 @@ export default function SetariEFacturaPage() {
       setLocalAgentError(e?.message || "Nu am putut citi starea agentului local Gufo e-Factura.")
     } finally {
       setLocalAgentLoading(false)
+    }
+  }
+
+  async function loadAgentDownloadInfo() {
+    if (!token) return
+    setAgentDownloadLoading(true)
+    try {
+      const res = await fetch(`${API}/api/v1/company/efactura/agent-download-info`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Nu am putut verifica installerul Gufo e-Factura.")
+      }
+      setAgentDownloadInfo((data?.agent || null) as AgentDownloadInfo | null)
+    } catch (e: any) {
+      setAgentDownloadInfo({
+        available: false,
+        type: "missing",
+        error: e?.message || "Nu am putut verifica installerul Gufo e-Factura.",
+      })
+    } finally {
+      setAgentDownloadLoading(false)
+    }
+  }
+
+  async function downloadAgentInstaller() {
+    if (!token) {
+      setError("Nu exista token de autentificare. Fa login din nou.")
+      return
+    }
+
+    setError("")
+    setMessage("")
+    try {
+      const res = await fetch(`${API}/api/v1/company/efactura/agent-download`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        redirect: "follow",
+      })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data?.error || "Nu am putut descarca installerul Gufo e-Factura.")
+      }
+
+      const blob = await res.blob()
+      const disposition = res.headers.get("Content-Disposition") || ""
+      const match = disposition.match(/filename=\"?([^"]+)\"?/)
+      const fileName = match?.[1] || agentDownloadInfo?.fileName || "Gufo-eFactura-Setup.exe"
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = fileName
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000)
+      setMessage("Installerul Gufo e-Factura a fost descarcat.")
+    } catch (e: any) {
+      setError(e?.message || "Nu am putut descarca installerul Gufo e-Factura.")
     }
   }
 
@@ -556,6 +633,9 @@ export default function SetariEFacturaPage() {
     Boolean(localCertificate?.configuredSerial) &&
     Boolean(form.efacturaCertSerial.trim()) &&
     String(localCertificate?.configuredSerial || "").trim().toUpperCase() === form.efacturaCertSerial.trim().toUpperCase()
+  const agentInstallerUpdatedAt = agentDownloadInfo?.updatedAt
+    ? new Date(agentDownloadInfo.updatedAt).toLocaleString("ro-RO")
+    : "-"
 
   return (
     <div className="space-y-3">
@@ -639,6 +719,14 @@ export default function SetariEFacturaPage() {
             <div className="flex gap-2">
               <button
                 type="button"
+                onClick={downloadAgentInstaller}
+                className={documentButtonSecondaryClass}
+                disabled={!agentDownloadInfo?.available}
+              >
+                Descarca agent
+              </button>
+              <button
+                type="button"
                 onClick={() => void loadLocalAgentStatus()}
                 className={documentButtonSecondaryClass}
                 disabled={localAgentLoading}
@@ -656,12 +744,23 @@ export default function SetariEFacturaPage() {
               Agent: <span className="font-semibold text-slate-900">{localAgentConnected ? "Conectat" : "Neconectat"}</span>
             </div>
             <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
+              Installer: <span className="font-semibold text-slate-900">{agentDownloadInfo?.available ? agentDownloadInfo.fileName || "Disponibil" : "Indisponibil"}</span>
+            </div>
+            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
               Certificat: <span className="font-semibold text-slate-900">{localCertificate?.configuredSerial || "-"}</span>
             </div>
             <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
               Expira: <span className="font-semibold text-slate-900">{localCertificateExpiryText}</span>
             </div>
           </div>
+          {agentDownloadLoading ? <div className="mt-2 text-xs text-slate-500">Verific installerul Gufo e-Factura...</div> : null}
+          {agentDownloadInfo?.available ? (
+            <div className="mt-2 text-xs text-slate-500">
+              Ultimul installer disponibil: <strong>{agentDownloadInfo.fileName || "Gufo-eFactura-Setup.exe"}</strong>{agentDownloadInfo?.updatedAt ? `, actualizat la ${agentInstallerUpdatedAt}` : ""}.
+            </div>
+          ) : agentDownloadInfo?.error ? (
+            <div className="mt-2 text-xs text-amber-700">{agentDownloadInfo.error}</div>
+          ) : null}
         </DocumentSection>
       </div>
 

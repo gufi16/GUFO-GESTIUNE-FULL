@@ -27,6 +27,7 @@ const ANAF_CUI_LOOKUP_URL = "https://webservicesp.anaf.ro/api/PlatitorTvaRest/v9
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret"
 const ANAF_OAUTH_CTX_COOKIE = "gufo_anaf_oauth_ctx"
 const certUploadsDir = ensureEfacturaCertDir()
+const efacturaAgentDownloadDir = path.join(process.cwd(), "uploads", "efactura-agent")
 
 const certStorage = multer.diskStorage({
   destination: (_req, _file, cb) => {
@@ -55,6 +56,65 @@ const certUpload = multer({
 function normalizeOptionalText(value: unknown) {
   const text = String(value || "").trim()
   return text || null
+}
+
+function getLatestEfacturaAgentFile() {
+  if (!fs.existsSync(efacturaAgentDownloadDir)) {
+    return null
+  }
+
+  const files = fs
+    .readdirSync(efacturaAgentDownloadDir)
+    .filter((entry) => entry.toLowerCase().endsWith(".exe"))
+    .map((entry) => {
+      const fullPath = path.join(efacturaAgentDownloadDir, entry)
+      const stats = fs.statSync(fullPath)
+      return {
+        fileName: entry,
+        fullPath,
+        size: stats.size,
+        updatedAt: stats.mtime.toISOString(),
+        mtimeMs: stats.mtimeMs,
+      }
+    })
+    .sort((a, b) => b.mtimeMs - a.mtimeMs)
+
+  return files[0] || null
+}
+
+function getEfacturaAgentDownloadSource() {
+  const externalUrl = String(process.env.GUFO_EFACTURA_AGENT_DOWNLOAD_URL || "").trim()
+  if (externalUrl) {
+    return {
+      available: true,
+      type: "external" as const,
+      url: externalUrl,
+      fileName:
+        String(process.env.GUFO_EFACTURA_AGENT_FILE_NAME || "").trim() || "Gufo-eFactura-Setup.exe",
+      updatedAt: null,
+      size: null,
+    }
+  }
+
+  const latestFile = getLatestEfacturaAgentFile()
+  if (!latestFile) {
+    return {
+      available: false,
+      type: "missing" as const,
+      error:
+        "Nu exista inca un installer Gufo e-Factura publicat pe server. Pune fisierul .exe in uploads/efactura-agent sau configureaza GUFO_EFACTURA_AGENT_DOWNLOAD_URL.",
+    }
+  }
+
+  return {
+    available: true,
+    type: "local" as const,
+    url: null,
+    fileName: latestFile.fileName,
+    fullPath: latestFile.fullPath,
+    updatedAt: latestFile.updatedAt,
+    size: latestFile.size,
+  }
 }
 
 function mapCompanyResponse(company: any, oauthConfig: any) {
@@ -786,6 +846,60 @@ router.post("/api/v1/company/efactura/oauth/test", async (req: AuthedRequest, re
       error: error?.message || "Eroare la testarea conexiunii ANAF.",
     })
   }
+})
+
+router.get("/api/v1/company/efactura/agent-download-info", requireAuth, async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const moduleCheck = await requireTenantModule(tenantId, "efactura")
+
+  if (!moduleCheck.enabled) {
+    return res.status(403).json({
+      ok: false,
+      error: "Modulul e-Factura nu este activ pe licenta acestui client.",
+    })
+  }
+
+  const source = getEfacturaAgentDownloadSource()
+  return res.json({
+    ok: true,
+    agent: source,
+  })
+})
+
+router.get("/api/v1/company/efactura/agent-download", requireAuth, async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const moduleCheck = await requireTenantModule(tenantId, "efactura")
+
+  if (!moduleCheck.enabled) {
+    return res.status(403).json({
+      ok: false,
+      error: "Modulul e-Factura nu este activ pe licenta acestui client.",
+    })
+  }
+
+  const source = getEfacturaAgentDownloadSource()
+
+  if (!source.available) {
+    return res.status(404).json({
+      ok: false,
+      error: source.error,
+    })
+  }
+
+  if (source.type === "external" && source.url) {
+    return res.redirect(source.url)
+  }
+
+  if (source.type === "local" && source.fullPath) {
+    res.setHeader("Content-Type", "application/octet-stream")
+    res.setHeader("Content-Disposition", `attachment; filename="${source.fileName}"`)
+    return res.sendFile(source.fullPath)
+  }
+
+  return res.status(404).json({
+    ok: false,
+    error: "Installerul Gufo e-Factura nu este disponibil.",
+  })
 })
 
 router.get("/api/v1/company/efactura/diagnostics", async (req: AuthedRequest, res) => {
