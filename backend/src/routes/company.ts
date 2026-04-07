@@ -124,6 +124,17 @@ function getEfacturaAgentDownloadSource() {
   }
 }
 
+function createEfacturaAgentDownloadTicket(tenantId: string) {
+  return jwt.sign(
+    {
+      tenantId,
+      purpose: "efactura-agent-download",
+    },
+    JWT_SECRET,
+    { expiresIn: "10m" },
+  )
+}
+
 function mapCompanyResponse(company: any, oauthConfig: any) {
   const hasStoredCertificate = hasEfacturaCertificateFile(company?.tenantId, company?.efacturaCertFilename)
 
@@ -369,6 +380,66 @@ export async function handleAnafOauthCallback(req, res) {
 }
 
 router.get("/api/v1/company/efactura/oauth/callback", handleAnafOauthCallback)
+
+router.get("/api/v1/public/efactura/agent-download", async (req, res) => {
+  const ticket = String(req.query.ticket || "").trim()
+
+  if (!ticket) {
+    return res.status(401).json({
+      ok: false,
+      error: "Lipseste ticket-ul de descarcare.",
+    })
+  }
+
+  let payload: { tenantId?: string | null; purpose?: string } | null = null
+  try {
+    payload = jwt.verify(ticket, JWT_SECRET) as { tenantId?: string | null; purpose?: string }
+  } catch {
+    return res.status(401).json({
+      ok: false,
+      error: "Ticket-ul de descarcare este invalid sau expirat.",
+    })
+  }
+
+  if (payload?.purpose !== "efactura-agent-download" || !payload?.tenantId) {
+    return res.status(401).json({
+      ok: false,
+      error: "Ticket-ul de descarcare este invalid.",
+    })
+  }
+
+  const moduleCheck = await requireTenantModule(payload.tenantId, "efactura")
+  if (!moduleCheck.enabled) {
+    return res.status(403).json({
+      ok: false,
+      error: "Modulul e-Factura nu este activ pe licenta acestui client.",
+    })
+  }
+
+  const source = getEfacturaAgentDownloadSource()
+
+  if (!source.available) {
+    return res.status(404).json({
+      ok: false,
+      error: source.error,
+    })
+  }
+
+  if (source.type === "external" && source.url) {
+    return res.redirect(source.url)
+  }
+
+  if (source.type === "local" && source.fullPath) {
+    res.setHeader("Content-Type", "application/octet-stream")
+    res.setHeader("Content-Disposition", `attachment; filename="${source.fileName}"`)
+    return res.sendFile(source.fullPath)
+  }
+
+  return res.status(404).json({
+    ok: false,
+    error: "Installerul Gufo e-Factura nu este disponibil.",
+  })
+})
 
 router.use(requireAuth)
 
@@ -906,6 +977,41 @@ router.get("/api/v1/company/efactura/agent-download", requireAuth, async (req: A
   return res.status(404).json({
     ok: false,
     error: "Installerul Gufo e-Factura nu este disponibil.",
+  })
+})
+
+router.get("/api/v1/company/efactura/agent-download-link", requireAuth, async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const moduleCheck = await requireTenantModule(tenantId, "efactura")
+
+  if (!moduleCheck.enabled) {
+    return res.status(403).json({
+      ok: false,
+      error: "Modulul e-Factura nu este activ pe licenta acestui client.",
+    })
+  }
+
+  const source = getEfacturaAgentDownloadSource()
+
+  if (!source.available) {
+    return res.status(404).json({
+      ok: false,
+      error: source.error,
+    })
+  }
+
+  if (source.type === "external" && source.url) {
+    return res.json({
+      ok: true,
+      url: source.url,
+      fileName: source.fileName || "Gufo-eFactura-Setup.exe",
+    })
+  }
+
+  return res.json({
+    ok: true,
+    url: `/api/v1/public/efactura/agent-download?ticket=${encodeURIComponent(createEfacturaAgentDownloadTicket(tenantId || ""))}`,
+    fileName: source.fileName || "Gufo-eFactura-Setup.exe",
   })
 })
 

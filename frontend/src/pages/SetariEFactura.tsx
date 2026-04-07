@@ -336,11 +336,10 @@ export default function SetariEFacturaPage() {
     setError("")
     setMessage("")
     try {
-      const res = await fetch(`${API}/api/v1/company/efactura/agent-download`, {
+      const res = await fetch(`${API}/api/v1/company/efactura/agent-download-link`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
-        redirect: "follow",
       })
 
       if (!res.ok) {
@@ -348,19 +347,22 @@ export default function SetariEFacturaPage() {
         throw new Error(data?.error || "Nu am putut descarca installerul Gufo e-Factura.")
       }
 
-      const blob = await res.blob()
-      const disposition = res.headers.get("Content-Disposition") || ""
-      const match = disposition.match(/filename=\"?([^"]+)\"?/)
-      const fileName = match?.[1] || agentDownloadInfo?.fileName || "Gufo-eFactura-Setup.exe"
-      const url = window.URL.createObjectURL(blob)
+      const data = await res.json().catch(() => ({}))
+      if (!data?.ok || !data?.url) {
+        throw new Error(data?.error || "Nu am putut obtine linkul de descarcare pentru Gufo e-Factura.")
+      }
+
+      const downloadUrl = String(data.url)
+      const fileName = data?.fileName || agentDownloadInfo?.fileName || "Gufo-eFactura-Setup.exe"
       const link = document.createElement("a")
-      link.href = url
+      link.href = downloadUrl.startsWith("http") ? downloadUrl : `${API}${downloadUrl}`
       link.download = fileName
+      link.target = "_blank"
+      link.rel = "noopener"
       document.body.appendChild(link)
       link.click()
       link.remove()
-      window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000)
-      setMessage("Installerul Gufo e-Factura a fost descarcat.")
+      setMessage("Descarcarea installerului Gufo e-Factura a fost pornita.")
     } catch (e: any) {
       setError(e?.message || "Nu am putut descarca installerul Gufo e-Factura.")
     }
