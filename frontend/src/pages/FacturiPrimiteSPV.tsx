@@ -344,8 +344,11 @@ export default function FacturiPrimiteSPVPage() {
           Authorization: `Bearer ${localAgent.bridgeToken}`,
           "Content-Type": "application/json",
         }
+        let listData: any = null
+        let payload: any = {}
+        let downloadsById = new Map<string, any>()
 
-        const listRes = await fetch(`${trimmedBridgeUrl}/api/v1/efactura/sync-batch`, {
+        const syncBatchRes = await fetch(`${trimmedBridgeUrl}/api/v1/efactura/sync-batch`, {
           method: "POST",
           headers: bridgeHeaders,
           body: JSON.stringify({
@@ -356,20 +359,53 @@ export default function FacturiPrimiteSPVPage() {
             existingIds: Array.from(existingDownloadIds),
           }),
         })
-        const listData = await listRes.json().catch(() => ({}))
-        if (!listRes.ok || !listData?.ok || !listData?.response?.list?.ok) {
-          throw new Error(listData?.response?.list?.error || listData?.error || "Bridge-ul local nu a putut sincroniza e-Factura.")
+        const syncBatchData = await syncBatchRes.json().catch(() => ({}))
+        const shouldFallbackToLegacyBridge =
+          !syncBatchRes.ok &&
+          (syncBatchRes.status === 404 ||
+            String(syncBatchData?.error || "")
+              .trim()
+              .toLowerCase()
+              .includes("ruta necunoscuta"))
+
+        if (!shouldFallbackToLegacyBridge) {
+          if (!syncBatchRes.ok || !syncBatchData?.ok || !syncBatchData?.response?.list?.ok) {
+            throw new Error(syncBatchData?.response?.list?.error || syncBatchData?.error || "Bridge-ul local nu a putut sincroniza e-Factura.")
+          }
+          listData = syncBatchData
+          payload = (() => {
+            const rawContent = String(listData?.response?.list?.content || "").trim()
+            if (!rawContent) return {}
+            try {
+              return JSON.parse(rawContent)
+            } catch {
+              return {}
+            }
+          })()
+          downloadsById = new Map<string, any>(
+            (Array.isArray(listData?.response?.items) ? listData.response.items : []).map((entry: any) => [
+              String(entry?.id || "").trim(),
+              entry,
+            ])
+          )
+        } else {
+          const listRes = await fetch(`${trimmedBridgeUrl}/api/v1/efactura/list-messages`, {
+            method: "POST",
+            headers: bridgeHeaders,
+            body: JSON.stringify({
+              days: requestedDays,
+              accessToken: bridgeConfig.accessToken,
+              cif: bridgeConfig.cif,
+              environment: bridgeConfig.environment,
+            }),
+          })
+          listData = await listRes.json().catch(() => ({}))
+          if (!listRes.ok || !listData?.ok || !listData?.response?.ok) {
+            throw new Error(listData?.response?.error || listData?.error || "Bridge-ul local nu a putut lista mesajele e-Factura.")
+          }
+          payload = listData?.response?.parsedContent || {}
         }
 
-        const payload = (() => {
-          const rawContent = String(listData?.response?.list?.content || "").trim()
-          if (!rawContent) return {}
-          try {
-            return JSON.parse(rawContent)
-          } catch {
-            return {}
-          }
-        })()
         const messages = filterMessagesForMonth(Array.isArray(payload?.mesaje) ? payload.mesaje : [], selectedMonth)
         setBridgeMessages(
           messages.map((entry: any) => ({
@@ -429,12 +465,32 @@ export default function FacturiPrimiteSPVPage() {
         let skipped = 0
         let lastImportedInvoiceNo = "-"
         const importErrors: string[] = []
-        const downloadsById = new Map<string, any>(
-          (Array.isArray(listData?.response?.items) ? listData.response.items : []).map((entry: any) => [
-            String(entry?.id || "").trim(),
-            entry,
-          ])
-        )
+
+        if (shouldFallbackToLegacyBridge) {
+          const downloadIds = newInvoiceMessages
+            .map((message: any) => String(message?.id || "").trim())
+            .filter(Boolean)
+
+          const batchDownloadRes = await fetch(`${trimmedBridgeUrl}/api/v1/efactura/download-many`, {
+            method: "POST",
+            headers: bridgeHeaders,
+            body: JSON.stringify({
+              ids: downloadIds,
+              accessToken: bridgeConfig.accessToken,
+              environment: bridgeConfig.environment,
+            }),
+          })
+          const batchDownloadData = await batchDownloadRes.json().catch(() => ({}))
+          if (!batchDownloadRes.ok || !batchDownloadData?.ok || !batchDownloadData?.response?.items) {
+            throw new Error(batchDownloadData?.error || "Bridge-ul local nu a putut descarca lotul de facturi e-Factura.")
+          }
+          downloadsById = new Map<string, any>(
+            (Array.isArray(batchDownloadData.response.items) ? batchDownloadData.response.items : []).map((entry: any) => [
+              String(entry?.id || "").trim(),
+              entry,
+            ])
+          )
+        }
 
         for (const message of newInvoiceMessages) {
           const messageId = String(message?.id || "").trim()
