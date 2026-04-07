@@ -20,7 +20,8 @@ const EFACTURA_LIST_MESSAGES_TEST_URL = "https://webserviceapl.anaf.ro/test/FCTE
 const EFACTURA_DOWNLOAD_PROD_URL = "https://webserviceapl.anaf.ro/prod/FCTEL/rest/descarcare"
 const EFACTURA_DOWNLOAD_TEST_URL = "https://webserviceapl.anaf.ro/test/FCTEL/rest/descarcare"
 const POWERSHELL_TIMEOUT_MS = 90000
-const CONFIG_PATH = path.join(__dirname, "agent-config.json")
+const CONFIG_DIR = resolveConfigDir()
+const CONFIG_PATH = path.join(CONFIG_DIR, "agent-config.json")
 
 loadEnv(path.join(__dirname, ".env"))
 
@@ -136,6 +137,44 @@ function loadEnv(filePath) {
   }
 }
 
+function resolveConfigDir() {
+  const configuredDir = String(process.env.GUFO_EFACTURA_CONFIG_DIR || "").trim()
+  if (configuredDir) {
+    return configuredDir
+  }
+  return __dirname
+}
+
+function ensureDirectory(dirPath) {
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true })
+  }
+}
+
+function parsePossiblySerializedDate(value) {
+  if (!value) return null
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value
+  }
+  const text = String(value).trim()
+  if (!text) return null
+  const serializedMatch = text.match(/^\/Date\((\d+)\)\/$/)
+  if (serializedMatch) {
+    const timestamp = Number(serializedMatch[1])
+    if (Number.isFinite(timestamp)) {
+      return new Date(timestamp)
+    }
+  }
+  const date = new Date(text)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function formatDisplayDate(value) {
+  const parsed = parsePossiblySerializedDate(value)
+  if (!parsed) return String(value || "-")
+  return parsed.toLocaleString("ro-RO")
+}
+
 function loadAgentConfig(filePath) {
   try {
     if (!fs.existsSync(filePath)) return {}
@@ -155,6 +194,7 @@ function saveAgentConfig() {
     erpUrl: ERP_URL,
     licenseKey: LICENSE_KEY,
   }
+  ensureDirectory(path.dirname(CONFIG_PATH))
   fs.writeFileSync(CONFIG_PATH, `${JSON.stringify(payload, null, 2)}\n`, "utf8")
 }
 
@@ -375,7 +415,7 @@ function renderSetupPage() {
             <button type="submit">Salveaza configuratia</button>
             <button type="button" class="secondary" id="refresh-status">Actualizeaza statusul</button>
             <button type="button" class="link" id="open-erp">Deschide ERP</button>
-            <div id="result" class="muted">Config curent salvat in <code>agent-config.json</code>.</div>
+            <div id="result" class="muted">Config curent salvat in <code>${escape(CONFIG_PATH)}</code>.</div>
           </div>
           <div class="full muted">Tokenul local este generat automat de agent. Hostul si portul local raman pe valorile default in aproape toate instalarile.</div>
         </form>
@@ -413,10 +453,24 @@ function renderSetupPage() {
     const refreshButton = document.getElementById('refresh-status');
     const openErpButton = document.getElementById('open-erp');
 
+    function parseDisplayDateValue(value) {
+      if (!value) return null;
+      const text = String(value).trim();
+      const serializedMatch = text.match(/^\/Date\((\d+)\)\/$/);
+      if (serializedMatch) {
+        const timestamp = Number(serializedMatch[1]);
+        if (Number.isFinite(timestamp)) {
+          return new Date(timestamp);
+        }
+      }
+      const date = new Date(text);
+      return Number.isNaN(date.getTime()) ? null : date;
+    }
+
     function formatExpiryLabel(certificate) {
       if (!certificate || !certificate.notAfter) return { title: '-', hint: 'Certificatul nu este detectat inca.' };
-      const date = new Date(certificate.notAfter);
-      const label = isNaN(date.getTime()) ? certificate.notAfter : date.toLocaleString('ro-RO');
+      const parsed = parseDisplayDateValue(certificate.notAfter);
+      const label = parsed ? parsed.toLocaleString('ro-RO') : String(certificate.notAfter);
       if (certificate.expired) {
         return { title: 'Expirat', hint: label };
       }
@@ -597,7 +651,7 @@ function getCertificateStatusPayload(certificate, error) {
   }
 
   const notAfterRaw = certificate?.notAfter || null
-  const notAfterDate = notAfterRaw ? new Date(notAfterRaw) : null
+  const notAfterDate = parsePossiblySerializedDate(notAfterRaw)
   const now = Date.now()
   const expiresInDays =
     notAfterDate && !Number.isNaN(notAfterDate.getTime())

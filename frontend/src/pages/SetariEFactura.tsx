@@ -121,6 +121,25 @@ const emptyForm: EFacturaForm = {
   efacturaCertSerial: "",
 }
 
+function parseDisplayDate(value: string | null | undefined) {
+  const text = String(value || "").trim()
+  if (!text) return null
+  const serializedMatch = text.match(/^\/Date\((\d+)\)\/$/)
+  if (serializedMatch) {
+    const timestamp = Number(serializedMatch[1])
+    if (Number.isFinite(timestamp)) {
+      return new Date(timestamp)
+    }
+  }
+  const date = new Date(text)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function formatDisplayDate(value: string | null | undefined) {
+  const date = parseDisplayDate(value)
+  return date ? date.toLocaleString("ro-RO") : "-"
+}
+
 function normalizeAnafMessage(message: string) {
   const text = String(message || "")
   if (text.includes("Platforma nu are configurata")) {
@@ -653,7 +672,7 @@ export default function SetariEFacturaPage() {
 
   const localCertificate = localAgentStatus?.certificate || null
   const localCertificateExpiryText = localCertificate?.notAfter
-    ? new Date(localCertificate.notAfter).toLocaleString("ro-RO")
+    ? formatDisplayDate(localCertificate.notAfter)
     : "-"
   const localCertificateWarning =
     localCertificate?.expired
