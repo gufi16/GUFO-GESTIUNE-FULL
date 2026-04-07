@@ -27,7 +27,12 @@ const ANAF_CUI_LOOKUP_URL = "https://webservicesp.anaf.ro/api/PlatitorTvaRest/v9
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret"
 const ANAF_OAUTH_CTX_COOKIE = "gufo_anaf_oauth_ctx"
 const certUploadsDir = ensureEfacturaCertDir()
-const efacturaAgentDownloadDir = path.join(process.cwd(), "uploads", "efactura-agent")
+const efacturaAgentDownloadDirs = [
+  String(process.env.GUFO_EFACTURA_AGENT_DOWNLOAD_DIR || "").trim(),
+  path.join(process.cwd(), "uploads", "efactura-agent"),
+  path.join(process.cwd(), "..", "uploads", "efactura-agent"),
+  "/opt/poshard/gufo-gestiune-full/uploads/efactura-agent",
+].filter(Boolean)
 
 const certStorage = multer.diskStorage({
   destination: (_req, _file, cb) => {
@@ -59,26 +64,28 @@ function normalizeOptionalText(value: unknown) {
 }
 
 function getLatestEfacturaAgentFile() {
-  if (!fs.existsSync(efacturaAgentDownloadDir)) {
-    return null
-  }
+  const files = efacturaAgentDownloadDirs.flatMap((dirPath) => {
+    if (!fs.existsSync(dirPath)) {
+      return []
+    }
 
-  const files = fs
-    .readdirSync(efacturaAgentDownloadDir)
-    .filter((entry) => entry.toLowerCase().endsWith(".exe"))
-    .map((entry) => {
-      const fullPath = path.join(efacturaAgentDownloadDir, entry)
-      const stats = fs.statSync(fullPath)
-      return {
-        fileName: entry,
-        fullPath,
-        size: stats.size,
-        updatedAt: stats.mtime.toISOString(),
-        mtimeMs: stats.mtimeMs,
-      }
-    })
-    .sort((a, b) => b.mtimeMs - a.mtimeMs)
+    return fs
+      .readdirSync(dirPath)
+      .filter((entry) => entry.toLowerCase().endsWith(".exe"))
+      .map((entry) => {
+        const fullPath = path.join(dirPath, entry)
+        const stats = fs.statSync(fullPath)
+        return {
+          fileName: entry,
+          fullPath,
+          size: stats.size,
+          updatedAt: stats.mtime.toISOString(),
+          mtimeMs: stats.mtimeMs,
+        }
+      })
+  })
 
+  files.sort((a, b) => b.mtimeMs - a.mtimeMs)
   return files[0] || null
 }
 
@@ -102,7 +109,7 @@ function getEfacturaAgentDownloadSource() {
       available: false,
       type: "missing" as const,
       error:
-        "Nu exista inca un installer Gufo e-Factura publicat pe server. Pune fisierul .exe in uploads/efactura-agent sau configureaza GUFO_EFACTURA_AGENT_DOWNLOAD_URL.",
+        "Nu exista inca un installer Gufo e-Factura publicat pe server. Pune fisierul .exe in uploads/efactura-agent sau configureaza GUFO_EFACTURA_AGENT_DOWNLOAD_URL / GUFO_EFACTURA_AGENT_DOWNLOAD_DIR.",
     }
   }
 
