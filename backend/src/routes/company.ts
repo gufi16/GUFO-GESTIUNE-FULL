@@ -170,10 +170,8 @@ function createEfacturaAgentPairingCode(payload: {
 }) {
   return jwt.sign(
     {
-      tenantId: payload.tenantId,
-      erpUrl: payload.erpUrl,
-      certSerial: payload.certSerial,
-      purpose: "efactura-agent-pairing",
+      sub: payload.tenantId,
+      p: "efactura-agent-pairing",
     },
     JWT_SECRET,
     { expiresIn: "7d" },
@@ -499,15 +497,9 @@ router.get("/api/v1/public/efactura/agent-pairing/resolve", async (req, res) => 
     })
   }
 
-  let payload: { tenantId?: string | null; erpUrl?: string | null; certSerial?: string | null; purpose?: string; exp?: number } | null = null
+  let payload: { sub?: string | null; p?: string; exp?: number } | null = null
   try {
-    payload = jwt.verify(code, JWT_SECRET) as {
-      tenantId?: string | null
-      erpUrl?: string | null
-      certSerial?: string | null
-      purpose?: string
-      exp?: number
-    }
+    payload = jwt.verify(code, JWT_SECRET) as { sub?: string | null; p?: string; exp?: number }
   } catch {
     return res.status(401).json({
       ok: false,
@@ -515,14 +507,16 @@ router.get("/api/v1/public/efactura/agent-pairing/resolve", async (req, res) => 
     })
   }
 
-  if (payload?.purpose !== "efactura-agent-pairing" || !payload?.tenantId) {
+  const tenantId = String(payload?.sub || "").trim()
+
+  if (payload?.p !== "efactura-agent-pairing" || !tenantId) {
     return res.status(401).json({
       ok: false,
       error: "Codul de pairing este invalid.",
     })
   }
 
-  const moduleCheck = await requireTenantModule(payload.tenantId, "efactura")
+  const moduleCheck = await requireTenantModule(tenantId, "efactura")
   if (!moduleCheck.enabled) {
     return res.status(403).json({
       ok: false,
@@ -531,7 +525,7 @@ router.get("/api/v1/public/efactura/agent-pairing/resolve", async (req, res) => 
   }
 
   const company = await prisma.company.findUnique({
-    where: { tenantId: payload.tenantId },
+    where: { tenantId },
     select: {
       name: true,
       efacturaCertSerial: true,
@@ -541,10 +535,10 @@ router.get("/api/v1/public/efactura/agent-pairing/resolve", async (req, res) => 
   return res.json({
     ok: true,
     pairing: {
-      tenantId: payload.tenantId,
+      tenantId,
       companyName: company?.name || null,
-      erpUrl: String(payload.erpUrl || getDefaultEfacturaAppUrl()),
-      certSerial: normalizeOptionalText(payload.certSerial) || company?.efacturaCertSerial || null,
+      erpUrl: getDefaultEfacturaAppUrl(),
+      certSerial: normalizeOptionalText(company?.efacturaCertSerial) || null,
       expiresAt: payload?.exp ? new Date(payload.exp * 1000).toISOString() : null,
     },
   })

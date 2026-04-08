@@ -104,7 +104,7 @@ type AgentPairingCodeState = {
 
 const DEFAULT_LOCAL_AGENT_URL = "http://127.0.0.1:48521"
 
-type ActiveModal = null | "flow" | "agent" | "debug"
+type ActiveModal = null | "flow" | "agent" | "debug" | "pairing"
 
 const emptyForm: EFacturaForm = {
   efacturaEnabled: false,
@@ -419,10 +419,22 @@ export default function SetariEFacturaPage() {
       }
       setAgentPairing(data.pairing as AgentPairingCodeState)
       setMessage("Codul de pairing pentru Gufo e-Factura a fost generat.")
+      setActiveModal("pairing")
     } catch (e: any) {
       setError(e?.message || "Nu am putut genera codul de pairing pentru Gufo e-Factura.")
     } finally {
       setAgentPairingBusy(false)
+    }
+  }
+
+  async function copyPairingCode() {
+    if (!agentPairing?.code) return
+    try {
+      await navigator.clipboard.writeText(agentPairing.code)
+      setMessage("Codul de pairing a fost copiat.")
+      setError("")
+    } catch {
+      setError("Nu am putut copia codul de pairing. Copiaza-l manual din fereastra deschisa.")
     }
   }
 
@@ -788,6 +800,11 @@ export default function SetariEFacturaPage() {
               <button type="button" onClick={generateAgentPairingCode} className={documentButtonSecondaryClass} disabled={agentPairingBusy}>
                 {agentPairingBusy ? "Generez..." : "Genereaza cod"}
               </button>
+              {agentPairing?.code ? (
+                <button type="button" onClick={copyPairingCode} className={documentButtonSecondaryClass}>
+                  Copiaza cod
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => void loadLocalAgentStatus()}
@@ -807,10 +824,7 @@ export default function SetariEFacturaPage() {
               Agent: <span className="font-semibold text-slate-900">{localAgentConnected ? "Conectat" : "Neconectat"}</span>
             </div>
             <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
-              Installer: <span className="font-semibold text-slate-900">{agentDownloadInfo?.available ? agentDownloadInfo.fileName || "Disponibil" : "Indisponibil"}</span>
-            </div>
-            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
-              Pairing: <span className="font-semibold text-slate-900">{agentPairing?.code ? `${agentPairing.code.slice(0, 18)}...` : "Genereaza cod"}</span>
+              Pairing: <span className="font-semibold text-slate-900">{agentPairing?.code ? "Cod generat" : "Genereaza cod"}</span>
             </div>
             <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
               Certificat: <span className="font-semibold text-slate-900">{localCertificate?.configuredSerial || "-"}</span>
@@ -822,7 +836,7 @@ export default function SetariEFacturaPage() {
           {agentDownloadLoading ? <div className="mt-2 text-xs text-slate-500">Verific installerul Gufo e-Factura...</div> : null}
           {agentDownloadInfo?.available ? (
             <div className="mt-2 text-xs text-slate-500">
-              Ultimul installer disponibil: <strong>{agentDownloadInfo.fileName || "Gufo-eFactura-Setup.exe"}</strong>{agentDownloadInfo?.updatedAt ? `, actualizat la ${agentInstallerUpdatedAt}` : ""}.
+              Installer disponibil{agentDownloadInfo?.updatedAt ? `, actualizat la ${agentInstallerUpdatedAt}` : ""}.
             </div>
           ) : agentDownloadInfo?.error ? (
             <div className="mt-2 text-xs text-amber-700">{agentDownloadInfo.error}</div>
@@ -830,13 +844,13 @@ export default function SetariEFacturaPage() {
           {agentPairing?.code ? (
             <div className="mt-2 rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-600">
               <div>
-                Cod pairing: <span className="break-all font-mono font-semibold text-slate-900">{agentPairing.code}</span>
+                Cod pairing pregatit pentru <span className="font-semibold text-slate-900">{agentPairing.companyName || form.companyName || "firma curenta"}</span>.
               </div>
               <div className="mt-1">
                 Expira: <span className="font-semibold text-slate-900">{agentPairing.expiresAt ? new Date(agentPairing.expiresAt).toLocaleString("ro-RO") : "-"}</span>
               </div>
               <div className="mt-1">
-                In agent clientul completeaza codul de pairing si verifica serialul certificatului.
+                In agent clientul lipeste codul si verifica serialul certificatului.
               </div>
             </div>
           ) : null}
@@ -1032,6 +1046,36 @@ export default function SetariEFacturaPage() {
               </button>
               <button type="button" onClick={() => window.open(localAgentUrl, "_blank", "noopener,noreferrer")} className={documentButtonPrimaryClass}>
                 Deschide aplicatia locala
+              </button>
+            </div>
+          </div>
+        </SettingsModal>
+      ) : null}
+
+      {activeModal === "pairing" && agentPairing?.code ? (
+        <SettingsModal title="Cod pairing Gufo e-Factura" onClose={() => setActiveModal(null)}>
+          <div className="space-y-4">
+            <InlineNotice tone="success">
+              Trimite clientului doar acest cod si spune-i sa-l lipeasca in aplicatia Gufo e-Factura.
+            </InlineNotice>
+
+            <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Cod pairing</div>
+              <div className="mt-2 break-all rounded-[14px] bg-white px-3 py-3 font-mono text-sm font-semibold text-slate-900">
+                {agentPairing.code}
+              </div>
+              <div className="mt-3 text-sm text-slate-600">
+                Valabil pentru <span className="font-semibold text-slate-900">{agentPairing.companyName || form.companyName || "-"}</span>
+                {agentPairing.expiresAt ? `, pana la ${new Date(agentPairing.expiresAt).toLocaleString("ro-RO")}` : ""}.
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={copyPairingCode} className={documentButtonSecondaryClass}>
+                Copiaza codul
+              </button>
+              <button type="button" onClick={() => setActiveModal(null)} className={documentButtonPrimaryClass}>
+                Gata
               </button>
             </div>
           </div>

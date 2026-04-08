@@ -41,6 +41,9 @@ let SHOW_POWERSHELL_WINDOW =
     .toLowerCase() !== "false"
 let ERP_URL = String(persistedConfig.erpUrl || "").trim()
 let LICENSE_KEY = String(persistedConfig.licenseKey || "").trim()
+let PAIRING_COMPANY_NAME = String(persistedConfig.pairingCompanyName || "").trim()
+let PAIRING_TENANT_ID = String(persistedConfig.pairingTenantId || "").trim()
+let PAIRING_EXPIRES_AT = String(persistedConfig.pairingExpiresAt || "").trim()
 let GENERATED_TOKEN_ON_BOOT = false
 
 if (!BRIDGE_TOKEN) {
@@ -195,6 +198,9 @@ function saveAgentConfig() {
     showPowerShellWindow: SHOW_POWERSHELL_WINDOW,
     erpUrl: ERP_URL,
     licenseKey: LICENSE_KEY,
+    pairingCompanyName: PAIRING_COMPANY_NAME,
+    pairingTenantId: PAIRING_TENANT_ID,
+    pairingExpiresAt: PAIRING_EXPIRES_AT,
   }
   ensureDirectory(path.dirname(CONFIG_PATH))
   fs.writeFileSync(CONFIG_PATH, `${JSON.stringify(payload, null, 2)}\n`, "utf8")
@@ -275,6 +281,9 @@ function renderSetupPage() {
   const erpOrigin = getConfiguredErpOrigin()
   const healthUrl = `http://${HOST}:${PORT}/health`
   const statusTone = DEFAULT_CERT_SERIAL ? "configured" : "attention"
+  const pairingStateLabel = PAIRING_COMPANY_NAME
+    ? `Pairing activ: ${PAIRING_COMPANY_NAME}`
+    : "Conecteaza agentul cu codul din ERP"
   return `<!doctype html>
 <html lang="ro">
 <head>
@@ -358,6 +367,7 @@ function renderSetupPage() {
       </div>
       <div class="row">
         <span class="pill ${statusTone === "configured" ? "green" : "amber"}" id="agent-state-pill">${DEFAULT_CERT_SERIAL ? "Agent configurat" : "Configurare necesara"}</span>
+        <span class="pill ${PAIRING_COMPANY_NAME ? "green" : "amber"}" id="pairing-state-pill">${escape(pairingStateLabel)}</span>
       </div>
     </div>
 
@@ -387,7 +397,7 @@ function renderSetupPage() {
 
       <div class="card">
         <div class="section-title">Configurare agent</div>
-        <div class="section-copy">Clientul completeaza codul de pairing din ERP si serialul certificatului, iar agentul isi ia singur configurarea necesara.</div>
+        <div class="section-copy">Clientul completeaza codul de pairing din ERP si serialul certificatului. Restul setarilor raman ascunse in mod normal.</div>
         <form id="config-form" class="grid">
           <div class="full">
             <label for="pairingCode">Cod pairing</label>
@@ -419,6 +429,9 @@ function renderSetupPage() {
             <button type="button" class="secondary" id="refresh-status">Actualizeaza statusul</button>
             <button type="button" class="link" id="open-erp">Deschide ERP</button>
             <div id="result" class="muted">Config curent salvat in <code>${escape(CONFIG_PATH)}</code>.</div>
+          </div>
+          <div class="full notice ${PAIRING_COMPANY_NAME ? "success" : ""}" id="pairing-note">
+            ${escape(PAIRING_COMPANY_NAME ? `Agentul este legat de ${PAIRING_COMPANY_NAME}.${PAIRING_EXPIRES_AT ? ` Codul expira la ${formatDisplayDate(PAIRING_EXPIRES_AT)}.` : ""}` : "In ERP apesi Genereaza cod, apoi lipesti codul aici si salvezi configuratia.")}
           </div>
           <div class="full muted">Tokenul local este generat automat de agent. Hostul si portul local raman pe valorile default in aproape toate instalarile.</div>
         </form>
@@ -576,6 +589,14 @@ function renderSetupPage() {
         }
         if (payload.pairingCode) {
           document.getElementById('pairingCode').value = payload.pairingCode;
+        }
+        const pairingNote = document.getElementById('pairing-note');
+        const pairingStatePill = document.getElementById('pairing-state-pill');
+        if (data.pairing && data.pairing.companyName) {
+          pairingNote.textContent = 'Agentul este legat de ' + data.pairing.companyName + '.';
+          pairingNote.className = 'full notice success';
+          pairingStatePill.textContent = 'Pairing activ: ' + data.pairing.companyName;
+          pairingStatePill.className = 'pill green';
         }
         refreshStatus();
       }
@@ -1812,9 +1833,12 @@ const server = http.createServer(async (req, res) => {
           certSerial: DEFAULT_CERT_SERIAL || "",
           bridgeHost: HOST,
           bridgePort: PORT,
-        showPowerShellWindow: SHOW_POWERSHELL_WINDOW,
-      },
-    })
+          showPowerShellWindow: SHOW_POWERSHELL_WINDOW,
+          pairingCompanyName: PAIRING_COMPANY_NAME,
+          pairingTenantId: PAIRING_TENANT_ID,
+          pairingExpiresAt: PAIRING_EXPIRES_AT,
+        },
+      })
     return
   }
 
@@ -1832,6 +1856,9 @@ const server = http.createServer(async (req, res) => {
       ERP_URL = String(resolvedPairing?.erpUrl || manualErpUrl || ERP_URL || DEFAULT_ERP_URL).trim()
       LICENSE_KEY = String(body.licenseKey || "").trim()
       DEFAULT_CERT_SERIAL = normalizeSerial(body.certSerial || resolvedPairing?.certSerial || "")
+      PAIRING_COMPANY_NAME = String(resolvedPairing?.companyName || PAIRING_COMPANY_NAME || "").trim()
+      PAIRING_TENANT_ID = String(resolvedPairing?.tenantId || PAIRING_TENANT_ID || "").trim()
+      PAIRING_EXPIRES_AT = String(resolvedPairing?.expiresAt || PAIRING_EXPIRES_AT || "").trim()
       HOST = String(body.bridgeHost || DEFAULT_HOST).trim() || DEFAULT_HOST
       PORT = Math.max(1, Math.min(65535, Number(body.bridgePort || DEFAULT_PORT) || DEFAULT_PORT))
       saveAgentConfig()
@@ -1843,6 +1870,9 @@ const server = http.createServer(async (req, res) => {
           certSerial: DEFAULT_CERT_SERIAL || "",
           bridgeHost: HOST,
           bridgePort: PORT,
+          pairingCompanyName: PAIRING_COMPANY_NAME,
+          pairingTenantId: PAIRING_TENANT_ID,
+          pairingExpiresAt: PAIRING_EXPIRES_AT,
         },
         pairing: resolvedPairing,
       })
@@ -1872,6 +1902,9 @@ const server = http.createServer(async (req, res) => {
         bridgeUrl: `http://${HOST}:${PORT}`,
         bridgeToken: BRIDGE_TOKEN,
         certSerial: DEFAULT_CERT_SERIAL || null,
+        pairingCompanyName: PAIRING_COMPANY_NAME || null,
+        pairingTenantId: PAIRING_TENANT_ID || null,
+        pairingExpiresAt: PAIRING_EXPIRES_AT || null,
         hasLicenseKey: Boolean(LICENSE_KEY),
       },
     })
