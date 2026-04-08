@@ -1856,6 +1856,13 @@ const server = http.createServer(async (req, res) => {
       const pairingCode = String(body.pairingCode || "").trim()
       let resolvedPairing = null
 
+      // Persist the last typed pairing code immediately so the input does not
+      // "disappear" after save, even if ERP validation fails.
+      if (pairingCode) {
+        LAST_PAIRING_CODE = pairingCode
+        saveAgentConfig()
+      }
+
       if (pairingCode) {
         resolvedPairing = await resolvePairingCode(pairingCode, manualErpUrl || ERP_URL || DEFAULT_ERP_URL)
       }
@@ -1886,9 +1893,22 @@ const server = http.createServer(async (req, res) => {
         pairing: resolvedPairing,
       })
     } catch (error) {
+      if (LAST_PAIRING_CODE) {
+        saveAgentConfig()
+      }
       sendJson(res, 400, {
         ok: false,
         error: String(error.message || error),
+        config: {
+          erpUrl: ERP_URL,
+          certSerial: DEFAULT_CERT_SERIAL || "",
+          bridgeHost: HOST,
+          bridgePort: PORT,
+          lastPairingCode: LAST_PAIRING_CODE,
+          pairingCompanyName: PAIRING_COMPANY_NAME,
+          pairingTenantId: PAIRING_TENANT_ID,
+          pairingExpiresAt: PAIRING_EXPIRES_AT,
+        },
       })
     }
     return
