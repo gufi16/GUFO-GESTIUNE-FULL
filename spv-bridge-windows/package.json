@@ -1,6 +1,6 @@
 {
   "name": "gufo-efactura-agent",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "author": "Gufo",
   "description": "Agent local Windows pentru Gufo e-Factura folosind certificatul din Windows Certificate Store/token USB.",
