@@ -148,6 +148,10 @@ function resolveConfigDir() {
   if (configuredDir) {
     return configuredDir
   }
+  const appDataDir = String(process.env.APPDATA || "").trim()
+  if (appDataDir) {
+    return path.join(appDataDir, "gufo-efactura-agent")
+  }
   return __dirname
 }
 
