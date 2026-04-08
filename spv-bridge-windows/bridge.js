@@ -41,6 +41,7 @@ let SHOW_POWERSHELL_WINDOW =
     .toLowerCase() !== "false"
 let ERP_URL = String(persistedConfig.erpUrl || "").trim()
 let LICENSE_KEY = String(persistedConfig.licenseKey || "").trim()
+let LAST_PAIRING_CODE = String(persistedConfig.lastPairingCode || "").trim()
 let PAIRING_COMPANY_NAME = String(persistedConfig.pairingCompanyName || "").trim()
 let PAIRING_TENANT_ID = String(persistedConfig.pairingTenantId || "").trim()
 let PAIRING_EXPIRES_AT = String(persistedConfig.pairingExpiresAt || "").trim()
@@ -198,6 +199,7 @@ function saveAgentConfig() {
     showPowerShellWindow: SHOW_POWERSHELL_WINDOW,
     erpUrl: ERP_URL,
     licenseKey: LICENSE_KEY,
+    lastPairingCode: LAST_PAIRING_CODE,
     pairingCompanyName: PAIRING_COMPANY_NAME,
     pairingTenantId: PAIRING_TENANT_ID,
     pairingExpiresAt: PAIRING_EXPIRES_AT,
@@ -401,7 +403,7 @@ function renderSetupPage() {
         <form id="config-form" class="grid">
           <div class="full">
             <label for="pairingCode">Cod pairing</label>
-            <input id="pairingCode" name="pairingCode" placeholder="Lipit din ERP > Setari e-Factura" />
+            <input id="pairingCode" name="pairingCode" value="${escape(LAST_PAIRING_CODE)}" placeholder="Lipit din ERP > Setari e-Factura" />
           </div>
           <div class="full">
             <label for="certSerial">Serial certificat</label>
@@ -1834,6 +1836,7 @@ const server = http.createServer(async (req, res) => {
           bridgeHost: HOST,
           bridgePort: PORT,
           showPowerShellWindow: SHOW_POWERSHELL_WINDOW,
+          lastPairingCode: LAST_PAIRING_CODE,
           pairingCompanyName: PAIRING_COMPANY_NAME,
           pairingTenantId: PAIRING_TENANT_ID,
           pairingExpiresAt: PAIRING_EXPIRES_AT,
@@ -1855,6 +1858,7 @@ const server = http.createServer(async (req, res) => {
 
       ERP_URL = String(resolvedPairing?.erpUrl || manualErpUrl || ERP_URL || DEFAULT_ERP_URL).trim()
       LICENSE_KEY = String(body.licenseKey || "").trim()
+      LAST_PAIRING_CODE = pairingCode || LAST_PAIRING_CODE
       DEFAULT_CERT_SERIAL = normalizeSerial(body.certSerial || resolvedPairing?.certSerial || "")
       PAIRING_COMPANY_NAME = String(resolvedPairing?.companyName || PAIRING_COMPANY_NAME || "").trim()
       PAIRING_TENANT_ID = String(resolvedPairing?.tenantId || PAIRING_TENANT_ID || "").trim()
@@ -1870,6 +1874,7 @@ const server = http.createServer(async (req, res) => {
           certSerial: DEFAULT_CERT_SERIAL || "",
           bridgeHost: HOST,
           bridgePort: PORT,
+          lastPairingCode: LAST_PAIRING_CODE,
           pairingCompanyName: PAIRING_COMPANY_NAME,
           pairingTenantId: PAIRING_TENANT_ID,
           pairingExpiresAt: PAIRING_EXPIRES_AT,
