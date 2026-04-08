@@ -6,7 +6,7 @@ const AGENT_URL = "http://127.0.0.1:48521/"
 let mainWindow = null
 let tray = null
 
-process.env.GUFO_EFACTURA_CONFIG_DIR = app.getPath("userData")
+process.env.GUFO_EFACTURA_CONFIG_DIR = path.join(app.getPath("appData"), "gufo-efactura-agent")
 
 function getAppIconPath() {
   const candidate = path.join(__dirname, "branding", "gufo-efactura.ico")
