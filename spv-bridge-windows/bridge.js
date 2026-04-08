@@ -574,7 +574,9 @@ function renderSetupPage() {
         if (data.config && data.config.certSerial) {
           document.getElementById('certSerial').value = data.config.certSerial;
         }
-        document.getElementById('pairingCode').value = '';
+        if (payload.pairingCode) {
+          document.getElementById('pairingCode').value = payload.pairingCode;
+        }
         refreshStatus();
       }
     });
@@ -1242,6 +1244,10 @@ function getEfacturaListMessagesUrl(environment, days, cui) {
   const normalizedEnvironment = String(environment || "prod").trim().toLowerCase() === "test" ? "test" : "prod"
   const baseUrl = normalizedEnvironment === "test" ? EFACTURA_LIST_MESSAGES_TEST_URL : EFACTURA_LIST_MESSAGES_PROD_URL
   return `${baseUrl}?zile=${Math.max(1, Math.min(365, Number(days || 30)))}&cif=${encodeURIComponent(String(cui || "").trim())}`
+}
+
+function getEfacturaListUrl(environment, cui, days) {
+  return getEfacturaListMessagesUrl(environment, days, cui)
 }
 
 function getEfacturaDownloadUrl(environment, id) {
