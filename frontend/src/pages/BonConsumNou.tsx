@@ -1,8 +1,19 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react"
-import { PackageMinus, Search, Trash2 } from "lucide-react"
+import { Check, ClipboardList, MapPin, PackageMinus, Search, Trash2 } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import PageHeader from "../components/PageHeader"
-import { api } from "../lib/api"
+import {
+  DocumentField,
+  DocumentMetric,
+  DocumentSection,
+  InlineNotice,
+  documentButtonDangerClass,
+  documentButtonPrimaryClass,
+  documentButtonSecondaryClass,
+  documentInputClass,
+  documentTextareaClass,
+} from "../components/DocumentUi"
+import { API_BASE as API, getToken } from "../lib/api"
 import { getActiveLocationId, setActiveLocationId, subscribeToActiveLocation } from "../lib/location"
 
 type LocationOption = {
@@ -108,6 +119,8 @@ export default function BonConsumNou() {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
+
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
   const qtyRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
   useEffect(() => {
@@ -127,8 +140,12 @@ export default function BonConsumNou() {
 
   async function loadLocations() {
     try {
-      const data = await api<any>("/api/v1/meta/locations")
-      const normalized = normalizeLocations(data)
+      const token = getToken() || ""
+      const res = await fetch(`${API}/api/v1/meta/locations`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      const json = await res.json().catch(() => ({}))
+      const normalized = normalizeLocations(json)
       setLocations(normalized)
       if (normalized.length) {
         const preferredLocationId = normalized.find((location) => location.id === getActiveLocationId())?.id || normalized[0].id
@@ -142,8 +159,12 @@ export default function BonConsumNou() {
   async function loadProducts() {
     try {
       setLoadingProducts(true)
-      const data = await api<any>("/api/v1/products")
-      setProducts(normalizeProducts(data))
+      const token = getToken() || ""
+      const res = await fetch(`${API}/api/v1/products`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      const json = await res.json().catch(() => ({}))
+      setProducts(normalizeProducts(json))
     } catch {
       setProducts([])
     } finally {
@@ -153,12 +174,17 @@ export default function BonConsumNou() {
 
   async function loadStockForLocation(selectedLocationId: string) {
     try {
-      const data = await api<any>(`/api/v1/stock/by-location?locationId=${encodeURIComponent(selectedLocationId)}`)
-      const nextMap = buildStockMap(data)
+      const token = getToken() || ""
+      const res = await fetch(`${API}/api/v1/stock/by-location?locationId=${encodeURIComponent(selectedLocationId)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      const json = await res.json().catch(() => ({}))
+      const nextMap = buildStockMap(json)
       setStockMap(nextMap)
       setItems((prev) => prev.map((item) => ({ ...item, stock: nextMap[item.productId] ?? 0 })))
     } catch {
       setStockMap({})
+      setItems((prev) => prev.map((item) => ({ ...item, stock: 0 })))
     }
   }
 
@@ -177,7 +203,6 @@ export default function BonConsumNou() {
   function addProduct(product: ProductOption) {
     setError("")
     setMessage("")
-    if (!product.id) return
 
     const existing = items.find((item) => item.productId === product.id)
     if (existing) {
@@ -203,7 +228,7 @@ export default function BonConsumNou() {
   }
 
   function updateQty(productId: string, value: string) {
-    const qty = value === "" ? 0 : toNumber(value)
+    const qty = value === "" ? 0 : toNumber(String(value).replace(",", "."))
     setItems((prev) => prev.map((item) => item.productId === productId ? { ...item, qty } : item))
   }
 
@@ -211,18 +236,9 @@ export default function BonConsumNou() {
     setItems((prev) => prev.filter((item) => item.productId !== productId))
   }
 
-  const filteredProducts = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return products.slice(0, 40)
-    return products.filter((product) => {
-      const haystack = `${product.name} ${product.code || ""} ${product.sku || ""} ${product.barcode || ""}`.toLowerCase()
-      return haystack.includes(q)
-    }).slice(0, 40)
-  }, [products, query])
-
   async function saveDoc() {
     if (!locationId) {
-      setError("Selecteaza locatia pentru bonul de consum.")
+      setError("Selectează locația.")
       return
     }
 
@@ -232,7 +248,7 @@ export default function BonConsumNou() {
     }))
 
     if (!lines.length) {
-      setError("Adauga produse in bonul de consum.")
+      setError("Adaugă cel puțin un produs în bonul de consum.")
       return
     }
 
@@ -240,170 +256,234 @@ export default function BonConsumNou() {
       setSaving(true)
       setError("")
       setMessage("")
-      const data = await api<any>("/api/v1/consumption-docs", {
+      const token = getToken() || ""
+      const res = await fetch(`${API}/api/v1/consumption-docs`, {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           locationId,
           note,
           items: lines,
         }),
       })
-      setMessage(`Bon de consum salvat: ${data?.item?.docNo || "OK"}`)
-      setTimeout(() => navigate("/documente?tab=consumption"), 600)
-    } catch (err: any) {
-      setError(err?.message || "Nu am putut salva bonul de consum.")
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(json?.error || "Nu am putut salva bonul de consum.")
+        return
+      }
+      setMessage(`Bon de consum salvat: ${json?.item?.docNo || "OK"}`)
+      setItems([])
+      setQuery("")
+      setNote("")
+      searchInputRef.current?.focus()
+      setTimeout(() => navigate("/documente?tab=consumption"), 700)
+    } catch {
+      setError("Nu am putut salva bonul de consum.")
     } finally {
       setSaving(false)
     }
   }
 
-  return (
-    <div className="space-y-6">
-      <PageHeader badge="documente" title="Bon de consum" />
+  const filteredProducts = useMemo(() => {
+    const term = query.trim().toLowerCase()
+    if (!term) return []
 
-      <div className="grid gap-4 xl:grid-cols-[1.25fr,0.95fr]">
-        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="grid gap-3 md:grid-cols-[1fr,1fr]">
-            <label className="space-y-2 text-sm font-medium text-slate-700">
-              <span>Locatie</span>
+    return products
+      .filter((product) => {
+        const fields = [product.name, product.code || "", product.sku || "", product.barcode || ""]
+          .join(" ")
+          .toLowerCase()
+        return fields.includes(term)
+      })
+      .slice(0, 12)
+  }, [products, query])
+
+  const selectedLocationName =
+    locations.find((location) => location.id === locationId)?.name || "Locația selectată"
+
+  const totalProducts = items.length
+  const totalQty = items.reduce((sum, item) => sum + item.qty, 0)
+  const lowStockItems = items.filter((item) => item.qty > item.stock).length
+
+  return (
+    <div className="w-full space-y-6">
+      <PageHeader
+        badge="document"
+        title="Bon de consum"
+        subtitle="Înregistrează consumul manual de materii prime, în același stil cu documentele din ERP."
+      />
+
+      {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
+      {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <DocumentMetric title="Poziții" value={totalProducts} tone="slate" />
+        <DocumentMetric title="Cantitate totală" value={totalQty.toLocaleString("ro-RO")} tone="blue" />
+        <DocumentMetric title="Depășesc stocul" value={lowStockItems} tone="amber" />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[minmax(0,1fr)_360px]">
+        <DocumentSection title="Adaugă produse în bon">
+          <div className="relative">
+            <Search size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              ref={searchInputRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={loadingProducts ? "Se încarcă produsele..." : "Caută după nume, cod sau cod de bare"}
+              className={`${documentInputClass} pl-11`}
+            />
+          </div>
+
+          {query ? (
+            <div className="mt-3 max-h-[320px] overflow-y-auto rounded-[14px] border border-slate-200 bg-slate-50 p-2">
+              {loadingProducts ? (
+                <div className="px-3 py-8 text-center text-sm text-slate-500">Se încarcă produsele...</div>
+              ) : filteredProducts.length ? (
+                <div className="space-y-2">
+                  {filteredProducts.map((product) => {
+                    const realStock = stockMap[product.id] ?? 0
+                    return (
+                      <button
+                        key={product.id}
+                        type="button"
+                        onClick={() => addProduct(product)}
+                        className="flex w-full items-center justify-between rounded-[14px] border border-transparent bg-white px-4 py-3 text-left transition hover:border-slate-200 hover:bg-slate-100"
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold text-slate-900">{product.name}</div>
+                          <div className="mt-1 text-xs text-slate-500">
+                            {product.code || product.sku || product.barcode || "fără cod"} · stoc {realStock} {pickUnit(product)}
+                          </div>
+                        </div>
+                        <span className="ml-3 inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                          adaugă
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="px-3 py-8 text-center text-sm text-slate-500">Nu am găsit produse pentru căutarea ta.</div>
+              )}
+            </div>
+          ) : (
+            <div className="mt-3 rounded-[14px] border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+              Începe să scrii și lista de produse apare imediat aici.
+            </div>
+          )}
+        </DocumentSection>
+
+        <DocumentSection title="Detalii document">
+          <div className="space-y-4">
+            <DocumentField label="Locație">
               <select
                 value={locationId}
                 onChange={(e) => setLocation(e.target.value)}
-                className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none"
+                className={documentInputClass}
               >
-                <option value="">Selecteaza locatia</option>
                 {locations.map((location) => (
-                  <option key={location.id} value={location.id}>{location.name}</option>
+                  <option key={location.id} value={location.id}>
+                    {location.name}
+                  </option>
                 ))}
               </select>
-            </label>
+            </DocumentField>
 
-            <label className="space-y-2 text-sm font-medium text-slate-700">
-              <span>Observatii</span>
-              <input
+            <DocumentField label="Observații">
+              <textarea
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                placeholder="Consum manual materii prime"
-                className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none"
+                rows={5}
+                placeholder="Poți nota explicații pentru consumul manual."
+                className={documentTextareaClass}
               />
-            </label>
-          </div>
+            </DocumentField>
 
-          <div className="mt-4 rounded-3xl border border-slate-200 bg-slate-50/70 p-4">
-            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
-              <Search size={16} />
-              Adauga produse in bon
+            <InlineNotice>
+              Locație activă: <span className="font-semibold">{selectedLocationName}</span>
+            </InlineNotice>
+
+            <div className="flex flex-col gap-2">
+              <button type="button" onClick={saveDoc} disabled={saving} className={documentButtonPrimaryClass}>
+                <Check size={16} className="mr-2" />
+                {saving ? "Se salvează..." : "Salvează bonul de consum"}
+              </button>
+              <button type="button" onClick={() => navigate("/inregistrare-document")} className={documentButtonSecondaryClass}>
+                Înapoi la documente
+              </button>
+            </div>
+          </div>
+        </DocumentSection>
+      </div>
+
+      <DocumentSection title="Poziții bon de consum">
+        {items.length ? (
+          <div className="space-y-3">
+            <div className="hidden items-center rounded-[14px] bg-slate-50 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 lg:grid lg:grid-cols-[minmax(0,1.7fr)_120px_140px_140px_110px] lg:gap-3">
+              <div>Produs</div>
+              <div>Stoc</div>
+              <div>Cantitate</div>
+              <div>UM</div>
+              <div>Acțiune</div>
             </div>
 
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={loadingProducts ? "Se incarca produsele..." : "Cauta dupa nume, cod sau barcode"}
-              className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none"
-            />
-
-            <div className="mt-3 max-h-72 space-y-2 overflow-auto pr-1">
-              {filteredProducts.map((product) => (
-                <button
-                  key={product.id}
-                  type="button"
-                  onClick={() => addProduct(product)}
-                  className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-3 py-3 text-left transition hover:border-amber-300 hover:bg-amber-50"
-                >
-                  <div>
-                    <div className="text-sm font-semibold text-slate-900">{product.name}</div>
-                    <div className="mt-1 text-xs text-slate-500">{product.code || product.sku || product.barcode || "fara cod"}</div>
+            {items.map((item) => (
+              <div key={item.productId} className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.7fr)_120px_140px_140px_110px] lg:items-center">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-slate-900">{item.name}</div>
+                    <div className="mt-1 text-xs text-slate-500">{item.code || "fără cod"}</div>
                   </div>
-                  <span className="rounded-xl bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">{pickUnit(product)}</span>
-                </button>
-              ))}
 
-              {!filteredProducts.length ? (
-                <div className="rounded-2xl border border-dashed border-slate-300 px-3 py-8 text-center text-sm text-slate-500">
-                  Nu am gasit produse dupa cautarea ta.
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </section>
-
-        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-base font-semibold text-slate-900">Linii bon de consum</div>
-              <div className="mt-1 text-sm text-slate-500">Adauga materiile prime si completeaza cantitatile.</div>
-            </div>
-            <span className="inline-flex items-center gap-2 rounded-2xl bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700">
-              <PackageMinus size={16} />
-              {items.length} pozitii
-            </span>
-          </div>
-
-          <div className="mt-4 space-y-3">
-            {items.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-10 text-center text-sm text-slate-500">
-                Aici vor aparea produsele din bonul de consum.
-              </div>
-            ) : items.map((item) => (
-              <div key={item.productId} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold text-slate-900">{item.name}</div>
-                    <div className="mt-1 text-xs text-slate-500">
-                      {item.code || "fara cod"} · stoc {item.stock} {item.um}
-                    </div>
+                  <div className="rounded-[12px] bg-white px-4 py-3 text-sm font-semibold text-slate-900">
+                    {item.stock} {item.um}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => removeItem(item.productId)}
-                    className="rounded-xl border border-red-200 bg-white p-2 text-red-600 transition hover:bg-red-50"
-                    aria-label={`Sterge ${item.name}`}
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
 
-                <div className="mt-3 grid gap-3 md:grid-cols-[140px,1fr]">
-                  <label className="space-y-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-                    <span>Cantitate</span>
+                  <div>
                     <input
-                      ref={(el) => { qtyRefs.current[item.productId] = el }}
-                      value={String(item.qty)}
+                      ref={(el) => {
+                        qtyRefs.current[item.productId] = el
+                      }}
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={item.qty}
                       onChange={(e) => updateQty(item.productId, e.target.value)}
-                      inputMode="decimal"
-                      className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none"
+                      className={documentInputClass}
                     />
-                  </label>
-                  <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-600">
-                    U.M.: <span className="font-semibold text-slate-900">{item.um}</span>
+                  </div>
+
+                  <div>
+                    <span className="inline-flex rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">
+                      {item.um}
+                    </span>
+                  </div>
+
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => removeItem(item.productId)}
+                      className={documentButtonDangerClass}
+                    >
+                      <Trash2 size={16} className="mr-2" />
+                      Șterge
+                    </button>
                   </div>
                 </div>
               </div>
             ))}
           </div>
-
-          {message ? <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{message}</div> : null}
-          {error ? <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div> : null}
-
-          <div className="mt-5 flex flex-wrap items-center justify-end gap-3">
-            <button
-              type="button"
-              onClick={() => navigate("/inregistrare-document")}
-              className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-            >
-              Inapoi
-            </button>
-            <button
-              type="button"
-              onClick={saveDoc}
-              disabled={saving}
-              className="rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {saving ? "Se salveaza..." : "Salveaza bonul de consum"}
-            </button>
+        ) : (
+          <div className="rounded-[14px] border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center">
+            <div className="text-sm font-semibold text-slate-700">Nu ai produse în document</div>
+            <div className="mt-1 text-sm text-slate-500">Caută un produs sus și apasă direct pe el pentru adăugare.</div>
           </div>
-        </section>
-      </div>
+        )}
+      </DocumentSection>
     </div>
   )
 }
