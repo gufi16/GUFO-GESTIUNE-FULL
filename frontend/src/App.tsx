@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+﻿import { useEffect } from "react"
 import { Navigate, Route, Routes } from "react-router-dom"
 import AppShell from "./components/AppShell"
 import RequireAuth from "./components/RequireAuth"
@@ -21,6 +21,7 @@ import Locatii from "./pages/Locatii"
 import Stoc from "./pages/stoc"
 import Inventare from "./pages/Inventare"
 import InventarNou from "./pages/InventarNou"
+import BonConsumNou from "./pages/BonConsumNou"
 import NirListPage from "./pages/nir-list"
 import NirPage from "./pages/nir"
 import NirPrintPage from "./pages/nir-print"
@@ -129,6 +130,7 @@ export default function App() {
         <Route path="/gestiune/productie" element={<RequireModule code="inventory"><Productie /></RequireModule>} />
         <Route path="/gestiune/inventare" element={<RequireModule code="inventory"><Inventare /></RequireModule>} />
         <Route path="/inregistrare-document/inventar/new" element={<RequireModule code="inventory"><InventarNou /></RequireModule>} />
+        <Route path="/inregistrare-document/bon-consum/new" element={<RequireModule code="documents"><BonConsumNou /></RequireModule>} />
 
         <Route path="/documente" element={<RequireModule code="documents"><Documente /></RequireModule>} />
         <Route path="/documente/facturi-primite-spv" element={<RequireModule code="documents"><FacturiPrimiteSPVPage /></RequireModule>} />
@@ -155,3 +157,5 @@ export default function App() {
     </Routes>
   )
 }
+
+

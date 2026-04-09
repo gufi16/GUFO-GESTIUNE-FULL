@@ -1,9 +1,155 @@
-// @ts-nocheck
+﻿// @ts-nocheck
+import { Prisma } from "@prisma/client";
 import { Router } from "express";
 import { prisma } from "../lib/prisma";
+import { decrementStockBalanceStrict } from "../lib/stock";
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth";
 
 const router = Router();
+
+function createConsumptionDocNo() {
+  const now = new Date();
+  const yyyy = `${now.getFullYear()}`;
+  const mm = `${now.getMonth() + 1}`.padStart(2, "0");
+  const dd = `${now.getDate()}`.padStart(2, "0");
+  const hh = `${now.getHours()}`.padStart(2, "0");
+  const mi = `${now.getMinutes()}`.padStart(2, "0");
+  const ss = `${now.getSeconds()}`.padStart(2, "0");
+  const rnd = `${Math.floor(Math.random() * 10000)}`.padStart(4, "0");
+  return `BC-${yyyy}${mm}${dd}-${hh}${mi}${ss}-${rnd}`;
+}
+
+/* ======================================================
+   POST /api/v1/consumption-docs
+   Creează manual bon de consum și scade stocul
+====================================================== */
+
+router.post("/api/v1/consumption-docs", requireAuth, async (req: AuthedRequest, res) => {
+  try {
+    const tenantId = req.auth!.tenantId;
+    const locationId = String(req.body?.locationId || "").trim();
+    const note = typeof req.body?.note === "string" ? req.body.note.trim() : "";
+    const docDateRaw = req.body?.docDate ? new Date(String(req.body.docDate)) : new Date();
+    const itemsRaw = Array.isArray(req.body?.items) ? req.body.items : [];
+
+    if (!locationId) {
+      return res.status(400).json({ ok: false, error: "Selectează locația pentru bonul de consum." });
+    }
+
+    if (!itemsRaw.length) {
+      return res.status(400).json({ ok: false, error: "Adaugă cel puțin un produs în bonul de consum." });
+    }
+
+    const normalizedItems = itemsRaw
+      .map((item: any) => ({
+        ingredientId: String(item?.productId || item?.ingredientId || "").trim(),
+        qty: Number(item?.qty || 0),
+        note: typeof item?.note === "string" ? item.note.trim() : "",
+      }))
+      .filter((item: any) => item.ingredientId && Number.isFinite(item.qty) && item.qty > 0);
+
+    if (!normalizedItems.length) {
+      return res.status(400).json({ ok: false, error: "Cantitățile din bonul de consum sunt invalide." });
+    }
+
+    const location = await prisma.location.findFirst({
+      where: { id: locationId, tenantId },
+      select: { id: true, name: true },
+    });
+
+    if (!location) {
+      return res.status(404).json({ ok: false, error: "Locația selectată nu există." });
+    }
+
+    const productIds = normalizedItems.map((item: any) => item.ingredientId);
+    const products = await prisma.product.findMany({
+      where: {
+        tenantId,
+        id: { in: productIds },
+      },
+      select: {
+        id: true,
+        name: true,
+        sku: true,
+        class: true,
+        uom: { select: { code: true, name: true } },
+      },
+    });
+
+    const productMap = new Map(products.map((product: any) => [product.id, product]));
+    const missingProductId = normalizedItems.find((item: any) => !productMap.has(item.ingredientId))?.ingredientId;
+    if (missingProductId) {
+      return res.status(400).json({ ok: false, error: "Unul dintre produsele selectate nu mai există în nomenclator." });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const doc = await tx.consumptionDoc.create({
+        data: {
+          tenantId,
+          locationId,
+          docNo: createConsumptionDocNo(),
+          docDate: docDateRaw,
+          note: note || null,
+        },
+      });
+
+      for (const line of normalizedItems) {
+        const product = productMap.get(line.ingredientId);
+        const qtyDecimal = new Prisma.Decimal(line.qty);
+
+        await decrementStockBalanceStrict(tx, {
+          tenantId,
+          locationId,
+          productId: line.ingredientId,
+          qty: qtyDecimal,
+          productName: product?.name || `produs ${line.ingredientId}`,
+          uomCode: product?.uom?.code || product?.uom?.name || "",
+        });
+
+        await tx.consumptionDocItem.create({
+          data: {
+            consumptionDocId: doc.id,
+            ingredientId: line.ingredientId,
+            qty: qtyDecimal,
+            note: line.note || null,
+          },
+        });
+
+        await tx.stockMove.create({
+          data: {
+            tenantId,
+            locationId,
+            productId: line.ingredientId,
+            type: "OUT",
+            qty: qtyDecimal,
+            refType: "CONSUMPTION",
+            refId: doc.id,
+            note: note || `Consum manual ${doc.docNo}`,
+          },
+        });
+      }
+
+      return doc;
+    });
+
+    return res.status(201).json({
+      ok: true,
+      item: {
+        id: result.id,
+        docNo: result.docNo,
+        docDate: result.docDate,
+        locationId,
+        locationName: location.name,
+      },
+    });
+  } catch (error: any) {
+    console.error("CONSUMPTION DOC CREATE ERROR:", error);
+    return res.status(500).json({
+      ok: false,
+      error: error?.message || "Nu am putut salva bonul de consum.",
+    });
+  }
+});
 
 /* ======================================================
    GET /api/v1/consumption-docs

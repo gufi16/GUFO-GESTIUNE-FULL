@@ -1,4 +1,4 @@
-﻿import { FilePlus2, PackagePlus, ReceiptText, ScrollText, Tags, TriangleAlert } from "lucide-react"
+﻿import { FilePlus2, PackageMinus, PackagePlus, ReceiptText, ScrollText, Tags, TriangleAlert } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import PageHeader from "../components/PageHeader"
 
@@ -20,6 +20,12 @@ const cards: Array<{
     path: "/inregistrare-document/inventar/new",
     icon: PackagePlus,
     tone: "bg-slate-100 text-slate-700",
+  },
+  {
+    title: "Bon de consum",
+    path: "/inregistrare-document/bon-consum/new",
+    icon: PackageMinus,
+    tone: "bg-amber-50 text-amber-700",
   },
   {
     title: "Transfer intre gestiuni",
@@ -85,3 +91,5 @@ export default function InregistrareDocument() {
     </div>
   )
 }
+
+
