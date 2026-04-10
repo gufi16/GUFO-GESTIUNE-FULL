@@ -534,7 +534,8 @@ export default function InventarNou() {
         </div>
 
         {items.length ? (
-          <div className="space-y-3">
+          <div className="max-h-[460px] overflow-y-auto pr-1">
+            <div className="space-y-3">
             <div className="hidden items-center rounded-2xl bg-slate-50 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 lg:grid lg:grid-cols-[minmax(0,1.8fr)_120px_140px_140px_110px] lg:gap-3">
               <div>Produs</div>
               <div>Scriptic</div>
@@ -597,6 +598,7 @@ export default function InventarNou() {
                 </div>
               )
             })}
+            </div>
           </div>
         ) : (
           <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center">
