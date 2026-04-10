@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { ArrowLeft, ArrowRightLeft, FileOutput, Plus, Truck, Warehouse } from "lucide-react"
+import { ArrowLeft, ArrowRightLeft, FileOutput, Plus, Search, Trash2, Truck, Warehouse } from "lucide-react"
 import PageHeader from "../components/PageHeader"
 import {
   DocumentField,
@@ -148,7 +148,7 @@ export default function TransferPage() {
       const prodData = await prodRes.json().catch(() => ({}))
 
       if (locRes.status === 401 || prodRes.status === 401) {
-        setError("Sesiunea a expirat. Intră din nou în cont și reîncearcă.")
+        setError("Sesiunea a expirat. Intra din nou �n cont ?i re�ncearca.")
         return
       }
 
@@ -161,8 +161,7 @@ export default function TransferPage() {
 
       if (!transferId) {
         const activeLocationId = getActiveLocationId()
-        const fallbackFrom =
-          nextLocations.find((location) => location.id === activeLocationId)?.id || nextLocations[0]?.id || ""
+        const fallbackFrom = nextLocations.find((location) => location.id === activeLocationId)?.id || nextLocations[0]?.id || ""
 
         setHeader((prev) => ({
           ...prev,
@@ -173,14 +172,9 @@ export default function TransferPage() {
               ? prev.toLocationId
               : nextLocations.find((location) => location.id !== (prev.fromLocationId || fallbackFrom))?.id || "",
         }))
-      } else if (!transferId) {
-        setHeader((prev) => ({
-          ...prev,
-          docNo: prev.docNo || getPreviewValue(numberingData?.previews, "transfer"),
-        }))
       }
     } catch {
-      setError("Nu am putut încărca datele pentru transfer.")
+      setError("Nu am putut �ncarca datele pentru transfer.")
     } finally {
       setLoadingMeta(false)
     }
@@ -200,12 +194,12 @@ export default function TransferPage() {
       const data = await res.json().catch(() => ({}))
 
       if (res.status === 401) {
-        setError("Sesiunea a expirat. Intră din nou în cont și reîncearcă.")
+        setError("Sesiunea a expirat. Intra din nou �n cont ?i re�ncearca.")
         return
       }
 
       if (!data.ok || !data.doc) {
-        setError(data.error || "Nu am putut încărca transferul.")
+        setError(data.error || "Nu am putut �ncarca transferul.")
         return
       }
 
@@ -239,7 +233,7 @@ export default function TransferPage() {
 
       setLines(loadedLines.length ? loadedLines : [makeLine()])
     } catch {
-      setError("Nu am putut încărca transferul.")
+      setError("Nu am putut �ncarca transferul.")
     } finally {
       setLoadingDoc(false)
     }
@@ -281,10 +275,7 @@ export default function TransferPage() {
     })
   }
 
-  const validLines = useMemo(
-    () => lines.filter((line) => line.productId && parsePositive(line.qty) > 0),
-    [lines]
-  )
+  const validLines = useMemo(() => lines.filter((line) => line.productId && parsePositive(line.qty) > 0), [lines])
 
   const totals = useMemo(
     () =>
@@ -307,37 +298,37 @@ export default function TransferPage() {
 
   async function saveDoc(postNow = false) {
     if (!token) {
-      setError("Lipsește sesiunea de autentificare.")
+      setError("Lipse?te sesiunea de autentificare.")
       return
     }
 
     if (isPosted) {
-      setError("Transferul este deja postat și nu mai poate fi modificat.")
+      setError("Transferul este deja postat ?i nu mai poate fi modificat.")
       return
     }
 
     if (!header.fromLocationId) {
-      setError("Selectează gestiunea predătoare.")
+      setError("Selecteaza gestiunea predatoare.")
       return
     }
 
     if (!header.toLocationId) {
-      setError("Selectează gestiunea primitoare.")
+      setError("Selecteaza gestiunea primitoare.")
       return
     }
 
     if (header.fromLocationId === header.toLocationId) {
-      setError("Gestiunea de plecare și cea de sosire trebuie să fie diferite.")
+      setError("Gestiunea de plecare ?i cea de sosire trebuie sa fie diferite.")
       return
     }
 
     if (!header.docDate) {
-      setError("Completează data documentului.")
+      setError("Completeaza data documentului.")
       return
     }
 
     if (!validLines.length) {
-      setError("Adaugă cel puțin un produs în transfer.")
+      setError("Adauga cel pu?in un produs �n transfer.")
       return
     }
 
@@ -367,7 +358,7 @@ export default function TransferPage() {
       const data = await res.json().catch(() => ({}))
 
       if (res.status === 401) {
-        setError("Sesiunea a expirat. Intră din nou în cont și reîncearcă.")
+        setError("Sesiunea a expirat. Intra din nou �n cont ?i re�ncearca.")
         return
       }
 
@@ -382,10 +373,10 @@ export default function TransferPage() {
       }
 
       setStatus(data.doc?.status || (postNow ? "POSTED" : "DRAFT"))
-      setMessage(postNow ? "Transferul a fost salvat și postat." : "Transferul a fost salvat ca draft.")
+      setMessage(postNow ? "Transferul a fost salvat ?i postat." : "Transferul a fost salvat ca draft.")
       if (transferId) await loadDoc()
     } catch {
-      setError("A apărut o eroare la salvarea transferului.")
+      setError("A aparut o eroare la salvarea transferului.")
     } finally {
       setSaving(false)
     }
@@ -393,7 +384,7 @@ export default function TransferPage() {
 
   async function exportPdf() {
     if (!transferId) {
-      setError("Salvează documentul înainte de export.")
+      setError("Salveaza documentul �nainte de export.")
       return
     }
 
@@ -410,325 +401,305 @@ export default function TransferPage() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="w-full space-y-4">
       <PageHeader
         badge="document"
         title={!transferId ? "Transfer nou" : isPosted ? "Transfer postat" : "Editare transfer"}
-        subtitle="Mută produse între gestiuni într-un flux mai clar, cu selecții rapide și totaluri vizibile."
+        subtitle="Muta produse �ntre gestiuni �n acela?i model compact ca bonul de consum."
       />
 
-      <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-3">
+      {loadingMeta ? <InlineNotice>Se �ncarca nomenclatoarele pentru transfer.</InlineNotice> : null}
+      {loadingDoc ? <InlineNotice>Se �ncarca documentul selectat.</InlineNotice> : null}
+      {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
+      {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
+      {isPosted ? <InlineNotice>Documentul este postat ?i ram�ne doar �n regim de vizualizare ?i export PDF.</InlineNotice> : null}
+
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
         <DocumentMetric title="Status" value={<DocumentStatusPill status={status || "DRAFT"} />} tone="amber" />
-        <DocumentMetric title="Cantitate totală" value={formatNumber(totals.totalQty)} tone="blue" />
-        <DocumentMetric title="Valoare estimată" value={`${formatNumber(totals.totalValue)} RON`} tone="emerald" />
+        <DocumentMetric title="Cantitate totala" value={formatNumber(totals.totalQty)} tone="blue" />
+        <DocumentMetric title="Valoare estimata" value={`${formatNumber(totals.totalValue)} RON`} tone="emerald" />
       </div>
 
       <div className="flex flex-wrap gap-2">
         <a href="/transfer" className={documentButtonSecondaryClass}>
           <ArrowLeft size={16} className="mr-2" />
-          Înapoi la listă
+          �napoi la lista
         </a>
         <button type="button" className={documentButtonSecondaryClass} onClick={exportPdf} disabled={!transferId || loadingDoc}>
           <FileOutput size={16} className="mr-2" />
           PDF
         </button>
-        {!isPosted ? (
-          <>
-            <button type="button" className={documentButtonSecondaryClass} onClick={() => saveDoc(false)} disabled={saving || loadingDoc}>
-              {saving ? "Se salvează..." : "Salvează draft"}
-            </button>
-            <button type="button" className={documentButtonPrimaryClass} onClick={() => saveDoc(true)} disabled={saving || loadingDoc}>
-              {saving ? "Se salvează..." : "Salvează și postează"}
-            </button>
-          </>
-        ) : null}
       </div>
 
-      {loadingMeta ? <InlineNotice>Se încarcă nomenclatoarele pentru transfer.</InlineNotice> : null}
-      {loadingDoc ? <InlineNotice>Se încarcă documentul selectat.</InlineNotice> : null}
-      {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
-      {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
-      {isPosted ? (
-        <InlineNotice>
-          Documentul este postat și rămâne doar în regim de vizualizare, PDF și urmărire istoric.
-        </InlineNotice>
-      ) : null}
-
-      <DocumentSection
-        title="Antet document"
-        description="Locația activă din topbar completează automat gestiunea de plecare pentru documentele noi."
-      >
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          <DocumentField label="Gestiune predătoare" hint={fromLocation?.code ? `Cod: ${fromLocation.code}` : undefined}>
-            <div className="relative">
-              <Warehouse className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-              <select
-                value={header.fromLocationId}
-                onChange={(e) => {
-                  const nextId = e.target.value
-                  setHeader((prev) => ({
-                    ...prev,
-                    fromLocationId: nextId,
-                    toLocationId: prev.toLocationId === nextId ? "" : prev.toLocationId,
-                  }))
-                  setActiveLocationId(nextId)
-                }}
-                className={`${documentInputClass} pl-9`}
-                disabled={isPosted}
-              >
-                <option value="">Selectează</option>
-                {locations.map((location) => (
-                  <option key={location.id} value={location.id}>
-                    {location.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </DocumentField>
-
-          <DocumentField label="Gestiune primitoare">
-            <div className="relative">
-              <ArrowRightLeft className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-              <select
-                value={header.toLocationId}
-                onChange={(e) => setHeader((prev) => ({ ...prev, toLocationId: e.target.value }))}
-                className={`${documentInputClass} pl-9`}
-                disabled={isPosted}
-              >
-                <option value="">Selectează</option>
-                {toLocationOptions.map((location) => (
-                  <option key={location.id} value={location.id}>
-                    {location.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </DocumentField>
-
-          <DocumentField label="Nr. document">
-            <input
-              value={header.docNo}
-              className={documentInputClass}
-              readOnly
-              style={readonlyInputStyle}
-            />
-          </DocumentField>
-
-          <DocumentField label="Data document">
-            <input
-              type="date"
-              value={header.docDate}
-              onChange={(e) => setHeader((prev) => ({ ...prev, docDate: e.target.value }))}
-              className={documentInputClass}
-              disabled={isPosted}
-            />
-          </DocumentField>
-
-          <DocumentField label="Motiv transfer">
-            <input
-              value={header.reason}
-              onChange={(e) => setHeader((prev) => ({ ...prev, reason: e.target.value }))}
-              className={documentInputClass}
-              disabled={isPosted}
-            />
-          </DocumentField>
-
-          <DocumentField label="Observații">
-            <input
-              value={header.note}
-              onChange={(e) => setHeader((prev) => ({ ...prev, note: e.target.value }))}
-              className={documentInputClass}
-              disabled={isPosted}
-            />
-          </DocumentField>
-
-          <DocumentField label="Delegat / Transportator">
-            <input
-              value={header.delegateName}
-              onChange={(e) => setHeader((prev) => ({ ...prev, delegateName: e.target.value }))}
-              className={documentInputClass}
-              disabled={isPosted}
-            />
-          </DocumentField>
-
-          <DocumentField label="CI / BI">
-            <input
-              value={header.delegateCi}
-              onChange={(e) => setHeader((prev) => ({ ...prev, delegateCi: e.target.value }))}
-              className={documentInputClass}
-              disabled={isPosted}
-            />
-          </DocumentField>
-
-          <DocumentField label="Mijloc transport">
-            <div className="relative">
-              <Truck className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-              <input
-                value={header.vehicle}
-                onChange={(e) => setHeader((prev) => ({ ...prev, vehicle: e.target.value }))}
-                className={`${documentInputClass} pl-9`}
-                disabled={isPosted}
-              />
-            </div>
-          </DocumentField>
-
-          <DocumentField label="Nr. auto">
-            <input
-              value={header.vehicleNo}
-              onChange={(e) => setHeader((prev) => ({ ...prev, vehicleNo: e.target.value }))}
-              className={documentInputClass}
-              disabled={isPosted}
-            />
-          </DocumentField>
-
-          <DocumentField label="Am predat">
-            <input
-              value={header.senderName}
-              onChange={(e) => setHeader((prev) => ({ ...prev, senderName: e.target.value }))}
-              className={documentInputClass}
-              disabled={isPosted}
-            />
-          </DocumentField>
-
-          <DocumentField label="Am primit">
-            <input
-              value={header.receiverName}
-              onChange={(e) => setHeader((prev) => ({ ...prev, receiverName: e.target.value }))}
-              className={documentInputClass}
-              disabled={isPosted}
-            />
-          </DocumentField>
-
-          <DocumentField label="Avizat">
-            <input
-              value={header.approvedBy}
-              onChange={(e) => setHeader((prev) => ({ ...prev, approvedBy: e.target.value }))}
-              className={documentInputClass}
-              disabled={isPosted}
-            />
-          </DocumentField>
-        </div>
-      </DocumentSection>
-
-      <DocumentSection
-        title="Linii transfer"
-        description="Caută după nume sau SKU și completezi repede doar cantitatea și prețul."
-        actions={
-          !isPosted ? (
-            <button type="button" className={documentButtonPrimaryClass} onClick={addLine}>
-              <Plus size={16} className="mr-2" />
-              Adaugă linie
-            </button>
-          ) : null
-        }
-      >
+      <div className="grid grid-cols-1 items-start gap-3 2xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-3">
-          {lines.map((line, index) => {
-            const matches = productMatches(line.search)
-            const lineValue = parsePositive(line.qty) * Math.max(0, Number(line.unitPrice || 0))
+          <DocumentSection title="Adauga produse transfer">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="text-sm text-slate-500">Scrie minim 2 litere, alege produsul ?i completeaza cantitatea ?i pre?ul.</div>
+              {!isPosted ? (
+                <button type="button" className={documentButtonPrimaryClass} onClick={addLine}>
+                  <Plus size={16} className="mr-2" />
+                  Adauga linie
+                </button>
+              ) : null}
+            </div>
 
-            return (
-              <div key={line.id} className="rounded-[18px] border border-slate-200 bg-slate-50/80 p-3">
-                <div className="mb-2.5 flex items-center justify-between gap-2">
-                  <div className="text-[13px] font-semibold text-slate-700">Poziția {index + 1}</div>
-                  {!isPosted ? (
-                    <button type="button" className={documentButtonDangerClass} onClick={() => removeLine(line.id)}>
-                      Șterge
-                    </button>
-                  ) : null}
-                </div>
+            <div className="max-h-[520px] overflow-y-auto pr-1">
+              <div className="space-y-2">
+                {lines.map((line, index) => {
+                  const matches = productMatches(line.search)
+                  const lineValue = parsePositive(line.qty) * Math.max(0, Number(line.unitPrice || 0))
 
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
-                  <DocumentField label="Produs">
-                    <input
-                      value={line.search}
-                      onChange={(e) => setLineValue(line.id, { search: e.target.value, productId: "" })}
-                      className={documentInputClass}
-                      disabled={isPosted}
-                      placeholder="Scrie 2-3 litere"
-                    />
-                  </DocumentField>
-
-                  <DocumentField label="SKU">
-                    <input value={line.sku} readOnly className={documentInputClass} style={readonlyInputStyle} />
-                  </DocumentField>
-
-                  <DocumentField label="UM">
-                    <input value={line.uomCode} readOnly className={documentInputClass} style={readonlyInputStyle} />
-                  </DocumentField>
-
-                  <DocumentField label="Cantitate">
-                    <input
-                      value={line.qty}
-                      onChange={(e) => setLineValue(line.id, { qty: e.target.value })}
-                      className={documentInputClass}
-                      disabled={isPosted}
-                    />
-                  </DocumentField>
-
-                  <DocumentField label="Preț unitar">
-                    <input
-                      value={line.unitPrice}
-                      onChange={(e) => setLineValue(line.id, { unitPrice: e.target.value })}
-                      className={documentInputClass}
-                      disabled={isPosted}
-                    />
-                  </DocumentField>
-
-                  <DocumentField label="Valoare">
-                    <input value={formatNumber(lineValue)} readOnly className={documentInputClass} style={readonlyInputStyle} />
-                  </DocumentField>
-                </div>
-
-                {line.search.trim().length >= 2 && !line.productId && !isPosted ? (
-                  <div className="mt-2 rounded-[14px] border border-slate-200 bg-white p-2 shadow-sm">
-                    {matches.length ? (
-                      <div className="space-y-1.5">
-                        {matches.map((product) => (
-                          <button
-                            key={product.id}
-                            type="button"
-                            onClick={() => chooseProduct(line.id, product)}
-                            className="w-full rounded-[12px] px-3 py-2.5 text-left transition hover:bg-slate-50"
-                          >
-                            <div className="font-semibold text-slate-900">{product.name}</div>
-                            <div className="mt-1 text-xs text-slate-500">
-                              {product.sku || "Fără SKU"} · UM {product.uom?.code || "-"} · Preț {formatNumber(product.price)}
-                            </div>
+                  return (
+                    <div key={line.id} className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <div className="text-sm font-semibold text-slate-800">Pozi?ia {index + 1}</div>
+                        {!isPosted ? (
+                          <button type="button" onClick={() => removeLine(line.id)} className={documentButtonDangerClass}>
+                            <Trash2 size={16} className="mr-2" />
+                            ?terge
                           </button>
-                        ))}
+                        ) : null}
                       </div>
-                    ) : (
-                      <div className="px-3 py-2 text-sm text-red-600">Nu am găsit niciun produs pentru „{line.search}”.</div>
-                    )}
+
+                      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.8fr)_110px_120px_120px_120px] lg:items-start">
+                        <div className="min-w-0">
+                          <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Produs</div>
+                          <input
+                            value={line.search}
+                            onChange={(e) => setLineValue(line.id, { search: e.target.value, productId: "" })}
+                            className={documentInputClass}
+                            disabled={isPosted}
+                            placeholder="Scrie 2-3 litere"
+                          />
+
+                          {line.search.trim().length >= 2 && !line.productId && !isPosted ? (
+                            <div className="mt-2 rounded-[14px] border border-slate-200 bg-white p-2 shadow-sm">
+                              {matches.length ? (
+                                <div className="space-y-1.5">
+                                  {matches.map((product) => (
+                                    <button
+                                      key={product.id}
+                                      type="button"
+                                      onClick={() => chooseProduct(line.id, product)}
+                                      className="w-full rounded-[12px] px-3 py-2.5 text-left transition hover:bg-slate-50"
+                                    >
+                                      <div className="font-semibold text-slate-900">{product.name}</div>
+                                      <div className="mt-1 text-xs text-slate-500">
+                                        {product.sku || "Fara SKU"} � UM {product.uom?.code || "-"} � Pre? {formatNumber(product.price)}
+                                      </div>
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="px-3 py-2 text-sm text-red-600">Nu am gasit niciun produs pentru �{line.search}�.</div>
+                              )}
+                            </div>
+                          ) : null}
+                        </div>
+
+                        <div>
+                          <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">SKU</div>
+                          <input value={line.sku} readOnly className={documentInputClass} style={readonlyInputStyle} />
+                        </div>
+
+                        <div>
+                          <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">UM</div>
+                          <input value={line.uomCode} readOnly className={documentInputClass} style={readonlyInputStyle} />
+                        </div>
+
+                        <div>
+                          <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Cantitate</div>
+                          <input
+                            value={line.qty}
+                            onChange={(e) => setLineValue(line.id, { qty: e.target.value })}
+                            className={documentInputClass}
+                            disabled={isPosted}
+                          />
+                        </div>
+
+                        <div>
+                          <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Pre? / Total</div>
+                          <input
+                            value={line.unitPrice}
+                            onChange={(e) => setLineValue(line.id, { unitPrice: e.target.value })}
+                            className={documentInputClass}
+                            disabled={isPosted}
+                          />
+                          <div className="mt-2 rounded-[12px] bg-white px-3 py-2 text-sm font-semibold text-slate-900">
+                            {formatNumber(lineValue)} RON
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </DocumentSection>
+        </div>
+
+        <div className="space-y-3">
+          <DocumentSection title="Detalii document">
+            <div className="space-y-3">
+              <DocumentField label="Gestiune predatoare" hint={fromLocation?.code ? `Cod: ${fromLocation.code}` : undefined}>
+                <div className="relative">
+                  <Warehouse className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                  <select
+                    value={header.fromLocationId}
+                    onChange={(e) => {
+                      const nextId = e.target.value
+                      setHeader((prev) => ({
+                        ...prev,
+                        fromLocationId: nextId,
+                        toLocationId: prev.toLocationId === nextId ? "" : prev.toLocationId,
+                      }))
+                      setActiveLocationId(nextId)
+                    }}
+                    className={`${documentInputClass} pl-9`}
+                    disabled={isPosted}
+                  >
+                    <option value="">Selecteaza</option>
+                    {locations.map((location) => (
+                      <option key={location.id} value={location.id}>{location.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </DocumentField>
+
+              <DocumentField label="Gestiune primitoare">
+                <div className="relative">
+                  <ArrowRightLeft className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                  <select
+                    value={header.toLocationId}
+                    onChange={(e) => setHeader((prev) => ({ ...prev, toLocationId: e.target.value }))}
+                    className={`${documentInputClass} pl-9`}
+                    disabled={isPosted}
+                  >
+                    <option value="">Selecteaza</option>
+                    {toLocationOptions.map((location) => (
+                      <option key={location.id} value={location.id}>{location.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </DocumentField>
+
+              <DocumentField label="Nr. document">
+                <input value={header.docNo} className={documentInputClass} readOnly style={readonlyInputStyle} />
+              </DocumentField>
+
+              <DocumentField label="Data document">
+                <input
+                  type="date"
+                  value={header.docDate}
+                  onChange={(e) => setHeader((prev) => ({ ...prev, docDate: e.target.value }))}
+                  className={documentInputClass}
+                  disabled={isPosted}
+                />
+              </DocumentField>
+
+              <DocumentField label="Motiv transfer">
+                <input
+                  value={header.reason}
+                  onChange={(e) => setHeader((prev) => ({ ...prev, reason: e.target.value }))}
+                  className={documentInputClass}
+                  disabled={isPosted}
+                />
+              </DocumentField>
+
+              <DocumentField label="Observa?ii interne">
+                <textarea
+                  value={header.note}
+                  onChange={(e) => setHeader((prev) => ({ ...prev, note: e.target.value }))}
+                  rows={4}
+                  className={documentTextareaClass}
+                  disabled={isPosted}
+                />
+              </DocumentField>
+
+              <DocumentField label="Delegat / CI">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <input
+                    value={header.delegateName}
+                    onChange={(e) => setHeader((prev) => ({ ...prev, delegateName: e.target.value }))}
+                    className={documentInputClass}
+                    disabled={isPosted}
+                    placeholder="Delegat"
+                  />
+                  <input
+                    value={header.delegateCi}
+                    onChange={(e) => setHeader((prev) => ({ ...prev, delegateCi: e.target.value }))}
+                    className={documentInputClass}
+                    disabled={isPosted}
+                    placeholder="CI / BI"
+                  />
+                </div>
+              </DocumentField>
+
+              <DocumentField label="Transport">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div className="relative">
+                    <Truck className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    <input
+                      value={header.vehicle}
+                      onChange={(e) => setHeader((prev) => ({ ...prev, vehicle: e.target.value }))}
+                      className={`${documentInputClass} pl-9`}
+                      disabled={isPosted}
+                      placeholder="Mijloc transport"
+                    />
                   </div>
+                  <input
+                    value={header.vehicleNo}
+                    onChange={(e) => setHeader((prev) => ({ ...prev, vehicleNo: e.target.value }))}
+                    className={documentInputClass}
+                    disabled={isPosted}
+                    placeholder="Nr. auto"
+                  />
+                </div>
+              </DocumentField>
+
+              <DocumentField label="Semnaturi">
+                <div className="grid grid-cols-1 gap-2">
+                  <input
+                    value={header.senderName}
+                    onChange={(e) => setHeader((prev) => ({ ...prev, senderName: e.target.value }))}
+                    className={documentInputClass}
+                    disabled={isPosted}
+                    placeholder="Am predat"
+                  />
+                  <input
+                    value={header.receiverName}
+                    onChange={(e) => setHeader((prev) => ({ ...prev, receiverName: e.target.value }))}
+                    className={documentInputClass}
+                    disabled={isPosted}
+                    placeholder="Am primit"
+                  />
+                  <input
+                    value={header.approvedBy}
+                    onChange={(e) => setHeader((prev) => ({ ...prev, approvedBy: e.target.value }))}
+                    className={documentInputClass}
+                    disabled={isPosted}
+                    placeholder="Avizat"
+                  />
+                </div>
+              </DocumentField>
+
+              <div className="grid grid-cols-1 gap-2">
+                {!isPosted ? (
+                  <>
+                    <button type="button" className={documentButtonSecondaryClass} onClick={() => saveDoc(false)} disabled={saving || loadingDoc}>
+                      {saving ? "Se salveaza..." : "Salveaza draft"}
+                    </button>
+                    <button type="button" className={documentButtonPrimaryClass} onClick={() => saveDoc(true)} disabled={saving || loadingDoc}>
+                      {saving ? "Se salveaza..." : "Salveaza ?i posteaza"}
+                    </button>
+                  </>
                 ) : null}
               </div>
-            )
-          })}
+            </div>
+          </DocumentSection>
         </div>
-      </DocumentSection>
-
-      <DocumentSection title="Observații și totaluri" description="Păstrează rezumatul documentului la vedere înainte de postare.">
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.8fr_0.9fr]">
-          <DocumentField label="Notă internă">
-            <textarea
-              value={header.note}
-              onChange={(e) => setHeader((prev) => ({ ...prev, note: e.target.value }))}
-              rows={4}
-              className={documentTextareaClass}
-              disabled={isPosted}
-              placeholder="Poți nota aici detalii despre transport, lot sau aprobare."
-            />
-          </DocumentField>
-
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-1">
-            <DocumentMetric title="Produse selectate" value={validLines.length} tone="slate" />
-            <DocumentMetric title="Cantitate totală" value={formatNumber(totals.totalQty)} tone="blue" />
-            <DocumentMetric title="Valoare totală" value={`${formatNumber(totals.totalValue)} RON`} tone="emerald" />
-          </div>
-        </div>
-      </DocumentSection>
+      </div>
     </div>
   )
 }
