@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import type { CSSProperties, KeyboardEvent, ReactNode } from "react"
 import PageHeader from "../components/PageHeader"
 import { API_BASE, getToken } from "../lib/api"
@@ -295,7 +295,7 @@ export default function NirPage() {
       const vData = await v.json().catch(() => ({}))
 
       if ([p, l, s, u, v].some((x) => x.status === 401)) {
-        setAuthError("Token lipsÄƒ sau expirat. FÄƒ login din nou Ã®n aplicaÈ›ie.")
+        setAuthError("Token lipsă sau expirat. Fă login din nou în aplicație.")
         setProducts([])
         setLocations([])
         setSuppliers([])
@@ -334,10 +334,10 @@ export default function NirPage() {
         !nextUoms.length &&
         !nextVatRates.length
       ) {
-        setLoadError("Nu s-au putut Ã®ncÄƒrca datele pentru NIR.")
+        setLoadError("Nu s-au putut încărca datele pentru NIR.")
       }
     } catch {
-      setLoadError("Nu pot Ã®ncÄƒrca datele din backend.")
+      setLoadError("Nu pot încărca datele din backend.")
       setProducts([])
       setLocations([])
       setSuppliers([])
@@ -364,12 +364,12 @@ export default function NirPage() {
       const data = await res.json().catch(() => ({}))
 
       if (res.status === 401) {
-        setAuthError("Token expirat sau invalid. FÄƒ login din nou.")
+        setAuthError("Token expirat sau invalid. Fă login din nou.")
         return
       }
 
       if (!data.ok || !data.receipt) {
-        setLoadError(data.error || "Nu pot Ã®ncÄƒrca documentul NIR.")
+        setLoadError(data.error || "Nu pot încărca documentul NIR.")
         return
       }
 
@@ -419,7 +419,7 @@ export default function NirPage() {
 
       setLines(loadedLines.length ? loadedLines : [makeLine()])
     } catch {
-      setLoadError("Nu pot Ã®ncÄƒrca documentul NIR.")
+      setLoadError("Nu pot încărca documentul NIR.")
     } finally {
       setLoadingReceipt(false)
     }
@@ -742,22 +742,22 @@ export default function NirPage() {
 
   async function saveQuickProduct() {
     if (!quickProductForm.name.trim()) {
-      setQuickProductError("CompleteazÄƒ denumirea produsului.")
+      setQuickProductError("Completează denumirea produsului.")
       return
     }
 
     if (!quickProductForm.uomId) {
-      setQuickProductError("SelecteazÄƒ UM stoc.")
+      setQuickProductError("Selectează UM stoc.")
       return
     }
 
     if (!quickProductForm.purchaseUomId) {
-      setQuickProductError("SelecteazÄƒ ambalaj.")
+      setQuickProductError("Selectează ambalaj.")
       return
     }
 
     if (!quickProductForm.vatRateId) {
-      setQuickProductError("SelecteazÄƒ TVA.")
+      setQuickProductError("Selectează TVA.")
       return
     }
 
@@ -854,7 +854,7 @@ export default function NirPage() {
 
   async function saveQuickSupplier() {
     if (!quickSupplierForm.name.trim()) {
-      setQuickSupplierError("CompleteazÄƒ numele furnizorului.")
+      setQuickSupplierError("Completează numele furnizorului.")
       return
     }
 
@@ -963,32 +963,32 @@ export default function NirPage() {
 
   async function saveNir(postNow = false) {
     if (!token) {
-      alert("Nu existÄƒ token de autentificare. FÄƒ login din nou.")
+      alert("Nu există token de autentificare. Fă login din nou.")
       return
     }
 
     if (isPosted) {
-      alert("Documentul POSTED este doar pentru vizualizare È™i nu mai poate fi modificat.")
+      alert("Documentul POSTED este doar pentru vizualizare și nu mai poate fi modificat.")
       return
     }
 
     if (!header.locationId) {
-      alert("SelecteazÄƒ locaÈ›ia.")
+      alert("Selectează locația.")
       return
     }
 
     if (!header.docNo.trim()) {
-      alert("CompleteazÄƒ numÄƒrul documentului.")
+      alert("Completează numărul documentului.")
       return
     }
 
     if (!header.docDate) {
-      alert("CompleteazÄƒ data documentului.")
+      alert("Completează data documentului.")
       return
     }
 
     if (!validLines.length) {
-      alert("AdaugÄƒ cel puÈ›in un produs.")
+      alert("Adaugă cel puțin un produs.")
       return
     }
 
@@ -1036,7 +1036,7 @@ export default function NirPage() {
       setSaving(false)
 
       if (res.status === 401) {
-        alert("Token expirat sau invalid. FÄƒ login din nou.")
+        alert("Token expirat sau invalid. Fă login din nou.")
         return
       }
 
@@ -1051,7 +1051,7 @@ export default function NirPage() {
       }
 
       setStatus(data.receipt?.status || (postNow ? "POSTED" : "DRAFT"))
-      alert(postNow ? "NIR salvat È™i postat Ã®n stoc." : "NIR salvat.")
+      alert(postNow ? "NIR salvat și postat în stoc." : "NIR salvat.")
 
       if (receiptId) {
         await loadReceipt(receiptId)
@@ -1064,7 +1064,7 @@ export default function NirPage() {
 
   function handlePrint() {
     if (!receiptId) {
-      alert("SalveazÄƒ documentul Ã®nainte.")
+      alert("Salvează documentul înainte.")
       return
     }
 
@@ -1077,7 +1077,7 @@ export default function NirPage() {
 
   async function exportPdf() {
     if (!receiptId) {
-      alert("SalveazÄƒ documentul Ã®nainte de export.")
+      alert("Salvează documentul înainte de export.")
       return
     }
 
@@ -1126,16 +1126,112 @@ export default function NirPage() {
     <div style={pageWrap}>
       <div className="no-print" style={{ marginBottom: 20 }}>
         <PageHeader
-          badge="operaÈ›iuni"
+          badge="operațiuni"
           title={pageTitle}
           subtitle={
             !receiptId
-              ? "RecepÈ›ie marfÄƒ simplÄƒ, compactÄƒ È™i rapidÄƒ"
+              ? "Recepție marfă simplă, compactă și rapidă"
               : isPosted
-                ? "Document postat Ã®n stoc, disponibil doar pentru vizualizare"
+                ? "Document postat în stoc, disponibil doar pentru vizualizare"
                 : "Document draft editabil"
           }
         />
+      </div>
+
+      <div className="no-print" style={isMobileViewport ? topActionsMobile : topActions}>
+        {isMobileViewport ? (
+          <>
+            <div style={topActionsPrimaryMobile}>
+              {!isPosted ? (
+                <>
+                  <button
+                    style={{ ...btnPrimary, width: "100%" }}
+                    onClick={() => saveNir(true)}
+                    disabled={saving || loadingReceipt}
+                  >
+                    {saving ? "Se salvează..." : "Salvează și postează"}
+                  </button>
+                  <button
+                    style={{ ...btnSecondary, width: "100%" }}
+                    onClick={() => saveNir(false)}
+                    disabled={saving || loadingReceipt}
+                  >
+                    {saving ? "Se salvează..." : "Salvează draft"}
+                  </button>
+                </>
+              ) : (
+                <button
+                  style={{ ...btnSecondary, width: "100%" }}
+                  onClick={handlePrint}
+                  disabled={!receiptId || loadingReceipt}
+                >
+                  Printează document
+                </button>
+              )}
+            </div>
+
+            <div style={topActionsCompactRowMobile}>
+              <a href="/inregistrare-document/nir" style={{ textDecoration: "none" }}>
+                <button style={btnGhostMobile}>Înapoi</button>
+              </a>
+              <button
+                style={btnGhostMobile}
+                onClick={handlePrint}
+                disabled={!receiptId || loadingReceipt}
+              >
+                Print
+              </button>
+              <button
+                style={btnGhostMobile}
+                onClick={exportPdf}
+                disabled={!receiptId || loadingReceipt}
+              >
+                PDF
+              </button>
+            </div>
+          </>
+        ) : null}
+        <div style={isMobileViewport ? { display: "none" } : { display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <a href="/inregistrare-document/nir" style={{ textDecoration: "none" }}>
+            <button style={btnSecondary}>Înapoi la listă</button>
+          </a>
+
+          <button
+            style={btnSecondary}
+            onClick={handlePrint}
+            disabled={!receiptId || loadingReceipt}
+          >
+            Printează
+          </button>
+
+          <button
+            style={btnSecondary}
+            onClick={exportPdf}
+            disabled={!receiptId || loadingReceipt}
+          >
+            PDF
+          </button>
+
+          {!isPosted && (
+            <>
+              <button
+                style={btnSecondary}
+                onClick={() => saveNir(false)}
+                disabled={saving || loadingReceipt}
+              >
+                {saving ? "Se salvează..." : "Salvează draft"}
+              </button>
+
+              <button
+                style={btnPrimary}
+                onClick={() => saveNir(true)}
+                disabled={saving || loadingReceipt}
+              >
+                {saving ? "Se salvează..." : "Salvează și postează"}
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {status && (
@@ -1145,32 +1241,369 @@ export default function NirPage() {
       )}
 
       {isPosted && (
-        <div style={infoBox}>
-          Documentul este POSTED È™i este blocat la editare. PoÈ›i doar sÄƒ Ã®l vizualizezi, sÄƒ Ã®l printezi sau sÄƒ generezi PDF.
-        </div>
+          <div style={infoBox}>
+            Documentul este POSTED și este blocat la editare. Poți doar să îl vizualizezi, să îl printezi sau să generezi PDF.
+          </div>
       )}
 
       {(authError || loadError) && <div style={errorBox}>{authError || loadError}</div>}
 
-      {!loadingReceipt && (
-        <div className="no-print grid grid-cols-1 gap-3 xl:grid-cols-3" style={{ marginBottom: 12 }}>
-          <Card title="PoziÈ›ii" value={String(visibleLines.length)} />
-          <Card title="Produse distincte" value={String(uniqueProductsCount)} />
-          <Card title={`Total cu SGR ${header.currency}`} value={`${formatNumber(totals.withSgrFc)} ${header.currency}`} />
-        </div>
-      )}
-
       {loadingReceipt ? (
-        <div style={infoBox}>Se Ã®ncarcÄƒ documentul...</div>
+        <div style={infoBox}>Se încarcă documentul...</div>
       ) : (
-        <div className="grid grid-cols-1 items-start gap-3 2xl:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="space-y-3">
-          <Section title="Produse recepÈ›ionate">
+        <>
+          <Section title="Antet document">
+            {isMobileViewport ? (
+              <div style={mobileHeaderStack}>
+                <div style={mobileHeaderHeroCard}>
+                  <div style={mobileHeaderHeroLabel}>Furnizor</div>
+                  <Field label="">
+                    <input
+                      type="text"
+                      placeholder="Scrie primele 2-3 litere..."
+                      value={supplierSearch}
+                      onChange={(e) => {
+                        const value = e.target.value
+                        setSupplierSearch(value)
+                        setSupplierChosen(false)
+                        setQuickSupplierOpen(false)
+                        setQuickSupplierError("")
+                        setHeader((prev) => ({
+                          ...prev,
+                          supplierId: "",
+                          supplierName: value,
+                          supplierCode: "",
+                        }))
+                      }}
+                      style={input}
+                      disabled={isPosted}
+                    />
+
+                    {supplierSearch.trim().length >= 2 && !supplierChosen && !isPosted && (
+                      <div style={inlineUnderField}>
+                        {matchedSuppliers.length > 0 ? (
+                          <div style={resultsBox}>
+                            {matchedSuppliers.map((s: AnyObj) => (
+                              <button
+                                key={s.id}
+                                type="button"
+                                style={resultBtn}
+                                onClick={() => chooseSupplier(s)}
+                              >
+                                <div style={{ fontWeight: 600 }}>{s.name}</div>
+                                <div style={{ fontSize: 12, color: "#666" }}>
+                                  {s.code || "-"} Â· CIF {s.cif || "-"}
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={inlineActionBox}>
+                            <div style={{ color: "#991b1b", fontSize: 13 }}>
+                              Nu existÄƒ furnizori gÄƒsiÈ›i pentru â€ž{supplierSearch}â€
+                            </div>
+
+                            <button
+                              type="button"
+                              style={btnSecondary}
+                              onClick={openQuickSupplierModal}
+                            >
+                              AdaugÄƒ furnizor nou
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </Field>
+                </div>
+
+                <div style={mobileHeaderCardGrid}>
+                  <Field label="LocaÈ›ie">
+                    <select
+                      value={header.locationId}
+                      onChange={(e) => {
+                        const nextLocationId = e.target.value
+                        setHeader({ ...header, locationId: nextLocationId })
+                        setActiveLocationId(nextLocationId)
+                      }}
+                      style={input}
+                      disabled={isPosted}
+                    >
+                      <option value="">SelecteazÄƒ locaÈ›ia</option>
+                      {ensureArray(locations).map((l: AnyObj) => (
+                        <option key={l.id} value={l.id}>
+                          {l.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+
+                  <Field label="Nr. document">
+                    <input
+                      value={header.docNo}
+                      onChange={(e) => setHeader({ ...header, docNo: e.target.value })}
+                      style={input}
+                      disabled={isPosted}
+                    />
+                  </Field>
+
+                  <Field label="Data document">
+                    <input
+                      type="date"
+                      value={header.docDate}
+                      onChange={(e) => setHeader({ ...header, docDate: e.target.value })}
+                      style={input}
+                      disabled={isPosted}
+                    />
+                  </Field>
+
+                  <Field label="MonedÄƒ">
+                    <select
+                      value={header.currency}
+                      onChange={(e) => {
+                        const value = e.target.value
+                        setHeader({
+                          ...header,
+                          currency: value,
+                          fxRate: value === "RON" ? "1" : header.fxRate,
+                        })
+                      }}
+                      style={input}
+                      disabled={isPosted}
+                    >
+                      <option value="RON">RON</option>
+                      <option value="EUR">EUR</option>
+                      <option value="USD">USD</option>
+                      <option value="HUF">HUF</option>
+                    </select>
+                  </Field>
+
+                  {header.currency !== "RON" ? (
+                    <Field label="Curs">
+                      <input
+                        type="text"
+                        value={header.fxRate}
+                        onChange={(e) => setHeader({ ...header, fxRate: e.target.value })}
+                        onBlur={() =>
+                          setHeader((prev) => ({
+                            ...prev,
+                            fxRate:
+                              prev.currency === "RON"
+                                ? "1"
+                                : clampStrictPositiveString(prev.fxRate, "1"),
+                          }))
+                        }
+                        style={input}
+                        disabled={isPosted}
+                      />
+                    </Field>
+                  ) : null}
+
+                  <Field label="Cod furnizor">
+                    <input
+                      value={header.supplierCode}
+                      readOnly
+                      style={{ ...input, background: "#f8fafc" }}
+                    />
+                  </Field>
+
+                  <Field label="ObservaÈ›ii">
+                    <input
+                      value={header.note}
+                      onChange={(e) => setHeader({ ...header, note: e.target.value })}
+                      style={input}
+                      disabled={isPosted}
+                    />
+                  </Field>
+                </div>
+              </div>
+            ) : null}
+            <div style={isMobileViewport ? { display: "none" } : headerGrid}>
+              <div>
+                <Field label="Locație">
+                <select
+                  value={header.locationId}
+                  onChange={(e) => {
+                    const nextLocationId = e.target.value
+                    setHeader({ ...header, locationId: nextLocationId })
+                    setActiveLocationId(nextLocationId)
+                  }}
+                  style={input}
+                  disabled={isPosted}
+                >
+                  <option value="">Selectează locația</option>
+                  {ensureArray(locations).map((l: AnyObj) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name}
+                    </option>
+                  ))}
+                </select>
+                </Field>
+              </div>
+
+              <Field label="Nr. document">
+                <input
+                  value={header.docNo}
+                  onChange={(e) => setHeader({ ...header, docNo: e.target.value })}
+                  style={input}
+                  disabled={isPosted}
+                />
+              </Field>
+
+              <Field label="Data document">
+                <input
+                  type="date"
+                  value={header.docDate}
+                  onChange={(e) => setHeader({ ...header, docDate: e.target.value })}
+                  style={input}
+                  disabled={isPosted}
+                />
+              </Field>
+
+              <div>
+                <Field label="Furnizor">
+                <input
+                  type="text"
+                  placeholder="Scrie primele 2-3 litere..."
+                  value={supplierSearch}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    setSupplierSearch(value)
+                    setSupplierChosen(false)
+                    setQuickSupplierOpen(false)
+                    setQuickSupplierError("")
+                    setHeader((prev) => ({
+                      ...prev,
+                      supplierId: "",
+                      supplierName: value,
+                      supplierCode: "",
+                    }))
+                  }}
+                  style={input}
+                  disabled={isPosted}
+                />
+
+                {supplierSearch.trim().length >= 2 && !supplierChosen && !isPosted && (
+                  <div style={inlineUnderField}>
+                    {matchedSuppliers.length > 0 ? (
+                      <div style={resultsBox}>
+                        {matchedSuppliers.map((s: AnyObj) => (
+                          <button
+                            key={s.id}
+                            type="button"
+                            style={resultBtn}
+                            onClick={() => chooseSupplier(s)}
+                          >
+                            <div style={{ fontWeight: 600 }}>{s.name}</div>
+                            <div style={{ fontSize: 12, color: "#666" }}>
+                              {s.code || "-"} · CIF {s.cif || "-"}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={inlineActionBox}>
+                        <div style={{ color: "#991b1b", fontSize: 13 }}>
+                          Nu există furnizori găsiți pentru „{supplierSearch}”
+                        </div>
+
+                        <button
+                          type="button"
+                          style={btnSecondary}
+                          onClick={openQuickSupplierModal}
+                        >
+                          Adaugă furnizor nou
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+                </Field>
+              </div>
+
+              <Field label="Cod furnizor">
+                <input
+                  value={header.supplierCode}
+                  readOnly
+                  style={{ ...input, background: "#f8fafc" }}
+                />
+              </Field>
+
+              <Field label="Monedă">
+                <select
+                  value={header.currency}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    setHeader({
+                      ...header,
+                      currency: value,
+                      fxRate: value === "RON" ? "1" : header.fxRate,
+                    })
+                  }}
+                  style={input}
+                  disabled={isPosted}
+                >
+                  <option value="RON">RON</option>
+                  <option value="EUR">EUR</option>
+                  <option value="USD">USD</option>
+                  <option value="HUF">HUF</option>
+                </select>
+              </Field>
+
+              <Field label="Curs">
+                <input
+                  type="text"
+                  value={header.fxRate}
+                  onChange={(e) => setHeader({ ...header, fxRate: e.target.value })}
+                  onBlur={() =>
+                    setHeader((prev) => ({
+                      ...prev,
+                      fxRate:
+                        prev.currency === "RON"
+                          ? "1"
+                          : clampStrictPositiveString(prev.fxRate, "1"),
+                    }))
+                  }
+                  style={input}
+                  disabled={header.currency === "RON" || isPosted}
+                />
+              </Field>
+
+              <Field label="Observații">
+                <input
+                  value={header.note}
+                  onChange={(e) => setHeader({ ...header, note: e.target.value })}
+                  style={input}
+                  disabled={isPosted}
+                />
+              </Field>
+            </div>
+          </Section>
+
+          <Section title="Sumar recepție">
+            <div style={totalsGrid}>
+              <Card title="Linii document" value={String(lines.length)} />
+              <Card title="Produse valide" value={String(uniqueProductsCount)} />
+              <Card title="Cantitate reală" value={`${formatNumber(totals.stockQty)} buc`} />
+              <Card
+                title={`Total cu SGR ${header.currency}`}
+                value={`${formatNumber(totals.withSgrFc)} ${header.currency}`}
+              />
+            </div>
+
+            {duplicateProductIds.size > 0 && (
+              <div style={{ ...warningBox, marginTop: 16 }}>
+                Ai produse duplicate pe mai multe linii. Nu blochez salvarea, dar verifică să nu dublezi recepția din greșeală.
+              </div>
+            )}
+          </Section>
+
+          <Section title="Produse recepționate">
             <div style={toolbarRow}>
               <div>
-                <div style={toolbarTitle}>Grid compact ERP RomÃ¢nia</div>
+                <div style={toolbarTitle}>Grid compact ERP România</div>
                 <div style={toolbarSubtitle}>
-                  Cantitatea este numÄƒr de ambalaje, preÈ›ul este pe bucatÄƒ, iar totalul se calculeazÄƒ pe cantitatea realÄƒ.
+                  Cantitatea este număr de ambalaje, prețul este pe bucată, iar totalul se calculează pe cantitatea reală.
                 </div>
               </div>
 
@@ -1184,7 +1617,7 @@ export default function NirPage() {
                     onClick={() => (isMobileViewport ? openLineEditor() : addLine())}
                     disabled={loadingMeta}
                   >
-                    + AdaugÄƒ linie
+                    + Adaugă linie
                   </button>
                 )}
               </div>
@@ -1194,7 +1627,7 @@ export default function NirPage() {
               <div>Produs</div>
               <div>Ambalaj</div>
               <div>Cant.</div>
-              <div>PreÈ›/buc</div>
+              <div>Preț/buc</div>
               <div>TVA</div>
               <div>Cant./ambalaj</div>
               <div>Total</div>
@@ -1231,8 +1664,8 @@ export default function NirPage() {
                             <div style={{ minWidth: 0 }}>
                               <div style={mobileLineTitle}>{line.search.trim() || "Linie fara produs"}</div>
                               <div style={mobileLineMeta}>
-                                Ambalaj {line.uomCode || "-"} Â· {line.autoFactor ? "factor auto" : "factor manual"}
-                                {line.isSgr ? " Â· SGR" : ""}
+                                Ambalaj {line.uomCode || "-"} · {line.autoFactor ? "factor auto" : "factor manual"}
+                                {line.isSgr ? " · SGR" : ""}
                               </div>
                             </div>
 
@@ -1244,13 +1677,13 @@ export default function NirPage() {
 
                           <div style={mobileLineFacts}>
                             <div style={mobileLineFact}><strong>Cant.</strong> {formatQtyRo(computed.qty)}</div>
-                            <div style={mobileLineFact}><strong>PreÈ›</strong> {formatMoneyRo(computed.price)}</div>
+                            <div style={mobileLineFact}><strong>Preț</strong> {formatMoneyRo(computed.price)}</div>
                             <div style={mobileLineFact}><strong>TVA</strong> {formatNumberRo(computed.vat, 0)}%</div>
                             <div style={mobileLineFact}><strong>Factor</strong> {formatFactorRo(computed.factor)}</div>
                           </div>
 
                           {isDuplicate && (
-                            <div style={duplicateMeta}>AtenÈ›ie: produsul apare È™i pe altÄƒ linie.</div>
+                            <div style={duplicateMeta}>Atenție: produsul apare și pe altă linie.</div>
                           )}
 
                           <div style={mobileLineActions}>
@@ -1259,7 +1692,7 @@ export default function NirPage() {
                             </button>
                             {!isPosted && (
                               <button type="button" style={btnDangerMobile} onClick={() => removeLine(line.id)}>
-                                È˜terge
+                                Șterge
                               </button>
                             )}
                           </div>
@@ -1292,14 +1725,14 @@ export default function NirPage() {
 
                           {line.productId && (
                             <div style={selectedProductMeta}>
-                              Selectat Â· ambalaj {line.uomCode || "-"} {line.isSgr ? "Â· SGR" : ""}
-                              {line.autoFactor ? " Â· factor auto" : " Â· factor manual"}
+                              Selectat · ambalaj {line.uomCode || "-"} {line.isSgr ? "· SGR" : ""}
+                              {line.autoFactor ? " · factor auto" : " · factor manual"}
                             </div>
                           )}
 
                           {isDuplicate && (
                             <div style={duplicateMeta}>
-                              AtenÈ›ie: produsul apare È™i pe altÄƒ linie.
+                              Atenție: produsul apare și pe altă linie.
                             </div>
                           )}
                         </div>
@@ -1382,7 +1815,7 @@ export default function NirPage() {
                           <div style={totalCell}>
                           <div style={totalValue}>{formatMoneyRo(computed.withSgrFc)}</div>
                           <div style={totalMeta}>
-                            {computed.qty.toFixed(2)} amb Ã— {computed.factor.toFixed(2)} ={" "}
+                            {computed.qty.toFixed(2)} amb × {computed.factor.toFixed(2)} ={" "}
                             {computed.qtyBase.toFixed(2)} buc
                           </div>
                           </div>
@@ -1408,7 +1841,7 @@ export default function NirPage() {
                               }
                               onClick={() => removeLine(line.id)}
                             >
-                              âœ•
+                              ✕
                             </button>
                           )}
                         </div>
@@ -1418,7 +1851,7 @@ export default function NirPage() {
                         {line.productId && (
                           <div style={lineInsightGrid}>
                             <div style={insightChip}>
-                              <strong>RelaÈ›ie:</strong> {computed.qty.toFixed(2)} amb Ã—{" "}
+                              <strong>Relație:</strong> {computed.qty.toFixed(2)} amb ×{" "}
                               {computed.factor.toFixed(2)} = {computed.qtyBase.toFixed(2)} buc
                             </div>
 
@@ -1434,7 +1867,7 @@ export default function NirPage() {
                               <div style={sgrInlineBox}>
                                 <span style={sgrBadge}>SGR</span>
                                 <span>
-                                  {computed.qtyBase.toFixed(2)} buc Ã— {computed.sgrUnit.toFixed(2)} ={" "}
+                                  {computed.qtyBase.toFixed(2)} buc × {computed.sgrUnit.toFixed(2)} ={" "}
                                   {computed.sgrFc.toFixed(2)}
                                 </span>
                               </div>
@@ -1465,7 +1898,7 @@ export default function NirPage() {
                                   >
                                     <div style={{ fontWeight: 600 }}>{p.name}</div>
                                     <div style={{ fontSize: 12, color: "#64748b" }}>
-                                      {p.sku || "-"} Â· Ambalaj {p.purchaseUom?.code || p.uom?.code || "-"} Â· TVA {p.vatRate?.rate ?? "-"}%
+                                      {p.sku || "-"} · Ambalaj {p.purchaseUom?.code || p.uom?.code || "-"} · TVA {p.vatRate?.rate ?? "-"}%
                                     </div>
                                   </button>
                                 ))}
@@ -1473,7 +1906,7 @@ export default function NirPage() {
                             ) : (
                               <div style={quickAddWrap}>
                                 <div style={{ color: "#991b1b", fontSize: 13 }}>
-                                  Nu existÄƒ produse gÄƒsite pentru â€ž{line.search}â€
+                                  Nu există produse găsite pentru „{line.search}”
                                 </div>
 
                                 {canAddQuickProduct && (
@@ -1482,7 +1915,7 @@ export default function NirPage() {
                                     style={btnSecondary}
                                     onClick={() => openQuickProduct(line)}
                                   >
-                                    AdaugÄƒ produs nou
+                                    Adaugă produs nou
                                   </button>
                                 )}
                               </div>
@@ -1497,490 +1930,47 @@ export default function NirPage() {
                 })}
                 {visibleLines.length === 0 && (
                   <div style={emptyMobileLinesBox}>
-                    Nu ai Ã®ncÄƒ nicio linie salvatÄƒ. ApasÄƒ `AdaugÄƒ linie` È™i completeazÄƒ produsul Ã®n popup.
+                    Nu ai încă nicio linie salvată. Apasă `Adaugă linie` și completează produsul în popup.
                   </div>
                 )}
               </div>
             </div>
           </Section>
-          </div>
 
-          <div className="space-y-3">
-            <div className="no-print">
-      <div className="no-print" style={isMobileViewport ? topActionsMobile : topActions}>
-        {isMobileViewport ? (
-          <>
-            <div style={topActionsPrimaryMobile}>
-              {!isPosted ? (
-                <>
-                  <button
-                    style={{ ...btnPrimary, width: "100%" }}
-                    onClick={() => saveNir(true)}
-                    disabled={saving || loadingReceipt}
-                  >
-                    {saving ? "Se salveazÄƒ..." : "SalveazÄƒ È™i posteazÄƒ"}
-                  </button>
-                  <button
-                    style={{ ...btnSecondary, width: "100%" }}
-                    onClick={() => saveNir(false)}
-                    disabled={saving || loadingReceipt}
-                  >
-                    {saving ? "Se salveazÄƒ..." : "SalveazÄƒ draft"}
-                  </button>
-                </>
-              ) : (
-                <button
-                  style={{ ...btnSecondary, width: "100%" }}
-                  onClick={handlePrint}
-                  disabled={!receiptId || loadingReceipt}
-                >
-                  PrinteazÄƒ document
-                </button>
-              )}
-            </div>
-
-            <div style={topActionsCompactRowMobile}>
-              <a href="/inregistrare-document/nir" style={{ textDecoration: "none" }}>
-                <button style={btnGhostMobile}>ÃŽnapoi</button>
-              </a>
-              <button
-                style={btnGhostMobile}
-                onClick={handlePrint}
-                disabled={!receiptId || loadingReceipt}
-              >
-                Print
-              </button>
-              <button
-                style={btnGhostMobile}
-                onClick={exportPdf}
-                disabled={!receiptId || loadingReceipt}
-              >
-                PDF
-              </button>
-            </div>
-          </>
-        ) : null}
-        <div style={isMobileViewport ? { display: "none" } : { display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <a href="/inregistrare-document/nir" style={{ textDecoration: "none" }}>
-            <button style={btnSecondary}>ÃŽnapoi la listÄƒ</button>
-          </a>
-
-          <button
-            style={btnSecondary}
-            onClick={handlePrint}
-            disabled={!receiptId || loadingReceipt}
-          >
-            PrinteazÄƒ
-          </button>
-
-          <button
-            style={btnSecondary}
-            onClick={exportPdf}
-            disabled={!receiptId || loadingReceipt}
-          >
-            PDF
-          </button>
-
-          {!isPosted && (
-            <>
-              <button
-                style={btnSecondary}
-                onClick={() => saveNir(false)}
-                disabled={saving || loadingReceipt}
-              >
-                {saving ? "Se salveazÄƒ..." : "SalveazÄƒ draft"}
-              </button>
-
-              <button
-                style={btnPrimary}
-                onClick={() => saveNir(true)}
-                disabled={saving || loadingReceipt}
-              >
-                {saving ? "Se salveazÄƒ..." : "SalveazÄƒ È™i posteazÄƒ"}
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-            </div>
-          <Section title="Antet document">
-            {isMobileViewport ? (
-              <div style={mobileHeaderStack}>
-                <div style={mobileHeaderHeroCard}>
-                  <div style={mobileHeaderHeroLabel}>Furnizor</div>
-                  <Field label="">
-                    <input
-                      type="text"
-                      placeholder="Scrie primele 2-3 litere..."
-                      value={supplierSearch}
-                      onChange={(e) => {
-                        const value = e.target.value
-                        setSupplierSearch(value)
-                        setSupplierChosen(false)
-                        setQuickSupplierOpen(false)
-                        setQuickSupplierError("")
-                        setHeader((prev) => ({
-                          ...prev,
-                          supplierId: "",
-                          supplierName: value,
-                          supplierCode: "",
-                        }))
-                      }}
-                      style={input}
-                      disabled={isPosted}
-                    />
-
-                    {supplierSearch.trim().length >= 2 && !supplierChosen && !isPosted && (
-                      <div style={inlineUnderField}>
-                        {matchedSuppliers.length > 0 ? (
-                          <div style={resultsBox}>
-                            {matchedSuppliers.map((s: AnyObj) => (
-                              <button
-                                key={s.id}
-                                type="button"
-                                style={resultBtn}
-                                onClick={() => chooseSupplier(s)}
-                              >
-                                <div style={{ fontWeight: 600 }}>{s.name}</div>
-                                <div style={{ fontSize: 12, color: "#666" }}>
-                                  {s.code || "-"} Ã‚Â· CIF {s.cif || "-"}
-                                </div>
-                              </button>
-                            ))}
-                          </div>
-                        ) : (
-                          <div style={inlineActionBox}>
-                            <div style={{ color: "#991b1b", fontSize: 13 }}>
-                              Nu existÃ„Æ’ furnizori gÃ„Æ’siÃˆâ€ºi pentru Ã¢â‚¬Å¾{supplierSearch}Ã¢â‚¬Â
-                            </div>
-
-                            <button
-                              type="button"
-                              style={btnSecondary}
-                              onClick={openQuickSupplierModal}
-                            >
-                              AdaugÃ„Æ’ furnizor nou
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </Field>
-                </div>
-
-                <div style={mobileHeaderCardGrid}>
-                  <Field label="LocaÃˆâ€ºie">
-                    <select
-                      value={header.locationId}
-                      onChange={(e) => {
-                        const nextLocationId = e.target.value
-                        setHeader({ ...header, locationId: nextLocationId })
-                        setActiveLocationId(nextLocationId)
-                      }}
-                      style={input}
-                      disabled={isPosted}
-                    >
-                      <option value="">SelecteazÃ„Æ’ locaÃˆâ€ºia</option>
-                      {ensureArray(locations).map((l: AnyObj) => (
-                        <option key={l.id} value={l.id}>
-                          {l.name}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-
-                  <Field label="Nr. document">
-                    <input
-                      value={header.docNo}
-                      onChange={(e) => setHeader({ ...header, docNo: e.target.value })}
-                      style={input}
-                      disabled={isPosted}
-                    />
-                  </Field>
-
-                  <Field label="Data document">
-                    <input
-                      type="date"
-                      value={header.docDate}
-                      onChange={(e) => setHeader({ ...header, docDate: e.target.value })}
-                      style={input}
-                      disabled={isPosted}
-                    />
-                  </Field>
-
-                  <Field label="MonedÃ„Æ’">
-                    <select
-                      value={header.currency}
-                      onChange={(e) => {
-                        const value = e.target.value
-                        setHeader({
-                          ...header,
-                          currency: value,
-                          fxRate: value === "RON" ? "1" : header.fxRate,
-                        })
-                      }}
-                      style={input}
-                      disabled={isPosted}
-                    >
-                      <option value="RON">RON</option>
-                      <option value="EUR">EUR</option>
-                      <option value="USD">USD</option>
-                      <option value="HUF">HUF</option>
-                    </select>
-                  </Field>
-
-                  {header.currency !== "RON" ? (
-                    <Field label="Curs">
-                      <input
-                        type="text"
-                        value={header.fxRate}
-                        onChange={(e) => setHeader({ ...header, fxRate: e.target.value })}
-                        onBlur={() =>
-                          setHeader((prev) => ({
-                            ...prev,
-                            fxRate:
-                              prev.currency === "RON"
-                                ? "1"
-                                : clampStrictPositiveString(prev.fxRate, "1"),
-                          }))
-                        }
-                        style={input}
-                        disabled={isPosted}
-                      />
-                    </Field>
-                  ) : null}
-
-                  <Field label="Cod furnizor">
-                    <input
-                      value={header.supplierCode}
-                      readOnly
-                      style={{ ...input, background: "#f8fafc" }}
-                    />
-                  </Field>
-
-                  <Field label="ObservaÃˆâ€ºii">
-                    <input
-                      value={header.note}
-                      onChange={(e) => setHeader({ ...header, note: e.target.value })}
-                      style={input}
-                      disabled={isPosted}
-                    />
-                  </Field>
-                </div>
-              </div>
-            ) : null}
-            <div style={isMobileViewport ? { display: "none" } : headerGrid}>
-              <div>
-                <Field label="LocaÈ›ie">
-                <select
-                  value={header.locationId}
-                  onChange={(e) => {
-                    const nextLocationId = e.target.value
-                    setHeader({ ...header, locationId: nextLocationId })
-                    setActiveLocationId(nextLocationId)
-                  }}
-                  style={input}
-                  disabled={isPosted}
-                >
-                  <option value="">SelecteazÄƒ locaÈ›ia</option>
-                  {ensureArray(locations).map((l: AnyObj) => (
-                    <option key={l.id} value={l.id}>
-                      {l.name}
-                    </option>
-                  ))}
-                </select>
-                </Field>
-              </div>
-
-              <Field label="Nr. document">
-                <input
-                  value={header.docNo}
-                  onChange={(e) => setHeader({ ...header, docNo: e.target.value })}
-                  style={input}
-                  disabled={isPosted}
-                />
-              </Field>
-
-              <Field label="Data document">
-                <input
-                  type="date"
-                  value={header.docDate}
-                  onChange={(e) => setHeader({ ...header, docDate: e.target.value })}
-                  style={input}
-                  disabled={isPosted}
-                />
-              </Field>
-
-              <div>
-                <Field label="Furnizor">
-                <input
-                  type="text"
-                  placeholder="Scrie primele 2-3 litere..."
-                  value={supplierSearch}
-                  onChange={(e) => {
-                    const value = e.target.value
-                    setSupplierSearch(value)
-                    setSupplierChosen(false)
-                    setQuickSupplierOpen(false)
-                    setQuickSupplierError("")
-                    setHeader((prev) => ({
-                      ...prev,
-                      supplierId: "",
-                      supplierName: value,
-                      supplierCode: "",
-                    }))
-                  }}
-                  style={input}
-                  disabled={isPosted}
-                />
-
-                {supplierSearch.trim().length >= 2 && !supplierChosen && !isPosted && (
-                  <div style={inlineUnderField}>
-                    {matchedSuppliers.length > 0 ? (
-                      <div style={resultsBox}>
-                        {matchedSuppliers.map((s: AnyObj) => (
-                          <button
-                            key={s.id}
-                            type="button"
-                            style={resultBtn}
-                            onClick={() => chooseSupplier(s)}
-                          >
-                            <div style={{ fontWeight: 600 }}>{s.name}</div>
-                            <div style={{ fontSize: 12, color: "#666" }}>
-                              {s.code || "-"} Â· CIF {s.cif || "-"}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <div style={inlineActionBox}>
-                        <div style={{ color: "#991b1b", fontSize: 13 }}>
-                          Nu existÄƒ furnizori gÄƒsiÈ›i pentru â€ž{supplierSearch}â€
-                        </div>
-
-                        <button
-                          type="button"
-                          style={btnSecondary}
-                          onClick={openQuickSupplierModal}
-                        >
-                          AdaugÄƒ furnizor nou
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-                </Field>
-              </div>
-
-              <Field label="Cod furnizor">
-                <input
-                  value={header.supplierCode}
-                  readOnly
-                  style={{ ...input, background: "#f8fafc" }}
-                />
-              </Field>
-
-              <Field label="MonedÄƒ">
-                <select
-                  value={header.currency}
-                  onChange={(e) => {
-                    const value = e.target.value
-                    setHeader({
-                      ...header,
-                      currency: value,
-                      fxRate: value === "RON" ? "1" : header.fxRate,
-                    })
-                  }}
-                  style={input}
-                  disabled={isPosted}
-                >
-                  <option value="RON">RON</option>
-                  <option value="EUR">EUR</option>
-                  <option value="USD">USD</option>
-                  <option value="HUF">HUF</option>
-                </select>
-              </Field>
-
-              <Field label="Curs">
-                <input
-                  type="text"
-                  value={header.fxRate}
-                  onChange={(e) => setHeader({ ...header, fxRate: e.target.value })}
-                  onBlur={() =>
-                    setHeader((prev) => ({
-                      ...prev,
-                      fxRate:
-                        prev.currency === "RON"
-                          ? "1"
-                          : clampStrictPositiveString(prev.fxRate, "1"),
-                    }))
-                  }
-                  style={input}
-                  disabled={header.currency === "RON" || isPosted}
-                />
-              </Field>
-
-              <Field label="ObservaÈ›ii">
-                <input
-                  value={header.note}
-                  onChange={(e) => setHeader({ ...header, note: e.target.value })}
-                  style={input}
-                  disabled={isPosted}
-                />
-              </Field>
-            </div>
-          </Section>
-          <Section title="Sumar recepÈ›ie">
-            <div style={totalsGrid}>
-              <Card title="Linii document" value={String(lines.length)} />
-              <Card title="Produse valide" value={String(uniqueProductsCount)} />
-              <Card title="Cantitate realÄƒ" value={`${formatNumber(totals.stockQty)} buc`} />
-              <Card
-                title={`Total cu SGR ${header.currency}`}
-                value={`${formatNumber(totals.withSgrFc)} ${header.currency}`}
-              />
-            </div>
-
-            {duplicateProductIds.size > 0 && (
-              <div style={{ ...warningBox, marginTop: 16 }}>
-                Ai produse duplicate pe mai multe linii. Nu blochez salvarea, dar verificÄƒ sÄƒ nu dublezi recepÈ›ia din greÈ™ealÄƒ.
-              </div>
-            )}
-          </Section>
           <Section title="Totaluri">
             <div style={totalsGrid}>
               <Card title={`Net ${header.currency}`} value={`${formatNumber(totals.netFc)} ${header.currency}`} />
               <Card title={`TVA ${header.currency}`} value={`${formatNumber(totals.vatFc)} ${header.currency}`} />
               <Card title={`SGR ${header.currency}`} value={`${formatNumber(totals.sgrFc)} ${header.currency}`} />
-              <Card title={`Total fÄƒrÄƒ SGR ${header.currency}`} value={`${formatNumber(totals.grossFc)} ${header.currency}`} />
+              <Card title={`Total fără SGR ${header.currency}`} value={`${formatNumber(totals.grossFc)} ${header.currency}`} />
               <Card title={`Total cu SGR ${header.currency}`} value={`${formatNumber(totals.withSgrFc)} ${header.currency}`} />
               {header.currency !== "RON" && (
                 <>
-                  <Card title="Total RON fÄƒrÄƒ SGR" value={`${formatNumber(totals.grossRon)} RON`} />
+                  <Card title="Total RON fără SGR" value={`${formatNumber(totals.grossRon)} RON`} />
                   <Card title="SGR RON" value={`${formatNumber(totals.sgrRon)} RON`} />
                   <Card title="Total RON cu SGR" value={`${formatNumber(totals.withSgrRon)} RON`} />
                 </>
               )}
             </div>
           </Section>
-          </div>
-        </div>
+        </>
       )}
+
       {lineEditorOpen && lineDraft && (
         <div style={modalOverlay}>
           <div style={{ ...modalCard, maxWidth: 720 }}>
             <div style={modalHeader}>
               <div>
                 <h3 style={{ margin: 0 }}>
-                  {lineEditorMode === "create" ? "AdaugÄƒ linie produs" : "Detalii linie produs"}
+                  {lineEditorMode === "create" ? "Adaugă linie produs" : "Detalii linie produs"}
                 </h3>
                 <div style={{ color: "#64748b", fontSize: 13, marginTop: 4 }}>
-                  Completezi produsul Ã®n popup, apoi Ã®n paginÄƒ rÄƒmÃ¢ne doar rezumatul curat al liniei.
+                  Completezi produsul în popup, apoi în pagină rămâne doar rezumatul curat al liniei.
                 </div>
               </div>
 
               <button type="button" onClick={closeLineEditor} style={btnSecondary}>
-                ÃŽnchide
+                Închide
               </button>
             </div>
 
@@ -1990,7 +1980,7 @@ export default function NirPage() {
               <Field label="Produs">
                 <input
                   type="text"
-                  placeholder="CautÄƒ produs..."
+                  placeholder="Caută produs..."
                   value={lineDraft.search}
                   onChange={(e) =>
                     setDraftLineValue({
@@ -2018,7 +2008,7 @@ export default function NirPage() {
                 />
               </Field>
 
-              <Field label="PreÈ› / bucatÄƒ">
+              <Field label="Preț / bucată">
                 <input
                   type="text"
                   value={lineDraft.price}
@@ -2062,7 +2052,7 @@ export default function NirPage() {
                   {formatMoneyRo(getLineComputed(lineDraft, header.fxRate).withSgrFc)}
                 </div>
                 <div style={totalMeta}>
-                  {formatQtyRo(getLineComputed(lineDraft, header.fxRate).qty)} amb Ã—{" "}
+                  {formatQtyRo(getLineComputed(lineDraft, header.fxRate).qty)} amb ×{" "}
                   {formatFactorRo(getLineComputed(lineDraft, header.fxRate).factor)} ={" "}
                   {formatQtyRo(getLineComputed(lineDraft, header.fxRate).qtyBase)} buc
                 </div>
@@ -2073,7 +2063,7 @@ export default function NirPage() {
                   {lineDraft.isSgr && (
                     <div style={sgrInlineBox}>
                       <span style={sgrBadge}>SGR</span>
-                      <span>Produsul are garanÈ›ie returnabilÄƒ activÄƒ.</span>
+                      <span>Produsul are garanție returnabilă activă.</span>
                     </div>
                   )}
                   {!isPosted && (
@@ -2101,7 +2091,7 @@ export default function NirPage() {
                         >
                           <div style={{ fontWeight: 600 }}>{p.name}</div>
                           <div style={{ fontSize: 12, color: "#64748b" }}>
-                            {p.sku || "-"} Â· Ambalaj {p.purchaseUom?.code || p.uom?.code || "-"} Â· TVA {p.vatRate?.rate ?? "-"}%
+                            {p.sku || "-"} · Ambalaj {p.purchaseUom?.code || p.uom?.code || "-"} · TVA {p.vatRate?.rate ?? "-"}%
                           </div>
                         </button>
                       ))}
@@ -2109,12 +2099,12 @@ export default function NirPage() {
                   ) : (
                     <div style={quickAddWrap}>
                       <div style={{ color: "#991b1b", fontSize: 13 }}>
-                        Nu existÄƒ produse gÄƒsite pentru â€ž{lineDraft.search}â€
+                        Nu există produse găsite pentru „{lineDraft.search}”
                       </div>
 
                       {!isPosted && uoms.length > 0 && vatRates.length > 0 && (
                         <button type="button" style={btnSecondary} onClick={() => openQuickProduct(lineDraft)}>
-                          AdaugÄƒ produs nou
+                          Adaugă produs nou
                         </button>
                       )}
                     </div>
@@ -2125,11 +2115,11 @@ export default function NirPage() {
 
             <div style={modalActions}>
               <button type="button" style={btnSecondary} onClick={closeLineEditor}>
-                RenunÈ›Äƒ
+                Renunță
               </button>
               {!isPosted && (
                 <button type="button" style={btnPrimary} onClick={saveLineDraft}>
-                  SalveazÄƒ linia
+                  Salvează linia
                 </button>
               )}
             </div>
@@ -2142,14 +2132,14 @@ export default function NirPage() {
           <div style={modalCard}>
             <div style={modalHeader}>
               <div>
-                <h3 style={{ margin: 0 }}>AdaugÄƒ produs nou</h3>
+                <h3 style={{ margin: 0 }}>Adaugă produs nou</h3>
                 <div style={{ color: "#666", fontSize: 13, marginTop: 4 }}>
-                  Produsul se salveazÄƒ Ã®n nomenclator È™i se selecteazÄƒ automat Ã®n linia curentÄƒ.
+                  Produsul se salvează în nomenclator și se selectează automat în linia curentă.
                 </div>
               </div>
 
               <button type="button" onClick={closeQuickProduct} style={btnSecondary}>
-                ÃŽnchide
+                Închide
               </button>
             </div>
 
@@ -2174,7 +2164,7 @@ export default function NirPage() {
                   }
                   style={input}
                 >
-                  <option value="">SelecteazÄƒ UM</option>
+                  <option value="">Selectează UM</option>
                   {uoms.map((u: AnyObj) => (
                     <option key={u.id} value={u.id}>
                       {u.code} - {u.name}
@@ -2194,7 +2184,7 @@ export default function NirPage() {
                   }
                   style={input}
                 >
-                  <option value="">SelecteazÄƒ ambalaj</option>
+                  <option value="">Selectează ambalaj</option>
                   {uoms.map((u: AnyObj) => (
                     <option key={u.id} value={u.id}>
                       {u.code} - {u.name}
@@ -2233,7 +2223,7 @@ export default function NirPage() {
                   }
                   style={input}
                 >
-                  <option value="">SelecteazÄƒ TVA</option>
+                  <option value="">Selectează TVA</option>
                   {vatRates.map((v: AnyObj) => (
                     <option key={v.id} value={v.id}>
                       {v.name} - {v.rate}%
@@ -2242,7 +2232,7 @@ export default function NirPage() {
                 </select>
               </Field>
 
-              <Field label="PreÈ› implicit">
+              <Field label="Preț implicit">
                 <input
                   value={quickProductForm.price}
                   onChange={(e) =>
@@ -2273,14 +2263,14 @@ export default function NirPage() {
                       }))
                     }
                   />
-                  <span>Produs cu SGR 0.50 fÄƒrÄƒ TVA</span>
+                  <span>Produs cu SGR 0.50 fără TVA</span>
                 </label>
               </Field>
             </div>
 
             <div style={modalActions}>
               <button type="button" onClick={closeQuickProduct} style={btnSecondary}>
-                RenunÈ›Äƒ
+                Renunță
               </button>
               <button
                 type="button"
@@ -2288,7 +2278,7 @@ export default function NirPage() {
                 style={btnPrimary}
                 disabled={quickProductLoading}
               >
-                {quickProductLoading ? "Se salveazÄƒ..." : "SalveazÄƒ produs"}
+                {quickProductLoading ? "Se salvează..." : "Salvează produs"}
               </button>
             </div>
           </div>
@@ -2300,14 +2290,14 @@ export default function NirPage() {
           <div style={modalCard}>
             <div style={modalHeader}>
               <div>
-                <h3 style={{ margin: 0 }}>AdaugÄƒ furnizor nou</h3>
+                <h3 style={{ margin: 0 }}>Adaugă furnizor nou</h3>
                 <div style={{ color: "#666", fontSize: 13, marginTop: 4 }}>
-                  Furnizorul se salveazÄƒ È™i se selecteazÄƒ automat Ã®n antet.
+                  Furnizorul se salvează și se selectează automat în antet.
                 </div>
               </div>
 
               <button type="button" onClick={closeQuickSupplier} style={btnSecondary}>
-                ÃŽnchide
+                Închide
               </button>
             </div>
 
@@ -2342,7 +2332,7 @@ export default function NirPage() {
                 />
               </Field>
 
-              <Field label="Reg. comerÈ›ului">
+              <Field label="Reg. comerțului">
                 <input
                   value={quickSupplierForm.regNo}
                   onChange={(e) =>
@@ -2352,7 +2342,7 @@ export default function NirPage() {
                 />
               </Field>
 
-              <Field label="AdresÄƒ">
+              <Field label="Adresă">
                 <input
                   value={quickSupplierForm.address}
                   onChange={(e) =>
@@ -2385,7 +2375,7 @@ export default function NirPage() {
 
             <div style={modalActions}>
               <button type="button" onClick={closeQuickSupplier} style={btnSecondary}>
-                RenunÈ›Äƒ
+                Renunță
               </button>
               <button
                 type="button"
@@ -2393,7 +2383,7 @@ export default function NirPage() {
                 style={btnPrimary}
                 disabled={quickSupplierLoading}
               >
-                {quickSupplierLoading ? "Se salveazÄƒ..." : "SalveazÄƒ furnizor"}
+                {quickSupplierLoading ? "Se salvează..." : "Salvează furnizor"}
               </button>
             </div>
           </div>
@@ -3064,4 +3054,3 @@ const modalActions: CSSProperties = {
   marginTop: 12,
   flexWrap: "wrap",
 }
-
