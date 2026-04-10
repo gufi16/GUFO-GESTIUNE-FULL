@@ -1,9 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Check, ClipboardList, MapPin, PackageSearch, Search, Trash2 } from "lucide-react"
+import { Check, Search, Trash2 } from "lucide-react"
 import PageHeader from "../components/PageHeader"
-import { API_BASE as API, getToken, authHeaders } from "../lib/api"
+import {
+  DocumentField,
+  DocumentMetric,
+  DocumentSection,
+  InlineNotice,
+  documentButtonDangerClass,
+  documentButtonPrimaryClass,
+  documentInputClass,
+  documentTextareaClass,
+} from "../components/DocumentUi"
+import { API_BASE as API, getToken } from "../lib/api"
 import { getActiveLocationId, setActiveLocationId, subscribeToActiveLocation } from "../lib/location"
-
 
 type LocationOption = {
   id: string
@@ -75,7 +84,7 @@ function normalizeLocations(payload: any): LocationOption[] {
 
   return rows.map((item: any) => ({
     id: String(item.id || item.locationId || ""),
-    name: String(item.name || item.label || "Locație"),
+    name: String(item.name || item.label || "Loca?ie"),
   }))
 }
 
@@ -87,13 +96,11 @@ function buildStockMap(payload: any) {
       : []
 
   const map: Record<string, number> = {}
-
   for (const row of rows) {
     const productId = String(row.productId || "")
     if (!productId) continue
     map[productId] = toNumber(row.qty)
   }
-
   return map
 }
 
@@ -105,7 +112,7 @@ function diffTone(value: number) {
 
 export default function InventarNou() {
   const [locations, setLocations] = useState<LocationOption[]>([])
-  const [locationId, setLocationId] = useState(getActiveLocationId())
+  const [locationId, setLocationIdState] = useState(getActiveLocationId())
   const [note, setNote] = useState("")
   const [query, setQuery] = useState("")
   const [products, setProducts] = useState<ProductOption[]>([])
@@ -123,37 +130,27 @@ export default function InventarNou() {
     loadLocations()
     loadProducts()
     const unsubscribe = subscribeToActiveLocation((nextLocationId) => {
-      setLocationId((current) => current || nextLocationId)
+      setLocationIdState((current) => current || nextLocationId)
     })
     return unsubscribe
   }, [])
 
   useEffect(() => {
-    if (locationId) {
-      loadStockForLocation(locationId)
-    }
+    if (locationId) loadStockForLocation(locationId)
   }, [locationId])
 
   async function loadLocations() {
     try {
-      const token =
-        localStorage.getItem("access_token") ||
-        localStorage.getItem("token") ||
-        ""
-
+      const token = getToken() || ""
       const res = await fetch(`${API}/api/v1/meta/locations`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
-
       const json = await res.json().catch(() => ({}))
       const normalized = normalizeLocations(json)
       setLocations(normalized)
-
       if (normalized.length) {
-        const preferredLocationId =
-          normalized.find((location) => location.id === getActiveLocationId())?.id || normalized[0].id
-
-        setLocationId((current) => current || preferredLocationId)
+        const preferred = normalized.find((location) => location.id === getActiveLocationId())?.id || normalized[0].id
+        setLocationIdState((current) => current || preferred)
       }
     } catch {
       setLocations([])
@@ -163,16 +160,10 @@ export default function InventarNou() {
   async function loadProducts() {
     try {
       setLoadingProducts(true)
-
-      const token =
-        localStorage.getItem("access_token") ||
-        localStorage.getItem("token") ||
-        ""
-
+      const token = getToken() || ""
       const res = await fetch(`${API}/api/v1/products`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
-
       const json = await res.json().catch(() => ({}))
       setProducts(normalizeProducts(json))
     } catch {
@@ -184,51 +175,35 @@ export default function InventarNou() {
 
   async function loadStockForLocation(selectedLocationId: string) {
     try {
-      const token =
-        localStorage.getItem("access_token") ||
-        localStorage.getItem("token") ||
-        ""
-
-      const res = await fetch(
-        `${API}/api/v1/stock/by-location?locationId=${encodeURIComponent(selectedLocationId)}`,
-        {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        }
-      )
-
+      const token = getToken() || ""
+      const res = await fetch(`${API}/api/v1/stock/by-location?locationId=${encodeURIComponent(selectedLocationId)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
       const json = await res.json().catch(() => ({}))
       const nextMap = buildStockMap(json)
-
       setStockMap(nextMap)
-
-      setItems((prev) =>
-        prev.map((item) => ({
-          ...item,
-          stock: nextMap[item.productId] ?? 0,
-        }))
-      )
+      setItems((prev) => prev.map((item) => ({ ...item, stock: nextMap[item.productId] ?? 0 })))
     } catch {
       setStockMap({})
-      setItems((prev) =>
-        prev.map((item) => ({
-          ...item,
-          stock: 0,
-        }))
-      )
+      setItems((prev) => prev.map((item) => ({ ...item, stock: 0 })))
     }
+  }
+
+  function setLocation(nextLocationId: string) {
+    setLocationIdState(nextLocationId)
+    setActiveLocationId(nextLocationId)
   }
 
   function focusQty(productId: string) {
     setTimeout(() => {
       qtyRefs.current[productId]?.focus()
       qtyRefs.current[productId]?.select()
-    }, 60)
+    }, 50)
   }
 
   function addProduct(product: ProductOption) {
     setError("")
     setMessage("")
-
     const existing = items.find((item) => item.productId === product.id)
     if (existing) {
       focusQty(product.id)
@@ -237,7 +212,6 @@ export default function InventarNou() {
     }
 
     const realStock = stockMap[product.id] ?? 0
-
     setItems((prev) => [
       ...prev,
       {
@@ -249,20 +223,13 @@ export default function InventarNou() {
         um: pickUnit(product),
       },
     ])
-
     setQuery("")
     focusQty(product.id)
   }
 
   function updateCounted(productId: string, value: string) {
-    const counted = value === "" ? 0 : toNumber(value)
-    setItems((prev) =>
-      prev.map((item) =>
-        item.productId === productId
-          ? { ...item, counted }
-          : item
-      )
-    )
+    const counted = value === "" ? 0 : toNumber(String(value).replace(",", "."))
+    setItems((prev) => prev.map((item) => item.productId === productId ? { ...item, counted } : item))
   }
 
   function removeItem(productId: string) {
@@ -271,12 +238,17 @@ export default function InventarNou() {
 
   async function saveInventory() {
     if (!locationId) {
-      setError("Selectează locația.")
+      setError("Selecteaza loca?ia.")
       return
     }
 
-    if (!items.length) {
-      setError("Adaugă cel puțin un produs.")
+    const lines = items.map((item) => ({
+      productId: item.productId,
+      countedQty: item.counted,
+    }))
+
+    if (!lines.length) {
+      setError("Adauga cel pu?in un produs.")
       return
     }
 
@@ -284,37 +256,20 @@ export default function InventarNou() {
       setSaving(true)
       setError("")
       setMessage("")
-
-      const token =
-        localStorage.getItem("access_token") ||
-        localStorage.getItem("token") ||
-        ""
-
-      const payload = {
-        locationId,
-        note,
-        items: items.map((item) => ({
-          productId: item.productId,
-          countedQty: item.counted,
-        })),
-      }
-
+      const token = getToken() || ""
       const res = await fetch(`${API}/api/v1/inventory`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ locationId, note, items: lines }),
       })
-
       const json = await res.json().catch(() => ({}))
-
       if (!res.ok) {
         setError(json?.error || "Inventarul nu a putut fi salvat.")
         return
       }
-
       setMessage("Inventarul a fost salvat.")
       setItems([])
       setQuery("")
@@ -330,284 +285,182 @@ export default function InventarNou() {
   const filteredProducts = useMemo(() => {
     const term = query.trim().toLowerCase()
     if (!term) return []
-
     return products
-      .filter((product) => {
-        const fields = [
-          product.name,
-          product.code || "",
-          product.sku || "",
-          product.barcode || "",
-        ]
-          .join(" ")
-          .toLowerCase()
-
-        return fields.includes(term)
-      })
-      .slice(0, 12)
+      .filter((product) => [product.name, product.code || "", product.sku || "", product.barcode || ""].join(" ").toLowerCase().includes(term))
+      .slice(0, 10)
   }, [products, query])
 
-  const selectedLocationName =
-    locations.find((location) => location.id === locationId)?.name || "Locația selectată"
-
+  const selectedLocationName = locations.find((location) => location.id === locationId)?.name || "Loca?ia selectata"
   const totalProducts = items.length
+  const totalCounted = items.reduce((sum, item) => sum + item.counted, 0)
   const withDifferences = items.filter((item) => item.counted !== item.stock).length
-  const totalNegative = items.filter((item) => item.counted - item.stock < 0).length
 
   return (
-    <div className="w-full space-y-6">
-      <PageHeader
-        badge="document"
-        title="Inventar nou"
-        subtitle="Înregistrează rapid inventarul, în același stil cu restul aplicației."
-      />
+    <div className="w-full space-y-4">
+      <PageHeader badge="document" title="Inventar nou" subtitle="Numarare rapida, �n acela?i model cu bonul de consum." />
 
-      {error ? (
-        <div className="rounded-[20px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
-      ) : null}
+      {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
+      {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
 
-      {message ? (
-        <div className="rounded-[20px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-          {message}
-        </div>
-      ) : null}
-
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="text-sm font-medium text-slate-500">Produse în inventar</div>
-              <div className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">{totalProducts}</div>
-              <div className="mt-2 text-sm text-slate-500">poziții adăugate în document</div>
-            </div>
-            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-white">
-              <ClipboardList size={20} />
-            </span>
-          </div>
-        </div>
-
-        <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="text-sm font-medium text-slate-500">Poziții cu diferențe</div>
-              <div className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">{withDifferences}</div>
-              <div className="mt-2 text-sm text-slate-500">unde număratul diferă de stocul scriptic</div>
-            </div>
-            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-white">
-              <PackageSearch size={20} />
-            </span>
-          </div>
-        </div>
-
-        <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="text-sm font-medium text-slate-500">Diferențe negative</div>
-              <div className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">{totalNegative}</div>
-              <div className="mt-2 text-sm text-slate-500">{selectedLocationName}</div>
-            </div>
-            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-white">
-              <MapPin size={20} />
-            </span>
-          </div>
-        </div>
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
+        <DocumentMetric title="Pozi?ii" value={totalProducts} tone="slate" />
+        <DocumentMetric title="Cantitate numarata" value={totalCounted.toLocaleString("ro-RO")} tone="blue" />
+        <DocumentMetric title="Diferen?e" value={withDifferences} tone="amber" />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-5">
-            <div className="text-lg font-semibold text-slate-900">Adaugă produse</div>
-            <div className="mt-1 text-sm text-slate-500">
-              Caută și apasă direct pe produs. Cardul este sus, la îndemână.
+      <div className="grid grid-cols-1 items-start gap-3 2xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="space-y-3">
+          <DocumentSection title="Adauga produse">
+            <div className="relative">
+              <Search size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                ref={searchInputRef}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={loadingProducts ? "Se �ncarca produsele..." : "Cauta dupa nume, cod sau cod de bare"}
+                className={`${documentInputClass} pl-11`}
+              />
             </div>
-          </div>
 
-          <div className="relative">
-            <Search size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              ref={searchInputRef}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Caută după nume, cod sau cod de bare"
-              className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
-            />
-          </div>
+            {query ? (
+              <div className="mt-2 max-h-[180px] overflow-y-auto rounded-[14px] border border-slate-200 bg-slate-50 p-2">
+                {loadingProducts ? (
+                  <div className="px-3 py-6 text-center text-sm text-slate-500">Se �ncarca produsele...</div>
+                ) : filteredProducts.length ? (
+                  <div className="space-y-2">
+                    {filteredProducts.map((product) => {
+                      const realStock = stockMap[product.id] ?? 0
+                      return (
+                        <button
+                          key={product.id}
+                          type="button"
+                          onClick={() => addProduct(product)}
+                          className="flex w-full items-center justify-between rounded-[14px] border border-transparent bg-white px-4 py-2.5 text-left transition hover:border-slate-200 hover:bg-slate-100"
+                        >
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold text-slate-900">{product.name}</div>
+                            <div className="mt-0.5 text-xs text-slate-500">
+                              {product.code || product.sku || product.barcode || "fara cod"} � stoc {realStock} {pickUnit(product)}
+                            </div>
+                          </div>
+                          <span className="ml-3 inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700">
+                            adauga
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="px-3 py-6 text-center text-sm text-slate-500">Nu am gasit produse pentru cautarea ta.</div>
+                )}
+              </div>
+            ) : (
+              <div className="mt-2 rounded-[14px] border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
+                �ncepe sa scrii ?i produsele apar aici, fara sa �mpinga pagina �n jos.
+              </div>
+            )}
+          </DocumentSection>
 
-          {query ? (
-            <div className="mt-3 max-h-[320px] overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50 p-2">
-              {loadingProducts ? (
-                <div className="px-3 py-8 text-center text-sm text-slate-500">Se încarcă produsele...</div>
-              ) : filteredProducts.length ? (
+          <DocumentSection title="Pozi?ii inventar">
+            <div className="max-h-[460px] overflow-y-auto pr-1">
+              {items.length ? (
                 <div className="space-y-2">
-                  {filteredProducts.map((product) => {
-                    const realStock = stockMap[product.id] ?? 0
+                  <div className="hidden items-center rounded-[14px] bg-slate-50 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 lg:grid lg:grid-cols-[minmax(0,1.8fr)_110px_130px_110px_110px] lg:gap-3">
+                    <div>Produs</div>
+                    <div>Scriptic</div>
+                    <div>Numarat</div>
+                    <div>Diferen?a</div>
+                    <div>Ac?iune</div>
+                  </div>
 
+                  {items.map((item) => {
+                    const diff = item.counted - item.stock
                     return (
-                      <button
-                        key={product.id}
-                        type="button"
-                        onClick={() => addProduct(product)}
-                        className="flex w-full items-center justify-between rounded-2xl border border-transparent bg-white px-4 py-3 text-left transition hover:border-slate-200 hover:bg-slate-100"
-                      >
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-semibold text-slate-900">{product.name}</div>
-                          <div className="mt-1 text-xs text-slate-500">
-                            {product.code || product.sku || product.barcode || "fără cod"} · stoc {realStock} {pickUnit(product)}
+                      <div key={item.productId} className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3">
+                        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.8fr)_110px_130px_110px_110px] lg:items-center">
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold text-slate-900">{item.name}</div>
+                            <div className="mt-0.5 text-xs text-slate-500">{item.code || "fara cod"}</div>
+                          </div>
+
+                          <div className="rounded-[12px] bg-white px-3 py-2.5 text-sm font-semibold text-slate-900">
+                            {item.stock} {item.um}
+                          </div>
+
+                          <div>
+                            <input
+                              ref={(el) => {
+                                qtyRefs.current[item.productId] = el
+                              }}
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={item.counted}
+                              onChange={(e) => updateCounted(item.productId, e.target.value)}
+                              className={documentInputClass}
+                            />
+                          </div>
+
+                          <div className="flex items-center">
+                            <span className={`inline-flex rounded-full px-3 py-2 text-sm font-semibold ${diffTone(diff)}`}>
+                              {diff > 0 ? "+" : ""}
+                              {diff} {item.um}
+                            </span>
+                          </div>
+
+                          <div>
+                            <button type="button" onClick={() => removeItem(item.productId)} className={documentButtonDangerClass}>
+                              <Trash2 size={16} className="mr-2" />
+                              ?terge
+                            </button>
                           </div>
                         </div>
-                        <span className="ml-3 inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
-                          click pentru adăugare
-                        </span>
-                      </button>
+                      </div>
                     )
                   })}
                 </div>
               ) : (
-                <div className="px-3 py-8 text-center text-sm text-slate-500">Nu am găsit produse pentru căutarea ta.</div>
+                <div className="rounded-[14px] border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center">
+                  <div className="text-sm font-semibold text-slate-700">Nu ai produse �n document</div>
+                  <div className="mt-1 text-sm text-slate-500">Cauta un produs sus ?i apasa direct pe el pentru adaugare.</div>
+                </div>
               )}
             </div>
-          ) : (
-            <div className="mt-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-              Începe să scrii și lista de produse apare imediat aici.
-            </div>
-          )}
+          </DocumentSection>
         </div>
 
-        <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-5">
-            <div className="text-lg font-semibold text-slate-900">Detalii document</div>
-            <div className="mt-1 text-sm text-slate-500">Alege locația și adaugă observații înainte de salvare.</div>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-600">Locație</label>
-              <select
-                value={locationId}
-                onChange={(e) => {
-                  const nextLocationId = e.target.value
-                  setLocationId(nextLocationId)
-                  setActiveLocationId(nextLocationId)
-                }}
-                className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
-              >
+        <DocumentSection title="Detalii document">
+          <div className="space-y-3">
+            <DocumentField label="Loca?ie">
+              <select value={locationId} onChange={(e) => setLocation(e.target.value)} className={documentInputClass}>
                 {locations.map((location) => (
-                  <option key={location.id} value={location.id}>
-                    {location.name}
-                  </option>
+                  <option key={location.id} value={location.id}>{location.name}</option>
                 ))}
               </select>
-            </div>
+            </DocumentField>
 
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-600">Observații</label>
+            <DocumentField label="Observa?ii">
               <textarea
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                rows={5}
-                placeholder="Poți nota detalii despre inventar."
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                rows={4}
+                placeholder="Po?i nota explica?ii pentru inventar."
+                className={documentTextareaClass}
               />
-            </div>
+            </DocumentField>
 
-            <button
-              type="button"
-              onClick={saveInventory}
-              disabled={saving}
-              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Check size={16} />
-              {saving ? "Se salvează..." : "Salvează inventar"}
-            </button>
-          </div>
-        </div>
-      </div>
+            <InlineNotice>
+              Loca?ie activa: <span className="font-semibold">{selectedLocationName}</span>
+            </InlineNotice>
 
-      <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="mb-5">
-          <div className="text-lg font-semibold text-slate-900">Poziții inventar</div>
-          <div className="mt-1 text-sm text-slate-500">
-            Totul este aliniat pe coloane fixe: produs, scriptic, numărat, diferență și acțiune.
-          </div>
-        </div>
-
-        {items.length ? (
-          <div className="max-h-[460px] overflow-y-auto pr-1">
-            <div className="space-y-3">
-            <div className="hidden items-center rounded-2xl bg-slate-50 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 lg:grid lg:grid-cols-[minmax(0,1.8fr)_120px_140px_140px_110px] lg:gap-3">
-              <div>Produs</div>
-              <div>Scriptic</div>
-              <div>Numărat</div>
-              <div>Diferență</div>
-              <div>Acțiune</div>
-            </div>
-
-            {items.map((item) => {
-              const diff = item.counted - item.stock
-
-              return (
-                <div
-                  key={item.productId}
-                  className="rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-4"
-                >
-                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.8fr)_120px_140px_140px_110px] lg:items-center">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold text-slate-900">{item.name}</div>
-                      <div className="mt-1 text-xs text-slate-500">
-                        {item.code || "fără cod"} · UM {item.um}
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-900">
-                      {item.stock} {item.um}
-                    </div>
-
-                    <div>
-                      <input
-                        ref={(el) => {
-                          qtyRefs.current[item.productId] = el
-                        }}
-                        type="number"
-                        step="0.01"
-                        value={item.counted}
-                        onChange={(e) => updateCounted(item.productId, e.target.value)}
-                        className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
-                      />
-                    </div>
-
-                    <div>
-                      <span className={`inline-flex rounded-full px-3 py-2 text-sm font-semibold ${diffTone(diff)}`}>
-                        {diff > 0 ? "+" : ""}
-                        {diff} {item.um}
-                      </span>
-                    </div>
-
-                    <div>
-                      <button
-                        type="button"
-                        onClick={() => removeItem(item.productId)}
-                        className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-red-200 bg-white px-4 text-sm font-semibold text-red-600 transition hover:bg-red-50"
-                      >
-                        <Trash2 size={16} />
-                        Șterge
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
+            <div className="flex flex-col gap-2">
+              <button type="button" onClick={saveInventory} disabled={saving} className={documentButtonPrimaryClass}>
+                <Check size={16} className="mr-2" />
+                {saving ? "Se salveaza..." : "Salveaza inventarul"}
+              </button>
             </div>
           </div>
-        ) : (
-          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center">
-            <div className="text-sm font-semibold text-slate-700">Nu ai produse în inventar</div>
-            <div className="mt-1 text-sm text-slate-500">
-              Caută un produs sus și apasă direct pe el pentru adăugare.
-            </div>
-          </div>
-        )}
+        </DocumentSection>
       </div>
     </div>
   )
