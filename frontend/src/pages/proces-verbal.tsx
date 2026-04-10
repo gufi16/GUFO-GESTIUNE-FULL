@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useState } from "react"
+import { FileOutput, Plus, Search, Trash2 } from "lucide-react"
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom"
 import PageHeader from "../components/PageHeader"
 import {
   documentButtonPrimaryClass,
   documentButtonSecondaryClass,
   DocumentField,
+  DocumentMetric,
   DocumentSection,
   DocumentStatusPill,
   InlineNotice,
   documentInputClass,
+  documentTextareaClass,
   readonlyInputStyle,
 } from "../components/DocumentUi"
 import api from "../lib/api"
@@ -77,7 +80,7 @@ export default function ProcesVerbalPage() {
   })
   const [lines, setLines] = useState<Line[]>([makeLine()])
 
-  const pageTitle = isDeterioration ? "PV deteriorare" : "PV schimbare pret"
+  const pageTitle = isDeterioration ? "PV deteriorare" : "PV schimbare pre?"
 
   useEffect(() => {
     void loadMeta()
@@ -114,7 +117,7 @@ export default function ProcesVerbalPage() {
         }))
       }
     } catch (e: any) {
-      setError(e?.message || "Nu pot incarca datele documentului.")
+      setError(e?.message || "Nu pot încarca datele documentului.")
     }
   }
 
@@ -148,7 +151,7 @@ export default function ProcesVerbalPage() {
           : [makeLine()]
       )
     } catch (e: any) {
-      setError(e?.message || "Nu pot incarca documentul.")
+      setError(e?.message || "Nu pot încarca documentul.")
     } finally {
       setLoading(false)
     }
@@ -216,7 +219,7 @@ export default function ProcesVerbalPage() {
 
       const nextId = data?.item?.id
       setStatus(data?.item?.status || (postNow ? "POSTED" : "DRAFT"))
-      setMessage(postNow ? "Document salvat si postat." : "Document salvat.")
+      setMessage(postNow ? "Document salvat ?i postat." : "Document salvat.")
 
       if (!id && nextId) {
         navigate(
@@ -241,316 +244,275 @@ export default function ProcesVerbalPage() {
   }
 
   return (
-    <div className="space-y-3">
-      <PageHeader badge="operatiuni" title={pageTitle} />
+    <div className="w-full space-y-4">
+      <PageHeader badge="document" title={pageTitle} subtitle="Acela?i model compact pentru procese verbale ?i ajustari de pre?." />
 
+      {loading ? <InlineNotice>Se încarca documentul...</InlineNotice> : null}
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
 
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => navigate("/inregistrare-document")}
-            className={documentButtonSecondaryClass}
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-4">
+        <DocumentMetric title="Status" value={<DocumentStatusPill status={status} />} tone="amber" />
+        <DocumentMetric title="Pozi?ii" value={validLines.length} tone="slate" />
+        <DocumentMetric title="Cantitate" value={formatQtyRo(validLines.reduce((sum, line) => sum + Math.max(0, parseLocaleNumber(line.qty)), 0), 3)} tone="blue" />
+        <DocumentMetric title="Total" value={formatMoneyRo(totalValue, "RON")} tone="emerald" />
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={() => navigate("/inregistrare-document")} className={documentButtonSecondaryClass}>
+          Înapoi
+        </button>
+        {id ? (
+          <button type="button" onClick={openPdf} className={documentButtonSecondaryClass}>
+            <FileOutput size={16} className="mr-2" />
+            PDF
+          </button>
+        ) : null}
+      </div>
+
+      <div className="grid grid-cols-1 items-start gap-3 2xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="space-y-3">
+          <DocumentSection
+            title="Pozi?ii document"
+            actions={
+              status !== "POSTED" ? (
+                <button type="button" onClick={() => setLines((prev) => [...prev, makeLine()])} className={documentButtonPrimaryClass}>
+                  <Plus size={16} className="mr-2" />
+                  Adauga linie
+                </button>
+              ) : null
+            }
           >
-            Inapoi
-          </button>
-          {id ? (
-            <button type="button" onClick={openPdf} className={documentButtonSecondaryClass}>
-              PDF
-            </button>
-          ) : null}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => saveDoc(false)} className={documentButtonSecondaryClass} disabled={saving}>
-            {saving ? "Se salveaza..." : "Salveaza draft"}
-          </button>
-          {status !== "POSTED" ? (
-            <button type="button" onClick={() => saveDoc(true)} className={documentButtonPrimaryClass} disabled={saving}>
-              {saving ? "Se salveaza..." : isDeterioration ? "Salveaza si posteaza" : "Salveaza si aplica"}
-            </button>
-          ) : null}
-        </div>
-      </div>
+            <div className="max-h-[520px] overflow-y-auto pr-1">
+              <div className="space-y-2">
+                {lines.map((line) => {
+                  const matches =
+                    line.search.trim().length < 2
+                      ? []
+                      : products
+                          .filter((product) => {
+                            const q = line.search.trim().toLowerCase()
+                            return product.name.toLowerCase().includes(q) || String(product.sku || "").toLowerCase().includes(q)
+                          })
+                          .slice(0, 6)
 
-      <div className="flex items-center gap-2">
-        <DocumentStatusPill status={status} />
-      </div>
+                  return (
+                    <div key={line.id} className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3">
+                      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.8fr)_110px_120px_120px_120px_110px] lg:items-start">
+                        <div className="min-w-0">
+                          <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Produs</div>
+                          <input
+                            value={line.search}
+                            onChange={(e) => setLineValue(line.id, { search: e.target.value, productId: "" })}
+                            placeholder="Produs..."
+                            className={documentInputClass}
+                            disabled={status === "POSTED"}
+                          />
+                          {matches.length && !line.productId && status !== "POSTED" ? (
+                            <div className="mt-2 rounded-[14px] border border-slate-200 bg-white p-2 shadow-sm">
+                              {matches.map((product) => (
+                                <button
+                                  key={product.id}
+                                  type="button"
+                                  onClick={() => chooseProduct(line.id, product)}
+                                  className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50"
+                                >
+                                  <span>{product.name}</span>
+                                  <span className="text-xs text-slate-400">{product.sku || "-"}</span>
+                                </button>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
 
-      <DocumentSection title="Antet document">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-          <DocumentField label="Locatie">
-            <select
-              value={header.locationId}
-              onChange={(e) => {
-                setHeader((prev) => ({ ...prev, locationId: e.target.value }))
-                setActiveLocationId(e.target.value)
-              }}
-              className={documentInputClass}
-              disabled={status === "POSTED"}
-            >
-              <option value="">Selecteaza locatia</option>
-              {locations.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-          </DocumentField>
+                        <div>
+                          <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Cantitate</div>
+                          <input
+                            value={line.qty}
+                            onChange={(e) => setLineValue(line.id, { qty: e.target.value })}
+                            placeholder="Cant."
+                            className={documentInputClass}
+                            disabled={status === "POSTED"}
+                          />
+                        </div>
 
-          <DocumentField label="Nr. document">
-            <input
-              value={header.docNo}
-              className={documentInputClass}
-              readOnly
-              style={readonlyInputStyle}
-            />
-          </DocumentField>
+                        {isDeterioration ? (
+                          <div>
+                            <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Valoare</div>
+                            <input
+                              value={line.unitValue}
+                              onChange={(e) => setLineValue(line.id, { unitValue: e.target.value })}
+                              placeholder="Valoare"
+                              className={documentInputClass}
+                              disabled={status === "POSTED"}
+                            />
+                          </div>
+                        ) : (
+                          <>
+                            <div>
+                              <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Pre? vechi</div>
+                              <input
+                                value={line.oldPrice}
+                                onChange={(e) => setLineValue(line.id, { oldPrice: e.target.value })}
+                                placeholder="Pre? vechi"
+                                className={documentInputClass}
+                                disabled={status === "POSTED"}
+                              />
+                            </div>
+                            <div>
+                              <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Pre? nou</div>
+                              <input
+                                value={line.newPrice}
+                                onChange={(e) => setLineValue(line.id, { newPrice: e.target.value })}
+                                placeholder="Pre? nou"
+                                className={documentInputClass}
+                                disabled={status === "POSTED"}
+                              />
+                            </div>
+                          </>
+                        )}
 
-          <DocumentField label="Data">
-            <input
-              type="date"
-              value={header.docDate}
-              onChange={(e) => setHeader((prev) => ({ ...prev, docDate: e.target.value }))}
-              className={documentInputClass}
-              disabled={status === "POSTED"}
-            />
-          </DocumentField>
+                        <div>
+                          <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Total</div>
+                          <input
+                            value={
+                              isDeterioration
+                                ? formatMoneyRo(parseLocaleNumber(line.qty) * parseLocaleNumber(line.unitValue), "RON")
+                                : formatMoneyRo(parseLocaleNumber(line.qty) * parseLocaleNumber(line.newPrice), "RON")
+                            }
+                            readOnly
+                            className={`${documentInputClass} bg-slate-100 font-semibold`}
+                          />
+                        </div>
 
-          <DocumentField label="Motiv">
-            <select
-              value={header.reasonCode}
-              onChange={(e) =>
-                setHeader((prev) => ({
-                  ...prev,
-                  reasonCode: e.target.value,
-                  findingCode:
-                    e.target.value === "EXPIRED"
-                      ? "EXPIRED_FOUND"
-                      : e.target.value === "LOSS"
-                        ? "LOSS_FOUND"
-                        : prev.findingCode === "EXPIRED_FOUND" || prev.findingCode === "LOSS_FOUND"
-                          ? "DAMAGE_PARTIAL"
-                          : prev.findingCode,
-                }))
-              }
-              className={documentInputClass}
-              disabled={status === "POSTED"}
-            >
-              {isDeterioration ? (
-                <>
-                  <option value="DAMAGE">Deteriorat</option>
-                  <option value="EXPIRED">Expirat</option>
-                  <option value="LOSS">Pierdere</option>
-                  <option value="OTHER">Alt motiv</option>
-                </>
-              ) : (
-                <option value="PRICE_UPDATE">Schimbare pret</option>
-              )}
-            </select>
-          </DocumentField>
-        </div>
-
-        <div className="mt-3">
-          <DocumentField label="Observatii">
-            <textarea
-              value={header.note}
-              onChange={(e) => setHeader((prev) => ({ ...prev, note: e.target.value }))}
-              className="w-full rounded-[10px] border border-slate-300 bg-white px-3 py-2.5 text-[13px] text-[#17324D] outline-none transition focus:border-[#244A7C] focus:ring-2 focus:ring-[#DCE7F5]"
-              rows={2}
-              disabled={status === "POSTED"}
-            />
-          </DocumentField>
-        </div>
-      </DocumentSection>
-
-      {isDeterioration ? (
-        <DocumentSection title="Constatare">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <DocumentField label="Constatare">
-              <select
-                value={header.findingCode}
-                onChange={(e) => setHeader((prev) => ({ ...prev, findingCode: e.target.value }))}
-                className={documentInputClass}
-                disabled={status === "POSTED"}
-              >
-                <option value="DAMAGE_PARTIAL">Deteriorare partiala</option>
-                <option value="DAMAGE_TOTAL">Deteriorare totala</option>
-                <option value="EXPIRED_FOUND">Produs expirat</option>
-                <option value="LOSS_FOUND">Lipsa in gestiune</option>
-              </select>
-            </DocumentField>
-            <DocumentField label="Observatii interne">
-              <input
-                value={header.note}
-                onChange={(e) => setHeader((prev) => ({ ...prev, note: e.target.value }))}
-                className={documentInputClass}
-                disabled={status === "POSTED"}
-              />
-            </DocumentField>
-          </div>
-        </DocumentSection>
-      ) : null}
-
-      <DocumentSection title="Pozitii">
-        <div className="space-y-2">
-          {lines.map((line) => {
-            const matches =
-              line.search.trim().length < 2
-                ? []
-                : products
-                    .filter((product) => {
-                      const q = line.search.trim().toLowerCase()
-                      return product.name.toLowerCase().includes(q) || String(product.sku || "").toLowerCase().includes(q)
-                    })
-                    .slice(0, 6)
-
-            return (
-              <div key={line.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <div className={`grid grid-cols-1 gap-2 ${isDeterioration ? "md:grid-cols-[2fr_110px_120px_1fr_44px]" : "md:grid-cols-[2fr_110px_120px_120px_1fr_44px]"}`}>
-                  <div className="space-y-1">
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500 md:hidden">
-                      Produs
-                    </div>
-                    <input
-                      value={line.search}
-                      onChange={(e) => setLineValue(line.id, { search: e.target.value, productId: "" })}
-                      placeholder="Produs..."
-                      className={documentInputClass}
-                      disabled={status === "POSTED"}
-                    />
-                    {matches.length && !line.productId && status !== "POSTED" ? (
-                      <div className="rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
-                        {matches.map((product) => (
+                        <div>
+                          <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Ac?iune</div>
                           <button
-                            key={product.id}
                             type="button"
-                            onClick={() => chooseProduct(line.id, product)}
-                            className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50"
+                            onClick={() => setLines((prev) => (prev.length === 1 ? [makeLine()] : prev.filter((item) => item.id !== line.id)))}
+                            className={`${documentButtonSecondaryClass} w-full justify-center`}
+                            disabled={status === "POSTED"}
                           >
-                            <span>{product.name}</span>
-                            <span className="text-xs text-slate-400">{product.sku || "-"}</span>
+                            <Trash2 size={16} className="mr-2" />
+                            ?terge
                           </button>
-                        ))}
+                        </div>
                       </div>
-                    ) : null}
-                  </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </DocumentSection>
+        </div>
 
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500 md:hidden">
-                    Cantitate
-                  </div>
-                  <input
-                    value={line.qty}
-                    onChange={(e) => setLineValue(line.id, { qty: e.target.value })}
-                    placeholder="Cant."
+        <div className="space-y-3">
+          <DocumentSection title="Detalii document">
+            <div className="space-y-3">
+              <DocumentField label="Loca?ie">
+                <select
+                  value={header.locationId}
+                  onChange={(e) => {
+                    setHeader((prev) => ({ ...prev, locationId: e.target.value }))
+                    setActiveLocationId(e.target.value)
+                  }}
+                  className={documentInputClass}
+                  disabled={status === "POSTED"}
+                >
+                  <option value="">Selecteaza loca?ia</option>
+                  {locations.map((item) => (
+                    <option key={item.id} value={item.id}>{item.name}</option>
+                  ))}
+                </select>
+              </DocumentField>
+
+              <DocumentField label="Nr. document">
+                <input value={header.docNo} className={documentInputClass} readOnly style={readonlyInputStyle} />
+              </DocumentField>
+
+              <DocumentField label="Data">
+                <input
+                  type="date"
+                  value={header.docDate}
+                  onChange={(e) => setHeader((prev) => ({ ...prev, docDate: e.target.value }))}
+                  className={documentInputClass}
+                  disabled={status === "POSTED"}
+                />
+              </DocumentField>
+
+              <DocumentField label="Motiv">
+                <select
+                  value={header.reasonCode}
+                  onChange={(e) =>
+                    setHeader((prev) => ({
+                      ...prev,
+                      reasonCode: e.target.value,
+                      findingCode:
+                        e.target.value === "EXPIRED"
+                          ? "EXPIRED_FOUND"
+                          : e.target.value === "LOSS"
+                            ? "LOSS_FOUND"
+                            : prev.findingCode === "EXPIRED_FOUND" || prev.findingCode === "LOSS_FOUND"
+                              ? "DAMAGE_PARTIAL"
+                              : prev.findingCode,
+                    }))
+                  }
+                  className={documentInputClass}
+                  disabled={status === "POSTED"}
+                >
+                  {isDeterioration ? (
+                    <>
+                      <option value="DAMAGE">Deteriorat</option>
+                      <option value="EXPIRED">Expirat</option>
+                      <option value="LOSS">Pierdere</option>
+                      <option value="OTHER">Alt motiv</option>
+                    </>
+                  ) : (
+                    <option value="PRICE_UPDATE">Schimbare pre?</option>
+                  )}
+                </select>
+              </DocumentField>
+
+              {isDeterioration ? (
+                <DocumentField label="Constatare">
+                  <select
+                    value={header.findingCode}
+                    onChange={(e) => setHeader((prev) => ({ ...prev, findingCode: e.target.value }))}
                     className={documentInputClass}
                     disabled={status === "POSTED"}
-                  />
+                  >
+                    <option value="DAMAGE_PARTIAL">Deteriorare par?iala</option>
+                    <option value="DAMAGE_TOTAL">Deteriorare totala</option>
+                    <option value="EXPIRED_FOUND">Produs expirat</option>
+                    <option value="LOSS_FOUND">Lipsa în gestiune</option>
+                  </select>
+                </DocumentField>
+              ) : null}
 
-                  {isDeterioration ? (
-                    <div className="space-y-1">
-                      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500 md:hidden">
-                        Valoare
-                      </div>
-                      <input
-                        value={line.unitValue}
-                        onChange={(e) => setLineValue(line.id, { unitValue: e.target.value })}
-                        placeholder="Valoare"
-                        className={documentInputClass}
-                        disabled={status === "POSTED"}
-                      />
-                    </div>
-                  ) : (
-                    <>
-                      <div className="space-y-1">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500 md:hidden">
-                          Pret vechi
-                        </div>
-                        <input
-                          value={line.oldPrice}
-                          onChange={(e) => setLineValue(line.id, { oldPrice: e.target.value })}
-                          placeholder="Pret vechi"
-                          className={documentInputClass}
-                          disabled={status === "POSTED"}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500 md:hidden">
-                          Pret nou
-                        </div>
-                        <input
-                          value={line.newPrice}
-                          onChange={(e) => setLineValue(line.id, { newPrice: e.target.value })}
-                          placeholder="Pret nou"
-                          className={documentInputClass}
-                          disabled={status === "POSTED"}
-                        />
-                      </div>
-                    </>
-                  )}
+              <DocumentField label="Observa?ii">
+                <textarea
+                  value={header.note}
+                  onChange={(e) => setHeader((prev) => ({ ...prev, note: e.target.value }))}
+                  rows={4}
+                  className={documentTextareaClass}
+                  disabled={status === "POSTED"}
+                />
+              </DocumentField>
 
-                  <div className="space-y-1">
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500 md:hidden">
-                      Total
-                    </div>
-                    <input
-                      value={
-                        isDeterioration
-                          ? formatMoneyRo(parseLocaleNumber(line.qty) * parseLocaleNumber(line.unitValue), "RON")
-                          : formatMoneyRo(parseLocaleNumber(line.qty) * parseLocaleNumber(line.newPrice), "RON")
-                      }
-                      readOnly
-                      className={`${documentInputClass} bg-slate-100 font-semibold`}
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500 md:hidden">
-                      Actiuni
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setLines((prev) => (prev.length === 1 ? [makeLine()] : prev.filter((item) => item.id !== line.id)))}
-                      className={`${documentButtonSecondaryClass} w-full justify-center md:w-auto`}
-                      disabled={status === "POSTED"}
-                    >
-                      X
-                    </button>
-                  </div>
-                </div>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <button type="button" onClick={() => saveDoc(false)} className={documentButtonSecondaryClass} disabled={saving}>
+                  {saving ? "Se salveaza..." : "Salveaza draft"}
+                </button>
+                {status !== "POSTED" ? (
+                  <button type="button" onClick={() => saveDoc(true)} className={documentButtonPrimaryClass} disabled={saving}>
+                    {saving ? "Se salveaza..." : isDeterioration ? "Salveaza ?i posteaza" : "Salveaza ?i aplica"}
+                  </button>
+                ) : null}
               </div>
-            )
-          })}
-        </div>
-
-        {status !== "POSTED" ? (
-          <div className="mt-3">
-            <button type="button" onClick={() => setLines((prev) => [...prev, makeLine()])} className={documentButtonPrimaryClass}>
-              Adauga linie
-            </button>
-          </div>
-        ) : null}
-      </DocumentSection>
-
-      <DocumentSection title="Sumar">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Pozitii</div>
-            <div className="mt-1 text-lg font-semibold text-slate-900">{validLines.length}</div>
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Cantitate</div>
-            <div className="mt-1 text-lg font-semibold text-slate-900">
-              {formatQtyRo(validLines.reduce((sum, line) => sum + Math.max(0, parseLocaleNumber(line.qty)), 0), 3)}
             </div>
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Total</div>
-            <div className="mt-1 text-lg font-semibold text-slate-900">{formatMoneyRo(totalValue, "RON")}</div>
-          </div>
+          </DocumentSection>
         </div>
-      </DocumentSection>
+      </div>
     </div>
   )
 }
