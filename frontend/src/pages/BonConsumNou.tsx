@@ -307,56 +307,121 @@ export default function BonConsumNou() {
       </div>
 
       <div className="grid grid-cols-1 items-start gap-3 2xl:grid-cols-[minmax(0,1fr)_320px]">
-        <DocumentSection title="Adaugă produse">
-          <div className="relative">
-            <Search size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              ref={searchInputRef}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={loadingProducts ? "Se încarcă produsele..." : "Caută după nume, cod sau cod de bare"}
-              className={`${documentInputClass} pl-11`}
-            />
-          </div>
+        <div className="space-y-3">
+          <DocumentSection title="Adaugă produse">
+            <div className="relative">
+              <Search size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                ref={searchInputRef}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={loadingProducts ? "Se încarcă produsele..." : "Caută după nume, cod sau cod de bare"}
+                className={`${documentInputClass} pl-11`}
+              />
+            </div>
 
-          {query ? (
-            <div className="mt-2 max-h-[180px] overflow-y-auto rounded-[14px] border border-slate-200 bg-slate-50 p-2">
-              {loadingProducts ? (
-                <div className="px-3 py-6 text-center text-sm text-slate-500">Se încarcă produsele...</div>
-              ) : filteredProducts.length ? (
-                <div className="space-y-2">
-                  {filteredProducts.map((product) => {
-                    const realStock = stockMap[product.id] ?? 0
-                    return (
-                      <button
-                        key={product.id}
-                        type="button"
-                        onClick={() => addProduct(product)}
-                        className="flex w-full items-center justify-between rounded-[14px] border border-transparent bg-white px-4 py-2.5 text-left transition hover:border-slate-200 hover:bg-slate-100"
-                      >
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-semibold text-slate-900">{product.name}</div>
-                          <div className="mt-0.5 text-xs text-slate-500">
-                            {product.code || product.sku || product.barcode || "fără cod"} · stoc {realStock} {pickUnit(product)}
+            {query ? (
+              <div className="mt-2 max-h-[180px] overflow-y-auto rounded-[14px] border border-slate-200 bg-slate-50 p-2">
+                {loadingProducts ? (
+                  <div className="px-3 py-6 text-center text-sm text-slate-500">Se încarcă produsele...</div>
+                ) : filteredProducts.length ? (
+                  <div className="space-y-2">
+                    {filteredProducts.map((product) => {
+                      const realStock = stockMap[product.id] ?? 0
+                      return (
+                        <button
+                          key={product.id}
+                          type="button"
+                          onClick={() => addProduct(product)}
+                          className="flex w-full items-center justify-between rounded-[14px] border border-transparent bg-white px-4 py-2.5 text-left transition hover:border-slate-200 hover:bg-slate-100"
+                        >
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold text-slate-900">{product.name}</div>
+                            <div className="mt-0.5 text-xs text-slate-500">
+                              {product.code || product.sku || product.barcode || "fără cod"} · stoc {realStock} {pickUnit(product)}
+                            </div>
                           </div>
+                          <span className="ml-3 inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700">
+                            adaugă
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="px-3 py-6 text-center text-sm text-slate-500">Nu am găsit produse pentru căutarea ta.</div>
+                )}
+              </div>
+            ) : (
+              <div className="mt-2 rounded-[14px] border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
+                Începe să scrii și produsele apar aici, fără să împingă pagina în jos.
+              </div>
+            )}
+          </DocumentSection>
+
+          <DocumentSection title="Poziții bon de consum">
+            <div className="max-h-[460px] overflow-y-auto pr-1">
+              {items.length ? (
+                <div className="space-y-2">
+                  <div className="hidden items-center rounded-[14px] bg-slate-50 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 lg:grid lg:grid-cols-[minmax(0,1.8fr)_110px_130px_110px_110px] lg:gap-3">
+                    <div>Produs</div>
+                    <div>Stoc</div>
+                    <div>Cantitate</div>
+                    <div>UM</div>
+                    <div>Acțiune</div>
+                  </div>
+
+                  {items.map((item) => (
+                    <div key={item.productId} className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3">
+                      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.8fr)_110px_130px_110px_110px] lg:items-center">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold text-slate-900">{item.name}</div>
+                          <div className="mt-0.5 text-xs text-slate-500">{item.code || "fără cod"}</div>
                         </div>
-                        <span className="ml-3 inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700">
-                          adaugă
-                        </span>
-                      </button>
-                    )
-                  })}
+
+                        <div className="rounded-[12px] bg-white px-3 py-2.5 text-sm font-semibold text-slate-900">
+                          {item.stock} {item.um}
+                        </div>
+
+                        <div>
+                          <input
+                            ref={(el) => {
+                              qtyRefs.current[item.productId] = el
+                            }}
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={item.qty}
+                            onChange={(e) => updateQty(item.productId, e.target.value)}
+                            className={documentInputClass}
+                          />
+                        </div>
+
+                        <div className="flex items-center">
+                          <span className="inline-flex rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">
+                            {item.um}
+                          </span>
+                        </div>
+
+                        <div>
+                          <button type="button" onClick={() => removeItem(item.productId)} className={documentButtonDangerClass}>
+                            <Trash2 size={16} className="mr-2" />
+                            Șterge
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : (
-                <div className="px-3 py-6 text-center text-sm text-slate-500">Nu am găsit produse pentru căutarea ta.</div>
+                <div className="rounded-[14px] border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center">
+                  <div className="text-sm font-semibold text-slate-700">Nu ai produse în document</div>
+                  <div className="mt-1 text-sm text-slate-500">Caută un produs sus și apasă direct pe el pentru adăugare.</div>
+                </div>
               )}
             </div>
-          ) : (
-            <div className="mt-2 rounded-[14px] border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
-              Începe să scrii și produsele apar aici, fără să împingă pagina în jos.
-            </div>
-          )}
-        </DocumentSection>
+          </DocumentSection>
+        </div>
 
         <DocumentSection title="Detalii document">
           <div className="space-y-3">
@@ -394,69 +459,6 @@ export default function BonConsumNou() {
           </div>
         </DocumentSection>
       </div>
-
-      <DocumentSection title="Poziții bon de consum">
-        <div className="max-h-[360px] overflow-y-auto pr-1">
-          {items.length ? (
-            <div className="space-y-2">
-              <div className="hidden items-center rounded-[14px] bg-slate-50 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 lg:grid lg:grid-cols-[minmax(0,1.7fr)_110px_130px_120px_110px] lg:gap-3">
-                <div>Produs</div>
-                <div>Stoc</div>
-                <div>Cantitate</div>
-                <div>UM</div>
-                <div>Acțiune</div>
-              </div>
-
-              {items.map((item) => (
-                <div key={item.productId} className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3">
-                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.7fr)_110px_130px_120px_110px] lg:items-center">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold text-slate-900">{item.name}</div>
-                      <div className="mt-0.5 text-xs text-slate-500">{item.code || "fără cod"}</div>
-                    </div>
-
-                    <div className="rounded-[12px] bg-white px-3 py-2.5 text-sm font-semibold text-slate-900">
-                      {item.stock} {item.um}
-                    </div>
-
-                    <div>
-                      <input
-                        ref={(el) => {
-                          qtyRefs.current[item.productId] = el
-                        }}
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={item.qty}
-                        onChange={(e) => updateQty(item.productId, e.target.value)}
-                        className={documentInputClass}
-                      />
-                    </div>
-
-                    <div>
-                      <span className="inline-flex rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">
-                        {item.um}
-                      </span>
-                    </div>
-
-                    <div>
-                      <button type="button" onClick={() => removeItem(item.productId)} className={documentButtonDangerClass}>
-                        <Trash2 size={16} className="mr-2" />
-                        Șterge
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-[14px] border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center">
-              <div className="text-sm font-semibold text-slate-700">Nu ai produse în document</div>
-              <div className="mt-1 text-sm text-slate-500">Caută un produs sus și apasă direct pe el pentru adăugare.</div>
-            </div>
-          )}
-        </div>
-      </DocumentSection>
     </div>
   )
 }
