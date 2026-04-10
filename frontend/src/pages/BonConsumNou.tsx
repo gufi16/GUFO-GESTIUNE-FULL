@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react"
-import { Check, ClipboardList, MapPin, PackageMinus, Search, Trash2 } from "lucide-react"
+import { Check, Search, Trash2 } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import PageHeader from "../components/PageHeader"
 import {
@@ -133,9 +133,7 @@ export default function BonConsumNou() {
   }, [])
 
   useEffect(() => {
-    if (locationId) {
-      loadStockForLocation(locationId)
-    }
+    if (locationId) loadStockForLocation(locationId)
   }, [locationId])
 
   async function loadLocations() {
@@ -148,8 +146,8 @@ export default function BonConsumNou() {
       const normalized = normalizeLocations(json)
       setLocations(normalized)
       if (normalized.length) {
-        const preferredLocationId = normalized.find((location) => location.id === getActiveLocationId())?.id || normalized[0].id
-        setLocationIdState((current) => current || preferredLocationId)
+        const preferred = normalized.find((location) => location.id === getActiveLocationId())?.id || normalized[0].id
+        setLocationIdState((current) => current || preferred)
       }
     } catch {
       setLocations([])
@@ -197,13 +195,12 @@ export default function BonConsumNou() {
     setTimeout(() => {
       qtyRefs.current[productId]?.focus()
       qtyRefs.current[productId]?.select()
-    }, 60)
+    }, 50)
   }
 
   function addProduct(product: ProductOption) {
     setError("")
     setMessage("")
-
     const existing = items.find((item) => item.productId === product.id)
     if (existing) {
       focusQty(product.id)
@@ -263,11 +260,7 @@ export default function BonConsumNou() {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({
-          locationId,
-          note,
-          items: lines,
-        }),
+        body: JSON.stringify({ locationId, note, items: lines }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -290,43 +283,31 @@ export default function BonConsumNou() {
   const filteredProducts = useMemo(() => {
     const term = query.trim().toLowerCase()
     if (!term) return []
-
     return products
-      .filter((product) => {
-        const fields = [product.name, product.code || "", product.sku || "", product.barcode || ""]
-          .join(" ")
-          .toLowerCase()
-        return fields.includes(term)
-      })
-      .slice(0, 12)
+      .filter((product) => [product.name, product.code || "", product.sku || "", product.barcode || ""].join(" ").toLowerCase().includes(term))
+      .slice(0, 10)
   }, [products, query])
 
-  const selectedLocationName =
-    locations.find((location) => location.id === locationId)?.name || "Locația selectată"
-
+  const selectedLocationName = locations.find((location) => location.id === locationId)?.name || "Locația selectată"
   const totalProducts = items.length
   const totalQty = items.reduce((sum, item) => sum + item.qty, 0)
   const lowStockItems = items.filter((item) => item.qty > item.stock).length
 
   return (
-    <div className="w-full space-y-6">
-      <PageHeader
-        badge="document"
-        title="Bon de consum"
-        subtitle="Înregistrează consumul manual de materii prime, în același stil cu documentele din ERP."
-      />
+    <div className="w-full space-y-4">
+      <PageHeader badge="document" title="Bon de consum" subtitle="Consum manual rapid, fără rețetar." />
 
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
         <DocumentMetric title="Poziții" value={totalProducts} tone="slate" />
-        <DocumentMetric title="Cantitate totală" value={totalQty.toLocaleString("ro-RO")} tone="blue" />
-        <DocumentMetric title="Depășesc stocul" value={lowStockItems} tone="amber" />
+        <DocumentMetric title="Cantitate" value={totalQty.toLocaleString("ro-RO")} tone="blue" />
+        <DocumentMetric title="Peste stoc" value={lowStockItems} tone="amber" />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[minmax(0,1fr)_360px]">
-        <DocumentSection title="Adaugă produse în bon">
+      <div className="grid grid-cols-1 items-start gap-3 2xl:grid-cols-[minmax(0,1fr)_320px]">
+        <DocumentSection title="Adaugă produse">
           <div className="relative">
             <Search size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -339,9 +320,9 @@ export default function BonConsumNou() {
           </div>
 
           {query ? (
-            <div className="mt-3 max-h-[320px] overflow-y-auto rounded-[14px] border border-slate-200 bg-slate-50 p-2">
+            <div className="mt-2 max-h-[180px] overflow-y-auto rounded-[14px] border border-slate-200 bg-slate-50 p-2">
               {loadingProducts ? (
-                <div className="px-3 py-8 text-center text-sm text-slate-500">Se încarcă produsele...</div>
+                <div className="px-3 py-6 text-center text-sm text-slate-500">Se încarcă produsele...</div>
               ) : filteredProducts.length ? (
                 <div className="space-y-2">
                   {filteredProducts.map((product) => {
@@ -351,15 +332,15 @@ export default function BonConsumNou() {
                         key={product.id}
                         type="button"
                         onClick={() => addProduct(product)}
-                        className="flex w-full items-center justify-between rounded-[14px] border border-transparent bg-white px-4 py-3 text-left transition hover:border-slate-200 hover:bg-slate-100"
+                        className="flex w-full items-center justify-between rounded-[14px] border border-transparent bg-white px-4 py-2.5 text-left transition hover:border-slate-200 hover:bg-slate-100"
                       >
                         <div className="min-w-0">
                           <div className="truncate text-sm font-semibold text-slate-900">{product.name}</div>
-                          <div className="mt-1 text-xs text-slate-500">
+                          <div className="mt-0.5 text-xs text-slate-500">
                             {product.code || product.sku || product.barcode || "fără cod"} · stoc {realStock} {pickUnit(product)}
                           </div>
                         </div>
-                        <span className="ml-3 inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                        <span className="ml-3 inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700">
                           adaugă
                         </span>
                       </button>
@@ -367,28 +348,22 @@ export default function BonConsumNou() {
                   })}
                 </div>
               ) : (
-                <div className="px-3 py-8 text-center text-sm text-slate-500">Nu am găsit produse pentru căutarea ta.</div>
+                <div className="px-3 py-6 text-center text-sm text-slate-500">Nu am găsit produse pentru căutarea ta.</div>
               )}
             </div>
           ) : (
-            <div className="mt-3 rounded-[14px] border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-              Începe să scrii și lista de produse apare imediat aici.
+            <div className="mt-2 rounded-[14px] border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
+              Începe să scrii și produsele apar aici, fără să împingă pagina în jos.
             </div>
           )}
         </DocumentSection>
 
         <DocumentSection title="Detalii document">
-          <div className="space-y-4">
+          <div className="space-y-3">
             <DocumentField label="Locație">
-              <select
-                value={locationId}
-                onChange={(e) => setLocation(e.target.value)}
-                className={documentInputClass}
-              >
+              <select value={locationId} onChange={(e) => setLocation(e.target.value)} className={documentInputClass}>
                 {locations.map((location) => (
-                  <option key={location.id} value={location.id}>
-                    {location.name}
-                  </option>
+                  <option key={location.id} value={location.id}>{location.name}</option>
                 ))}
               </select>
             </DocumentField>
@@ -397,7 +372,7 @@ export default function BonConsumNou() {
               <textarea
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                rows={5}
+                rows={4}
                 placeholder="Poți nota explicații pentru consumul manual."
                 className={documentTextareaClass}
               />
@@ -421,68 +396,66 @@ export default function BonConsumNou() {
       </div>
 
       <DocumentSection title="Poziții bon de consum">
-        {items.length ? (
-          <div className="space-y-3">
-            <div className="hidden items-center rounded-[14px] bg-slate-50 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 lg:grid lg:grid-cols-[minmax(0,1.7fr)_120px_140px_140px_110px] lg:gap-3">
-              <div>Produs</div>
-              <div>Stoc</div>
-              <div>Cantitate</div>
-              <div>UM</div>
-              <div>Acțiune</div>
-            </div>
+        <div className="max-h-[360px] overflow-y-auto pr-1">
+          {items.length ? (
+            <div className="space-y-2">
+              <div className="hidden items-center rounded-[14px] bg-slate-50 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 lg:grid lg:grid-cols-[minmax(0,1.7fr)_110px_130px_120px_110px] lg:gap-3">
+                <div>Produs</div>
+                <div>Stoc</div>
+                <div>Cantitate</div>
+                <div>UM</div>
+                <div>Acțiune</div>
+              </div>
 
-            {items.map((item) => (
-              <div key={item.productId} className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
-                <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.7fr)_120px_140px_140px_110px] lg:items-center">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold text-slate-900">{item.name}</div>
-                    <div className="mt-1 text-xs text-slate-500">{item.code || "fără cod"}</div>
-                  </div>
+              {items.map((item) => (
+                <div key={item.productId} className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3">
+                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.7fr)_110px_130px_120px_110px] lg:items-center">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-slate-900">{item.name}</div>
+                      <div className="mt-0.5 text-xs text-slate-500">{item.code || "fără cod"}</div>
+                    </div>
 
-                  <div className="rounded-[12px] bg-white px-4 py-3 text-sm font-semibold text-slate-900">
-                    {item.stock} {item.um}
-                  </div>
+                    <div className="rounded-[12px] bg-white px-3 py-2.5 text-sm font-semibold text-slate-900">
+                      {item.stock} {item.um}
+                    </div>
 
-                  <div>
-                    <input
-                      ref={(el) => {
-                        qtyRefs.current[item.productId] = el
-                      }}
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={item.qty}
-                      onChange={(e) => updateQty(item.productId, e.target.value)}
-                      className={documentInputClass}
-                    />
-                  </div>
+                    <div>
+                      <input
+                        ref={(el) => {
+                          qtyRefs.current[item.productId] = el
+                        }}
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={item.qty}
+                        onChange={(e) => updateQty(item.productId, e.target.value)}
+                        className={documentInputClass}
+                      />
+                    </div>
 
-                  <div>
-                    <span className="inline-flex rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">
-                      {item.um}
-                    </span>
-                  </div>
+                    <div>
+                      <span className="inline-flex rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">
+                        {item.um}
+                      </span>
+                    </div>
 
-                  <div>
-                    <button
-                      type="button"
-                      onClick={() => removeItem(item.productId)}
-                      className={documentButtonDangerClass}
-                    >
-                      <Trash2 size={16} className="mr-2" />
-                      Șterge
-                    </button>
+                    <div>
+                      <button type="button" onClick={() => removeItem(item.productId)} className={documentButtonDangerClass}>
+                        <Trash2 size={16} className="mr-2" />
+                        Șterge
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="rounded-[14px] border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center">
-            <div className="text-sm font-semibold text-slate-700">Nu ai produse în document</div>
-            <div className="mt-1 text-sm text-slate-500">Caută un produs sus și apasă direct pe el pentru adăugare.</div>
-          </div>
-        )}
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-[14px] border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center">
+              <div className="text-sm font-semibold text-slate-700">Nu ai produse în document</div>
+              <div className="mt-1 text-sm text-slate-500">Caută un produs sus și apasă direct pe el pentru adăugare.</div>
+            </div>
+          )}
+        </div>
       </DocumentSection>
     </div>
   )
