@@ -44,6 +44,7 @@ import usersRouter from "./routes/users"
 dotenv.config()
 
 const app = express()
+app.set("trust proxy", true)
 const PORT = Number(process.env.PORT || 3001)
 const CORS_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:5173"
 const JWT_SECRET =

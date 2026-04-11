@@ -1,183 +1,321 @@
-import { Router, Request, Response } from "express";
-import { prisma } from "../lib/prisma";
+﻿import { Router, Request, Response } from "express"
+import { Prisma } from "@prisma/client"
+import { prisma } from "../lib/prisma"
 
-const router = Router();
+const router = Router()
 
-/*
-GET /api/v1/dashboard
+type ActivityType =
+  | "sale"
+  | "purchase"
+  | "transfer"
+  | "consumption"
+  | "production"
+  | "inventory"
+  | "minutes"
 
-Query:
-dateFrom
-dateTo
-*/
+type RecentActivityItem = {
+  type: ActivityType
+  title: string
+  meta: string
+  at: string
+}
+
+function safeDate(value: unknown, fallback: Date) {
+  const date = value ? new Date(String(value)) : fallback
+  return Number.isNaN(date.getTime()) ? fallback : date
+}
+
+function buildLocationWhere(locationId: string | null) {
+  return locationId ? { locationId } : {}
+}
 
 router.get("/api/v1/dashboard", async (req: Request, res: Response) => {
   try {
-    const tenantId = req.headers["x-tenant-id"] as string;
-    const locationId = req.query.locationId ? String(req.query.locationId) : null;
+    const tenantId = req.headers["x-tenant-id"] as string
+    const locationId = req.query.locationId ? String(req.query.locationId) : null
 
     if (!tenantId) {
-      return res.status(400).json({
-        ok: false,
-        error: "tenantId lipsă",
-      });
+      return res.status(400).json({ ok: false, error: "tenantId lipsa" })
     }
 
-    const dateFrom = req.query.dateFrom
-      ? new Date(String(req.query.dateFrom))
-      : new Date(new Date().setHours(0, 0, 0, 0));
-
-    const dateTo = req.query.dateTo
-      ? new Date(String(req.query.dateTo))
-      : new Date();
-
-    /* =====================================
-       TOTAL SALES
-    ===================================== */
+    const now = new Date()
+    const dateFrom = safeDate(req.query.dateFrom, new Date(new Date().setHours(0, 0, 0, 0)))
+    const dateTo = safeDate(req.query.dateTo, now)
 
     const saleWhere = {
       tenantId,
-      ...(locationId ? { locationId } : {}),
+      ...buildLocationWhere(locationId),
       soldAt: {
         gte: dateFrom,
         lte: dateTo,
       },
-    };
+    }
 
-    const salesAgg = await prisma.sale.aggregate({
-      where: saleWhere,
-      _sum: {
-        total: true,
-      },
-      _count: {
-        id: true,
-      },
-    });
-
-    const sales = Number(salesAgg._sum.total || 0);
-    const receipts = Number(salesAgg._count.id || 0);
-    const avgReceipt = receipts > 0 ? sales / receipts : 0;
-
-    /* =====================================
-       CASH VS CARD
-    ===================================== */
-
-    const cashAgg = await prisma.sale.aggregate({
-      where: saleWhere,
-      _sum: {
-        cashAmount: true,
-      },
-    });
-
-    const cardAgg = await prisma.sale.aggregate({
-      where: saleWhere,
-      _sum: {
-        cardAmount: true,
-      },
-    });
-
-    const cash = Number(cashAgg._sum.cashAmount || 0);
-    const card = Number(cardAgg._sum.cardAmount || 0);
-
-    /* =====================================
-       SALES PER DAY
-    ===================================== */
-
-    const locationFilterSql = locationId ? ` AND "locationId" = '${locationId}'` : "";
-
-    const salesPerDay: any = await prisma.$queryRawUnsafe(`
-      SELECT
-        DATE("soldAt") as day,
-        SUM(total) as total
-      FROM "Sale"
-      WHERE "tenantId" = '${tenantId}'
-      ${locationFilterSql}
-      AND "soldAt" BETWEEN '${dateFrom.toISOString()}' AND '${dateTo.toISOString()}'
-      GROUP BY day
-      ORDER BY day
-    `);
-
-    /* =====================================
-       TOP PRODUCTS + REAL PROFIT
-       profit = SUM((net sale price - costPrice) * qty)
-       unitPrice in sale item is treated as gross sale price
-       costPrice in Product is treated as net cost
-    ===================================== */
-
-    const topProducts: any = await prisma.$queryRawUnsafe(`
-      SELECT
-        p.name,
-        SUM(si.qty) as qty,
-        SUM(
-          (
-            (COALESCE(si."unitPrice", 0) / NULLIF(1 + (COALESCE(si."vatRate", 0) / 100.0), 0))
-            - COALESCE(p."costPrice", 0)
-          ) * COALESCE(si.qty, 0)
-        ) as profit
-      FROM "SaleItem" si
-      JOIN "Product" p ON p.id = si."productId"
-      JOIN "Sale" s ON s.id = si."saleId"
-      WHERE s."tenantId" = '${tenantId}'
-      ${locationFilterSql.replace(/"locationId"/g, 's."locationId"')}
-      AND s."soldAt" BETWEEN '${dateFrom.toISOString()}' AND '${dateTo.toISOString()}'
-      GROUP BY p.name
-      ORDER BY qty DESC
-      LIMIT 5
-    `);
-
-    /* =====================================
-       LOW STOCK
-    ===================================== */
-
-    const lowStock = await prisma.stockBalance.findMany({
-      where: {
-        tenantId,
-        ...(locationId ? { locationId } : {}),
-        qty: {
-          lte: 5,
+    const [
+      salesAgg,
+      cashAgg,
+      cardAgg,
+      salesPerDayRows,
+      topProductsRows,
+      lowStock,
+      recentSales,
+      recentPurchases,
+      recentTransfers,
+      recentConsumptions,
+      recentProductions,
+      recentInventories,
+      recentMinutes,
+    ] = await Promise.all([
+      prisma.sale.aggregate({
+        where: saleWhere,
+        _sum: { total: true },
+        _count: { id: true },
+      }),
+      prisma.sale.aggregate({
+        where: saleWhere,
+        _sum: { cashAmount: true },
+      }),
+      prisma.sale.aggregate({
+        where: saleWhere,
+        _sum: { cardAmount: true },
+      }),
+      prisma.$queryRaw<Array<{ day: string; total: number }>>(Prisma.sql`
+        SELECT
+          DATE("soldAt") as day,
+          SUM(total) as total
+        FROM "Sale"
+        WHERE "tenantId" = ${tenantId}
+          ${locationId ? Prisma.sql`AND "locationId" = ${locationId}` : Prisma.empty}
+          AND "soldAt" BETWEEN ${dateFrom} AND ${dateTo}
+        GROUP BY day
+        ORDER BY day
+      `),
+      prisma.$queryRaw<Array<{ name: string; qty: number; profit: number }>>(Prisma.sql`
+        SELECT
+          p.name,
+          SUM(si.qty) as qty,
+          SUM(
+            (
+              (COALESCE(si."unitPrice", 0) / NULLIF(1 + (COALESCE(si."vatRate", 0) / 100.0), 0))
+              - COALESCE(p."costPrice", 0)
+            ) * COALESCE(si.qty, 0)
+          ) as profit
+        FROM "SaleItem" si
+        JOIN "Product" p ON p.id = si."productId"
+        JOIN "Sale" s ON s.id = si."saleId"
+        WHERE s."tenantId" = ${tenantId}
+          ${locationId ? Prisma.sql`AND s."locationId" = ${locationId}` : Prisma.empty}
+          AND s."soldAt" BETWEEN ${dateFrom} AND ${dateTo}
+        GROUP BY p.name
+        ORDER BY qty DESC
+        LIMIT 5
+      `),
+      prisma.stockBalance.findMany({
+        where: {
+          tenantId,
+          ...buildLocationWhere(locationId),
+          qty: { lte: 5 },
         },
-      },
-      include: {
-        product: true,
-        location: true,
-      },
-      take: 10,
-    });
+        include: {
+          product: true,
+          location: true,
+        },
+        take: 10,
+      }),
+      prisma.sale.findMany({
+        where: saleWhere,
+        select: {
+          id: true,
+          receiptNo: true,
+          total: true,
+          soldAt: true,
+          location: { select: { name: true } },
+        },
+        orderBy: [{ soldAt: "desc" }, { createdAt: "desc" }],
+        take: 4,
+      }),
+      prisma.purchaseReceipt.findMany({
+        where: {
+          tenantId,
+          ...buildLocationWhere(locationId),
+        },
+        select: {
+          id: true,
+          docNo: true,
+          supplierName: true,
+          createdAt: true,
+          location: { select: { name: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 4,
+      }),
+      prisma.transferDoc.findMany({
+        where: {
+          tenantId,
+          ...(locationId
+            ? {
+                OR: [{ fromLocationId: locationId }, { toLocationId: locationId }],
+              }
+            : {}),
+        },
+        select: {
+          id: true,
+          docNo: true,
+          createdAt: true,
+          fromLocation: { select: { name: true } },
+          toLocation: { select: { name: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 4,
+      }),
+      prisma.consumptionDoc.findMany({
+        where: {
+          tenantId,
+          ...buildLocationWhere(locationId),
+        },
+        select: {
+          id: true,
+          docNo: true,
+          createdAt: true,
+          location: { select: { name: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 4,
+      }),
+      prisma.productionDoc.findMany({
+        where: {
+          tenantId,
+          ...buildLocationWhere(locationId),
+        },
+        select: {
+          id: true,
+          docNo: true,
+          createdAt: true,
+          location: { select: { name: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 4,
+      }),
+      prisma.inventoryDoc.findMany({
+        where: {
+          tenantId,
+          ...buildLocationWhere(locationId),
+        },
+        select: {
+          id: true,
+          docNo: true,
+          createdAt: true,
+          location: { select: { name: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 4,
+      }),
+      prisma.minutesDoc.findMany({
+        where: {
+          tenantId,
+          ...buildLocationWhere(locationId),
+        },
+        select: {
+          id: true,
+          docNo: true,
+          type: true,
+          createdAt: true,
+          location: { select: { name: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 4,
+      }),
+    ])
+
+    const sales = Number(salesAgg._sum.total || 0)
+    const receipts = Number(salesAgg._count.id || 0)
+    const avgReceipt = receipts > 0 ? sales / receipts : 0
+    const cash = Number(cashAgg._sum.cashAmount || 0)
+    const card = Number(cardAgg._sum.cardAmount || 0)
+
+    const recentActivity: RecentActivityItem[] = [
+      ...recentSales.map((item) => ({
+        type: "sale" as const,
+        title: `Bon fiscal ${item.receiptNo ? `#${item.receiptNo}` : "nou"}`,
+        meta: `${item.location?.name || "locatie necunoscuta"} • ${Number(item.total || 0).toFixed(2)} RON`,
+        at: item.soldAt.toISOString(),
+      })),
+      ...recentPurchases.map((item) => ({
+        type: "purchase" as const,
+        title: `NIR ${item.docNo}`,
+        meta: `${item.supplierName || "furnizor"} • ${item.location?.name || "locatie"}`,
+        at: item.createdAt.toISOString(),
+      })),
+      ...recentTransfers.map((item) => ({
+        type: "transfer" as const,
+        title: `Transfer ${item.docNo}`,
+        meta: `${item.fromLocation?.name || "-"} → ${item.toLocation?.name || "-"}`,
+        at: item.createdAt.toISOString(),
+      })),
+      ...recentConsumptions.map((item) => ({
+        type: "consumption" as const,
+        title: `Bon consum ${item.docNo}`,
+        meta: item.location?.name || "locatie",
+        at: item.createdAt.toISOString(),
+      })),
+      ...recentProductions.map((item) => ({
+        type: "production" as const,
+        title: `Productie ${item.docNo}`,
+        meta: item.location?.name || "locatie",
+        at: item.createdAt.toISOString(),
+      })),
+      ...recentInventories.map((item) => ({
+        type: "inventory" as const,
+        title: `Inventar ${item.docNo}`,
+        meta: item.location?.name || "locatie",
+        at: item.createdAt.toISOString(),
+      })),
+      ...recentMinutes.map((item) => ({
+        type: "minutes" as const,
+        title: `${item.type === "PRICE_CHANGE" ? "Proces verbal pret" : "Proces verbal"} ${item.docNo}`,
+        meta: item.location?.name || "locatie",
+        at: item.createdAt.toISOString(),
+      })),
+    ]
+      .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+      .slice(0, 6)
 
     return res.json({
       ok: true,
-
       sales,
       receipts,
       avgReceipt,
-
       cash,
       card,
-
-      salesPerDay,
-
-      topProducts: Array.isArray(topProducts)
-        ? topProducts.map((item: any) => ({
+      salesPerDay: Array.isArray(salesPerDayRows)
+        ? salesPerDayRows.map((item) => ({
+            day: item.day,
+            total: Number(item.total || 0),
+          }))
+        : [],
+      topProducts: Array.isArray(topProductsRows)
+        ? topProductsRows.map((item) => ({
             name: item.name,
             qty: Number(item.qty || 0),
             profit: Number(item.profit || 0),
           }))
         : [],
-
-      lowStock: lowStock.map((s) => ({
-        product: s.product.name,
-        location: s.location.name,
-        qty: Number(s.qty),
+      lowStock: lowStock.map((item) => ({
+        product: item.product.name,
+        location: item.location.name,
+        qty: Number(item.qty),
       })),
-    });
+      recentActivity,
+      updatedAt: new Date().toISOString(),
+    })
   } catch (err) {
-    console.error("DASHBOARD ERROR", err);
+    console.error("DASHBOARD ERROR", err)
 
     return res.status(500).json({
       ok: false,
       error: "dashboard_failed",
-    });
+    })
   }
-});
+})
 
-export default router;
+export default router

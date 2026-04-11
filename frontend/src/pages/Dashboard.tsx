@@ -1,4 +1,4 @@
-import {
+﻿import {
   AlertTriangle,
   ArrowRightLeft,
   CircleDollarSign,
@@ -55,6 +55,8 @@ type DashboardApiResponse = {
     location: string
     qty: number
   }>
+  recentActivity?: RecentActivityItem[]
+  updatedAt?: string
 }
 
 type LowStockItem = {
@@ -69,6 +71,13 @@ type TopProductItem = {
   profit: number
 }
 
+type RecentActivityItem = {
+  type: "sale" | "purchase" | "transfer" | "consumption" | "production" | "inventory" | "minutes"
+  title: string
+  meta: string
+  at: string
+}
+
 type MeResponse = {
   ok?: boolean
   tenant_id?: string
@@ -77,11 +86,17 @@ type MeResponse = {
   modules?: string[]
 }
 
-const recentDocs = [
-  { icon: Receipt, title: "Recepție NIR #000128", meta: "Furnizor Aqua Distribution • acum 18 minute" },
-  { icon: ArrowRightLeft, title: "Transfer către locația Central", meta: "42 produse mutate • acum 43 minute" },
-  { icon: FileText, title: "Sincronizare POS finalizată", meta: "4 terminale actualizate • acum 1 oră" },
-]
+const DASHBOARD_REFRESH_MS = 15000
+
+const ACTIVITY_ICON_MAP = {
+  sale: Receipt,
+  purchase: ShoppingCart,
+  transfer: ArrowRightLeft,
+  consumption: FileText,
+  production: TrendingUp,
+  inventory: PackageSearch,
+  minutes: AlertTriangle,
+} as const
 
 function formatRon(value: number) {
   return formatMoneyRo(value, "RON")
@@ -115,6 +130,23 @@ function normalizeSalesPerDay(data: DashboardApiResponse["salesPerDay"]): SalesP
   })
 }
 
+function formatRelativeTime(value: string) {
+  if (!value) return "acum"
+
+  const diffMs = Date.now() - new Date(value).getTime()
+  if (!Number.isFinite(diffMs)) return "acum"
+
+  const diffMinutes = Math.max(0, Math.round(diffMs / 60000))
+  if (diffMinutes < 1) return "acum"
+  if (diffMinutes < 60) return `acum ${diffMinutes} min`
+
+  const diffHours = Math.round(diffMinutes / 60)
+  if (diffHours < 24) return `acum ${diffHours} h`
+
+  const diffDays = Math.round(diffHours / 24)
+  return `acum ${diffDays} zile`
+}
+
 async function getTenantIdFromSession(token: string): Promise<string> {
   const storedTenantId =
     localStorage.getItem("tenant_id") ||
@@ -134,7 +166,7 @@ async function getTenantIdFromSession(token: string): Promise<string> {
   const data: MeResponse = await res.json().catch(() => ({}))
 
   if (!res.ok || !data?.ok || !data?.tenant_id) {
-    throw new Error("Nu am putut determina tenant-ul din sesiunea curentă.")
+    throw new Error("Nu am putut determina tenant-ul din sesiunea curentÄƒ.")
   }
 
   localStorage.setItem("tenant_id", data.tenant_id)
@@ -184,9 +216,9 @@ function SalesChart({
     <div className="rounded-[18px] border border-[#E8E3DA] bg-white p-3.5 shadow-sm shadow-[#17324D]/[0.04]">
       <div className="mb-2.5 flex flex-col gap-2.5 xl:flex-row xl:items-start xl:justify-between">
         <div>
-          <div className="text-lg font-semibold text-slate-900">Vânzări pe interval</div>
+          <div className="text-lg font-semibold text-slate-900">VÃ¢nzÄƒri pe interval</div>
           <div className="mt-1 text-sm text-slate-500">
-            Grafic compact cu filtrare rapidă și focus pe evoluția zilnică.
+            Grafic compact cu filtrare rapidÄƒ È™i focus pe evoluÈ›ia zilnicÄƒ.
           </div>
         </div>
 
@@ -205,7 +237,7 @@ function SalesChart({
 
           <div className="min-w-0">
             <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-              Până la
+              PÃ¢nÄƒ la
             </label>
             <input
               type="date"
@@ -230,10 +262,10 @@ function SalesChart({
           {hovered ? hovered.label : "-"}
         </div>
         <div className="mt-1 text-xl font-semibold text-slate-900">
-          {hovered ? formatRon(hovered.value) : "—"}
+          {hovered ? formatRon(hovered.value) : "â€”"}
         </div>
         <div className="mt-1 text-sm text-slate-500">
-          {hovered ? `Vânzări înregistrate la data de ${hovered.date}` : "Nu există puncte în intervalul ales."}
+          {hovered ? `VÃ¢nzÄƒri Ã®nregistrate la data de ${hovered.date}` : "Nu existÄƒ puncte Ã®n intervalul ales."}
         </div>
       </div>
 
@@ -386,6 +418,8 @@ export default function Dashboard() {
   const [cardTotal, setCardTotal] = useState(0)
   const [topProducts, setTopProducts] = useState<TopProductItem[]>([])
   const [lowStock, setLowStock] = useState<LowStockItem[]>([])
+  const [recentActivity, setRecentActivity] = useState<RecentActivityItem[]>([])
+  const [updatedAt, setUpdatedAt] = useState("")
   const [activeLocationId, setActiveLocationId] = useState(getActiveLocationId())
 
   useEffect(() => {
@@ -395,20 +429,50 @@ export default function Dashboard() {
   }, [])
 
   useEffect(() => {
-    loadCriticalStock(activeLocationId)
+    void loadCriticalStock(activeLocationId)
+
+    const intervalId = window.setInterval(() => {
+      void loadCriticalStock(activeLocationId, true)
+    }, DASHBOARD_REFRESH_MS)
+
+    return () => window.clearInterval(intervalId)
   }, [activeLocationId])
 
   useEffect(() => {
-    loadDashboard(activeLocationId)
+    void loadDashboard(activeLocationId)
+
+    const intervalId = window.setInterval(() => {
+      void loadDashboard(activeLocationId, true)
+    }, DASHBOARD_REFRESH_MS)
+
+    return () => window.clearInterval(intervalId)
   }, [dateFrom, dateTo, activeLocationId])
 
-  async function loadCriticalStock(selectedLocationId: string) {
+  useEffect(() => {
+    const refreshNow = () => {
+      if (document.visibilityState !== "visible") return
+      void loadDashboard(activeLocationId, true)
+      void loadCriticalStock(activeLocationId, true)
+    }
+
+    window.addEventListener("focus", refreshNow)
+    document.addEventListener("visibilitychange", refreshNow)
+
+    return () => {
+      window.removeEventListener("focus", refreshNow)
+      document.removeEventListener("visibilitychange", refreshNow)
+    }
+  }, [dateFrom, dateTo, activeLocationId])
+
+  async function loadCriticalStock(selectedLocationId: string, silent = false) {
     if (!token) {
       setCriticalLoading(false)
       return
     }
 
-    setCriticalLoading(true)
+    if (!silent) {
+      setCriticalLoading(true)
+    }
 
     try {
       const endpoint = selectedLocationId
@@ -431,18 +495,22 @@ export default function Dashboard() {
     } catch {
       setCriticalStock([])
     } finally {
-      setCriticalLoading(false)
+      if (!silent) {
+        setCriticalLoading(false)
+      }
     }
   }
 
-  async function loadDashboard(selectedLocationId: string) {
+  async function loadDashboard(selectedLocationId: string, silent = false) {
     if (!token) {
       setDashboardLoading(false)
-      setDashboardError("Lipsește token-ul pentru dashboard.")
+      setDashboardError("LipseÈ™te token-ul pentru dashboard.")
       return
     }
 
-    setDashboardLoading(true)
+    if (!silent) {
+      setDashboardLoading(true)
+    }
     setDashboardError("")
 
     try {
@@ -463,7 +531,7 @@ export default function Dashboard() {
       const data: DashboardApiResponse = await res.json().catch(() => ({}))
 
       if (!res.ok || !data.ok) {
-        throw new Error("Nu s-au putut încărca datele dashboard.")
+        throw new Error("Nu s-au putut Ã®ncÄƒrca datele dashboard.")
       }
 
       const normalizedSeries = normalizeSalesPerDay(data.salesPerDay)
@@ -484,9 +552,11 @@ export default function Dashboard() {
           : []
       )
       setLowStock(Array.isArray(data.lowStock) ? data.lowStock : [])
+      setRecentActivity(Array.isArray(data.recentActivity) ? data.recentActivity : [])
+      setUpdatedAt(String(data.updatedAt || new Date().toISOString()))
     } catch (error) {
       console.error("Dashboard load failed", error)
-      setDashboardError("Nu am putut încărca dashboard-ul real din backend.")
+      setDashboardError("Nu am putut Ã®ncÄƒrca dashboard-ul real din backend.")
       setSalesSeries([])
       setSalesTotal(0)
       setReceiptsCount(0)
@@ -495,8 +565,11 @@ export default function Dashboard() {
       setCardTotal(0)
       setTopProducts([])
       setLowStock([])
+      setRecentActivity([])
     } finally {
-      setDashboardLoading(false)
+      if (!silent) {
+        setDashboardLoading(false)
+      }
     }
   }
 
@@ -511,7 +584,7 @@ export default function Dashboard() {
   const bestDay = useMemo(() => {
     if (!filteredSales.length) return "-"
     const top = [...filteredSales].sort((a, b) => b.value - a.value)[0]
-    return `${top.label} • ${formatRon(top.value)}`
+    return `${top.label} â€¢ ${formatRon(top.value)}`
   }, [filteredSales])
 
   const criticalStockCount = lowStock.length || criticalStock.length
@@ -519,10 +592,10 @@ export default function Dashboard() {
   const cashShare = paymentTotal > 0 ? (cashTotal / paymentTotal) * 100 : 0
   const cardShare = paymentTotal > 0 ? (cardTotal / paymentTotal) * 100 : 0
   const totalTopProfit = topProducts.reduce((acc, item) => acc + item.profit, 0)
-
+  const lastUpdatedLabel = updatedAt ? formatRelativeTime(updatedAt) : "acum"
   const stats = [
     {
-      title: "Vânzări interval",
+      title: "VÃ¢nzÄƒri interval",
       value: formatRon(salesTotal),
       hint: `${filteredSales.length} zile selectate`,
       icon: CircleDollarSign,
@@ -552,7 +625,7 @@ export default function Dashboard() {
     {
       title: "Stoc critic",
       value: `${criticalStockCount}`,
-      hint: "produse de urmărit",
+      hint: "produse de urmÄƒrit",
       icon: AlertTriangle,
       tone: "amber" as const,
     },
@@ -605,7 +678,7 @@ export default function Dashboard() {
                   <TrendingUp size={18} />
                 </span>
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold text-slate-900">Cea mai bună zi</div>
+                  <div className="text-sm font-semibold text-slate-900">Cea mai bunÄƒ zi</div>
                   <div className="mt-1 text-sm text-slate-500">{bestDay}</div>
                 </div>
               </div>
@@ -617,7 +690,7 @@ export default function Dashboard() {
                   <Wallet size={18} />
                 </span>
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold text-slate-900">Total încasări urmărite</div>
+                  <div className="text-sm font-semibold text-slate-900">Total Ã®ncasÄƒri urmÄƒrite</div>
                   <div className="mt-1 text-sm text-slate-500">{formatRon(paymentTotal)}</div>
                 </div>
               </div>
@@ -630,7 +703,7 @@ export default function Dashboard() {
                 </span>
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-slate-900">Alerte stoc</div>
-                  <div className="mt-1 text-sm text-slate-500">{criticalStockCount} produse necesită atenție</div>
+                  <div className="mt-1 text-sm text-slate-500">{criticalStockCount} produse necesitÄƒ atenÈ›ie</div>
                 </div>
               </div>
             </div>
@@ -651,10 +724,10 @@ export default function Dashboard() {
         >
           <div className="space-y-2.5">
             {dashboardLoading ? (
-              <div className="text-sm text-slate-500">Se încarcă top produse...</div>
+              <div className="text-sm text-slate-500">Se Ã®ncarcÄƒ top produse...</div>
             ) : topProducts.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-                Nu există încă produse vândute în intervalul selectat.
+                Nu existÄƒ Ã®ncÄƒ produse vÃ¢ndute Ã®n intervalul selectat.
               </div>
             ) : (
               topProducts.map((item, index) => (
@@ -689,23 +762,32 @@ export default function Dashboard() {
           title="Activitate recentă"
           action={
             <div className="rounded-full bg-[#FFF1D6] px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-[#B66A00]">
-              live
+              {lastUpdatedLabel}
             </div>
           }
         >
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-            {recentDocs.map((item) => {
-              const Icon = item.icon
-              return (
-                <div key={item.title} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-slate-900 shadow-sm">
-                    <Icon size={18} />
+            {dashboardLoading ? (
+              <div className="text-sm text-slate-500">Se încarcă activitatea recentă...</div>
+            ) : recentActivity.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+                Nu există încă activitate recentă pentru locația selectată.
+              </div>
+            ) : (
+              recentActivity.map((item, index) => {
+                const Icon = ACTIVITY_ICON_MAP[item.type] || FileText
+                return (
+                  <div key={`${item.type}-${item.at}-${index}`} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-slate-900 shadow-sm">
+                      <Icon size={18} />
+                    </div>
+                    <div className="text-sm font-semibold text-slate-900">{item.title}</div>
+                    <div className="mt-2 text-sm text-slate-500">{item.meta}</div>
+                    <div className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-[#B66A00]">{formatRelativeTime(item.at)}</div>
                   </div>
-                  <div className="text-sm font-semibold text-slate-900">{item.title}</div>
-                  <div className="mt-2 text-sm text-slate-500">{item.meta}</div>
-                </div>
-              )
-            })}
+                )
+              })
+            )}
           </div>
         </SectionCard>
       </div>
@@ -715,7 +797,7 @@ export default function Dashboard() {
       >
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-2 2xl:grid-cols-3">
           {dashboardLoading || criticalLoading ? (
-            <div className="text-sm text-slate-500">Se încarcă produsele cu stoc mic...</div>
+            <div className="text-sm text-slate-500">Se Ã®ncarcÄƒ produsele cu stoc mic...</div>
           ) : lowStock.length > 0 ? (
             lowStock.map((item, index) => (
               <div
@@ -733,7 +815,7 @@ export default function Dashboard() {
             ))
           ) : criticalStock.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-              Nu există suficiente date pentru alertă stoc critic.
+              Nu existÄƒ suficiente date pentru alertÄƒ stoc critic.
             </div>
           ) : (
             criticalStock.map((product, index) => (
@@ -742,8 +824,8 @@ export default function Dashboard() {
                 className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5"
               >
                 <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-slate-800">{product.name || "Produs fără nume"}</div>
-                  <div className="text-xs text-slate-500">{product.sku || "fără SKU"}</div>
+                  <div className="truncate text-sm font-semibold text-slate-800">{product.name || "Produs fÄƒrÄƒ nume"}</div>
+                  <div className="text-xs text-slate-500">{product.sku || "fÄƒrÄƒ SKU"}</div>
                 </div>
                 <div className="ml-3 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
                   {formatQtyRo(activeLocationId ? product.qty : product.totalQty || 0)} {product.uom || ""}
@@ -756,3 +838,10 @@ export default function Dashboard() {
     </div>
   )
 }
+
+
+
+
+
+
+

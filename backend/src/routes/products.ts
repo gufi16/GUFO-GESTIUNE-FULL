@@ -1,4 +1,4 @@
-// @ts-nocheck
+﻿// @ts-nocheck
 import { Router } from "express"
 import path from "path"
 import fs from "fs"
@@ -37,7 +37,7 @@ const upload = multer({
   fileFilter: (_req, file, cb) => {
     const ok = /^image\/(jpeg|jpg|png|webp|gif)$/i.test(file.mimetype)
     if (!ok) {
-      cb(new Error("Sunt permise doar fișiere imagine: jpg, png, webp, gif."))
+      cb(new Error("Sunt permise doar fiÈ™iere imagine: jpg, png, webp, gif."))
       return
     }
     cb(null, true)
@@ -77,7 +77,7 @@ function normalizeProductFlags(classValue: string, payload: { price: number; isV
   const rules = getClassRules(classValue)
 
   if (!rules) {
-    throw new Error("Clasificare produs invalidă.")
+    throw new Error("Clasificare produs invalidÄƒ.")
   }
 
   return {
@@ -147,8 +147,27 @@ function normalizeImageUrl(value: any) {
   return text || null
 }
 
+function buildPublicBaseUrl(req: any) {
+  const explicitBase = String(
+    process.env.PUBLIC_API_URL || process.env.API_PUBLIC_URL || process.env.APP_PUBLIC_API_URL || ""
+  )
+    .trim()
+    .replace(/\/+$/, "")
+
+  if (explicitBase) return explicitBase
+
+  const forwardedProto = String(req.headers["x-forwarded-proto"] || req.protocol || "http")
+    .split(",")[0]
+    .trim()
+  const forwardedHost = String(req.headers["x-forwarded-host"] || req.get("host") || "")
+    .split(",")[0]
+    .trim()
+
+  return `${forwardedProto}://${forwardedHost}`
+}
+
 function buildPublicImageUrl(req: any, folder: "products" | "categories", filename: string) {
-  return `${req.protocol}://${req.get("host")}/uploads/${folder}/${filename}`
+  return `${buildPublicBaseUrl(req)}/uploads/${folder}/${filename}`
 }
 
 router.post(
@@ -241,6 +260,8 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
   const categoryId = categoryIdRaw || null
   const requestedSku = String(req.body?.sku || "").trim()
   const classValue = String(req.body?.class || "MARFA").trim()
+  const normalizedPurchaseUomId = classValue === "PRODUS_FIN" ? uomId : purchaseUomId
+  const normalizedPurchaseFactor = classValue === "PRODUS_FIN" ? 1 : purchaseFactor
   let productionMode = normalizeProductionMode(req.body?.productionMode || "AUTO")
   const requestedIsActive = req.body?.isActive === undefined ? true : Boolean(req.body?.isActive)
   const requestedVisibleInPos =
@@ -248,11 +269,11 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
   const requestedIsSgr = req.body?.isSgr === undefined ? false : Boolean(req.body?.isSgr)
 
   if (!ALL_PRODUCT_CLASSES.includes(classValue)) {
-    return res.status(400).json({ ok: false, error: "Clasificare produs invalidă." })
+    return res.status(400).json({ ok: false, error: "Clasificare produs invalidÄƒ." })
   }
 
   if (!productionMode) {
-    return res.status(400).json({ ok: false, error: "Mod de producție invalid." })
+    return res.status(400).json({ ok: false, error: "Mod de producÈ›ie invalid." })
   }
 
   const { price: normalizedPrice, isVisibleInPos, isSgr } = normalizeProductFlags(classValue, {
@@ -273,8 +294,8 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
     return res.status(400).json({ ok: false, error: "UM este obligatorie." })
   }
 
-  if (purchaseFactor <= 0) {
-    return res.status(400).json({ ok: false, error: "Factorul trebuie să fie mai mare decât 0." })
+  if (normalizedPurchaseFactor <= 0) {
+    return res.status(400).json({ ok: false, error: "Factorul trebuie sÄƒ fie mai mare decÃ¢t 0." })
   }
 
   const [vatRate, fallbackVatRate, uom, purchaseUom, category] = await Promise.all([
@@ -301,10 +322,10 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
         tenantId
       }
     }),
-    purchaseUomId
+    normalizedPurchaseUomId
       ? prisma.uom.findFirst({
           where: {
-            id: purchaseUomId,
+            id: normalizedPurchaseUomId,
             tenantId
           }
         })
@@ -327,23 +348,23 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
   }
 
   if (!isVatPayer && !fallbackVatRate) {
-    return res.status(400).json({ ok: false, error: "Lipsește cota TVA 0% pentru companiile neplătitoare de TVA." })
+    return res.status(400).json({ ok: false, error: "LipseÈ™te cota TVA 0% pentru companiile neplÄƒtitoare de TVA." })
   }
 
   if (!isVatPayer && !fallbackVatRate) {
-    return res.status(400).json({ ok: false, error: "Lipsește cota TVA 0% pentru companiile neplătitoare de TVA." })
+    return res.status(400).json({ ok: false, error: "LipseÈ™te cota TVA 0% pentru companiile neplÄƒtitoare de TVA." })
   }
 
   if (!uom) {
-    return res.status(404).json({ ok: false, error: "UM inexistentă." })
+    return res.status(404).json({ ok: false, error: "UM inexistentÄƒ." })
   }
 
-  if (purchaseUomId && !purchaseUom) {
-    return res.status(404).json({ ok: false, error: "UM achiziție inexistentă." })
+  if (normalizedPurchaseUomId && !purchaseUom) {
+    return res.status(404).json({ ok: false, error: "UM achiziÈ›ie inexistentÄƒ." })
   }
 
   if (categoryId && !category) {
-    return res.status(404).json({ ok: false, error: "Categoria nu există." })
+    return res.status(404).json({ ok: false, error: "Categoria nu existÄƒ." })
   }
 
   try {
@@ -381,8 +402,8 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
           class: classValue as any,
           vatRateId: vatRate?.id || fallbackVatRate?.id || vatRateIdRaw,
           uomId,
-          purchaseUomId: purchaseUomId || uomId,
-          purchaseFactor,
+          purchaseUomId: normalizedPurchaseUomId || uomId,
+          purchaseFactor: normalizedPurchaseFactor,
           categoryId,
           departmentId: category?.departmentId || null,
           price: normalizedPrice,
@@ -449,17 +470,20 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   const categoryIdRaw = String(req.body?.categoryId || "").trim()
   const categoryId = categoryIdRaw || null
   const classValue = String(req.body?.class || "MARFA").trim()
+  const normalizedPurchaseUomId = classValue === "PRODUS_FIN" ? uomId : purchaseUomId
+  const normalizedPurchaseFactor = classValue === "PRODUS_FIN" ? 1 : purchaseFactor
+  let productionMode = normalizeProductionMode(req.body?.productionMode || "AUTO")
   const requestedIsActive = req.body?.isActive === undefined ? true : Boolean(req.body?.isActive)
   const requestedVisibleInPos =
     req.body?.isVisibleInPos === undefined ? true : Boolean(req.body?.isVisibleInPos)
   const requestedIsSgr = req.body?.isSgr === undefined ? false : Boolean(req.body?.isSgr)
 
   if (!ALL_PRODUCT_CLASSES.includes(classValue)) {
-    return res.status(400).json({ ok: false, error: "Clasificare produs invalidă." })
+    return res.status(400).json({ ok: false, error: "Clasificare produs invalidÄƒ." })
   }
 
   if (!productionMode) {
-    return res.status(400).json({ ok: false, error: "Mod de producție invalid." })
+    return res.status(400).json({ ok: false, error: "Mod de producÈ›ie invalid." })
   }
 
   const { price: normalizedPrice, isVisibleInPos, isSgr } = normalizeProductFlags(classValue, {
@@ -480,8 +504,8 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
     return res.status(400).json({ ok: false, error: "UM este obligatorie." })
   }
 
-  if (purchaseFactor <= 0) {
-    return res.status(400).json({ ok: false, error: "Factorul trebuie să fie mai mare decât 0." })
+  if (normalizedPurchaseFactor <= 0) {
+    return res.status(400).json({ ok: false, error: "Factorul trebuie sÄƒ fie mai mare decÃ¢t 0." })
   }
 
   const current = await prisma.product.findFirst({
@@ -492,7 +516,7 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   })
 
   if (!current) {
-    return res.status(404).json({ ok: false, error: "Produsul nu există." })
+    return res.status(404).json({ ok: false, error: "Produsul nu existÄƒ." })
   }
 
   productionMode = normalizeProductionMode(
@@ -523,10 +547,10 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
         tenantId
       }
     }),
-    purchaseUomId
+    normalizedPurchaseUomId
       ? prisma.uom.findFirst({
           where: {
-            id: purchaseUomId,
+            id: normalizedPurchaseUomId,
             tenantId
           }
         })
@@ -555,15 +579,15 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   }
 
   if (!uom) {
-    return res.status(404).json({ ok: false, error: "UM inexistentă." })
+    return res.status(404).json({ ok: false, error: "UM inexistentÄƒ." })
   }
 
-  if (purchaseUomId && !purchaseUom) {
-    return res.status(404).json({ ok: false, error: "UM achiziție inexistentă." })
+  if (normalizedPurchaseUomId && !purchaseUom) {
+    return res.status(404).json({ ok: false, error: "UM achiziÈ›ie inexistentÄƒ." })
   }
 
   if (categoryId && !category) {
-    return res.status(404).json({ ok: false, error: "Categoria nu există." })
+    return res.status(404).json({ ok: false, error: "Categoria nu existÄƒ." })
   }
 
   try {
@@ -578,8 +602,8 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
         class: classValue as any,
         vatRateId: vatRate?.id || fallbackVatRate?.id || current.vatRateId,
         uomId,
-        purchaseUomId: purchaseUomId || uomId,
-        purchaseFactor,
+        purchaseUomId: normalizedPurchaseUomId || uomId,
+          purchaseFactor: normalizedPurchaseFactor,
         categoryId,
         departmentId: category?.departmentId || null,
         price: normalizedPrice,
@@ -635,7 +659,7 @@ router.get("/api/v1/products/:id/recipe", async (req: AuthedRequest, res) => {
   })
 
   if (!product) {
-    return res.status(404).json({ ok: false, error: "Produsul nu există." })
+    return res.status(404).json({ ok: false, error: "Produsul nu existÄƒ." })
   }
 
   const recipe = await prisma.recipe.findFirst({
@@ -678,13 +702,13 @@ router.post("/api/v1/products/:id/recipe", async (req: AuthedRequest, res) => {
   })
 
   if (!product) {
-    return res.status(404).json({ ok: false, error: "Produsul nu există." })
+    return res.status(404).json({ ok: false, error: "Produsul nu existÄƒ." })
   }
 
   if (product.class !== "PRODUS_FIN" && product.class !== "SEMIFABRICATE") {
     return res.status(400).json({
       ok: false,
-      error: "Rețetarul se poate defini doar pentru PRODUS_FIN sau SEMIFABRICATE."
+      error: "ReÈ›etarul se poate defini doar pentru PRODUS_FIN sau SEMIFABRICATE."
     })
   }
 
@@ -698,11 +722,11 @@ router.post("/api/v1/products/:id/recipe", async (req: AuthedRequest, res) => {
   const itemsRaw = Array.isArray(req.body?.items) ? req.body.items : []
 
   if (yieldQty <= 0) {
-    return res.status(400).json({ ok: false, error: "Randamentul trebuie să fie mai mare decât 0." })
+    return res.status(400).json({ ok: false, error: "Randamentul trebuie sÄƒ fie mai mare decÃ¢t 0." })
   }
 
   if (!["DRAFT", "ACTIVE", "INACTIVE"].includes(status)) {
-    return res.status(400).json({ ok: false, error: "Status rețetar invalid." })
+    return res.status(400).json({ ok: false, error: "Status reÈ›etar invalid." })
   }
 
   const normalizedItems: Array<{
@@ -720,21 +744,21 @@ router.post("/api/v1/products/:id/recipe", async (req: AuthedRequest, res) => {
   }))
 
   if (!normalizedItems.length) {
-    return res.status(400).json({ ok: false, error: "Adaugă cel puțin un ingredient în rețetar." })
+    return res.status(400).json({ ok: false, error: "AdaugÄƒ cel puÈ›in un ingredient Ã®n reÈ›etar." })
   }
 
   for (const line of normalizedItems) {
     if (!line.ingredientId) {
-      return res.status(400).json({ ok: false, error: "Există ingrediente fără produs selectat." })
+      return res.status(400).json({ ok: false, error: "ExistÄƒ ingrediente fÄƒrÄƒ produs selectat." })
     }
     if (line.ingredientId === productId) {
-      return res.status(400).json({ ok: false, error: "Produsul nu poate fi ingredient în propriul rețetar." })
+      return res.status(400).json({ ok: false, error: "Produsul nu poate fi ingredient Ã®n propriul reÈ›etar." })
     }
     if (line.qty <= 0) {
-      return res.status(400).json({ ok: false, error: "Cantitatea ingredientului trebuie să fie mai mare decât 0." })
+      return res.status(400).json({ ok: false, error: "Cantitatea ingredientului trebuie sÄƒ fie mai mare decÃ¢t 0." })
     }
     if (line.lossPercent < 0) {
-      return res.status(400).json({ ok: false, error: "Pierderea nu poate fi negativă." })
+      return res.status(400).json({ ok: false, error: "Pierderea nu poate fi negativÄƒ." })
     }
   }
 
@@ -750,7 +774,7 @@ router.post("/api/v1/products/:id/recipe", async (req: AuthedRequest, res) => {
   })
 
   if (ingredients.length !== ingredientIds.length) {
-    return res.status(400).json({ ok: false, error: "Unul sau mai multe ingrediente nu există." })
+    return res.status(400).json({ ok: false, error: "Unul sau mai multe ingrediente nu existÄƒ." })
   }
 
   const invalidIngredient = ingredients.find(
@@ -761,7 +785,7 @@ router.post("/api/v1/products/:id/recipe", async (req: AuthedRequest, res) => {
     return res.status(400).json({
       ok: false,
       error:
-        "În rețetar sunt permise doar ingrediente din clasele MATERIE_PRIMA, MARFA sau SEMIFABRICATE."
+        "ÃŽn reÈ›etar sunt permise doar ingrediente din clasele MATERIE_PRIMA, MARFA sau SEMIFABRICATE."
     })
   }
 
@@ -855,7 +879,7 @@ router.post("/api/v1/products/:id/recipe", async (req: AuthedRequest, res) => {
   } catch (e: any) {
     return res.status(400).json({
       ok: false,
-      error: e?.message || "Nu am putut salva rețetarul."
+      error: e?.message || "Nu am putut salva reÈ›etarul."
     })
   }
 })
@@ -872,7 +896,7 @@ router.delete("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   })
 
   if (!current) {
-    return res.status(404).json({ ok: false, error: "Produsul nu există." })
+    return res.status(404).json({ ok: false, error: "Produsul nu existÄƒ." })
   }
 
   try {
@@ -882,8 +906,13 @@ router.delete("/api/v1/products/:id", async (req: AuthedRequest, res) => {
 
     res.json({ ok: true })
   } catch {
-    res.status(400).json({ ok: false, error: "Produsul este utilizat și nu poate fi șters." })
+    res.status(400).json({ ok: false, error: "Produsul este utilizat È™i nu poate fi È™ters." })
   }
 })
 
 export default router
+
+
+
+
+

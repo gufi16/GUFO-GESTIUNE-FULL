@@ -156,6 +156,17 @@ function formatMoney(value: any) {
   return formatMoneyRo(value)
 }
 
+function normalizeHostedImageUrl(value: any) {
+  const text = String(value || "").trim()
+  if (!text) return ""
+
+  if (typeof window !== "undefined" && window.location.protocol === "https:" && text.startsWith("http://")) {
+    return text.replace(/^http:\/\//i, "https://")
+  }
+
+  return text
+}
+
 export default function ProdusePage() {
   const token =
     getToken() ||
@@ -202,6 +213,20 @@ export default function ProdusePage() {
   const selectedPurchaseUom = useMemo(() => {
     return uoms.find((u) => u.id === form.purchaseUomId) || null
   }, [uoms, form.purchaseUomId])
+
+  const isFinishedProduct = form.class === "PRODUS_FIN"
+
+  useEffect(() => {
+    if (!isFinishedProduct || !form.uomId) return
+
+    if (form.purchaseUomId !== form.uomId || form.purchaseFactor !== "1") {
+      setForm((prev) => ({
+        ...prev,
+        purchaseUomId: prev.uomId,
+        purchaseFactor: "1"
+      }))
+    }
+  }, [isFinishedProduct, form.uomId, form.purchaseUomId, form.purchaseFactor])
 
   useEffect(() => {
     loadAll()
@@ -318,7 +343,7 @@ function getDefaultVat(list = vatRates) {
     setForm({
       sku: item.sku || "",
       name: item.name || "",
-      imageUrl: item.imageUrl || "",
+      imageUrl: normalizeHostedImageUrl(item.imageUrl || ""),
       class: item.class || "MARFA",
       uomId: item.uom?.id || "",
       purchaseUomId: item.purchaseUom?.id || item.uom?.id || "",
@@ -373,7 +398,7 @@ function getDefaultVat(list = vatRates) {
         return
       }
 
-      setForm((prev) => ({ ...prev, imageUrl: data.imageUrl || "" }))
+      setForm((prev) => ({ ...prev, imageUrl: normalizeHostedImageUrl(data.imageUrl || "") }))
     } catch {
       setError("Nu am putut încărca imaginea.")
     } finally {
@@ -397,8 +422,8 @@ function getDefaultVat(list = vatRates) {
       return
     }
 
-    if (!form.purchaseUomId) {
-      setError("Selectează ambalajul.")
+    if (!isFinishedProduct && !form.purchaseUomId) {
+      setError("Selecteaz? ambalajul.")
       return
     }
 
@@ -407,7 +432,10 @@ function getDefaultVat(list = vatRates) {
       return
     }
 
-    const normalizedFactor = Math.max(0.000001, toNumberSafe(form.purchaseFactor || 1))
+    const normalizedPurchaseUomId = isFinishedProduct ? form.uomId : form.purchaseUomId || form.uomId
+    const normalizedFactor = isFinishedProduct
+      ? 1
+      : Math.max(0.000001, toNumberSafe(form.purchaseFactor || 1))
     const normalizedPrice = Math.max(0, toNumberSafe(form.price || 0))
     const normalizedCost = Math.max(0, toNumberSafe(form.costPrice || 0))
 
@@ -431,10 +459,10 @@ function getDefaultVat(list = vatRates) {
         body: JSON.stringify({
           sku: !editingItem ? form.sku.trim() || null : undefined,
           name: form.name.trim(),
-          imageUrl: form.imageUrl.trim() || null,
+          imageUrl: normalizeHostedImageUrl(form.imageUrl.trim()) || null,
           class: form.class,
           uomId: form.uomId,
-          purchaseUomId: form.purchaseUomId || form.uomId,
+          purchaseUomId: normalizedPurchaseUomId,
           purchaseFactor: normalizedFactor,
           vatRateId: isVatPayer ? form.vatRateId : null,
           categoryId: form.categoryId || null,
@@ -964,7 +992,7 @@ function getDefaultVat(list = vatRates) {
               </div>
 
               <button onClick={closeModal} style={btnSecondary}>
-                �nchide
+                �nchide
               </button>
             </div>
 
@@ -1060,14 +1088,17 @@ function getDefaultVat(list = vatRates) {
 
                 <SectionCard title="Unități și achiziție">
                   <div style={gridCompact}>
-                    <Field label="UM">
+                    <Field label={isFinishedProduct ? "UM v?nzare" : "UM"}>
                       <select
                         value={form.uomId}
                         onChange={(e) =>
                           setForm((prev) => ({
                             ...prev,
                             uomId: e.target.value,
-                            purchaseUomId: prev.purchaseUomId || e.target.value
+                            purchaseUomId: isFinishedProduct
+                              ? e.target.value
+                              : prev.purchaseUomId || e.target.value,
+                            purchaseFactor: isFinishedProduct ? "1" : prev.purchaseFactor
                           }))
                         }
                         style={input}
@@ -1082,49 +1113,56 @@ function getDefaultVat(list = vatRates) {
                           ))}
                       </select>
                     </Field>
+                    {!isFinishedProduct ? (
+                      <>
+                        <Field label="Ambalaj">
+                          <select
+                            value={form.purchaseUomId}
+                            onChange={(e) =>
+                              setForm((prev) => ({ ...prev, purchaseUomId: e.target.value }))
+                            }
+                            style={input}
+                          >
+                            <option value="">Selecteaz? ambalaj</option>
+                            {uoms
+                              .filter((u) => u.isActive !== false)
+                              .map((u) => (
+                                <option key={u.id} value={u.id}>
+                                  {u.code} - {u.name}
+                                </option>
+                              ))}
+                          </select>
+                        </Field>
 
-                    <Field label="Ambalaj">
-                      <select
-                        value={form.purchaseUomId}
-                        onChange={(e) =>
-                          setForm((prev) => ({ ...prev, purchaseUomId: e.target.value }))
-                        }
-                        style={input}
-                      >
-                        <option value="">Selectează ambalaj</option>
-                        {uoms
-                          .filter((u) => u.isActive !== false)
-                          .map((u) => (
-                            <option key={u.id} value={u.id}>
-                              {u.code} - {u.name}
-                            </option>
-                          ))}
-                      </select>
-                    </Field>
-
-                    <Field label="Cantitate pe ambalaj">
-                      <input
-                        type="number"
-                        min="1"
-                        step="0.001"
-                        value={form.purchaseFactor}
-                        onChange={(e) =>
-                          setForm((prev) => ({ ...prev, purchaseFactor: e.target.value }))
-                        }
-                        onBlur={() =>
-                          setForm((prev) => ({
-                            ...prev,
-                            purchaseFactor: normalizeStrictPositiveString(prev.purchaseFactor, "1")
-                          }))
-                        }
-                        style={input}
-                      />
-                      <div style={fieldHint}>
-                        {form.uomId && form.purchaseUomId && form.uomId === form.purchaseUomId
-                          ? `Lasă 1 dacă produsul se cumpără și se stochează în aceeași unitate (${selectedUom?.code || "UM"}).`
-                          : `Exemplu: 1 ${selectedPurchaseUom?.code || "ambalaj"} = 8 ${selectedUom?.code || "UM"}.`}
+                        <Field label="Cantitate pe ambalaj">
+                          <input
+                            type="number"
+                            min="1"
+                            step="0.001"
+                            value={form.purchaseFactor}
+                            onChange={(e) =>
+                              setForm((prev) => ({ ...prev, purchaseFactor: e.target.value }))
+                            }
+                            onBlur={() =>
+                              setForm((prev) => ({
+                                ...prev,
+                                purchaseFactor: normalizeStrictPositiveString(prev.purchaseFactor, "1")
+                              }))
+                            }
+                            style={input}
+                          />
+                          <div style={fieldHint}>
+                            {form.uomId && form.purchaseUomId && form.uomId === form.purchaseUomId
+                              ? `Las? 1 dac? produsul se cump?r? ?i se stocheaz? ?n aceea?i unitate (${selectedUom?.code || "UM"}).`
+                              : `Exemplu: 1 ${selectedPurchaseUom?.code || "ambalaj"} = 8 ${selectedUom?.code || "UM"}.`}
+                          </div>
+                        </Field>
+                      </>
+                    ) : (
+                      <div style={hintBoxInline}>
+                        Pentru produs finit se folose?te doar U.M. de v?nzare. Ambalajul ?i factorul r?m?n automat pe aceea?i unitate.
                       </div>
-                    </Field>
+                    )}
 
                     <Field label="TVA">
                       {isVatPayer ? (
