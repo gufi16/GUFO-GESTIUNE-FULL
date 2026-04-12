@@ -35,6 +35,35 @@ function slugify(value: string) {
   )
 }
 
+const RESERVED_SUBDOMAINS = new Set(["app", "api", "www", "admin", "cp", "mail", "docs", "support"])
+
+function normalizeSubdomain(value?: string | null) {
+  const normalized = slugify(String(value || ""))
+  return normalized || "client"
+}
+
+function buildTenantPortalUrl(subdomain?: string | null) {
+  if (!subdomain) return null
+  return `https://${subdomain}.gufo.ink`
+}
+
+async function generateUniqueTenantSubdomain(value: string) {
+  const base = normalizeSubdomain(value)
+  let candidate = RESERVED_SUBDOMAINS.has(base) ? `${base}-client` : base
+  let index = 1
+
+  while (await prisma.tenant.findFirst({ where: { subdomain: candidate } })) {
+    candidate = `${base}-${index}`.slice(0, 50)
+    index += 1
+  }
+
+  if (RESERVED_SUBDOMAINS.has(candidate)) {
+    candidate = `${candidate}-1`.slice(0, 50)
+  }
+
+  return candidate
+}
+
 function addDays(base: Date, days: number) {
   const next = new Date(base)
   next.setDate(next.getDate() + days)
@@ -112,6 +141,7 @@ async function generateUniqueDeviceId(tenantId: string) {
 
 const CreateClientSchema = z.object({
   companyName: z.string().min(2),
+  subdomain: z.string().optional(),
   cui: z.string().optional(),
   regNo: z.string().optional(),
   address: z.string().optional(),
@@ -407,7 +437,9 @@ router.get("/api/v1/admin/clients", requireAuth, requireOwner, async (_req, res)
       return {
         id: tenant.id,
         name: tenant.name,
-        slug: tenant.company?.cui || slugify(tenant.name),
+        slug: tenant.subdomain || tenant.company?.cui || slugify(tenant.name),
+        subdomain: tenant.subdomain,
+        portalUrl: buildTenantPortalUrl(tenant.subdomain),
         company: tenant.company
           ? {
               id: tenant.company.id,
@@ -544,7 +576,9 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
     item: {
       id: tenant.id,
       name: tenant.name,
-      slug: tenant.company?.cui || slugify(tenant.name),
+      slug: tenant.subdomain || tenant.company?.cui || slugify(tenant.name),
+      subdomain: tenant.subdomain,
+      portalUrl: buildTenantPortalUrl(tenant.subdomain),
       company: tenant.company
         ? {
             id: tenant.company.id,
@@ -676,12 +710,14 @@ router.post("/api/v1/admin/clients", requireAuth, requireOwner, async (req: Auth
   const expiresAt = parseOptionalDate(data.expiresAt) || addDays(now, 30)
   const keyHash = await bcrypt.hash(data.licenseKey, 10)
   const keyPrefix = data.licenseKey.slice(0, 4).toUpperCase()
+  const subdomain = await generateUniqueTenantSubdomain(data.subdomain?.trim() || data.companyName)
 
   try {
     const result = await prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
         data: {
           name: data.companyName,
+          subdomain,
           company: {
             create: {
               name: data.companyName,
@@ -743,6 +779,8 @@ router.post("/api/v1/admin/clients", requireAuth, requireOwner, async (req: Auth
           entityId: tenant.id,
           payload: {
             companyName: data.companyName,
+            subdomain,
+            portalUrl: buildTenantPortalUrl(subdomain),
             modules: data.modules,
             limits: {
               locations: data.limitLocations,
@@ -769,6 +807,8 @@ router.post("/api/v1/admin/clients", requireAuth, requireOwner, async (req: Auth
       item: {
         id: result.tenant.id,
         name: result.tenant.name,
+        subdomain: result.tenant.subdomain,
+        portalUrl: buildTenantPortalUrl(result.tenant.subdomain),
         company: result.tenant.company,
         license: result.tenant.licenses[0] || null,
         erpUser: {

@@ -8,6 +8,8 @@ type AdminClientItem = {
   id: string
   name: string
   slug: string
+  subdomain?: string | null
+  portalUrl?: string | null
   status: "active" | "suspended" | "expired" | "inactive"
   createdAt: string
   usersCount: number
@@ -51,6 +53,7 @@ type AdminClientsResponse = {
 
 type CreateClientPayload = {
   companyName: string
+  subdomain?: string
   cui?: string
   regNo?: string
   address?: string
@@ -74,6 +77,8 @@ type CreateClientPayload = {
 type CreateClientResponse = {
   item?: {
     name?: string
+    subdomain?: string | null
+    portalUrl?: string | null
     erpUser?: {
       email?: string
       password?: string
@@ -144,6 +149,8 @@ function normalizeClient(raw: any): AdminClientItem {
     id: typeof raw?.id === "string" ? raw.id : "",
     name: typeof raw?.name === "string" ? raw.name : "Client",
     slug: typeof raw?.slug === "string" ? raw.slug : "",
+    subdomain: typeof raw?.subdomain === "string" ? raw.subdomain : null,
+    portalUrl: typeof raw?.portalUrl === "string" ? raw.portalUrl : null,
     status: raw?.status || "inactive",
     createdAt: typeof raw?.createdAt === "string" ? raw.createdAt : new Date().toISOString(),
     usersCount: Number(raw?.usersCount ?? 0),
@@ -196,9 +203,10 @@ export default function ControlPanelClients() {
   const [formError, setFormError] = useState<string | null>(null)
   const [ownerEmail, setOwnerEmail] = useState("")
   const [loggingOut, setLoggingOut] = useState(false)
-  const [createdCredentials, setCreatedCredentials] = useState<{ clientName: string; email: string; password: string } | null>(null)
+  const [createdCredentials, setCreatedCredentials] = useState<{ clientName: string; email: string; password: string; portalUrl?: string | null } | null>(null)
   const [form, setForm] = useState<CreateClientPayload>({
     companyName: "",
+    subdomain: "",
     cui: "",
     regNo: "",
     address: "",
@@ -244,7 +252,7 @@ export default function ControlPanelClients() {
     return items.filter((item) => {
       if (statusFilter !== "all" && item.status !== statusFilter) return false
       if (!term) return true
-      const haystack = [item.company?.name, item.company?.cui, item.company?.email, item.name, item.slug].filter(Boolean).join(" ").toLowerCase()
+      const haystack = [item.company?.name, item.company?.cui, item.company?.email, item.name, item.slug, item.subdomain, item.portalUrl].filter(Boolean).join(" ").toLowerCase()
       return haystack.includes(term)
     })
   }, [items, search, statusFilter])
@@ -295,11 +303,13 @@ export default function ControlPanelClients() {
           clientName: response?.item?.name || form.companyName || "Client",
           email: erpUser.email,
           password: erpUser.password,
+          portalUrl: response?.item?.portalUrl || null,
         })
       }
       setIsModalOpen(false)
       setForm({
         companyName: "",
+        subdomain: "",
         cui: "",
         regNo: "",
         address: "",
@@ -357,6 +367,7 @@ export default function ControlPanelClients() {
             <div>
               <div className="text-sm font-semibold text-blue-800">{createdCredentials.clientName}</div>
               <div className="mt-1 text-sm text-blue-700">{createdCredentials.email}</div>
+              {createdCredentials.portalUrl ? <div className="mt-1 text-sm text-blue-700">{createdCredentials.portalUrl}</div> : null}
               <div className="mt-1 font-mono text-sm text-blue-900">{createdCredentials.password}</div>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -368,6 +379,12 @@ export default function ControlPanelClients() {
                 <Copy size={12} />
                 Parola
               </button>
+              {createdCredentials.portalUrl ? (
+                <button onClick={() => copyText(createdCredentials.portalUrl || "", "URL portal")} className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700">
+                  <Copy size={12} />
+                  URL portal
+                </button>
+              ) : null}
               <button onClick={() => setCreatedCredentials(null)} className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700">
                 <X size={12} />
                 Inchide
@@ -392,7 +409,7 @@ export default function ControlPanelClients() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Cauta firma, CUI, email, slug"
+              placeholder="Cauta firma, CUI, email, subdomeniu"
               className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm text-slate-700 outline-none transition focus:border-[#17324D] focus:bg-white"
             />
           </div>
@@ -463,7 +480,7 @@ export default function ControlPanelClients() {
                     <td className="px-4 py-3">
                       <div className="font-semibold text-[#17324D]">{item.company?.name || item.name}</div>
                       <div className="mt-1 text-xs text-slate-500">
-                        {item.company?.cui || "-"} • {item.company?.email || "-"} • {item.slug || "-"}
+                        {item.company?.cui || "-"} • {item.company?.email || "-"} • {item.portalUrl || item.subdomain || item.slug || "-"}
                       </div>
                     </td>
                     <td className="px-4 py-3">
@@ -524,6 +541,7 @@ export default function ControlPanelClients() {
               <div className="grid gap-3 md:grid-cols-2">
                 {[
                   ["companyName", "Firma", "SC Exemplu SRL"],
+                  ["subdomain", "Subdomeniu", "coffee-cup"],
                   ["cui", "CUI", "RO12345678"],
                   ["email", "Email", "office@client.ro"],
                   ["phone", "Telefon", "+40 7xx xxx xxx"],

@@ -185,6 +185,7 @@ enum MarketplaceMappingStatus {
 model Tenant {
   id        String   @id @default(cuid())
   name      String
+  subdomain String?  @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

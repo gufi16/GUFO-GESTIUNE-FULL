@@ -84,6 +84,40 @@ function normalizeText(value: unknown) {
   return String(value ?? "").trim()
 }
 
+function getRequestHostname(req: express.Request) {
+  const forwardedHost = String(req.headers["x-forwarded-host"] || req.get("host") || "")
+    .split(",")[0]
+    .trim()
+    .toLowerCase()
+  return forwardedHost.replace(/:\d+$/, "")
+}
+
+function getTenantSubdomainFromHostname(hostname: string) {
+  if (!hostname) return null
+  if (/^(localhost|127\.0\.0\.1)$/i.test(hostname)) return null
+  if (hostname === "gufo.ink" || hostname === "app.gufo.ink" || hostname === "api.gufo.ink") return null
+  if (!hostname.endsWith(".gufo.ink")) return null
+
+  const parts = hostname.split(".")
+  if (parts.length < 3) return null
+
+  const subdomain = parts[0]
+  if (!subdomain || ["app", "api", "www", "admin", "cp"].includes(subdomain)) return null
+  return subdomain
+}
+
+async function resolveTenantIdFromRequestHost(req: express.Request) {
+  const subdomain = getTenantSubdomainFromHostname(getRequestHostname(req))
+  if (!subdomain) return null
+
+  const tenant = await prisma.tenant.findFirst({
+    where: { subdomain },
+    select: { id: true },
+  })
+
+  return tenant?.id || null
+}
+
 app.get("/health", (_req, res) => {
   res.json({
     ok: true,
@@ -121,12 +155,19 @@ app.post("/api/v1/auth/login", async (req, res) => {
   }
 
   const { email, password, tenantId } = parsed.data
+  const hostTenantId = await resolveTenantIdFromRequestHost(req)
+
+  if (tenantId && hostTenantId && tenantId !== hostTenantId) {
+    return res.status(403).json({ ok: false, error: "Tenantul nu corespunde subdomeniului." })
+  }
+
+  const scopedTenantId = tenantId || hostTenantId || undefined
 
   const candidates = await prisma.user.findMany({
     where: {
       email,
       isActive: true,
-      ...(tenantId ? { tenantId } : {}),
+      ...(scopedTenantId ? { tenantId: scopedTenantId } : {}),
     },
     orderBy: { createdAt: "desc" },
   })
