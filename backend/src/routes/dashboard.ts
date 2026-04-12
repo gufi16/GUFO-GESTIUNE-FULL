@@ -29,10 +29,15 @@ function buildLocationWhere(locationId: string | null) {
   return locationId ? { locationId } : {}
 }
 
+function buildTerminalWhere(terminalId: string | null) {
+  return terminalId ? { terminalId } : {}
+}
+
 router.get("/api/v1/dashboard", async (req: Request, res: Response) => {
   try {
     const tenantId = req.headers["x-tenant-id"] as string
     const locationId = req.query.locationId ? String(req.query.locationId) : null
+    const terminalId = req.query.terminalId ? String(req.query.terminalId) : null
 
     if (!tenantId) {
       return res.status(400).json({ ok: false, error: "tenantId lipsa" })
@@ -45,6 +50,7 @@ router.get("/api/v1/dashboard", async (req: Request, res: Response) => {
     const saleWhere = {
       tenantId,
       ...buildLocationWhere(locationId),
+      ...buildTerminalWhere(terminalId),
       soldAt: {
         gte: dateFrom,
         lte: dateTo,
@@ -86,6 +92,7 @@ router.get("/api/v1/dashboard", async (req: Request, res: Response) => {
         FROM "Sale"
         WHERE "tenantId" = ${tenantId}
           ${locationId ? Prisma.sql`AND "locationId" = ${locationId}` : Prisma.empty}
+          ${terminalId ? Prisma.sql`AND "terminalId" = ${terminalId}` : Prisma.empty}
           AND "soldAt" BETWEEN ${dateFrom} AND ${dateTo}
         GROUP BY day
         ORDER BY day
@@ -105,6 +112,7 @@ router.get("/api/v1/dashboard", async (req: Request, res: Response) => {
         JOIN "Sale" s ON s.id = si."saleId"
         WHERE s."tenantId" = ${tenantId}
           ${locationId ? Prisma.sql`AND s."locationId" = ${locationId}` : Prisma.empty}
+          ${terminalId ? Prisma.sql`AND s."terminalId" = ${terminalId}` : Prisma.empty}
           AND s."soldAt" BETWEEN ${dateFrom} AND ${dateTo}
         GROUP BY p.name
         ORDER BY qty DESC

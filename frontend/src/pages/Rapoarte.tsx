@@ -24,6 +24,7 @@ import {
 import PageHeader from "../components/PageHeader"
 import { API_BASE as API, getToken, authHeaders } from "../lib/api"
 import { getActiveLocationId, subscribeToActiveLocation } from "../lib/location"
+import { getActiveTerminalId, subscribeToActiveTerminal } from "../lib/terminal"
 
 const BAR_COLORS = ["#2563eb", "#14b8a6", "#f59e0b", "#8b5cf6", "#ef4444", "#0ea5e9"]
 const PIE_COLORS = ["#2563eb", "#14b8a6", "#f59e0b", "#8b5cf6", "#ef4444", "#0ea5e9"]
@@ -316,6 +317,7 @@ export default function RapoartePage() {
   const [data, setData] = useState<AdvancedReportsResponse | null>(null)
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [selectedLocationId, setSelectedLocationId] = useState(getActiveLocationId() || "ALL")
+  const [selectedTerminalId, setSelectedTerminalId] = useState(getActiveTerminalId() || "ALL")
 
   const today = new Date()
   const defaultDateTo = toInputDate(today)
@@ -334,8 +336,14 @@ export default function RapoartePage() {
   }, [])
 
   useEffect(() => {
-    loadReports(selectedLocationId, dateFrom, dateTo)
-  }, [selectedLocationId, dateFrom, dateTo])
+    return subscribeToActiveTerminal((nextTerminalId) => {
+      setSelectedTerminalId(nextTerminalId || "ALL")
+    })
+  }, [])
+
+  useEffect(() => {
+    loadReports(selectedLocationId, selectedTerminalId, dateFrom, dateTo)
+  }, [selectedLocationId, selectedTerminalId, dateFrom, dateTo])
 
   async function loadLocations() {
     try {
@@ -365,7 +373,7 @@ export default function RapoartePage() {
     }
   }
 
-  async function loadReports(locationId: string, from: string, to: string) {
+  async function loadReports(locationId: string, terminalId: string, from: string, to: string) {
     try {
       setLoading(true)
       setError("")
@@ -374,6 +382,7 @@ export default function RapoartePage() {
 
       const params = new URLSearchParams()
       if (locationId && locationId !== "ALL") params.set("locationId", locationId)
+      if (terminalId && terminalId !== "ALL") params.set("terminalId", terminalId)
       if (from) params.set("dateFrom", `${from}T00:00:00.000Z`)
       if (to) params.set("dateTo", `${to}T23:59:59.999Z`)
 

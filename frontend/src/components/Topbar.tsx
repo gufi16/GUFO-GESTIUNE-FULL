@@ -4,6 +4,7 @@ import { useLocation, useNavigate, useSearchParams } from "react-router-dom"
 import { API_BASE as API, authHeaders } from "../lib/api"
 import { logout, me } from "../lib/auth"
 import { getActiveLocationId, setActiveLocationId, subscribeToActiveLocation } from "../lib/location"
+import { getActiveTerminalId, setActiveTerminalId, subscribeToActiveTerminal } from "../lib/terminal"
 
 function toInputDate(value: Date) {
   const year = value.getFullYear()
@@ -17,12 +18,18 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const [locations, setLocations] = useState<Array<{ id: string; name: string; code?: string }>>([])
+  const [terminals, setTerminals] = useState<
+    Array<{ id: string; label: string; deviceId: string; locationId?: string; locationName?: string; locationCode?: string }>
+  >([])
   const [locationId, setLocationIdState] = useState(getActiveLocationId())
+  const [terminalId, setTerminalIdState] = useState(getActiveTerminalId())
   const [userLabel, setUserLabel] = useState("Utilizator")
   const [userMeta, setUserMeta] = useState("ERP")
   const [notificationsOpen, setNotificationsOpen] = useState(false)
 
   const isDashboard = location.pathname === "/dashboard"
+  const isReports = location.pathname === "/rapoarte"
+  const showSalesFilters = isDashboard || isReports
   const today = new Date()
   const defaultDateTo = toInputDate(today)
   const defaultDateFrom = toInputDate(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 6))
@@ -110,6 +117,57 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
   }, [])
 
   useEffect(() => {
+    return subscribeToActiveTerminal((nextTerminalId) => {
+      setTerminalIdState(nextTerminalId)
+    })
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadTerminals() {
+      try {
+        const params = new URLSearchParams()
+        if (locationId) params.set("locationId", locationId)
+
+        const res = await fetch(`${API}/api/v1/meta/terminals${params.toString() ? `?${params.toString()}` : ""}`, {
+          headers: authHeaders(),
+        })
+        const data = await res.json().catch(() => ({}))
+        const items = Array.isArray(data?.terminals) ? data.terminals : []
+
+        if (cancelled) return
+
+        const normalized = items.map((item: any) => ({
+          id: String(item.id || ""),
+          label: String(item.label || item.deviceId || "POS"),
+          deviceId: String(item.deviceId || ""),
+          locationId: item.locationId ? String(item.locationId) : undefined,
+          locationName: item.location?.name ? String(item.location.name) : undefined,
+          locationCode: item.location?.code ? String(item.location.code) : undefined,
+        }))
+
+        setTerminals(normalized)
+
+        if (terminalId && !normalized.some((item: { id: string }) => item.id === terminalId)) {
+          setTerminalIdState("")
+          setActiveTerminalId("")
+        }
+      } catch {
+        if (!cancelled) {
+          setTerminals([])
+        }
+      }
+    }
+
+    void loadTerminals()
+
+    return () => {
+      cancelled = true
+    }
+  }, [locationId, terminalId])
+
+  useEffect(() => {
     setNotificationsOpen(false)
   }, [location.pathname])
 
@@ -119,9 +177,31 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
     return selected.code ? `${selected.name} (${selected.code})` : selected.name
   }, [locationId, locations])
 
+  const selectedTerminalLabel = useMemo(() => {
+    const selected = terminals.find((item) => item.id === terminalId)
+    if (!selected) return "Toate device-urile"
+    return selected.deviceId ? `${selected.label} (${selected.deviceId})` : selected.label
+  }, [terminalId, terminals])
+
   function handleLocationChange(nextLocationId: string) {
     setLocationIdState(nextLocationId)
     setActiveLocationId(nextLocationId)
+    setTerminalIdState("")
+    setActiveTerminalId("")
+  }
+
+  function handleTerminalChange(nextTerminalId: string) {
+    const normalized = String(nextTerminalId || "")
+    setTerminalIdState(normalized)
+    setActiveTerminalId(normalized)
+
+    if (!normalized) return
+
+    const selectedTerminal = terminals.find((item) => item.id === normalized)
+    if (!selectedTerminal?.locationId || selectedTerminal.locationId === locationId) return
+
+    setLocationIdState(selectedTerminal.locationId)
+    setActiveLocationId(selectedTerminal.locationId)
   }
 
   function handleLogout() {
@@ -192,6 +272,29 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
               </select>
             </div>
           </div>
+
+          {showSalesFilters ? (
+            <div className="mt-2 flex items-center gap-2 rounded-[12px] border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm shadow-slate-900/[0.03]">
+              <div className="min-w-0 flex-1">
+                <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6C7A89]">
+                  Device
+                </div>
+                <select
+                  value={terminalId}
+                  onChange={(e) => handleTerminalChange(e.target.value)}
+                  className="h-8 w-full rounded-[8px] border border-slate-200 bg-white px-2 text-sm text-[#17324D] outline-none transition focus:border-[#244A7C] focus:bg-white"
+                  title={selectedTerminalLabel}
+                >
+                  <option value="">Toate device-urile</option>
+                  {terminals.map((terminalItem) => (
+                    <option key={terminalItem.id} value={terminalItem.id}>
+                      {terminalItem.deviceId ? `${terminalItem.label} (${terminalItem.deviceId})` : terminalItem.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="mt-2 hidden items-center justify-between gap-3 md:flex">
@@ -219,6 +322,29 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
                 </select>
               </div>
             </div>
+
+            {showSalesFilters ? (
+              <div className="flex items-center gap-2 rounded-[12px] border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm shadow-slate-900/[0.03]">
+                <div className="min-w-[230px]">
+                  <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6C7A89]">
+                    Device
+                  </div>
+                  <select
+                    value={terminalId}
+                    onChange={(e) => handleTerminalChange(e.target.value)}
+                    className="h-7 w-full rounded-[8px] border border-slate-200 bg-white px-2 text-sm text-[#17324D] outline-none transition focus:border-[#244A7C] focus:bg-white"
+                    title={selectedTerminalLabel}
+                  >
+                    <option value="">Toate device-urile</option>
+                    {terminals.map((terminalItem) => (
+                      <option key={terminalItem.id} value={terminalItem.id}>
+                        {terminalItem.deviceId ? `${terminalItem.label} (${terminalItem.deviceId})` : terminalItem.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            ) : null}
 
             {isDashboard ? (
               <div className="flex items-end gap-2 rounded-[12px] border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm shadow-slate-900/[0.03]">

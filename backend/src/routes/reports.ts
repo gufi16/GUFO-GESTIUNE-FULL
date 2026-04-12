@@ -54,7 +54,9 @@ router.get("/api/v1/reports/advanced", requireAuth, async (req: AuthedRequest, r
       new Date()
 
     const locationId = String(req.query.locationId || "").trim() || null
+    const terminalId = String(req.query.terminalId || "").trim() || null
     const whereLocation = locationId ? { locationId } : {}
+    const whereTerminal = terminalId ? { terminalId } : {}
 
     const [locations, products, sales, stockBalances, inventoryDocs, consumptionDocs, stockMoves] =
       await Promise.all([
@@ -99,6 +101,7 @@ router.get("/api/v1/reports/advanced", requireAuth, async (req: AuthedRequest, r
               lte: to,
             },
             ...whereLocation,
+            ...whereTerminal,
           },
           include: {
             items: {

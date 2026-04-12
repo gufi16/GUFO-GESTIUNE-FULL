@@ -16,6 +16,7 @@ import PageHeader from "../components/PageHeader"
 import QuickActions from "../components/QuickActions"
 import { API_BASE as API, getToken, authHeaders } from "../lib/api"
 import { getActiveLocationId, subscribeToActiveLocation } from "../lib/location"
+import { getActiveTerminalId, subscribeToActiveTerminal } from "../lib/terminal"
 import { formatMoneyRo, formatQtyRo } from "../lib/format"
 
 
@@ -378,10 +379,17 @@ export default function Dashboard() {
   const [recentActivity, setRecentActivity] = useState<RecentActivityItem[]>([])
   const [updatedAt, setUpdatedAt] = useState("")
   const [activeLocationId, setActiveLocationId] = useState(getActiveLocationId())
+  const [activeTerminalId, setActiveTerminalId] = useState(getActiveTerminalId())
 
   useEffect(() => {
     return subscribeToActiveLocation((nextLocationId) => {
       setActiveLocationId(nextLocationId)
+    })
+  }, [])
+
+  useEffect(() => {
+    return subscribeToActiveTerminal((nextTerminalId) => {
+      setActiveTerminalId(nextTerminalId)
     })
   }, [])
 
@@ -396,19 +404,19 @@ export default function Dashboard() {
   }, [activeLocationId])
 
   useEffect(() => {
-    void loadDashboard(activeLocationId)
+    void loadDashboard(activeLocationId, activeTerminalId)
 
     const intervalId = window.setInterval(() => {
-      void loadDashboard(activeLocationId, true)
+      void loadDashboard(activeLocationId, activeTerminalId, true)
     }, DASHBOARD_REFRESH_MS)
 
     return () => window.clearInterval(intervalId)
-  }, [dateFrom, dateTo, activeLocationId])
+  }, [dateFrom, dateTo, activeLocationId, activeTerminalId])
 
   useEffect(() => {
     const refreshNow = () => {
       if (document.visibilityState !== "visible") return
-      void loadDashboard(activeLocationId, true)
+      void loadDashboard(activeLocationId, activeTerminalId, true)
       void loadCriticalStock(activeLocationId, true)
     }
 
@@ -419,7 +427,7 @@ export default function Dashboard() {
       window.removeEventListener("focus", refreshNow)
       document.removeEventListener("visibilitychange", refreshNow)
     }
-  }, [dateFrom, dateTo, activeLocationId])
+  }, [dateFrom, dateTo, activeLocationId, activeTerminalId])
 
   async function loadCriticalStock(selectedLocationId: string, silent = false) {
     if (!token) {
@@ -458,7 +466,7 @@ export default function Dashboard() {
     }
   }
 
-  async function loadDashboard(selectedLocationId: string, silent = false) {
+  async function loadDashboard(selectedLocationId: string, selectedTerminalId: string, silent = false) {
     if (!token) {
       setDashboardLoading(false)
       setDashboardError("Lipseste token-ul pentru dashboard.")
@@ -477,6 +485,7 @@ export default function Dashboard() {
       if (dateFrom) params.set("dateFrom", `${dateFrom}T00:00:00.000Z`)
       if (dateTo) params.set("dateTo", `${dateTo}T23:59:59.999Z`)
       if (selectedLocationId) params.set("locationId", selectedLocationId)
+      if (selectedTerminalId) params.set("terminalId", selectedTerminalId)
 
       const res = await fetch(`${API}/api/v1/dashboard?${params.toString()}`, {
         headers: {

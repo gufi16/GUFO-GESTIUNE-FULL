@@ -137,6 +137,34 @@ router.get("/api/v1/meta/locations", async (req: AuthedRequest, res) => {
   res.json({ ok: true, locations })
 })
 
+router.get("/api/v1/meta/terminals", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const locationId = String(req.query.locationId || "").trim()
+
+  const terminals = await prisma.terminal.findMany({
+    where: {
+      tenantId,
+      ...(locationId ? { locationId } : {}),
+    },
+    select: {
+      id: true,
+      label: true,
+      deviceId: true,
+      locationId: true,
+      location: {
+        select: {
+          id: true,
+          name: true,
+          code: true,
+        },
+      },
+    },
+    orderBy: [{ label: "asc" }, { deviceId: "asc" }],
+  })
+
+  res.json({ ok: true, terminals })
+})
+
 router.post("/api/v1/meta/locations", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
 
