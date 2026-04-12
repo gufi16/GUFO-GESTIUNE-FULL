@@ -2366,7 +2366,7 @@ export default function Documente() {
                       <div>
                         <div className="text-lg font-semibold text-slate-900">{row.name}</div>
                         <div className="mt-1 text-sm text-slate-500">
-                          {row.sku} â€¢ {formatNumber(row.qty)} {row.uom}
+                                  {row.sku} - {formatNumber(row.qty)} {row.uom}
                         </div>
                       </div>
                     </div>

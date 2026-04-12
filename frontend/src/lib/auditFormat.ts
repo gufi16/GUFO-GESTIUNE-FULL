@@ -15,6 +15,7 @@ function toTitleCase(value: string) {
 
 function normalizeWords(value: string) {
   return value
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
     .replace(/[-_]+/g, " ")
     .replace(/\s+/g, " ")
     .trim()
@@ -38,7 +39,7 @@ function sectionLabelFromPath(payload?: Record<string, unknown> | null) {
     products: "Produse",
     company: "Firma",
     users: "Utilizatori",
-    dashboard: "Dashboard",
+    dashboard: "Panou principal",
     reports: "Rapoarte",
     stock: "Stoc",
     inventory: "Inventar",
@@ -46,7 +47,10 @@ function sectionLabelFromPath(payload?: Record<string, unknown> | null) {
     transfer: "Transferuri",
     production: "Productie",
     consumption: "Bonuri de consum",
+    consumptiondocs: "Bonuri de consum",
+    "consumption docs": "Bonuri de consum",
     salesinvoices: "Facturi",
+    "sales invoices": "Facturi",
     customers: "Clienti",
     "meta locations": "Locatii",
     "meta suppliers": "Furnizori",
@@ -70,10 +74,16 @@ function entityLabel(entityType: string) {
     License: "licenta",
     Customer: "client",
     Supplier: "furnizor",
-    Dashboard: "dashboard",
+    Dashboard: "panou principal",
     Report: "raport",
     Meta: "nomenclator",
     AuthSession: "sesiune",
+    Consumptiondocs: "bon de consum",
+    ConsumptionDocs: "bon de consum",
+    Salesinvoices: "factura",
+    SalesInvoices: "factura",
+    Purchase: "achizitie",
+    Products: "produs",
   }
 
   return map[entityType] || normalizeWords(entityType).toLowerCase()

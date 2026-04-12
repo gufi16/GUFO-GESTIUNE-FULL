@@ -992,7 +992,7 @@ function getDefaultVat(list = vatRates) {
               </div>
 
               <button onClick={closeModal} style={btnSecondary}>
-                �nchide
+                Inchide
               </button>
             </div>
 
