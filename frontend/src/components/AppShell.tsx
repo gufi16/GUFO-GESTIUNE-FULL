@@ -2,6 +2,7 @@ import { useState } from "react"
 import { Outlet } from "react-router-dom"
 import Sidebar from "./Sidebar"
 import Topbar from "./Topbar"
+import GufoAiWidget from "./GufoAiWidget"
 
 export default function AppShell() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
@@ -24,6 +25,8 @@ export default function AppShell() {
           </main>
         </div>
       </div>
+
+      <GufoAiWidget />
     </div>
   )
 }

@@ -42,6 +42,7 @@ import incomingEfacturaRouter from "./routes/incomingEfactura"
 import spvClassicRouter from "./routes/spvClassic"
 import usersRouter from "./routes/users"
 import auditRouter from "./routes/audit"
+import gufoAiRouter from "./routes/gufoAi"
 
 dotenv.config()
 
@@ -952,6 +953,7 @@ app.use(incomingEfacturaRouter)
 app.use(spvClassicRouter)
 app.use(usersRouter)
 app.use(auditRouter)
+app.use(gufoAiRouter)
 app.use(companyRouter)
 app.use("/api/v1/purchase-receipts", purchaseReceiptsPdf)
 app.use(transferRouter)
