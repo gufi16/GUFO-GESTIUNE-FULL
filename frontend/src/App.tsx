@@ -37,6 +37,7 @@ import FirmaPage from "./pages/Firma"
 import SetariNumerotarePage from "./pages/SetariNumerotare"
 import SetariEFacturaPage from "./pages/SetariEFactura"
 import UtilizatoriPage from "./pages/Utilizatori"
+import IstoricActiuniPage from "./pages/IstoricActiuni"
 import Productie from "./pages/Productie"
 import Rapoarte from "./pages/Rapoarte"
 import ControlPanelDashboard from "./pages/control/ControlPanelDashboard"
@@ -151,6 +152,7 @@ export default function App() {
         <Route path="/setari/numerotare" element={<RequireModule code="settings"><SetariNumerotarePage /></RequireModule>} />
         <Route path="/setari/efactura" element={<RequireModule code="settings"><SetariEFacturaPage /></RequireModule>} />
         <Route path="/setari/utilizatori" element={<RequireModule code="settings"><UtilizatoriPage /></RequireModule>} />
+        <Route path="/setari/istoric" element={<RequireModule code="settings"><IstoricActiuniPage /></RequireModule>} />
 
         <Route path="*" element={<div className="p-6">Pagina nu exista.</div>} />
       </Route>

@@ -41,6 +41,7 @@ import minutesDocsRouter from "./routes/minutesDocs"
 import incomingEfacturaRouter from "./routes/incomingEfactura"
 import spvClassicRouter from "./routes/spvClassic"
 import usersRouter from "./routes/users"
+import auditRouter from "./routes/audit"
 
 dotenv.config()
 
@@ -950,6 +951,7 @@ app.use(minutesDocsRouter)
 app.use(incomingEfacturaRouter)
 app.use(spvClassicRouter)
 app.use(usersRouter)
+app.use(auditRouter)
 app.use(companyRouter)
 app.use("/api/v1/purchase-receipts", purchaseReceiptsPdf)
 app.use(transferRouter)
