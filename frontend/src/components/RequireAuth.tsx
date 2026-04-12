@@ -50,7 +50,7 @@ export default function RequireAuth({ children }: { children: React.ReactNode })
     };
   }, [token]);
 
-  if (loading) return <div className="p-6">Loading...</div>;
+  if (loading) return <div className="p-6">Se incarca...</div>;
   if (!token || !ok) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }

@@ -1001,7 +1001,7 @@ export default function ControlPanelClientDetails() {
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
             {metricCard("Plan", client?.subscription?.plan?.name || "-")}
             {metricCard("Pret", currencyFormat(client?.subscription?.price, client?.subscription?.currency))}
-            {metricCard("Billing", client?.subscription?.billingStatus || "-")}
+            {metricCard("Facturare", client?.subscription?.billingStatus || "-")}
             {metricCard("Plata", formatDate(client?.subscription?.nextBillingDate))}
           </div>
 

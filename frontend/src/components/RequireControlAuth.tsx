@@ -41,7 +41,7 @@ export default function RequireControlAuth({
     }
   }, [controlToken])
 
-  if (loading) return <div className="p-6">Loading...</div>
+  if (loading) return <div className="p-6">Se incarca...</div>
   if (!controlToken || !ok) return <Navigate to="/cp/login" replace />
 
   return <>{children}</>
