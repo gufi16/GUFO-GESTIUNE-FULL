@@ -148,7 +148,7 @@ export default function TransferPage() {
       const prodData = await prodRes.json().catch(() => ({}))
 
       if (locRes.status === 401 || prodRes.status === 401) {
-        setError("Sesiunea a expirat. Intra din nou în cont ?i reîncearca.")
+        setError("Sesiunea a expirat. Intra din nou in cont si reincerca.")
         return
       }
 
@@ -174,7 +174,7 @@ export default function TransferPage() {
         }))
       }
     } catch {
-      setError("Nu am putut încarca datele pentru transfer.")
+      setError("Nu am putut incarca datele pentru transfer.")
     } finally {
       setLoadingMeta(false)
     }
@@ -194,12 +194,12 @@ export default function TransferPage() {
       const data = await res.json().catch(() => ({}))
 
       if (res.status === 401) {
-        setError("Sesiunea a expirat. Intra din nou în cont ?i reîncearca.")
+        setError("Sesiunea a expirat. Intra din nou in cont si reincerca.")
         return
       }
 
       if (!data.ok || !data.doc) {
-        setError(data.error || "Nu am putut încarca transferul.")
+        setError(data.error || "Nu am putut incarca transferul.")
         return
       }
 
@@ -233,7 +233,7 @@ export default function TransferPage() {
 
       setLines(loadedLines.length ? loadedLines : [makeLine()])
     } catch {
-      setError("Nu am putut încarca transferul.")
+      setError("Nu am putut incarca transferul.")
     } finally {
       setLoadingDoc(false)
     }
@@ -298,12 +298,12 @@ export default function TransferPage() {
 
   async function saveDoc(postNow = false) {
     if (!token) {
-      setError("Lipse?te sesiunea de autentificare.")
+      setError("Lipseste sesiunea de autentificare.")
       return
     }
 
     if (isPosted) {
-      setError("Transferul este deja postat ?i nu mai poate fi modificat.")
+      setError("Transferul este deja postat si nu mai poate fi modificat.")
       return
     }
 
@@ -318,7 +318,7 @@ export default function TransferPage() {
     }
 
     if (header.fromLocationId === header.toLocationId) {
-      setError("Gestiunea de plecare ?i cea de sosire trebuie sa fie diferite.")
+      setError("Gestiunea de plecare si cea de sosire trebuie sa fie diferite.")
       return
     }
 
@@ -328,7 +328,7 @@ export default function TransferPage() {
     }
 
     if (!validLines.length) {
-      setError("Adauga cel pu?in un produs în transfer.")
+      setError("Adauga cel putin un produs in transfer.")
       return
     }
 
@@ -358,7 +358,7 @@ export default function TransferPage() {
       const data = await res.json().catch(() => ({}))
 
       if (res.status === 401) {
-        setError("Sesiunea a expirat. Intra din nou în cont ?i reîncearca.")
+        setError("Sesiunea a expirat. Intra din nou in cont si reincerca.")
         return
       }
 
@@ -373,7 +373,7 @@ export default function TransferPage() {
       }
 
       setStatus(data.doc?.status || (postNow ? "POSTED" : "DRAFT"))
-      setMessage(postNow ? "Transferul a fost salvat ?i postat." : "Transferul a fost salvat ca draft.")
+      setMessage(postNow ? "Transferul a fost salvat si postat." : "Transferul a fost salvat ca draft.")
       if (transferId) await loadDoc()
     } catch {
       setError("A aparut o eroare la salvarea transferului.")
@@ -404,11 +404,11 @@ export default function TransferPage() {
     <div className="w-full space-y-4">
       <PageHeader badge="document" title={!transferId ? "Transfer nou" : isPosted ? "Transfer postat" : "Editare transfer"} />
 
-      {loadingMeta ? <InlineNotice>Se încarca nomenclatoarele pentru transfer.</InlineNotice> : null}
-      {loadingDoc ? <InlineNotice>Se încarca documentul selectat.</InlineNotice> : null}
+      {loadingMeta ? <InlineNotice>Se incarca nomenclatoarele pentru transfer.</InlineNotice> : null}
+      {loadingDoc ? <InlineNotice>Se incarca documentul selectat.</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
-      {isPosted ? <InlineNotice>Documentul este postat ?i ramâne doar în regim de vizualizare ?i export PDF.</InlineNotice> : null}
+      {isPosted ? <InlineNotice>Documentul este postat si ramane doar in regim de vizualizare si export PDF.</InlineNotice> : null}
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
         <DocumentMetric title="Status" value={<DocumentStatusPill status={status || "DRAFT"} />} tone="amber" />
@@ -431,7 +431,7 @@ export default function TransferPage() {
         <div className="space-y-3">
           <DocumentSection title="Adauga produse transfer">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-sm text-slate-500">Scrie minim 2 litere, alege produsul ?i completeaza cantitatea ?i pre?ul.</div>
+              <div className="text-sm text-slate-500">Scrie minim 2 litere, alege produsul si completeaza cantitatea si pretul.</div>
               {!isPosted ? (
                 <button type="button" className={documentButtonPrimaryClass} onClick={addLine}>
                   <Plus size={16} className="mr-2" />
@@ -449,11 +449,11 @@ export default function TransferPage() {
                   return (
                     <div key={line.id} className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3">
                       <div className="mb-2 flex items-center justify-between gap-2">
-                        <div className="text-sm font-semibold text-slate-800">Pozi?ia {index + 1}</div>
+                        <div className="text-sm font-semibold text-slate-800">Pozitia {index + 1}</div>
                         {!isPosted ? (
                           <button type="button" onClick={() => removeLine(line.id)} className={documentButtonDangerClass}>
                             <Trash2 size={16} className="mr-2" />
-                            ?terge
+                            Sterge
                           </button>
                         ) : null}
                       </div>
@@ -482,7 +482,7 @@ export default function TransferPage() {
                                     >
                                       <div className="font-semibold text-slate-900">{product.name}</div>
                                       <div className="mt-1 text-xs text-slate-500">
-                                        {product.sku || "Fara SKU"} · UM {product.uom?.code || "-"} · Pre? {formatNumber(product.price)}
+                                        {product.sku || "Fara SKU"} - UM {product.uom?.code || "-"} - Pret {formatNumber(product.price)}
                                       </div>
                                     </button>
                                   ))}
@@ -515,7 +515,7 @@ export default function TransferPage() {
                         </div>
 
                         <div>
-                          <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Pre? / Total</div>
+                          <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Pret / Total</div>
                           <input
                             value={line.unitPrice}
                             onChange={(e) => setLineValue(line.id, { unitPrice: e.target.value })}
@@ -603,7 +603,7 @@ export default function TransferPage() {
                 />
               </DocumentField>
 
-              <DocumentField label="Observa?ii interne">
+              <DocumentField label="Observatii interne">
                 <textarea
                   value={header.note}
                   onChange={(e) => setHeader((prev) => ({ ...prev, note: e.target.value }))}
@@ -687,7 +687,7 @@ export default function TransferPage() {
                       {saving ? "Se salveaza..." : "Salveaza draft"}
                     </button>
                     <button type="button" className={documentButtonPrimaryClass} onClick={() => saveDoc(true)} disabled={saving || loadingDoc}>
-                      {saving ? "Se salveaza..." : "Salveaza ?i posteaza"}
+                      {saving ? "Se salveaza..." : "Salveaza si posteaza"}
                     </button>
                   </>
                 ) : null}

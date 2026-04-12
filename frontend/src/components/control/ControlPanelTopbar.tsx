@@ -32,7 +32,7 @@ export default function ControlPanelTopbar({ onOpenMenu }: { onOpenMenu?: () => 
           </div>
 
           <div className="min-w-0 flex-1 md:hidden">
-            <div className="truncate text-sm font-semibold text-[#17324D]">Control Panel</div>
+            <div className="truncate text-sm font-semibold text-[#17324D]">Panou de control</div>
             <div className="truncate text-[11px] text-slate-500">administrare clienti si licente</div>
           </div>
 
@@ -40,7 +40,7 @@ export default function ControlPanelTopbar({ onOpenMenu }: { onOpenMenu?: () => 
             type="button"
             onClick={handleLogout}
             className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-rose-200 bg-rose-50 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 md:hidden"
-            aria-label="Logout"
+            aria-label="Iesire"
           >
             <LogOut size={16} />
           </button>
@@ -59,7 +59,7 @@ export default function ControlPanelTopbar({ onOpenMenu }: { onOpenMenu?: () => 
               <ShieldCheck size={18} />
             </div>
             <div className="text-sm">
-              <div className="font-semibold text-[#17324D]">Control Panel</div>
+              <div className="font-semibold text-[#17324D]">Panou de control</div>
               <div className="flex items-center gap-1 text-xs text-slate-500">
                 <Sparkles size={12} className="text-[#F39C12]" />
                 control total pe clienti si module
@@ -73,10 +73,11 @@ export default function ControlPanelTopbar({ onOpenMenu }: { onOpenMenu?: () => 
             className="inline-flex h-11 items-center justify-center rounded-2xl border border-rose-200 bg-rose-50 px-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
           >
             <LogOut size={16} className="mr-2" />
-            Logout
+            Iesire
           </button>
         </div>
       </div>
     </header>
   )
 }
+

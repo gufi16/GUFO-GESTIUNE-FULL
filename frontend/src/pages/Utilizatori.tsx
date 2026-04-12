@@ -22,7 +22,7 @@ type UserItem = {
 }
 
 const roleLabels: Record<string, string> = {
-  OWNER: "Owner",
+  OWNER: "Proprietar",
   ADMIN: "Administrator",
   MANAGER: "Manager",
   CASHIER: "Ospatar / Casier",

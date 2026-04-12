@@ -136,7 +136,7 @@ export default function ProductiePage() {
         setLocationId(rawLocations[0].id)
       }
     } catch {
-      setError("Nu pot încarca produsele ?i loca?iile.")
+      setError("Nu pot incarca produsele si locatiile.")
     } finally {
       setLoading(false)
     }
@@ -249,7 +249,7 @@ export default function ProductiePage() {
     }
 
     if (!items.length) {
-      setError("Adauga cel pu?in un produs în produc?ie.")
+      setError("Adauga cel putin un produs in productie.")
       return
     }
 
@@ -288,18 +288,18 @@ export default function ProductiePage() {
       }
 
       if (!res.ok || !data.ok) {
-        setError(data.error || "Nu am putut genera produc?ia.")
+        setError(data.error || "Nu am putut genera productia.")
         return
       }
 
-      setMessage("Documentul de produc?ie a fost generat cu succes.")
+      setMessage("Documentul de productie a fost generat cu succes.")
       setItems([])
       setNote("")
       setQty("1")
       setProductId("")
       setProductSearch("")
     } catch {
-      setError("Nu am putut genera produc?ia.")
+      setError("Nu am putut genera productia.")
     } finally {
       setSubmitting(false)
     }
@@ -309,25 +309,25 @@ export default function ProductiePage() {
     <div className="w-full space-y-4">
       <PageHeader badge="document" title="Productie" />
 
-      {loading ? <InlineNotice>Se încarca datele pentru produc?ie...</InlineNotice> : null}
+      {loading ? <InlineNotice>Se incarca datele pentru productie...</InlineNotice> : null}
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-4">
-        <DocumentMetric title="Loca?ie" value={selectedLocation?.name || "-"} tone="slate" />
-        <DocumentMetric title="Pozi?ii" value={String(totalLines)} tone="blue" />
+        <DocumentMetric title="Locatie" value={selectedLocation?.name || "-"} tone="slate" />
+        <DocumentMetric title="Pozitii" value={String(totalLines)} tone="blue" />
         <DocumentMetric title="Cantitate totala" value={String(totalQty)} tone="emerald" />
         <DocumentMetric title="Status" value={items.length > 0 ? "Pregatit" : "Gol"} tone="amber" />
       </div>
 
       <div className="grid grid-cols-1 items-start gap-3 2xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-3">
-          <DocumentSection title="Adauga produs în produc?ie">
+          <DocumentSection title="Adauga produs in productie">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-sm text-slate-500">Cauta produsul dupa nume sau cod ?i adauga-l rapid în document.</div>
+              <div className="text-sm text-slate-500">Cauta produsul dupa nume sau cod si adauga-l rapid in document.</div>
               {(productId || productSearch) ? (
                 <button type="button" onClick={resetProductPicker} className={documentButtonSecondaryClass} disabled={submitting}>
-                  Reseteaza selec?ia
+                  Reseteaza selectia
                 </button>
               ) : null}
             </div>
@@ -364,7 +364,7 @@ export default function ProductiePage() {
                           <div className="min-w-0">
                             <div className="truncate text-sm font-semibold text-slate-900">{product.name}</div>
                             <div className="mt-0.5 text-xs text-slate-500">
-                              {product.sku || "fara cod"} · {PRODUCT_CLASS_LABEL[product.class || ""] || product.class || "-"}
+                              {product.sku || "fara cod"} - {PRODUCT_CLASS_LABEL[product.class || ""] || product.class || "-"}
                             </div>
                           </div>
                           <span className="ml-3 inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700">
@@ -379,9 +379,9 @@ export default function ProductiePage() {
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <DocumentField label="Loca?ie">
+              <DocumentField label="Locatie">
                 <select value={locationId} onChange={(e) => setLocationId(e.target.value)} className={documentInputClass}>
-                  <option value="">Selecteaza loca?ia</option>
+                  <option value="">Selecteaza locatia</option>
                   {locations.map((l) => (
                     <option key={l.id} value={l.id}>{l.name}</option>
                   ))}
@@ -402,7 +402,7 @@ export default function ProductiePage() {
 
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={loadAll} className={documentButtonSecondaryClass} disabled={loading || submitting}>
-                Refresh
+                Reincarca
               </button>
               <button
                 type="button"
@@ -410,17 +410,17 @@ export default function ProductiePage() {
                 className={documentButtonPrimaryClass}
                 disabled={!productId || Number(qty) <= 0 || submitting}
               >
-                Adauga în document
+                Adauga in document
               </button>
             </div>
           </DocumentSection>
 
-          <DocumentSection title="Pozi?ii produc?ie">
+          <DocumentSection title="Pozitii productie">
             <div className="max-h-[460px] overflow-y-auto pr-1">
               {items.length === 0 ? (
                 <div className="rounded-[14px] border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center">
-                  <div className="text-sm font-semibold text-slate-700">Nu ai adaugat produse înca</div>
-                  <div className="mt-1 text-sm text-slate-500">Cauta un produs sus ?i adauga-l în document.</div>
+                  <div className="text-sm font-semibold text-slate-700">Nu ai adaugat produse inca</div>
+                  <div className="mt-1 text-sm text-slate-500">Cauta un produs sus si adauga-l in document.</div>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -428,7 +428,7 @@ export default function ProductiePage() {
                     <div>Produs</div>
                     <div>Cantitate</div>
                     <div>UM</div>
-                    <div>Ac?iune</div>
+                    <div>Actiune</div>
                   </div>
 
                   {items.map((row, index) => (
@@ -459,7 +459,7 @@ export default function ProductiePage() {
                         <div>
                           <button type="button" onClick={() => removeItem(index)} className={documentButtonDangerClass}>
                             <Trash2 size={16} className="mr-2" />
-                            ?terge
+                            Sterge
                           </button>
                         </div>
                       </div>
@@ -473,18 +473,18 @@ export default function ProductiePage() {
 
         <DocumentSection title="Detalii document">
           <div className="space-y-3">
-            <DocumentField label="Observa?ii document">
+            <DocumentField label="Observatii document">
               <textarea
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 rows={4}
-                placeholder="ex: produc?ie diminea?a / tura 1"
+                placeholder="ex: productie dimineata / tura 1"
                 className={documentTextareaClass}
               />
             </DocumentField>
 
             <InlineNotice>
-              Loca?ie selectata: <span className="font-semibold">{selectedLocation?.name || "-"}</span>
+              Locatie selectata: <span className="font-semibold">{selectedLocation?.name || "-"}</span>
             </InlineNotice>
 
             <div className="flex flex-col gap-2">
@@ -495,7 +495,7 @@ export default function ProductiePage() {
                 disabled={items.length === 0 || !locationId || submitting || loading}
               >
                 <Check size={16} className="mr-2" />
-                {submitting ? "Se genereaza..." : "Genereaza documentul de produc?ie"}
+                {submitting ? "Se genereaza..." : "Genereaza documentul de productie"}
               </button>
             </div>
           </div>

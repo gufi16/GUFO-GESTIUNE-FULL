@@ -43,7 +43,7 @@ export default function LocatiiPage() {
 
   async function loadLocations() {
     if (!token) {
-      setError("Nu există token de autentificare. Fă login din nou.")
+      setError("Nu exista token de autentificare. Fa login din nou.")
       return
     }
 
@@ -60,20 +60,20 @@ export default function LocatiiPage() {
       const data = await res.json().catch(() => ({}))
 
       if (res.status === 401) {
-        setError("Token expirat sau invalid. Fă login din nou.")
+        setError("Token expirat sau invalid. Fa login din nou.")
         setItems([])
         return
       }
 
       if (!data.ok) {
-        setError(data.error || "Nu pot încărca locațiile.")
+        setError(data.error || "Nu pot incarca locatiile.")
         setItems([])
         return
       }
 
       setItems(Array.isArray(data.locations) ? data.locations : [])
     } catch {
-      setError("Nu pot încărca locațiile.")
+      setError("Nu pot incarca locatiile.")
       setItems([])
     } finally {
       setLoading(false)
@@ -82,17 +82,17 @@ export default function LocatiiPage() {
 
   async function saveLocation() {
     if (!token) {
-      setError("Nu există token de autentificare. Fă login din nou.")
+      setError("Nu exista token de autentificare. Fa login din nou.")
       return
     }
 
     if (!form.name.trim()) {
-      setError("Completează numele locației.")
+      setError("Completeaza numele locatiei.")
       return
     }
 
     if (!form.code.trim()) {
-      setError("Completează codul locației.")
+      setError("Completeaza codul locatiei.")
       return
     }
 
@@ -113,20 +113,20 @@ export default function LocatiiPage() {
       const data = await res.json().catch(() => ({}))
 
       if (res.status === 401) {
-        setError("Token expirat sau invalid. Fă login din nou.")
+        setError("Token expirat sau invalid. Fa login din nou.")
         return
       }
 
       if (!data.ok) {
-        setError(data.error || "Nu pot salva locația.")
+        setError(data.error || "Nu pot salva locatia.")
         return
       }
 
-      setSuccess("Locația a fost salvată.")
+      setSuccess("Locatia a fost salvata.")
       setForm({ name: "", code: "" })
       loadLocations()
     } catch {
-      setError("Nu pot salva locația.")
+      setError("Nu pot salva locatia.")
     } finally {
       setSaving(false)
     }
@@ -141,36 +141,36 @@ export default function LocatiiPage() {
     <div className="space-y-3">
       <PageHeader
         badge="nomenclator"
-        title="Locații"
-        subtitle="Gestionezi magazinele, depozitele și punctele de lucru în același stil curat cu restul ERP-ului."
+        title="Locatii"
+        subtitle="Gestionezi magazinele, depozitele si punctele de lucru in acelasi stil curat cu restul ERP-ului."
       />
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
-        <DocumentMetric title="Locații" value={stats.total} tone="slate" />
+        <DocumentMetric title="Locatii" value={stats.total} tone="slate" />
         <DocumentMetric title="Cu cod" value={stats.codes} tone="blue" />
-        <DocumentMetric title="Ultima din listă" value={stats.newest} tone="emerald" />
+        <DocumentMetric title="Ultima din lista" value={stats.newest} tone="emerald" />
       </div>
 
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {success ? <InlineNotice tone="success">{success}</InlineNotice> : null}
 
       <DocumentSection
-        title="Adaugă locație"
-        description="Completezi rapid datele esențiale, iar lista de dedesubt se actualizează imediat."
+        title="Adauga locatie"
+        description="Completezi rapid datele esentiale, iar lista de dedesubt se actualizează imediat."
         actions={
           <>
             <button type="button" onClick={loadLocations} className={documentButtonSecondaryClass}>
               <RefreshCw size={16} className="mr-2" />
-              {loading ? "Se încarcă..." : "Refresh"}
+              {loading ? "Se incarca..." : "Reincarca"}
             </button>
             <button type="button" onClick={saveLocation} className={documentButtonPrimaryClass} disabled={saving}>
-              {saving ? "Se salvează..." : "Salvează locația"}
+              {saving ? "Se salveaza..." : "Salveaza locatia"}
             </button>
           </>
         }
       >
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <DocumentField label="Nume locație">
+          <DocumentField label="Nume locatie">
             <input
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -179,7 +179,7 @@ export default function LocatiiPage() {
             />
           </DocumentField>
 
-          <DocumentField label="Cod locație">
+          <DocumentField label="Cod locatie">
             <input
               value={form.code}
               onChange={(e) => setForm({ ...form, code: e.target.value })}
@@ -190,21 +190,21 @@ export default function LocatiiPage() {
         </div>
       </DocumentSection>
 
-      <DocumentSection title="Locații existente" description="Ai lista completă a locațiilor salvate și codurile lor operaționale.">
+      <DocumentSection title="Locatii existente" description="Ai lista completa a locatiilor salvate si codurile lor operationale.">
         {loading ? (
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-            Se încarcă locațiile...
+            Se incarca locatiile...
           </div>
         ) : items.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-            Nu există locații salvate.
+            Nu exista locatii salvate.
           </div>
         ) : (
           <div className="overflow-hidden rounded-[16px] border border-slate-200">
             <table className="w-full text-[13px]">
               <thead className="bg-slate-50 text-slate-500">
                 <tr>
-                  <th className="px-3 py-2.5 text-left font-medium">Locație</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Locatie</th>
                   <th className="px-3 py-2.5 text-left font-medium">Cod</th>
                 </tr>
               </thead>
@@ -230,3 +230,4 @@ export default function LocatiiPage() {
     </div>
   )
 }
+

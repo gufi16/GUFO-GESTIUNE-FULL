@@ -13,12 +13,12 @@ import {
 } from "lucide-react"
 
 const items = [
-  { to: "/control-panel", label: "Overview", icon: LayoutDashboard, exact: true },
+  { to: "/control-panel", label: "Panou", icon: LayoutDashboard, exact: true },
   { to: "/control-panel/clienti", label: "Clienti", icon: Building2 },
   { to: "/control-panel/integrari", label: "Integrari", icon: PlugZap },
   { to: "/control-panel/licente", label: "Licente", icon: ShieldCheck, disabled: true },
   { to: "/control-panel/facturare", label: "Facturare", icon: CreditCard, disabled: true },
-  { to: "/control-panel/audit", label: "Audit", icon: Activity, disabled: true },
+  { to: "/control-panel/audit", label: "Istoric", icon: Activity, disabled: true },
 ]
 
 function SidebarContent({
@@ -52,15 +52,15 @@ function SidebarContent({
 
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <h1 className="truncate text-xl font-semibold tracking-tight text-[#17324D]">GUFO Control Panel</h1>
+                <h1 className="truncate text-xl font-semibold tracking-tight text-[#17324D]">Panou GUFO</h1>
                 <span className="inline-flex items-center gap-1 rounded-full border border-[#F39C12]/30 bg-[#FFF1D6] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#B56800]">
                   <Sparkles size={11} />
-                  Owner
+                  Proprietar
                 </span>
               </div>
 
               <p className="mt-2 text-sm leading-6 text-slate-500">
-                centru de comanda pentru clienti, licente, integrari, activari POS si billing.
+                centru de comanda pentru clienti, licente, integrari, activari POS si facturare.
               </p>
             </div>
           </div>
@@ -125,7 +125,7 @@ function SidebarContent({
                         <div className="min-w-0 flex-1">
                           <div className="font-medium">{item.label}</div>
                           <div className={clsx("text-xs", isActive ? "text-slate-300" : "text-slate-400")}>
-                            {item.label === "Overview" ? "sinteza SaaS" : "gestionare centralizata"}
+                            {item.label === "Panou" ? "sinteza SaaS" : "gestionare centralizata"}
                           </div>
                         </div>
 
@@ -184,3 +184,6 @@ export default function ControlPanelSidebar({
     </>
   )
 }
+
+
+

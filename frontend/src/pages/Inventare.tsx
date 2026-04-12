@@ -141,7 +141,7 @@ function statusBadge(status?: string) {
 function statusText(status?: string) {
   if (status === "FINALIZED") return "Finalizat"
   if (status === "CANCELLED") return "Anulat"
-  return "În lucru"
+  return "In lucru"
 }
 
 export default function Inventare() {
@@ -216,7 +216,7 @@ export default function Inventare() {
       if (!locationId && preferredLocationId) setLocationId(preferredLocationId)
       if (!editorLocationId && preferredLocationId) setEditorLocationId(preferredLocationId)
     } catch (e: any) {
-      setError(e?.message || "Nu pot încărca locațiile.")
+      setError(e?.message || "Nu pot incarca locatiile.")
       setLocations([])
     }
   }
@@ -235,7 +235,7 @@ export default function Inventare() {
       const data = await api<{ ok: boolean; items: InventoryDocListItem[] }>(url)
       setDocs(Array.isArray(data.items) ? data.items : [])
     } catch (e: any) {
-      setError(e?.message || "Nu pot încărca inventarele.")
+      setError(e?.message || "Nu pot incarca inventarele.")
       setDocs([])
     } finally {
       setLoading(false)
@@ -436,7 +436,7 @@ export default function Inventare() {
     setSuccess("")
 
     if (!editorLocationId) {
-      setFormError("Selectează locația.")
+      setFormError("Selecteaza locatia.")
       return
     }
 
@@ -446,17 +446,17 @@ export default function Inventare() {
     }))
 
     if (!payloadItems.length) {
-      setFormError("Adaugă cel puțin un produs.")
+      setFormError("Adauga cel putin un produs.")
       return
     }
 
     if (payloadItems.some((x) => !x.productId)) {
-      setFormError("Există produse invalide în document.")
+      setFormError("Exista produse invalide in document.")
       return
     }
 
     if (payloadItems.some((x) => x.countedQty < 0)) {
-      setFormError("Cantitatea numărată nu poate fi negativă.")
+      setFormError("Cantitatea numarata nu poate fi negativa.")
       return
     }
 
@@ -499,7 +499,7 @@ export default function Inventare() {
   async function finalizeDraft(id?: string) {
     const targetId = id || editingId
     if (!targetId) {
-      setFormError("Salvează mai întâi inventarul.")
+      setFormError("Salveaza mai intai inventarul.")
       return
     }
 
@@ -540,7 +540,7 @@ export default function Inventare() {
     const targetId = id || editingId
     if (!targetId) return
 
-    const ok = window.confirm("Sigur vrei să anulezi inventarul?")
+    const ok = window.confirm("Sigur vrei sa anulezi inventarul?")
     if (!ok) return
 
     setError("")
@@ -577,7 +577,7 @@ export default function Inventare() {
     try {
       const token = getToken()
       if (!token) {
-        setError("Nu există token de autentificare.")
+        setError("Nu exista token de autentificare.")
         return
       }
 
@@ -624,7 +624,7 @@ export default function Inventare() {
             onClick={loadDocs}
             className={documentButtonSecondaryClass}
           >
-            {loading ? "Se încarcă..." : "Refresh"}
+            {loading ? "Se incarca..." : "Reincarca"}
           </button>
 
           <button
@@ -639,23 +639,23 @@ export default function Inventare() {
       <div className="bg-white border border-slate-200 rounded-2xl p-3 shadow-sm">
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-700">Căutare</label>
+            <label className="text-sm font-medium text-slate-700">Cautare</label>
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               className={documentInputClass}
-              placeholder="Nr document, observații, produs..."
+              placeholder="Nr document, observatii, produs..."
             />
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-700">Locație</label>
+            <label className="text-sm font-medium text-slate-700">Locatie</label>
             <select
               value={locationId}
               onChange={(e) => setLocationId(e.target.value)}
               className={documentInputClass}
             >
-              <option value="">Toate locațiile</option>
+              <option value="">Toate locatiile</option>
               {locations.map((loc) => (
                 <option key={loc.id} value={loc.id}>
                   {loc.name}
@@ -673,7 +673,7 @@ export default function Inventare() {
               className={documentInputClass}
             >
               <option value="">Toate</option>
-              <option value="DRAFT">În lucru</option>
+              <option value="DRAFT">In lucru</option>
               <option value="FINALIZED">Finalizat</option>
               <option value="CANCELLED">Anulat</option>
             </select>
@@ -690,7 +690,7 @@ export default function Inventare() {
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-700">Până la</label>
+            <label className="text-sm font-medium text-slate-700">Pana la</label>
             <input
               type="date"
               value={dateTo}
@@ -705,7 +705,7 @@ export default function Inventare() {
             onClick={loadDocs}
             className={documentButtonPrimaryClass}
           >
-            Filtrează
+            Filtreaza
           </button>
 
           <button
@@ -718,7 +718,7 @@ export default function Inventare() {
             }}
             className={documentButtonSecondaryClass}
           >
-            Resetează
+            Reseteaza
           </button>
         </div>
       </div>
@@ -751,7 +751,7 @@ export default function Inventare() {
                   disabled={printing}
                   className={documentButtonSecondaryClass}
                 >
-                  {printing ? "Se generează..." : "PDF"}
+                  {printing ? "Se genereaza..." : "PDF"}
                 </button>
               ) : null}
 
@@ -766,7 +766,7 @@ export default function Inventare() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-slate-700">Locație</label>
+              <label className="text-sm font-medium text-slate-700">Locatie</label>
               <select
                 value={editorLocationId}
                 onChange={(e) => {
@@ -961,7 +961,7 @@ export default function Inventare() {
                       disabled={printing}
                       className={documentButtonSecondaryClass}
                     >
-                      {printing ? "Se generează..." : "PDF"}
+                      {printing ? "Se genereaza..." : "PDF"}
                     </button>
 
                     <button
@@ -988,7 +988,7 @@ export default function Inventare() {
                 disabled={printing}
                 className={documentButtonPrimaryClass}
               >
-                {printing ? "Se generează..." : "PDF"}
+                {printing ? "Se genereaza..." : "PDF"}
               </button>
             ) : null}
           </div>
@@ -1012,7 +1012,7 @@ export default function Inventare() {
                   <th className="text-left p-3 border-b border-slate-200">Document</th>
                   <th className="text-left p-3 border-b border-slate-200">Status</th>
                   <th className="text-left p-3 border-b border-slate-200">Data</th>
-                  <th className="text-left p-3 border-b border-slate-200">Locație</th>
+                  <th className="text-left p-3 border-b border-slate-200">Locatie</th>
                   <th className="text-left p-3 border-b border-slate-200">Articole</th>
                   <th className="text-left p-3 border-b border-slate-200">Diferență</th>
                   <th className="text-left p-3 border-b border-slate-200">Acțiuni</th>
@@ -1062,7 +1062,7 @@ export default function Inventare() {
                           disabled={printing}
                           className={documentButtonSecondaryClass}
                         >
-                          {printing ? "Se generează..." : "PDF"}
+                          {printing ? "Se genereaza..." : "PDF"}
                         </button>
 
                         {doc.status === "DRAFT" ? (
@@ -1095,3 +1095,4 @@ export default function Inventare() {
     </div>
   )
 }
+

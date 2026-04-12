@@ -488,7 +488,7 @@ export default function Documente() {
   async function loadMinutesDocs() {
     if (!token) {
       setLoading(false)
-      setError("Lipse?te sesiunea de autentificare.")
+      setError("Lipseste sesiunea de autentificare.")
       return
     }
 
@@ -504,7 +504,7 @@ export default function Documente() {
 
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data?.ok) {
-        throw new Error(data?.error || "Nu am putut ?nc?rca procesele verbale.")
+      throw new Error(data?.error || "Nu am putut incarca procesele verbale.")
       }
 
       let items: MinutesDocListItem[] = Array.isArray(data?.items) ? data.items : []
@@ -526,7 +526,7 @@ export default function Documente() {
     } catch (err) {
       console.error("LOAD MINUTES DOCS ERROR", err)
       setMinutesDocs([])
-      setError("Nu am putut ?nc?rca procesele verbale.")
+      setError("Nu am putut incarca procesele verbale.")
     } finally {
       setLoading(false)
     }
@@ -535,7 +535,7 @@ export default function Documente() {
   async function loadReceiptDocs() {
     if (!token) {
       setLoading(false)
-      setError("Lipse?te sesiunea de autentificare.")
+      setError("Lipseste sesiunea de autentificare.")
       return
     }
 
@@ -551,7 +551,7 @@ export default function Documente() {
 
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        throw new Error(data?.error || "Nu am putut ?nc?rca recep?iile NIR.")
+      throw new Error(data?.error || "Nu am putut incarca receptiile NIR.")
       }
 
       let items: ReceiptListItem[] = Array.isArray(data?.receipts)
@@ -579,7 +579,7 @@ export default function Documente() {
     } catch (err) {
       console.error("LOAD RECEIPTS ERROR", err)
       setReceiptDocs([])
-      setError("Nu am putut ?nc?rca recep?iile NIR.")
+      setError("Nu am putut incarca receptiile NIR.")
     } finally {
       setLoading(false)
     }
@@ -588,7 +588,7 @@ export default function Documente() {
   async function loadInvoiceDocs() {
     if (!token) {
       setLoading(false)
-      setError("Lipse?te sesiunea de autentificare.")
+      setError("Lipseste sesiunea de autentificare.")
       return
     }
 
@@ -604,7 +604,7 @@ export default function Documente() {
 
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data?.ok) {
-        throw new Error(data?.error || "Nu am putut ?nc?rca facturile.")
+      throw new Error(data?.error || "Nu am putut incarca facturile.")
       }
 
       let items = Array.isArray(data.invoices) ? data.invoices : []
@@ -626,7 +626,7 @@ export default function Documente() {
     } catch (err) {
       console.error("LOAD SALES INVOICES ERROR", err)
       setInvoiceDocs([])
-      setError("Nu am putut ?nc?rca facturile.")
+      setError("Nu am putut incarca facturile.")
     } finally {
       setLoading(false)
     }
@@ -635,7 +635,7 @@ export default function Documente() {
   async function loadConsumptionDocs() {
     if (!token) {
       setLoading(false)
-      setError("Lipse?te sesiunea de autentificare.")
+      setError("Lipseste sesiunea de autentificare.")
       return
     }
 
@@ -661,14 +661,14 @@ export default function Documente() {
       }))
 
       if (!res.ok || !data.ok) {
-        throw new Error("Nu am putut ?nc?rca bonurile de consum.")
+      throw new Error("Nu am putut incarca bonurile de consum.")
       }
 
       setConsumptionDocs(Array.isArray(data.items) ? data.items : [])
     } catch (err) {
       console.error("LOAD CONSUMPTION DOCS ERROR", err)
       setConsumptionDocs([])
-      setError("Nu am putut ?nc?rca bonurile de consum.")
+      setError("Nu am putut incarca bonurile de consum.")
     } finally {
       setLoading(false)
     }
@@ -677,7 +677,7 @@ export default function Documente() {
   async function loadProductionDocs() {
     if (!token) {
       setLoading(false)
-      setError("Lipse?te sesiunea de autentificare.")
+      setError("Lipseste sesiunea de autentificare.")
       return
     }
 
@@ -701,7 +701,7 @@ export default function Documente() {
       }))
 
       if (!res.ok || !data.ok) {
-        throw new Error("Nu am putut ?nc?rca documentele de produc?ie.")
+      throw new Error("Nu am putut incarca documentele de productie.")
       }
 
       let items = Array.isArray(data.items) ? data.items : []
@@ -719,7 +719,7 @@ export default function Documente() {
     } catch (err) {
       console.error("LOAD PRODUCTION DOCS ERROR", err)
       setProductionDocs([])
-      setError("Nu am putut ?nc?rca documentele de produc?ie.")
+      setError("Nu am putut incarca documentele de productie.")
     } finally {
       setLoading(false)
     }
@@ -728,7 +728,7 @@ export default function Documente() {
   async function loadInventoryDocs() {
     if (!token) {
       setLoading(false)
-      setError("Lipse?te sesiunea de autentificare.")
+      setError("Lipseste sesiunea de autentificare.")
       return
     }
 
@@ -754,14 +754,14 @@ export default function Documente() {
       }))
 
       if (!res.ok || !data.ok) {
-        throw new Error("Nu am putut ?nc?rca documentele de inventar.")
+      throw new Error("Nu am putut incarca documentele de inventar.")
       }
 
       setInventoryDocs(Array.isArray(data.items) ? data.items : [])
     } catch (err) {
       console.error("LOAD INVENTORY DOCS ERROR", err)
       setInventoryDocs([])
-      setError("Nu am putut ?nc?rca documentele de inventar.")
+      setError("Nu am putut incarca documentele de inventar.")
     } finally {
       setLoading(false)
     }
@@ -789,7 +789,7 @@ export default function Documente() {
       }))
 
       if (!res.ok || !data.ok) {
-        throw new Error("Nu am putut ?nc?rca detaliul bonului de consum.")
+      throw new Error("Nu am putut incarca detaliul bonului de consum.")
       }
 
       setSelectedConsumptionDoc(data.item)
@@ -823,7 +823,7 @@ export default function Documente() {
       }))
 
       if (!res.ok || !data.ok) {
-        throw new Error("Nu am putut ?nc?rca documentul de produc?ie.")
+      throw new Error("Nu am putut incarca documentul de productie.")
       }
 
       setSelectedProductionDoc(data.item)
@@ -857,7 +857,7 @@ export default function Documente() {
       }))
 
       if (!res.ok || !data.ok) {
-        throw new Error("Nu am putut ?nc?rca documentul de inventar.")
+      throw new Error("Nu am putut incarca documentul de inventar.")
       }
 
       setSelectedInventoryDoc(data.item)
@@ -907,7 +907,7 @@ export default function Documente() {
       await openPdfInNewTab(res)
     } catch (err) {
       console.error("PDF PRODUCTION ERROR", err)
-      alert("Nu am putut genera PDF-ul documentului de produc?ie.")
+      alert("Nu am putut genera PDF-ul documentului de productie.")
     }
   }
 
@@ -1225,14 +1225,14 @@ export default function Documente() {
           : activeTab === "receipt"
             ? {
                 title: "Istoric receptii NIR",
-                subtitle: "Urm?re?ti notele de recep?ie ?i furnizorii din documente.",
+      subtitle: "Urmaresti notele de receptie si furnizorii din documente.",
                 placeholder: "Nr document, furnizor, CIF, locatie...",
                 resultCount: filteredReceiptDocs.length,
               }
             : activeTab === "minutes"
               ? {
                   title: "Procese verbale",
-                  subtitle: "Urm?re?ti deterior?rile ?i schimb?rile de pre?.",
+      subtitle: "Urmaresti deteriorarile si schimbarile de pret.",
                   placeholder: "Nr document, tip, motiv, locatie...",
                   resultCount: filteredMinutesDocs.length,
                 }
@@ -1249,12 +1249,12 @@ export default function Documente() {
           {
             title: "Bonuri de consum",
             value: String(filteredConsumptionDocs.length),
-            hint: "Documente generate automat din v?nz?ri",
+      hint: "Documente generate automat din vanzari",
             icon: FilePlus2,
             tone: "blue",
           },
           {
-            title: "Pozi?ii consum",
+      title: "Pozitii consum",
             value: String(filteredConsumptionDocs.reduce((sum, doc) => sum + doc.itemsCount, 0)),
             hint: "Ingrediente consumate ?n documentele filtrate",
             icon: Repeat2,
@@ -1263,7 +1263,7 @@ export default function Documente() {
           {
             title: "Cantitate total?",
             value: formatNumber(filteredConsumptionDocs.reduce((sum, doc) => sum + doc.totalQty, 0)),
-            hint: "Total cantit??i consumate",
+      hint: "Total cantitati consumate",
             icon: FileCheck2,
             tone: "emerald",
           },
@@ -1271,14 +1271,14 @@ export default function Documente() {
       : activeTab === "production"
         ? [
             {
-              title: "Documente produc?ie",
+      title: "Documente productie",
               value: String(filteredProductionDocs.length),
-              hint: "Documente generate la produc?ie",
+      hint: "Documente generate la productie",
               icon: Factory,
               tone: "blue",
             },
             {
-              title: "Pozi?ii produse",
+      title: "Pozitii produse",
               value: String(filteredProductionDocs.reduce((sum, doc) => sum + doc.itemsCount, 0)),
               hint: "Produse finite produse",
               icon: FilePlus2,
@@ -1287,7 +1287,7 @@ export default function Documente() {
             {
               title: "Cantitate total?",
               value: formatNumber(filteredProductionDocs.reduce((sum, doc) => sum + doc.totalQty, 0)),
-              hint: "Total cantit??i produse",
+      hint: "Total cantitati produse",
               icon: FileCheck2,
               tone: "emerald",
             },
@@ -1302,7 +1302,7 @@ export default function Documente() {
                 tone: "blue",
               },
               {
-                title: "Pozi?ii facturate",
+      title: "Pozitii facturate",
                 value: String(filteredInvoiceDocs.reduce((sum, doc) => sum + doc.itemsCount, 0)),
                 hint: "Linii de produse din facturile filtrate",
                 icon: ClipboardList,
@@ -1332,21 +1332,21 @@ export default function Documente() {
               {
                 title: "Receptii NIR",
                 value: String(filteredReceiptDocs.length),
-                hint: "Documente de recep?ie",
+      hint: "Documente de receptie",
                 icon: PackageSearch,
                 tone: "blue",
               },
               {
                 title: "Pozitii",
                 value: String(filteredReceiptDocs.reduce((sum, doc) => sum + Number(doc.itemsCount || doc.linesCount || doc.itemCount || 0), 0)),
-                hint: "Linii recep?ionate",
+      hint: "Linii receptionate",
                 icon: FilePlus2,
                 tone: "slate",
               },
               {
                 title: "Valoare total?",
                 value: formatRon(filteredReceiptDocs.reduce((sum, doc) => sum + Number(doc.totalGrossRon || doc.totalRon || doc.grandTotal || doc.total || 0), 0)),
-                hint: "Total recep?ionat",
+      hint: "Total receptionat",
                 icon: FileCheck2,
                 tone: "emerald",
               },
@@ -1384,7 +1384,7 @@ export default function Documente() {
               tone: "blue",
             },
             {
-              title: "Pozi?ii inventariate",
+      title: "Pozitii inventariate",
               value: String(filteredInventoryDocs.reduce((sum, doc) => sum + doc.itemsCount, 0)),
               hint: "Total produse din inventarele filtrate",
               icon: FilePlus2,
@@ -1393,7 +1393,7 @@ export default function Documente() {
             {
               title: "Diferen?? total?",
               value: formatNumber(filteredInventoryDocs.reduce((sum, doc) => sum + doc.totalDifferenceQty, 0), 3),
-              hint: "Diferen?? total? dintre scriptic ?i num?rat",
+      hint: "Diferenta totala dintre scriptic si numarat",
               icon: FileCheck2,
               tone: "emerald",
             },
@@ -1430,7 +1430,7 @@ export default function Documente() {
           }`}
         >
           <Factory size={15} />
-          Produc?ie
+                Productie
         </button>
 
         <button
@@ -1469,7 +1469,7 @@ export default function Documente() {
           }`}
         >
           <PackageSearch size={15} />
-          Note de recep?ie
+                Note de receptie
         </button>
         <button
           type="button"
@@ -1542,7 +1542,7 @@ export default function Documente() {
               className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-[13px] font-semibold text-slate-700 transition hover:bg-white"
             >
               <PackageSearch size={15} />
-              Re?ncarc?
+              Reincarca
             </button>
           </div>
 
@@ -1661,14 +1661,14 @@ export default function Documente() {
               <thead className="bg-slate-50 text-slate-500">
                 <tr>
                   <th className="px-3 py-2.5 text-left font-medium">Tip</th>
-                  <th className="px-3 py-2.5 text-left font-medium">Num?r</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Numar</th>
                   <th className="px-3 py-2.5 text-left font-medium">Data</th>
-                  <th className="px-3 py-2.5 text-left font-medium">Loca?ie</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Locatie</th>
                   <th className="px-3 py-2.5 text-left font-medium">Bon POS</th>
                   <th className="px-3 py-2.5 text-left font-medium">Produse</th>
                   <th className="px-3 py-2.5 text-left font-medium">Cantitate</th>
                   <th className="px-3 py-2.5 text-left font-medium">Status</th>
-                  <th className="px-3 py-2.5 text-right font-medium">Ac?iune</th>
+                  <th className="px-3 py-2.5 text-right font-medium">Actiune</th>
                 </tr>
               </thead>
 
@@ -1676,13 +1676,13 @@ export default function Documente() {
                 {loading ? (
                   <tr>
                     <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
-                      Se ?ncarc? bonurile de consum...
+                      Se incarca bonurile de consum...
                     </td>
                   </tr>
                 ) : filteredConsumptionDocs.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
-                      Nu exist? bonuri de consum ?n intervalul selectat.
+                      Nu exista bonuri de consum in intervalul selectat.
                     </td>
                   </tr>
                 ) : (
@@ -1737,13 +1737,13 @@ export default function Documente() {
               <thead className="bg-slate-50 text-slate-500">
                 <tr>
                   <th className="px-3 py-2.5 text-left font-medium">Tip</th>
-                  <th className="px-3 py-2.5 text-left font-medium">Num?r</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Numar</th>
                   <th className="px-3 py-2.5 text-left font-medium">Data</th>
-                  <th className="px-3 py-2.5 text-left font-medium">Loca?ie</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Locatie</th>
                   <th className="px-3 py-2.5 text-left font-medium">Produse</th>
                   <th className="px-3 py-2.5 text-left font-medium">Cantitate</th>
                   <th className="px-3 py-2.5 text-left font-medium">Status</th>
-                  <th className="px-3 py-2.5 text-right font-medium">Ac?iune</th>
+                  <th className="px-3 py-2.5 text-right font-medium">Actiune</th>
                 </tr>
               </thead>
 
@@ -1751,19 +1751,19 @@ export default function Documente() {
                 {loading ? (
                   <tr>
                     <td colSpan={efacturaEnabled ? 9 : 8} className="px-4 py-8 text-center text-slate-500">
-                      Se ?ncarc? documentele de produc?ie...
+                Se incarca documentele de productie...
                     </td>
                   </tr>
                 ) : filteredProductionDocs.length === 0 ? (
                   <tr>
                     <td colSpan={efacturaEnabled ? 9 : 8} className="px-4 py-8 text-center text-slate-500">
-                      Nu exist? documente de produc?ie ?n intervalul selectat.
+                Nu exista documente de productie in intervalul selectat.
                     </td>
                   </tr>
                 ) : (
                   filteredProductionDocs.map((doc) => (
                     <tr key={doc.id} className="border-t border-slate-200">
-                      <td className="px-3 py-2.5 text-slate-700">Produc?ie</td>
+                    <td className="px-3 py-2.5 text-slate-700">Productie</td>
                       <td className="px-3 py-2.5 font-semibold text-slate-900">{doc.docNo}</td>
                       <td className="px-3 py-2.5 text-slate-600">{formatDate(doc.docDate)}</td>
                       <td className="px-3 py-2.5 text-slate-600">{doc.locationName || "-"}</td>
@@ -1810,15 +1810,15 @@ export default function Documente() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-slate-500">
                 <tr>
-                  <th className="px-3 py-2.5 text-left font-medium">Num?r</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Numar</th>
                   <th className="px-3 py-2.5 text-left font-medium">Data</th>
                   <th className="px-3 py-2.5 text-left font-medium">Client</th>
                   <th className="px-3 py-2.5 text-left font-medium">CIF</th>
-                  <th className="px-3 py-2.5 text-left font-medium">Loca?ie</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Locatie</th>
                   <th className="px-3 py-2.5 text-left font-medium">Status</th>
                   {efacturaEnabled ? <th className="px-3 py-2.5 text-left font-medium">e-Factura</th> : null}
                   <th className="px-3 py-2.5 text-left font-medium">Valoare</th>
-                  <th className="px-3 py-2.5 text-right font-medium">Ac?iune</th>
+                  <th className="px-3 py-2.5 text-right font-medium">Actiune</th>
                 </tr>
               </thead>
 
@@ -1826,13 +1826,13 @@ export default function Documente() {
                 {loading ? (
                   <tr>
                     <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
-                      Se ?ncarc? facturile...
+                      Se incarca facturile...
                     </td>
                   </tr>
                 ) : filteredInvoiceDocs.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
-                      Nu exist? facturi ?n intervalul selectat.
+                      Nu exista facturi in intervalul selectat.
                     </td>
                   </tr>
                 ) : (
@@ -1919,13 +1919,13 @@ export default function Documente() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-slate-500">
                 <tr>
-                  <th className="px-3 py-2.5 text-left font-medium">Num?r</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Numar</th>
                   <th className="px-3 py-2.5 text-left font-medium">Data</th>
                   <th className="px-3 py-2.5 text-left font-medium">Furnizor</th>
-                  <th className="px-3 py-2.5 text-left font-medium">Loca?ie</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Locatie</th>
                   <th className="px-3 py-2.5 text-left font-medium">Status</th>
                   <th className="px-3 py-2.5 text-left font-medium">Valoare</th>
-                  <th className="px-3 py-2.5 text-right font-medium">Ac?iune</th>
+                  <th className="px-3 py-2.5 text-right font-medium">Actiune</th>
                 </tr>
               </thead>
 
@@ -1933,13 +1933,13 @@ export default function Documente() {
                 {loading ? (
                   <tr>
                     <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
-                      Se ?ncarc? recep?iile NIR...
+                Se incarca receptiile NIR...
                     </td>
                   </tr>
                 ) : filteredReceiptDocs.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
-                      Nu exist? note de recep?ie ?n intervalul selectat.
+                Nu exista note de receptie in intervalul selectat.
                     </td>
                   </tr>
                 ) : (
@@ -1990,13 +1990,13 @@ export default function Documente() {
               <thead className="bg-slate-50 text-slate-500">
                 <tr>
                   <th className="px-3 py-2.5 text-left font-medium">Tip</th>
-                  <th className="px-3 py-2.5 text-left font-medium">Num?r</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Numar</th>
                   <th className="px-3 py-2.5 text-left font-medium">Data</th>
-                  <th className="px-3 py-2.5 text-left font-medium">Loca?ie</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Locatie</th>
                   <th className="px-3 py-2.5 text-left font-medium">Motiv</th>
                   <th className="px-3 py-2.5 text-left font-medium">Status</th>
                   <th className="px-3 py-2.5 text-left font-medium">Valoare</th>
-                  <th className="px-3 py-2.5 text-right font-medium">Ac?iune</th>
+                  <th className="px-3 py-2.5 text-right font-medium">Actiune</th>
                 </tr>
               </thead>
 
@@ -2004,13 +2004,13 @@ export default function Documente() {
                 {loading ? (
                   <tr>
                     <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
-                      Se ?ncarc? procesele verbale...
+                      Se incarca procesele verbale...
                     </td>
                   </tr>
                 ) : filteredMinutesDocs.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
-                      Nu exist? procese verbale ?n intervalul selectat.
+                      Nu exista procese verbale in intervalul selectat.
                     </td>
                   </tr>
                 ) : (
@@ -2065,13 +2065,13 @@ export default function Documente() {
               <thead className="bg-slate-50 text-slate-500">
                 <tr>
                   <th className="px-3 py-2.5 text-left font-medium">Tip</th>
-                  <th className="px-3 py-2.5 text-left font-medium">Num?r</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Numar</th>
                   <th className="px-3 py-2.5 text-left font-medium">Data</th>
-                  <th className="px-3 py-2.5 text-left font-medium">Loca?ie</th>
-                  <th className="px-3 py-2.5 text-left font-medium">Pozi?ii</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Locatie</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Pozitii</th>
                   <th className="px-3 py-2.5 text-left font-medium">Diferen??</th>
                   <th className="px-3 py-2.5 text-left font-medium">Status</th>
-                  <th className="px-3 py-2.5 text-right font-medium">Ac?iune</th>
+                  <th className="px-3 py-2.5 text-right font-medium">Actiune</th>
                 </tr>
               </thead>
 
@@ -2079,13 +2079,13 @@ export default function Documente() {
                 {loading ? (
                   <tr>
                     <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
-                      Se ?ncarc? documentele de inventar...
+                      Se incarca documentele de inventar...
                     </td>
                   </tr>
                 ) : filteredInventoryDocs.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
-                      Nu exist? documente de inventar ?n intervalul selectat.
+                      Nu exista documente de inventar in intervalul selectat.
                     </td>
                   </tr>
                 ) : (
@@ -2143,7 +2143,7 @@ export default function Documente() {
                   {selectedConsumptionDoc ? `Detaliu bon de consum ${selectedConsumptionDoc.docNo}` : "Detaliu bon de consum"}
                 </div>
                 <div className="mt-1 text-sm text-slate-500">
-                  Vizualizezi consumul generat automat din v?nzare ?i re?etar.
+                Vizualizezi consumul generat automat din vanzare si retetar.
                 </div>
               </div>
 
@@ -2173,13 +2173,13 @@ export default function Documente() {
 
             {detailLoading || !selectedConsumptionDoc ? (
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-                Se ?ncarc? detaliul documentului...
+                Se incarca detaliul documentului...
               </div>
             ) : (
               <div className="space-y-4">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
                   <div className="rounded-[16px] border border-slate-200 bg-slate-50 p-3">
-                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Num?r</div>
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Numar</div>
                     <div className="mt-2 text-base font-semibold text-slate-900">{selectedConsumptionDoc.docNo}</div>
                   </div>
 
@@ -2189,7 +2189,7 @@ export default function Documente() {
                   </div>
 
                   <div className="rounded-[16px] border border-slate-200 bg-slate-50 p-3">
-                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Loca?ie</div>
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Locatie</div>
                     <div className="mt-2 text-base font-semibold text-slate-900">{selectedConsumptionDoc.location?.name || "-"}</div>
                   </div>
 
@@ -2209,7 +2209,7 @@ export default function Documente() {
                         <div className="mt-2 font-semibold text-slate-900">{selectedConsumptionDoc.sale.receiptNo || "-"}</div>
                       </div>
                       <div>
-                        <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Data v?nz?rii</div>
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Data vanzarii</div>
                         <div className="mt-2 text-slate-700">{formatDateTime(selectedConsumptionDoc.sale.soldAt)}</div>
                       </div>
                       <div>
@@ -2226,7 +2226,7 @@ export default function Documente() {
                       </div>
                     </div>
                   ) : (
-                    <div className="text-sm text-slate-500">Document f?r? leg?tur? la v?nzare.</div>
+                    <div className="text-sm text-slate-500">Document fara legatura la vanzare.</div>
                   )}
                 </div>
 
@@ -2263,7 +2263,7 @@ export default function Documente() {
 
                 {selectedConsumptionDoc.sale?.items?.length ? (
                   <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-                    <div className="mb-4 text-lg font-semibold text-slate-900">Linii v?nzare</div>
+                <div className="mb-4 text-lg font-semibold text-slate-900">Linii vanzare</div>
 
                     <MobileTable minWidthClass="min-w-[640px]">
                       <table className="w-full text-sm">
@@ -2301,10 +2301,10 @@ export default function Documente() {
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <div className="text-lg font-semibold text-slate-900">
-                  {selectedProductionDoc ? `Detaliu produc?ie ${selectedProductionDoc.docNo}` : "Detaliu produc?ie"}
+              {selectedProductionDoc ? `Detaliu productie ${selectedProductionDoc.docNo}` : "Detaliu productie"}
                 </div>
                 <div className="mt-1 text-sm text-slate-500">
-                  Vizualizezi produsele finite realizate ?i ingredientele consumate.
+            Vizualizezi produsele finite realizate si ingredientele consumate.
                 </div>
               </div>
 
@@ -2334,13 +2334,13 @@ export default function Documente() {
 
             {detailLoading || !selectedProductionDoc ? (
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-                Se ?ncarc? detaliul documentului...
+                Se incarca detaliul documentului...
               </div>
             ) : (
               <div className="space-y-4">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
                   <div className="rounded-[16px] border border-slate-200 bg-slate-50 p-3">
-                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Num?r</div>
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Numar</div>
                     <div className="mt-2 text-base font-semibold text-slate-900">{selectedProductionDoc.docNo}</div>
                   </div>
 
@@ -2350,7 +2350,7 @@ export default function Documente() {
                   </div>
 
                   <div className="rounded-[16px] border border-slate-200 bg-slate-50 p-3">
-                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Loca?ie</div>
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Locatie</div>
                     <div className="mt-2 text-base font-semibold text-slate-900">{selectedProductionDoc.locationName || "-"}</div>
                   </div>
 
@@ -2385,7 +2385,7 @@ export default function Documente() {
                           {row.ingredients.length === 0 ? (
                             <tr>
                               <td colSpan={4} className="px-4 py-6 text-center text-slate-500">
-                                Nu exist? ingrediente.
+                                Nu exista ingrediente.
                               </td>
                             </tr>
                           ) : (
@@ -2418,7 +2418,7 @@ export default function Documente() {
                   {selectedInventoryDoc ? `Detaliu inventar ${selectedInventoryDoc.docNo}` : "Detaliu inventar"}
                 </div>
                 <div className="mt-1 text-sm text-slate-500">
-                  Vizualizezi pozi?iile inventariate, cantit??ile scriptice ?i diferen?ele.
+            Vizualizezi pozitiile inventariate, cantitatile scriptice si diferentele.
                 </div>
               </div>
 
@@ -2448,13 +2448,13 @@ export default function Documente() {
 
             {detailLoading || !selectedInventoryDoc ? (
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-                Se ?ncarc? detaliul documentului...
+                Se incarca detaliul documentului...
               </div>
             ) : (
               <div className="space-y-4">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
                   <div className="rounded-[16px] border border-slate-200 bg-slate-50 p-3">
-                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Num?r</div>
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Numar</div>
                     <div className="mt-2 text-base font-semibold text-slate-900">{selectedInventoryDoc.docNo}</div>
                   </div>
 
@@ -2464,7 +2464,7 @@ export default function Documente() {
                   </div>
 
                   <div className="rounded-[16px] border border-slate-200 bg-slate-50 p-3">
-                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Loca?ie</div>
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Locatie</div>
                     <div className="mt-2 text-base font-semibold text-slate-900">{selectedInventoryDoc.location?.name || "-"}</div>
                   </div>
 
@@ -2476,7 +2476,7 @@ export default function Documente() {
                   </div>
 
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Pozi?ii</div>
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Pozitii</div>
                     <div className="mt-2 text-base font-semibold text-slate-900">{selectedInventoryDoc.summary.itemsCount}</div>
                   </div>
                 </div>
@@ -2490,7 +2490,7 @@ export default function Documente() {
                   </div>
 
                   <div className="rounded-[16px] border border-slate-200 bg-white p-3 shadow-sm">
-                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Total num?rat</div>
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Total numarat</div>
                     <div className="mt-2 text-lg font-semibold text-slate-900">
                       {formatNumber(selectedInventoryDoc.summary.totalCountedQty, 3)}
                     </div>
@@ -2505,7 +2505,7 @@ export default function Documente() {
                 </div>
 
                 <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-                  <div className="mb-4 text-lg font-semibold text-slate-900">Pozi?ii inventar</div>
+                <div className="mb-4 text-lg font-semibold text-slate-900">Pozitii inventar</div>
 
                   <MobileTable minWidthClass="min-w-[760px]">
                     <table className="w-full text-sm">
@@ -2515,7 +2515,7 @@ export default function Documente() {
                           <th className="px-3 py-2.5 text-left font-medium">SKU</th>
                           <th className="px-3 py-2.5 text-left font-medium">UM</th>
                           <th className="px-3 py-2.5 text-left font-medium">Scriptic</th>
-                          <th className="px-3 py-2.5 text-left font-medium">Num?rat</th>
+                    <th className="px-3 py-2.5 text-left font-medium">Numarat</th>
                           <th className="px-3 py-2.5 text-left font-medium">Diferen??</th>
                         </tr>
                       </thead>
@@ -2523,7 +2523,7 @@ export default function Documente() {
                         {selectedInventoryDoc.items.length === 0 ? (
                           <tr>
                             <td colSpan={6} className="px-4 py-6 text-center text-slate-500">
-                              Nu exist? pozi?ii ?n inventar.
+                    Nu exista pozitii in inventar.
                             </td>
                           </tr>
                         ) : (
@@ -2547,7 +2547,7 @@ export default function Documente() {
 
                 {selectedInventoryDoc.note ? (
                   <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-                    <div className="mb-2 text-lg font-semibold text-slate-900">Observa?ii</div>
+                <div className="mb-2 text-lg font-semibold text-slate-900">Observatii</div>
                     <div className="text-sm text-slate-600">{selectedInventoryDoc.note}</div>
                   </div>
                 ) : null}

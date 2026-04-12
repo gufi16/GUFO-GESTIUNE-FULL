@@ -241,9 +241,9 @@ export default function ControlPanelClients() {
   async function loadOwnerProfile() {
     try {
       const profile = await controlMe()
-      setOwnerEmail(typeof (profile as any)?.email === "string" ? (profile as any).email : "Owner")
+      setOwnerEmail(typeof (profile as any)?.email === "string" ? (profile as any).email : "Proprietar")
     } catch {
-      setOwnerEmail("Owner")
+      setOwnerEmail("Proprietar")
     }
   }
 
@@ -315,10 +315,10 @@ export default function ControlPanelClients() {
     }
   }
 
-  async function handleLogout() {
+  async function handleIesire() {
     try {
       setLoggingOut(true)
-      controlLogout()
+    controlLogout()
       navigate("/cp/login", { replace: true })
     } finally {
       setLoggingOut(false)
@@ -433,16 +433,16 @@ export default function ControlPanelClients() {
 
           <div className="flex flex-wrap gap-2">
             <button onClick={loadClients} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700">
-              <RefreshCw size={15} />
-              Refresh
+            <RefreshCw size={15} />
+            Reincarca
             </button>
             <button onClick={() => setIsModalOpen(true)} className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2 text-sm font-semibold text-white">
               <Plus size={15} />
               Client nou
             </button>
-            <button onClick={handleLogout} disabled={loggingOut} className="inline-flex items-center gap-2 rounded-2xl border border-rose-200 bg-white px-3 py-2 text-sm font-medium text-rose-700 disabled:opacity-60">
-              <LogOut size={15} />
-              {loggingOut ? "..." : "Logout"}
+          <button onClick={handleIesire} disabled={loggingOut} className="inline-flex items-center gap-2 rounded-2xl border border-rose-200 bg-white px-3 py-2 text-sm font-medium text-rose-700 disabled:opacity-60">
+            <LogOut size={15} />
+            {loggingOut ? "..." : "Iesire"}
             </button>
           </div>
         </div>
@@ -732,4 +732,5 @@ export default function ControlPanelClients() {
     </div>
   )
 }
+
 

@@ -145,7 +145,7 @@ export default function DepartamentePage() {
         actions={
           <>
             <button type="button" onClick={load} className={documentButtonSecondaryClass}>
-              Refresh
+              Reincarca
             </button>
             <button type="button" onClick={add} className={documentButtonPrimaryClass} disabled={saving}>
               {saving ? "Se salvează..." : "Adaugă"}
@@ -208,3 +208,4 @@ export default function DepartamentePage() {
     </div>
   )
 }
+

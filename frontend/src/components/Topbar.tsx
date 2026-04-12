@@ -1,4 +1,4 @@
-﻿import { Bell, LogOut, MapPin, Menu } from "lucide-react"
+import { Bell, LogOut, MapPin, Menu } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom"
 import { API_BASE as API, authHeaders } from "../lib/api"
@@ -204,7 +204,7 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
     setActiveLocationId(selectedTerminal.locationId)
   }
 
-  function handleLogout() {
+  function handleIesire() {
     logout()
     navigate("/login")
   }
@@ -240,9 +240,9 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
 
           <button
             type="button"
-            onClick={handleLogout}
+            onClick={handleIesire}
             className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-rose-200 bg-rose-50 text-rose-700 transition hover:bg-rose-100"
-            aria-label="Logout"
+            aria-label="Iesire"
           >
             <LogOut size={16} />
           </button>
@@ -416,11 +416,11 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
 
             <button
               type="button"
-              onClick={handleLogout}
+              onClick={handleIesire}
               className="inline-flex h-9 items-center justify-center rounded-[12px] border border-rose-200 bg-rose-50 px-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
             >
               <LogOut size={16} className="mr-2" />
-              Logout
+              Iesire
             </button>
           </div>
         </div>
@@ -428,5 +428,6 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
     </header>
   )
 }
+
 
 

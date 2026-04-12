@@ -949,7 +949,7 @@ export default function ControlPanelClientDetails() {
                 onChange={(e) => setUserForm((prev) => ({ ...prev, role: e.target.value }))}
                 className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
               >
-                <option value="OWNER">Owner</option>
+                <option value="OWNER">Proprietar</option>
                 <option value="ADMIN">Administrator</option>
                 <option value="MANAGER">Manager</option>
                 <option value="CASHIER">Ospatar / Casier</option>
@@ -1164,4 +1164,5 @@ export default function ControlPanelClientDetails() {
     </div>
   )
 }
+
 

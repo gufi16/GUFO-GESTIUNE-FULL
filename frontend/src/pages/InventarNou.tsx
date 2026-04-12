@@ -317,7 +317,7 @@ export default function InventarNou() {
                 ref={searchInputRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder={loadingProducts ? "Se încarca produsele..." : "Cauta dupa nume, cod sau cod de bare"}
+                placeholder={loadingProducts ? "Se incarca produsele..." : "Cauta dupa nume, cod sau cod de bare"}
                 className={`${documentInputClass} pl-11`}
               />
             </div>
@@ -325,7 +325,7 @@ export default function InventarNou() {
             {query ? (
               <div className="mt-2 max-h-[180px] overflow-y-auto rounded-[14px] border border-slate-200 bg-slate-50 p-2">
                 {loadingProducts ? (
-                  <div className="px-3 py-6 text-center text-sm text-slate-500">Se încarca produsele...</div>
+                  <div className="px-3 py-6 text-center text-sm text-slate-500">Se incarca produsele...</div>
                 ) : filteredProducts.length ? (
                   <div className="space-y-2">
                     {filteredProducts.map((product) => {
@@ -340,7 +340,7 @@ export default function InventarNou() {
                           <div className="min-w-0">
                             <div className="truncate text-sm font-semibold text-slate-900">{product.name}</div>
                             <div className="mt-0.5 text-xs text-slate-500">
-                              {product.code || product.sku || product.barcode || "fara cod"} · stoc {realStock} {pickUnit(product)}
+                              {product.code || product.sku || product.barcode || "fara cod"} - stoc {realStock} {pickUnit(product)}
                             </div>
                           </div>
                           <span className="ml-3 inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700">
@@ -356,7 +356,7 @@ export default function InventarNou() {
               </div>
             ) : (
               <div className="mt-2 rounded-[14px] border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
-                Începe sa scrii ?i produsele apar aici, fara sa împinga pagina în jos.
+                Incepe sa scrii si produsele apar aici, fara sa impinga pagina in jos.
               </div>
             )}
           </DocumentSection>
@@ -421,7 +421,7 @@ export default function InventarNou() {
                 </div>
               ) : (
                 <div className="rounded-[14px] border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center">
-                  <div className="text-sm font-semibold text-slate-700">Nu ai produse în document</div>
+                  <div className="text-sm font-semibold text-slate-700">Nu ai produse in document</div>
                   <div className="mt-1 text-sm text-slate-500">Cauta un produs sus si apasa direct pe el pentru adaugare.</div>
                 </div>
               )}

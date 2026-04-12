@@ -85,7 +85,7 @@ const CLASS_OPTIONS = [
   { value: "MATERIE_PRIMA", label: "materie prima" },
   { value: "ALTE_MATERIALE", label: "alte materiale" },
   { value: "PRODUS_FIN", label: "produs finit" },
-  { value: "MARFA", label: "marfă" },
+  { value: "MARFA", label: "marfa" },
   { value: "AMBALAJE", label: "ambalaje" },
   { value: "SEMIFABRICATE", label: "semifabricate" },
   { value: "REZIDUALE", label: "reziduale" },
@@ -97,13 +97,13 @@ const CLASS_LABEL_MAP: Record<string, string> = Object.fromEntries(
 )
 
 const PRODUCTION_MODE_OPTIONS = [
-  { value: "AUTO", label: "Automată" },
-  { value: "MANUAL", label: "Manuală" }
+  { value: "AUTO", label: "Automata" },
+  { value: "MANUAL", label: "Manuala" }
 ] as const
 
 const PRODUCTION_MODE_LABEL_MAP: Record<string, string> = {
-  AUTO: "Automată",
-  MANUAL: "Manuală"
+  AUTO: "Automata",
+  MANUAL: "Manuala"
 }
 
 const emptyForm: FormState = {
@@ -235,7 +235,7 @@ export default function ProdusePage() {
 
   async function loadAll() {
     if (!token) {
-      setError("Nu există token de autentificare. Fă login din nou.")
+      setError("Nu exista token de autentificare. Fa login din nou.")
       setLoading(false)
       return
     }
@@ -262,7 +262,7 @@ export default function ProdusePage() {
       const companyData = await companyRes.json().catch(() => ({}))
 
       if ([productsRes, uomRes, vatRes, catRes, companyRes].some((r) => r.status === 401)) {
-        setError("Token expirat sau invalid. Fă login din nou.")
+        setError("Token expirat sau invalid. Fa login din nou.")
         setLoading(false)
         return
       }
@@ -277,7 +277,7 @@ export default function ProdusePage() {
       setIsVatPayer(companyData?.company?.isVatPayer !== false)
       void loadNextSku()
     } catch {
-      setError("Nu pot încărca produsele.")
+      setError("Nu pot incarca produsele.")
     } finally {
       setLoading(false)
     }
@@ -371,7 +371,7 @@ function getDefaultVat(list = vatRates) {
 
   async function uploadImage(file: File) {
     if (!token) {
-      setError("Nu există token de autentificare. Fă login din nou.")
+      setError("Nu exista token de autentificare. Fa login din nou.")
       return
     }
 
@@ -394,13 +394,13 @@ function getDefaultVat(list = vatRates) {
       const data = await res.json().catch(() => ({}))
 
       if (!res.ok || !data.ok) {
-        setError(data.error || "Nu am putut încărca imaginea.")
+        setError(data.error || "Nu am putut incarca imaginea.")
         return
       }
 
       setForm((prev) => ({ ...prev, imageUrl: normalizeHostedImageUrl(data.imageUrl || "") }))
     } catch {
-      setError("Nu am putut încărca imaginea.")
+      setError("Nu am putut incarca imaginea.")
     } finally {
       setUploading(false)
     }
@@ -408,27 +408,27 @@ function getDefaultVat(list = vatRates) {
 
   async function saveProduct() {
     if (!token) {
-      setError("Nu există token de autentificare. Fă login din nou.")
+      setError("Nu exista token de autentificare. Fa login din nou.")
       return
     }
 
     if (!form.name.trim()) {
-      setError("Completează denumirea produsului.")
+      setError("Completeaza denumirea produsului.")
       return
     }
 
     if (!form.uomId) {
-      setError("Selectează UM.")
+      setError("Selecteaza UM.")
       return
     }
 
     if (!isFinishedProduct && !form.purchaseUomId) {
-      setError("Selecteaz? ambalajul.")
+      setError("Selecteaza ambalajul.")
       return
     }
 
     if (isVatPayer && !form.vatRateId) {
-      setError("Selectează TVA.")
+      setError("Selecteaza TVA.")
       return
     }
 
@@ -478,7 +478,7 @@ function getDefaultVat(list = vatRates) {
       const data = await res.json().catch(() => ({}))
 
       if (res.status === 401) {
-        setError("Token expirat sau invalid. Fă login din nou.")
+        setError("Token expirat sau invalid. Fa login din nou.")
         return
       }
 
@@ -497,7 +497,7 @@ function getDefaultVat(list = vatRates) {
 
       if (needsRecipeFlow) {
         setMessage(
-          `Produsul ${savedItem.name} a fost salvat inițial ca inactiv. Completează acum rețetarul ca să devină utilizabil.`
+          `Produsul ${savedItem.name} a fost salvat initial ca inactiv. Completeaza acum retetarul ca sa devina utilizabil.`
         )
         await loadAll()
         await openRecipeModal(savedItem)
@@ -505,7 +505,7 @@ function getDefaultVat(list = vatRates) {
         if (editingItem) {
           if (savedItem?.forcedInactiveBecauseMissingRecipe) {
             setMessage(
-              `Produsul ${savedItem?.name || ""} a fost actualizat, dar a rămas inactiv pentru că nu are rețetar completat.`
+              `Produsul ${savedItem?.name || ""} a fost actualizat, dar a ramas inactiv pentru ca nu are retetar completat.`
             )
           } else {
             setMessage(`Produsul ${savedItem?.name || ""} a fost actualizat.`)
@@ -513,7 +513,7 @@ function getDefaultVat(list = vatRates) {
         } else {
           if (savedItem?.forcedInactiveBecauseMissingRecipe) {
             setMessage(
-              `Produsul a fost salvat cu codul ${savedItem?.sku || ""} și marcat automat inactiv până la completarea rețetarului.`
+              `Produsul a fost salvat cu codul ${savedItem?.sku || ""} si marcat automat inactiv pana la completarea retetarului.`
             )
           } else {
             setMessage(`Produsul a fost salvat cu codul ${savedItem?.sku || ""}.`)
@@ -531,11 +531,11 @@ function getDefaultVat(list = vatRates) {
 
   async function deleteProduct(item: Product) {
     if (!token) {
-      setError("Nu există token de autentificare. Fă login din nou.")
+      setError("Nu exista token de autentificare. Fa login din nou.")
       return
     }
 
-    const ok = window.confirm(`Sigur vrei să ștergi produsul "${item.name}"?`)
+    const ok = window.confirm(`Sigur vrei sa stergi produsul "${item.name}"?`)
     if (!ok) return
 
     setError("")
@@ -552,25 +552,25 @@ function getDefaultVat(list = vatRates) {
       const data = await res.json().catch(() => ({}))
 
       if (res.status === 401) {
-        setError("Token expirat sau invalid. Fă login din nou.")
+        setError("Token expirat sau invalid. Fa login din nou.")
         return
       }
 
       if (!data.ok) {
-        setError(data.error || "Nu am putut șterge produsul.")
+        setError(data.error || "Nu am putut sterge produsul.")
         return
       }
 
-      setMessage(`Produsul "${item.name}" a fost șters.`)
+      setMessage(`Produsul "${item.name}" a fost sters.`)
       await loadAll()
     } catch {
-      setError("Nu am putut șterge produsul.")
+      setError("Nu am putut sterge produsul.")
     }
   }
 
   async function openRecipeModal(item: Product) {
     if (!token) {
-      setError("Nu există token de autentificare. Fă login din nou.")
+      setError("Nu exista token de autentificare. Fa login din nou.")
       return
     }
 
@@ -590,13 +590,13 @@ function getDefaultVat(list = vatRates) {
       const data = await res.json().catch(() => ({}))
 
       if (res.status === 401) {
-        setError("Token expirat sau invalid. Fă login din nou.")
+        setError("Token expirat sau invalid. Fa login din nou.")
         setShowRecipeModal(false)
         return
       }
 
       if (!data.ok) {
-        setError(data.error || "Nu am putut încărca rețetarul.")
+        setError(data.error || "Nu am putut incarca retetarul.")
         setShowRecipeModal(false)
         return
       }
@@ -633,7 +633,7 @@ function getDefaultVat(list = vatRates) {
         })
       }
     } catch {
-      setError("Nu am putut încărca rețetarul.")
+      setError("Nu am putut incarca retetarul.")
       setShowRecipeModal(false)
     } finally {
       setRecipeLoading(false)
@@ -687,12 +687,12 @@ function getDefaultVat(list = vatRates) {
 
   async function saveRecipe() {
     if (!token || !recipeProduct) {
-      setError("Nu există sesiune activă.")
+      setError("Nu exista sesiune activa.")
       return
     }
 
     if (!recipeForm.items.length) {
-      setError("Adaugă cel puțin un ingredient în rețetar.")
+      setError("Adauga cel putin un ingredient in retetar.")
       return
     }
 
@@ -728,17 +728,17 @@ function getDefaultVat(list = vatRates) {
       const data = await res.json().catch(() => ({}))
 
       if (!res.ok || !data.ok) {
-        setError(data.error || "Nu am putut salva rețetarul.")
+        setError(data.error || "Nu am putut salva retetarul.")
         return
       }
 
       setMessage(
-        `Rețetarul pentru "${recipeProduct.name}" a fost salvat. Produsul a fost activat automat.`
+        `Retetarul pentru "${recipeProduct.name}" a fost salvat. Produsul a fost activat automat.`
       )
       setShowRecipeModal(false)
       await loadAll()
     } catch {
-      setError("Nu am putut salva rețetarul.")
+      setError("Nu am putut salva retetarul.")
     } finally {
       setRecipeSaving(false)
     }
@@ -806,7 +806,7 @@ function getDefaultVat(list = vatRates) {
       <PageHeader
         badge="nomenclator"
         title="Produse"
-        subtitle="Lista produselor, configurarea lor, clasificări, POS, SGR și rețetare."
+        subtitle="Lista produselor, configurarea lor, clasificari, POS, SGR si retetare."
       />
 
       {error ? <div style={errorBox}>{error}</div> : null}
@@ -814,9 +814,9 @@ function getDefaultVat(list = vatRates) {
 
       <div style={kpiGrid}>
         <MetricCard title="Total produse" value={String(kpis.total)} />
-        <MetricCard title="Vizibile în POS" value={String(kpis.visiblePos)} />
+        <MetricCard title="Vizibile in POS" value={String(kpis.visiblePos)} />
         <MetricCard title="Cu SGR" value={String(kpis.sgr)} />
-        <MetricCard title="Cu rețetar" value={String(kpis.recipe)} />
+        <MetricCard title="Cu retetar" value={String(kpis.recipe)} />
       </div>
 
       <div style={card}>
@@ -844,7 +844,7 @@ function getDefaultVat(list = vatRates) {
         <div style={topBar}>
           <div style={{ flex: 1 }}>
             <input
-              placeholder="Caută rapid după produs, cod, categorie, departament sau ambalaj..."
+              placeholder="Cauta rapid dupa produs, cod, categorie, departament sau ambalaj..."
               value={q}
               onChange={(e) => setQ(e.target.value)}
               style={input}
@@ -852,27 +852,27 @@ function getDefaultVat(list = vatRates) {
           </div>
 
           <button onClick={openAddModal} style={btnPrimary}>
-            Adaugă produs
+            Adauga produs
           </button>
         </div>
 
         {!isVatPayer ? (
           <div style={warningBox}>
-            Firma este setată ca neplătitoare de TVA. În această pagină, produsele se salvează fără cotă TVA, iar în listă TVA-ul este ignorat.
+            Firma este setata ca neplatitoare de TVA. In aceasta pagina, produsele se salveaza fara cota TVA, iar in lista TVA-ul este ignorat.
           </div>
         ) : null}
 
         {loading ? (
-          <div style={infoText}>Se încarcă produsele...</div>
+          <div style={infoText}>Se incarca produsele...</div>
         ) : filtered.length === 0 ? (
-          <div style={emptyBox}>Nu există produse pentru filtrul selectat.</div>
+          <div style={emptyBox}>Nu exista produse pentru filtrul selectat.</div>
         ) : (
           <>
             <div style={tableWrap}>
               <table style={table}>
                 <thead>
                   <tr>
-                    <th style={th}>Poză</th>
+                    <th style={th}>Poza</th>
                     <th style={th}>Cod</th>
                     <th style={th}>Produs</th>
                     <th style={th}>Clasificare</th>
@@ -882,13 +882,13 @@ function getDefaultVat(list = vatRates) {
                     <th style={th}>Ambalaj</th>
                     <th style={th}>Cant./ambalaj</th>
                     <th style={th}>TVA</th>
-                    <th style={th}>Preț</th>
+                    <th style={th}>Pret</th>
                     <th style={th}>Cost / UM</th>
                     <th style={th}>POS</th>
                     <th style={th}>SGR</th>
                     <th style={th}>Activ</th>
-                    <th style={th}>Rețetar</th>
-                    <th style={th}>Acțiuni</th>
+                    <th style={th}>Retetar</th>
+                    <th style={th}>Actiuni</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -921,7 +921,7 @@ function getDefaultVat(list = vatRates) {
                           ? item.vatRate?.rate != null
                             ? `${item.vatRate.rate}%`
                             : "-"
-                          : "Neplătitor"}
+                          : "Neplatitor"}
                       </td>
                       <td style={td}>{formatMoney(item.price || 0)}</td>
                       <td style={td}>{formatMoney(item.costPrice || 0)}</td>
@@ -931,7 +931,7 @@ function getDefaultVat(list = vatRates) {
                       <td style={td}>
                         {recipeEligibleClasses.includes(item.class) ? (
                           <button onClick={() => openRecipeModal(item)} style={btnRecipeSmall}>
-                            {item.recipe?.items?.length ? `Rețetar (${item.recipe.items.length})` : "Rețetar"}
+                            {item.recipe?.items?.length ? `Retetar (${item.recipe.items.length})` : "Retetar"}
                           </button>
                         ) : (
                           <span style={{ color: "#94a3b8" }}>-</span>
@@ -943,7 +943,7 @@ function getDefaultVat(list = vatRates) {
                             Edit
                           </button>
                           <button onClick={() => deleteProduct(item)} style={btnDangerSmall}>
-                            Șterge
+                            Sterge
                           </button>
                         </div>
                       </td>
@@ -959,7 +959,7 @@ function getDefaultVat(list = vatRates) {
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 style={page === 1 ? btnDisabled : btnSecondarySmall}
               >
-                ← Anterior
+                Inapoi
               </button>
 
               <div style={paginationInfo}>
@@ -971,7 +971,7 @@ function getDefaultVat(list = vatRates) {
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 style={page >= totalPages ? btnDisabled : btnSecondarySmall}
               >
-                Următor →
+                Urmator
               </button>
             </div>
           </>
@@ -1040,7 +1040,7 @@ function getDefaultVat(list = vatRates) {
                       </select>
                     </Field>
 
-                    <Field label="Mod producție">
+                    <Field label="Mod productie">
                       <select
                         value={form.productionMode}
                         onChange={(e) =>
@@ -1065,7 +1065,7 @@ function getDefaultVat(list = vatRates) {
                         onChange={(e) => setForm((prev) => ({ ...prev, categoryId: e.target.value }))}
                         style={input}
                       >
-                        <option value="">Selectează categoria</option>
+                        <option value="">Selecteaza categoria</option>
                         {categories
                           .filter((c) => c.isActive !== false)
                           .map((c) => (
@@ -1086,9 +1086,9 @@ function getDefaultVat(list = vatRates) {
                   </div>
                 </SectionCard>
 
-                <SectionCard title="Unități și achiziție">
+                <SectionCard title="Unitati si achizitie">
                   <div style={gridCompact}>
-                    <Field label={isFinishedProduct ? "UM v?nzare" : "UM"}>
+                    <Field label={isFinishedProduct ? "UM vanzare" : "UM"}>
                       <select
                         value={form.uomId}
                         onChange={(e) =>
@@ -1103,7 +1103,7 @@ function getDefaultVat(list = vatRates) {
                         }
                         style={input}
                       >
-                        <option value="">Selectează UM</option>
+                        <option value="">Selecteaza UM</option>
                         {uoms
                           .filter((u) => u.isActive !== false)
                           .map((u) => (
@@ -1123,7 +1123,7 @@ function getDefaultVat(list = vatRates) {
                             }
                             style={input}
                           >
-                            <option value="">Selecteaz? ambalaj</option>
+                            <option value="">Selecteaza ambalaj</option>
                             {uoms
                               .filter((u) => u.isActive !== false)
                               .map((u) => (
@@ -1153,14 +1153,14 @@ function getDefaultVat(list = vatRates) {
                           />
                           <div style={fieldHint}>
                             {form.uomId && form.purchaseUomId && form.uomId === form.purchaseUomId
-                              ? `Las? 1 dac? produsul se cump?r? ?i se stocheaz? ?n aceea?i unitate (${selectedUom?.code || "UM"}).`
+                              ? `Lasa 1 daca produsul se cumpara si se stocheaza in aceeasi unitate (${selectedUom?.code || "UM"}).`
                               : `Exemplu: 1 ${selectedPurchaseUom?.code || "ambalaj"} = 8 ${selectedUom?.code || "UM"}.`}
                           </div>
                         </Field>
                       </>
                     ) : (
                       <div style={hintBoxInline}>
-                        Pentru produs finit se folose?te doar U.M. de v?nzare. Ambalajul ?i factorul r?m?n automat pe aceea?i unitate.
+                        Pentru produs finit se foloseste doar U.M. de vanzare. Ambalajul si factorul raman automat pe aceeasi unitate.
                       </div>
                     )}
 
@@ -1171,7 +1171,7 @@ function getDefaultVat(list = vatRates) {
                           onChange={(e) => setForm((prev) => ({ ...prev, vatRateId: e.target.value }))}
                           style={input}
                         >
-                          <option value="">Selectează TVA</option>
+                          <option value="">Selecteaza TVA</option>
                           {vatRates
                             .filter((v) => v.isActive !== false)
                             .map((v) => (
@@ -1182,12 +1182,12 @@ function getDefaultVat(list = vatRates) {
                         </select>
                       ) : (
                         <div style={hintBoxInline}>
-                          Firma este neplătitoare de TVA. Produsul se salvează fără cotă TVA.
+                          Firma este neplatitoare de TVA. Produsul se salveaza fara cota TVA.
                         </div>
                       )}
                     </Field>
 
-                    <Field label="Preț vânzare">
+                    <Field label="Pret vanzare">
                       <input
                         type="number"
                         min="0"
@@ -1204,7 +1204,7 @@ function getDefaultVat(list = vatRates) {
                       />
                     </Field>
 
-                    <Field label="Cost achiziție / UM">
+                    <Field label="Cost achizitie / UM">
                       <input
                         type="number"
                         min="0"
@@ -1220,7 +1220,7 @@ function getDefaultVat(list = vatRates) {
                         style={input}
                       />
                       <div style={fieldHint}>
-                        Costul se introduce pe unitatea de bază, nu pe ambalaj.
+                        Costul se introduce pe unitatea de baza, nu pe ambalaj.
                       </div>
                     </Field>
                   </div>
@@ -1228,7 +1228,7 @@ function getDefaultVat(list = vatRates) {
               </div>
 
               <div style={modalSideColumn}>
-                <SectionCard title="Setări rapide">
+                <SectionCard title="Setari rapide">
                   <div style={sideStack}>
                     <div style={checkBlock}>
                       <label style={checkLabel}>
@@ -1239,7 +1239,7 @@ function getDefaultVat(list = vatRates) {
                         />
                         <span>SGR</span>
                       </label>
-                      <div style={checkHint}>SGR = 0.50 lei fără TVA.</div>
+                      <div style={checkHint}>SGR = 0.50 lei fara TVA.</div>
                     </div>
 
                     <div style={checkBlock}>
@@ -1249,9 +1249,9 @@ function getDefaultVat(list = vatRates) {
                           checked={form.isVisibleInPos}
                           onChange={(e) => setForm((prev) => ({ ...prev, isVisibleInPos: e.target.checked }))}
                         />
-                        <span>Vizibil în POS</span>
+                        <span>Vizibil in POS</span>
                       </label>
-                      <div style={checkHint}>Dacă este debifat, produsul nu apare în Android POS.</div>
+                      <div style={checkHint}>Daca este debifat, produsul nu apare in Android POS.</div>
                     </div>
 
                     <div style={checkBlock}>
@@ -1264,13 +1264,13 @@ function getDefaultVat(list = vatRates) {
                         <span>Produs activ</span>
                       </label>
                       <div style={checkHint}>
-                        Pentru produs finit și semifabricate, dacă nu există rețetar, produsul poate fi salvat automat inactiv.
+                        Pentru produs finit si semifabricate, daca nu exista retetar, produsul poate fi salvat automat inactiv.
                       </div>
                     </div>
                   </div>
                 </SectionCard>
 
-                <SectionCard title="Poză produs">
+                <SectionCard title="Poza produs">
                   <div style={uploadRowCompact}>
                     <label style={uploadLabel}>
                       <input
@@ -1283,7 +1283,7 @@ function getDefaultVat(list = vatRates) {
                         }}
                       />
                       <span style={btnSecondary}>
-                        {uploading ? "Se încarcă..." : "Încarcă poză"}
+                        {uploading ? "Se incarca..." : "Incarca poza"}
                       </span>
                     </label>
 
@@ -1293,7 +1293,7 @@ function getDefaultVat(list = vatRates) {
                         style={btnDangerSoft}
                         onClick={() => setForm((prev) => ({ ...prev, imageUrl: "" }))}
                       >
-                        Șterge
+                        Sterge
                       </button>
                     ) : null}
                   </div>
@@ -1311,14 +1311,14 @@ function getDefaultVat(list = vatRates) {
                     </div>
                   ) : (
                     <div style={hintBox}>
-                      Produsul nu are încă poză. Se lucrează doar cu upload, fără câmp de image URL.
+                      Produsul nu are inca poza. Se lucreaza doar cu upload, fara camp de image URL.
                     </div>
                   )}
                 </SectionCard>
 
                 {(form.class === "PRODUS_FIN" || form.class === "SEMIFABRICATE") && (
                   <div style={warningBox}>
-                    Pentru această clasificare, produsul se salvează întâi ca inactiv și trebuie completat imediat rețetarul.
+                    Pentru aceasta clasificare, produsul se salveaza intai ca inactiv si trebuie completat imediat retetarul.
                   </div>
                 )}
               </div>
@@ -1326,11 +1326,11 @@ function getDefaultVat(list = vatRates) {
 
             <div style={actionsRow}>
               <button onClick={closeModal} style={btnSecondary}>
-                Renunță
+                Renunta
               </button>
 
               <button onClick={saveProduct} disabled={saving || uploading} style={btnPrimary}>
-                {saving ? "Se salvează..." : editingItem ? "Salvează modificările" : "Salvează produs"}
+                {saving ? "Se salveaza..." : editingItem ? "Salveaza modificarile" : "Salveaza produs"}
               </button>
             </div>
           </div>
@@ -1342,23 +1342,23 @@ function getDefaultVat(list = vatRates) {
           <div style={recipeModalCard}>
             <div style={modalHeader}>
               <div>
-                <div style={cardTitle}>Rețetar produs</div>
+                <div style={cardTitle}>Retetar produs</div>
                 <div style={cardSubtitleCompact}>
                   {recipeProduct.name} ({recipeProduct.sku})
                 </div>
               </div>
 
               <button onClick={closeRecipeModal} style={btnSecondary}>
-                Închide
+                Inchide
               </button>
             </div>
 
             {recipeLoading ? (
-              <div style={infoText}>Se încarcă rețetarul...</div>
+              <div style={infoText}>Se incarca retetarul...</div>
             ) : (
               <>
                 <div style={recipeTopGrid}>
-                  <Field label="Cod rețetar">
+                  <Field label="Cod retetar">
                     <input
                       value={recipeForm.code}
                       onChange={(e) => setRecipeForm((prev) => ({ ...prev, code: e.target.value }))}
@@ -1366,7 +1366,7 @@ function getDefaultVat(list = vatRates) {
                     />
                   </Field>
 
-                  <Field label="Nume rețetar">
+                  <Field label="Nume retetar">
                     <input
                       value={recipeForm.name}
                       onChange={(e) => setRecipeForm((prev) => ({ ...prev, name: e.target.value }))}
@@ -1385,7 +1385,7 @@ function getDefaultVat(list = vatRates) {
                     />
                   </Field>
 
-                  <Field label="Status rețetar">
+                  <Field label="Status retetar">
                     <select
                       value={recipeForm.status}
                       onChange={(e) =>
@@ -1404,7 +1404,7 @@ function getDefaultVat(list = vatRates) {
                 </div>
 
                 <div style={{ marginTop: 16 }}>
-                  <Field label="Observații">
+                  <Field label="Observatii">
                     <textarea
                       value={recipeForm.notes}
                       onChange={(e) => setRecipeForm((prev) => ({ ...prev, notes: e.target.value }))}
@@ -1417,12 +1417,12 @@ function getDefaultVat(list = vatRates) {
                 <div style={recipeHeaderRow}>
                   <div style={{ fontSize: 15, fontWeight: 700 }}>Ingrediente</div>
                   <button onClick={addRecipeLine} style={btnPrimary}>
-                    Adaugă ingredient
+                    Adauga ingredient
                   </button>
                 </div>
 
                 {recipeForm.items.length === 0 ? (
-                  <div style={emptyBox}>Nu există încă ingrediente în rețetar.</div>
+                  <div style={emptyBox}>Nu exista inca ingrediente in retetar.</div>
                 ) : (
                   <div style={recipeTableWrap}>
                     <table style={table}>
@@ -1432,8 +1432,8 @@ function getDefaultVat(list = vatRates) {
                           <th style={th}>UM</th>
                           <th style={th}>Cantitate</th>
                           <th style={th}>Pierdere %</th>
-                          <th style={th}>Observații</th>
-                          <th style={th}>Acțiuni</th>
+                          <th style={th}>Observatii</th>
+                          <th style={th}>Actiuni</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1447,7 +1447,7 @@ function getDefaultVat(list = vatRates) {
                                   onChange={(e) => updateRecipeLine(index, { ingredientId: e.target.value })}
                                   style={input}
                                 >
-                                  <option value="">Selectează ingredient</option>
+                                  <option value="">Selecteaza ingredient</option>
                                   {productOptions
                                     .filter((p) => p.id !== recipeProduct.id && p.isActive !== false)
                                     .map((p) => (
@@ -1492,7 +1492,7 @@ function getDefaultVat(list = vatRates) {
 
                               <td style={td}>
                                 <button onClick={() => removeRecipeLine(index)} style={btnDangerSmall}>
-                                  Șterge
+                                  Sterge
                                 </button>
                               </td>
                             </tr>
@@ -1510,20 +1510,20 @@ function getDefaultVat(list = vatRates) {
                       checked={recipeForm.isActive}
                       onChange={(e) => setRecipeForm((prev) => ({ ...prev, isActive: e.target.checked }))}
                     />
-                    <span>Rețetar activ</span>
+                    <span>Retetar activ</span>
                   </label>
                   <div style={checkHint}>
-                    După salvarea rețetarului, produsul va fi activat automat.
+                    Dupa salvarea retetarului, produsul va fi activat automat.
                   </div>
                 </div>
 
                 <div style={actionsRow}>
                   <button onClick={closeRecipeModal} style={btnSecondary}>
-                    Renunță
+                    Renunta
                   </button>
 
                   <button onClick={saveRecipe} disabled={recipeSaving} style={btnPrimary}>
-                    {recipeSaving ? "Se salvează..." : "Salvează rețetar"}
+                    {recipeSaving ? "Se salveaza..." : "Salveaza retetar"}
                   </button>
                 </div>
               </>
@@ -2067,3 +2067,5 @@ const recipeModalCard: CSSProperties = {
   boxShadow: "0 30px 60px rgba(0,0,0,0.18)",
   margin: "8px 0"
 }
+
+
