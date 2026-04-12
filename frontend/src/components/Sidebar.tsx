@@ -118,12 +118,14 @@ function SidebarContent({
         ) : null}
 
         {!mobile ? (
-          <div className="flex items-center justify-center rounded-[16px] border border-slate-200 bg-white p-4 shadow-sm shadow-slate-900/[0.03]">
-            <img src="/favicon.svg" alt="Gufo ERP" className="h-14 w-14 rounded-[16px]" />
+          <div className="rounded-[16px] border border-slate-200 bg-white p-3 shadow-sm shadow-slate-900/[0.03]">
+            <div className="flex items-center">
+              <img src="/favicon.svg" alt="Gufo ERP" className="h-12 w-12 rounded-[14px]" />
+            </div>
           </div>
         ) : (
-          <div className="mt-2 flex items-center gap-3">
-            <img src="/favicon.svg" alt="Gufo ERP" className="h-10 w-10 rounded-[12px]" />
+          <div className="mt-2 flex items-center">
+            <img src="/favicon.svg" alt="Gufo ERP" className="h-9 w-9 rounded-[12px]" />
           </div>
         )}
       </div>

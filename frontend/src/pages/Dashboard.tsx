@@ -11,6 +11,7 @@
   PackageSearch,
 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
+import { useSearchParams } from "react-router-dom"
 import PageHeader from "../components/PageHeader"
 import QuickActions from "../components/QuickActions"
 import { API_BASE as API, getToken, authHeaders } from "../lib/api"
@@ -182,18 +183,8 @@ async function getTenantIdFromSession(token: string): Promise<string> {
 
 function SalesChart({
   data,
-  dateFrom,
-  dateTo,
-  onDateFromChange,
-  onDateToChange,
-  onReset,
 }: {
   data: SalesPoint[]
-  dateFrom: string
-  dateTo: string
-  onDateFromChange: (value: string) => void
-  onDateToChange: (value: string) => void
-  onReset: () => void
 }) {
   const width = 640
   const height = 250
@@ -222,39 +213,6 @@ function SalesChart({
           </div>
         </div>
 
-        <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-[repeat(2,minmax(0,1fr))_auto] xl:w-auto">
-          <div className="min-w-0">
-            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-              De la
-            </label>
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => onDateFromChange(e.target.value)}
-              className="h-9 w-full rounded-xl border border-[#E8E3DA] bg-[#FCFBF8] px-3 text-sm text-[#17324D] outline-none transition focus:border-[#F39C12] focus:bg-white focus:ring-2 focus:ring-[#FFF1D6]"
-            />
-          </div>
-
-          <div className="min-w-0">
-            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-              PÃ¢nÄƒ la
-            </label>
-            <input
-              type="date"
-              value={dateTo}
-              onChange={(e) => onDateToChange(e.target.value)}
-              className="h-9 w-full rounded-xl border border-[#E8E3DA] bg-[#FCFBF8] px-3 text-sm text-[#17324D] outline-none transition focus:border-[#F39C12] focus:bg-white focus:ring-2 focus:ring-[#FFF1D6]"
-            />
-          </div>
-
-          <button
-            type="button"
-            onClick={onReset}
-            className="h-9 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-[#B66A00] transition hover:bg-white"
-          >
-            Reset
-          </button>
-        </div>
       </div>
 
       <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
@@ -394,6 +352,7 @@ function SectionCard({
 }
 
 export default function Dashboard() {
+  const [searchParams] = useSearchParams()
   const token =
     getToken() || ""
 
@@ -404,8 +363,8 @@ export default function Dashboard() {
   const [criticalStock, setCriticalStock] = useState<GlobalStockItem[]>([])
   const [criticalLoading, setCriticalLoading] = useState(true)
 
-  const [dateFrom, setDateFrom] = useState(defaultDateFrom)
-  const [dateTo, setDateTo] = useState(defaultDateTo)
+  const dateFrom = searchParams.get("dateFrom") || defaultDateFrom
+  const dateTo = searchParams.get("dateTo") || defaultDateTo
 
   const [salesSeries, setSalesSeries] = useState<SalesPoint[]>([])
   const [dashboardLoading, setDashboardLoading] = useState(true)
@@ -653,14 +612,6 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 gap-3 2xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
         <SalesChart
           data={safeSales}
-          dateFrom={dateFrom}
-          dateTo={dateTo}
-          onDateFromChange={setDateFrom}
-          onDateToChange={setDateTo}
-          onReset={() => {
-            setDateFrom(defaultDateFrom)
-            setDateTo(defaultDateTo)
-          }}
         />
 
         <SectionCard
@@ -838,10 +789,5 @@ export default function Dashboard() {
     </div>
   )
 }
-
-
-
-
-
 
 
