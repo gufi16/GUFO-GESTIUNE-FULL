@@ -13,6 +13,7 @@ import crypto from "crypto"
 
 import { prisma } from "./lib/prisma"
 import { hashSecret, signAccessToken, verifySecret } from "./lib/auth"
+import { writeAuditLogFromRequest, writeExplicitAuditLog } from "./lib/audit"
 import { requireAuth, AuthedRequest } from "./middleware/requireAuth"
 import { hasSmtpConfig, sendMail } from "./lib/mailer"
 
@@ -103,6 +104,14 @@ app.use(express.json({ limit: "10mb" }))
 app.use(cookieParser())
 app.use(morgan("dev"))
 app.use("/uploads", express.static(uploadsDir))
+app.use((req, res, next) => {
+  res.on("finish", () => {
+    void writeAuditLogFromRequest(req as AuthedRequest, res).catch((error) => {
+      console.error("audit-log-write-failed", error)
+    })
+  })
+  next()
+})
 
 function signPosToken(payload: { tenantId: string; terminalId: string; deviceId: string }) {
   if (!JWT_SECRET) {
@@ -266,6 +275,24 @@ app.post("/api/v1/auth/login", async (req, res) => {
     userId: user.id,
     role: user.role,
     email: user.email,
+  })
+
+  void writeExplicitAuditLog({
+    tenantId: user.tenantId,
+    actorType: user.role === "OWNER" ? "OWNER" : "USER",
+    actorId: user.id,
+    action: "AUTH_LOGIN_SUCCESS",
+    entityType: "AuthSession",
+    entityId: user.id,
+    payload: {
+      email: user.email,
+      role: user.role,
+      source: getRequestHostname(req) || getOriginHostname(req) || null,
+    },
+    ipAddress: req.ip || null,
+    userAgent: req.get("user-agent") || null,
+  }).catch((error) => {
+    console.error("audit-login-write-failed", error)
   })
 
   return res.json({

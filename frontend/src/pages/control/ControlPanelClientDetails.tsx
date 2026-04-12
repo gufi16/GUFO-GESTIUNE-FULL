@@ -37,6 +37,22 @@ type LocationItem = {
   devices?: LocationDevice[]
 }
 
+type AuditLogItem = {
+  id: string
+  actorType?: string
+  actorId?: string | null
+  actorName?: string | null
+  actorEmail?: string | null
+  actorRole?: string | null
+  action: string
+  entityType: string
+  entityId?: string | null
+  payload?: Record<string, unknown> | null
+  ipAddress?: string | null
+  userAgent?: string | null
+  createdAt: string
+}
+
 type ClientDetailsResponse = {
   item?: any
 }
@@ -148,6 +164,28 @@ function metricCard(label: string, value: string | number) {
   )
 }
 
+function formatDateTime(value?: string | null) {
+  if (!value) return "-"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "-"
+  return date.toLocaleString("ro-RO", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
+
+function formatAuditAction(value: string) {
+  return value
+    .split("_")
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+    .replace(/^./, (char) => char.toUpperCase())
+}
+
 export default function ControlPanelClientDetails() {
   const { id } = useParams()
   const [loading, setLoading] = useState(true)
@@ -221,6 +259,7 @@ export default function ControlPanelClientDetails() {
 
   const users = Array.isArray(client?.users) ? (client.users as User[]) : []
   const locations = Array.isArray(client?.locations) ? (client.locations as LocationItem[]) : []
+  const auditLogs = Array.isArray(client?.auditLogs) ? (client.auditLogs as AuditLogItem[]) : []
   const activeModules = Array.isArray(client?.activeModules) ? client.activeModules : []
   const erpEnabled = Boolean(
     licenseForm.modules.dashboard ||
@@ -1008,6 +1047,50 @@ export default function ControlPanelClientDetails() {
             </table>
           </div>
         </div>
+      </section>
+
+      <section className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Istoric ERP</div>
+          <div className="mt-1 text-sm font-semibold text-[#17324D]">Cine a facut ce in clientul acesta</div>
+        </div>
+
+        {auditLogs.length === 0 ? (
+          <div className="px-4 py-8 text-sm text-slate-500">Nu exista evenimente in istoric.</div>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {auditLogs.map((entry) => {
+              const actorLabel =
+                entry.actorName || entry.actorEmail || (entry.actorType === "OWNER" ? "Owner" : entry.actorType === "SYSTEM" ? "Sistem" : "Utilizator")
+
+              return (
+                <div key={entry.id} className="grid gap-3 px-4 py-3 lg:grid-cols-[220px_minmax(0,1fr)_180px] lg:items-start">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-slate-900">{actorLabel}</div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      {[entry.actorRole, entry.ipAddress].filter(Boolean).join(" | ") || entry.actorType || "-"}
+                    </div>
+                  </div>
+
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-[#17324D]">{formatAuditAction(entry.action)}</div>
+                    <div className="mt-1 text-sm text-slate-600">
+                      {entry.entityType}
+                      {entry.entityId ? ` | ${entry.entityId}` : ""}
+                    </div>
+                    {entry.payload ? (
+                      <pre className="mt-2 overflow-x-auto rounded-2xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                        {JSON.stringify(entry.payload, null, 2)}
+                      </pre>
+                    ) : null}
+                  </div>
+
+                  <div className="text-sm text-slate-500 lg:text-right">{formatDateTime(entry.createdAt)}</div>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </section>
 
       <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">

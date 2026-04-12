@@ -553,6 +553,22 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
           plan: true,
         },
       },
+      auditLogs: {
+        orderBy: { createdAt: "desc" },
+        take: 80,
+        select: {
+          id: true,
+          actorType: true,
+          actorId: true,
+          action: true,
+          entityType: true,
+          entityId: true,
+          payload: true,
+          ipAddress: true,
+          userAgent: true,
+          createdAt: true,
+        },
+      },
       tenantModules: {
         where: { enabled: true },
         include: { module: true },
@@ -566,6 +582,21 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
 
   const latestLicense = tenant.licenses[0] || null
   const latestSubscription = tenant.subscriptions[0] || null
+  const actorIds = Array.from(new Set(tenant.auditLogs.map((row) => row.actorId).filter(Boolean)))
+  const actorUsers = actorIds.length
+    ? await prisma.user.findMany({
+        where: {
+          id: { in: actorIds },
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+        },
+      })
+    : []
+  const actorMap = new Map(actorUsers.map((user) => [user.id, user]))
 
   const terminalsByLocation = new Map<string, typeof tenant.terminals>()
   for (const terminal of tenant.terminals) {
@@ -670,6 +701,24 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
         name: row.module.name,
         limitValue: row.limitValue,
       })),
+      auditLogs: tenant.auditLogs.map((entry) => {
+        const actor = entry.actorId ? actorMap.get(entry.actorId) : null
+        return {
+          id: entry.id,
+          actorType: entry.actorType,
+          actorId: entry.actorId,
+          actorName: actor?.name || null,
+          actorEmail: actor?.email || null,
+          actorRole: actor?.role || null,
+          action: entry.action,
+          entityType: entry.entityType,
+          entityId: entry.entityId,
+          payload: entry.payload,
+          ipAddress: entry.ipAddress,
+          userAgent: entry.userAgent,
+          createdAt: entry.createdAt,
+        }
+      }),
     },
   })
 })
