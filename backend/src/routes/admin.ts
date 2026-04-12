@@ -233,6 +233,10 @@ const TenantEfacturaModuleSchema = z.object({
   enabled: z.boolean(),
 })
 
+const UpdateTenantSubdomainSchema = z.object({
+  subdomain: z.string().min(2),
+})
+
 router.get("/api/v1/admin/platform/efactura", requireAuth, requireOwner, async (_req, res) => {
   const config = await prisma.platformConfig.findUnique({
     where: { key: "global" },
@@ -666,6 +670,76 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
         name: row.module.name,
         limitValue: row.limitValue,
       })),
+    },
+  })
+})
+
+router.patch("/api/v1/admin/clients/:id/subdomain", requireAuth, requireOwner, async (req: AuthedRequest, res) => {
+  const parsed = UpdateTenantSubdomainSchema.safeParse(req.body || {})
+  if (!parsed.success) {
+    return res.status(400).json({ ok: false, error: parsed.error.flatten() })
+  }
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: req.params.id },
+    select: { id: true, name: true, subdomain: true },
+  })
+
+  if (!tenant) {
+    return res.status(404).json({ ok: false, error: "Client inexistent" })
+  }
+
+  const requestedSubdomain = normalizeSubdomain(parsed.data.subdomain)
+
+  if (RESERVED_SUBDOMAINS.has(requestedSubdomain)) {
+    return res.status(409).json({ ok: false, error: "Subdomeniul este rezervat." })
+  }
+
+  const existingTenant = await prisma.tenant.findFirst({
+    where: {
+      subdomain: requestedSubdomain,
+      NOT: { id: tenant.id },
+    },
+    select: { id: true },
+  })
+
+  if (existingTenant) {
+    return res.status(409).json({ ok: false, error: "Subdomeniul este deja folosit." })
+  }
+
+  const updatedTenant = await prisma.tenant.update({
+    where: { id: tenant.id },
+    data: { subdomain: requestedSubdomain },
+    select: {
+      id: true,
+      name: true,
+      subdomain: true,
+    },
+  })
+
+  await prisma.auditLog.create({
+    data: {
+      tenantId: tenant.id,
+      actorType: "OWNER",
+      actorId: req.auth?.userId,
+      action: "TENANT_SUBDOMAIN_UPDATED",
+      entityType: "Tenant",
+      entityId: tenant.id,
+      payload: {
+        tenantName: tenant.name,
+        previousSubdomain: tenant.subdomain,
+        nextSubdomain: updatedTenant.subdomain,
+      },
+    },
+  })
+
+  return res.json({
+    ok: true,
+    item: {
+      id: updatedTenant.id,
+      name: updatedTenant.name,
+      subdomain: updatedTenant.subdomain,
+      portalUrl: buildTenantPortalUrl(updatedTenant.subdomain),
     },
   })
 })

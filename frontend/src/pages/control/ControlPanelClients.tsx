@@ -86,6 +86,14 @@ type CreateClientResponse = {
   }
 }
 
+type UpdateSubdomainResponse = {
+  item?: {
+    id?: string
+    subdomain?: string | null
+    portalUrl?: string | null
+  }
+}
+
 const defaultModules = {
   dashboard: true,
   documents: true,
@@ -204,6 +212,8 @@ export default function ControlPanelClients() {
   const [ownerEmail, setOwnerEmail] = useState("")
   const [loggingOut, setLoggingOut] = useState(false)
   const [createdCredentials, setCreatedCredentials] = useState<{ clientName: string; email: string; password: string; portalUrl?: string | null } | null>(null)
+  const [subdomainDrafts, setSubdomainDrafts] = useState<Record<string, string>>({})
+  const [savingSubdomainId, setSavingSubdomainId] = useState<string | null>(null)
   const [form, setForm] = useState<CreateClientPayload>({
     companyName: "",
     subdomain: "",
@@ -233,7 +243,14 @@ export default function ControlPanelClients() {
       setLoading(true)
       setError(null)
       const data = await api<AdminClientsResponse>("/api/v1/admin/clients")
-      setItems((Array.isArray(data?.items) ? data.items : []).map(normalizeClient))
+      const normalized = (Array.isArray(data?.items) ? data.items : []).map(normalizeClient)
+      setItems(normalized)
+      setSubdomainDrafts(
+        normalized.reduce<Record<string, string>>((acc, item) => {
+          acc[item.id] = item.subdomain || ""
+          return acc
+        }, {})
+      )
     } catch (err: any) {
       setError(err?.message || "Nu am putut incarca lista de clienti.")
       setItems([])
@@ -326,6 +343,48 @@ export default function ControlPanelClients() {
       setFormError(err?.message || "Nu am putut crea clientul.")
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleUpdateSubdomain(item: AdminClientItem) {
+    const nextSubdomain = (subdomainDrafts[item.id] || "").trim()
+
+    if (!nextSubdomain) {
+      setMessage("Completeaza subdomeniul.")
+      window.setTimeout(() => setMessage(null), 1800)
+      return
+    }
+
+    try {
+      setSavingSubdomainId(item.id)
+      setError(null)
+      const response = await api<UpdateSubdomainResponse>(`/api/v1/admin/clients/${item.id}/subdomain`, {
+        method: "PATCH",
+        body: JSON.stringify({ subdomain: nextSubdomain }),
+      })
+
+      setItems((prev) =>
+        prev.map((entry) =>
+          entry.id === item.id
+            ? {
+                ...entry,
+                subdomain: response?.item?.subdomain || nextSubdomain,
+                portalUrl: response?.item?.portalUrl || null,
+                slug: response?.item?.subdomain || entry.slug,
+              }
+            : entry
+        )
+      )
+      setSubdomainDrafts((prev) => ({
+        ...prev,
+        [item.id]: response?.item?.subdomain || nextSubdomain,
+      }))
+      setMessage("Subdomeniu salvat")
+      window.setTimeout(() => setMessage(null), 1800)
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut salva subdomeniul.")
+    } finally {
+      setSavingSubdomainId(null)
     }
   }
 
@@ -481,6 +540,33 @@ export default function ControlPanelClients() {
                       <div className="font-semibold text-[#17324D]">{item.company?.name || item.name}</div>
                       <div className="mt-1 text-xs text-slate-500">
                         {item.company?.cui || "-"} • {item.company?.email || "-"} • {item.portalUrl || item.subdomain || item.slug || "-"}
+                      </div>
+                      <div className="mt-3 flex flex-col gap-2 sm:max-w-[340px]">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Subdomeniu</div>
+                        <div className="flex flex-col gap-2 sm:flex-row" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex min-w-0 flex-1 items-center rounded-2xl border border-slate-200 bg-slate-50 px-3">
+                            <input
+                              value={subdomainDrafts[item.id] ?? item.subdomain ?? ""}
+                              onChange={(e) =>
+                                setSubdomainDrafts((prev) => ({
+                                  ...prev,
+                                  [item.id]: e.target.value,
+                                }))
+                              }
+                              placeholder="coffee-cup"
+                              className="h-10 min-w-0 flex-1 bg-transparent text-sm text-slate-700 outline-none"
+                            />
+                            <span className="pl-2 text-xs text-slate-400">.gufo.ink</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateSubdomain(item)}
+                            disabled={savingSubdomainId === item.id}
+                            className="inline-flex h-10 items-center justify-center rounded-2xl border border-slate-200 bg-white px-3 text-xs font-semibold text-[#17324D] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {savingSubdomainId === item.id ? "Se salveaza..." : "Salveaza"}
+                          </button>
+                        </div>
                       </div>
                     </td>
                     <td className="px-4 py-3">
