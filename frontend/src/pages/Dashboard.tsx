@@ -167,7 +167,7 @@ async function getTenantIdFromSession(token: string): Promise<string> {
   const data: MeResponse = await res.json().catch(() => ({}))
 
   if (!res.ok || !data?.ok || !data?.tenant_id) {
-    throw new Error("Nu am putut determina tenant-ul din sesiunea curentÄƒ.")
+    throw new Error("Nu am putut determina tenant-ul din sesiunea curenta.")
   }
 
   localStorage.setItem("tenant_id", data.tenant_id)
@@ -207,10 +207,8 @@ function SalesChart({
     <div className="rounded-[18px] border border-[#E8E3DA] bg-white p-3.5 shadow-sm shadow-[#17324D]/[0.04]">
       <div className="mb-2.5 flex flex-col gap-2.5 xl:flex-row xl:items-start xl:justify-between">
         <div>
-          <div className="text-lg font-semibold text-slate-900">VÃ¢nzÄƒri pe interval</div>
-          <div className="mt-1 text-sm text-slate-500">
-            Grafic compact cu filtrare rapidÄƒ È™i focus pe evoluÈ›ia zilnicÄƒ.
-          </div>
+          <div className="text-lg font-semibold text-slate-900">Vanzari pe interval</div>
+          <div className="mt-1 text-sm text-slate-500">Evolutie zilnica pentru perioada selectata.</div>
         </div>
 
       </div>
@@ -220,10 +218,10 @@ function SalesChart({
           {hovered ? hovered.label : "-"}
         </div>
         <div className="mt-1 text-xl font-semibold text-slate-900">
-          {hovered ? formatRon(hovered.value) : "â€”"}
+          {hovered ? formatRon(hovered.value) : "—"}
         </div>
         <div className="mt-1 text-sm text-slate-500">
-          {hovered ? `VÃ¢nzÄƒri Ã®nregistrate la data de ${hovered.date}` : "Nu existÄƒ puncte Ã®n intervalul ales."}
+          {hovered ? `Vanzari inregistrate la data de ${hovered.date}` : "Nu exista date in intervalul ales."}
         </div>
       </div>
 
@@ -463,7 +461,7 @@ export default function Dashboard() {
   async function loadDashboard(selectedLocationId: string, silent = false) {
     if (!token) {
       setDashboardLoading(false)
-      setDashboardError("LipseÈ™te token-ul pentru dashboard.")
+      setDashboardError("Lipseste token-ul pentru dashboard.")
       return
     }
 
@@ -490,7 +488,7 @@ export default function Dashboard() {
       const data: DashboardApiResponse = await res.json().catch(() => ({}))
 
       if (!res.ok || !data.ok) {
-        throw new Error("Nu s-au putut Ã®ncÄƒrca datele dashboard.")
+        throw new Error("Nu s-au putut incarca datele dashboard.")
       }
 
       const normalizedSeries = normalizeSalesPerDay(data.salesPerDay)
@@ -515,7 +513,7 @@ export default function Dashboard() {
       setUpdatedAt(String(data.updatedAt || new Date().toISOString()))
     } catch (error) {
       console.error("Dashboard load failed", error)
-      setDashboardError("Nu am putut Ã®ncÄƒrca dashboard-ul real din backend.")
+      setDashboardError("Nu am putut incarca dashboardul din backend.")
       setSalesSeries([])
       setSalesTotal(0)
       setReceiptsCount(0)
@@ -543,7 +541,7 @@ export default function Dashboard() {
   const bestDay = useMemo(() => {
     if (!filteredSales.length) return "-"
     const top = [...filteredSales].sort((a, b) => b.value - a.value)[0]
-    return `${top.label} â€¢ ${formatRon(top.value)}`
+    return `${top.label} • ${formatRon(top.value)}`
   }, [filteredSales])
 
   const criticalStockCount = lowStock.length || criticalStock.length
@@ -554,7 +552,7 @@ export default function Dashboard() {
   const lastUpdatedLabel = updatedAt ? formatRelativeTime(updatedAt) : "acum"
   const stats = [
     {
-      title: "VÃ¢nzÄƒri interval",
+      title: "Vanzari interval",
       value: formatRon(salesTotal),
       hint: `${filteredSales.length} zile selectate`,
       icon: CircleDollarSign,
@@ -584,7 +582,7 @@ export default function Dashboard() {
     {
       title: "Stoc critic",
       value: `${criticalStockCount}`,
-      hint: "produse de urmÄƒrit",
+      hint: "produse de urmarit",
       icon: AlertTriangle,
       tone: "amber" as const,
     },
@@ -592,10 +590,7 @@ export default function Dashboard() {
 
   return (
     <div className="w-full space-y-4">
-      <PageHeader
-        badge="ceo dashboard"
-        title="Dashboard ERP"
-      />
+      <PageHeader badge="dashboard" title="Dashboard ERP" />
 
       {dashboardError ? (
         <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -615,7 +610,7 @@ export default function Dashboard() {
         />
 
         <SectionCard
-          title="Pulse business"
+          title="Rezumat"
           action={
             <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
               live
@@ -629,7 +624,7 @@ export default function Dashboard() {
                   <TrendingUp size={18} />
                 </span>
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold text-slate-900">Cea mai bunÄƒ zi</div>
+                  <div className="text-sm font-semibold text-slate-900">Cea mai buna zi</div>
                   <div className="mt-1 text-sm text-slate-500">{bestDay}</div>
                 </div>
               </div>
@@ -641,7 +636,7 @@ export default function Dashboard() {
                   <Wallet size={18} />
                 </span>
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold text-slate-900">Total Ã®ncasÄƒri urmÄƒrite</div>
+                  <div className="text-sm font-semibold text-slate-900">Total incasari urmarite</div>
                   <div className="mt-1 text-sm text-slate-500">{formatRon(paymentTotal)}</div>
                 </div>
               </div>
@@ -654,7 +649,7 @@ export default function Dashboard() {
                 </span>
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-slate-900">Alerte stoc</div>
-                  <div className="mt-1 text-sm text-slate-500">{criticalStockCount} produse necesitÄƒ atenÈ›ie</div>
+                  <div className="mt-1 text-sm text-slate-500">{criticalStockCount} produse necesita atentie</div>
                 </div>
               </div>
             </div>
@@ -675,10 +670,10 @@ export default function Dashboard() {
         >
           <div className="space-y-2.5">
             {dashboardLoading ? (
-              <div className="text-sm text-slate-500">Se Ã®ncarcÄƒ top produse...</div>
+              <div className="text-sm text-slate-500">Se incarca top produse...</div>
             ) : topProducts.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-                Nu existÄƒ Ã®ncÄƒ produse vÃ¢ndute Ã®n intervalul selectat.
+                Nu exista produse vandute in intervalul selectat.
               </div>
             ) : (
               topProducts.map((item, index) => (
@@ -748,7 +743,7 @@ export default function Dashboard() {
       >
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-2 2xl:grid-cols-3">
           {dashboardLoading || criticalLoading ? (
-            <div className="text-sm text-slate-500">Se Ã®ncarcÄƒ produsele cu stoc mic...</div>
+            <div className="text-sm text-slate-500">Se incarca produsele cu stoc mic...</div>
           ) : lowStock.length > 0 ? (
             lowStock.map((item, index) => (
               <div
@@ -766,7 +761,7 @@ export default function Dashboard() {
             ))
           ) : criticalStock.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-              Nu existÄƒ suficiente date pentru alertÄƒ stoc critic.
+              Nu exista suficiente date pentru alerta de stoc critic.
             </div>
           ) : (
             criticalStock.map((product, index) => (
@@ -775,8 +770,8 @@ export default function Dashboard() {
                 className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5"
               >
                 <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-slate-800">{product.name || "Produs fÄƒrÄƒ nume"}</div>
-                  <div className="text-xs text-slate-500">{product.sku || "fÄƒrÄƒ SKU"}</div>
+                  <div className="truncate text-sm font-semibold text-slate-800">{product.name || "Produs fara nume"}</div>
+                  <div className="text-xs text-slate-500">{product.sku || "fara SKU"}</div>
                 </div>
                 <div className="ml-3 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
                   {formatQtyRo(activeLocationId ? product.qty : product.totalQty || 0)} {product.uom || ""}
@@ -789,5 +784,6 @@ export default function Dashboard() {
     </div>
   )
 }
+
 
 

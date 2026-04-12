@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+ï»¿import { useEffect, useMemo, useRef, useState } from "react"
 import { Check, Search, Trash2 } from "lucide-react"
 import PageHeader from "../components/PageHeader"
 import {
@@ -136,7 +136,7 @@ export default function ProductiePage() {
         setLocationId(rawLocations[0].id)
       }
     } catch {
-      setError("Nu pot încarca produsele ?i loca?iile.")
+      setError("Nu pot Ã®ncarca produsele ?i loca?iile.")
     } finally {
       setLoading(false)
     }
@@ -186,7 +186,7 @@ export default function ProductiePage() {
     }
 
     if (!qty || Number(qty) <= 0) {
-      setError("Cantitatea trebuie sa fie mai mare decât 0.")
+      setError("Cantitatea trebuie sa fie mai mare decÃ¢t 0.")
       return
     }
 
@@ -244,12 +244,12 @@ export default function ProductiePage() {
     }
 
     if (!locationId) {
-      setError("Selecteaza loca?ia.")
+      setError("Selecteaza locatia.")
       return
     }
 
     if (!items.length) {
-      setError("Adauga cel pu?in un produs în produc?ie.")
+      setError("Adauga cel pu?in un produs Ã®n produc?ie.")
       return
     }
 
@@ -307,13 +307,9 @@ export default function ProductiePage() {
 
   return (
     <div className="w-full space-y-4">
-      <PageHeader
-        badge="document"
-        title="Produc?ie"
-        subtitle="Creeaza documentul de produc?ie în acela?i model compact ca bonul de consum."
-      />
+      <PageHeader badge="document" title="Productie" />
 
-      {loading ? <InlineNotice>Se încarca datele pentru produc?ie...</InlineNotice> : null}
+      {loading ? <InlineNotice>Se Ã®ncarca datele pentru produc?ie...</InlineNotice> : null}
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
 
@@ -326,9 +322,9 @@ export default function ProductiePage() {
 
       <div className="grid grid-cols-1 items-start gap-3 2xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-3">
-          <DocumentSection title="Adauga produs în produc?ie">
+          <DocumentSection title="Adauga produs Ã®n produc?ie">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-sm text-slate-500">Cauta produsul dupa nume sau cod ?i adauga-l rapid în document.</div>
+              <div className="text-sm text-slate-500">Cauta produsul dupa nume sau cod ?i adauga-l rapid Ã®n document.</div>
               {(productId || productSearch) ? (
                 <button type="button" onClick={resetProductPicker} className={documentButtonSecondaryClass} disabled={submitting}>
                   Reseteaza selec?ia
@@ -368,7 +364,7 @@ export default function ProductiePage() {
                           <div className="min-w-0">
                             <div className="truncate text-sm font-semibold text-slate-900">{product.name}</div>
                             <div className="mt-0.5 text-xs text-slate-500">
-                              {product.sku || "fara cod"} · {PRODUCT_CLASS_LABEL[product.class || ""] || product.class || "-"}
+                              {product.sku || "fara cod"} Â· {PRODUCT_CLASS_LABEL[product.class || ""] || product.class || "-"}
                             </div>
                           </div>
                           <span className="ml-3 inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700">
@@ -414,7 +410,7 @@ export default function ProductiePage() {
                 className={documentButtonPrimaryClass}
                 disabled={!productId || Number(qty) <= 0 || submitting}
               >
-                Adauga în document
+                Adauga Ã®n document
               </button>
             </div>
           </DocumentSection>
@@ -423,8 +419,8 @@ export default function ProductiePage() {
             <div className="max-h-[460px] overflow-y-auto pr-1">
               {items.length === 0 ? (
                 <div className="rounded-[14px] border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center">
-                  <div className="text-sm font-semibold text-slate-700">Nu ai adaugat produse înca</div>
-                  <div className="mt-1 text-sm text-slate-500">Cauta un produs sus ?i adauga-l în document.</div>
+                  <div className="text-sm font-semibold text-slate-700">Nu ai adaugat produse Ã®nca</div>
+                  <div className="mt-1 text-sm text-slate-500">Cauta un produs sus ?i adauga-l Ã®n document.</div>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -508,3 +504,6 @@ export default function ProductiePage() {
     </div>
   )
 }
+
+
+

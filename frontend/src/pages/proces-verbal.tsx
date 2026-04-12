@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+ï»¿import { useEffect, useMemo, useState } from "react"
 import { FileOutput, Plus, Search, Trash2 } from "lucide-react"
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom"
 import PageHeader from "../components/PageHeader"
@@ -80,7 +80,7 @@ export default function ProcesVerbalPage() {
   })
   const [lines, setLines] = useState<Line[]>([makeLine()])
 
-  const pageTitle = isDeterioration ? "PV deteriorare" : "PV schimbare pre?"
+  const pageTitle = isDeterioration ? "PV deteriorare" : "PV schimbare pret"
 
   useEffect(() => {
     void loadMeta()
@@ -117,7 +117,7 @@ export default function ProcesVerbalPage() {
         }))
       }
     } catch (e: any) {
-      setError(e?.message || "Nu pot încarca datele documentului.")
+      setError(e?.message || "Nu pot Ã®ncarca datele documentului.")
     }
   }
 
@@ -151,7 +151,7 @@ export default function ProcesVerbalPage() {
           : [makeLine()]
       )
     } catch (e: any) {
-      setError(e?.message || "Nu pot încarca documentul.")
+      setError(e?.message || "Nu pot Ã®ncarca documentul.")
     } finally {
       setLoading(false)
     }
@@ -219,7 +219,7 @@ export default function ProcesVerbalPage() {
 
       const nextId = data?.item?.id
       setStatus(data?.item?.status || (postNow ? "POSTED" : "DRAFT"))
-      setMessage(postNow ? "Document salvat ?i postat." : "Document salvat.")
+      setMessage(postNow ? "Document salvat si postat." : "Document salvat.")
 
       if (!id && nextId) {
         navigate(
@@ -245,22 +245,22 @@ export default function ProcesVerbalPage() {
 
   return (
     <div className="w-full space-y-4">
-      <PageHeader badge="document" title={pageTitle} subtitle="Acela?i model compact pentru procese verbale ?i ajustari de pre?." />
+      <PageHeader badge="document" title={pageTitle} />
 
-      {loading ? <InlineNotice>Se încarca documentul...</InlineNotice> : null}
+      {loading ? <InlineNotice>Se Ã®ncarca documentul...</InlineNotice> : null}
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-4">
         <DocumentMetric title="Status" value={<DocumentStatusPill status={status} />} tone="amber" />
-        <DocumentMetric title="Pozi?ii" value={validLines.length} tone="slate" />
+        <DocumentMetric title="Pozitii" value={validLines.length} tone="slate" />
         <DocumentMetric title="Cantitate" value={formatQtyRo(validLines.reduce((sum, line) => sum + Math.max(0, parseLocaleNumber(line.qty)), 0), 3)} tone="blue" />
         <DocumentMetric title="Total" value={formatMoneyRo(totalValue, "RON")} tone="emerald" />
       </div>
 
       <div className="flex flex-wrap gap-2">
         <button type="button" onClick={() => navigate("/inregistrare-document")} className={documentButtonSecondaryClass}>
-          Înapoi
+          ÃŽnapoi
         </button>
         {id ? (
           <button type="button" onClick={openPdf} className={documentButtonSecondaryClass}>
@@ -273,7 +273,7 @@ export default function ProcesVerbalPage() {
       <div className="grid grid-cols-1 items-start gap-3 2xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-3">
           <DocumentSection
-            title="Pozi?ii document"
+            title="Pozitii document"
             actions={
               status !== "POSTED" ? (
                 <button type="button" onClick={() => setLines((prev) => [...prev, makeLine()])} className={documentButtonPrimaryClass}>
@@ -350,21 +350,21 @@ export default function ProcesVerbalPage() {
                         ) : (
                           <>
                             <div>
-                              <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Pre? vechi</div>
+                              <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Pret vechi</div>
                               <input
                                 value={line.oldPrice}
                                 onChange={(e) => setLineValue(line.id, { oldPrice: e.target.value })}
-                                placeholder="Pre? vechi"
+                                placeholder="Pret vechi"
                                 className={documentInputClass}
                                 disabled={status === "POSTED"}
                               />
                             </div>
                             <div>
-                              <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Pre? nou</div>
+                              <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Pret nou</div>
                               <input
                                 value={line.newPrice}
                                 onChange={(e) => setLineValue(line.id, { newPrice: e.target.value })}
-                                placeholder="Pre? nou"
+                                placeholder="Pret nou"
                                 className={documentInputClass}
                                 disabled={status === "POSTED"}
                               />
@@ -386,7 +386,7 @@ export default function ProcesVerbalPage() {
                         </div>
 
                         <div>
-                          <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Ac?iune</div>
+                          <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Actiune</div>
                           <button
                             type="button"
                             onClick={() => setLines((prev) => (prev.length === 1 ? [makeLine()] : prev.filter((item) => item.id !== line.id)))}
@@ -394,7 +394,7 @@ export default function ProcesVerbalPage() {
                             disabled={status === "POSTED"}
                           >
                             <Trash2 size={16} className="mr-2" />
-                            ?terge
+                            Sterge
                           </button>
                         </div>
                       </div>
@@ -409,7 +409,7 @@ export default function ProcesVerbalPage() {
         <div className="space-y-3">
           <DocumentSection title="Detalii document">
             <div className="space-y-3">
-              <DocumentField label="Loca?ie">
+              <DocumentField label="Locatie">
                 <select
                   value={header.locationId}
                   onChange={(e) => {
@@ -419,7 +419,7 @@ export default function ProcesVerbalPage() {
                   className={documentInputClass}
                   disabled={status === "POSTED"}
                 >
-                  <option value="">Selecteaza loca?ia</option>
+                  <option value="">Selecteaza locatia</option>
                   {locations.map((item) => (
                     <option key={item.id} value={item.id}>{item.name}</option>
                   ))}
@@ -468,7 +468,7 @@ export default function ProcesVerbalPage() {
                       <option value="OTHER">Alt motiv</option>
                     </>
                   ) : (
-                    <option value="PRICE_UPDATE">Schimbare pre?</option>
+                    <option value="PRICE_UPDATE">Schimbare pret</option>
                   )}
                 </select>
               </DocumentField>
@@ -481,15 +481,15 @@ export default function ProcesVerbalPage() {
                     className={documentInputClass}
                     disabled={status === "POSTED"}
                   >
-                    <option value="DAMAGE_PARTIAL">Deteriorare par?iala</option>
+                    <option value="DAMAGE_PARTIAL">Deteriorare partiala</option>
                     <option value="DAMAGE_TOTAL">Deteriorare totala</option>
                     <option value="EXPIRED_FOUND">Produs expirat</option>
-                    <option value="LOSS_FOUND">Lipsa în gestiune</option>
+                    <option value="LOSS_FOUND">Lipsa Ã®n gestiune</option>
                   </select>
                 </DocumentField>
               ) : null}
 
-              <DocumentField label="Observa?ii">
+              <DocumentField label="Observatii">
                 <textarea
                   value={header.note}
                   onChange={(e) => setHeader((prev) => ({ ...prev, note: e.target.value }))}
@@ -505,7 +505,7 @@ export default function ProcesVerbalPage() {
                 </button>
                 {status !== "POSTED" ? (
                   <button type="button" onClick={() => saveDoc(true)} className={documentButtonPrimaryClass} disabled={saving}>
-                    {saving ? "Se salveaza..." : isDeterioration ? "Salveaza ?i posteaza" : "Salveaza ?i aplica"}
+                    {saving ? "Se salveaza..." : isDeterioration ? "Salveaza si posteaza" : "Salveaza si aplica"}
                   </button>
                 ) : null}
               </div>
@@ -516,3 +516,6 @@ export default function ProcesVerbalPage() {
     </div>
   )
 }
+
+
+

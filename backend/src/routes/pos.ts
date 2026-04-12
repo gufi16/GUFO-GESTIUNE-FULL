@@ -1282,7 +1282,7 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
   } catch (error) {
     return res.status(400).json({
       ok: false,
-      error: error instanceof Error ? error.message : "Nu am putut procesa vÃ¢nzarea POS.",
+      error: error instanceof Error ? error.message : "Nu am putut procesa vanzarea POS.",
     });
   }
 

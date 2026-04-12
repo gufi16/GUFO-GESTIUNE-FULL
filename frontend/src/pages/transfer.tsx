@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+Ôªøimport { useEffect, useMemo, useState } from "react"
 import { ArrowLeft, ArrowRightLeft, FileOutput, Plus, Search, Trash2, Truck, Warehouse } from "lucide-react"
 import PageHeader from "../components/PageHeader"
 import {
@@ -148,7 +148,7 @@ export default function TransferPage() {
       const prodData = await prodRes.json().catch(() => ({}))
 
       if (locRes.status === 401 || prodRes.status === 401) {
-        setError("Sesiunea a expirat. Intra din nou Ón cont ?i reÓncearca.")
+        setError("Sesiunea a expirat. Intra din nou √Æn cont ?i re√Æncearca.")
         return
       }
 
@@ -174,7 +174,7 @@ export default function TransferPage() {
         }))
       }
     } catch {
-      setError("Nu am putut Óncarca datele pentru transfer.")
+      setError("Nu am putut √Æncarca datele pentru transfer.")
     } finally {
       setLoadingMeta(false)
     }
@@ -194,12 +194,12 @@ export default function TransferPage() {
       const data = await res.json().catch(() => ({}))
 
       if (res.status === 401) {
-        setError("Sesiunea a expirat. Intra din nou Ón cont ?i reÓncearca.")
+        setError("Sesiunea a expirat. Intra din nou √Æn cont ?i re√Æncearca.")
         return
       }
 
       if (!data.ok || !data.doc) {
-        setError(data.error || "Nu am putut Óncarca transferul.")
+        setError(data.error || "Nu am putut √Æncarca transferul.")
         return
       }
 
@@ -233,7 +233,7 @@ export default function TransferPage() {
 
       setLines(loadedLines.length ? loadedLines : [makeLine()])
     } catch {
-      setError("Nu am putut Óncarca transferul.")
+      setError("Nu am putut √Æncarca transferul.")
     } finally {
       setLoadingDoc(false)
     }
@@ -328,7 +328,7 @@ export default function TransferPage() {
     }
 
     if (!validLines.length) {
-      setError("Adauga cel pu?in un produs Ón transfer.")
+      setError("Adauga cel pu?in un produs √Æn transfer.")
       return
     }
 
@@ -358,7 +358,7 @@ export default function TransferPage() {
       const data = await res.json().catch(() => ({}))
 
       if (res.status === 401) {
-        setError("Sesiunea a expirat. Intra din nou Ón cont ?i reÓncearca.")
+        setError("Sesiunea a expirat. Intra din nou √Æn cont ?i re√Æncearca.")
         return
       }
 
@@ -384,7 +384,7 @@ export default function TransferPage() {
 
   async function exportPdf() {
     if (!transferId) {
-      setError("Salveaza documentul Ónainte de export.")
+      setError("Salveaza documentul √Ænainte de export.")
       return
     }
 
@@ -402,17 +402,13 @@ export default function TransferPage() {
 
   return (
     <div className="w-full space-y-4">
-      <PageHeader
-        badge="document"
-        title={!transferId ? "Transfer nou" : isPosted ? "Transfer postat" : "Editare transfer"}
-        subtitle="Muta produse Óntre gestiuni Ón acela?i model compact ca bonul de consum."
-      />
+      <PageHeader badge="document" title={!transferId ? "Transfer nou" : isPosted ? "Transfer postat" : "Editare transfer"} />
 
-      {loadingMeta ? <InlineNotice>Se Óncarca nomenclatoarele pentru transfer.</InlineNotice> : null}
-      {loadingDoc ? <InlineNotice>Se Óncarca documentul selectat.</InlineNotice> : null}
+      {loadingMeta ? <InlineNotice>Se √Æncarca nomenclatoarele pentru transfer.</InlineNotice> : null}
+      {loadingDoc ? <InlineNotice>Se √Æncarca documentul selectat.</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
-      {isPosted ? <InlineNotice>Documentul este postat ?i ram‚ne doar Ón regim de vizualizare ?i export PDF.</InlineNotice> : null}
+      {isPosted ? <InlineNotice>Documentul este postat ?i ram√¢ne doar √Æn regim de vizualizare ?i export PDF.</InlineNotice> : null}
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
         <DocumentMetric title="Status" value={<DocumentStatusPill status={status || "DRAFT"} />} tone="amber" />
@@ -423,7 +419,7 @@ export default function TransferPage() {
       <div className="flex flex-wrap gap-2">
         <a href="/transfer" className={documentButtonSecondaryClass}>
           <ArrowLeft size={16} className="mr-2" />
-          Œnapoi la lista
+          √énapoi la lista
         </a>
         <button type="button" className={documentButtonSecondaryClass} onClick={exportPdf} disabled={!transferId || loadingDoc}>
           <FileOutput size={16} className="mr-2" />
@@ -486,13 +482,13 @@ export default function TransferPage() {
                                     >
                                       <div className="font-semibold text-slate-900">{product.name}</div>
                                       <div className="mt-1 text-xs text-slate-500">
-                                        {product.sku || "Fara SKU"} ∑ UM {product.uom?.code || "-"} ∑ Pre? {formatNumber(product.price)}
+                                        {product.sku || "Fara SKU"} ¬∑ UM {product.uom?.code || "-"} ¬∑ Pre? {formatNumber(product.price)}
                                       </div>
                                     </button>
                                   ))}
                                 </div>
                               ) : (
-                                <div className="px-3 py-2 text-sm text-red-600">Nu am gasit niciun produs pentru Ñ{line.search}î.</div>
+                                <div className="px-3 py-2 text-sm text-red-600">Nu am gasit niciun produs pentru ‚Äû{line.search}‚Äù.</div>
                               )}
                             </div>
                           ) : null}
@@ -703,3 +699,6 @@ export default function TransferPage() {
     </div>
   )
 }
+
+
+

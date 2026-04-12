@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+﻿import { useEffect, useMemo, useState } from "react"
 import type { CSSProperties, KeyboardEvent, ReactNode } from "react"
 import PageHeader from "../components/PageHeader"
 import { API_BASE, getToken } from "../lib/api"
@@ -295,7 +295,7 @@ export default function NirPage() {
       const vData = await v.json().catch(() => ({}))
 
       if ([p, l, s, u, v].some((x) => x.status === 401)) {
-        setAuthError("Token lipsă sau expirat. Fă login din nou în aplicație.")
+        setAuthError("Token lipsa sau expirat. Fa login din nou in aplicatie.")
         setProducts([])
         setLocations([])
         setSuppliers([])
@@ -334,10 +334,10 @@ export default function NirPage() {
         !nextUoms.length &&
         !nextVatRates.length
       ) {
-        setLoadError("Nu s-au putut încărca datele pentru NIR.")
+        setLoadError("Nu s-au putut incarca datele pentru NIR.")
       }
     } catch {
-      setLoadError("Nu pot încărca datele din backend.")
+      setLoadError("Nu pot incarca datele din backend.")
       setProducts([])
       setLocations([])
       setSuppliers([])
@@ -364,12 +364,12 @@ export default function NirPage() {
       const data = await res.json().catch(() => ({}))
 
       if (res.status === 401) {
-        setAuthError("Token expirat sau invalid. Fă login din nou.")
+        setAuthError("Token expirat sau invalid. Fa login din nou.")
         return
       }
 
       if (!data.ok || !data.receipt) {
-        setLoadError(data.error || "Nu pot încărca documentul NIR.")
+        setLoadError(data.error || "Nu pot incarca documentul NIR.")
         return
       }
 
@@ -419,7 +419,7 @@ export default function NirPage() {
 
       setLines(loadedLines.length ? loadedLines : [makeLine()])
     } catch {
-      setLoadError("Nu pot încărca documentul NIR.")
+      setLoadError("Nu pot incarca documentul NIR.")
     } finally {
       setLoadingReceipt(false)
     }
@@ -742,22 +742,22 @@ export default function NirPage() {
 
   async function saveQuickProduct() {
     if (!quickProductForm.name.trim()) {
-      setQuickProductError("Completează denumirea produsului.")
+      setQuickProductError("Completeaza denumirea produsului.")
       return
     }
 
     if (!quickProductForm.uomId) {
-      setQuickProductError("Selectează UM stoc.")
+      setQuickProductError("Selecteaza UM stoc.")
       return
     }
 
     if (!quickProductForm.purchaseUomId) {
-      setQuickProductError("Selectează ambalaj.")
+      setQuickProductError("Selecteaza ambalaj.")
       return
     }
 
     if (!quickProductForm.vatRateId) {
-      setQuickProductError("Selectează TVA.")
+      setQuickProductError("Selecteaza TVA.")
       return
     }
 
@@ -854,7 +854,7 @@ export default function NirPage() {
 
   async function saveQuickSupplier() {
     if (!quickSupplierForm.name.trim()) {
-      setQuickSupplierError("Completează numele furnizorului.")
+      setQuickSupplierError("Completeaza numele furnizorului.")
       return
     }
 
@@ -963,32 +963,32 @@ export default function NirPage() {
 
   async function saveNir(postNow = false) {
     if (!token) {
-      alert("Nu există token de autentificare. Fă login din nou.")
+      alert("Nu exista token de autentificare. Fa login din nou.")
       return
     }
 
     if (isPosted) {
-      alert("Documentul POSTED este doar pentru vizualizare și nu mai poate fi modificat.")
+      alert("Documentul POSTED este doar pentru vizualizare si nu mai poate fi modificat.")
       return
     }
 
     if (!header.locationId) {
-      alert("Selectează locația.")
+      alert("Selecteaza locatia.")
       return
     }
 
     if (!header.docNo.trim()) {
-      alert("Completează numărul documentului.")
+      alert("Completeaza numarul documentului.")
       return
     }
 
     if (!header.docDate) {
-      alert("Completează data documentului.")
+      alert("Completeaza data documentului.")
       return
     }
 
     if (!validLines.length) {
-      alert("Adaugă cel puțin un produs.")
+      alert("Adauga cel putin un produs.")
       return
     }
 
@@ -1036,7 +1036,7 @@ export default function NirPage() {
       setSaving(false)
 
       if (res.status === 401) {
-        alert("Token expirat sau invalid. Fă login din nou.")
+        alert("Token expirat sau invalid. Fa login din nou.")
         return
       }
 
@@ -1051,7 +1051,7 @@ export default function NirPage() {
       }
 
       setStatus(data.receipt?.status || (postNow ? "POSTED" : "DRAFT"))
-      alert(postNow ? "NIR salvat și postat în stoc." : "NIR salvat.")
+      alert(postNow ? "NIR salvat si postat in stoc." : "NIR salvat.")
 
       if (receiptId) {
         await loadReceipt(receiptId)
@@ -1064,7 +1064,7 @@ export default function NirPage() {
 
   function handlePrint() {
     if (!receiptId) {
-      alert("Salvează documentul înainte.")
+      alert("Salveaza documentul inainte.")
       return
     }
 
@@ -1077,7 +1077,7 @@ export default function NirPage() {
 
   async function exportPdf() {
     if (!receiptId) {
-      alert("Salvează documentul înainte de export.")
+      alert("Salveaza documentul inainte de export.")
       return
     }
 
@@ -1125,17 +1125,7 @@ export default function NirPage() {
   return (
     <div style={pageWrap}>
       <div className="no-print" style={{ marginBottom: 20 }}>
-        <PageHeader
-          badge="operațiuni"
-          title={pageTitle}
-          subtitle={
-            !receiptId
-              ? "Recepție marfă simplă, compactă și rapidă"
-              : isPosted
-                ? "Document postat în stoc, disponibil doar pentru vizualizare"
-                : "Document draft editabil"
-          }
-        />
+        <PageHeader badge="operatiuni" title={pageTitle} />
       </div>
 
       <div className="no-print" style={isMobileViewport ? topActionsMobile : topActions}>
@@ -1149,14 +1139,14 @@ export default function NirPage() {
                     onClick={() => saveNir(true)}
                     disabled={saving || loadingReceipt}
                   >
-                    {saving ? "Se salvează..." : "Salvează și postează"}
+                    {saving ? "Se salveaza..." : "Salveaza si posteaza"}
                   </button>
                   <button
                     style={{ ...btnSecondary, width: "100%" }}
                     onClick={() => saveNir(false)}
                     disabled={saving || loadingReceipt}
                   >
-                    {saving ? "Se salvează..." : "Salvează draft"}
+                    {saving ? "Se salveaza..." : "Salveaza draft"}
                   </button>
                 </>
               ) : (
@@ -1165,14 +1155,14 @@ export default function NirPage() {
                   onClick={handlePrint}
                   disabled={!receiptId || loadingReceipt}
                 >
-                  Printează document
+                  Printeaza document
                 </button>
               )}
             </div>
 
             <div style={topActionsCompactRowMobile}>
               <a href="/inregistrare-document/nir" style={{ textDecoration: "none" }}>
-                <button style={btnGhostMobile}>Înapoi</button>
+                <button style={btnGhostMobile}>Inapoi</button>
               </a>
               <button
                 style={btnGhostMobile}
@@ -1193,7 +1183,7 @@ export default function NirPage() {
         ) : null}
         <div style={isMobileViewport ? { display: "none" } : { display: "flex", gap: 10, flexWrap: "wrap" }}>
           <a href="/inregistrare-document/nir" style={{ textDecoration: "none" }}>
-            <button style={btnSecondary}>Înapoi la listă</button>
+            <button style={btnSecondary}>Inapoi la lista</button>
           </a>
 
           <button
@@ -1201,7 +1191,7 @@ export default function NirPage() {
             onClick={handlePrint}
             disabled={!receiptId || loadingReceipt}
           >
-            Printează
+            Printeaza
           </button>
 
           <button
@@ -1219,7 +1209,7 @@ export default function NirPage() {
                 onClick={() => saveNir(false)}
                 disabled={saving || loadingReceipt}
               >
-                {saving ? "Se salvează..." : "Salvează draft"}
+                {saving ? "Se salveaza..." : "Salveaza draft"}
               </button>
 
               <button
@@ -1227,7 +1217,7 @@ export default function NirPage() {
                 onClick={() => saveNir(true)}
                 disabled={saving || loadingReceipt}
               >
-                {saving ? "Se salvează..." : "Salvează și postează"}
+                {saving ? "Se salveaza..." : "Salveaza si posteaza"}
               </button>
             </>
           )}
@@ -1242,14 +1232,14 @@ export default function NirPage() {
 
       {isPosted && (
           <div style={infoBox}>
-            Documentul este POSTED și este blocat la editare. Poți doar să îl vizualizezi, să îl printezi sau să generezi PDF.
+            Documentul este POSTED si este blocat la editare. Poti doar sa il vizualizezi, sa il printezi sau sa generezi PDF.
           </div>
       )}
 
       {(authError || loadError) && <div style={errorBox}>{authError || loadError}</div>}
 
       {loadingReceipt ? (
-        <div style={infoBox}>Se încarcă documentul...</div>
+        <div style={infoBox}>Se incarca documentul...</div>
       ) : (
         <>
           <Section title="Antet document">
@@ -1292,7 +1282,7 @@ export default function NirPage() {
                               >
                                 <div style={{ fontWeight: 600 }}>{s.name}</div>
                                 <div style={{ fontSize: 12, color: "#666" }}>
-                                  {s.code || "-"} Â· CIF {s.cif || "-"}
+                                  {s.code || "-"} · CIF {s.cif || "-"}
                                 </div>
                               </button>
                             ))}
@@ -1300,7 +1290,7 @@ export default function NirPage() {
                         ) : (
                           <div style={inlineActionBox}>
                             <div style={{ color: "#991b1b", fontSize: 13 }}>
-                              Nu existÄƒ furnizori gÄƒsiÈ›i pentru â€ž{supplierSearch}â€
+                              Nu exista furnizori gasiti pentru "{supplierSearch}"
                             </div>
 
                             <button
@@ -1308,7 +1298,7 @@ export default function NirPage() {
                               style={btnSecondary}
                               onClick={openQuickSupplierModal}
                             >
-                              AdaugÄƒ furnizor nou
+                              Adauga furnizor nou
                             </button>
                           </div>
                         )}
@@ -1318,7 +1308,7 @@ export default function NirPage() {
                 </div>
 
                 <div style={mobileHeaderCardGrid}>
-                  <Field label="LocaÈ›ie">
+                  <Field label="Locatie">
                     <select
                       value={header.locationId}
                       onChange={(e) => {
@@ -1329,7 +1319,7 @@ export default function NirPage() {
                       style={input}
                       disabled={isPosted}
                     >
-                      <option value="">SelecteazÄƒ locaÈ›ia</option>
+                      <option value="">Selecteaza locatia</option>
                       {ensureArray(locations).map((l: AnyObj) => (
                         <option key={l.id} value={l.id}>
                           {l.name}
@@ -1357,7 +1347,7 @@ export default function NirPage() {
                     />
                   </Field>
 
-                  <Field label="MonedÄƒ">
+                  <Field label="Moneda">
                     <select
                       value={header.currency}
                       onChange={(e) => {
@@ -1407,7 +1397,7 @@ export default function NirPage() {
                     />
                   </Field>
 
-                  <Field label="ObservaÈ›ii">
+                  <Field label="Observatii">
                     <input
                       value={header.note}
                       onChange={(e) => setHeader({ ...header, note: e.target.value })}
@@ -1420,7 +1410,7 @@ export default function NirPage() {
             ) : null}
             <div style={isMobileViewport ? { display: "none" } : headerGrid}>
               <div>
-                <Field label="Locație">
+                <Field label="Locatie">
                 <select
                   value={header.locationId}
                   onChange={(e) => {
@@ -1431,7 +1421,7 @@ export default function NirPage() {
                   style={input}
                   disabled={isPosted}
                 >
-                  <option value="">Selectează locația</option>
+                  <option value="">Selecteaza locatia</option>
                   {ensureArray(locations).map((l: AnyObj) => (
                     <option key={l.id} value={l.id}>
                       {l.name}
@@ -1504,7 +1494,7 @@ export default function NirPage() {
                     ) : (
                       <div style={inlineActionBox}>
                         <div style={{ color: "#991b1b", fontSize: 13 }}>
-                          Nu există furnizori găsiți pentru „{supplierSearch}”
+                          Nu exista furnizori gasiti pentru "{supplierSearch}"
                         </div>
 
                         <button
@@ -1512,7 +1502,7 @@ export default function NirPage() {
                           style={btnSecondary}
                           onClick={openQuickSupplierModal}
                         >
-                          Adaugă furnizor nou
+                          Adauga furnizor nou
                         </button>
                       </div>
                     )}
@@ -1529,7 +1519,7 @@ export default function NirPage() {
                 />
               </Field>
 
-              <Field label="Monedă">
+              <Field label="Moneda">
                 <select
                   value={header.currency}
                   onChange={(e) => {
@@ -1569,7 +1559,7 @@ export default function NirPage() {
                 />
               </Field>
 
-              <Field label="Observații">
+              <Field label="Observatii">
                 <input
                   value={header.note}
                   onChange={(e) => setHeader({ ...header, note: e.target.value })}
@@ -1580,11 +1570,11 @@ export default function NirPage() {
             </div>
           </Section>
 
-          <Section title="Sumar recepție">
+          <Section title="Sumar receptie">
             <div style={totalsGrid}>
               <Card title="Linii document" value={String(lines.length)} />
               <Card title="Produse valide" value={String(uniqueProductsCount)} />
-              <Card title="Cantitate reală" value={`${formatNumber(totals.stockQty)} buc`} />
+              <Card title="Cantitate reala" value={`${formatNumber(totals.stockQty)} buc`} />
               <Card
                 title={`Total cu SGR ${header.currency}`}
                 value={`${formatNumber(totals.withSgrFc)} ${header.currency}`}
@@ -1593,18 +1583,15 @@ export default function NirPage() {
 
             {duplicateProductIds.size > 0 && (
               <div style={{ ...warningBox, marginTop: 16 }}>
-                Ai produse duplicate pe mai multe linii. Nu blochez salvarea, dar verifică să nu dublezi recepția din greșeală.
+                Ai produse duplicate pe mai multe linii. Nu blochez salvarea, dar verifica sa nu dublezi receptia din greseala.
               </div>
             )}
           </Section>
 
-          <Section title="Produse recepționate">
+          <Section title="Produse receptionate">
             <div style={toolbarRow}>
               <div>
-                <div style={toolbarTitle}>Grid compact ERP România</div>
-                <div style={toolbarSubtitle}>
-                  Cantitatea este număr de ambalaje, prețul este pe bucată, iar totalul se calculează pe cantitatea reală.
-                </div>
+                <div style={toolbarTitle}>Produse</div>
               </div>
 
               <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
@@ -1617,7 +1604,7 @@ export default function NirPage() {
                     onClick={() => (isMobileViewport ? openLineEditor() : addLine())}
                     disabled={loadingMeta}
                   >
-                    + Adaugă linie
+                    + Adauga linie
                   </button>
                 )}
               </div>
@@ -1627,7 +1614,7 @@ export default function NirPage() {
               <div>Produs</div>
               <div>Ambalaj</div>
               <div>Cant.</div>
-              <div>Preț/buc</div>
+              <div>Pret/buc</div>
               <div>TVA</div>
               <div>Cant./ambalaj</div>
               <div>Total</div>
@@ -1677,13 +1664,13 @@ export default function NirPage() {
 
                           <div style={mobileLineFacts}>
                             <div style={mobileLineFact}><strong>Cant.</strong> {formatQtyRo(computed.qty)}</div>
-                            <div style={mobileLineFact}><strong>Preț</strong> {formatMoneyRo(computed.price)}</div>
+                            <div style={mobileLineFact}><strong>Pret</strong> {formatMoneyRo(computed.price)}</div>
                             <div style={mobileLineFact}><strong>TVA</strong> {formatNumberRo(computed.vat, 0)}%</div>
                             <div style={mobileLineFact}><strong>Factor</strong> {formatFactorRo(computed.factor)}</div>
                           </div>
 
                           {isDuplicate && (
-                            <div style={duplicateMeta}>Atenție: produsul apare și pe altă linie.</div>
+                            <div style={duplicateMeta}>Atentie: produsul apare si pe alta linie.</div>
                           )}
 
                           <div style={mobileLineActions}>
@@ -1692,7 +1679,7 @@ export default function NirPage() {
                             </button>
                             {!isPosted && (
                               <button type="button" style={btnDangerMobile} onClick={() => removeLine(line.id)}>
-                                Șterge
+                                Sterge
                               </button>
                             )}
                           </div>
@@ -1732,7 +1719,7 @@ export default function NirPage() {
 
                           {isDuplicate && (
                             <div style={duplicateMeta}>
-                              Atenție: produsul apare și pe altă linie.
+                              Atentie: produsul apare si pe alta linie.
                             </div>
                           )}
                         </div>
@@ -1841,7 +1828,7 @@ export default function NirPage() {
                               }
                               onClick={() => removeLine(line.id)}
                             >
-                              ✕
+                              âœ•
                             </button>
                           )}
                         </div>
@@ -1851,7 +1838,7 @@ export default function NirPage() {
                         {line.productId && (
                           <div style={lineInsightGrid}>
                             <div style={insightChip}>
-                              <strong>Relație:</strong> {computed.qty.toFixed(2)} amb ×{" "}
+                              <strong>Relatie:</strong> {computed.qty.toFixed(2)} amb ×{" "}
                               {computed.factor.toFixed(2)} = {computed.qtyBase.toFixed(2)} buc
                             </div>
 
@@ -1906,7 +1893,7 @@ export default function NirPage() {
                             ) : (
                               <div style={quickAddWrap}>
                                 <div style={{ color: "#991b1b", fontSize: 13 }}>
-                                  Nu există produse găsite pentru „{line.search}”
+                                  Nu exista produse gasite pentru "{line.search}"
                                 </div>
 
                                 {canAddQuickProduct && (
@@ -1915,7 +1902,7 @@ export default function NirPage() {
                                     style={btnSecondary}
                                     onClick={() => openQuickProduct(line)}
                                   >
-                                    Adaugă produs nou
+                                    Adauga produs nou
                                   </button>
                                 )}
                               </div>
@@ -1930,7 +1917,7 @@ export default function NirPage() {
                 })}
                 {visibleLines.length === 0 && (
                   <div style={emptyMobileLinesBox}>
-                    Nu ai încă nicio linie salvată. Apasă `Adaugă linie` și completează produsul în popup.
+                    Nu ai inca nicio linie salvata. Apasa `Adauga linie` si completeaza produsul in popup.
                   </div>
                 )}
               </div>
@@ -1942,11 +1929,11 @@ export default function NirPage() {
               <Card title={`Net ${header.currency}`} value={`${formatNumber(totals.netFc)} ${header.currency}`} />
               <Card title={`TVA ${header.currency}`} value={`${formatNumber(totals.vatFc)} ${header.currency}`} />
               <Card title={`SGR ${header.currency}`} value={`${formatNumber(totals.sgrFc)} ${header.currency}`} />
-              <Card title={`Total fără SGR ${header.currency}`} value={`${formatNumber(totals.grossFc)} ${header.currency}`} />
+              <Card title={`Total fara SGR ${header.currency}`} value={`${formatNumber(totals.grossFc)} ${header.currency}`} />
               <Card title={`Total cu SGR ${header.currency}`} value={`${formatNumber(totals.withSgrFc)} ${header.currency}`} />
               {header.currency !== "RON" && (
                 <>
-                  <Card title="Total RON fără SGR" value={`${formatNumber(totals.grossRon)} RON`} />
+                  <Card title="Total RON fara SGR" value={`${formatNumber(totals.grossRon)} RON`} />
                   <Card title="SGR RON" value={`${formatNumber(totals.sgrRon)} RON`} />
                   <Card title="Total RON cu SGR" value={`${formatNumber(totals.withSgrRon)} RON`} />
                 </>
@@ -1962,15 +1949,15 @@ export default function NirPage() {
             <div style={modalHeader}>
               <div>
                 <h3 style={{ margin: 0 }}>
-                  {lineEditorMode === "create" ? "Adaugă linie produs" : "Detalii linie produs"}
+                  {lineEditorMode === "create" ? "Adauga linie produs" : "Detalii linie produs"}
                 </h3>
                 <div style={{ color: "#64748b", fontSize: 13, marginTop: 4 }}>
-                  Completezi produsul în popup, apoi în pagină rămâne doar rezumatul curat al liniei.
+                  Completezi produsul in popup, apoi in pagina ramane doar rezumatul curat al liniei.
                 </div>
               </div>
 
               <button type="button" onClick={closeLineEditor} style={btnSecondary}>
-                Închide
+                Inchide
               </button>
             </div>
 
@@ -1980,7 +1967,7 @@ export default function NirPage() {
               <Field label="Produs">
                 <input
                   type="text"
-                  placeholder="Caută produs..."
+                  placeholder="Cauta produs..."
                   value={lineDraft.search}
                   onChange={(e) =>
                     setDraftLineValue({
@@ -2008,7 +1995,7 @@ export default function NirPage() {
                 />
               </Field>
 
-              <Field label="Preț / bucată">
+              <Field label="Pret / bucata">
                 <input
                   type="text"
                   value={lineDraft.price}
@@ -2063,7 +2050,7 @@ export default function NirPage() {
                   {lineDraft.isSgr && (
                     <div style={sgrInlineBox}>
                       <span style={sgrBadge}>SGR</span>
-                      <span>Produsul are garanție returnabilă activă.</span>
+                      <span>Produsul are garantie returnabila activa.</span>
                     </div>
                   )}
                   {!isPosted && (
@@ -2099,12 +2086,12 @@ export default function NirPage() {
                   ) : (
                     <div style={quickAddWrap}>
                       <div style={{ color: "#991b1b", fontSize: 13 }}>
-                        Nu există produse găsite pentru „{lineDraft.search}”
+                        Nu exista produse gasite pentru "{lineDraft.search}"
                       </div>
 
                       {!isPosted && uoms.length > 0 && vatRates.length > 0 && (
                         <button type="button" style={btnSecondary} onClick={() => openQuickProduct(lineDraft)}>
-                          Adaugă produs nou
+                          Adauga produs nou
                         </button>
                       )}
                     </div>
@@ -2115,11 +2102,11 @@ export default function NirPage() {
 
             <div style={modalActions}>
               <button type="button" style={btnSecondary} onClick={closeLineEditor}>
-                Renunță
+                Renunta
               </button>
               {!isPosted && (
                 <button type="button" style={btnPrimary} onClick={saveLineDraft}>
-                  Salvează linia
+                  Salveaza linia
                 </button>
               )}
             </div>
@@ -2132,14 +2119,14 @@ export default function NirPage() {
           <div style={modalCard}>
             <div style={modalHeader}>
               <div>
-                <h3 style={{ margin: 0 }}>Adaugă produs nou</h3>
+                <h3 style={{ margin: 0 }}>Adauga produs nou</h3>
                 <div style={{ color: "#666", fontSize: 13, marginTop: 4 }}>
-                  Produsul se salvează în nomenclator și se selectează automat în linia curentă.
+                  Produsul se salveaza in nomenclator si se selecteaza automat in linia curenta.
                 </div>
               </div>
 
               <button type="button" onClick={closeQuickProduct} style={btnSecondary}>
-                Închide
+                Inchide
               </button>
             </div>
 
@@ -2164,7 +2151,7 @@ export default function NirPage() {
                   }
                   style={input}
                 >
-                  <option value="">Selectează UM</option>
+                  <option value="">Selecteaza UM</option>
                   {uoms.map((u: AnyObj) => (
                     <option key={u.id} value={u.id}>
                       {u.code} - {u.name}
@@ -2184,7 +2171,7 @@ export default function NirPage() {
                   }
                   style={input}
                 >
-                  <option value="">Selectează ambalaj</option>
+                  <option value="">Selecteaza ambalaj</option>
                   {uoms.map((u: AnyObj) => (
                     <option key={u.id} value={u.id}>
                       {u.code} - {u.name}
@@ -2223,7 +2210,7 @@ export default function NirPage() {
                   }
                   style={input}
                 >
-                  <option value="">Selectează TVA</option>
+                  <option value="">Selecteaza TVA</option>
                   {vatRates.map((v: AnyObj) => (
                     <option key={v.id} value={v.id}>
                       {v.name} - {v.rate}%
@@ -2232,7 +2219,7 @@ export default function NirPage() {
                 </select>
               </Field>
 
-              <Field label="Preț implicit">
+              <Field label="Pret implicit">
                 <input
                   value={quickProductForm.price}
                   onChange={(e) =>
@@ -2263,14 +2250,14 @@ export default function NirPage() {
                       }))
                     }
                   />
-                  <span>Produs cu SGR 0.50 fără TVA</span>
+                  <span>Produs cu SGR 0.50 fara TVA</span>
                 </label>
               </Field>
             </div>
 
             <div style={modalActions}>
               <button type="button" onClick={closeQuickProduct} style={btnSecondary}>
-                Renunță
+                Renunta
               </button>
               <button
                 type="button"
@@ -2278,7 +2265,7 @@ export default function NirPage() {
                 style={btnPrimary}
                 disabled={quickProductLoading}
               >
-                {quickProductLoading ? "Se salvează..." : "Salvează produs"}
+                {quickProductLoading ? "Se salveaza..." : "Salveaza produs"}
               </button>
             </div>
           </div>
@@ -2290,14 +2277,14 @@ export default function NirPage() {
           <div style={modalCard}>
             <div style={modalHeader}>
               <div>
-                <h3 style={{ margin: 0 }}>Adaugă furnizor nou</h3>
+                <h3 style={{ margin: 0 }}>Adauga furnizor nou</h3>
                 <div style={{ color: "#666", fontSize: 13, marginTop: 4 }}>
-                  Furnizorul se salvează și se selectează automat în antet.
+                  Furnizorul se salveaza si se selecteaza automat in antet.
                 </div>
               </div>
 
               <button type="button" onClick={closeQuickSupplier} style={btnSecondary}>
-                Închide
+                Inchide
               </button>
             </div>
 
@@ -2332,7 +2319,7 @@ export default function NirPage() {
                 />
               </Field>
 
-              <Field label="Reg. comerțului">
+              <Field label="Reg. comertului">
                 <input
                   value={quickSupplierForm.regNo}
                   onChange={(e) =>
@@ -2342,7 +2329,7 @@ export default function NirPage() {
                 />
               </Field>
 
-              <Field label="Adresă">
+              <Field label="Adresa">
                 <input
                   value={quickSupplierForm.address}
                   onChange={(e) =>
@@ -2375,7 +2362,7 @@ export default function NirPage() {
 
             <div style={modalActions}>
               <button type="button" onClick={closeQuickSupplier} style={btnSecondary}>
-                Renunță
+                Renunta
               </button>
               <button
                 type="button"
@@ -2383,7 +2370,7 @@ export default function NirPage() {
                 style={btnPrimary}
                 disabled={quickSupplierLoading}
               >
-                {quickSupplierLoading ? "Se salvează..." : "Salvează furnizor"}
+                {quickSupplierLoading ? "Se salveaza..." : "Salveaza furnizor"}
               </button>
             </div>
           </div>
@@ -3054,3 +3041,7 @@ const modalActions: CSSProperties = {
   marginTop: 12,
   flexWrap: "wrap",
 }
+
+
+
+

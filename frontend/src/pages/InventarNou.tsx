@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+ï»¿import { useEffect, useMemo, useRef, useState } from "react"
 import { Check, Search, Trash2 } from "lucide-react"
 import PageHeader from "../components/PageHeader"
 import {
@@ -84,7 +84,7 @@ function normalizeLocations(payload: any): LocationOption[] {
 
   return rows.map((item: any) => ({
     id: String(item.id || item.locationId || ""),
-    name: String(item.name || item.label || "Loca?ie"),
+    name: String(item.name || item.label || "Locatie"),
   }))
 }
 
@@ -238,7 +238,7 @@ export default function InventarNou() {
 
   async function saveInventory() {
     if (!locationId) {
-      setError("Selecteaza loca?ia.")
+      setError("Selecteaza locatia.")
       return
     }
 
@@ -248,7 +248,7 @@ export default function InventarNou() {
     }))
 
     if (!lines.length) {
-      setError("Adauga cel pu?in un produs.")
+      setError("Adauga cel putin un produs.")
       return
     }
 
@@ -290,22 +290,22 @@ export default function InventarNou() {
       .slice(0, 10)
   }, [products, query])
 
-  const selectedLocationName = locations.find((location) => location.id === locationId)?.name || "Loca?ia selectata"
+  const selectedLocationName = locations.find((location) => location.id === locationId)?.name || "Locatia selectata"
   const totalProducts = items.length
   const totalCounted = items.reduce((sum, item) => sum + item.counted, 0)
   const withDifferences = items.filter((item) => item.counted !== item.stock).length
 
   return (
     <div className="w-full space-y-4">
-      <PageHeader badge="document" title="Inventar nou" subtitle="Numarare rapida, în acela?i model cu bonul de consum." />
+      <PageHeader badge="document" title="Inventar nou" />
 
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-        <DocumentMetric title="Pozi?ii" value={totalProducts} tone="slate" />
+        <DocumentMetric title="Pozitii" value={totalProducts} tone="slate" />
         <DocumentMetric title="Cantitate numarata" value={totalCounted.toLocaleString("ro-RO")} tone="blue" />
-        <DocumentMetric title="Diferen?e" value={withDifferences} tone="amber" />
+        <DocumentMetric title="Diferente" value={withDifferences} tone="amber" />
       </div>
 
       <div className="grid grid-cols-1 items-start gap-3 2xl:grid-cols-[minmax(0,1fr)_320px]">
@@ -317,7 +317,7 @@ export default function InventarNou() {
                 ref={searchInputRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder={loadingProducts ? "Se încarca produsele..." : "Cauta dupa nume, cod sau cod de bare"}
+                placeholder={loadingProducts ? "Se Ã®ncarca produsele..." : "Cauta dupa nume, cod sau cod de bare"}
                 className={`${documentInputClass} pl-11`}
               />
             </div>
@@ -325,7 +325,7 @@ export default function InventarNou() {
             {query ? (
               <div className="mt-2 max-h-[180px] overflow-y-auto rounded-[14px] border border-slate-200 bg-slate-50 p-2">
                 {loadingProducts ? (
-                  <div className="px-3 py-6 text-center text-sm text-slate-500">Se încarca produsele...</div>
+                  <div className="px-3 py-6 text-center text-sm text-slate-500">Se Ã®ncarca produsele...</div>
                 ) : filteredProducts.length ? (
                   <div className="space-y-2">
                     {filteredProducts.map((product) => {
@@ -340,7 +340,7 @@ export default function InventarNou() {
                           <div className="min-w-0">
                             <div className="truncate text-sm font-semibold text-slate-900">{product.name}</div>
                             <div className="mt-0.5 text-xs text-slate-500">
-                              {product.code || product.sku || product.barcode || "fara cod"} · stoc {realStock} {pickUnit(product)}
+                              {product.code || product.sku || product.barcode || "fara cod"} Â· stoc {realStock} {pickUnit(product)}
                             </div>
                           </div>
                           <span className="ml-3 inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700">
@@ -356,12 +356,12 @@ export default function InventarNou() {
               </div>
             ) : (
               <div className="mt-2 rounded-[14px] border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
-                Începe sa scrii ?i produsele apar aici, fara sa împinga pagina în jos.
+                ÃŽncepe sa scrii ?i produsele apar aici, fara sa Ã®mpinga pagina Ã®n jos.
               </div>
             )}
           </DocumentSection>
 
-          <DocumentSection title="Pozi?ii inventar">
+          <DocumentSection title="Pozitii inventar">
             <div className="max-h-[460px] overflow-y-auto pr-1">
               {items.length ? (
                 <div className="space-y-2">
@@ -369,8 +369,8 @@ export default function InventarNou() {
                     <div>Produs</div>
                     <div>Scriptic</div>
                     <div>Numarat</div>
-                    <div>Diferen?a</div>
-                    <div>Ac?iune</div>
+                    <div>Diferenta</div>
+                    <div>Actiune</div>
                   </div>
 
                   {items.map((item) => {
@@ -411,7 +411,7 @@ export default function InventarNou() {
                           <div>
                             <button type="button" onClick={() => removeItem(item.productId)} className={documentButtonDangerClass}>
                               <Trash2 size={16} className="mr-2" />
-                              ?terge
+                              Sterge
                             </button>
                           </div>
                         </div>
@@ -421,8 +421,8 @@ export default function InventarNou() {
                 </div>
               ) : (
                 <div className="rounded-[14px] border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center">
-                  <div className="text-sm font-semibold text-slate-700">Nu ai produse în document</div>
-                  <div className="mt-1 text-sm text-slate-500">Cauta un produs sus ?i apasa direct pe el pentru adaugare.</div>
+                  <div className="text-sm font-semibold text-slate-700">Nu ai produse Ã®n document</div>
+                  <div className="mt-1 text-sm text-slate-500">Cauta un produs sus si apasa direct pe el pentru adaugare.</div>
                 </div>
               )}
             </div>
@@ -431,7 +431,7 @@ export default function InventarNou() {
 
         <DocumentSection title="Detalii document">
           <div className="space-y-3">
-            <DocumentField label="Loca?ie">
+            <DocumentField label="Locatie">
               <select value={locationId} onChange={(e) => setLocation(e.target.value)} className={documentInputClass}>
                 {locations.map((location) => (
                   <option key={location.id} value={location.id}>{location.name}</option>
@@ -439,18 +439,18 @@ export default function InventarNou() {
               </select>
             </DocumentField>
 
-            <DocumentField label="Observa?ii">
+            <DocumentField label="Observatii">
               <textarea
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 rows={4}
-                placeholder="Po?i nota explica?ii pentru inventar."
+                placeholder="Poti nota explicatii pentru inventar."
                 className={documentTextareaClass}
               />
             </DocumentField>
 
             <InlineNotice>
-              Loca?ie activa: <span className="font-semibold">{selectedLocationName}</span>
+              <span className="font-semibold">{selectedLocationName}</span>
             </InlineNotice>
 
             <div className="flex flex-col gap-2">
@@ -465,3 +465,6 @@ export default function InventarNou() {
     </div>
   )
 }
+
+
+

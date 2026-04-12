@@ -1,4 +1,4 @@
-import { Bell, LogOut, MapPin, Menu } from "lucide-react"
+﻿import { Bell, LogOut, MapPin, Menu } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom"
 import { API_BASE as API, authHeaders } from "../lib/api"
@@ -32,18 +32,18 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
   const notifications = [
     {
       id: "release",
-      title: "Update ERP disponibil",
-      description: "Avem imbunatatiri noi pentru dashboard si documente.",
+      title: "Actualizare ERP",
+      description: "Sunt disponibile modificari noi in platforma.",
     },
     {
       id: "sync",
       title: "Sincronizare finalizata",
-      description: "Ultimele date au fost actualizate cu succes.",
+      description: "Datele au fost actualizate.",
     },
     {
       id: "support",
-      title: "Mesaj intern",
-      description: "Verifica noile notificari operationale din platforma.",
+      title: "Notificare interna",
+      description: "Verifica ultimele alerte operationale.",
     },
   ]
 
@@ -175,7 +175,7 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
             </div>
             <div className="min-w-0 flex-1">
               <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6C7A89]">
-                Locatie activa
+                Locatie
               </div>
               <select
                 value={locationId}
@@ -202,7 +202,7 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
               </div>
               <div className="min-w-[190px]">
                 <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6C7A89]">
-                  Locatie activa
+                  Locatie
                 </div>
                 <select
                   value={locationId}
@@ -267,7 +267,7 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
 
               {notificationsOpen ? (
                 <div className="absolute right-0 top-12 z-40 w-[320px] rounded-[16px] border border-slate-200 bg-white p-3 shadow-xl">
-                  <div className="mb-2 text-sm font-semibold text-[#17324D]">Updates & notificari</div>
+                  <div className="mb-2 text-sm font-semibold text-[#17324D]">Notificari</div>
                   <div className="space-y-2">
                     {notifications.map((item) => (
                       <div key={item.id} className="rounded-[12px] border border-slate-200 bg-slate-50 px-3 py-2.5">
@@ -302,3 +302,5 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
     </header>
   )
 }
+
+

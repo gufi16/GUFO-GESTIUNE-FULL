@@ -105,8 +105,7 @@ function SidebarContent({
     <div className="flex h-full w-full flex-col overflow-hidden">
       <div className="border-b border-slate-200/80 px-4 pb-3 pt-4">
         {mobile ? (
-          <div className="mb-1 flex items-center justify-between">
-            <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Meniu ERP</div>
+          <div className="mb-1 flex items-center justify-end">
             <button
               type="button"
               onClick={onCloseMobile}

@@ -1,4 +1,4 @@
-import fs from "fs"
+﻿import fs from "fs"
 import { Router } from "express"
 import PDFDocument from "pdfkit"
 import { prisma } from "../lib/prisma"
@@ -120,9 +120,9 @@ async function replaceInvoiceItems(tenantId: string, invoiceId: string, fxRate: 
     const unitPriceFc = toNumber(raw.unitPriceFc)
     const vatRateValue = toNumber(raw.vatRateValue)
 
-    if (!productId) throw new Error("Fiecare linie trebuie să aibă produs.")
-    if (qty <= 0) throw new Error("Cantitatea trebuie să fie mai mare decât 0.")
-    if (unitPriceFc < 0) throw new Error("Prețul trebuie să fie mai mare sau egal cu 0.")
+    if (!productId) throw new Error("Fiecare linie trebuie sa aiba produs.")
+    if (qty <= 0) throw new Error("Cantitatea trebuie sa fie mai mare decat 0.")
+    if (unitPriceFc < 0) throw new Error("Pretul trebuie sa fie mai mare sau egal cu 0.")
 
     const product = await prisma.product.findFirst({
       where: {
@@ -136,7 +136,7 @@ async function replaceInvoiceItems(tenantId: string, invoiceId: string, fxRate: 
     })
 
     if (!product) {
-      throw new Error("Produs inexistent într-una dintre linii.")
+      throw new Error("Produs inexistent intr-una dintre linii.")
     }
 
     const vat = vatRateValue || toNumber(product.vatRate?.rate)
@@ -263,7 +263,7 @@ router.get("/api/v1/sales-invoices/:id", async (req: AuthedRequest, res) => {
   })
 
   if (!invoice) {
-    return res.status(404).json({ ok: false, error: "Factura nu a fost găsită." })
+    return res.status(404).json({ ok: false, error: "Factura nu a fost gasita." })
   }
 
   return res.json({
@@ -290,7 +290,7 @@ router.post("/api/v1/sales-invoices/full", async (req: AuthedRequest, res) => {
     }
 
     if (!Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ ok: false, error: "Factura trebuie să aibă cel puțin o poziție." })
+      return res.status(400).json({ ok: false, error: "Factura trebuie sa aiba cel putin o pozitie." })
     }
 
     const location = await prisma.location.findFirst({
@@ -301,7 +301,7 @@ router.post("/api/v1/sales-invoices/full", async (req: AuthedRequest, res) => {
     })
 
     if (!location) {
-      return res.status(404).json({ ok: false, error: "Locația nu a fost găsită." })
+      return res.status(404).json({ ok: false, error: "Locatia nu a fost gasita." })
     }
 
     const customerId = header?.customerId ? String(header.customerId) : null
@@ -316,7 +316,7 @@ router.post("/api/v1/sales-invoices/full", async (req: AuthedRequest, res) => {
       })
 
       if (!customer) {
-        return res.status(404).json({ ok: false, error: "Clientul nu a fost găsit." })
+        return res.status(404).json({ ok: false, error: "Clientul nu a fost gasit." })
       }
     }
 
@@ -354,7 +354,7 @@ router.post("/api/v1/sales-invoices/full", async (req: AuthedRequest, res) => {
       })
 
       if (duplicate) {
-        return res.status(400).json({ ok: false, error: "Există deja o factură cu acest număr." })
+        return res.status(400).json({ ok: false, error: "Exista deja o factura cu acest numar." })
       }
 
       const created = await prisma.salesInvoice.create({
@@ -395,11 +395,11 @@ router.post("/api/v1/sales-invoices/full", async (req: AuthedRequest, res) => {
       })
 
       if (!existing) {
-        return res.status(404).json({ ok: false, error: "Factura nu a fost găsită." })
+        return res.status(404).json({ ok: false, error: "Factura nu a fost gasita." })
       }
 
       if (existing.status === "CANCELLED") {
-        return res.status(400).json({ ok: false, error: "Factura anulată nu mai poate fi modificată." })
+        return res.status(400).json({ ok: false, error: "Factura anulata nu mai poate fi modificata." })
       }
 
       const duplicate = await prisma.salesInvoice.findFirst({
@@ -412,7 +412,7 @@ router.post("/api/v1/sales-invoices/full", async (req: AuthedRequest, res) => {
       })
 
       if (duplicate) {
-        return res.status(400).json({ ok: false, error: "Există deja o factură cu acest număr." })
+        return res.status(400).json({ ok: false, error: "Exista deja o factura cu acest numar." })
       }
 
       await prisma.salesInvoice.update({
@@ -468,7 +468,7 @@ router.post("/api/v1/sales-invoices/full", async (req: AuthedRequest, res) => {
     })
 
     if (!invoice) {
-      return res.status(404).json({ ok: false, error: "Factura nu a fost gÄƒsitÄƒ." })
+      return res.status(404).json({ ok: false, error: "Factura nu a fost gasita." })
     }
 
     return res.json({
@@ -510,7 +510,7 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
   })
 
   if (!invoice) {
-    return res.status(404).json({ ok: false, error: "Factura nu a fost gÄƒsitÄƒ." })
+    return res.status(404).json({ ok: false, error: "Factura nu a fost gasita." })
   }
 
   const company = await prisma.company.findUnique({
@@ -662,7 +662,7 @@ router.post("/api/v1/sales-invoices/:id/efactura/prepare", async (req: AuthedReq
   })
 
   if (!invoice) {
-    return res.status(404).json({ ok: false, error: "Factura nu a fost găsită." })
+    return res.status(404).json({ ok: false, error: "Factura nu a fost gasita." })
   }
 
   const company = await prisma.company.findUnique({
@@ -707,14 +707,14 @@ router.post("/api/v1/sales-invoices/:id/efactura/prepare", async (req: AuthedReq
         invoiceId: id,
         stage: "PREPARE",
         success: false,
-        message: errorText || "Factura nu a trecut validarea locală.",
+        message: errorText || "Factura nu a trecut validarea locala.",
         payload: validation,
       },
     })
 
     return res.status(400).json({
       ok: false,
-      error: errorText || "Factura nu a trecut validarea locală pentru e-Factura.",
+      error: errorText || "Factura nu a trecut validarea locala pentru e-Factura.",
       validation,
       invoice: enrichInvoice(updated),
     })
@@ -755,7 +755,7 @@ router.post("/api/v1/sales-invoices/:id/efactura/prepare", async (req: AuthedReq
       invoiceId: id,
       stage: "PREPARE",
       success: true,
-      message: "Factura a fost validată local și XML-ul a fost generat.",
+      message: "Factura a fost validata local si XML-ul a fost generat.",
       payload: { warnings: validation.warnings },
     },
   })
@@ -790,11 +790,11 @@ router.get("/api/v1/sales-invoices/:id/efactura/xml", async (req: AuthedRequest,
   })
 
   if (!invoice) {
-    return res.status(404).json({ ok: false, error: "Factura nu a fost găsită." })
+    return res.status(404).json({ ok: false, error: "Factura nu a fost gasita." })
   }
 
   if (!invoice.efacturaXmlText) {
-    return res.status(404).json({ ok: false, error: "Factura nu are încă XML e-Factura pregătit." })
+    return res.status(404).json({ ok: false, error: "Factura nu are inca XML e-Factura pregatit." })
   }
 
   const filename = `eFactura_${safeFilePart(invoice.docNo)}_${safeFilePart(invoice.customerName)}.xml`
@@ -1259,7 +1259,7 @@ router.post("/api/v1/sales-invoices/:id/cancel", async (req: AuthedRequest, res)
   })
 
   if (!invoice) {
-    return res.status(404).json({ ok: false, error: "Factura nu a fost găsită." })
+    return res.status(404).json({ ok: false, error: "Factura nu a fost gasita." })
   }
 
   const cancelled = await prisma.salesInvoice.update({
@@ -1276,3 +1276,4 @@ router.post("/api/v1/sales-invoices/:id/cancel", async (req: AuthedRequest, res)
 })
 
 export default router
+
