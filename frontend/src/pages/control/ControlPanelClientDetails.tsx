@@ -541,7 +541,7 @@ export default function ControlPanelClientDetails() {
             </span>
           </div>
           <div className="mt-1 text-sm text-slate-500">
-            {client?.company?.cui || "-"} • expirare {formatDate(client?.license?.expiresAt)} • tenant {client?.id || "-"}
+            {client?.company?.cui || "-"} | expirare {formatDate(client?.license?.expiresAt)} | tenant {client?.id || "-"}
           </div>
         </div>
 
@@ -593,9 +593,17 @@ export default function ControlPanelClientDetails() {
         </div>
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+      <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
         <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Informatii client</div>
+              <div className="mt-1 text-sm font-semibold text-[#17324D]">Date comerciale si contact</div>
+            </div>
+            <div className="text-xs text-slate-500">Vizual compact</div>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
             {metricCard("Utilizatori", client?.usersCount ?? users.length)}
             {metricCard("Locatii", client?.locationsCount ?? locations.length)}
             {metricCard("POS", client?.terminalsCount ?? 0)}
@@ -612,7 +620,18 @@ export default function ControlPanelClientDetails() {
         </section>
 
         <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Licenta si module</div>
+              <div className="mt-1 text-sm font-semibold text-[#17324D]">Limite, expirare si activare module</div>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-right text-xs text-slate-500">
+              <div>{erpEnabled ? "ERP activ" : "ERP inactiv"}</div>
+              <div className="mt-1">{efacturaModuleEnabled ? "e-Factura activa" : "e-Factura inactiva"}</div>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
             <label className="block">
               <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Expirare</div>
               <input
@@ -682,7 +701,8 @@ export default function ControlPanelClientDetails() {
             </button>
           </div>
 
-          <div className="mt-4">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+            <div className="text-sm text-slate-500">Salveaza imediat dupa orice modificare de licenta sau modul.</div>
             <button
               onClick={handleSaveLicense}
               disabled={licenseBusy}
@@ -691,16 +711,13 @@ export default function ControlPanelClientDetails() {
               <Save size={15} />
               {licenseBusy ? "Se salveaza..." : "Salveaza"}
             </button>
-            <div className="text-sm text-slate-500">
-              {erpEnabled ? "ERP activ" : "ERP inactiv"} • {efacturaModuleEnabled ? "e-Factura activa" : "e-Factura inactiva"}
-            </div>
           </div>
         </section>
       </div>
 
       <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="text-sm font-semibold text-[#17324D]">Locatii si device-uri POS</div>
+          <div><div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Locatii si POS</div><div className="mt-1 text-sm font-semibold text-[#17324D]">Administrare locatii, terminale si chei de licenta</div></div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <input
               value={newLocationName}
@@ -734,7 +751,7 @@ export default function ControlPanelClientDetails() {
                       {location.name}
                     </div>
                     <div className="mt-1 text-xs text-slate-500">
-                      {location.code || "-"} • {(location.devices?.length || 0)} device-uri
+                      {location.code || "-"} | {(location.devices?.length || 0)} device-uri
                     </div>
                   </div>
 
@@ -826,8 +843,13 @@ export default function ControlPanelClientDetails() {
         </div>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+      <section className="grid gap-4 xl:grid-cols-[0.95fr_0.75fr_1.3fr]">
         <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-4">
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Acces ERP</div>
+            <div className="mt-1 text-sm font-semibold text-[#17324D]">Adaugare, editare si resetare utilizatori</div>
+          </div>
+
           <div className="flex items-center justify-between gap-2">
             <div className="text-sm font-semibold text-[#17324D]">
               {editingUserId ? "Editeaza utilizator" : "Adauga utilizator"}
@@ -914,16 +936,27 @@ export default function ControlPanelClientDetails() {
         </div>
 
         <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="mb-4">
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Client summary</div>
+            <div className="mt-1 text-sm font-semibold text-[#17324D]">Plan, billing si contact principal</div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
             {metricCard("Plan", client?.subscription?.plan?.name || "-")}
             {metricCard("Pret", currencyFormat(client?.subscription?.price, client?.subscription?.currency))}
             {metricCard("Billing", client?.subscription?.billingStatus || "-")}
             {metricCard("Plata", formatDate(client?.subscription?.nextBillingDate))}
           </div>
+
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Contact principal</div>
+            <div className="mt-1 font-medium text-slate-900">{principalUser?.fullName || client?.company?.name || "-"}</div>
+            <div className="mt-1 break-all text-slate-600">{principalUser?.email || client?.company?.email || "-"}</div>
+          </div>
         </div>
 
-        <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-[#17324D]">Utilizatori ERP</div>
+        <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm xl:col-span-3">
+          <div className="border-b border-slate-200 bg-slate-50 px-4 py-3"><div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Utilizatori ERP</div><div className="mt-1 text-sm font-semibold text-[#17324D]">Operatori, administratori si resetari rapide</div></div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead className="text-xs uppercase text-slate-400">

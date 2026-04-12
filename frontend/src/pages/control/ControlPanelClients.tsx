@@ -521,10 +521,10 @@ export default function ControlPanelClients() {
       </section>
 
       <section className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
-        <div className="hidden grid-cols-[minmax(0,1.7fr)_170px_170px_280px] gap-4 border-b border-slate-200 bg-slate-50 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 lg:grid">
+        <div className="hidden grid-cols-[minmax(0,1.9fr)_170px_180px_260px] gap-4 border-b border-slate-200 bg-slate-50 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 lg:grid">
           <div>Client</div>
           <div>Plan</div>
-          <div>Utilizare</div>
+          <div>Status</div>
           <div>Subdomeniu</div>
         </div>
 
@@ -541,20 +541,20 @@ export default function ControlPanelClients() {
             <article
               key={item.id}
               onClick={() => navigate(`/control-panel/clienti/${item.id}`)}
-              className="cursor-pointer border-b border-slate-100 px-4 py-4 transition hover:bg-slate-50 last:border-b-0"
+              className="cursor-pointer border-b border-slate-100 px-4 py-3 transition hover:bg-slate-50 last:border-b-0"
             >
-              <div className="grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_170px_170px_280px] lg:items-center">
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,1.9fr)_170px_180px_260px] lg:items-center">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="truncate text-base font-semibold text-slate-950">{item.company?.name || item.name}</h2>
+                    <h2 className="truncate text-[15px] font-semibold text-slate-950">{item.company?.name || item.name}</h2>
                     <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${statusClass(item.status)}`}>
                       {statusLabel(item.status)}
                     </span>
                   </div>
                   <div className="mt-1 text-sm text-slate-500">
-                    {[item.company?.cui, item.company?.email, item.company?.phone].filter(Boolean).join(" · ") || "-"}
+                    {[item.company?.cui, item.company?.email, item.company?.phone].filter(Boolean).join(" | ") || "-"}
                   </div>
-                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
+                  <div className="mt-1.5 flex flex-wrap gap-3 text-xs text-slate-500">
                     <span>Creat {formatDate(item.createdAt)}</span>
                     <span>Licenta {formatDate(item.license?.expiresAt)}</span>
                   </div>
@@ -569,28 +569,28 @@ export default function ControlPanelClients() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 text-center text-sm">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-2 py-2">
-                    <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Useri</div>
-                    <div className="mt-1 font-semibold text-slate-950">{item.usersCount}</div>
+                <div className="grid gap-1.5 text-sm">
+                  <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+                    <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Useri</span>
+                    <span className="font-semibold text-slate-950">{item.usersCount}</span>
                   </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-2 py-2">
-                    <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Loc</div>
-                    <div className="mt-1 font-semibold text-slate-950">
+                  <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+                    <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Locatii</span>
+                    <span className="font-semibold text-slate-950">
                       {item.locationsCount}/{item.license?.limits?.locations ?? 0}
-                    </div>
+                    </span>
                   </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-2 py-2">
-                    <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">POS</div>
-                    <div className="mt-1 font-semibold text-slate-950">
+                  <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+                    <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">POS</span>
+                    <span className="font-semibold text-slate-950">
                       {item.terminalsCount}/{item.license?.limits?.terminals ?? 0}
-                    </div>
+                    </span>
                   </div>
                 </div>
 
                 <div className="space-y-2">
                   <div
-                    className="flex items-center rounded-2xl border border-slate-200 bg-slate-50 px-3"
+                    className="flex items-center rounded-xl border border-slate-200 bg-slate-50 px-3"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <input
@@ -602,7 +602,7 @@ export default function ControlPanelClients() {
                         }))
                       }
                       placeholder="coffee-cup"
-                      className="h-10 min-w-0 flex-1 bg-transparent text-sm text-slate-700 outline-none"
+                      className="h-9 min-w-0 flex-1 bg-transparent text-sm text-slate-700 outline-none"
                     />
                     <span className="pl-2 text-xs text-slate-400">.gufo.ink</span>
                   </div>
@@ -611,11 +611,11 @@ export default function ControlPanelClients() {
                       type="button"
                       onClick={() => handleUpdateSubdomain(item)}
                       disabled={savingSubdomainId === item.id}
-                      className="inline-flex h-9 items-center justify-center rounded-2xl border border-slate-200 bg-white px-3 text-xs font-semibold text-[#17324D] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="inline-flex h-8 items-center justify-center rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-[#17324D] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {savingSubdomainId === item.id ? "..." : "Salveaza"}
                     </button>
-                    <div className="truncate text-xs text-slate-500">{item.portalUrl || "-"}</div>
+                    <div className="truncate text-[11px] text-slate-500">{item.portalUrl || "-"}</div>
                   </div>
                 </div>
 
