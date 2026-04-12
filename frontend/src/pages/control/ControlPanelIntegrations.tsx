@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { ShieldCheck, PlugZap } from "lucide-react"
+import { PlugZap, ShieldCheck } from "lucide-react"
 import { api } from "../../lib/api"
 
 type PlatformEFacturaResponse = {
@@ -48,7 +48,7 @@ export default function ControlPanelIntegrations() {
       })
       setConfigured(Boolean(data?.item?.configured))
     } catch (err: any) {
-      setError(err?.message || "Nu am putut incarca integrarea ANAF.")
+      setError(err?.message || "Nu am putut încărca integrarea ANAF.")
     } finally {
       setLoading(false)
     }
@@ -68,9 +68,9 @@ export default function ControlPanelIntegrations() {
         body: JSON.stringify(form),
       })
       setConfigured(Boolean(data?.item?.configured))
-      setMessage("Configurarea globala ANAF a fost salvata.")
+      setMessage("Setările au fost salvate.")
     } catch (err: any) {
-      setError(err?.message || "Nu am putut salva configurarea ANAF.")
+      setError(err?.message || "Nu am putut salva setările.")
     } finally {
       setSaving(false)
     }
@@ -81,27 +81,23 @@ export default function ControlPanelIntegrations() {
   }
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+    <div className="space-y-4">
+      <section className="rounded-[28px] border border-slate-200 bg-white px-5 py-5 shadow-sm">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
               <PlugZap size={14} />
-              integrare globala
+              Integrări
             </div>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">ANAF e-Factura</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-              Aici configurezi o singura data aplicatia ANAF a platformei. Clientii din ERP vor vedea doar
-              butonul <strong>Genereaza token ANAF</strong>, fara campurile tehnice.
-            </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-              Configurare globala: <span className="font-semibold text-slate-950">{configured ? "Completa" : "Incompleta"}</span>
+              Status: <span className="font-semibold text-slate-950">{configured ? "Configurat" : "Neconfigurat"}</span>
             </div>
             <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-              Mediu implicit: <span className="font-semibold text-slate-950">{form.efacturaEnvironment === "prod" ? "Productie" : "Test"}</span>
+              Mediu: <span className="font-semibold text-slate-950">{form.efacturaEnvironment === "prod" ? "Producție" : "Test"}</span>
             </div>
           </div>
         </div>
@@ -110,17 +106,11 @@ export default function ControlPanelIntegrations() {
       {error ? <div className="rounded-[22px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div> : null}
       {message ? <div className="rounded-[22px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</div> : null}
 
-      <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-              <ShieldCheck size={14} />
-              configurare aplicatie anaf
-            </div>
-            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Date tehnice platforma</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-500">
-              Aceste date apartin aplicatiei ANAF inrolate de voi ca developeri. Nu trebuie completate in ERP de fiecare client.
-            </p>
+      <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+            <ShieldCheck size={14} />
+            Configurare
           </div>
 
           <div className="flex gap-2">
@@ -128,9 +118,9 @@ export default function ControlPanelIntegrations() {
               type="button"
               onClick={load}
               disabled={loading || saving}
-              className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700"
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700"
             >
-              Reincarca
+              Reîncarcă
             </button>
             <button
               type="button"
@@ -138,24 +128,24 @@ export default function ControlPanelIntegrations() {
               disabled={loading || saving}
               className="rounded-2xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
             >
-              {saving ? "Se salveaza..." : "Salveaza"}
+              {saving ? "Se salvează..." : "Salvează"}
             </button>
           </div>
         </div>
 
-        <div className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
           <label className="space-y-2 text-sm text-slate-700">
-            <span className="font-medium">ID aplicatie ANAF</span>
+            <span className="font-medium">Client ID</span>
             <input
               value={form.efacturaOauthClientId}
               onChange={(e) => update("efacturaOauthClientId", e.target.value)}
               className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-700 outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
-              placeholder="Client ID / ID aplicatie ANAF"
+              placeholder="Client ID"
             />
           </label>
 
           <label className="space-y-2 text-sm text-slate-700">
-            <span className="font-medium">Cheie secreta aplicatie ANAF</span>
+            <span className="font-medium">Client Secret</span>
             <input
               value={form.efacturaOauthClientSecret}
               onChange={(e) => update("efacturaOauthClientSecret", e.target.value)}
@@ -165,24 +155,24 @@ export default function ControlPanelIntegrations() {
           </label>
 
           <label className="space-y-2 text-sm text-slate-700 xl:col-span-2">
-            <span className="font-medium">URI revenire ANAF</span>
+            <span className="font-medium">Redirect URI</span>
             <input
               value={form.efacturaOauthRedirectUri}
               onChange={(e) => update("efacturaOauthRedirectUri", e.target.value)}
               className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-700 outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
-              placeholder="Ex: https://api.tau.ro/api/v1/company/efactura/oauth/callback"
+              placeholder="https://api.gufo.ink/api/v1/company/efactura/oauth/callback"
             />
           </label>
 
           <label className="space-y-2 text-sm text-slate-700">
-            <span className="font-medium">Mediu implicit</span>
+            <span className="font-medium">Mediu</span>
             <select
               value={form.efacturaEnvironment}
               onChange={(e) => update("efacturaEnvironment", e.target.value)}
               className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-700 outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
             >
               <option value="test">Test</option>
-              <option value="prod">Productie</option>
+              <option value="prod">Producție</option>
             </select>
           </label>
         </div>

@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { Building2, Check, Copy, Crown, Filter, LogOut, Plus, RefreshCw, Search, ShieldCheck, Store, Users, Wallet, X } from "lucide-react"
+import { Check, Copy, Crown, Filter, LogOut, Plus, RefreshCw, Search, Store, Users, X } from "lucide-react"
 import { api } from "../../lib/api"
 import { controlLogout, controlMe } from "../../lib/controlAuth"
 
@@ -198,6 +198,15 @@ function normalizeClient(raw: any): AdminClientItem {
   }
 }
 
+function summaryCard(label: string, value: number) {
+  return (
+    <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</div>
+      <div className="mt-2 text-2xl font-semibold text-slate-950">{value}</div>
+    </div>
+  )
+}
+
 export default function ControlPanelClients() {
   const navigate = useNavigate()
   const [items, setItems] = useState<AdminClientItem[]>([])
@@ -252,7 +261,7 @@ export default function ControlPanelClients() {
         }, {})
       )
     } catch (err: any) {
-      setError(err?.message || "Nu am putut incarca lista de clienti.")
+      setError(err?.message || "Nu am putut încărca lista de clienți.")
       setItems([])
     } finally {
       setLoading(false)
@@ -269,20 +278,31 @@ export default function ControlPanelClients() {
     return items.filter((item) => {
       if (statusFilter !== "all" && item.status !== statusFilter) return false
       if (!term) return true
-      const haystack = [item.company?.name, item.company?.cui, item.company?.email, item.name, item.slug, item.subdomain, item.portalUrl].filter(Boolean).join(" ").toLowerCase()
+      const haystack = [
+        item.company?.name,
+        item.company?.cui,
+        item.company?.email,
+        item.name,
+        item.slug,
+        item.subdomain,
+        item.portalUrl,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
       return haystack.includes(term)
     })
   }, [items, search, statusFilter])
 
-  const summary = useMemo(() => {
-    return {
+  const summary = useMemo(
+    () => ({
       total: items.length,
       active: items.filter((item) => item.status === "active").length,
-      suspended: items.filter((item) => item.status === "suspended").length,
       locations: items.reduce((sum, item) => sum + item.locationsCount, 0),
       terminals: items.reduce((sum, item) => sum + item.terminalsCount, 0),
-    }
-  }, [items])
+    }),
+    [items]
+  )
 
   async function copyText(value: string, label: string) {
     try {
@@ -348,9 +368,8 @@ export default function ControlPanelClients() {
 
   async function handleUpdateSubdomain(item: AdminClientItem) {
     const nextSubdomain = (subdomainDrafts[item.id] || "").trim()
-
     if (!nextSubdomain) {
-      setMessage("Completeaza subdomeniul.")
+      setMessage("Completează subdomeniul.")
       window.setTimeout(() => setMessage(null), 1800)
       return
     }
@@ -388,32 +407,51 @@ export default function ControlPanelClients() {
     }
   }
 
+  const statusTabs: Array<["all" | AdminClientItem["status"], string]> = [
+    ["all", "Toți"],
+    ["active", "Activi"],
+    ["suspended", "Suspendați"],
+    ["expired", "Expirați"],
+    ["inactive", "Inactivi"],
+  ]
+
   return (
     <div className="space-y-4">
-      <section className="flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-slate-200 bg-white px-4 py-4 shadow-sm">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#17324D] text-white">
-            <Crown size={16} />
-          </div>
+      <section className="rounded-[28px] border border-slate-200 bg-white px-5 py-5 shadow-sm">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
-            <div className="truncate text-sm font-semibold text-[#17324D]">{ownerEmail}</div>
-            <div className="text-xs text-slate-500">Control panel clienti</div>
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#17324D] text-white">
+                <Crown size={16} />
+              </div>
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold text-[#17324D]">{ownerEmail}</div>
+                <div className="text-xs text-slate-500">Clienți</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button onClick={loadClients} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700">
+              <RefreshCw size={15} />
+              Refresh
+            </button>
+            <button onClick={() => setIsModalOpen(true)} className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2 text-sm font-semibold text-white">
+              <Plus size={15} />
+              Client nou
+            </button>
+            <button onClick={handleLogout} disabled={loggingOut} className="inline-flex items-center gap-2 rounded-2xl border border-rose-200 bg-white px-3 py-2 text-sm font-medium text-rose-700 disabled:opacity-60">
+              <LogOut size={15} />
+              {loggingOut ? "..." : "Logout"}
+            </button>
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <button onClick={loadClients} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700">
-            <RefreshCw size={15} />
-            Refresh
-          </button>
-          <button onClick={() => setIsModalOpen(true)} className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2 text-sm font-semibold text-white">
-            <Plus size={15} />
-            Client nou
-          </button>
-          <button onClick={handleLogout} disabled={loggingOut} className="inline-flex items-center gap-2 rounded-2xl border border-rose-200 bg-white px-3 py-2 text-sm font-medium text-rose-700 disabled:opacity-60">
-            <LogOut size={15} />
-            {loggingOut ? "..." : "Logout"}
-          </button>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {summaryCard("Clienți", summary.total)}
+          {summaryCard("Activi", summary.active)}
+          {summaryCard("Locații", summary.locations)}
+          {summaryCard("POS", summary.terminals)}
         </div>
       </section>
 
@@ -441,25 +479,17 @@ export default function ControlPanelClients() {
               {createdCredentials.portalUrl ? (
                 <button onClick={() => copyText(createdCredentials.portalUrl || "", "URL portal")} className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700">
                   <Copy size={12} />
-                  URL portal
+                  URL
                 </button>
               ) : null}
               <button onClick={() => setCreatedCredentials(null)} className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700">
-                <X size={12} />
-                Inchide
+                <Check size={12} />
+                Închide
               </button>
             </div>
           </div>
         </section>
       ) : null}
-
-      <section className="grid gap-3 md:grid-cols-5">
-        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm"><div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Clienti</div><div className="mt-1 text-2xl font-semibold text-[#17324D]">{summary.total}</div></div>
-        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm"><div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Activi</div><div className="mt-1 text-2xl font-semibold text-[#17324D]">{summary.active}</div></div>
-        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm"><div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Suspendati</div><div className="mt-1 text-2xl font-semibold text-[#17324D]">{summary.suspended}</div></div>
-        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm"><div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Locatii</div><div className="mt-1 text-2xl font-semibold text-[#17324D]">{summary.locations}</div></div>
-        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm"><div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">POS</div><div className="mt-1 text-2xl font-semibold text-[#17324D]">{summary.terminals}</div></div>
-      </section>
 
       <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -468,7 +498,7 @@ export default function ControlPanelClients() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Cauta firma, CUI, email, subdomeniu"
+              placeholder="Caută firmă, CUI, email sau subdomeniu"
               className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm text-slate-700 outline-none transition focus:border-[#17324D] focus:bg-white"
             />
           </div>
@@ -478,13 +508,7 @@ export default function ControlPanelClients() {
               <Filter size={14} />
               Status
             </span>
-            {([
-              ["all", "Toti"],
-              ["active", "Activi"],
-              ["suspended", "Suspendati"],
-              ["expired", "Expirati"],
-              ["inactive", "Inactivi"],
-            ] as const).map(([status, label]) => (
+            {statusTabs.map(([status, label]) => (
               <button
                 key={status}
                 type="button"
@@ -500,114 +524,119 @@ export default function ControlPanelClients() {
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase tracking-[0.16em] text-slate-400">
-              <tr>
-                <th className="px-4 py-3 font-semibold">Client</th>
-                <th className="px-4 py-3 font-semibold">Status</th>
-                <th className="px-4 py-3 font-semibold">Capacitate</th>
-                <th className="px-4 py-3 font-semibold">Module</th>
-                <th className="px-4 py-3 font-semibold">Billing</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {!loading && filteredItems.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-slate-500">Nu exista rezultate.</td>
-                </tr>
+      <section className="grid gap-4 xl:grid-cols-2">
+        {!loading && filteredItems.length === 0 ? (
+          <div className="rounded-[24px] border border-dashed border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500 xl:col-span-2">
+            Nu există rezultate.
+          </div>
+        ) : null}
+
+        {(loading ? Array.from({ length: 6 }, (_, index) => ({ __skeleton: true as const, index })) : filteredItems).map((item) => {
+          if ("__skeleton" in item) {
+            return <div key={`skeleton-${item.index}`} className="h-56 animate-pulse rounded-[24px] border border-slate-200 bg-slate-100" />
+          }
+
+          return (
+            <article key={item.id} className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-lg font-semibold text-slate-950">{item.company?.name || item.name}</h2>
+                    <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${statusClass(item.status)}`}>
+                      {statusLabel(item.status)}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-sm text-slate-500">
+                    {item.company?.cui || "-"} • {item.company?.email || "-"}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => navigate(`/control-panel/clienti/${item.id}`)}
+                  className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  Deschide
+                </button>
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3">
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Useri</div>
+                  <div className="mt-2 text-lg font-semibold text-slate-950">{item.usersCount}</div>
+                </div>
+                <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3">
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Locații</div>
+                  <div className="mt-2 inline-flex items-center gap-2 text-lg font-semibold text-slate-950">
+                    <Store size={15} className="text-slate-400" />
+                    {item.locationsCount}/{item.license?.limits?.locations ?? 0}
+                  </div>
+                </div>
+                <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3">
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">POS</div>
+                  <div className="mt-2 inline-flex items-center gap-2 text-lg font-semibold text-slate-950">
+                    <Users size={15} className="text-slate-400" />
+                    {item.terminalsCount}/{item.license?.limits?.terminals ?? 0}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_auto]">
+                <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Subdomeniu</div>
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                    <div className="flex min-w-0 flex-1 items-center rounded-2xl border border-slate-200 bg-white px-3">
+                      <input
+                        value={subdomainDrafts[item.id] ?? item.subdomain ?? ""}
+                        onChange={(e) =>
+                          setSubdomainDrafts((prev) => ({
+                            ...prev,
+                            [item.id]: e.target.value,
+                          }))
+                        }
+                        placeholder="coffee-cup"
+                        className="h-10 min-w-0 flex-1 bg-transparent text-sm text-slate-700 outline-none"
+                      />
+                      <span className="pl-2 text-xs text-slate-400">.gufo.ink</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateSubdomain(item)}
+                      disabled={savingSubdomainId === item.id}
+                      className="inline-flex h-10 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-[#17324D] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {savingSubdomainId === item.id ? "Se salvează..." : "Salvează"}
+                    </button>
+                  </div>
+                  <div className="mt-2 text-sm text-slate-500">{item.portalUrl || "Fără URL portal"}</div>
+                </div>
+
+                <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-4 lg:min-w-[220px]">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Plan</div>
+                  <div className="mt-2 font-semibold text-slate-950">{item.subscription?.plan?.name || "-"}</div>
+                  <div className="mt-1 text-sm text-slate-500">
+                    {item.subscription
+                      ? `${Number(item.subscription.price ?? 0).toLocaleString("ro-RO")} ${item.subscription.currency || "RON"} / ${billingCycleLabel(item.subscription.billingCycle)}`
+                      : "-"}
+                  </div>
+                  <div className="mt-1 text-sm text-slate-500">{formatDate(item.subscription?.nextBillingDate)}</div>
+                </div>
+              </div>
+
+              {item.activeModules.length > 0 ? (
+                <div className="mt-4 flex flex-wrap gap-1.5">
+                  {item.activeModules.map((module) => (
+                    <span key={`${item.id}-${module.code}`} className="inline-flex items-center rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">
+                      {module.name}
+                    </span>
+                  ))}
+                </div>
               ) : null}
 
-              {(loading ? Array.from({ length: 6 }, (_, index) => ({ __skeleton: true as const, index })) : filteredItems).map((item) => {
-                if ("__skeleton" in item) {
-                  return (
-                    <tr key={`skeleton-${item.index}`}>
-                      <td colSpan={5} className="px-4 py-4">
-                        <div className="h-12 animate-pulse rounded-2xl bg-slate-100" />
-                      </td>
-                    </tr>
-                  )
-                }
-
-                return (
-                  <tr
-                    key={item.id}
-                    onClick={() => navigate(`/control-panel/clienti/${item.id}`)}
-                    className="cursor-pointer align-top transition hover:bg-slate-50"
-                  >
-                    <td className="px-4 py-3">
-                      <div className="font-semibold text-[#17324D]">{item.company?.name || item.name}</div>
-                      <div className="mt-1 text-xs text-slate-500">
-                        {item.company?.cui || "-"} • {item.company?.email || "-"} • {item.portalUrl || item.subdomain || item.slug || "-"}
-                      </div>
-                      <div className="mt-3 flex flex-col gap-2 sm:max-w-[340px]">
-                        <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Subdomeniu</div>
-                        <div className="flex flex-col gap-2 sm:flex-row" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex min-w-0 flex-1 items-center rounded-2xl border border-slate-200 bg-slate-50 px-3">
-                            <input
-                              value={subdomainDrafts[item.id] ?? item.subdomain ?? ""}
-                              onChange={(e) =>
-                                setSubdomainDrafts((prev) => ({
-                                  ...prev,
-                                  [item.id]: e.target.value,
-                                }))
-                              }
-                              placeholder="coffee-cup"
-                              className="h-10 min-w-0 flex-1 bg-transparent text-sm text-slate-700 outline-none"
-                            />
-                            <span className="pl-2 text-xs text-slate-400">.gufo.ink</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleUpdateSubdomain(item)}
-                            disabled={savingSubdomainId === item.id}
-                            className="inline-flex h-10 items-center justify-center rounded-2xl border border-slate-200 bg-white px-3 text-xs font-semibold text-[#17324D] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            {savingSubdomainId === item.id ? "Se salveaza..." : "Salveaza"}
-                          </button>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClass(item.status)}`}>
-                        {statusLabel(item.status)}
-                      </span>
-                      <div className="mt-1 text-xs text-slate-500">expira {formatDate(item.license?.expiresAt)}</div>
-                    </td>
-                    <td className="px-4 py-3 text-slate-700">
-                      <div>{item.locationsCount}/{item.license?.limits?.locations ?? 0} locatii</div>
-                      <div className="mt-1">{item.terminalsCount}/{item.license?.limits?.terminals ?? 0} POS</div>
-                      <div className="mt-1">{item.usersCount} useri</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex max-w-[280px] flex-wrap gap-1.5">
-                        {item.activeModules.length > 0 ? (
-                          item.activeModules.map((module) => (
-                            <span key={`${item.id}-${module.code}`} className="inline-flex items-center rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">
-                              {module.name}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="text-xs text-slate-400">Fara module dinamice</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-slate-700">
-                      <div className="font-medium text-slate-900">{item.subscription?.plan?.name || "-"}</div>
-                      <div className="mt-1 text-xs text-slate-500">
-                        {item.subscription ? `${Number(item.subscription.price ?? 0).toLocaleString("ro-RO")} ${item.subscription.currency || "RON"} / ${billingCycleLabel(item.subscription.billingCycle)}` : "-"}
-                      </div>
-                      <div className="mt-1 text-xs text-slate-500">
-                        {item.subscription?.billingStatus || "-"} • {formatDate(item.subscription?.nextBillingDate)}
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+              <div className="mt-4 text-sm text-slate-500">Expirare licență: {formatDate(item.license?.expiresAt)}</div>
+            </article>
+          )
+        })}
       </section>
 
       {isModalOpen ? (
@@ -616,7 +645,6 @@ export default function ControlPanelClients() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="text-lg font-semibold text-[#17324D]">Client nou</div>
-                <div className="text-sm text-slate-500">Provisionare rapida</div>
               </div>
               <button onClick={() => setIsModalOpen(false)} className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500">
                 <X size={16} />
@@ -626,13 +654,13 @@ export default function ControlPanelClients() {
             <form className="mt-4 space-y-4" onSubmit={handleCreateClient}>
               <div className="grid gap-3 md:grid-cols-2">
                 {[
-                  ["companyName", "Firma", "SC Exemplu SRL"],
+                  ["companyName", "Firmă", "SC Exemplu SRL"],
                   ["subdomain", "Subdomeniu", "coffee-cup"],
                   ["cui", "CUI", "RO12345678"],
                   ["email", "Email", "office@client.ro"],
                   ["phone", "Telefon", "+40 7xx xxx xxx"],
                   ["contactName", "Contact", "Administrator"],
-                  ["licenseKey", "Cheie licenta", "GUFO-XXXX-XXXX"],
+                  ["licenseKey", "Cheie licență", "GUFO-XXXX-XXXX"],
                 ].map(([field, label, placeholder]) => (
                   <label key={field} className="block">
                     <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</div>
@@ -656,7 +684,7 @@ export default function ControlPanelClients() {
                   />
                 </label>
                 <label className="block">
-                  <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Locatii</div>
+                  <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Locații</div>
                   <input
                     type="number"
                     min={1}
@@ -678,7 +706,7 @@ export default function ControlPanelClients() {
               </div>
 
               <label className="block">
-                <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Adresa</div>
+                <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Adresă</div>
                 <input
                   value={form.address || ""}
                   onChange={(e) => setForm((prev) => ({ ...prev, address: e.target.value }))}
@@ -705,10 +733,10 @@ export default function ControlPanelClients() {
 
               <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700">
-                  Inchide
+                  Închide
                 </button>
                 <button type="submit" disabled={saving} className="rounded-2xl bg-[#17324D] px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">
-                  {saving ? "Se creeaza..." : "Creeaza client"}
+                  {saving ? "Se creează..." : "Creează client"}
                 </button>
               </div>
             </form>
