@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { Check, Copy, Crown, Filter, LogOut, Plus, RefreshCw, Search, Store, Users, X } from "lucide-react"
+import { Check, Copy, Crown, LogOut, Plus, RefreshCw, Search, X } from "lucide-react"
 import { api } from "../../lib/api"
 import { controlLogout, controlMe } from "../../lib/controlAuth"
 
@@ -144,9 +144,9 @@ function statusLabel(status: string) {
 function billingCycleLabel(cycle?: string | null) {
   switch ((cycle || "").toLowerCase()) {
     case "monthly":
-      return "lunar"
+      return "luna"
     case "yearly":
-      return "anual"
+      return "an"
     default:
       return cycle || "-"
   }
@@ -202,7 +202,7 @@ function summaryCard(label: string, value: number) {
   return (
     <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3">
       <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</div>
-      <div className="mt-2 text-2xl font-semibold text-slate-950">{value}</div>
+      <div className="mt-1 text-2xl font-semibold text-slate-950">{value}</div>
     </div>
   )
 }
@@ -258,10 +258,10 @@ export default function ControlPanelClients() {
         normalized.reduce<Record<string, string>>((acc, item) => {
           acc[item.id] = item.subdomain || ""
           return acc
-        }, {})
+        }, {}),
       )
     } catch (err: any) {
-      setError(err?.message || "Nu am putut încărca lista de clienți.")
+      setError(err?.message || "Nu am putut incarca lista de clienti.")
       setItems([])
     } finally {
       setLoading(false)
@@ -301,7 +301,7 @@ export default function ControlPanelClients() {
       locations: items.reduce((sum, item) => sum + item.locationsCount, 0),
       terminals: items.reduce((sum, item) => sum + item.terminalsCount, 0),
     }),
-    [items]
+    [items],
   )
 
   async function copyText(value: string, label: string) {
@@ -369,7 +369,7 @@ export default function ControlPanelClients() {
   async function handleUpdateSubdomain(item: AdminClientItem) {
     const nextSubdomain = (subdomainDrafts[item.id] || "").trim()
     if (!nextSubdomain) {
-      setMessage("Completează subdomeniul.")
+      setMessage("Completeaza subdomeniul.")
       window.setTimeout(() => setMessage(null), 1800)
       return
     }
@@ -391,8 +391,8 @@ export default function ControlPanelClients() {
                 portalUrl: response?.item?.portalUrl || null,
                 slug: response?.item?.subdomain || entry.slug,
               }
-            : entry
-        )
+            : entry,
+        ),
       )
       setSubdomainDrafts((prev) => ({
         ...prev,
@@ -408,17 +408,17 @@ export default function ControlPanelClients() {
   }
 
   const statusTabs: Array<["all" | AdminClientItem["status"], string]> = [
-    ["all", "Toți"],
+    ["all", "Toti"],
     ["active", "Activi"],
-    ["suspended", "Suspendați"],
-    ["expired", "Expirați"],
+    ["suspended", "Suspendati"],
+    ["expired", "Expirati"],
     ["inactive", "Inactivi"],
   ]
 
   return (
     <div className="space-y-4">
       <section className="rounded-[28px] border border-slate-200 bg-white px-5 py-5 shadow-sm">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#17324D] text-white">
@@ -426,7 +426,7 @@ export default function ControlPanelClients() {
               </div>
               <div className="min-w-0">
                 <div className="truncate text-sm font-semibold text-[#17324D]">{ownerEmail}</div>
-                <div className="text-xs text-slate-500">Clienți</div>
+                <h1 className="text-2xl font-semibold text-slate-950">Clienti</h1>
               </div>
             </div>
           </div>
@@ -448,9 +448,9 @@ export default function ControlPanelClients() {
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {summaryCard("Clienți", summary.total)}
+          {summaryCard("Clienti", summary.total)}
           {summaryCard("Activi", summary.active)}
-          {summaryCard("Locații", summary.locations)}
+          {summaryCard("Locatii", summary.locations)}
           {summaryCard("POS", summary.terminals)}
         </div>
       </section>
@@ -477,14 +477,14 @@ export default function ControlPanelClients() {
                 Parola
               </button>
               {createdCredentials.portalUrl ? (
-                <button onClick={() => copyText(createdCredentials.portalUrl || "", "URL portal")} className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700">
+                <button onClick={() => copyText(createdCredentials.portalUrl || "", "URL")} className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700">
                   <Copy size={12} />
                   URL
                 </button>
               ) : null}
               <button onClick={() => setCreatedCredentials(null)} className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700">
                 <Check size={12} />
-                Închide
+                Inchide
               </button>
             </div>
           </div>
@@ -498,16 +498,12 @@ export default function ControlPanelClients() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Caută firmă, CUI, email sau subdomeniu"
+              placeholder="Cauta firma, CUI, email sau subdomeniu"
               className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm text-slate-700 outline-none transition focus:border-[#17324D] focus:bg-white"
             />
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-              <Filter size={14} />
-              Status
-            </span>
+          <div className="flex flex-wrap gap-2">
             {statusTabs.map(([status, label]) => (
               <button
                 key={status}
@@ -524,116 +520,109 @@ export default function ControlPanelClients() {
         </div>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-2">
+      <section className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
+        <div className="hidden grid-cols-[minmax(0,1.5fr)_170px_170px_280px_96px] gap-4 border-b border-slate-200 bg-slate-50 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 lg:grid">
+          <div>Client</div>
+          <div>Plan</div>
+          <div>Utilizare</div>
+          <div>Subdomeniu</div>
+          <div className="text-right">Detalii</div>
+        </div>
+
         {!loading && filteredItems.length === 0 ? (
-          <div className="rounded-[24px] border border-dashed border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500 xl:col-span-2">
-            Nu există rezultate.
-          </div>
+          <div className="px-4 py-12 text-center text-sm text-slate-500">Nu exista rezultate.</div>
         ) : null}
 
-        {(loading ? Array.from({ length: 6 }, (_, index) => ({ __skeleton: true as const, index })) : filteredItems).map((item) => {
+        {(loading ? Array.from({ length: 8 }, (_, index) => ({ __skeleton: true as const, index })) : filteredItems).map((item) => {
           if ("__skeleton" in item) {
-            return <div key={`skeleton-${item.index}`} className="h-56 animate-pulse rounded-[24px] border border-slate-200 bg-slate-100" />
+            return <div key={`skeleton-${item.index}`} className="h-24 animate-pulse border-b border-slate-100 bg-slate-50/60 last:border-b-0" />
           }
 
           return (
-            <article key={item.id} className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex flex-wrap items-start justify-between gap-3">
+            <article key={item.id} className="border-b border-slate-100 px-4 py-4 last:border-b-0">
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_170px_170px_280px_96px] lg:items-center">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-lg font-semibold text-slate-950">{item.company?.name || item.name}</h2>
+                    <h2 className="truncate text-base font-semibold text-slate-950">{item.company?.name || item.name}</h2>
                     <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${statusClass(item.status)}`}>
                       {statusLabel(item.status)}
                     </span>
                   </div>
                   <div className="mt-1 text-sm text-slate-500">
-                    {item.company?.cui || "-"} • {item.company?.email || "-"}
+                    {[item.company?.cui, item.company?.email, item.company?.phone].filter(Boolean).join(" � ") || "-"}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
+                    <span>Creat {formatDate(item.createdAt)}</span>
+                    <span>Licenta {formatDate(item.license?.expiresAt)}</span>
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => navigate(`/control-panel/clienti/${item.id}`)}
-                  className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                >
-                  Deschide
-                </button>
-              </div>
-
-              <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3">
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Useri</div>
-                  <div className="mt-2 text-lg font-semibold text-slate-950">{item.usersCount}</div>
-                </div>
-                <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3">
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Locații</div>
-                  <div className="mt-2 inline-flex items-center gap-2 text-lg font-semibold text-slate-950">
-                    <Store size={15} className="text-slate-400" />
-                    {item.locationsCount}/{item.license?.limits?.locations ?? 0}
-                  </div>
-                </div>
-                <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3">
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">POS</div>
-                  <div className="mt-2 inline-flex items-center gap-2 text-lg font-semibold text-slate-950">
-                    <Users size={15} className="text-slate-400" />
-                    {item.terminalsCount}/{item.license?.limits?.terminals ?? 0}
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_auto]">
-                <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-4">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Subdomeniu</div>
-                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                    <div className="flex min-w-0 flex-1 items-center rounded-2xl border border-slate-200 bg-white px-3">
-                      <input
-                        value={subdomainDrafts[item.id] ?? item.subdomain ?? ""}
-                        onChange={(e) =>
-                          setSubdomainDrafts((prev) => ({
-                            ...prev,
-                            [item.id]: e.target.value,
-                          }))
-                        }
-                        placeholder="coffee-cup"
-                        className="h-10 min-w-0 flex-1 bg-transparent text-sm text-slate-700 outline-none"
-                      />
-                      <span className="pl-2 text-xs text-slate-400">.gufo.ink</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleUpdateSubdomain(item)}
-                      disabled={savingSubdomainId === item.id}
-                      className="inline-flex h-10 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-[#17324D] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {savingSubdomainId === item.id ? "Se salvează..." : "Salvează"}
-                    </button>
-                  </div>
-                  <div className="mt-2 text-sm text-slate-500">{item.portalUrl || "Fără URL portal"}</div>
-                </div>
-
-                <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-4 lg:min-w-[220px]">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Plan</div>
-                  <div className="mt-2 font-semibold text-slate-950">{item.subscription?.plan?.name || "-"}</div>
-                  <div className="mt-1 text-sm text-slate-500">
+                <div className="text-sm">
+                  <div className="font-semibold text-slate-900">{item.subscription?.plan?.name || "-"}</div>
+                  <div className="mt-1 text-slate-500">
                     {item.subscription
                       ? `${Number(item.subscription.price ?? 0).toLocaleString("ro-RO")} ${item.subscription.currency || "RON"} / ${billingCycleLabel(item.subscription.billingCycle)}`
                       : "-"}
                   </div>
-                  <div className="mt-1 text-sm text-slate-500">{formatDate(item.subscription?.nextBillingDate)}</div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-center text-sm">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-2 py-2">
+                    <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Useri</div>
+                    <div className="mt-1 font-semibold text-slate-950">{item.usersCount}</div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-2 py-2">
+                    <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Loc</div>
+                    <div className="mt-1 font-semibold text-slate-950">
+                      {item.locationsCount}/{item.license?.limits?.locations ?? 0}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-2 py-2">
+                    <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">POS</div>
+                    <div className="mt-1 font-semibold text-slate-950">
+                      {item.terminalsCount}/{item.license?.limits?.terminals ?? 0}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center rounded-2xl border border-slate-200 bg-slate-50 px-3">
+                    <input
+                      value={subdomainDrafts[item.id] ?? item.subdomain ?? ""}
+                      onChange={(e) =>
+                        setSubdomainDrafts((prev) => ({
+                          ...prev,
+                          [item.id]: e.target.value,
+                        }))
+                      }
+                      placeholder="coffee-cup"
+                      className="h-10 min-w-0 flex-1 bg-transparent text-sm text-slate-700 outline-none"
+                    />
+                    <span className="pl-2 text-xs text-slate-400">.gufo.ink</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateSubdomain(item)}
+                      disabled={savingSubdomainId === item.id}
+                      className="inline-flex h-9 items-center justify-center rounded-2xl border border-slate-200 bg-white px-3 text-xs font-semibold text-[#17324D] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {savingSubdomainId === item.id ? "..." : "Salveaza"}
+                    </button>
+                    <div className="truncate text-xs text-slate-500">{item.portalUrl || "-"}</div>
+                  </div>
+                </div>
+
+                <div className="flex justify-start lg:justify-end">
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/control-panel/clienti/${item.id}`)}
+                    className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                  >
+                    Deschide
+                  </button>
                 </div>
               </div>
-
-              {item.activeModules.length > 0 ? (
-                <div className="mt-4 flex flex-wrap gap-1.5">
-                  {item.activeModules.map((module) => (
-                    <span key={`${item.id}-${module.code}`} className="inline-flex items-center rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">
-                      {module.name}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-
-              <div className="mt-4 text-sm text-slate-500">Expirare licență: {formatDate(item.license?.expiresAt)}</div>
             </article>
           )
         })}
@@ -654,13 +643,13 @@ export default function ControlPanelClients() {
             <form className="mt-4 space-y-4" onSubmit={handleCreateClient}>
               <div className="grid gap-3 md:grid-cols-2">
                 {[
-                  ["companyName", "Firmă", "SC Exemplu SRL"],
+                  ["companyName", "Firma", "SC Exemplu SRL"],
                   ["subdomain", "Subdomeniu", "coffee-cup"],
                   ["cui", "CUI", "RO12345678"],
                   ["email", "Email", "office@client.ro"],
                   ["phone", "Telefon", "+40 7xx xxx xxx"],
                   ["contactName", "Contact", "Administrator"],
-                  ["licenseKey", "Cheie licență", "GUFO-XXXX-XXXX"],
+                  ["licenseKey", "Cheie licenta", "GUFO-XXXX-XXXX"],
                 ].map(([field, label, placeholder]) => (
                   <label key={field} className="block">
                     <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</div>
@@ -684,7 +673,7 @@ export default function ControlPanelClients() {
                   />
                 </label>
                 <label className="block">
-                  <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Locații</div>
+                  <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Locatii</div>
                   <input
                     type="number"
                     min={1}
@@ -706,7 +695,7 @@ export default function ControlPanelClients() {
               </div>
 
               <label className="block">
-                <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Adresă</div>
+                <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Adresa</div>
                 <input
                   value={form.address || ""}
                   onChange={(e) => setForm((prev) => ({ ...prev, address: e.target.value }))}
@@ -733,10 +722,10 @@ export default function ControlPanelClients() {
 
               <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700">
-                  Închide
+                  Inchide
                 </button>
                 <button type="submit" disabled={saving} className="rounded-2xl bg-[#17324D] px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">
-                  {saving ? "Se creează..." : "Creează client"}
+                  {saving ? "Se creeaza..." : "Creeaza client"}
                 </button>
               </div>
             </form>
