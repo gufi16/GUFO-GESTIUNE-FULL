@@ -10,6 +10,13 @@ import {
 } from "../components/DocumentUi"
 import { api } from "../lib/api"
 import { me } from "../lib/auth"
+import {
+  formatAuditDateTime,
+  getAuditActionLabel,
+  getAuditActorLabel,
+  getAuditArea,
+  matchesAuditSearch,
+} from "../lib/auditFormat"
 
 type AuditLogItem = {
   id: string
@@ -31,28 +38,6 @@ type MeResponse = {
   role?: string
 }
 
-function formatDateTime(value?: string | null) {
-  if (!value) return "-"
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return "-"
-  return date.toLocaleString("ro-RO", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
-}
-
-function formatAction(value: string) {
-  return value
-    .split("_")
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase()
-    .replace(/^./, (char) => char.toUpperCase())
-}
-
 export default function IstoricActiuni() {
   const [items, setItems] = useState<AuditLogItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -71,7 +56,6 @@ export default function IstoricActiuni() {
       setRole(profile?.role || "")
 
       const params = new URLSearchParams()
-      if (query.trim()) params.set("q", query.trim())
       if (dateFrom) params.set("dateFrom", new Date(`${dateFrom}T00:00:00`).toISOString())
       if (dateTo) params.set("dateTo", new Date(`${dateTo}T23:59:59.999`).toISOString())
       params.set("limit", "150")
@@ -108,6 +92,10 @@ export default function IstoricActiuni() {
   )
 
   const canView = role === "OWNER" || role === "ADMIN"
+  const filteredItems = useMemo(
+    () => items.filter((item) => matchesAuditSearch(item, query)),
+    [items, query],
+  )
 
   return (
     <div className="space-y-3">
@@ -140,7 +128,7 @@ export default function IstoricActiuni() {
               className={`${documentInputClass} pl-10`}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Cauta actiune sau entitate"
+              placeholder="Cauta dupa nume, actiune sau zona"
             />
           </div>
 
@@ -154,53 +142,35 @@ export default function IstoricActiuni() {
         </div>
       </DocumentSection>
 
-      <DocumentSection title="Istoric">
-        <div className="overflow-x-auto">
+      <DocumentSection title="Istoric activitate">
+        <div className="max-h-[70vh] overflow-auto rounded-[10px] border border-slate-200">
           <table className="min-w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-[0.16em] text-slate-500">
+              <tr className="sticky top-0 border-b border-slate-200 bg-white text-left text-xs uppercase tracking-[0.16em] text-slate-500">
                 <th className="px-3 py-2">Utilizator</th>
-                <th className="px-3 py-2">Actiune</th>
-                <th className="px-3 py-2">Entitate</th>
-                <th className="px-3 py-2">Detalii</th>
-                <th className="px-3 py-2">Moment</th>
+                <th className="px-3 py-2">Ce a facut</th>
+                <th className="px-3 py-2">Unde</th>
+                <th className="px-3 py-2">Data si ora</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center text-slate-400">Se incarca...</td>
+                  <td colSpan={4} className="px-3 py-6 text-center text-slate-400">Se incarca...</td>
                 </tr>
-              ) : items.length === 0 ? (
+              ) : filteredItems.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center text-slate-400">Nu exista inca evenimente.</td>
+                  <td colSpan={4} className="px-3 py-6 text-center text-slate-400">Nu exista evenimente pentru filtrele alese.</td>
                 </tr>
               ) : (
-                items.map((item) => (
+                filteredItems.map((item) => (
                   <tr key={item.id} className="border-b border-slate-100 align-top">
                     <td className="px-3 py-3">
-                      <div className="font-semibold text-slate-900">
-                        {item.actorName || item.actorEmail || (item.actorType === "SYSTEM" ? "Sistem" : "Utilizator")}
-                      </div>
-                      <div className="text-xs text-slate-500">
-                        {[item.actorRole, item.ipAddress].filter(Boolean).join(" | ") || item.actorType || "-"}
-                      </div>
+                      <div className="font-semibold text-slate-900">{getAuditActorLabel(item)}</div>
                     </td>
-                    <td className="px-3 py-3 font-medium text-[#17324D]">{formatAction(item.action)}</td>
-                    <td className="px-3 py-3 text-slate-700">
-                      <div>{item.entityType}</div>
-                      <div className="text-xs text-slate-500">{item.entityId || "-"}</div>
-                    </td>
-                    <td className="px-3 py-3">
-                      {item.payload ? (
-                        <pre className="max-w-[420px] overflow-x-auto rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                          {JSON.stringify(item.payload, null, 2)}
-                        </pre>
-                      ) : (
-                        <span className="text-slate-400">-</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-3 text-slate-500">{formatDateTime(item.createdAt)}</td>
+                    <td className="px-3 py-3 font-medium text-[#17324D]">{getAuditActionLabel(item)}</td>
+                    <td className="px-3 py-3 text-slate-700">{getAuditArea(item)}</td>
+                    <td className="px-3 py-3 text-slate-500">{formatAuditDateTime(item.createdAt)}</td>
                   </tr>
                 ))
               )}

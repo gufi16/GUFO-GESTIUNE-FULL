@@ -3,16 +3,25 @@ import { useParams } from "react-router-dom"
 import {
   Copy,
   Download,
+  Filter,
+  History,
   KeyRound,
   MapPin,
   PauseCircle,
   Plus,
   RefreshCw,
   Save,
+  Search,
   Smartphone,
   Trash2,
 } from "lucide-react"
 import { api } from "../../lib/api"
+import {
+  formatAuditDateTime,
+  getAuditActionLabel,
+  getAuditActorLabel,
+  getAuditArea,
+} from "../../lib/auditFormat"
 
 type User = {
   id: string
@@ -164,28 +173,6 @@ function metricCard(label: string, value: string | number) {
   )
 }
 
-function formatDateTime(value?: string | null) {
-  if (!value) return "-"
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return "-"
-  return date.toLocaleString("ro-RO", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
-}
-
-function formatAuditAction(value: string) {
-  return value
-    .split("_")
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase()
-    .replace(/^./, (char) => char.toUpperCase())
-}
-
 export default function ControlPanelClientDetails() {
   const { id } = useParams()
   const [loading, setLoading] = useState(true)
@@ -211,6 +198,10 @@ export default function ControlPanelClientDetails() {
   const [locationError, setLocationError] = useState<string | null>(null)
   const [deviceError, setDeviceError] = useState<string | null>(null)
   const [userError, setUserError] = useState<string | null>(null)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [historyQuery, setHistoryQuery] = useState("")
+  const [historyDateFrom, setHistoryDateFrom] = useState("")
+  const [historyDateTo, setHistoryDateTo] = useState("")
   const [userForm, setUserForm] = useState({
     name: "",
     email: "",
@@ -274,6 +265,26 @@ export default function ControlPanelClientDetails() {
     [users],
   )
   const efacturaModuleEnabled = activeModules.some((module: any) => module.code === "efactura")
+  const filteredAuditLogs = useMemo(() => {
+    return auditLogs.filter((entry) => {
+      const normalized = historyQuery.trim().toLowerCase()
+      const matchesQuery =
+        !normalized ||
+        [getAuditActorLabel(entry), getAuditActionLabel(entry), getAuditArea(entry)]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(normalized)
+
+      const createdAt = new Date(entry.createdAt)
+      if (Number.isNaN(createdAt.getTime())) return matchesQuery
+
+      const afterStart = historyDateFrom ? createdAt >= new Date(`${historyDateFrom}T00:00:00`) : true
+      const beforeEnd = historyDateTo ? createdAt <= new Date(`${historyDateTo}T23:59:59.999`) : true
+
+      return matchesQuery && afterStart && beforeEnd
+    })
+  }, [auditLogs, historyDateFrom, historyDateTo, historyQuery])
 
   async function copy(text: string, label = "Valoarea") {
     try {
@@ -606,7 +617,14 @@ export default function ControlPanelClientDetails() {
             className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700"
           >
             <RefreshCw size={15} />
-            Refresh
+            Reincarca
+          </button>
+          <button
+            onClick={() => setHistoryOpen(true)}
+            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700"
+          >
+            <History size={15} />
+            Istoric
           </button>
         </div>
       </div>
@@ -627,7 +645,7 @@ export default function ControlPanelClientDetails() {
             className="mt-2 inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700"
           >
             <Copy size={13} />
-            Copy
+            Copiaza
           </button>
         </div>
       ) : null}
@@ -777,7 +795,7 @@ export default function ControlPanelClientDetails() {
 
         <div className="mt-4 space-y-3">
           {loading ? (
-            <div className="text-sm text-slate-400">Loading...</div>
+            <div className="text-sm text-slate-400">Se incarca...</div>
           ) : locations.length === 0 ? (
             <div className="text-sm text-slate-400">Nu exista locatii.</div>
           ) : (
@@ -858,7 +876,7 @@ export default function ControlPanelClientDetails() {
                                   className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700"
                                 >
                                   <Copy size={12} />
-                                  Copy
+                                  Copiaza
                                 </button>
                                 <button
                                   onClick={() => handleDeleteTerminal(device.id, device.label || device.deviceId || "Device POS")}
@@ -976,8 +994,8 @@ export default function ControlPanelClientDetails() {
 
         <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-4">
-            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Client summary</div>
-            <div className="mt-1 text-sm font-semibold text-[#17324D]">Plan, billing si contact principal</div>
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Rezumat client</div>
+            <div className="mt-1 text-sm font-semibold text-[#17324D]">Plan, facturare si contact principal</div>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
@@ -1009,7 +1027,7 @@ export default function ControlPanelClientDetails() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-6 text-center text-slate-400">Loading...</td>
+                    <td colSpan={4} className="px-4 py-6 text-center text-slate-400">Se incarca...</td>
                   </tr>
                 ) : users.length === 0 ? (
                   <tr>
@@ -1049,50 +1067,6 @@ export default function ControlPanelClientDetails() {
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Istoric ERP</div>
-          <div className="mt-1 text-sm font-semibold text-[#17324D]">Cine a facut ce in clientul acesta</div>
-        </div>
-
-        {auditLogs.length === 0 ? (
-          <div className="px-4 py-8 text-sm text-slate-500">Nu exista evenimente in istoric.</div>
-        ) : (
-          <div className="divide-y divide-slate-100">
-            {auditLogs.map((entry) => {
-              const actorLabel =
-                entry.actorName || entry.actorEmail || (entry.actorType === "OWNER" ? "Owner" : entry.actorType === "SYSTEM" ? "Sistem" : "Utilizator")
-
-              return (
-                <div key={entry.id} className="grid gap-3 px-4 py-3 lg:grid-cols-[220px_minmax(0,1fr)_180px] lg:items-start">
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold text-slate-900">{actorLabel}</div>
-                    <div className="mt-1 text-xs text-slate-500">
-                      {[entry.actorRole, entry.ipAddress].filter(Boolean).join(" | ") || entry.actorType || "-"}
-                    </div>
-                  </div>
-
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium text-[#17324D]">{formatAuditAction(entry.action)}</div>
-                    <div className="mt-1 text-sm text-slate-600">
-                      {entry.entityType}
-                      {entry.entityId ? ` | ${entry.entityId}` : ""}
-                    </div>
-                    {entry.payload ? (
-                      <pre className="mt-2 overflow-x-auto rounded-2xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                        {JSON.stringify(entry.payload, null, 2)}
-                      </pre>
-                    ) : null}
-                  </div>
-
-                  <div className="text-sm text-slate-500 lg:text-right">{formatDateTime(entry.createdAt)}</div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </section>
-
       <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
         <span className="font-semibold">Atentie:</span> locatia se poate sterge doar daca nu are device-uri POS.
       </div>
@@ -1100,6 +1074,91 @@ export default function ControlPanelClientDetails() {
       {principalUser?.email ? (
         <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm">
           Contact principal: {principalUser.email}
+        </div>
+      ) : null}
+
+      {historyOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
+          <div className="max-h-[86vh] w-full max-w-5xl overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-xl">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Istoric client</div>
+                <div className="mt-1 text-lg font-semibold text-[#17324D]">Activitatea din ERP pentru acest client</div>
+              </div>
+              <button
+                onClick={() => setHistoryOpen(false)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+              >
+                Inchide
+              </button>
+            </div>
+
+            <div className="max-h-[72vh] overflow-auto">
+              <div className="sticky top-0 z-10 border-b border-slate-200 bg-white px-5 py-4">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_160px_160px]">
+                  <div className="relative">
+                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      value={historyQuery}
+                      onChange={(e) => setHistoryQuery(e.target.value)}
+                      placeholder="Cauta dupa nume, actiune sau zona"
+                      className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+                    />
+                  </div>
+                  <input
+                    type="date"
+                    value={historyDateFrom}
+                    onChange={(e) => setHistoryDateFrom(e.target.value)}
+                    className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+                  />
+                  <input
+                    type="date"
+                    value={historyDateTo}
+                    onChange={(e) => setHistoryDateTo(e.target.value)}
+                    className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+                  />
+                </div>
+
+                <div className="mt-3 flex items-center justify-between gap-3 text-xs text-slate-500">
+                  <div className="inline-flex items-center gap-2">
+                    <Filter size={13} />
+                    {filteredAuditLogs.length} evenimente afisate
+                  </div>
+                  <button
+                    onClick={() => {
+                      setHistoryQuery("")
+                      setHistoryDateFrom("")
+                      setHistoryDateTo("")
+                    }}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 font-semibold text-slate-600"
+                  >
+                    Reseteaza filtrele
+                  </button>
+                </div>
+              </div>
+
+              {filteredAuditLogs.length === 0 ? (
+                <div className="px-5 py-8 text-sm text-slate-500">Nu exista evenimente in istoric.</div>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {filteredAuditLogs.map((entry) => (
+                    <div key={entry.id} className="grid gap-3 px-5 py-3 lg:grid-cols-[220px_minmax(0,1fr)_180px] lg:items-start">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-slate-900">{getAuditActorLabel(entry)}</div>
+                      </div>
+
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-[#17324D]">{getAuditActionLabel(entry)}</div>
+                        <div className="mt-1 text-sm text-slate-600">{getAuditArea(entry)}</div>
+                      </div>
+
+                      <div className="text-sm text-slate-500 lg:text-right">{formatAuditDateTime(entry.createdAt)}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       ) : null}
     </div>
