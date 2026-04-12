@@ -6,6 +6,24 @@ import { AuthedRequest, requireAuth } from "../middleware/requireAuth"
 
 const router = Router()
 
+const CONTROL_PANEL_ACTION_PREFIXES = ["ADMIN_PANEL_", "TENANT_", "PLATFORM_"]
+const CONTROL_PANEL_ACTIONS = new Set([
+  "LOCATION_CREATED",
+  "LOCATION_DELETED",
+  "POS_DEVICE_CREATED",
+  "POS_DEVICE_DELETED",
+  "LICENSE_UPDATED",
+  "USER_PASSWORD_RESET",
+])
+
+function isErpAuditAction(action: string) {
+  if (action === "AUTH_LOGIN_SUCCESS") return true
+  if (CONTROL_PANEL_ACTIONS.has(action)) return false
+  if (CONTROL_PANEL_ACTION_PREFIXES.some((prefix) => action.startsWith(prefix))) return false
+  if (/^(POST|PUT|PATCH|DELETE)_/.test(action)) return true
+  return false
+}
+
 function ensureTenantAdmin(req: AuthedRequest, res: any) {
   const allowed = Boolean(
     req.auth?.tenantId && (req.auth?.role === UserRole.OWNER || req.auth?.role === UserRole.ADMIN),
@@ -67,7 +85,7 @@ router.get("/api/v1/audit-logs", requireAuth, async (req: AuthedRequest, res) =>
   const items = await prisma.auditLog.findMany({
     where,
     orderBy: { createdAt: "desc" },
-    take: limit,
+    take: limit * 3,
     select: {
       id: true,
       actorType: true,
@@ -82,8 +100,10 @@ router.get("/api/v1/audit-logs", requireAuth, async (req: AuthedRequest, res) =>
     },
   })
 
+  const erpItems = items.filter((item) => isErpAuditAction(item.action)).slice(0, limit)
+
   const actorIds = Array.from(
-    new Set(items.map((item) => item.actorId).filter((value): value is string => Boolean(value))),
+    new Set(erpItems.map((item) => item.actorId).filter((value): value is string => Boolean(value))),
   )
   const users = actorIds.length
     ? await prisma.user.findMany({
@@ -101,7 +121,7 @@ router.get("/api/v1/audit-logs", requireAuth, async (req: AuthedRequest, res) =>
 
   return res.json({
     ok: true,
-    items: items.map((item) => {
+    items: erpItems.map((item) => {
       const actor = item.actorId ? actorMap.get(item.actorId) : null
       return {
         id: item.id,
