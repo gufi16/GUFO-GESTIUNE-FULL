@@ -4,6 +4,7 @@ type GufoAiGuide = {
   routePrefixes: string[]
   keywords: string[]
   summary: string
+  keyFields?: string[]
   whereTo: string[]
   howTo: string[]
   troubleshooting: string[]
@@ -37,6 +38,102 @@ const FORBIDDEN_KEYWORDS = [
 ]
 
 const GUIDES: GufoAiGuide[] = [
+  {
+    id: "nir",
+    title: "NIR",
+    routePrefixes: ["/inregistrare-document/nir", "/inregistrare-document/nir/new", "/inregistrare-document/nir/edit"],
+    keywords: ["nir", "receptie", "furnizor", "intrare marfa", "doc no", "curs valutar", "fx", "receptie marfa"],
+    summary: "Aici faci nota de intrare receptie pentru marfa sau materii prime intrate de la furnizor.",
+    keyFields: ["Locatie", "Furnizor", "Numar document", "Data document", "Moneda", "Curs valutar", "Linii produse"],
+    whereTo: [
+      "Mergi la Inregistrare document > NIR.",
+      "Poti crea un NIR nou sau edita un document existent, daca este in lucru.",
+    ],
+    howTo: [
+      "Selecteaza locatia si furnizorul.",
+      "Completeaza numarul documentului, data si moneda.",
+      "Adauga produsele pe linii, apoi cantitatea, pretul si TVA-ul.",
+      "Salveaza documentul dupa ce verifici totalurile.",
+    ],
+    troubleshooting: [
+      "Daca nu poti salva, verifica furnizorul, locatia si liniile de produse.",
+      "Daca totalurile sunt gresite, verifica pretul, cantitatea, factorul si TVA-ul pe fiecare linie.",
+      "Daca lucrezi in alta moneda, verifica si cursul valutar.",
+    ],
+    suggestions: ["Cum fac un NIR cu mai multe produse?", "Ce completez la curs valutar?", "De ce nu pot salva NIR-ul?"],
+  },
+  {
+    id: "factura",
+    title: "Factura",
+    routePrefixes: ["/inregistrare-document/factura", "/inregistrare-document/factura/new", "/inregistrare-document/factura/edit"],
+    keywords: ["factura", "client", "scadenta", "emit factura", "efactura", "e-factura"],
+    summary: "Aici emiti factura pentru client, completezi liniile si, daca este cazul, pregatesti trimiterea e-Factura.",
+    keyFields: ["Locatie", "Client", "Numar factura", "Data", "Scadenta", "Moneda", "Linii produse"],
+    whereTo: [
+      "Mergi la Inregistrare document > Factura.",
+      "Alegi clientul, completezi antetul si apoi adaugi liniile de pe factura.",
+    ],
+    howTo: [
+      "Selecteaza locatia si clientul.",
+      "Completeaza numarul facturii, data si scadenta.",
+      "Adauga produsele sau serviciile pe linii.",
+      "Salveaza factura si verifica statusul ei.",
+    ],
+    troubleshooting: [
+      "Daca nu poti salva, verifica locatia, clientul si liniile facturii.",
+      "Daca vrei e-Factura, verifica datele clientului si campurile obligatorii.",
+      "Daca totalurile nu ies corect, verifica pretul, cantitatea si TVA-ul.",
+    ],
+    suggestions: ["Cum emit o factura?", "Ce trebuie completat la client?", "De ce nu merge e-Factura?"],
+  },
+  {
+    id: "bon-consum",
+    title: "Bon de consum",
+    routePrefixes: ["/inregistrare-document/bon-consum/new"],
+    keywords: ["bon consum", "consum", "iesire consum", "consum intern"],
+    summary: "Aici creezi bonul de consum pentru produsele iesite din stoc prin consum intern.",
+    keyFields: ["Locatie", "Produse", "Cantitate", "Observatii"],
+    whereTo: [
+      "Mergi la Inregistrare document > Bon de consum.",
+      "Alegi locatia si adaugi produsele consumate.",
+    ],
+    howTo: [
+      "Selecteaza locatia.",
+      "Cauta produsul si adauga-l in document.",
+      "Completeaza cantitatea consumata pentru fiecare produs.",
+      "Salveaza bonul dupa ce verifici liniile.",
+    ],
+    troubleshooting: [
+      "Daca nu poti salva, verifica locatia si daca ai cel putin un produs in document.",
+      "Daca stocul pare gresit, reincarca stocul locatiei si verifica produsul ales.",
+      "Daca produsul exista deja in document, modifica direct cantitatea lui.",
+    ],
+    suggestions: ["Cum fac un bon de consum?", "De ce nu pot salva bonul?", "Cum schimb cantitatea unui produs?"],
+  },
+  {
+    id: "inventar-nou",
+    title: "Inventar nou",
+    routePrefixes: ["/inregistrare-document/inventar/new"],
+    keywords: ["inventar nou", "numarare stoc", "cantitate numarata", "diferenta inventar"],
+    summary: "Aici creezi un document nou de inventar si compari stocul scriptic cu cantitatea numarata.",
+    keyFields: ["Locatie", "Produse", "Cantitate scriptica", "Cantitate numarata", "Diferenta", "Observatii"],
+    whereTo: [
+      "Mergi la Inregistrare document > Inventar nou.",
+      "Alegi locatia si adaugi produsele pe care vrei sa le numeri.",
+    ],
+    howTo: [
+      "Selecteaza locatia.",
+      "Cauta si adauga produsele in document.",
+      "Completeaza cantitatea numarata pentru fiecare produs.",
+      "Salveaza inventarul dupa ce verifici diferentele.",
+    ],
+    troubleshooting: [
+      "Daca nu poti salva, verifica locatia si liniile din document.",
+      "Cantitatea numarata nu poate fi negativa.",
+      "Daca produsul este deja in lista, modifica direct valoarea lui din coloana de numarare.",
+    ],
+    suggestions: ["Cum fac un inventar nou?", "Ce inseamna diferenta la inventar?", "De ce nu pot salva inventarul?"],
+  },
   {
     id: "dashboard",
     title: "Panou principal",
@@ -296,10 +393,18 @@ function tokenize(value: string) {
 function findGuideByPath(currentPath?: string | null) {
   const pathValue = String(currentPath || "").trim()
   if (!pathValue) return null
-  return GUIDES.find((guide) => guide.routePrefixes.some((prefix) => pathValue.startsWith(prefix))) || null
+  return (
+    [...GUIDES]
+      .sort((a, b) => {
+        const aLen = Math.max(...a.routePrefixes.map((prefix) => prefix.length))
+        const bLen = Math.max(...b.routePrefixes.map((prefix) => prefix.length))
+        return bLen - aLen
+      })
+      .find((guide) => guide.routePrefixes.some((prefix) => pathValue.startsWith(prefix))) || null
+  )
 }
 
-function scoreGuide(message: string, guide: GufoAiGuide) {
+function scoreGuide(message: string, guide: GufoAiGuide, currentPath?: string | null) {
   const normalized = normalize(message)
   const tokens = tokenize(message)
   let score = 0
@@ -311,16 +416,21 @@ function scoreGuide(message: string, guide: GufoAiGuide) {
   }
 
   if (guide.id === "documente" && /nir|factur|bon consum|proces verbal/.test(normalized)) score += 3
+  if (guide.id === "nir" && /furnizor|receptie|curs|moneda|linie|tva/.test(normalized)) score += 4
+  if (guide.id === "factura" && /client|scadenta|emit|efactura|linie|tva/.test(normalized)) score += 4
+  if (guide.id === "bon-consum" && /consum|cantitate|stoc|iesire/.test(normalized)) score += 4
+  if (guide.id === "inventar-nou" && /numarata|scriptic|diferenta|stoc/.test(normalized)) score += 4
   if (guide.id === "rapoarte" && /profit|marja|top produse|evolutie/.test(normalized)) score += 3
   if (guide.id === "dashboard" && /incasari|indicatori|device|locatie/.test(normalized)) score += 3
   if (guide.id === "utilizatori" && /parola|rol|administrator|ospatar|manager/.test(normalized)) score += 3
+  if (currentPath && guide.routePrefixes.some((prefix) => String(currentPath).startsWith(prefix))) score += 2
 
   return score
 }
 
-function findGuideByMessage(message: string) {
+function findGuideByMessage(message: string, currentPath?: string | null) {
   const ranked = GUIDES
-    .map((guide) => ({ guide, score: scoreGuide(message, guide) }))
+    .map((guide) => ({ guide, score: scoreGuide(message, guide, currentPath) }))
     .sort((a, b) => b.score - a.score)
 
   if (!ranked.length || ranked[0].score <= 0) return null
@@ -361,14 +471,16 @@ function buildGuideAnswer(guide: GufoAiGuide, intent: string, currentPath?: stri
     ? `Esti deja in zona ${guide.title}.`
     : `Pentru ce intrebi tu, zona potrivita este ${guide.title}.`
 
+  const fields = guide.keyFields?.length ? `Campuri importante:\n${buildList(guide.keyFields)}\n\n` : ""
+
   const body =
     intent === "where"
-      ? buildList(guide.whereTo)
+      ? `${fields}${buildList(guide.whereTo)}`
       : intent === "troubleshooting"
-        ? buildList(guide.troubleshooting)
+        ? `${fields}${buildList(guide.troubleshooting)}`
         : intent === "how"
-          ? buildList(guide.howTo)
-          : `${guide.summary}\n\nUnde gasesti:\n${buildList(guide.whereTo)}\n\nCum lucrezi:\n${buildList(guide.howTo)}`
+          ? `${fields}${buildList(guide.howTo)}`
+          : `${guide.summary}\n\n${fields}Unde gasesti:\n${buildList(guide.whereTo)}\n\nCum lucrezi:\n${buildList(guide.howTo)}`
 
   return `${intro}\n\n${guide.summary}\n\n${body}`
 }
@@ -421,7 +533,7 @@ export function generateGufoAiReply(input: GufoAiInput): GufoAiReply {
     }
   }
 
-  const guide = findGuideByMessage(message) || findGuideByPath(currentPath)
+  const guide = findGuideByMessage(message, currentPath) || findGuideByPath(currentPath)
   const intent = detectIntent(message)
 
   if (guide) {
