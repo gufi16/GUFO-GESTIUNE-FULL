@@ -521,12 +521,11 @@ export default function ControlPanelClients() {
       </section>
 
       <section className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
-        <div className="hidden grid-cols-[minmax(0,1.5fr)_170px_170px_280px_96px] gap-4 border-b border-slate-200 bg-slate-50 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 lg:grid">
+        <div className="hidden grid-cols-[minmax(0,1.7fr)_170px_170px_280px] gap-4 border-b border-slate-200 bg-slate-50 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 lg:grid">
           <div>Client</div>
           <div>Plan</div>
           <div>Utilizare</div>
           <div>Subdomeniu</div>
-          <div className="text-right">Detalii</div>
         </div>
 
         {!loading && filteredItems.length === 0 ? (
@@ -539,8 +538,12 @@ export default function ControlPanelClients() {
           }
 
           return (
-            <article key={item.id} className="border-b border-slate-100 px-4 py-4 last:border-b-0">
-              <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_170px_170px_280px_96px] lg:items-center">
+            <article
+              key={item.id}
+              onClick={() => navigate(`/control-panel/clienti/${item.id}`)}
+              className="cursor-pointer border-b border-slate-100 px-4 py-4 transition hover:bg-slate-50 last:border-b-0"
+            >
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_170px_170px_280px] lg:items-center">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="truncate text-base font-semibold text-slate-950">{item.company?.name || item.name}</h2>
@@ -586,7 +589,10 @@ export default function ControlPanelClients() {
                 </div>
 
                 <div className="space-y-2">
-                  <div className="flex items-center rounded-2xl border border-slate-200 bg-slate-50 px-3">
+                  <div
+                    className="flex items-center rounded-2xl border border-slate-200 bg-slate-50 px-3"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <input
                       value={subdomainDrafts[item.id] ?? item.subdomain ?? ""}
                       onChange={(e) =>
@@ -600,7 +606,7 @@ export default function ControlPanelClients() {
                     />
                     <span className="pl-2 text-xs text-slate-400">.gufo.ink</span>
                   </div>
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
                     <button
                       type="button"
                       onClick={() => handleUpdateSubdomain(item)}
@@ -613,15 +619,6 @@ export default function ControlPanelClients() {
                   </div>
                 </div>
 
-                <div className="flex justify-start lg:justify-end">
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/control-panel/clienti/${item.id}`)}
-                    className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                  >
-                    Deschide
-                  </button>
-                </div>
               </div>
             </article>
           )
@@ -735,3 +732,4 @@ export default function ControlPanelClients() {
     </div>
   )
 }
+

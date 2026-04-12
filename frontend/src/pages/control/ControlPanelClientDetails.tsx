@@ -541,7 +541,7 @@ export default function ControlPanelClientDetails() {
             </span>
           </div>
           <div className="mt-1 text-sm text-slate-500">
-            {client?.company?.cui || "-"} â€¢ expirare {formatDate(client?.license?.expiresAt)} â€¢ tenant {client?.id || "-"}
+            {client?.company?.cui || "-"} • expirare {formatDate(client?.license?.expiresAt)} • tenant {client?.id || "-"}
           </div>
         </div>
 
@@ -593,7 +593,7 @@ export default function ControlPanelClientDetails() {
         </div>
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[1.05fr_1.35fr]">
+      <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
         <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
           <div className="grid gap-3 sm:grid-cols-3">
             {metricCard("Utilizatori", client?.usersCount ?? users.length)}
@@ -682,7 +682,7 @@ export default function ControlPanelClientDetails() {
             </button>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center gap-2">
+          <div className="mt-4">
             <button
               onClick={handleSaveLicense}
               disabled={licenseBusy}
@@ -692,7 +692,7 @@ export default function ControlPanelClientDetails() {
               {licenseBusy ? "Se salveaza..." : "Salveaza"}
             </button>
             <div className="text-sm text-slate-500">
-              {erpEnabled ? "ERP activ" : "ERP inactiv"} â€¢ {efacturaModuleEnabled ? "e-Factura activa" : "e-Factura inactiva"}
+              {erpEnabled ? "ERP activ" : "ERP inactiv"} • {efacturaModuleEnabled ? "e-Factura activa" : "e-Factura inactiva"}
             </div>
           </div>
         </section>
@@ -734,7 +734,7 @@ export default function ControlPanelClientDetails() {
                       {location.name}
                     </div>
                     <div className="mt-1 text-xs text-slate-500">
-                      {location.code || "-"} â€¢ {(location.devices?.length || 0)} device-uri
+                      {location.code || "-"} • {(location.devices?.length || 0)} device-uri
                     </div>
                   </div>
 
@@ -826,11 +826,11 @@ export default function ControlPanelClientDetails() {
         </div>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[0.9fr_1.3fr]">
+      <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
         <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between gap-2">
             <div className="text-sm font-semibold text-[#17324D]">
-              {editingUserId ? "Editeaza utilizator ERP" : "Utilizator ERP nou"}
+              {editingUserId ? "Editeaza utilizator" : "Adauga utilizator"}
             </div>
             {editingUserId ? (
               <button
@@ -923,7 +923,7 @@ export default function ControlPanelClientDetails() {
         </div>
 
         <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-[#17324D]">Utilizatori</div>
+          <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-[#17324D]">Utilizatori ERP</div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead className="text-xs uppercase text-slate-400">
