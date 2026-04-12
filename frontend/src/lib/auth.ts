@@ -24,9 +24,18 @@ type MeResponse = {
 }
 
 export async function login(email: string, password: string) {
+  const hostname = typeof window !== "undefined" ? window.location.hostname || "" : ""
+  const tenantSubdomain =
+    hostname &&
+    hostname.endsWith(".gufo.ink") &&
+    hostname !== "app.gufo.ink" &&
+    hostname !== "api.gufo.ink"
+      ? hostname.split(".")[0]
+      : undefined
+
   const data = await api<LoginResponse>("/api/v1/auth/login", {
     method: "POST",
-    body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
+    body: JSON.stringify({ email: email.trim().toLowerCase(), password, tenantSubdomain }),
   })
 
   const token = data.access_token || data.token

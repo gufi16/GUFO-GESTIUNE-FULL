@@ -47,6 +47,7 @@ const app = express()
 app.set("trust proxy", true)
 const PORT = Number(process.env.PORT || 3001)
 const CORS_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:5173"
+const CORS_ORIGINS = CORS_ORIGIN.split(",").map((value) => value.trim()).filter(Boolean)
 const JWT_SECRET =
   process.env.JWT_SECRET || (process.env.NODE_ENV !== "production" ? "dev_secret" : "")
 
@@ -58,7 +59,37 @@ fs.mkdirSync(productUploadsDir, { recursive: true })
 fs.mkdirSync(categoryUploadsDir, { recursive: true })
 
 app.disable("etag")
-app.use(cors({ origin: CORS_ORIGIN, credentials: true }))
+
+function getHostnameFromUrl(value: string) {
+  try {
+    return new URL(value).hostname.toLowerCase()
+  } catch {
+    return ""
+  }
+}
+
+function isAllowedOrigin(origin?: string) {
+  if (!origin) return true
+  if (CORS_ORIGINS.includes(origin)) return true
+
+  const hostname = getHostnameFromUrl(origin)
+  if (!hostname) return false
+
+  if (/^(localhost|127\.0\.0\.1)$/i.test(hostname)) return true
+  if (hostname === "app.gufo.ink" || hostname === "api.gufo.ink") return true
+  if (hostname.endsWith(".gufo.ink")) return true
+
+  return false
+}
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      callback(null, isAllowedOrigin(origin))
+    },
+    credentials: true,
+  })
+)
 app.use((req, res, next) => {
   if (req.path === "/health" || req.path.startsWith("/api/")) {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate")
@@ -84,12 +115,32 @@ function normalizeText(value: unknown) {
   return String(value ?? "").trim()
 }
 
+function normalizeSubdomain(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 50)
+}
+
 function getRequestHostname(req: express.Request) {
   const forwardedHost = String(req.headers["x-forwarded-host"] || req.get("host") || "")
     .split(",")[0]
     .trim()
     .toLowerCase()
   return forwardedHost.replace(/:\d+$/, "")
+}
+
+function getOriginHostname(req: express.Request) {
+  const origin = String(req.headers.origin || "").trim()
+  if (origin) return getHostnameFromUrl(origin)
+
+  const referer = String(req.headers.referer || "").trim()
+  if (referer) return getHostnameFromUrl(referer)
+
+  return ""
 }
 
 function getTenantSubdomainFromHostname(hostname: string) {
@@ -106,8 +157,19 @@ function getTenantSubdomainFromHostname(hostname: string) {
   return subdomain
 }
 
+function getTenantSubdomainFromRequest(req: express.Request) {
+  const hostnames = [getRequestHostname(req), getOriginHostname(req)]
+
+  for (const hostname of hostnames) {
+    const subdomain = getTenantSubdomainFromHostname(hostname)
+    if (subdomain) return subdomain
+  }
+
+  return null
+}
+
 async function resolveTenantIdFromRequestHost(req: express.Request) {
-  const subdomain = getTenantSubdomainFromHostname(getRequestHostname(req))
+  const subdomain = getTenantSubdomainFromRequest(req)
   if (!subdomain) return null
 
   const tenant = await prisma.tenant.findFirst({
@@ -132,6 +194,7 @@ const LoginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(4),
   tenantId: z.string().optional(),
+  tenantSubdomain: z.string().optional(),
 })
 
 const ControlPanelLoginSchema = z.object({
@@ -154,14 +217,23 @@ app.post("/api/v1/auth/login", async (req, res) => {
     return res.status(400).json({ ok: false, error: parsed.error.flatten() })
   }
 
-  const { email, password, tenantId } = parsed.data
+  const { email, password, tenantId, tenantSubdomain } = parsed.data
   const hostTenantId = await resolveTenantIdFromRequestHost(req)
+  let requestedTenantId = tenantId || undefined
 
-  if (tenantId && hostTenantId && tenantId !== hostTenantId) {
+  if (!requestedTenantId && tenantSubdomain) {
+    const tenant = await prisma.tenant.findFirst({
+      where: { subdomain: normalizeSubdomain(tenantSubdomain) },
+      select: { id: true },
+    })
+    requestedTenantId = tenant?.id || undefined
+  }
+
+  if (requestedTenantId && hostTenantId && requestedTenantId !== hostTenantId) {
     return res.status(403).json({ ok: false, error: "Tenantul nu corespunde subdomeniului." })
   }
 
-  const scopedTenantId = tenantId || hostTenantId || undefined
+  const scopedTenantId = requestedTenantId || hostTenantId || undefined
 
   const candidates = await prisma.user.findMany({
     where: {
@@ -200,6 +272,34 @@ app.post("/api/v1/auth/login", async (req, res) => {
     ok: true,
     access_token: token,
   })
+})
+
+app.get("/api/v1/public/domain-allow", async (req, res) => {
+  const domain = String(req.query.domain || "").trim().toLowerCase().replace(/:\d+$/, "")
+
+  if (!domain) {
+    return res.status(400).send("missing domain")
+  }
+
+  if (domain === "app.gufo.ink" || domain === "api.gufo.ink") {
+    return res.status(200).send("ok")
+  }
+
+  const subdomain = getTenantSubdomainFromHostname(domain)
+  if (!subdomain) {
+    return res.status(403).send("forbidden")
+  }
+
+  const tenant = await prisma.tenant.findFirst({
+    where: { subdomain },
+    select: { id: true },
+  })
+
+  if (!tenant) {
+    return res.status(403).send("forbidden")
+  }
+
+  return res.status(200).send("ok")
 })
 
 app.post("/api/v1/admin/auth/login", async (req, res) => {
