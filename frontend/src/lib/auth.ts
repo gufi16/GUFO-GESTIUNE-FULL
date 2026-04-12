@@ -11,6 +11,8 @@ type MeResponse = {
   tenant_id: string
   user_id: string
   role: string
+  name?: string
+  email?: string
   modules: string[]
   license: {
     expiresAt: string

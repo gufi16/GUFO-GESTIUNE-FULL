@@ -444,6 +444,8 @@ app.get("/api/v1/me", requireAuth, async (req: AuthedRequest, res) => {
     tenant_id: auth.tenantId,
     user_id: auth.userId,
     role: auth.role,
+    name: user.name,
+    email: user.email,
     modules,
     license: license
       ? {

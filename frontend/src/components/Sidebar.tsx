@@ -9,7 +9,6 @@ import {
   FileText,
   LayoutDashboard,
   Settings,
-  Sparkles,
   Warehouse,
 } from "lucide-react"
 import { hasModule } from "../lib/modules"
@@ -119,32 +118,13 @@ function SidebarContent({
         ) : null}
 
         {!mobile ? (
-          <div className="rounded-[16px] border border-slate-200 bg-white p-3 shadow-sm shadow-slate-900/[0.03]">
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[18px] bg-[#17324D] text-sm font-bold text-white shadow-sm">
-                GF
-              </div>
-
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-base font-semibold tracking-tight text-[#17324D]">GuFo Gestiune</div>
-                <div className="mt-1 text-xs leading-4.5 text-slate-500">
-                  gestiune moderna pentru retail, horeca si depozit
-                </div>
-
-                <div className="mt-2.5 flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
-                    <Sparkles size={12} />
-                    UI nou
-                  </span>
-                  <span className="inline-flex rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600">
-                    GUFO ERP
-                  </span>
-                </div>
-              </div>
-            </div>
+          <div className="flex items-center justify-center rounded-[16px] border border-slate-200 bg-white p-4 shadow-sm shadow-slate-900/[0.03]">
+            <img src="/favicon.svg" alt="Gufo ERP" className="h-14 w-14 rounded-[16px]" />
           </div>
         ) : (
-          <div className="mt-2 text-sm font-semibold text-[#17324D]">Gufo ERP</div>
+          <div className="mt-2 flex items-center gap-3">
+            <img src="/favicon.svg" alt="Gufo ERP" className="h-10 w-10 rounded-[12px]" />
+          </div>
         )}
       </div>
 
@@ -165,20 +145,6 @@ function SidebarContent({
               </div>
             </section>
           ))}
-        </div>
-      </div>
-
-      <div className="border-t border-slate-200/80 px-4 py-3">
-        <div className={clsx("rounded-[14px] border border-slate-200 bg-white px-3 py-3 shadow-sm", mobile && "hidden")}>
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-[18px] bg-[#17324D] text-sm font-bold text-white">
-              DT
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-semibold text-[#17324D]">Tenant activ</div>
-              <div className="mt-1 truncate text-xs text-slate-500">cont conectat</div>
-            </div>
-          </div>
         </div>
       </div>
     </div>

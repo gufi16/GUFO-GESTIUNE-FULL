@@ -1,24 +1,48 @@
-import { Bell, LogOut, MapPin, Menu, Sparkles } from "lucide-react"
+import { Bell, LogOut, MapPin, Menu } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { API_BASE as API, authHeaders } from "../lib/api"
-import { logout } from "../lib/auth"
+import { logout, me } from "../lib/auth"
 import { getActiveLocationId, setActiveLocationId, subscribeToActiveLocation } from "../lib/location"
 
 export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
   const navigate = useNavigate()
   const [locations, setLocations] = useState<Array<{ id: string; name: string; code?: string }>>([])
   const [locationId, setLocationIdState] = useState(getActiveLocationId())
+  const [userLabel, setUserLabel] = useState("Utilizator")
+  const [userMeta, setUserMeta] = useState("ERP")
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+
+  const notifications = [
+    {
+      id: "release",
+      title: "Update ERP disponibil",
+      description: "Avem imbunatatiri noi pentru dashboard si documente.",
+    },
+    {
+      id: "sync",
+      title: "Sincronizare finalizata",
+      description: "Ultimele date au fost actualizate cu succes.",
+    },
+    {
+      id: "support",
+      title: "Mesaj intern",
+      description: "Verifica noile notificari operationale din platforma.",
+    },
+  ]
 
   useEffect(() => {
     let cancelled = false
 
-    async function loadLocations() {
+    async function loadTopbarData() {
       try {
-        const res = await fetch(`${API}/api/v1/meta/locations`, {
-          headers: authHeaders(),
-        })
-        const data = await res.json().catch(() => ({}))
+        const [locationsRes, profile] = await Promise.all([
+          fetch(`${API}/api/v1/meta/locations`, {
+            headers: authHeaders(),
+          }),
+          me().catch(() => null),
+        ])
+        const data = await locationsRes.json().catch(() => ({}))
         const items = Array.isArray(data?.locations) ? data.locations : []
 
         if (cancelled) return
@@ -35,6 +59,19 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
           setLocationIdState(normalized[0].id)
           setActiveLocationId(normalized[0].id)
         }
+
+        const profileName =
+          typeof (profile as any)?.name === "string" && (profile as any).name.trim()
+            ? String((profile as any).name).trim()
+            : typeof (profile as any)?.email === "string" && (profile as any).email.trim()
+              ? String((profile as any).email).trim()
+              : "Utilizator"
+        const profileRole =
+          typeof (profile as any)?.role === "string" && (profile as any).role.trim()
+            ? String((profile as any).role).trim()
+            : "ERP"
+        setUserLabel(profileName)
+        setUserMeta(profileRole)
       } catch {
         if (!cancelled) {
           setLocations([])
@@ -42,7 +79,7 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
       }
     }
 
-    loadLocations()
+    loadTopbarData()
     return () => {
       cancelled = true
     }
@@ -82,17 +119,8 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
             <Menu size={18} />
           </button>
 
-          <div className="hidden min-w-0 flex-1 md:block">
-            <div className="relative w-full max-w-xl">
-              <input
-                placeholder="Cauta produse, documente, furnizori sau locatii..."
-                className="h-9 w-full rounded-[12px] border border-slate-200 bg-white pl-10 pr-3 text-sm text-[#17324D] outline-none transition focus:border-[#244A7C] focus:bg-white focus:ring-2 focus:ring-[#DCE7F5]"
-              />
-            </div>
-          </div>
-
           <div className="min-w-0 flex-1 md:hidden">
-            <div className="truncate text-sm font-semibold text-[#17324D]">Gufo ERP</div>
+            <div className="truncate text-sm font-semibold text-[#17324D]">{userLabel}</div>
             <div className="truncate text-[11px] text-slate-500">{selectedLocationLabel}</div>
           </div>
 
@@ -157,27 +185,42 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
             </div>
           </div>
 
-          <button
-            type="button"
-            className="flex h-9 w-9 items-center justify-center rounded-[12px] border border-slate-200 bg-white text-[#6C7A89] shadow-sm transition hover:text-[#17324D]"
-          >
-            <Bell size={18} />
-          </button>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setNotificationsOpen((prev) => !prev)}
+              className="flex h-9 w-9 items-center justify-center rounded-[12px] border border-slate-200 bg-white text-[#6C7A89] shadow-sm transition hover:text-[#17324D]"
+            >
+              <Bell size={18} />
+            </button>
 
-          <div className="flex items-center gap-2 rounded-[12px] border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm shadow-slate-900/[0.03]">
-            <div className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-[#17324D] text-white">
-              <Sparkles size={18} />
-            </div>
-            <div className="text-sm">
-              <div className="font-semibold text-[#17324D]">Cont activ</div>
-              <div className="text-xs text-slate-500">ERP</div>
+            {notificationsOpen ? (
+              <div className="absolute right-0 top-12 z-40 w-[320px] rounded-[16px] border border-slate-200 bg-white p-3 shadow-xl">
+                <div className="mb-2 text-sm font-semibold text-[#17324D]">Updates & notificari</div>
+                <div className="space-y-2">
+                  {notifications.map((item) => (
+                    <div key={item.id} className="rounded-[12px] border border-slate-200 bg-slate-50 px-3 py-2.5">
+                      <div className="text-sm font-semibold text-slate-900">{item.title}</div>
+                      <div className="mt-1 text-xs leading-5 text-slate-500">{item.description}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="flex min-w-[190px] items-center gap-2 rounded-[12px] border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm shadow-slate-900/[0.03]">
+            <img src="/favicon.svg" alt="Gufo ERP" className="h-8 w-8 rounded-[10px]" />
+            <div className="min-w-0 text-sm">
+              <div className="truncate font-semibold text-[#17324D]">{userLabel}</div>
+              <div className="truncate text-xs uppercase text-slate-500">{userMeta}</div>
             </div>
           </div>
 
           <button
             type="button"
             onClick={handleLogout}
-            className="inline-flex h-9 items-center justify-center rounded-[12px] border border-rose-200 bg-rose-50 px-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
+            className="ml-auto inline-flex h-9 items-center justify-center rounded-[12px] border border-rose-200 bg-rose-50 px-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
           >
             <LogOut size={16} className="mr-2" />
             Logout
