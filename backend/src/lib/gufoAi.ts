@@ -13,6 +13,7 @@ type GufoAiGuide = {
 type GufoAiInput = {
   message: string
   currentPath?: string | null
+  history?: Array<{ role: "user" | "assistant"; text: string }>
 }
 
 type GufoAiReply = {
@@ -285,19 +286,45 @@ function matchesForbiddenTopic(message: string) {
   return FORBIDDEN_KEYWORDS.some((keyword) => normalized.includes(keyword))
 }
 
+function tokenize(value: string) {
+  return normalize(value)
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+}
+
 function findGuideByPath(currentPath?: string | null) {
   const pathValue = String(currentPath || "").trim()
   if (!pathValue) return null
   return GUIDES.find((guide) => guide.routePrefixes.some((prefix) => pathValue.startsWith(prefix))) || null
 }
 
-function findGuideByMessage(message: string) {
+function scoreGuide(message: string, guide: GufoAiGuide) {
   const normalized = normalize(message)
-  return (
-    GUIDES.find((guide) =>
-      guide.keywords.some((keyword) => normalized.includes(normalize(keyword))),
-    ) || null
-  )
+  const tokens = tokenize(message)
+  let score = 0
+
+  for (const keyword of guide.keywords) {
+    const normalizedKeyword = normalize(keyword)
+    if (normalized.includes(normalizedKeyword)) score += normalizedKeyword.includes(" ") ? 3 : 2
+    if (tokens.includes(normalizedKeyword)) score += 1
+  }
+
+  if (guide.id === "documente" && /nir|factur|bon consum|proces verbal/.test(normalized)) score += 3
+  if (guide.id === "rapoarte" && /profit|marja|top produse|evolutie/.test(normalized)) score += 3
+  if (guide.id === "dashboard" && /incasari|indicatori|device|locatie/.test(normalized)) score += 3
+  if (guide.id === "utilizatori" && /parola|rol|administrator|ospatar|manager/.test(normalized)) score += 3
+
+  return score
+}
+
+function findGuideByMessage(message: string) {
+  const ranked = GUIDES
+    .map((guide) => ({ guide, score: scoreGuide(message, guide) }))
+    .sort((a, b) => b.score - a.score)
+
+  if (!ranked.length || ranked[0].score <= 0) return null
+  return ranked[0].guide
 }
 
 function detectIntent(message: string) {
@@ -346,9 +373,31 @@ function buildGuideAnswer(guide: GufoAiGuide, intent: string, currentPath?: stri
   return `${intro}\n\n${guide.summary}\n\n${body}`
 }
 
+function getLastUserQuestion(history?: Array<{ role: "user" | "assistant"; text: string }>) {
+  if (!Array.isArray(history)) return ""
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const item = history[index]
+    if (item?.role === "user" && String(item.text || "").trim()) return String(item.text).trim()
+  }
+  return ""
+}
+
+function shouldReusePreviousQuestion(message: string) {
+  const normalized = normalize(message)
+  return (
+    normalized.split(/\s+/).length <= 4 ||
+    ["si aici", "si la asta", "aici", "acolo", "de ce", "cum exact", "detaliaza", "mai clar"].includes(normalized)
+  )
+}
+
 export function generateGufoAiReply(input: GufoAiInput): GufoAiReply {
-  const message = String(input.message || "").trim()
+  const rawMessage = String(input.message || "").trim()
   const currentPath = String(input.currentPath || "").trim()
+  const previousUserQuestion = getLastUserQuestion(input.history)
+  const message =
+    shouldReusePreviousQuestion(rawMessage) && previousUserQuestion
+      ? `${previousUserQuestion}. ${rawMessage}`
+      : rawMessage
 
   if (!message) {
     return {
@@ -384,7 +433,7 @@ export function generateGufoAiReply(input: GufoAiInput): GufoAiReply {
   }
 
   const currentGuide = findGuideByPath(currentPath)
-  if (currentGuide) {
+  if (currentGuide && rawMessage.split(/\s+/).length <= 3) {
     return {
       title: currentGuide.title,
       answer: `Esti in zona ${currentGuide.title}.\n\n${currentGuide.summary}\n\nDaca imi spui exact ce vrei sa faci aici, iti raspund cu pasii corecti pentru aceasta pagina.`,
@@ -395,7 +444,7 @@ export function generateGufoAiReply(input: GufoAiInput): GufoAiReply {
   return {
     title: "Gufo AI",
     answer:
-      "Te pot ajuta doar cu folosirea ERP-ului. Spune-mi ce vrei sa faci, de exemplu: produs nou, NIR, transfer, inventar, raport, utilizator sau istoric.",
+      `Nu sunt sigur inca ce operatie vrei sa faci.\n\nSpune-mi mai direct, de exemplu:\n1. ce document sau modul folosesti\n2. ce vrei sa obtii\n3. unde te blochezi\n\nExemple bune: "cum fac un NIR cu 3 produse", "de ce nu vad vanzari pe locatie", "cum schimb parola unui utilizator".${currentGuide ? `\n\nDaca intrebi despre pagina curenta, esti acum in zona ${currentGuide.title}.` : ""}`,
     suggestions: [
       "Cum fac un NIR?",
       "Cum filtrez rapoartele pe locatie?",

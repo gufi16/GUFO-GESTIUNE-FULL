@@ -102,6 +102,10 @@ export default function GufoAiWidget() {
         body: JSON.stringify({
           message: question,
           currentPath: location.pathname,
+          history: messages.slice(-8).map((item) => ({
+            role: item.role,
+            text: item.text,
+          })),
         }),
       })
 

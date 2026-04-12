@@ -8,6 +8,15 @@ const router = Router()
 const ChatSchema = z.object({
   message: z.string().trim().min(1).max(2000),
   currentPath: z.string().trim().max(200).optional(),
+  history: z
+    .array(
+      z.object({
+        role: z.enum(["user", "assistant"]),
+        text: z.string().trim().min(1).max(4000),
+      }),
+    )
+    .max(12)
+    .optional(),
 })
 
 router.post("/api/v1/gufo-ai/chat", requireAuth, async (req: AuthedRequest, res) => {
@@ -23,6 +32,7 @@ router.post("/api/v1/gufo-ai/chat", requireAuth, async (req: AuthedRequest, res)
   const reply = generateGufoAiReply({
     message: parsed.data.message,
     currentPath: parsed.data.currentPath,
+    history: parsed.data.history,
   })
 
   return res.json({
