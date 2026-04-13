@@ -187,6 +187,37 @@ export default function ExportContabilitatePage() {
     [exportKinds, selectedKind]
   )
 
+  const exportGroups = useMemo(
+    () => [
+      {
+        label: "Nomenclatoare",
+        items: exportKinds.filter((item) => ["products", "customers", "suppliers"].includes(item.code)),
+      },
+      {
+        label: "Documente de intrare",
+        items: exportKinds.filter((item) => ["purchase-receipts"].includes(item.code)),
+      },
+      {
+        label: "Documente de iesire",
+        items: exportKinds.filter((item) => ["sales-invoices"].includes(item.code)),
+      },
+      {
+        label: "Documente operationale",
+        items: exportKinds.filter((item) => ["consumption-docs", "production-docs"].includes(item.code)),
+      },
+    ].filter((group) => group.items.length > 0),
+    [exportKinds]
+  )
+
+  const selectedKindCategory = useMemo(() => {
+    if (["products", "customers", "suppliers"].includes(selectedKind)) return "catalog"
+    if (["purchase-receipts", "sales-invoices", "consumption-docs", "production-docs"].includes(selectedKind)) return "documents"
+    return "generic"
+  }, [selectedKind])
+
+  const needsLocationFilter = selectedKindCategory === "documents"
+  const needsPartnerFilter = ["customers", "suppliers", "sales-invoices", "purchase-receipts"].includes(selectedKind)
+  const needsValueType = selectedKindCategory === "documents"
   const contextualPartnerLabel = selectedKindMeta?.partnerLabel || "Client / partener"
 
   async function handleSaveConfig(event: FormEvent) {
@@ -338,11 +369,13 @@ export default function ExportContabilitatePage() {
               <select
                 value={selectedValueType}
                 onChange={(e) => setSelectedValueType(e.target.value)}
+                disabled={!needsValueType}
                 className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
               >
                 <option value="CANTITATIV_VALORIC">Cantitativ valoric</option>
                 <option value="GLOBAL_VALORIC">Global valoric</option>
               </select>
+              {!needsValueType ? <div className="mt-1 text-xs text-slate-500">Nu este necesar pentru nomenclatoare.</div> : null}
             </label>
 
             <label className="block">
@@ -379,10 +412,14 @@ export default function ExportContabilitatePage() {
                 className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
               >
                 <option value="">Nu ai selectat niciun tip de document</option>
-                {exportKinds.map((item) => (
-                  <option key={item.code} value={item.code}>
-                    {item.label}
-                  </option>
+                {exportGroups.map((group) => (
+                  <optgroup key={group.label} label={group.label}>
+                    {group.items.map((item) => (
+                      <option key={item.code} value={item.code}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
               {selectedKindMeta?.description ? (
@@ -395,6 +432,7 @@ export default function ExportContabilitatePage() {
               <select
                 value={selectedLocationId}
                 onChange={(e) => setSelectedLocationId(e.target.value)}
+                disabled={!needsLocationFilter}
                 className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
               >
                 <option value="">Toate locatiile</option>
@@ -404,15 +442,18 @@ export default function ExportContabilitatePage() {
                   </option>
                 ))}
               </select>
+              {!needsLocationFilter ? <div className="mt-1 text-xs text-slate-500">Filtrul pe locatie se aplica doar pe documente.</div> : null}
             </label>
 
             <label className="block">
               <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Gestiune</div>
               <input
                 value={
-                  selectedLocationId
+                  needsLocationFilter && selectedLocationId
                     ? locations.find((item) => item.id === selectedLocationId)?.name || ""
-                    : "Nu ai selectat gestiunea"
+                    : needsLocationFilter
+                      ? "Nu ai selectat gestiunea"
+                      : "Nu se aplica pentru acest export"
                 }
                 readOnly
                 className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-100 px-3 text-sm text-slate-500 outline-none"
@@ -426,10 +467,12 @@ export default function ExportContabilitatePage() {
                 <input
                   value={partnerSearch}
                   onChange={(e) => setPartnerSearch(e.target.value)}
+                  disabled={!needsPartnerFilter}
                   placeholder={`Cauti dupa nume, cod sau CIF ${contextualPartnerLabel.toLowerCase()}`}
                   className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
                 />
               </div>
+              {!needsPartnerFilter ? <div className="mt-1 text-xs text-slate-500">Filtrul pe partener este disponibil unde are sens.</div> : null}
             </label>
           </div>
 
@@ -558,6 +601,23 @@ export default function ExportContabilitatePage() {
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Rezumat export</div>
             <div className="mt-1 text-sm font-semibold text-[#17324D]">Tipurile de document pregatite pentru generator</div>
+          </div>
+
+          <div className="mt-4 grid gap-2 md:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Selectie curenta</div>
+              <div className="mt-1 text-sm font-semibold text-slate-900">{selectedKindMeta?.label || "Niciun tip selectat"}</div>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Filtrare locatie</div>
+              <div className="mt-1 text-sm font-semibold text-slate-900">
+                {needsLocationFilter
+                  ? selectedLocationId
+                    ? locations.find((item) => item.id === selectedLocationId)?.name || "Locatie selectata"
+                    : "Toate locatiile"
+                  : "Nu se aplica"}
+              </div>
+            </div>
           </div>
 
           <div className="mt-4 space-y-2">
