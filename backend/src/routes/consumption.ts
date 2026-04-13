@@ -4,7 +4,7 @@ import { Router } from "express";
 import { prisma } from "../lib/prisma";
 import { decrementStockBalanceStrict } from "../lib/stock";
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth";
-import { requireRequestCompanyId } from "../lib/companyScope";
+import { buildCompanyScopedTenantWhere, requireRequestCompanyId } from "../lib/companyScope";
 
 const router = Router();
 
@@ -169,6 +169,7 @@ router.post("/api/v1/consumption-docs", requireAuth, async (req: AuthedRequest, 
 router.get("/api/v1/consumption-docs", requireAuth, async (req: AuthedRequest, res) => {
   try {
     const tenantId = req.auth!.tenantId;
+    const companyId = await requireRequestCompanyId(req);
 
     const dateFrom = req.query.dateFrom ? new Date(String(req.query.dateFrom)) : null;
     const dateTo = req.query.dateTo ? new Date(String(req.query.dateTo)) : null;
@@ -177,8 +178,7 @@ router.get("/api/v1/consumption-docs", requireAuth, async (req: AuthedRequest, r
 
     const docs = await prisma.consumptionDoc.findMany({
       where: {
-        tenantId,
-        companyId,
+        ...buildCompanyScopedTenantWhere(tenantId, companyId),
         ...(locationId ? { locationId } : {}),
         ...(dateFrom || dateTo
           ? {
@@ -316,8 +316,7 @@ router.get("/api/v1/consumption-docs/:id", requireAuth, async (req: AuthedReques
     const doc = await prisma.consumptionDoc.findFirst({
       where: {
         id,
-        tenantId,
-        companyId,
+        ...buildCompanyScopedTenantWhere(tenantId, companyId, { id }),
       },
       include: {
         location: {

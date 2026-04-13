@@ -3,7 +3,7 @@ import { Router } from "express"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { reserveNextNumber } from "../lib/numbering"
-import { requireRequestCompanyId } from "../lib/companyScope"
+import { buildCompanyScopedTenantWhere, requireRequestCompanyId } from "../lib/companyScope"
 
 const router = Router()
 
@@ -325,10 +325,7 @@ router.get("/api/v1/purchase-receipts", async (req: AuthedRequest, res) => {
   const dateTo = String(req.query.dateTo || "").trim()
   const month = String(req.query.month || "").trim()
 
-  const where: any = {
-    tenantId,
-    companyId
-  }
+  const where: any = buildCompanyScopedTenantWhere(tenantId, companyId)
 
   if (month) {
     const [y, m] = month.split("-").map(Number)
@@ -379,8 +376,7 @@ router.get("/api/v1/purchase-receipts/:id", async (req: AuthedRequest, res) => {
   const receipt = await prisma.purchaseReceipt.findFirst({
     where: {
       id,
-      tenantId,
-      companyId
+      ...buildCompanyScopedTenantWhere(tenantId, companyId)
     },
     include: {
       location: true,
@@ -537,8 +533,7 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
       const existing = await prisma.purchaseReceipt.findFirst({
         where: {
           id: receiptId,
-          tenantId,
-          companyId
+          ...buildCompanyScopedTenantWhere(tenantId, companyId)
         }
       })
 
@@ -575,6 +570,7 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
       await prisma.purchaseReceipt.update({
         where: { id: receiptId },
         data: {
+          companyId,
           locationId,
           supplierId: supplier?.id || null,
           supplierName: supplier?.name || (supplierName ? String(supplierName).trim() : null),
@@ -601,8 +597,7 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
     const receipt = await prisma.purchaseReceipt.findFirst({
       where: {
         id: receiptId,
-        tenantId,
-        companyId
+        ...buildCompanyScopedTenantWhere(tenantId, companyId)
       },
       include: {
         location: true,
@@ -706,8 +701,7 @@ router.post("/api/v1/purchase-receipts/:id/cancel", async (req: AuthedRequest, r
   const receipt = await prisma.purchaseReceipt.findFirst({
     where: {
       id,
-      tenantId,
-      companyId
+      ...buildCompanyScopedTenantWhere(tenantId, companyId)
     }
   })
 
