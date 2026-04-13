@@ -71,7 +71,7 @@ export default function GufoAiWidget() {
         {
           id: "welcome",
           role: "assistant",
-          text: `Salut! Sunt Gufo AI. Te pot ajuta cu pasii din ERP pentru pagina ${pageLabel}. Spune-mi ce vrei sa faci si iti raspund simplu, in romana.`,
+          text: `Salut! Sunt Gufo AI.\n\nSunt aici sa te ajut cu ERP-ul, iar acum esti in zona ${pageLabel}. Poti sa vorbesti cu mine natural, exact cum ai vorbi cu un coleg: ma poti saluta, poti sa-mi spui ce vrei sa faci, unde te-ai blocat sau ce nu intelegi.`,
         },
       ])
     }
@@ -161,7 +161,8 @@ export default function GufoAiWidget() {
                   Asistent ERP
                 </div>
                 <div className="mt-2 text-lg font-semibold">Gufo AI</div>
-                <div className="mt-1 text-sm text-slate-200">Pagina curenta: {pageLabel}</div>
+                <div className="mt-1 text-sm text-slate-200">Asistent ERP conversational</div>
+                <div className="mt-1 text-xs text-slate-300">Pagina curenta: {pageLabel}</div>
               </div>
 
               <button
@@ -197,7 +198,7 @@ export default function GufoAiWidget() {
             {loading ? (
               <div className="flex justify-start">
                 <div className="rounded-[22px] rounded-bl-md border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
-                  Gufo AI scrie...
+                  Gufo AI iti raspunde...
                 </div>
               </div>
             ) : null}
@@ -228,7 +229,7 @@ export default function GufoAiWidget() {
                   }
                 }}
                 rows={2}
-                placeholder="Scrie ce vrei sa faci in ERP..."
+                placeholder="Scrie-mi natural, de exemplu: salut, cum fac un NIR sau de ce nu pot salva..."
                 className="min-h-[52px] flex-1 resize-none rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-[#17324D] focus:bg-white focus:ring-4 focus:ring-blue-100"
               />
 

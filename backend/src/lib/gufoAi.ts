@@ -23,6 +23,8 @@ type GufoAiReply = {
   suggestions: string[]
 }
 
+type ConversationTone = "warm" | "direct" | "supportive"
+
 const FORBIDDEN_KEYWORDS = [
   "control panel",
   "subdomeniu",
@@ -459,8 +461,139 @@ function detectIntent(message: string) {
   return "generic"
 }
 
+function isGreeting(message: string) {
+  const normalized = normalize(message)
+  return [
+    "salut",
+    "buna",
+    "bunaa",
+    "hello",
+    "hei",
+    "hey",
+    "ceau",
+    "servus",
+    "neata",
+    "buna ziua",
+    "buna seara",
+  ].some((term) => normalized === term || normalized.startsWith(`${term} `))
+}
+
+function isThanks(message: string) {
+  const normalized = normalize(message)
+  return ["mersi", "multumesc", "merci", "super mersi", "sarumana"].some(
+    (term) => normalized === term || normalized.startsWith(`${term} `),
+  )
+}
+
+function isFarewell(message: string) {
+  const normalized = normalize(message)
+  return ["pa", "bye", "la revedere", "o zi buna", "noapte buna"].some(
+    (term) => normalized === term || normalized.startsWith(`${term} `),
+  )
+}
+
+function isHelpPrompt(message: string) {
+  const normalized = normalize(message)
+  return [
+    "ma poti ajuta",
+    "ma ajuti",
+    "poti sa ma ajuti",
+    "am nevoie de ajutor",
+    "ce poti sa faci",
+    "cu ce ma poti ajuta",
+    "vreau ajutor",
+  ].some((term) => normalized.includes(term))
+}
+
+function isConfused(message: string) {
+  const normalized = normalize(message)
+  return [
+    "nu am inteles",
+    "n am inteles",
+    "nu inteleg",
+    "mai simplu",
+    "mai pe scurt",
+    "explica mai simplu",
+    "cum adica",
+  ].some((term) => normalized.includes(term))
+}
+
+function isVeryShortAck(message: string) {
+  const normalized = normalize(message)
+  return ["ok", "bine", "super", "perfect", "gata"].includes(normalized)
+}
+
 function buildList(lines: string[]) {
   return lines.map((line, index) => `${index + 1}. ${line}`).join("\n")
+}
+
+function buildNaturalList(lines: string[]) {
+  if (!lines.length) return ""
+  if (lines.length === 1) return lines[0]
+  if (lines.length === 2) return `${lines[0]} si ${lines[1]}`
+  return `${lines.slice(0, -1).join(", ")} si ${lines[lines.length - 1]}`
+}
+
+function buildClosingPrompt(guide?: GufoAiGuide | null, tone: ConversationTone = "warm") {
+  const prompts = guide
+    ? [
+        `Daca vrei, iti spun imediat si pasii exacti pentru ${guide.title.toLowerCase()}.`,
+        `Daca vrei, mergem impreuna pas cu pas in ${guide.title.toLowerCase()}.`,
+        `Daca te-ai blocat intr-un camp anume din ${guide.title.toLowerCase()}, spune-mi si intram direct acolo.`,
+      ]
+    : [
+        "Daca vrei, imi spui exact unde esti blocat si mergem direct la solutie.",
+        "Daca imi spui ce vrei sa faci, iti raspund pe scurt si clar.",
+        "Daca vrei, luam exact operatia ta si o desfacem pas cu pas.",
+      ]
+
+  if (tone === "direct") return prompts[0]
+  if (tone === "supportive") return prompts[1]
+  return prompts[2]
+}
+
+function buildGreetingReply(currentGuide?: GufoAiGuide | null): GufoAiReply {
+  return {
+    title: "Gufo AI",
+    answer: currentGuide
+      ? `Salut! Ma bucur sa te ajut.\n\nEsti acum in zona ${currentGuide.title}. Spune-mi ce vrei sa faci, ce nu merge sau ce vrei sa intelegi mai bine, iar eu iti raspund ca intr-o conversatie normala, pas cu pas.\n\n${buildClosingPrompt(currentGuide, "supportive")}`
+      : `Salut! Sunt aici sa te ajut cu ERP-ul.\n\nPoti sa ma intrebi natural, de exemplu cum faci un document, de ce nu merge ceva, unde gasesti o setare sau cum rezolvi o problema. Iti raspund simplu si pe scurt, iar daca vrei continuam conversatia pana se clarifica.`,
+    suggestions: currentGuide
+      ? currentGuide.suggestions
+      : ["Cum adaug un produs?", "Cum fac un NIR?", "De ce nu vad date in dashboard?"],
+  }
+}
+
+function buildThanksReply(currentGuide?: GufoAiGuide | null): GufoAiReply {
+  return {
+    title: "Gufo AI",
+    answer: currentGuide
+      ? `Cu drag.\n\nDaca mai ai nevoie, raman aici si te ajut in continuare pe zona ${currentGuide.title}.`
+      : "Cu drag. Daca mai ai nevoie de ceva in ERP, spune-mi direct si continuam.",
+    suggestions: currentGuide
+      ? currentGuide.suggestions
+      : ["Cum schimb parola unui utilizator?", "Cum filtrez rapoartele pe locatie?", "Cum fac un transfer?"],
+  }
+}
+
+function buildFarewellReply(): GufoAiReply {
+  return {
+    title: "Gufo AI",
+    answer: "Sigur. Cand mai ai nevoie de ajutor in ERP, scrie-mi direct si continuam de acolo.",
+    suggestions: ["Cum adaug un produs?", "Cum fac un inventar nou?", "Unde vad istoricul actiunilor?"],
+  }
+}
+
+function buildConfusedReply(guide?: GufoAiGuide | null): GufoAiReply {
+  return {
+    title: guide?.title || "Gufo AI",
+    answer: guide
+      ? `Hai sa o luam mai simplu pentru ${guide.title}.\n\nPe scurt, ai de facut ${buildNaturalList(guide.howTo.slice(0, 3)).replace(/^./, (char) => char.toLowerCase())}.\n\nDaca vrei, iti explic doar primul pas sau doar campurile importante.`
+      : "Hai sa o luam mai simplu.\n\nSpune-mi exact ce vrei sa faci in ERP si iti explic pe scurt, fara termeni tehnici inutili.",
+    suggestions: guide
+      ? [guide.suggestions[0] || "Arata-mi pasii pe scurt", "Explica-mi doar primul pas", "Ce verific daca nu merge?"]
+      : ["Cum adaug un produs?", "Cum fac un NIR?", "Cum schimb parola unui utilizator?"],
+  }
 }
 
 function buildGuideAnswer(guide: GufoAiGuide, intent: string, currentPath?: string | null) {
@@ -469,20 +602,34 @@ function buildGuideAnswer(guide: GufoAiGuide, intent: string, currentPath?: stri
 
   const intro = inCurrentPage
     ? `Esti deja in zona ${guide.title}.`
-    : `Pentru ce intrebi tu, zona potrivita este ${guide.title}.`
+    : `Pentru ce intrebi tu, te ajuta zona ${guide.title}.`
 
-  const fields = guide.keyFields?.length ? `Campuri importante:\n${buildList(guide.keyFields)}\n\n` : ""
+  const fields = guide.keyFields?.length ? `Uita-te in special la:\n${buildList(guide.keyFields)}\n\n` : ""
 
-  const body =
-    intent === "where"
-      ? `${fields}${buildList(guide.whereTo)}`
-      : intent === "troubleshooting"
-        ? `${fields}${buildList(guide.troubleshooting)}`
-        : intent === "how"
-          ? `${fields}${buildList(guide.howTo)}`
-          : `${guide.summary}\n\n${fields}Unde gasesti:\n${buildList(guide.whereTo)}\n\nCum lucrezi:\n${buildList(guide.howTo)}`
+  if (intent === "where") {
+    return `${intro}\n\n${guide.summary}\n\nGasesti asta aici:\n${buildList(guide.whereTo)}\n\n${buildClosingPrompt(
+      guide,
+      "direct",
+    )}`
+  }
 
-  return `${intro}\n\n${guide.summary}\n\n${body}`
+  if (intent === "troubleshooting") {
+    return `${intro}\n\nCel mai des blocajele din ${guide.title} vin din cateva lucruri clare.\n\n${fields}Verifica pe rand:\n${buildList(
+      guide.troubleshooting,
+    )}\n\nDaca imi spui exact ce mesaj vezi sau la ce pas te opresti, restrang imediat cauza.`
+  }
+
+  if (intent === "how") {
+    return `${intro}\n\n${guide.summary}\n\n${fields}Pasii sunt:\n${buildList(
+      guide.howTo,
+    )}\n\n${buildClosingPrompt(guide, "supportive")}`
+  }
+
+  return `${intro}\n\n${guide.summary}\n\n${fields}Ca sa te orientezi repede:\n1. Unde intri:\n${buildList(
+    guide.whereTo,
+  )}\n\n2. Ce faci acolo:\n${buildList(guide.howTo)}\n\n3. Daca ceva nu merge:\n${buildList(
+    guide.troubleshooting.slice(0, 2),
+  )}\n\nSpune-mi ce vrei sa rezolvi exact si mergem mai adanc doar pe bucata ta.`
 }
 
 function getLastUserQuestion(history?: Array<{ role: "user" | "assistant"; text: string }>) {
@@ -498,31 +645,43 @@ function shouldReusePreviousQuestion(message: string) {
   const normalized = normalize(message)
   return (
     normalized.split(/\s+/).length <= 4 ||
-    ["si aici", "si la asta", "aici", "acolo", "de ce", "cum exact", "detaliaza", "mai clar"].includes(normalized)
+    [
+      "si aici",
+      "si la asta",
+      "aici",
+      "acolo",
+      "de ce",
+      "cum exact",
+      "detaliaza",
+      "mai clar",
+      "si cum fac",
+      "bun si aici",
+    ].includes(normalized)
   )
 }
 
 export function generateGufoAiReply(input: GufoAiInput): GufoAiReply {
   const rawMessage = String(input.message || "").trim()
   const currentPath = String(input.currentPath || "").trim()
+  const pathGuide = findGuideByPath(currentPath)
+
+  if (!rawMessage) {
+    return {
+      title: "Gufo AI",
+      answer: pathGuide
+        ? `Salut! Sunt Gufo AI.\n\nTe pot ajuta cu tot ce tine de ERP, iar acum esti in zona ${pathGuide.title}. Poti sa ma intrebi natural, de exemplu ce vrei sa faci, ce nu merge sau ce vrei sa intelegi mai bine.`
+        : "Salut! Sunt Gufo AI. Spune-mi ce vrei sa faci in ERP, unde te-ai blocat sau ce vrei sa intelegi mai bine, iar eu iti raspund pas cu pas.",
+      suggestions: pathGuide
+        ? pathGuide.suggestions
+        : ["Cum adaug un produs?", "Cum fac un inventar nou?", "De ce nu vad vanzari in dashboard?"],
+    }
+  }
+
   const previousUserQuestion = getLastUserQuestion(input.history)
   const message =
     shouldReusePreviousQuestion(rawMessage) && previousUserQuestion
       ? `${previousUserQuestion}. ${rawMessage}`
       : rawMessage
-
-  if (!message) {
-    return {
-      title: "Gufo AI",
-      answer:
-        "Scrie-mi ce vrei sa faci in ERP, iar eu iti explic pas cu pas. Pot ajuta cu produse, documente, stoc, inventare, rapoarte, setari si utilizatori.",
-      suggestions: [
-        "Cum adaug un produs?",
-        "Cum fac un inventar nou?",
-        "De ce nu vad vanzari in dashboard?",
-      ],
-    }
-  }
 
   if (matchesForbiddenTopic(message)) {
     return {
@@ -533,7 +692,31 @@ export function generateGufoAiReply(input: GufoAiInput): GufoAiReply {
     }
   }
 
-  const guide = findGuideByMessage(message, currentPath) || findGuideByPath(currentPath)
+  if (isGreeting(rawMessage)) return buildGreetingReply(pathGuide)
+  if (isThanks(rawMessage)) return buildThanksReply(pathGuide)
+  if (isFarewell(rawMessage)) return buildFarewellReply()
+  if (isHelpPrompt(rawMessage)) {
+    return {
+      title: "Gufo AI",
+      answer: pathGuide
+        ? `Da, sigur.\n\nPot sa te ajut pe pagina ${pathGuide.title} sau cu orice alta functie din ERP: produse, documente, stoc, inventare, rapoarte, utilizatori si setari.\n\nSpune-mi direct ce vrei sa faci sau unde te-ai blocat.`
+        : "Da, sigur.\n\nPot sa te ajut cu produse, documente, stoc, inventare, rapoarte, utilizatori si setari din ERP. Spune-mi direct ce vrei sa faci sau unde te-ai blocat.",
+      suggestions: pathGuide
+        ? pathGuide.suggestions
+        : ["Cum fac un NIR?", "Cum schimb parola unui utilizator?", "De ce raportul este gol?"],
+    }
+  }
+
+  const guide = findGuideByMessage(message, currentPath)
+  if (isConfused(rawMessage)) return buildConfusedReply(guide)
+  if (isVeryShortAck(rawMessage) && guide) {
+    return {
+      title: guide.title,
+      answer: `Perfect. Daca vrei, continuam pe ${guide.title}.\n\nPot sa-ti spun mai departe fie pasii exacti, fie ce verifici daca nu merge, fie unde gasesti functia in ERP.`,
+      suggestions: guide.suggestions,
+    }
+  }
+
   const intent = detectIntent(message)
 
   if (guide) {
@@ -544,19 +727,26 @@ export function generateGufoAiReply(input: GufoAiInput): GufoAiReply {
     }
   }
 
-  const currentGuide = findGuideByPath(currentPath)
-  if (currentGuide && rawMessage.split(/\s+/).length <= 3) {
+  if (pathGuide && intent !== "generic") {
     return {
-      title: currentGuide.title,
-      answer: `Esti in zona ${currentGuide.title}.\n\n${currentGuide.summary}\n\nDaca imi spui exact ce vrei sa faci aici, iti raspund cu pasii corecti pentru aceasta pagina.`,
-      suggestions: currentGuide.suggestions,
+      title: pathGuide.title,
+      answer: buildGuideAnswer(pathGuide, intent, currentPath),
+      suggestions: pathGuide.suggestions,
+    }
+  }
+
+  if (pathGuide && rawMessage.split(/\s+/).length <= 3) {
+    return {
+      title: pathGuide.title,
+      answer: `Esti in zona ${pathGuide.title}.\n\nSpune-mi direct ce vrei sa faci aici si iti raspund ca intr-o conversatie normala, nu doar cu descrierea paginii. De exemplu poti sa-mi spui ce vrei sa creezi, ce nu merge sau ce camp nu intelegi.`,
+      suggestions: pathGuide.suggestions,
     }
   }
 
   return {
     title: "Gufo AI",
     answer:
-      `Nu sunt sigur inca ce operatie vrei sa faci.\n\nSpune-mi mai direct, de exemplu:\n1. ce document sau modul folosesti\n2. ce vrei sa obtii\n3. unde te blochezi\n\nExemple bune: "cum fac un NIR cu 3 produse", "de ce nu vad vanzari pe locatie", "cum schimb parola unui utilizator".${currentGuide ? `\n\nDaca intrebi despre pagina curenta, esti acum in zona ${currentGuide.title}.` : ""}`,
+      `Nu sunt sigur inca ce operatie vrei sa faci.\n\nSpune-mi mai direct, de exemplu:\n1. ce document sau modul folosesti\n2. ce vrei sa obtii\n3. unde te blochezi\n\nExemple bune: "cum fac un NIR cu 3 produse", "de ce nu vad vanzari pe locatie", "cum schimb parola unui utilizator".${pathGuide ? `\n\nDaca intrebi despre pagina curenta, esti acum in zona ${pathGuide.title}.` : ""}`,
     suggestions: [
       "Cum fac un NIR?",
       "Cum filtrez rapoartele pe locatie?",
