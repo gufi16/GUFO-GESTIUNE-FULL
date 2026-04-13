@@ -563,6 +563,19 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
           role: true,
           isActive: true,
           createdAt: true,
+          companyAccesses: {
+            include: {
+              company: {
+                select: {
+                  id: true,
+                  name: true,
+                  code: true,
+                  cui: true,
+                  isDefault: true,
+                },
+              },
+            },
+          },
         },
       },
       locations: {
@@ -714,6 +727,12 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
       users: tenant.users.map((user) => ({
         ...user,
         fullName: user.name,
+        companies:
+          user.role === "OWNER" || user.role === "ADMIN"
+            ? (tenant as any).companies.map((company: any) => serializeCompanySummary(company))
+            : Array.isArray(user.companyAccesses)
+              ? user.companyAccesses.map((access) => serializeCompanySummary(access.company)).filter(Boolean)
+              : [],
       })),
       locations: tenant.locations.map((location) => {
         const devices = terminalsByLocation.get(location.id) || []
