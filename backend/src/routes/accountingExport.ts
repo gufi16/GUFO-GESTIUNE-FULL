@@ -86,6 +86,11 @@ const StockTypeSchema = z.object({
   isDefault: z.boolean().optional(),
 })
 
+const ProductAccountingSchema = z.object({
+  accountingItemCode: z.string().trim().max(40).optional().nullable(),
+  accountingStockTypeId: z.string().trim().optional().nullable(),
+})
+
 function xmlEscape(value: unknown) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -206,6 +211,19 @@ function downloadName(kind: string, from: string, to: string) {
   return `saga_${safeKind}_${fromChunk}_${toChunk}.xml`
 }
 
+function managementValue(config: any, location: { code?: string | null; name?: string | null } | null | undefined) {
+  if (!location) return ""
+  switch (config?.managementAnalytic) {
+    case "LOCATION_NAME":
+      return location.name || ""
+    case "NONE":
+      return ""
+    case "LOCATION_CODE":
+    default:
+      return location.code || location.name || ""
+  }
+}
+
 router.get("/api/v1/reports/accounting/saga/config", requireAuth, async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
   const company = await requireRequestCompany(req)
@@ -243,6 +261,8 @@ router.get("/api/v1/reports/accounting/saga/config", requireAuth, async (req: Au
         { code: "suppliers", label: "Furnizori" },
         { code: "sales-invoices", label: "Facturi iesire" },
         { code: "purchase-receipts", label: "NIR / intrari" },
+        { code: "consumption-docs", label: "Bonuri de consum" },
+        { code: "production-docs", label: "Productie" },
       ],
     },
   })
@@ -333,6 +353,84 @@ router.patch("/api/v1/reports/accounting/saga/stock-types/:id", requireAuth, asy
       salesAccount: parsed.data.salesAccount?.trim() || null,
       analyticMode: parsed.data.analyticMode.trim(),
       isDefault: Boolean(parsed.data.isDefault),
+    },
+  })
+
+  return res.json({ ok: true, item: updated })
+})
+
+router.get("/api/v1/reports/accounting/saga/products", requireAuth, async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
+  const search = String(req.query.search || "").trim()
+
+  const products = await prisma.product.findMany({
+    where: {
+      tenantId,
+      companyId,
+      isActive: true,
+      ...(search
+        ? {
+            OR: [
+              { name: { contains: search, mode: "insensitive" } },
+              { sku: { contains: search, mode: "insensitive" } },
+              { accountingItemCode: { contains: search, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+    },
+    include: {
+      vatRate: { select: { rate: true, fiscalCode: true, name: true } },
+      uom: { select: { code: true, name: true } },
+      accountingStockType: { select: { id: true, code: true, name: true } },
+    },
+    orderBy: [{ name: "asc" }],
+    take: 150,
+  })
+
+  return res.json({ ok: true, items: products })
+})
+
+router.patch("/api/v1/reports/accounting/saga/products/:id", requireAuth, async (req: AuthedRequest, res) => {
+  const parsed = ProductAccountingSchema.safeParse(req.body || {})
+  if (!parsed.success) {
+    return res.status(400).json({ ok: false, error: parsed.error.flatten() })
+  }
+
+  const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
+
+  const product = await prisma.product.findFirst({
+    where: { id: req.params.id, tenantId, companyId },
+  })
+
+  if (!product) {
+    return res.status(404).json({ ok: false, error: "Produsul nu exista." })
+  }
+
+  if (parsed.data.accountingStockTypeId) {
+    const stockType = await prisma.accountingStockType.findFirst({
+      where: {
+        id: parsed.data.accountingStockTypeId,
+        tenantId,
+        companyId,
+      },
+    })
+    if (!stockType) {
+      return res.status(400).json({ ok: false, error: "Tipul de stoc selectat nu exista." })
+    }
+  }
+
+  const updated = await prisma.product.update({
+    where: { id: product.id },
+    data: {
+      accountingItemCode: parsed.data.accountingItemCode || null,
+      accountingStockTypeId: parsed.data.accountingStockTypeId || null,
+    },
+    include: {
+      accountingStockType: { select: { id: true, code: true, name: true } },
+      vatRate: { select: { rate: true, fiscalCode: true, name: true } },
+      uom: { select: { code: true, name: true } },
     },
   })
 
@@ -561,6 +659,124 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         ].join("\n")
       ),
       `  </Intrari>`,
+      `</SAGA>`,
+    ].join("\n")
+  } else if (kind === "consumption-docs") {
+    const documents = await prisma.consumptionDoc.findMany({
+      where: {
+        tenantId,
+        companyId,
+        docDate: { gte: from, lte: to },
+      },
+      include: {
+        location: true,
+        items: {
+          include: {
+            ingredient: {
+              include: {
+                accountingStockType: true,
+                uom: true,
+                vatRate: true,
+              },
+            },
+            finishedProduct: {
+              include: {
+                accountingStockType: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { docDate: "asc" },
+    })
+
+    xml = [
+      `<?xml version="1.0" encoding="utf-8"?>`,
+      `<SAGA tip="BonuriConsum">`,
+      `  <BonuriConsum>`,
+      ...documents.map((document) =>
+        [
+          `    <BonConsum>`,
+          `      <Numar>${xmlEscape(document.docNo)}</Numar>`,
+          `      <Data>${xmlEscape(formatDate(document.docDate))}</Data>`,
+          `      <Gestiune>${xmlEscape(managementValue(config, document.location))}</Gestiune>`,
+          `      <Explicatie>${xmlEscape(document.note || "Bon de consum")}</Explicatie>`,
+          `      <Linii>`,
+          ...document.items.map((line) => {
+            const stockType = pickStockType(line.ingredient, stockTypes, config)
+            return [
+              `        <Linie>`,
+              `          <Cod>${xmlEscape(line.ingredient.accountingItemCode || line.ingredient.sku || slugCode(line.ingredient.name, "ART"))}</Cod>`,
+              `          <Denumire>${xmlEscape(line.ingredient.name)}</Denumire>`,
+              `          <UM>${xmlEscape(line.ingredient.uom?.code || "BUC")}</UM>`,
+              `          <Cantitate>${decimal(line.qty, 3)}</Cantitate>`,
+              `          <ContCheltuiala>${xmlEscape(stockType?.expenseAccount || config.expenseAccount)}</ContCheltuiala>`,
+              `          <ContStoc>${xmlEscape(stockType?.inventoryAccount || config.inventoryAccount)}</ContStoc>`,
+              `          <ProdusFinal>${xmlEscape(line.finishedProduct?.name || "")}</ProdusFinal>`,
+              `        </Linie>`,
+            ].join("\n")
+          }),
+          `      </Linii>`,
+          `    </BonConsum>`,
+        ].join("\n")
+      ),
+      `  </BonuriConsum>`,
+      `</SAGA>`,
+    ].join("\n")
+  } else if (kind === "production-docs") {
+    const documents = await prisma.productionDoc.findMany({
+      where: {
+        tenantId,
+        companyId,
+        docDate: { gte: from, lte: to },
+      },
+      include: {
+        location: true,
+        items: {
+          include: {
+            product: {
+              include: {
+                accountingStockType: true,
+                uom: true,
+                vatRate: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { docDate: "asc" },
+    })
+
+    xml = [
+      `<?xml version="1.0" encoding="utf-8"?>`,
+      `<SAGA tip="Productie">`,
+      `  <Productie>`,
+      ...documents.map((document) =>
+        [
+          `    <DocumentProductie>`,
+          `      <Numar>${xmlEscape(document.docNo)}</Numar>`,
+          `      <Data>${xmlEscape(formatDate(document.docDate))}</Data>`,
+          `      <Gestiune>${xmlEscape(managementValue(config, document.location))}</Gestiune>`,
+          `      <Explicatie>${xmlEscape(document.note || "Nota de productie")}</Explicatie>`,
+          `      <Linii>`,
+          ...document.items.map((line) => {
+            const stockType = pickStockType(line.product, stockTypes, config)
+            return [
+              `        <Linie>`,
+              `          <Cod>${xmlEscape(line.product.accountingItemCode || line.product.sku || slugCode(line.product.name, "ART"))}</Cod>`,
+              `          <Denumire>${xmlEscape(line.product.name)}</Denumire>`,
+              `          <UM>${xmlEscape(line.product.uom?.code || "BUC")}</UM>`,
+              `          <Cantitate>${decimal(line.qty, 3)}</Cantitate>`,
+              `          <ContStoc>${xmlEscape(stockType?.inventoryAccount || config.inventoryAccount)}</ContStoc>`,
+              `          <ContVenit>${xmlEscape(stockType?.salesAccount || config.salesAccount)}</ContVenit>`,
+              `        </Linie>`,
+            ].join("\n")
+          }),
+          `      </Linii>`,
+          `    </DocumentProductie>`,
+        ].join("\n")
+      ),
+      `  </Productie>`,
       `</SAGA>`,
     ].join("\n")
   } else {

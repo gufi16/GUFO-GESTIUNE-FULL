@@ -29,6 +29,28 @@ type StockType = {
   isDefault: boolean
 }
 
+type ProductAccountingItem = {
+  id: string
+  sku: string
+  name: string
+  accountingItemCode?: string | null
+  accountingStockTypeId?: string | null
+  accountingStockType?: {
+    id: string
+    code: string
+    name: string
+  } | null
+  vatRate?: {
+    rate?: number | string
+    fiscalCode?: string | null
+    name?: string | null
+  } | null
+  uom?: {
+    code?: string | null
+    name?: string | null
+  } | null
+}
+
 type ConfigResponse = {
   item?: {
     company?: {
@@ -40,6 +62,10 @@ type ConfigResponse = {
     stockTypes?: StockType[]
     exportKinds?: Array<{ code: string; label: string }>
   }
+}
+
+type ProductsResponse = {
+  items?: ProductAccountingItem[]
 }
 
 const emptyConfig: AccountingConfig = {
@@ -86,6 +112,10 @@ export default function ExportContabilitatePage() {
   const [stockTypes, setStockTypes] = useState<StockType[]>([])
   const [stockTypeForm, setStockTypeForm] = useState(emptyStockType)
   const [exportKinds, setExportKinds] = useState<Array<{ code: string; label: string }>>([])
+  const [products, setProducts] = useState<ProductAccountingItem[]>([])
+  const [productSearch, setProductSearch] = useState("")
+  const [loadingProducts, setLoadingProducts] = useState(false)
+  const [savingProductId, setSavingProductId] = useState<string | null>(null)
   const today = new Date()
   const [dateFrom, setDateFrom] = useState(toInputDate(new Date(today.getFullYear(), today.getMonth(), 1)))
   const [dateTo, setDateTo] = useState(toInputDate(today))
@@ -106,8 +136,25 @@ export default function ExportContabilitatePage() {
     }
   }
 
+  async function loadProducts(search = productSearch) {
+    try {
+      setLoadingProducts(true)
+      const params = search.trim() ? `?search=${encodeURIComponent(search.trim())}` : ""
+      const data = await api<ProductsResponse>(`/api/v1/reports/accounting/saga/products${params}`)
+      setProducts(Array.isArray(data?.items) ? data.items : [])
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut incarca produsele pentru maparea contabila.")
+    } finally {
+      setLoadingProducts(false)
+    }
+  }
+
   useEffect(() => {
     load()
+  }, [])
+
+  useEffect(() => {
+    loadProducts("")
   }, [])
 
   const configFields = useMemo(
@@ -193,6 +240,27 @@ export default function ExportContabilitatePage() {
       setError(err?.message || "Nu am putut genera exportul SAGA.")
     } finally {
       setDownloadingKind(null)
+    }
+  }
+
+  async function handleSaveProduct(product: ProductAccountingItem) {
+    try {
+      setSavingProductId(product.id)
+      setError("")
+      await api(`/api/v1/reports/accounting/saga/products/${product.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          accountingItemCode: product.accountingItemCode || null,
+          accountingStockTypeId: product.accountingStockTypeId || null,
+        }),
+      })
+      setMessage(`Maparea contabila a fost salvata pentru ${product.name}.`)
+      window.setTimeout(() => setMessage(""), 1800)
+      await loadProducts(productSearch)
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut salva maparea contabila a produsului.")
+    } finally {
+      setSavingProductId(null)
     }
   }
 
@@ -471,6 +539,114 @@ export default function ExportContabilitatePage() {
           </div>
         </section>
       </div>
+
+      <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Mapare produse</div>
+            <div className="mt-1 text-sm font-semibold text-[#17324D]">Cod contabil si tip de stoc pe fiecare produs</div>
+          </div>
+
+          <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
+            <input
+              value={productSearch}
+              onChange={(e) => setProductSearch(e.target.value)}
+              placeholder="Cauta dupa nume, SKU sau cod contabil"
+              className="h-11 min-w-[280px] rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+            />
+            <button
+              type="button"
+              onClick={() => loadProducts(productSearch)}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700"
+            >
+              <RefreshCw size={15} />
+              {loadingProducts ? "Se cauta..." : "Cauta"}
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="text-xs uppercase text-slate-400">
+              <tr>
+                <th className="px-3 py-2 text-left font-semibold">Produs</th>
+                <th className="px-3 py-2 text-left font-semibold">Cod contabil</th>
+                <th className="px-3 py-2 text-left font-semibold">Tip stoc</th>
+                <th className="px-3 py-2 text-left font-semibold">TVA / UM</th>
+                <th className="px-3 py-2 text-right font-semibold">Actiune</th>
+              </tr>
+            </thead>
+            <tbody>
+              {products.map((product) => (
+                <tr key={product.id} className="border-t border-slate-200 align-top">
+                  <td className="px-3 py-3">
+                    <div className="font-semibold text-slate-900">{product.name}</div>
+                    <div className="mt-1 text-xs text-slate-500">SKU: {product.sku}</div>
+                  </td>
+                  <td className="px-3 py-3">
+                    <input
+                      value={product.accountingItemCode || ""}
+                      onChange={(e) =>
+                        setProducts((prev) =>
+                          prev.map((item) =>
+                            item.id === product.id ? { ...item, accountingItemCode: e.target.value } : item
+                          )
+                        )
+                      }
+                      placeholder="Cod import SAGA"
+                      className="h-10 w-full min-w-[180px] rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+                    />
+                  </td>
+                  <td className="px-3 py-3">
+                    <select
+                      value={product.accountingStockTypeId || ""}
+                      onChange={(e) =>
+                        setProducts((prev) =>
+                          prev.map((item) =>
+                            item.id === product.id ? { ...item, accountingStockTypeId: e.target.value || null } : item
+                          )
+                        )
+                      }
+                      className="h-10 w-full min-w-[220px] rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+                    >
+                      <option value="">Tip implicit</option>
+                      {stockTypes.map((stockType) => (
+                        <option key={stockType.id} value={stockType.id}>
+                          {stockType.name} ({stockType.code})
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="px-3 py-3 text-slate-600">
+                    <div>TVA: {product.vatRate?.rate ?? "-" }%</div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      {[product.vatRate?.fiscalCode, product.uom?.code].filter(Boolean).join(" | ") || "-"}
+                    </div>
+                  </td>
+                  <td className="px-3 py-3 text-right">
+                    <button
+                      type="button"
+                      onClick={() => handleSaveProduct(product)}
+                      disabled={savingProductId === product.id}
+                      className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <Save size={14} />
+                      {savingProductId === product.id ? "Se salveaza..." : "Salveaza"}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {!products.length ? (
+                <tr>
+                  <td colSpan={5} className="px-3 py-6 text-center text-sm text-slate-500">
+                    {loadingProducts ? "Se incarca produsele..." : "Nu exista produse pentru criteriul cautat."}
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   )
 }
