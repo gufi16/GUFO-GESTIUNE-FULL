@@ -38,6 +38,14 @@ async function buildPreferredCompanyFilter(
   tenantId: string,
   companyId: string
 ) {
+  const companiesCount = await prisma.company.count({
+    where: { tenantId },
+  })
+
+  if (companiesCount > 1) {
+    return { companyId }
+  }
+
   const hasCompanySpecific =
     model === "location"
       ? (await prisma.location.count({
