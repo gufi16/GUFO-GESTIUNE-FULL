@@ -6,6 +6,7 @@ import {
   Building2,
   ChevronLeft,
   FilePlus2,
+  FileSpreadsheet,
   FileText,
   LayoutDashboard,
   Settings,
@@ -40,6 +41,7 @@ const sections: SidebarSection[] = [
       { to: "/gestiune", label: "Gestiune", icon: Warehouse, module: "inventory" },
       { to: "/documente", label: "Documente", icon: FileText, module: "documents" },
       { to: "/rapoarte", label: "Rapoarte", icon: BarChart3, module: "reports" },
+      { to: "/rapoarte/export-contabilitate", label: "Export contabilitate", icon: FileSpreadsheet, module: "reports" },
     ],
   },
   {
