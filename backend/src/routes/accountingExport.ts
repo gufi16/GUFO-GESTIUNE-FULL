@@ -444,6 +444,8 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
   const kind = String(req.query.kind || "").trim().toLowerCase()
   const dateFrom = String(req.query.dateFrom || "").trim()
   const dateTo = String(req.query.dateTo || "").trim()
+  const locationId = String(req.query.locationId || "").trim()
+  const partnerSearch = String(req.query.partnerSearch || "").trim()
   const from = dateFrom ? new Date(`${dateFrom}T00:00:00`) : new Date("2000-01-01T00:00:00")
   const to = dateTo ? new Date(`${dateTo}T23:59:59.999`) : new Date()
 
@@ -492,7 +494,20 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     ].join("\n")
   } else if (kind === "customers") {
     const customers = await prisma.customer.findMany({
-      where: { tenantId, companyId, isActive: true },
+      where: {
+        tenantId,
+        companyId,
+        isActive: true,
+        ...(partnerSearch
+          ? {
+              OR: [
+                { name: { contains: partnerSearch, mode: "insensitive" } },
+                { code: { contains: partnerSearch, mode: "insensitive" } },
+                { cif: { contains: partnerSearch, mode: "insensitive" } },
+              ],
+            }
+          : {}),
+      },
       orderBy: { name: "asc" },
     })
 
@@ -519,7 +534,20 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     ].join("\n")
   } else if (kind === "suppliers") {
     const suppliers = await prisma.supplier.findMany({
-      where: { tenantId, companyId, isActive: true },
+      where: {
+        tenantId,
+        companyId,
+        isActive: true,
+        ...(partnerSearch
+          ? {
+              OR: [
+                { name: { contains: partnerSearch, mode: "insensitive" } },
+                { code: { contains: partnerSearch, mode: "insensitive" } },
+                { cif: { contains: partnerSearch, mode: "insensitive" } },
+              ],
+            }
+          : {}),
+      },
       orderBy: { name: "asc" },
     })
 
@@ -551,6 +579,16 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         companyId,
         status: "ISSUED",
         docDate: { gte: from, lte: to },
+        ...(locationId ? { locationId } : {}),
+        ...(partnerSearch
+          ? {
+              OR: [
+                { customerName: { contains: partnerSearch, mode: "insensitive" } },
+                { customerCode: { contains: partnerSearch, mode: "insensitive" } },
+                { customerCif: { contains: partnerSearch, mode: "insensitive" } },
+              ],
+            }
+          : {}),
       },
       include: {
         location: true,
@@ -606,6 +644,15 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         companyId,
         status: "POSTED",
         docDate: { gte: from, lte: to },
+        ...(locationId ? { locationId } : {}),
+        ...(partnerSearch
+          ? {
+              OR: [
+                { supplierName: { contains: partnerSearch, mode: "insensitive" } },
+                { supplierCode: { contains: partnerSearch, mode: "insensitive" } },
+              ],
+            }
+          : {}),
       },
       include: {
         location: true,
@@ -667,6 +714,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         tenantId,
         companyId,
         docDate: { gte: from, lte: to },
+        ...(locationId ? { locationId } : {}),
       },
       include: {
         location: true,
@@ -729,6 +777,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         tenantId,
         companyId,
         docDate: { gte: from, lte: to },
+        ...(locationId ? { locationId } : {}),
       },
       include: {
         location: true,

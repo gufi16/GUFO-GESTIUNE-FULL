@@ -15,6 +15,7 @@ import {
   Warehouse,
   ArrowLeftRight,
   BarChart3,
+  FileSpreadsheet,
   ScrollText,
 } from "lucide-react"
 import clsx from "clsx"
@@ -60,6 +61,7 @@ const sections: SidebarSection[] = [
       { to: "/gestiune/productie", label: "Producție", icon: Factory },
       { to: "/documente", label: "Documente", icon: FileText },
       { to: "/rapoarte", label: "Rapoarte", icon: BarChart3 },
+      { to: "/rapoarte/export-contabilitate", label: "Export contabilitate", icon: FileSpreadsheet },
     ],
   },
   {

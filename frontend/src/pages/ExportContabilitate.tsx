@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react"
-import { Download, Plus, RefreshCw, Save } from "lucide-react"
+import { CalendarDays, Download, Mail, Plus, RefreshCw, Save, Search } from "lucide-react"
 import PageHeader from "../components/PageHeader"
 import { api } from "../lib/api"
 
@@ -61,6 +61,7 @@ type ConfigResponse = {
     config?: AccountingConfig
     stockTypes?: StockType[]
     exportKinds?: Array<{ code: string; label: string }>
+    locations?: Array<{ id: string; name: string; code?: string | null }>
   }
 }
 
@@ -112,10 +113,16 @@ export default function ExportContabilitatePage() {
   const [stockTypes, setStockTypes] = useState<StockType[]>([])
   const [stockTypeForm, setStockTypeForm] = useState(emptyStockType)
   const [exportKinds, setExportKinds] = useState<Array<{ code: string; label: string }>>([])
+  const [locations, setLocations] = useState<Array<{ id: string; name: string; code?: string | null }>>([])
   const [products, setProducts] = useState<ProductAccountingItem[]>([])
   const [productSearch, setProductSearch] = useState("")
   const [loadingProducts, setLoadingProducts] = useState(false)
   const [savingProductId, setSavingProductId] = useState<string | null>(null)
+  const [selectedKind, setSelectedKind] = useState("")
+  const [selectedValueType, setSelectedValueType] = useState("CANTITATIV_VALORIC")
+  const [selectedLocationId, setSelectedLocationId] = useState("")
+  const [partnerSearch, setPartnerSearch] = useState("")
+  const [sendEmail, setSendEmail] = useState(false)
   const today = new Date()
   const [dateFrom, setDateFrom] = useState(toInputDate(new Date(today.getFullYear(), today.getMonth(), 1)))
   const [dateTo, setDateTo] = useState(toInputDate(today))
@@ -129,6 +136,7 @@ export default function ExportContabilitatePage() {
       setConfig({ ...emptyConfig, ...(data?.item?.config || {}) })
       setStockTypes(Array.isArray(data?.item?.stockTypes) ? data.item!.stockTypes! : [])
       setExportKinds(Array.isArray(data?.item?.exportKinds) ? data.item!.exportKinds! : [])
+      setLocations(Array.isArray(data?.item?.locations) ? data.item!.locations! : [])
     } catch (err: any) {
       setError(err?.message || "Nu am putut incarca setarile pentru exportul contabil.")
     } finally {
@@ -216,7 +224,9 @@ export default function ExportContabilitatePage() {
       const response = await api<Response>(
         `/api/v1/reports/accounting/saga/export?kind=${encodeURIComponent(kind)}&dateFrom=${encodeURIComponent(
           dateFrom
-        )}&dateTo=${encodeURIComponent(dateTo)}`,
+        )}&dateTo=${encodeURIComponent(dateTo)}&locationId=${encodeURIComponent(selectedLocationId)}&partnerSearch=${encodeURIComponent(
+          partnerSearch
+        )}`,
         { raw: true }
       )
 
@@ -241,6 +251,16 @@ export default function ExportContabilitatePage() {
     } finally {
       setDownloadingKind(null)
     }
+  }
+
+  async function handleGenerate() {
+    if (!selectedKind) {
+      setError("Alege mai intai tipul de document pentru export.")
+      return
+    }
+
+    setMessage("")
+    await handleDownload(selectedKind)
   }
 
   async function handleSaveProduct(product: ProductAccountingItem) {
@@ -276,20 +296,155 @@ export default function ExportContabilitatePage() {
       {error ? <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div> : null}
 
       <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Firma activa</div>
-            <div className="mt-1 text-lg font-semibold text-[#17324D]">{companyName}</div>
-            <div className="mt-1 text-sm text-slate-500">Exportul se genereaza pentru firma selectata acum in ERP.</div>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Generator export contabilitate</div>
+              <div className="mt-1 text-lg font-semibold text-[#17324D]">{companyName}</div>
+              <div className="mt-1 text-sm text-slate-500">Flux compact de export, separat de rapoartele generale, inspirat de structura din Freya.</div>
+            </div>
+            <button
+              type="button"
+              onClick={load}
+              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700"
+            >
+              <RefreshCw size={15} />
+              Reincarca datele
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={load}
-            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700"
-          >
-            <RefreshCw size={15} />
-            Reincarca
-          </button>
+
+          <div className="grid gap-3 xl:grid-cols-4">
+            <label className="block">
+              <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Tip export</div>
+              <select className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white" value="SAGA" disabled>
+                <option value="SAGA">SAGA</option>
+              </select>
+            </label>
+
+            <label className="block">
+              <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Tip valoare</div>
+              <select
+                value={selectedValueType}
+                onChange={(e) => setSelectedValueType(e.target.value)}
+                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+              >
+                <option value="CANTITATIV_VALORIC">Cantitativ valoric</option>
+                <option value="GLOBAL_VALORIC">Global valoric</option>
+              </select>
+            </label>
+
+            <label className="block">
+              <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Data start</div>
+              <div className="relative">
+                <CalendarDays size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+                />
+              </div>
+            </label>
+
+            <label className="block">
+              <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Data stop</div>
+              <div className="relative">
+                <CalendarDays size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+                />
+              </div>
+            </label>
+
+            <label className="block">
+              <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Tip document</div>
+              <select
+                value={selectedKind}
+                onChange={(e) => setSelectedKind(e.target.value)}
+                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+              >
+                <option value="">Nu ai selectat niciun tip de document</option>
+                {exportKinds.map((item) => (
+                  <option key={item.code} value={item.code}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Locatie</div>
+              <select
+                value={selectedLocationId}
+                onChange={(e) => setSelectedLocationId(e.target.value)}
+                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+              >
+                <option value="">Toate locatiile</option>
+                {locations.map((location) => (
+                  <option key={location.id} value={location.id}>
+                    {location.code ? `${location.code} - ${location.name}` : location.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Gestiune</div>
+              <input
+                value={
+                  selectedLocationId
+                    ? locations.find((item) => item.id === selectedLocationId)?.name || ""
+                    : "Nu ai selectat gestiunea"
+                }
+                readOnly
+                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-100 px-3 text-sm text-slate-500 outline-none"
+              />
+            </label>
+
+            <label className="block">
+              <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Client / partener</div>
+              <div className="relative">
+                <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  value={partnerSearch}
+                  onChange={(e) => setPartnerSearch(e.target.value)}
+                  placeholder="Tastezi nume, cod sau CIF"
+                  className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+                />
+              </div>
+            </label>
+          </div>
+
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <label className="inline-flex items-center gap-2 text-sm text-slate-600">
+              <input
+                type="checkbox"
+                checked={sendEmail}
+                onChange={(e) => setSendEmail(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-[#17324D] focus:ring-[#17324D]"
+              />
+              <Mail size={14} />
+              Trimite pe email
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500">in curand</span>
+            </label>
+
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={!selectedKind || downloadingKind === selectedKind}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#2d2a5f] px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Download size={15} />
+              {downloadingKind === selectedKind ? "Se genereaza..." : "Genereaza"}
+            </button>
+          </div>
+
+          <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+            Exportul se descarca instant in format XML compatibil cu importul din SAGA. Optiunea de trimitere pe email ramane rezervata pentru etapa urmatoare.
+          </div>
         </div>
       </section>
 
@@ -373,55 +528,28 @@ export default function ExportContabilitatePage() {
 
         <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
           <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Export SAGA</div>
-            <div className="mt-1 text-sm font-semibold text-[#17324D]">Genereaza fisiere XML pentru import</div>
-          </div>
-
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <label className="block">
-              <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Data inceput</div>
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
-              />
-            </label>
-
-            <label className="block">
-              <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Data sfarsit</div>
-              <input
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
-              />
-            </label>
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Rezumat export</div>
+            <div className="mt-1 text-sm font-semibold text-[#17324D]">Tipurile de document pregatite pentru generator</div>
           </div>
 
           <div className="mt-4 space-y-2">
             {exportKinds.map((item) => (
-              <button
+              <div
                 key={item.code}
-                type="button"
-                onClick={() => handleDownload(item.code)}
-                disabled={downloadingKind === item.code}
-                className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left transition hover:border-[#17324D] hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                className={[
+                  "flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left transition",
+                  selectedKind === item.code ? "border-[#17324D] bg-slate-100" : "border-slate-200 bg-slate-50",
+                ].join(" ")}
               >
                 <div>
                   <div className="font-semibold text-slate-900">{item.label}</div>
                   <div className="mt-1 text-xs text-slate-500">Fisier XML pentru import SAGA</div>
                 </div>
-                <span className="inline-flex items-center gap-2 text-sm font-semibold text-[#17324D]">
-                  <Download size={15} />
-                  {downloadingKind === item.code ? "Se genereaza..." : "Exporta"}
+                <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                  {selectedKind === item.code ? "selectat" : "disponibil"}
                 </span>
-              </button>
+              </div>
             ))}
-          </div>
-
-          <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-            Importul se face ulterior in SAGA din meniul de import date, folosind fisierele XML generate aici.
           </div>
         </section>
       </div>
