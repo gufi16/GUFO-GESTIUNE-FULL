@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { Check, Copy, Crown, LogOut, Plus, RefreshCw, Search, X } from "lucide-react"
+import { Building2, Check, Copy, Crown, LogOut, Plus, RefreshCw, Search, X } from "lucide-react"
 import { api } from "../../lib/api"
 import { controlLogout, controlMe } from "../../lib/controlAuth"
 
@@ -407,6 +407,10 @@ export default function ControlPanelClients() {
     }
   }
 
+  function handleAddCompany(clientId: string) {
+    navigate(`/control-panel/clienti/${clientId}?adaugaFirma=1`)
+  }
+
   const statusTabs: Array<["all" | AdminClientItem["status"], string]> = [
     ["all", "Toti"],
     ["active", "Activi"],
@@ -557,6 +561,19 @@ export default function ControlPanelClients() {
                   <div className="mt-1.5 flex flex-wrap gap-3 text-xs text-slate-500">
                     <span>Creat {formatDate(item.createdAt)}</span>
                     <span>Licenta {formatDate(item.license?.expiresAt)}</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        handleAddCompany(item.id)
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-800"
+                    >
+                      <Building2 size={12} />
+                      Adauga firma
+                    </button>
                   </div>
                 </div>
 

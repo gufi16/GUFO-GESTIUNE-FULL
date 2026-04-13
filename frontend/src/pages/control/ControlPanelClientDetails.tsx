@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react"
-import { useParams } from "react-router-dom"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { useParams, useSearchParams } from "react-router-dom"
 import {
   Copy,
   Download,
@@ -204,6 +204,7 @@ function metricCard(label: string, value: string | number) {
 
 export default function ControlPanelClientDetails() {
   const { id } = useParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -230,6 +231,7 @@ export default function ControlPanelClientDetails() {
   const [userError, setUserError] = useState<string | null>(null)
   const [companyError, setCompanyError] = useState<string | null>(null)
   const [creatingCompany, setCreatingCompany] = useState(false)
+  const [showCompanyForm, setShowCompanyForm] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [historyQuery, setHistoryQuery] = useState("")
   const [historyDateFrom, setHistoryDateFrom] = useState("")
@@ -255,6 +257,7 @@ export default function ControlPanelClientDetails() {
     limitTerminals: 1,
     modules: defaultModules,
   })
+  const companySectionRef = useRef<HTMLElement | null>(null)
 
   async function load() {
     try {
@@ -288,6 +291,14 @@ export default function ControlPanelClientDetails() {
   useEffect(() => {
     load()
   }, [id])
+
+  useEffect(() => {
+    if (searchParams.get("adaugaFirma") !== "1") return
+    setShowCompanyForm(true)
+    window.setTimeout(() => {
+      companySectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    }, 50)
+  }, [searchParams])
 
   const users = Array.isArray(client?.users) ? (client.users as User[]) : []
   const locations = Array.isArray(client?.locations) ? (client.locations as LocationItem[]) : []
@@ -451,6 +462,12 @@ export default function ControlPanelClientDetails() {
         email: "",
         phone: "",
       })
+      setShowCompanyForm(false)
+      if (searchParams.get("adaugaFirma") === "1") {
+        const nextParams = new URLSearchParams(searchParams)
+        nextParams.delete("adaugaFirma")
+        setSearchParams(nextParams, { replace: true })
+      }
       setMessage("Firma suplimentara a fost adaugata.")
       await load()
     } catch (err: any) {
@@ -658,6 +675,13 @@ export default function ControlPanelClientDetails() {
     ["reports", "Rapoarte"],
   ]
 
+  function openCompanyForm() {
+    setShowCompanyForm(true)
+    window.setTimeout(() => {
+      companySectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    }, 50)
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-slate-200 bg-white px-4 py-4 shadow-sm">
@@ -675,12 +699,12 @@ export default function ControlPanelClientDetails() {
 
         <div className="flex flex-wrap gap-2">
           <button
-            onClick={handleCreateCompany}
-            disabled={creatingCompany}
+            type="button"
+            onClick={openCompanyForm}
             className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#0F2740] disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Plus size={15} />
-            {creatingCompany ? "Se adauga firma..." : "Adauga alta firma"}
+            Adauga alta firma
           </button>
           <button
             onClick={handleExportClient}
@@ -723,7 +747,7 @@ export default function ControlPanelClientDetails() {
       {userError ? <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{userError}</div> : null}
       {companyError ? <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{companyError}</div> : null}
 
-      <section className="rounded-[24px] border border-blue-200 bg-gradient-to-r from-blue-50 via-white to-slate-50 p-4 shadow-sm">
+      <section ref={companySectionRef} className="rounded-[24px] border border-blue-200 bg-gradient-to-r from-blue-50 via-white to-slate-50 p-4 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <div className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600">Multi-firma</div>
@@ -738,54 +762,79 @@ export default function ControlPanelClientDetails() {
             </div>
             <button
               type="button"
-              onClick={handleCreateCompany}
-              disabled={creatingCompany}
+              onClick={openCompanyForm}
               className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#0F2740] disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Plus size={15} />
-              {creatingCompany ? "Se adauga..." : "Adauga alta firma"}
+              Adauga alta firma
             </button>
           </div>
         </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          <input
-            value={companyForm.name}
-            onChange={(e) => setCompanyForm((prev) => ({ ...prev, name: e.target.value }))}
-            placeholder="Nume firma noua"
-            className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
-          />
-          <input
-            value={companyForm.cui}
-            onChange={(e) => setCompanyForm((prev) => ({ ...prev, cui: e.target.value }))}
-            placeholder="CUI"
-            className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
-          />
-          <input
-            value={companyForm.regNo}
-            onChange={(e) => setCompanyForm((prev) => ({ ...prev, regNo: e.target.value }))}
-            placeholder="Reg. com."
-            className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
-          />
-          <input
-            value={companyForm.email}
-            onChange={(e) => setCompanyForm((prev) => ({ ...prev, email: e.target.value }))}
-            placeholder="Email firma"
-            className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
-          />
-          <input
-            value={companyForm.phone}
-            onChange={(e) => setCompanyForm((prev) => ({ ...prev, phone: e.target.value }))}
-            placeholder="Telefon"
-            className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
-          />
-          <input
-            value={companyForm.address}
-            onChange={(e) => setCompanyForm((prev) => ({ ...prev, address: e.target.value }))}
-            placeholder="Adresa"
-            className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
-          />
-        </div>
+        {showCompanyForm ? (
+          <div className="mt-4 space-y-3">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <input
+                value={companyForm.name}
+                onChange={(e) => setCompanyForm((prev) => ({ ...prev, name: e.target.value }))}
+                placeholder="Nume firma noua"
+                className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+              />
+              <input
+                value={companyForm.cui}
+                onChange={(e) => setCompanyForm((prev) => ({ ...prev, cui: e.target.value }))}
+                placeholder="CUI"
+                className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+              />
+              <input
+                value={companyForm.regNo}
+                onChange={(e) => setCompanyForm((prev) => ({ ...prev, regNo: e.target.value }))}
+                placeholder="Reg. com."
+                className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+              />
+              <input
+                value={companyForm.email}
+                onChange={(e) => setCompanyForm((prev) => ({ ...prev, email: e.target.value }))}
+                placeholder="Email firma"
+                className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+              />
+              <input
+                value={companyForm.phone}
+                onChange={(e) => setCompanyForm((prev) => ({ ...prev, phone: e.target.value }))}
+                placeholder="Telefon"
+                className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+              />
+              <input
+                value={companyForm.address}
+                onChange={(e) => setCompanyForm((prev) => ({ ...prev, address: e.target.value }))}
+                placeholder="Adresa"
+                className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleCreateCompany}
+                disabled={creatingCompany}
+                className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#0F2740] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Plus size={15} />
+                {creatingCompany ? "Se adauga firma..." : "Salveaza firma"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCompanyForm(false)}
+                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700"
+              >
+                Renunta
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-4 rounded-2xl border border-dashed border-blue-200 bg-white/80 px-4 py-4 text-sm text-slate-600">
+            Apasa pe <span className="font-semibold text-[#17324D]">Adauga alta firma</span> pentru a deschide formularul.
+          </div>
+        )}
       </section>
 
       {resetPassword ? (
