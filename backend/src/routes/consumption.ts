@@ -29,7 +29,6 @@ router.post("/api/v1/consumption-docs", requireAuth, async (req: AuthedRequest, 
   try {
     const tenantId = req.auth!.tenantId;
     const companyId = await requireRequestCompanyId(req);
-    const companyId = await requireRequestCompanyId(req);
     const locationId = String(req.body?.locationId || "").trim();
     const note = typeof req.body?.note === "string" ? req.body.note.trim() : "";
     const docDateRaw = req.body?.docDate ? new Date(String(req.body.docDate)) : new Date();
