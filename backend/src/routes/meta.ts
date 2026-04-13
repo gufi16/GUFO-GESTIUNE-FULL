@@ -33,6 +33,23 @@ function buildCompanyScope(companyId: string) {
   return [{ companyId }, { companyId: null }]
 }
 
+async function buildPreferredCompanyFilter(
+  model: "location" | "terminal",
+  tenantId: string,
+  companyId: string
+) {
+  const hasCompanySpecific =
+    model === "location"
+      ? (await prisma.location.count({
+          where: { tenantId, companyId },
+        })) > 0
+      : (await prisma.terminal.count({
+          where: { tenantId, companyId },
+        })) > 0
+
+  return hasCompanySpecific ? { companyId } : { companyId: null }
+}
+
 async function ensureDefaultUoms(tenantId: string, companyId: string) {
   const existing = await prisma.uom.findMany({
     where: {
@@ -140,11 +157,12 @@ router.post(
 router.get("/api/v1/meta/locations", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
   const companyId = await requireRequestCompanyId(req)
+  const companyFilter = await buildPreferredCompanyFilter("location", tenantId, companyId)
 
   const locations = await prisma.location.findMany({
     where: {
       tenantId,
-      OR: buildCompanyScope(companyId),
+      ...companyFilter,
     },
     orderBy: { name: "asc" }
   })
@@ -156,11 +174,12 @@ router.get("/api/v1/meta/terminals", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
   const companyId = await requireRequestCompanyId(req)
   const locationId = String(req.query.locationId || "").trim()
+  const companyFilter = await buildPreferredCompanyFilter("terminal", tenantId, companyId)
 
   const terminals = await prisma.terminal.findMany({
     where: {
       tenantId,
-      OR: buildCompanyScope(companyId),
+      ...companyFilter,
       ...(locationId ? { locationId } : {}),
     },
     select: {
