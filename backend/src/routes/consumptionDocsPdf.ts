@@ -5,6 +5,7 @@ import PDFDocument from "pdfkit"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { resolveTenantCompany } from "../lib/companyResolver"
+import { requireRequestCompanyId } from "../lib/companyScope"
 
 const router = Router()
 
@@ -122,10 +123,11 @@ function drawCell(
 router.get("/:id/pdf", async (req: AuthedRequest, res) => {
   try {
     const tenantId = req.auth!.tenantId
+    const companyId = await requireRequestCompanyId(req)
     const { id } = req.params
 
     const docData = await prisma.consumptionDoc.findFirst({
-      where: { id, tenantId },
+      where: { id, tenantId, companyId },
       include: {
         location: true,
         sale: {
@@ -167,7 +169,7 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
 
     const consumptionDoc = docData
 
-    const company = await resolveTenantCompany(prisma, tenantId, req.auth?.activeCompanyId)
+    const company = await resolveTenantCompany(prisma, tenantId, companyId)
 
     const filename = `BonConsum_${safeFilePart(consumptionDoc.docNo)}_${safeFilePart(consumptionDoc.location?.name || "locatie")}.pdf`
 

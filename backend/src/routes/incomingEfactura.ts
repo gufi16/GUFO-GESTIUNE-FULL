@@ -10,6 +10,7 @@ import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { requireTenantModule } from "../lib/tenantModules"
 import { reserveNextNumber } from "../lib/numbering"
 import { resolveTenantCompany } from "../lib/companyResolver"
+import { requireRequestCompanyId } from "../lib/companyScope"
 import {
   extractDownloadId,
   extractUploadIndex,
@@ -125,11 +126,12 @@ function normalizeCurrency(value: any): "RON" | "EUR" | "USD" | "HUF" {
   return "RON"
 }
 
-async function matchSupplier(tenantId: string, supplierCif: string, supplierName: string) {
+async function matchSupplier(tenantId: string, companyId: string, supplierCif: string, supplierName: string) {
   if (supplierCif) {
     const byCif = await prisma.supplier.findFirst({
       where: {
         tenantId,
+        companyId,
         cif: {
           contains: supplierCif,
           mode: "insensitive",
@@ -144,6 +146,7 @@ async function matchSupplier(tenantId: string, supplierCif: string, supplierName
     const byName = await prisma.supplier.findFirst({
       where: {
         tenantId,
+        companyId,
         name: {
           equals: supplierName,
           mode: "insensitive",
@@ -157,14 +160,14 @@ async function matchSupplier(tenantId: string, supplierCif: string, supplierName
   return null
 }
 
-async function matchProduct(tenantId: string, line: any) {
+async function matchProduct(tenantId: string, companyId: string, line: any) {
   const skuCandidates = [line.externalCode, line.productCode, line.barcode]
     .map((value: any) => String(value || "").trim())
     .filter(Boolean)
 
   for (const candidate of skuCandidates) {
     const bySku = await prisma.product.findFirst({
-      where: { tenantId, sku: candidate },
+      where: { tenantId, companyId, sku: candidate },
       select: {
         id: true,
         name: true,
@@ -183,6 +186,7 @@ async function matchProduct(tenantId: string, line: any) {
     const byName = await prisma.product.findFirst({
       where: {
         tenantId,
+        companyId,
         name: {
           equals: String(line.productName).trim(),
           mode: "insensitive",
@@ -207,12 +211,14 @@ async function matchProduct(tenantId: string, line: any) {
 
 async function upsertIncomingInvoice(
   tenantId: string,
+  companyId: string,
   rawMessage: any,
   xmlText: string,
   parsedInvoice: any
 ) {
   const supplier = await matchSupplier(
     tenantId,
+    companyId,
     parsedInvoice.supplierCif || "",
     parsedInvoice.supplierName || ""
   )
@@ -231,12 +237,14 @@ async function upsertIncomingInvoice(
 
   const baseRecord = await prisma.incomingEInvoice.upsert({
     where: {
-      tenantId_spvDownloadId: {
+      tenantId_companyId_spvDownloadId: {
         tenantId,
+        companyId,
         spvDownloadId: downloadId,
       },
     },
     update: {
+      companyId,
       supplierId: supplier?.id || null,
       supplierName: parsedInvoice.supplierName || null,
       supplierCode: supplier?.code || null,
@@ -260,6 +268,7 @@ async function upsertIncomingInvoice(
     },
     create: {
       tenantId,
+      companyId,
       supplierId: supplier?.id || null,
       supplierName: parsedInvoice.supplierName || null,
       supplierCode: supplier?.code || null,
@@ -289,7 +298,7 @@ async function upsertIncomingInvoice(
   })
 
   for (const line of parsedInvoice.lines || []) {
-    const matchedProduct = await matchProduct(tenantId, line)
+    const matchedProduct = await matchProduct(tenantId, companyId, line)
     await prisma.incomingEInvoiceItem.create({
       data: {
         invoiceId: baseRecord.id,
@@ -341,12 +350,13 @@ function isMalformedIncomingInvoice(entry: any) {
   )
 }
 
-async function repairIncomingInvoiceIfNeeded(tenantId: string, entry: any) {
+async function repairIncomingInvoiceIfNeeded(tenantId: string, companyId: string, entry: any) {
   if (!entry?.xmlText || !isMalformedIncomingInvoice(entry)) return entry
   try {
     const parsedInvoice = parseIncomingEInvoiceXml(String(entry.xmlText))
     const repaired = await upsertIncomingInvoice(
       tenantId,
+      companyId,
       entry.rawPayload || {
         id: entry.spvMessageId || entry.spvDownloadId,
         downloadId: entry.spvDownloadId,
@@ -736,13 +746,14 @@ async function ensureIncomingInvoicePdfSaved(item: any) {
 
 router.get("/api/v1/efactura/incoming", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
   if (!moduleCheck.enabled) {
     return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
   }
 
   const items = await prisma.incomingEInvoice.findMany({
-    where: { tenantId },
+    where: { tenantId, companyId },
     include: {
       supplier: true,
       linkedReceipt: true,
@@ -756,7 +767,7 @@ router.get("/api/v1/efactura/incoming", async (req: AuthedRequest, res) => {
     orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
   })
 
-  const repairedItems = await Promise.all(items.map((entry) => repairIncomingInvoiceIfNeeded(tenantId, entry)))
+  const repairedItems = await Promise.all(items.map((entry) => repairIncomingInvoiceIfNeeded(tenantId, companyId, entry)))
 
   return res.json({ ok: true, items: repairedItems })
 })
@@ -799,13 +810,14 @@ router.get("/api/v1/efactura/incoming/bridge-config", async (req: AuthedRequest,
 
 router.get("/api/v1/efactura/incoming/:id", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
   if (!moduleCheck.enabled) {
     return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
   }
 
   const item = await prisma.incomingEInvoice.findFirst({
-    where: { tenantId, id: req.params.id },
+    where: { tenantId, companyId, id: req.params.id },
     include: {
       supplier: true,
       linkedReceipt: true,
@@ -828,20 +840,21 @@ router.get("/api/v1/efactura/incoming/:id", async (req: AuthedRequest, res) => {
     return res.status(404).json({ ok: false, error: "Factura primita SPV nu a fost gasita." })
   }
 
-  const repaired = await repairIncomingInvoiceIfNeeded(tenantId, item)
+  const repaired = await repairIncomingInvoiceIfNeeded(tenantId, companyId, item)
 
   return res.json({ ok: true, item: repaired })
 })
 
 router.get("/api/v1/efactura/incoming/:id/pdf", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
   if (!moduleCheck.enabled) {
     return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
   }
 
   const item = await prisma.incomingEInvoice.findFirst({
-    where: { tenantId, id: req.params.id },
+    where: { tenantId, companyId, id: req.params.id },
     include: {
       items: {
         orderBy: { lineIndex: "asc" },
@@ -864,13 +877,14 @@ router.get("/api/v1/efactura/incoming/:id/pdf", async (req: AuthedRequest, res) 
 
 router.get("/api/v1/efactura/incoming/:id/xml", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
   if (!moduleCheck.enabled) {
     return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
   }
 
   const item = await prisma.incomingEInvoice.findFirst({
-    where: { tenantId, id: req.params.id },
+    where: { tenantId, companyId, id: req.params.id },
     select: {
       invoiceNo: true,
       spvDownloadId: true,
@@ -892,6 +906,7 @@ router.get("/api/v1/efactura/incoming/:id/xml", async (req: AuthedRequest, res) 
 
 router.post("/api/v1/efactura/incoming/import-from-spv-bridge", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
   if (!moduleCheck.enabled) {
     return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
@@ -912,7 +927,7 @@ router.post("/api/v1/efactura/incoming/import-from-spv-bridge", async (req: Auth
     const buffer = Buffer.from(downloadBase64, "base64")
     const extracted = extractXmlFromAnafDownload(buffer)
     const parsedInvoice = parseIncomingEInvoiceXml(extracted.xmlText)
-    const item = await upsertIncomingInvoice(tenantId, rawMessage, extracted.xmlText, parsedInvoice)
+    const item = await upsertIncomingInvoice(tenantId, companyId, rawMessage, extracted.xmlText, parsedInvoice)
     await ensureIncomingInvoicePdfSaved(item)
     return res.json({
       ok: true,
@@ -931,13 +946,14 @@ router.post("/api/v1/efactura/incoming/import-from-spv-bridge", async (req: Auth
 
 router.post("/api/v1/efactura/incoming/:id/create-supplier", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
   if (!moduleCheck.enabled) {
     return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
   }
 
   const invoice = await prisma.incomingEInvoice.findFirst({
-    where: { tenantId, id: req.params.id },
+    where: { tenantId, companyId, id: req.params.id },
     select: {
       id: true,
       supplierId: true,
@@ -968,6 +984,7 @@ router.post("/api/v1/efactura/incoming/:id/create-supplier", async (req: AuthedR
           ? await tx.supplier.findFirst({
               where: {
                 tenantId,
+                companyId,
                 cif: {
                   contains: invoice.supplierCif,
                   mode: "insensitive",
@@ -988,10 +1005,11 @@ router.post("/api/v1/efactura/incoming/:id/create-supplier", async (req: AuthedR
       }
 
       const code = await reserveNextNumber(tx, tenantId, "supplier")
-      const created = await tx.supplier.create({
-        data: {
-          tenantId,
-          name: String(invoice.supplierName || "").trim(),
+        const created = await tx.supplier.create({
+          data: {
+            tenantId,
+            companyId,
+            name: String(invoice.supplierName || "").trim(),
           code,
           cif: invoice.supplierCif ? String(invoice.supplierCif).trim() : null,
           isActive: true,

@@ -5,6 +5,7 @@ import PDFDocument from "pdfkit"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { resolveTenantCompany } from "../lib/companyResolver"
+import { requireRequestCompanyId } from "../lib/companyScope"
 
 const router = Router()
 
@@ -114,10 +115,11 @@ function drawCell(
 
 router.get("/:id/pdf", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const { id } = req.params
 
   const receipt = await prisma.purchaseReceipt.findFirst({
-    where: { id, tenantId },
+    where: { id, tenantId, companyId },
     include: {
       items: {
         include: {
@@ -144,7 +146,7 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
 
   const purchaseReceipt = receipt
 
-  const company = await resolveTenantCompany(prisma, tenantId, req.auth?.activeCompanyId)
+  const company = await resolveTenantCompany(prisma, tenantId, companyId)
 
   const supplier = purchaseReceipt.supplier?.name || receipt.supplierName || "Furnizor"
   const filename = `NIR_${safeFilePart(purchaseReceipt.docNo)}_${safeFilePart(supplier)}.pdf`

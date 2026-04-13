@@ -1018,7 +1018,7 @@ model IncomingEInvoice {
   linkedReceipt PurchaseReceipt?
   items         IncomingEInvoiceItem[]
 
-    @@unique([tenantId, spvDownloadId])
+    @@unique([tenantId, companyId, spvDownloadId])
     @@index([tenantId])
     @@index([tenantId, companyId])
     @@index([companyId])
