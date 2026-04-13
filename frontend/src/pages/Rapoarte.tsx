@@ -9,6 +9,7 @@ import {
   ShoppingBag,
   TriangleAlert,
 } from "lucide-react"
+import { useNavigate } from "react-router-dom"
 import {
   Bar,
   BarChart,
@@ -311,6 +312,7 @@ function EmptyState({ text }: { text: string }) {
 }
 
 export default function RapoartePage() {
+  const navigate = useNavigate()
   const [tab, setTab] = useState<TabKey>("CEO")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -490,6 +492,24 @@ export default function RapoartePage() {
         title="Rapoarte"
         subtitle="Taburi curate, indicatori clari și secțiuni aerisite, pe date live."
       />
+
+      <section className="rounded-[20px] border border-blue-200 bg-blue-50/70 p-4 shadow-sm">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">Export contabilitate</div>
+            <div className="mt-1 text-sm font-semibold text-[#17324D]">Genereaza fisiere XML pentru import in SAGA</div>
+            <div className="mt-1 text-sm text-slate-600">Configurezi conturile si tipurile de stoc, apoi exporti articole, terti si documente.</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate("/rapoarte/export-contabilitate")}
+            className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2.5 text-sm font-semibold text-white"
+          >
+            <Building2 size={15} />
+            Deschide export contabilitate
+          </button>
+        </div>
+      </section>
 
       {error ? (
         <div className="rounded-[20px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

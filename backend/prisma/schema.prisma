@@ -229,6 +229,8 @@ model Tenant {
   invoices      Invoice[]
   tenantModules TenantModule[]
   auditLogs     AuditLog[]
+  accountingExportConfigs AccountingExportConfig[]
+  accountingStockTypes    AccountingStockType[]
 }
 
 model PlatformConfig {
@@ -322,11 +324,65 @@ model Company {
   inventoryDocs InventoryDoc[]
   minutesDocs MinutesDoc[]
   userAccesses UserCompanyAccess[]
+  accountingExportConfig AccountingExportConfig?
+  accountingStockTypes   AccountingStockType[]
 
     @@index([tenantId])
     @@unique([tenantId, name])
     @@unique([tenantId, code])
   }
+
+model AccountingExportConfig {
+  id                    String   @id @default(cuid())
+  tenantId              String
+  companyId             String   @unique
+  exportTarget          String   @default("SAGA")
+  articleCodeSource     String   @default("SKU")
+  managementAnalytic    String   @default("LOCATION_CODE")
+  customerAccount       String   @default("4111")
+  supplierAccount       String   @default("401")
+  salesAccount          String   @default("707")
+  expenseAccount        String   @default("607")
+  inventoryAccount      String   @default("371")
+  vatCollectedAccount   String   @default("4427")
+  vatDeductibleAccount  String   @default("4426")
+  cashAccount           String   @default("5311")
+  cardAccount           String   @default("5121")
+  defaultStockTypeId    String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  tenant           Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company          Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  defaultStockType AccountingStockType? @relation("DefaultAccountingStockType", fields: [defaultStockTypeId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([defaultStockTypeId])
+}
+
+model AccountingStockType {
+  id                String   @id @default(cuid())
+  tenantId          String
+  companyId         String
+  code              String
+  name              String
+  inventoryAccount  String
+  expenseAccount    String
+  salesAccount      String?
+  analyticMode      String   @default("NONE")
+  isDefault         Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  tenant               Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company              Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  products             Product[]
+  exportConfigDefaults AccountingExportConfig[] @relation("DefaultAccountingStockType")
+
+  @@unique([tenantId, companyId, code])
+  @@index([tenantId])
+  @@index([companyId])
+}
 
 model User {
   id           String   @id @default(cuid())
@@ -579,6 +635,8 @@ model Product {
 
   departmentId String?
   categoryId   String?
+  accountingStockTypeId String?
+  accountingItemCode String?
 
   price          Decimal        @default(0)
   costPrice      Decimal        @default(0)
@@ -598,6 +656,7 @@ model Product {
   purchaseUom Uom?        @relation("PurchaseUom", fields: [purchaseUomId], references: [id])
   department  Department? @relation(fields: [departmentId], references: [id])
   category    Category?   @relation(fields: [categoryId], references: [id])
+  accountingStockType AccountingStockType? @relation(fields: [accountingStockTypeId], references: [id])
 
   barcodes                 ProductBarcode[]
   saleItems                SaleItem[]
@@ -627,6 +686,7 @@ model Product {
     @@index([departmentId])
     @@index([categoryId])
     @@index([purchaseUomId])
+    @@index([accountingStockTypeId])
   }
 
 model Recipe {

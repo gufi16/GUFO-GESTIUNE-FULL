@@ -34,6 +34,7 @@ import productionDocsRouter from "./routes/productionDocs"
 import inventoryRouter from "./routes/inventory"
 import inventoryDocsPdf from "./routes/inventoryDocsPdf"
 import reportsRouter from "./routes/reports"
+import accountingExportRouter from "./routes/accountingExport"
 import adminRouter from "./routes/admin"
 import marketplaceRouter from "./routes/marketplace"
 import salesInvoicesRouter from "./routes/salesInvoices"
@@ -1120,6 +1121,7 @@ app.use(productionDocsRouter)
 app.use(inventoryRouter)
 app.use("/api/v1/inventory-docs", inventoryDocsPdf)
 app.use(reportsRouter)
+app.use(accountingExportRouter)
 app.use(adminRouter)
 app.use(marketplaceRouter)
 app.use(salesInvoicesRouter)
