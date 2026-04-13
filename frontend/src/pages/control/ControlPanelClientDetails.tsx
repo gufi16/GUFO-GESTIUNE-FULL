@@ -36,6 +36,12 @@ type LocationDevice = {
   label?: string | null
   createdAt?: string
   licenseKey?: string
+  companyId?: string | null
+  company?: {
+    id: string
+    name: string
+    code?: string | null
+  } | null
 }
 
 type LocationItem = {
@@ -43,6 +49,12 @@ type LocationItem = {
   name: string
   code?: string
   isActive?: boolean
+  companyId?: string | null
+  company?: {
+    id: string
+    name: string
+    code?: string | null
+  } | null
   devices?: LocationDevice[]
 }
 
@@ -84,6 +96,7 @@ type CreateLocationResponse = {
     id: string
     name: string
     code: string
+    companyId?: string | null
   }
 }
 
@@ -92,6 +105,7 @@ type CreateDeviceResponse = {
     label?: string | null
     deviceId: string
     licenseKey: string
+    companyId?: string | null
   }
 }
 
@@ -208,6 +222,7 @@ export default function ControlPanelClientDetails() {
   const [exportingClient, setExportingClient] = useState(false)
   const [editingUserId, setEditingUserId] = useState<string | null>(null)
   const [newLocationName, setNewLocationName] = useState("")
+  const [newLocationCompanyId, setNewLocationCompanyId] = useState("")
   const [deviceForms, setDeviceForms] = useState<Record<string, { label: string }>>({})
   const [openDeviceLocationId, setOpenDeviceLocationId] = useState<string | null>(null)
   const [locationError, setLocationError] = useState<string | null>(null)
@@ -248,8 +263,8 @@ export default function ControlPanelClientDetails() {
       const data = await api<ClientDetailsResponse>(`/api/v1/admin/clients/${id}`)
       const item = data?.item || null
       setClient(item)
-      setLicenseForm({
-        expiresAt: toInputDate(item?.license?.expiresAt),
+        setLicenseForm({
+          expiresAt: toInputDate(item?.license?.expiresAt),
         limitLocations: Number(item?.license?.limits?.locations ?? 1),
         limitTerminals: Number(item?.license?.limits?.terminals ?? 1),
         modules: {
@@ -259,10 +274,11 @@ export default function ControlPanelClientDetails() {
           nomenclature: Boolean(item?.license?.modules?.nomenclature),
           settings: Boolean(item?.license?.modules?.settings),
           pos: Boolean(item?.license?.modules?.pos),
-          reports: Boolean(item?.license?.modules?.reports),
-        },
-      })
-    } catch (err: any) {
+            reports: Boolean(item?.license?.modules?.reports),
+          },
+        })
+        setNewLocationCompanyId((item?.companies || []).find((company: any) => company?.isDefault)?.id || item?.companies?.[0]?.id || "")
+      } catch (err: any) {
       setError(err?.message || "Nu am putut incarca detaliile clientului.")
     } finally {
       setLoading(false)
@@ -512,12 +528,16 @@ export default function ControlPanelClientDetails() {
       setLocationError("Introdu numele locatiei.")
       return
     }
+    if (!newLocationCompanyId) {
+      setLocationError("Selecteaza firma pentru care vrei sa creezi locatia.")
+      return
+    }
     try {
       setCreatingLocation(true)
       setLocationError(null)
       await api<CreateLocationResponse>(`/api/v1/admin/clients/${id}/locations`, {
         method: "POST",
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, companyId: newLocationCompanyId }),
       })
       setNewLocationName("")
       setMessage("Locatia a fost adaugata.")
@@ -915,12 +935,24 @@ export default function ControlPanelClientDetails() {
       <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div><div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Locatii si POS</div><div className="mt-1 text-sm font-semibold text-[#17324D]">Administrare locatii, terminale si chei de licenta</div></div>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <input
-              value={newLocationName}
-              onChange={(e) => setNewLocationName(e.target.value)}
-              placeholder="Locatie noua"
-              className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <select
+                value={newLocationCompanyId}
+                onChange={(e) => setNewLocationCompanyId(e.target.value)}
+                className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+              >
+                <option value="">Selecteaza firma</option>
+                {companies.map((company: any) => (
+                  <option key={company.id} value={company.id}>
+                    {company.name}
+                  </option>
+                ))}
+              </select>
+              <input
+                value={newLocationName}
+                onChange={(e) => setNewLocationName(e.target.value)}
+                placeholder="Locatie noua"
+                className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
             />
             <button
               onClick={handleCreateLocation}
@@ -942,15 +974,20 @@ export default function ControlPanelClientDetails() {
             locations.map((location) => (
               <div key={location.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                      <MapPin size={14} />
-                      {location.name}
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                        <MapPin size={14} />
+                        {location.name}
+                        {location.company?.name ? (
+                          <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                            {location.company.name}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        {[location.code || "-", location.company?.code || null, `${location.devices?.length || 0} device-uri`].filter(Boolean).join(" | ")}
+                      </div>
                     </div>
-                    <div className="mt-1 text-xs text-slate-500">
-                      {location.code || "-"} | {(location.devices?.length || 0)} device-uri
-                    </div>
-                  </div>
 
                   <div className="flex flex-wrap gap-2">
                     <button
@@ -1005,8 +1042,11 @@ export default function ControlPanelClientDetails() {
                       </thead>
                       <tbody>
                         {location.devices.map((device) => (
-                          <tr key={device.id} className="border-t border-slate-200">
-                            <td className="px-2 py-2 text-slate-800">{device.label || device.deviceId || "-"}</td>
+                            <tr key={device.id} className="border-t border-slate-200">
+                              <td className="px-2 py-2 text-slate-800">
+                                <div className="font-medium">{device.label || device.deviceId || "-"}</div>
+                                {device.company?.name ? <div className="mt-0.5 text-xs text-slate-500">{device.company.name}</div> : null}
+                              </td>
                             <td className="px-2 py-2 font-mono text-slate-600">{device.licenseKey || device.deviceId || "-"}</td>
                             <td className="px-2 py-2 text-slate-500">{formatDate(device.createdAt)}</td>
                             <td className="px-2 py-2">

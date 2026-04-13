@@ -309,6 +309,7 @@ model Company {
   recipes Recipe[]
   locations Location[]
   terminals Terminal[]
+  vatRates VatRate[]
   uoms Uom[]
   departments Department[]
   categories Category[]
@@ -450,6 +451,7 @@ model Terminal {
 model VatRate {
   id         String   @id @default(cuid())
   tenantId   String
+  companyId  String?
   name       String
   rate       Int
   fiscalCode String?
@@ -457,12 +459,15 @@ model VatRate {
   createdAt  DateTime @default(now())
 
   tenant        Tenant                @relation(fields: [tenantId], references: [id])
+  company       Company?              @relation(fields: [companyId], references: [id])
   products      Product[]
   receiptItems  PurchaseReceiptItem[]
   transferItems TransferDocItem[]
 
-  @@unique([tenantId, rate])
+  @@unique([tenantId, companyId, rate])
   @@index([tenantId])
+  @@index([tenantId, companyId])
+  @@index([companyId])
 }
 
 model Uom {

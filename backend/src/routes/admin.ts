@@ -52,6 +52,30 @@ function pickPrimaryCompany(companies?: Array<any> | null) {
   return companies.find((company) => company?.isDefault) || companies[0] || null
 }
 
+function serializeCompanySummary(company?: any | null) {
+  if (!company) return null
+  return {
+    id: company.id,
+    name: company.name,
+    code: company.code,
+    cui: company.cui,
+    regNo: company.regNo,
+    address: company.address,
+    email: company.email,
+    phone: company.phone,
+    isDefault: company.isDefault,
+    createdAt: company.createdAt,
+  }
+}
+
+function resolveOwnedCompany(companies: Array<any>, requestedCompanyId?: string | null) {
+  if (!Array.isArray(companies) || !companies.length) return null
+  if (requestedCompanyId) {
+    return companies.find((company) => company.id === requestedCompanyId) || null
+  }
+  return pickPrimaryCompany(companies)
+}
+
 async function generateUniqueTenantSubdomain(value: string) {
   const base = normalizeSubdomain(value)
   let candidate = RESERVED_SUBDOMAINS.has(base) ? `${base}-client` : base
@@ -121,12 +145,12 @@ function generateTemporaryPassword(length = 10) {
   return value
 }
 
-async function generateUniqueLocationCode(tenantId: string, name: string) {
+async function generateUniqueLocationCode(tenantId: string, companyId: string | null | undefined, name: string) {
   const base = slugify(name).replace(/-/g, "").toUpperCase().slice(0, 6) || "LOC"
   let code = base
   let index = 1
 
-  while (await prisma.location.findFirst({ where: { tenantId, code } })) {
+  while (await prisma.location.findFirst({ where: { tenantId, companyId: companyId ?? null, code } })) {
     code = `${base}${index}`.slice(0, 10)
     index += 1
   }
@@ -134,10 +158,10 @@ async function generateUniqueLocationCode(tenantId: string, name: string) {
   return code
 }
 
-async function generateUniqueDeviceId(tenantId: string) {
+async function generateUniqueDeviceId(tenantId: string, companyId: string | null | undefined) {
   let deviceId = `POS-${randomChunk(4)}-${randomChunk(4)}`
 
-  while (await prisma.terminal.findFirst({ where: { tenantId, deviceId } })) {
+  while (await prisma.terminal.findFirst({ where: { tenantId, companyId: companyId ?? null, deviceId } })) {
     deviceId = `POS-${randomChunk(4)}-${randomChunk(4)}`
   }
 
@@ -217,6 +241,7 @@ const AdminUpdateUserSchema = z.object({
 
 const CreateLocationSchema = z.object({
   name: z.string().min(2),
+  companyId: z.string().optional().nullable(),
 })
 
 const CreateDeviceSchema = z.object({
@@ -548,16 +573,42 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
           name: true,
           code: true,
           isActive: true,
+          companyId: true,
+          company: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+              isDefault: true,
+            },
+          },
         },
       },
       terminals: {
         orderBy: { createdAt: "desc" },
         include: {
+          company: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+              isDefault: true,
+            },
+          },
           location: {
             select: {
               id: true,
               name: true,
               code: true,
+              companyId: true,
+              company: {
+                select: {
+                  id: true,
+                  name: true,
+                  code: true,
+                  isDefault: true,
+                },
+              },
             },
           },
         },
@@ -647,18 +698,7 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
           }
         : null,
       companies: Array.isArray((tenant as any).companies)
-        ? (tenant as any).companies.map((company: any) => ({
-            id: company.id,
-            name: company.name,
-            code: company.code,
-            cui: company.cui,
-            regNo: company.regNo,
-            address: company.address,
-            email: company.email,
-            phone: company.phone,
-            isDefault: company.isDefault,
-            createdAt: company.createdAt,
-          }))
+        ? (tenant as any).companies.map((company: any) => serializeCompanySummary(company))
         : [],
       status: !latestLicense
         ? "inactive"
@@ -682,6 +722,8 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
           name: location.name,
           code: location.code,
           isActive: location.isActive,
+          companyId: location.companyId,
+          company: serializeCompanySummary(location.company),
           terminalsCount: devices.length,
           devices: devices.map((device) => ({
             id: device.id,
@@ -690,6 +732,8 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
             createdAt: device.createdAt,
             isLockedToLocation: device.isLockedToLocation,
             licenseKey: device.deviceId,
+            companyId: device.companyId,
+            company: serializeCompanySummary(device.company),
           })),
         }
       }),
@@ -699,6 +743,8 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
         label: terminal.label,
         isLockedToLocation: terminal.isLockedToLocation,
         createdAt: terminal.createdAt,
+        companyId: terminal.companyId,
+        company: serializeCompanySummary(terminal.company),
         location: terminal.location,
       })),
       license: latestLicense
@@ -1272,6 +1318,21 @@ router.post("/api/v1/admin/clients/:id/locations", requireAuth, requireOwner, as
   const tenant = await prisma.tenant.findUnique({
     where: { id: req.params.id },
     include: {
+      companies: {
+        orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          cui: true,
+          regNo: true,
+          address: true,
+          email: true,
+          phone: true,
+          isDefault: true,
+          createdAt: true,
+        },
+      },
       licenses: {
         orderBy: { createdAt: "desc" },
         take: 1,
@@ -1300,12 +1361,21 @@ router.post("/api/v1/admin/clients/:id/locations", requireAuth, requireOwner, as
   }
 
   try {
-    const code = await generateUniqueLocationCode(tenant.id, parsed.data.name)
+    const company = resolveOwnedCompany(tenant.companies, parsed.data.companyId)
+    if (!company) {
+      return res.status(400).json({
+        ok: false,
+        error: "Selecteaza firma pentru care vrei sa creezi locatia.",
+      })
+    }
+
+    const code = await generateUniqueLocationCode(tenant.id, company.id, parsed.data.name)
 
     const location = await prisma.$transaction(async (tx) => {
       const created = await tx.location.create({
         data: {
           tenantId: tenant.id,
+          companyId: company.id,
           name: parsed.data.name.trim(),
           code,
           isActive: true,
@@ -1321,6 +1391,8 @@ router.post("/api/v1/admin/clients/:id/locations", requireAuth, requireOwner, as
           entityType: "Location",
           entityId: created.id,
           payload: {
+            companyId: company.id,
+            companyName: company.name,
             name: created.name,
             code: created.code,
           },
@@ -1337,6 +1409,8 @@ router.post("/api/v1/admin/clients/:id/locations", requireAuth, requireOwner, as
         name: location.name,
         code: location.code,
         isActive: location.isActive,
+        companyId: company.id,
+        company: serializeCompanySummary(company),
       },
     })
   } catch (error: any) {
@@ -1356,6 +1430,20 @@ router.post("/api/v1/admin/locations/:id/devices", requireAuth, requireOwner, as
   const location = await prisma.location.findUnique({
     where: { id: req.params.id },
     include: {
+      company: {
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          cui: true,
+          regNo: true,
+          address: true,
+          email: true,
+          phone: true,
+          isDefault: true,
+          createdAt: true,
+        },
+      },
       tenant: {
         include: {
           licenses: {
@@ -1391,12 +1479,13 @@ router.post("/api/v1/admin/locations/:id/devices", requireAuth, requireOwner, as
   }
 
   try {
-    const deviceId = await generateUniqueDeviceId(location.tenantId)
+    const deviceId = await generateUniqueDeviceId(location.tenantId, location.companyId)
 
     const terminal = await prisma.$transaction(async (tx) => {
       const created = await tx.terminal.create({
         data: {
           tenantId: location.tenantId,
+          companyId: location.companyId,
           locationId: location.id,
           deviceId,
           label: parsed.data.label.trim(),
@@ -1413,6 +1502,8 @@ router.post("/api/v1/admin/locations/:id/devices", requireAuth, requireOwner, as
           entityType: "Terminal",
           entityId: created.id,
           payload: {
+            companyId: location.companyId,
+            companyName: location.company?.name || null,
             locationId: location.id,
             locationName: location.name,
             deviceId: created.deviceId,
@@ -1433,6 +1524,8 @@ router.post("/api/v1/admin/locations/:id/devices", requireAuth, requireOwner, as
         licenseKey: terminal.deviceId,
         locationId: location.id,
         locationName: location.name,
+        companyId: location.companyId,
+        company: serializeCompanySummary(location.company),
         createdAt: terminal.createdAt,
       },
     })

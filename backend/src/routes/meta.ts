@@ -684,9 +684,13 @@ function normalizeFiscalCode(value: unknown) {
 
 router.get("/api/v1/meta/vat", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
 
   const items = await prisma.vatRate.findMany({
-    where: { tenantId },
+    where: {
+      tenantId,
+      OR: buildCompanyScope(companyId),
+    },
     orderBy: [{ rate: "asc" }]
   })
 
@@ -695,6 +699,7 @@ router.get("/api/v1/meta/vat", async (req: AuthedRequest, res) => {
 
 router.post("/api/v1/meta/vat", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
 
   const rawRate = req.body?.rate
   const rate = Number(rawRate)
@@ -720,6 +725,7 @@ router.post("/api/v1/meta/vat", async (req: AuthedRequest, res) => {
     const existing = await prisma.vatRate.findFirst({
       where: {
         tenantId,
+        companyId,
         rate: roundedRate
       }
     })
@@ -735,6 +741,7 @@ router.post("/api/v1/meta/vat", async (req: AuthedRequest, res) => {
       const duplicateFiscalCode = await prisma.vatRate.findFirst({
         where: {
           tenantId,
+          companyId,
           fiscalCode
         }
       })
@@ -747,11 +754,12 @@ router.post("/api/v1/meta/vat", async (req: AuthedRequest, res) => {
       }
     }
 
-    const item = await prisma.vatRate.create({
-      data: {
-        tenantId,
-        rate: roundedRate,
-        name: `TVA ${roundedRate}%`,
+      const item = await prisma.vatRate.create({
+        data: {
+          tenantId,
+          companyId,
+          rate: roundedRate,
+          name: `TVA ${roundedRate}%`,
         fiscalCode,
         isActive: true
       }
@@ -768,6 +776,7 @@ router.post("/api/v1/meta/vat", async (req: AuthedRequest, res) => {
 
 router.put("/api/v1/meta/vat/:id", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const id = String(req.params.id)
 
   const rawRate = req.body?.rate
@@ -791,7 +800,11 @@ router.put("/api/v1/meta/vat/:id", async (req: AuthedRequest, res) => {
 
   try {
     const current = await prisma.vatRate.findFirst({
-      where: { id, tenantId }
+      where: {
+        id,
+        tenantId,
+        OR: buildCompanyScope(companyId),
+      }
     })
 
     if (!current) {
@@ -806,6 +819,7 @@ router.put("/api/v1/meta/vat/:id", async (req: AuthedRequest, res) => {
     const duplicate = await prisma.vatRate.findFirst({
       where: {
         tenantId,
+        companyId: current.companyId ?? companyId,
         rate: roundedRate,
         NOT: { id }
       }
@@ -822,6 +836,7 @@ router.put("/api/v1/meta/vat/:id", async (req: AuthedRequest, res) => {
       const duplicateFiscalCode = await prisma.vatRate.findFirst({
         where: {
           tenantId,
+          companyId: current.companyId ?? companyId,
           fiscalCode,
           NOT: { id }
         }
@@ -837,9 +852,10 @@ router.put("/api/v1/meta/vat/:id", async (req: AuthedRequest, res) => {
 
     const item = await prisma.vatRate.update({
       where: { id },
-      data: {
-        rate: roundedRate,
-        name: `TVA ${roundedRate}%`,
+        data: {
+          companyId: current.companyId ?? companyId,
+          rate: roundedRate,
+          name: `TVA ${roundedRate}%`,
         fiscalCode,
         isActive
       }
@@ -856,11 +872,16 @@ router.put("/api/v1/meta/vat/:id", async (req: AuthedRequest, res) => {
 
 router.delete("/api/v1/meta/vat/:id", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const id = String(req.params.id)
 
   try {
     const current = await prisma.vatRate.findFirst({
-      where: { id, tenantId }
+      where: {
+        id,
+        tenantId,
+        OR: buildCompanyScope(companyId),
+      }
     })
 
     if (!current) {
