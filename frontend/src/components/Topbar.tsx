@@ -1,8 +1,8 @@
-import { Bell, LogOut, MapPin, Menu } from "lucide-react"
+import { Bell, Building2, LogOut, MapPin, Menu } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom"
 import { API_BASE as API, authHeaders } from "../lib/api"
-import { logout, me } from "../lib/auth"
+import { logout, me, selectCompany } from "../lib/auth"
 import { getActiveLocationId, setActiveLocationId, subscribeToActiveLocation } from "../lib/location"
 import { getActiveTerminalId, setActiveTerminalId, subscribeToActiveTerminal } from "../lib/terminal"
 
@@ -26,6 +26,9 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
   const [userLabel, setUserLabel] = useState("Utilizator")
   const [userMeta, setUserMeta] = useState("ERP")
   const [companyLabel, setCompanyLabel] = useState("Firma activa")
+  const [companyChoices, setCompanyChoices] = useState<Array<{ id: string; name: string; code?: string; cui?: string; isDefault?: boolean }>>([])
+  const [activeCompanyId, setActiveCompanyId] = useState("")
+  const [switchingCompany, setSwitchingCompany] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
 
   const isDashboard = location.pathname === "/dashboard"
@@ -106,6 +109,8 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
 
         setUserLabel(profileName)
         setUserMeta(profileRole)
+        setCompanyChoices(companies)
+        setActiveCompanyId(activeCompany?.id || "")
         setCompanyLabel(activeCompany?.name || "Firma activa")
       } catch {
         if (!cancelled) {
@@ -219,6 +224,29 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
     navigate("/login")
   }
 
+  async function handleCompanyChange(nextCompanyId: string) {
+    if (!nextCompanyId || nextCompanyId === activeCompanyId) return
+
+    try {
+      setSwitchingCompany(true)
+      await selectCompany(nextCompanyId)
+      const profile = await me()
+      const companies = Array.isArray((profile as any)?.companies) ? (profile as any).companies : []
+      const nextActiveCompany =
+        companies.find((item: any) => String(item?.id || "") === nextCompanyId) ||
+        companies.find((item: any) => item?.isDefault) ||
+        companies[0] ||
+        null
+
+      setCompanyChoices(companies)
+      setActiveCompanyId(nextActiveCompany?.id || "")
+      setCompanyLabel(nextActiveCompany?.name || "Firma activa")
+      window.location.reload()
+    } finally {
+      setSwitchingCompany(false)
+    }
+  }
+
   function updateDashboardRange(next: { dateFrom?: string; dateTo?: string; reset?: boolean }) {
     const nextParams = new URLSearchParams(searchParams)
     if (next.reset) {
@@ -259,6 +287,32 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
         </div>
 
         <div className="mt-2 md:hidden">
+          {companyChoices.length > 1 ? (
+            <div className="mb-2 flex items-center gap-2 rounded-[12px] border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm shadow-slate-900/[0.03]">
+              <div className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-[#EEF4FB] text-[#244A7C]">
+                <Building2 size={16} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6C7A89]">
+                  Firma
+                </div>
+                <select
+                  value={activeCompanyId}
+                  onChange={(e) => handleCompanyChange(e.target.value)}
+                  disabled={switchingCompany}
+                  className="h-8 w-full rounded-[8px] border border-slate-200 bg-white px-2 text-sm text-[#17324D] outline-none transition focus:border-[#244A7C] focus:bg-white"
+                  title={companyLabel}
+                >
+                  {companyChoices.map((company) => (
+                    <option key={company.id} value={company.id}>
+                      {company.code ? `${company.name} (${company.code})` : company.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ) : null}
+
           <div className="flex items-center gap-2 rounded-[12px] border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm shadow-slate-900/[0.03]">
             <div className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-[#EEF4FB] text-[#244A7C]">
               <MapPin size={16} />
@@ -309,6 +363,32 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
 
         <div className="mt-2 hidden items-center justify-between gap-3 md:flex">
           <div className="flex items-center gap-3">
+            {companyChoices.length > 1 ? (
+              <div className="flex items-center gap-2 rounded-[12px] border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm shadow-slate-900/[0.03]">
+                <div className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-[#EEF4FB] text-[#244A7C]">
+                  <Building2 size={16} />
+                </div>
+                <div className="min-w-[220px]">
+                  <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6C7A89]">
+                    Firma
+                  </div>
+                  <select
+                    value={activeCompanyId}
+                    onChange={(e) => handleCompanyChange(e.target.value)}
+                    disabled={switchingCompany}
+                    className="h-7 w-full rounded-[8px] border border-slate-200 bg-white px-2 text-sm text-[#17324D] outline-none transition focus:border-[#244A7C] focus:bg-white"
+                    title={companyLabel}
+                  >
+                    {companyChoices.map((company) => (
+                      <option key={company.id} value={company.id}>
+                        {company.code ? `${company.name} (${company.code})` : company.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            ) : null}
+
             <div className="flex items-center gap-2 rounded-[12px] border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm shadow-slate-900/[0.03]">
               <div className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-[#EEF4FB] text-[#244A7C]">
                 <MapPin size={16} />

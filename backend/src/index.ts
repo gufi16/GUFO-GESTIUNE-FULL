@@ -195,8 +195,36 @@ async function listTenantCompanies(tenantId?: string | null) {
   })
 }
 
-async function resolveActiveCompanyForTenant(tenantId?: string | null, activeCompanyId?: string | null) {
-  const companies = await listTenantCompanies(tenantId)
+async function listAccessibleCompaniesForUser(user: {
+  id: string
+  tenantId?: string | null
+  role?: string | null
+}) {
+  const companies = await listTenantCompanies(user.tenantId)
+  if (!companies.length) return companies
+
+  if (user.role === "OWNER" || user.role === "ADMIN") {
+    return companies
+  }
+
+  const accessRows = await prisma.userCompanyAccess.findMany({
+    where: { userId: user.id },
+    select: { companyId: true },
+  })
+
+  if (!accessRows.length) {
+    return companies
+  }
+
+  const allowedIds = new Set(accessRows.map((row) => row.companyId))
+  return companies.filter((company) => allowedIds.has(company.id))
+}
+
+async function resolveActiveCompanyForUser(
+  user: { id: string; tenantId?: string | null; role?: string | null },
+  activeCompanyId?: string | null
+) {
+  const companies = await listAccessibleCompaniesForUser(user)
   if (!companies.length) {
     return {
       companies,
@@ -313,7 +341,7 @@ app.post("/api/v1/auth/login", async (req, res) => {
     return res.status(401).json({ ok: false, error: "Invalid credentials" })
   }
 
-  const { companies, activeCompany } = await resolveActiveCompanyForTenant(user.tenantId, null)
+  const { companies, activeCompany } = await resolveActiveCompanyForUser(user, null)
 
   const token = signAccessToken({
     tenantId: user.tenantId,
@@ -383,6 +411,16 @@ app.post("/api/v1/auth/select-company", requireAuth, async (req: AuthedRequest, 
 
   if (!company) {
     return res.status(404).json({ ok: false, error: "Firma selectata nu exista." })
+  }
+
+  const allowedCompanies = await listAccessibleCompaniesForUser({
+    id: auth.userId,
+    tenantId: auth.tenantId,
+    role: auth.role,
+  })
+
+  if (!allowedCompanies.some((item) => item.id === company.id)) {
+    return res.status(403).json({ ok: false, error: "Nu ai acces la firma selectata." })
   }
 
   const token = signAccessToken({
@@ -713,7 +751,10 @@ app.get("/api/v1/me", requireAuth, async (req: AuthedRequest, res) => {
       ].filter(Boolean)
     : []
 
-  const { companies, activeCompany } = await resolveActiveCompanyForTenant(auth.tenantId, auth.activeCompanyId)
+  const { companies, activeCompany } = await resolveActiveCompanyForUser(
+    { id: auth.userId, tenantId: auth.tenantId, role: auth.role },
+    auth.activeCompanyId
+  )
 
   return res.json({
     ok: true,

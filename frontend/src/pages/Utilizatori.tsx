@@ -19,6 +19,15 @@ type UserItem = {
   role: string
   isActive: boolean
   createdAt: string
+  companies?: CompanyItem[]
+}
+
+type CompanyItem = {
+  id: string
+  name: string
+  code?: string | null
+  cui?: string | null
+  isDefault?: boolean
 }
 
 const roleLabels: Record<string, string> = {
@@ -38,8 +47,10 @@ const roleOptions = [
 
 export default function Utilizatori() {
   const [items, setItems] = useState<UserItem[]>([])
+  const [availableCompanies, setAvailableCompanies] = useState<CompanyItem[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [savingCompaniesFor, setSavingCompaniesFor] = useState<string | null>(null)
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
   const [credentials, setCredentials] = useState<{ email: string; password: string } | null>(null)
@@ -48,14 +59,18 @@ export default function Utilizatori() {
     email: "",
     role: "CASHIER",
     password: "",
+    companyIds: [] as string[],
   })
+  const [editingCompaniesFor, setEditingCompaniesFor] = useState<string | null>(null)
+  const [companySelection, setCompanySelection] = useState<string[]>([])
 
   async function loadUsers() {
     setLoading(true)
     setError("")
     try {
-      const data = await api<{ ok: boolean; items?: UserItem[] }>("/api/v1/users")
+      const data = await api<{ ok: boolean; items?: UserItem[]; availableCompanies?: CompanyItem[] }>("/api/v1/users")
       setItems(Array.isArray(data.items) ? data.items : [])
+      setAvailableCompanies(Array.isArray(data.availableCompanies) ? data.availableCompanies : [])
     } catch (err: any) {
       setError(err?.message || "Nu am putut incarca utilizatorii.")
       setItems([])
@@ -85,7 +100,10 @@ export default function Utilizatori() {
     try {
       const data = await api<{ ok: boolean; item?: UserItem; temporaryPassword?: string }>("/api/v1/users", {
         method: "POST",
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form,
+          companyIds: form.role === "OWNER" || form.role === "ADMIN" ? [] : form.companyIds,
+        }),
       })
 
       setMessage("Utilizatorul a fost creat.")
@@ -105,11 +123,36 @@ export default function Utilizatori() {
         email: "",
         role: "CASHIER",
         password: "",
+        companyIds: [],
       })
     } catch (err: any) {
       setError(err?.message || "Nu am putut crea utilizatorul.")
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function saveCompanyAccess(user: UserItem) {
+    try {
+      setSavingCompaniesFor(user.id)
+      setError("")
+      setMessage("")
+      const data = await api<{ ok: boolean; item?: { id: string; companies?: CompanyItem[] } }>(`/api/v1/users/${user.id}/companies`, {
+        method: "PATCH",
+        body: JSON.stringify({ companyIds: companySelection }),
+      })
+
+      setItems((current) =>
+        current.map((item) =>
+          item.id === user.id ? { ...item, companies: Array.isArray(data.item?.companies) ? data.item?.companies : companySelection.map((companyId) => availableCompanies.find((company) => company.id === companyId)).filter(Boolean) as CompanyItem[] } : item
+        )
+      )
+      setEditingCompaniesFor(null)
+      setMessage("Accesul pe firme a fost actualizat.")
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut actualiza accesul pe firme.")
+    } finally {
+      setSavingCompaniesFor(null)
     }
   }
 
@@ -197,7 +240,13 @@ export default function Utilizatori() {
               <select
                 className={documentInputClass}
                 value={form.role}
-                onChange={(e) => setForm((current) => ({ ...current, role: e.target.value }))}
+                onChange={(e) =>
+                  setForm((current) => ({
+                    ...current,
+                    role: e.target.value,
+                    companyIds: e.target.value === "ADMIN" ? [] : current.companyIds,
+                  }))
+                }
               >
                 {roleOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -216,6 +265,45 @@ export default function Utilizatori() {
                 onChange={(e) => setForm((current) => ({ ...current, password: e.target.value }))}
                 placeholder="Lasa gol pentru generare automata"
               />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-700">Acces firme</label>
+              {form.role === "ADMIN" ? (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600">
+                  Administratorul are acces complet la toate firmele.
+                </div>
+              ) : (
+                <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                  {availableCompanies.map((company) => {
+                    const checked = form.companyIds.includes(company.id)
+                    return (
+                      <label key={company.id} className="flex items-start gap-3 text-sm text-slate-700">
+                        <input
+                          type="checkbox"
+                          className="mt-1 h-4 w-4 rounded border-slate-300 text-[#17324D] focus:ring-[#17324D]"
+                          checked={checked}
+                          onChange={(e) =>
+                            setForm((current) => ({
+                              ...current,
+                              companyIds: e.target.checked
+                                ? [...current.companyIds, company.id]
+                                : current.companyIds.filter((id) => id !== company.id),
+                            }))
+                          }
+                        />
+                        <span>
+                          <span className="font-medium text-slate-900">{company.name}</span>
+                          <span className="mt-0.5 block text-xs text-slate-500">
+                            {[company.code, company.cui].filter(Boolean).join(" • ") || "Firma ERP"}
+                          </span>
+                        </span>
+                      </label>
+                    )
+                  })}
+                  <div className="text-xs text-slate-500">Daca nu selectezi nimic, utilizatorul va vedea toate firmele disponibile acum.</div>
+                </div>
+              )}
             </div>
 
             <button className={documentButtonPrimaryClass} type="submit" disabled={saving}>
@@ -241,6 +329,7 @@ export default function Utilizatori() {
                   <th className="px-3 py-2">Utilizator</th>
                   <th className="px-3 py-2">Rol</th>
                   <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Firme</th>
                   <th className="px-3 py-2">Creat</th>
                   <th className="px-3 py-2 text-right">Actiuni</th>
                 </tr>
@@ -257,6 +346,66 @@ export default function Utilizatori() {
                       <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${item.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
                         {item.isActive ? "Activ" : "Inactiv"}
                       </span>
+                    </td>
+                    <td className="px-3 py-3">
+                      {item.role === "OWNER" || item.role === "ADMIN" ? (
+                        <span className="text-xs font-medium text-slate-500">Toate firmele</span>
+                      ) : editingCompaniesFor === item.id ? (
+                        <div className="min-w-[250px] space-y-2 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                          {availableCompanies.map((company) => (
+                            <label key={company.id} className="flex items-start gap-2 text-xs text-slate-700">
+                              <input
+                                type="checkbox"
+                                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#17324D] focus:ring-[#17324D]"
+                                checked={companySelection.includes(company.id)}
+                                onChange={(e) =>
+                                  setCompanySelection((current) =>
+                                    e.target.checked ? [...current, company.id] : current.filter((id) => id !== company.id)
+                                  )
+                                }
+                              />
+                              <span>
+                                <span className="font-medium text-slate-900">{company.name}</span>
+                                <span className="mt-0.5 block text-[11px] text-slate-500">
+                                  {[company.code, company.cui].filter(Boolean).join(" • ") || "Firma ERP"}
+                                </span>
+                              </span>
+                            </label>
+                          ))}
+                          <div className="flex gap-2 pt-1">
+                            <button className={documentButtonPrimaryClass} type="button" disabled={savingCompaniesFor === item.id} onClick={() => saveCompanyAccess(item)}>
+                              {savingCompaniesFor === item.id ? "Se salveaza..." : "Salveaza"}
+                            </button>
+                            <button className={documentButtonSecondaryClass} type="button" onClick={() => setEditingCompaniesFor(null)}>
+                              Renunta
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap gap-1.5">
+                            {(item.companies || []).length ? (
+                              (item.companies || []).map((company) => (
+                                <span key={company.id} className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
+                                  {company.name}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-xs text-slate-500">Toate firmele</span>
+                            )}
+                          </div>
+                          <button
+                            className="text-xs font-semibold text-[#17324D] underline-offset-2 hover:underline"
+                            type="button"
+                            onClick={() => {
+                              setEditingCompaniesFor(item.id)
+                              setCompanySelection((item.companies || []).map((company) => company.id))
+                            }}
+                          >
+                            Modifica accesul
+                          </button>
+                        </div>
+                      )}
                     </td>
                     <td className="px-3 py-3">{new Date(item.createdAt).toLocaleDateString("ro-RO")}</td>
                     <td className="px-3 py-3">
@@ -279,7 +428,7 @@ export default function Utilizatori() {
                 ))}
                 {!items.length ? (
                   <tr>
-                    <td colSpan={5} className="px-3 py-6 text-center text-sm text-slate-500">
+                    <td colSpan={6} className="px-3 py-6 text-center text-sm text-slate-500">
                       Nu exista utilizatori definiti.
                     </td>
                   </tr>
