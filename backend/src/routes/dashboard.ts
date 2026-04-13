@@ -2,7 +2,7 @@
 import { Router, Response } from "express"
 import { Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma"
-import { requireAuth, AuthedRequest } from "../middleware/auth"
+import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { requireRequestCompanyId } from "../lib/companyScope"
 const router = Router()
 
