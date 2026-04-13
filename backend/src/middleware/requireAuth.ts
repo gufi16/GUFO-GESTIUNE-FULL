@@ -7,6 +7,7 @@ export interface AuthedRequest extends Request {
     tenantId?: string | null
     role: string
     email?: string | null
+    activeCompanyId?: string | null
   }
 }
 
@@ -41,6 +42,7 @@ export function requireAuth(req: AuthedRequest, res: Response, next: NextFunctio
       tenantId: null,
       role: "OWNER",
       email: null,
+      activeCompanyId: null,
     }
     return next()
   }
@@ -53,6 +55,7 @@ export function requireAuth(req: AuthedRequest, res: Response, next: NextFunctio
       tenantId: decoded.tenantId || decoded.tenant_id || null,
       role: decoded.role,
       email: decoded.email || null,
+      activeCompanyId: decoded.activeCompanyId || decoded.active_company_id || null,
     }
 
     if (!req.auth.userId || !req.auth.role) {

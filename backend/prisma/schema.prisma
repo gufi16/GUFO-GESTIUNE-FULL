@@ -189,7 +189,7 @@ model Tenant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  company   Company?
+  companies Company[]
   users     User[]
   licenses  License[]
   locations Location[]
@@ -244,10 +244,12 @@ model PlatformConfig {
 }
 
 model Company {
-  id       String @id @default(cuid())
-  tenantId String @unique
+  id       String  @id @default(cuid())
+  tenantId String
 
   name    String
+  code    String?
+  isDefault Boolean @default(false)
   cui     String?
   regNo   String?
   address String?
@@ -300,6 +302,8 @@ model Company {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
+  @@unique([tenantId, name])
+  @@unique([tenantId, code])
 }
 
 model User {

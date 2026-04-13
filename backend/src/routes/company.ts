@@ -10,6 +10,7 @@ import { getNextNumberPreview, getNumberingConfig, normalizeNumberingPayload } f
 import { requireTenantModule } from "../lib/tenantModules"
 import { anafHttpRequest } from "../lib/anafHttp"
 import { getAnafCompanyDiagnostics } from "../lib/anafClient"
+import { ensureTenantCompany, resolveTenantCompany, updateOrCreateTenantCompany } from "../lib/companyResolver"
 import {
   deleteEfacturaCertificateFile,
   encryptSecret,
@@ -190,10 +191,35 @@ function mapCompanyResponse(company: any, oauthConfig: any) {
   }
 }
 
+function getActiveCompanyId(req: AuthedRequest) {
+  return req.auth?.activeCompanyId || null
+}
+
+async function getRequestCompany(req: AuthedRequest, extra: Record<string, any> = {}) {
+  return resolveTenantCompany(prisma, req.auth!.tenantId, getActiveCompanyId(req), extra)
+}
+
+async function ensureRequestCompany(req: AuthedRequest, seedData: Record<string, any> = {}) {
+  return ensureTenantCompany(prisma, req.auth!.tenantId, getActiveCompanyId(req), seedData)
+}
+
+async function updateRequestCompany(
+  req: AuthedRequest,
+  updateData: Record<string, any>,
+  createData: Record<string, any> = {}
+) {
+  return updateOrCreateTenantCompany(
+    prisma,
+    req.auth!.tenantId,
+    getActiveCompanyId(req),
+    updateData,
+    createData
+  )
+}
+
 async function getEffectiveAnafOauthConfig(tenantId: string) {
   const [company, platform] = await Promise.all([
-    prisma.company.findUnique({
-      where: { tenantId },
+    resolveTenantCompany(prisma, tenantId, null, {
       select: {
         efacturaOauthClientId: true,
         efacturaOauthClientSecret: true,
@@ -350,11 +376,8 @@ export async function handleAnafOauthCallback(req, res) {
         ? "Autorizarea ANAF a fost anulata sau refuzata."
         : errorDescription || error || "Autorizarea ANAF nu a putut fi finalizata."
 
-    await prisma.company.update({
-      where: { tenantId: state.tenantId },
-      data: {
-        efacturaOauthLastError: nextError,
-      },
+    await updateOrCreateTenantCompany(prisma, state.tenantId, null, {
+      efacturaOauthLastError: nextError,
     })
 
     return res.redirect(
@@ -387,35 +410,26 @@ export async function handleAnafOauthCallback(req, res) {
     const payload = await tokenRes.json().catch(() => ({}))
 
     if (!tokenRes.ok || !payload?.access_token) {
-      await prisma.company.update({
-        where: { tenantId: state.tenantId },
-        data: {
-          efacturaOauthLastError: String(payload?.error_description || payload?.error || "Nu am putut obtine token-ul ANAF."),
-        },
+      await updateOrCreateTenantCompany(prisma, state.tenantId, null, {
+        efacturaOauthLastError: String(payload?.error_description || payload?.error || "Nu am putut obtine token-ul ANAF."),
       })
 
       return res.redirect(`${state.returnTo}${state.returnTo.includes("?") ? "&" : "?"}oauth=error`)
     }
 
-    await prisma.company.update({
-      where: { tenantId: state.tenantId },
-      data: {
-        efacturaOauthAccessToken: String(payload.access_token),
-        efacturaOauthRefreshToken: payload.refresh_token ? String(payload.refresh_token) : null,
-        efacturaOauthAccessTokenExpiresAt: decodeTokenExpiry(String(payload.access_token)),
-        efacturaOauthRefreshTokenExpiresAt: decodeTokenExpiry(payload.refresh_token ? String(payload.refresh_token) : null),
-        efacturaOauthConnectedAt: new Date(),
-        efacturaOauthLastError: null,
-      },
+    await updateOrCreateTenantCompany(prisma, state.tenantId, null, {
+      efacturaOauthAccessToken: String(payload.access_token),
+      efacturaOauthRefreshToken: payload.refresh_token ? String(payload.refresh_token) : null,
+      efacturaOauthAccessTokenExpiresAt: decodeTokenExpiry(String(payload.access_token)),
+      efacturaOauthRefreshTokenExpiresAt: decodeTokenExpiry(payload.refresh_token ? String(payload.refresh_token) : null),
+      efacturaOauthConnectedAt: new Date(),
+      efacturaOauthLastError: null,
     })
 
     return res.redirect(`${state.returnTo}${state.returnTo.includes("?") ? "&" : "?"}oauth=success`)
   } catch (error: any) {
-    await prisma.company.update({
-      where: { tenantId: state.tenantId },
-      data: {
-        efacturaOauthLastError: error?.message || "Eroare la schimbul token-ului ANAF.",
-      },
+    await updateOrCreateTenantCompany(prisma, state.tenantId, null, {
+      efacturaOauthLastError: error?.message || "Eroare la schimbul token-ului ANAF.",
     })
 
     return res.redirect(`${state.returnTo}${state.returnTo.includes("?") ? "&" : "?"}oauth=error`)
@@ -524,8 +538,7 @@ router.get("/api/v1/public/efactura/agent-pairing/resolve", async (req, res) => 
     })
   }
 
-  const company = await prisma.company.findUnique({
-    where: { tenantId },
+  const company = await resolveTenantCompany(prisma, tenantId, null, {
     select: {
       name: true,
       efacturaCertSerial: true,
@@ -553,9 +566,7 @@ router.get("/api/v1/company", async (req: AuthedRequest, res) => {
 
   try {
     const [company, oauthConfig] = await Promise.all([
-      prisma.company.findUnique({
-        where: { tenantId }
-      }),
+      getRequestCompany(req),
       getEffectiveAnafOauthConfig(tenantId),
     ])
 
@@ -679,13 +690,9 @@ router.post("/api/v1/company", async (req: AuthedRequest, res) => {
   }
 
   try {
-    const existing = await prisma.company.findUnique({
-      where: { tenantId }
-    })
+    const existing = await getRequestCompany(req)
 
-    const company = await prisma.company.upsert({
-      where: { tenantId },
-      update: {
+    const company = await updateRequestCompany(req, {
         name: String(name).trim(),
         cui: cui ? String(cui).trim() : null,
         regNo: regNo ? String(regNo).trim() : null,
@@ -731,9 +738,7 @@ router.post("/api/v1/company", async (req: AuthedRequest, res) => {
         productionSeries: existing?.productionSeries ?? "PROD",
         customerCodePrefix: existing?.customerCodePrefix ?? "CLI",
         supplierCodePrefix: existing?.supplierCodePrefix ?? "FUR",
-      },
-      create: {
-        tenantId,
+      }, {
         name: String(name).trim(),
         cui: cui ? String(cui).trim() : null,
         regNo: regNo ? String(regNo).trim() : null,
@@ -771,8 +776,7 @@ router.post("/api/v1/company", async (req: AuthedRequest, res) => {
         productionSeries: "PROD",
         customerCodePrefix: "CLI",
         supplierCodePrefix: "FUR",
-      }
-    })
+      })
 
     return res.json({
       ok: true,
@@ -811,8 +815,7 @@ router.post(
         })
       }
 
-      const existing = await prisma.company.findUnique({
-        where: { tenantId },
+      const existing = await getRequestCompany(req, {
         select: {
           tenantId: true,
           name: true,
@@ -824,23 +827,18 @@ router.post(
         deleteEfacturaCertificateFile(tenantId, existing.efacturaCertFilename)
       }
 
-      const company = await prisma.company.upsert({
-        where: { tenantId },
-        update: {
+      const company = await updateRequestCompany(req, {
           efacturaCertFilename: req.file.filename,
           efacturaCertUploadedAt: new Date(),
           efacturaCertSerial: serial,
           efacturaCertPasswordEnc: encryptSecret(password),
-        },
-        create: {
-          tenantId,
+        }, {
           name: existing?.name || "Companie",
           efacturaCertFilename: req.file.filename,
           efacturaCertUploadedAt: new Date(),
           efacturaCertSerial: serial,
           efacturaCertPasswordEnc: encryptSecret(password),
-        },
-      })
+        })
 
       return res.json({
         ok: true,
@@ -862,8 +860,7 @@ router.delete("/api/v1/company/efactura/certificate", requireAuth, async (req: A
   const tenantId = req.auth!.tenantId
 
   try {
-    const company = await prisma.company.findUnique({
-      where: { tenantId },
+    const company = await getRequestCompany(req, {
       select: {
         efacturaCertFilename: true,
       },
@@ -871,12 +868,9 @@ router.delete("/api/v1/company/efactura/certificate", requireAuth, async (req: A
 
     deleteEfacturaCertificateFile(tenantId, company?.efacturaCertFilename)
 
-    const updated = await prisma.company.update({
-      where: { tenantId },
-      data: {
-        efacturaCertFilename: null,
-        efacturaCertUploadedAt: null,
-      },
+    const updated = await updateRequestCompany(req, {
+      efacturaCertFilename: null,
+      efacturaCertUploadedAt: null,
     })
 
     return res.json({
@@ -960,8 +954,7 @@ router.post("/api/v1/company/efactura/oauth/test", async (req: AuthedRequest, re
     })
   }
 
-  const company = await prisma.company.findUnique({
-    where: { tenantId },
+  const company = await getRequestCompany(req, {
     select: {
       efacturaOauthAccessToken: true,
       efacturaOauthConnectedAt: true,
@@ -986,11 +979,8 @@ router.post("/api/v1/company/efactura/oauth/test", async (req: AuthedRequest, re
     const text = response.text
 
     if (!response.ok) {
-      await prisma.company.update({
-        where: { tenantId },
-        data: {
-          efacturaOauthLastError: text.slice(0, 1000),
-        },
+      await updateRequestCompany(req, {
+        efacturaOauthLastError: text.slice(0, 1000),
       })
 
       return res.status(400).json({
@@ -1000,12 +990,9 @@ router.post("/api/v1/company/efactura/oauth/test", async (req: AuthedRequest, re
       })
     }
 
-    await prisma.company.update({
-      where: { tenantId },
-      data: {
-        efacturaOauthConnectedAt: company.efacturaOauthConnectedAt ?? new Date(),
-        efacturaOauthLastError: null,
-      },
+    await updateRequestCompany(req, {
+      efacturaOauthConnectedAt: company.efacturaOauthConnectedAt ?? new Date(),
+      efacturaOauthLastError: null,
     })
 
     return res.json({
@@ -1015,11 +1002,8 @@ router.post("/api/v1/company/efactura/oauth/test", async (req: AuthedRequest, re
       expiresAt: company.efacturaOauthAccessTokenExpiresAt,
     })
   } catch (error: any) {
-    await prisma.company.update({
-      where: { tenantId },
-      data: {
-        efacturaOauthLastError: error?.message || "Eroare la testarea conexiunii ANAF.",
-      },
+    await updateRequestCompany(req, {
+      efacturaOauthLastError: error?.message || "Eroare la testarea conexiunii ANAF.",
     })
 
     return res.status(500).json({
@@ -1132,8 +1116,7 @@ router.post("/api/v1/company/efactura/agent-pairing-code", requireAuth, async (r
     })
   }
 
-  const company = await prisma.company.findUnique({
-    where: { tenantId },
+  const company = await getRequestCompany(req, {
     select: {
       name: true,
       efacturaCertSerial: true,
@@ -1173,8 +1156,7 @@ router.get("/api/v1/company/efactura/diagnostics", async (req: AuthedRequest, re
   }
 
   try {
-    const company = await prisma.company.findUnique({
-      where: { tenantId },
+    const company = await getRequestCompany(req, {
       select: {
         tenantId: true,
         cui: true,
@@ -1234,14 +1216,9 @@ router.post("/api/v1/company/document-numbering", async (req: AuthedRequest, res
   try {
     const settings = normalizeNumberingPayload(req.body)
 
-    await prisma.company.upsert({
-      where: { tenantId },
-      update: settings,
-      create: {
-        tenantId,
-        name: "Companie",
-        ...settings,
-      },
+    await updateRequestCompany(req, settings, {
+      name: "Companie",
+      ...settings,
     })
 
     const counterUpdates: Array<{ key: string; nextNumber: unknown }> = [
@@ -1308,8 +1285,7 @@ router.get("/api/v1/company/pos-sync-config", async (req: AuthedRequest, res) =>
   const tenantId = req.auth!.tenantId
 
   try {
-    const company = await prisma.company.findUnique({
-      where: { tenantId },
+    const company = await getRequestCompany(req, {
       select: {
         posSyncInterval: true
       }
@@ -1340,33 +1316,12 @@ router.post("/api/v1/company/pos-sync-config", async (req: AuthedRequest, res) =
   }
 
   try {
-    const existingCompany = await prisma.company.findUnique({
-      where: { tenantId }
+    const company = await updateRequestCompany(req, {
+      posSyncInterval: interval
+    }, {
+      name: "Companie",
+      posSyncInterval: interval
     })
-
-    let company = existingCompany
-
-    if (!company) {
-      const tenant = await prisma.tenant.findUnique({
-        where: { id: tenantId },
-        select: { name: true }
-      })
-
-      company = await prisma.company.create({
-        data: {
-          tenantId,
-          name: tenant?.name || "Companie",
-          posSyncInterval: interval
-        }
-      })
-    } else {
-      company = await prisma.company.update({
-        where: { tenantId },
-        data: {
-          posSyncInterval: interval
-        }
-      })
-    }
 
     return res.json({
       ok: true,

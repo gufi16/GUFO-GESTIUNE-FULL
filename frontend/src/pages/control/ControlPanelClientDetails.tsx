@@ -95,6 +95,21 @@ type CreateDeviceResponse = {
   }
 }
 
+type CreateCompanyResponse = {
+  item?: {
+    id: string
+    name: string
+    code?: string | null
+    cui?: string | null
+    regNo?: string | null
+    address?: string | null
+    email?: string | null
+    phone?: string | null
+    isDefault?: boolean
+    createdAt?: string
+  }
+}
+
 type LicenseModules = {
   dashboard: boolean
   documents: boolean
@@ -198,6 +213,8 @@ export default function ControlPanelClientDetails() {
   const [locationError, setLocationError] = useState<string | null>(null)
   const [deviceError, setDeviceError] = useState<string | null>(null)
   const [userError, setUserError] = useState<string | null>(null)
+  const [companyError, setCompanyError] = useState<string | null>(null)
+  const [creatingCompany, setCreatingCompany] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [historyQuery, setHistoryQuery] = useState("")
   const [historyDateFrom, setHistoryDateFrom] = useState("")
@@ -208,6 +225,14 @@ export default function ControlPanelClientDetails() {
     role: "CASHIER",
     password: "",
     isActive: true,
+  })
+  const [companyForm, setCompanyForm] = useState({
+    name: "",
+    cui: "",
+    regNo: "",
+    address: "",
+    email: "",
+    phone: "",
   })
   const [licenseForm, setLicenseForm] = useState({
     expiresAt: "",
@@ -251,6 +276,7 @@ export default function ControlPanelClientDetails() {
   const users = Array.isArray(client?.users) ? (client.users as User[]) : []
   const locations = Array.isArray(client?.locations) ? (client.locations as LocationItem[]) : []
   const auditLogs = Array.isArray(client?.auditLogs) ? (client.auditLogs as AuditLogItem[]) : []
+  const companies = Array.isArray(client?.companies) ? client.companies : []
   const activeModules = Array.isArray(client?.activeModules) ? client.activeModules : []
   const erpEnabled = Boolean(
     licenseForm.modules.dashboard ||
@@ -383,6 +409,38 @@ export default function ControlPanelClientDetails() {
       setUserError(err?.message || "Nu am putut salva utilizatorul.")
     } finally {
       setSavingUser(false)
+    }
+  }
+
+  async function handleCreateCompany() {
+    if (!id) return
+    if (!companyForm.name.trim()) {
+      setCompanyError("Completeaza numele firmei.")
+      return
+    }
+
+    try {
+      setCreatingCompany(true)
+      setCompanyError(null)
+      setError(null)
+      await api<CreateCompanyResponse>(`/api/v1/admin/clients/${id}/companies`, {
+        method: "POST",
+        body: JSON.stringify(companyForm),
+      })
+      setCompanyForm({
+        name: "",
+        cui: "",
+        regNo: "",
+        address: "",
+        email: "",
+        phone: "",
+      })
+      setMessage("Firma suplimentara a fost adaugata.")
+      await load()
+    } catch (err: any) {
+      setCompanyError(err?.message || "Nu am putut adauga firma.")
+    } finally {
+      setCreatingCompany(false)
     }
   }
 
@@ -635,6 +693,7 @@ export default function ControlPanelClientDetails() {
       {deviceError ? <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{deviceError}</div> : null}
       {copyMessage ? <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">{copyMessage}</div> : null}
       {userError ? <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{userError}</div> : null}
+      {companyError ? <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{companyError}</div> : null}
 
       {resetPassword ? (
         <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
@@ -673,6 +732,87 @@ export default function ControlPanelClientDetails() {
                 <div className="break-words text-slate-800">{value}</div>
               </div>
             ))}
+          </div>
+
+          <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Firme ERP</div>
+                <div className="mt-1 text-sm font-semibold text-[#17324D]">Firmele pe care le poate alege adminul la login</div>
+              </div>
+              <div className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600">
+                {companies.length} firme
+              </div>
+            </div>
+
+            <div className="mt-3 space-y-2">
+              {companies.map((company: any) => (
+                <div key={company.id} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm">
+                  <div>
+                    <div className="font-semibold text-[#17324D]">{company.name}</div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      {[company.code, company.cui, company.email].filter(Boolean).join(" • ") || "Firma activa ERP"}
+                    </div>
+                  </div>
+                  {company.isDefault ? (
+                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                      Implicita
+                    </span>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <input
+                value={companyForm.name}
+                onChange={(e) => setCompanyForm((prev) => ({ ...prev, name: e.target.value }))}
+                placeholder="Nume firma noua"
+                className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+              />
+              <input
+                value={companyForm.cui}
+                onChange={(e) => setCompanyForm((prev) => ({ ...prev, cui: e.target.value }))}
+                placeholder="CUI"
+                className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+              />
+              <input
+                value={companyForm.regNo}
+                onChange={(e) => setCompanyForm((prev) => ({ ...prev, regNo: e.target.value }))}
+                placeholder="Reg. com."
+                className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+              />
+              <input
+                value={companyForm.email}
+                onChange={(e) => setCompanyForm((prev) => ({ ...prev, email: e.target.value }))}
+                placeholder="Email firma"
+                className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+              />
+              <input
+                value={companyForm.phone}
+                onChange={(e) => setCompanyForm((prev) => ({ ...prev, phone: e.target.value }))}
+                placeholder="Telefon"
+                className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+              />
+              <input
+                value={companyForm.address}
+                onChange={(e) => setCompanyForm((prev) => ({ ...prev, address: e.target.value }))}
+                placeholder="Adresa"
+                className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+              />
+            </div>
+
+            <div className="mt-3 flex justify-end">
+              <button
+                type="button"
+                onClick={handleCreateCompany}
+                disabled={creatingCompany}
+                className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#0F2740] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Plus size={15} />
+                {creatingCompany ? "Se adauga..." : "Adauga alta firma"}
+              </button>
+            </div>
           </div>
         </section>
 

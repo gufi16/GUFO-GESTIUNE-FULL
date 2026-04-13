@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { decrementStockBalanceStrict } from "../lib/stock";
+import { getPrimaryTenantCompany } from "../lib/companyResolver";
 
 console.log("POS ROUTES FILE LOADED");
 
@@ -382,8 +383,7 @@ function mapCatalogProduct(req: Request, product: any, isVatPayer: boolean) {
 
 export async function buildCatalogPayload(req: Request, tenantId: string) {
   const requestedCursor = normalizeText(req.query.cursor ?? req.query.since);
-  const company = await prisma.company.findUnique({
-    where: { tenantId },
+  const company = await getPrimaryTenantCompany(tenantId, {
     select: {
       isVatPayer: true,
     },
@@ -709,8 +709,7 @@ router.get("/api/v1/pos/config", async (req: PosAuthRequest, res: Response) => {
 
     const tenantId = auth.tenantId;
 
-    const company = await prisma.company.findUnique({
-      where: { tenantId },
+    const company = await getPrimaryTenantCompany(tenantId, {
       select: {
         posSyncInterval: true,
         isVatPayer: true,
@@ -946,8 +945,7 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
     });
   }
 
-  const company = await prisma.company.findUnique({
-    where: { tenantId },
+  const company = await getPrimaryTenantCompany(tenantId, {
     select: {
       isVatPayer: true,
     },

@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client"
 import { prisma } from "./prisma"
+import { ensureTenantCompany, resolveTenantCompany } from "./companyResolver"
 
 type NumberingKey =
   | "invoice"
@@ -65,23 +66,7 @@ function buildFormattedNumber(prefix: string, nextNumber: number) {
 }
 
 async function ensureCompany(tenantId: string) {
-  const existing = await prisma.company.findUnique({ where: { tenantId } })
-  if (existing) {
-    return existing
-  }
-
-  const tenant = await prisma.tenant.findUnique({
-    where: { id: tenantId },
-    select: { name: true },
-  })
-
-  return prisma.company.create({
-    data: {
-      tenantId,
-      name: tenant?.name || "Companie",
-      ...defaults,
-    },
-  })
+  return ensureTenantCompany(prisma, tenantId, null, defaults)
 }
 
 export async function getNumberingConfig(tenantId: string) {
@@ -126,7 +111,7 @@ export async function reserveNextNumber(
   tenantId: string,
   key: NumberingKey
 ) {
-  const company = await tx.company.findUnique({ where: { tenantId } })
+  const company = await resolveTenantCompany(tx, tenantId, null)
   const config = {
     invoiceSeries: normalizePrefix(company?.invoiceSeries, defaults.invoiceSeries),
     purchaseSeries: normalizePrefix(company?.purchaseSeries, defaults.purchaseSeries),

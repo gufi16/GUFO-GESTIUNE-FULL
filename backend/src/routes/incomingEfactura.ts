@@ -9,6 +9,7 @@ import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { requireTenantModule } from "../lib/tenantModules"
 import { reserveNextNumber } from "../lib/numbering"
+import { resolveTenantCompany } from "../lib/companyResolver"
 import {
   extractDownloadId,
   extractUploadIndex,
@@ -767,8 +768,7 @@ router.get("/api/v1/efactura/incoming/bridge-config", async (req: AuthedRequest,
     return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
   }
 
-  const company = await prisma.company.findUnique({
-    where: { tenantId },
+  const company = await resolveTenantCompany(prisma, tenantId, req.auth?.activeCompanyId, {
     select: {
       cui: true,
       efacturaEnvironment: true,

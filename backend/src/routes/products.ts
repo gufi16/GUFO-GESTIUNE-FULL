@@ -6,6 +6,7 @@ import multer from "multer"
 import { Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
+import { resolveTenantCompany } from "../lib/companyResolver"
 
 const router = Router()
 
@@ -237,8 +238,7 @@ router.get("/api/v1/products/next-sku", async (req: AuthedRequest, res) => {
 router.post("/api/v1/products", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
 
-  const company = await prisma.company.findUnique({
-    where: { tenantId },
+  const company = await resolveTenantCompany(prisma, tenantId, req.auth?.activeCompanyId, {
     select: {
       isVatPayer: true
     }
@@ -448,8 +448,7 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
   const id = String(req.params.id)
 
-  const company = await prisma.company.findUnique({
-    where: { tenantId },
+  const company = await resolveTenantCompany(prisma, tenantId, req.auth?.activeCompanyId, {
     select: {
       isVatPayer: true
     }

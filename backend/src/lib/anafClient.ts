@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { prisma } from "./prisma"
+import { getPrimaryTenantCompany } from "./companyResolver"
 import { anafHttpRequest } from "./anafHttp"
 import { getAnafCertificateOptions } from "./efacturaCertificate"
 import {
@@ -24,8 +25,7 @@ const COMPANY_ANAF_SELECT = {
 }
 
 export async function loadAnafCompanyContext(tenantId: string) {
-  return prisma.company.findUnique({
-    where: { tenantId },
+  return getPrimaryTenantCompany(tenantId, {
     select: COMPANY_ANAF_SELECT,
   })
 }

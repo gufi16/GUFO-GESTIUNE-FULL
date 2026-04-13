@@ -25,6 +25,7 @@ export function signAccessToken(payload: {
   userId: string
   role: string
   email?: string
+  activeCompanyId?: string | null
 }) {
   const expiresIn: SignOptions["expiresIn"] = JWT_EXPIRES_IN as SignOptions["expiresIn"]
   return jwt.sign(payload, getJwtSecret(), { expiresIn });
@@ -36,6 +37,7 @@ export function verifyAccessToken(token: string) {
     userId: string
     role: string
     email?: string
+    activeCompanyId?: string | null
     iat: number
     exp: number
   };

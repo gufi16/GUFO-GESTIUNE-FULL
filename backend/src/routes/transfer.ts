@@ -7,6 +7,7 @@ import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { assertSufficientStock, decrementStockBalanceStrict, incrementStockBalance } from "../lib/stock"
 import { reserveNextNumber } from "../lib/numbering"
+import { resolveTenantCompany } from "../lib/companyResolver"
 
 const router = Router()
 router.use(requireAuth)
@@ -456,9 +457,7 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
     return res.status(404).json({ ok: false, error: "Documentul nu a fost găsit." })
   }
 
-  const company = await prisma.company.findUnique({
-    where: { tenantId }
-  })
+  const company = await resolveTenantCompany(prisma, tenantId, req.auth?.activeCompanyId)
 
   const filename = `TRANSFER_${safeFilePart(docData.docNo)}_${safeFilePart(docData.fromLocation.name)}_${safeFilePart(docData.toLocation.name)}.pdf`
 

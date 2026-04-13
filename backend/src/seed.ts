@@ -4,6 +4,7 @@ dotenv.config()
 import bcrypt from "bcryptjs"
 import { prisma } from "./lib/prisma"
 import { hashSecret, makeLicenseKey } from "./lib/auth"
+import { ensureTenantCompany } from "./lib/companyResolver"
 
 async function main() {
   const demoEmail = "admin@demo.local"
@@ -52,39 +53,30 @@ async function main() {
     })
   }
 
-  let company = await prisma.company.findUnique({
-    where: { tenantId: tenant.id }
+  const company = await ensureTenantCompany(prisma, tenant.id, null, {
+    name: "GUFO RETAIL SRL",
+    cui: "RO42691617",
+    regNo: "J12/2000/2028",
+    address: "CALEA FLORESTI 20, CLUJ NAPOCA, CLUJ",
+    bank: "Transilvania Cluj",
+    iban: "RO74BTRLRONCRT0557477501",
+    email: "demo@gufo.ro",
+    phone: "0733985881"
   })
 
-  if (!company) {
-    company = await prisma.company.create({
-      data: {
-        tenantId: tenant.id,
-        name: "GUFO RETAIL SRL",
-        cui: "RO42691617",
-        regNo: "J12/2000/2028",
-        address: "CALEA FLORESTI 20, CLUJ NAPOCA, CLUJ",
-        bank: "Transilvania Cluj",
-        iban: "RO74BTRLRONCRT0557477501",
-        email: "demo@gufo.ro",
-        phone: "0733985881"
-      }
-    })
-  } else {
-    await prisma.company.update({
-      where: { id: company.id },
-      data: {
-        name: "GUFO RETAIL SRL",
-        cui: "RO42691617",
-        regNo: "J12/2000/2028",
-        address: "CALEA FLORESTI 20, CLUJ NAPOCA, CLUJ",
-        bank: "Transilvania Cluj",
-        iban: "RO74BTRLRONCRT0557477501",
-        email: "demo@gufo.ro",
-        phone: "0733985881"
-      }
-    })
-  }
+  await prisma.company.update({
+    where: { id: company.id },
+    data: {
+      name: "GUFO RETAIL SRL",
+      cui: "RO42691617",
+      regNo: "J12/2000/2028",
+      address: "CALEA FLORESTI 20, CLUJ NAPOCA, CLUJ",
+      bank: "Transilvania Cluj",
+      iban: "RO74BTRLRONCRT0557477501",
+      email: "demo@gufo.ro",
+      phone: "0733985881"
+    }
+  })
 
   let location = await prisma.location.findFirst({
     where: {

@@ -7,6 +7,7 @@ import { getNextNumberPreview, reserveNextNumber } from "../lib/numbering"
 import { generateInvoiceEFacturaXml, validateInvoiceForEFactura } from "../lib/efactura"
 import { requireTenantModule } from "../lib/tenantModules"
 import { readAnafHeader } from "../lib/anafHttp"
+import { resolveTenantCompany } from "../lib/companyResolver"
 import {
   anafCheckUploadStatus,
   anafDownloadById,
@@ -513,9 +514,7 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
     return res.status(404).json({ ok: false, error: "Factura nu a fost gasita." })
   }
 
-  const company = await prisma.company.findUnique({
-    where: { tenantId },
-  })
+  const company = await resolveTenantCompany(prisma, tenantId, req.auth?.activeCompanyId)
 
   const filename = `Factura_${safeFilePart(invoice.docNo)}_${safeFilePart(invoice.customerName)}.pdf`
   res.setHeader("Content-Type", "application/pdf")
@@ -665,9 +664,7 @@ router.post("/api/v1/sales-invoices/:id/efactura/prepare", async (req: AuthedReq
     return res.status(404).json({ ok: false, error: "Factura nu a fost gasita." })
   }
 
-  const company = await prisma.company.findUnique({
-    where: { tenantId },
-  })
+  const company = await resolveTenantCompany(prisma, tenantId, req.auth?.activeCompanyId)
 
   const validation = validateInvoiceForEFactura(invoice, company)
   const now = new Date()

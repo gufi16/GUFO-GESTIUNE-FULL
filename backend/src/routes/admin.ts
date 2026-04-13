@@ -47,6 +47,11 @@ function buildTenantPortalUrl(subdomain?: string | null) {
   return `https://${subdomain}.gufo.ink`
 }
 
+function pickPrimaryCompany(companies?: Array<any> | null) {
+  if (!Array.isArray(companies) || !companies.length) return null
+  return companies.find((company) => company?.isDefault) || companies[0] || null
+}
+
 async function generateUniqueTenantSubdomain(value: string) {
   const base = normalizeSubdomain(value)
   let candidate = RESERVED_SUBDOMAINS.has(base) ? `${base}-client` : base
@@ -237,6 +242,16 @@ const UpdateTenantSubdomainSchema = z.object({
   subdomain: z.string().min(2),
 })
 
+const AddTenantCompanySchema = z.object({
+  name: z.string().min(2),
+  code: z.string().optional(),
+  cui: z.string().optional(),
+  regNo: z.string().optional(),
+  address: z.string().optional(),
+  email: z.string().email().optional(),
+  phone: z.string().optional(),
+})
+
 router.get("/api/v1/admin/platform/efactura", requireAuth, requireOwner, async (_req, res) => {
   const config = await prisma.platformConfig.findUnique({
     where: { key: "global" },
@@ -402,7 +417,9 @@ router.get("/api/v1/admin/clients", requireAuth, requireOwner, async (_req, res)
   const tenants = await prisma.tenant.findMany({
     orderBy: { createdAt: "desc" },
     include: {
-      company: true,
+      companies: {
+        orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+      },
       users: {
         where: { isActive: true },
         select: { id: true },
@@ -435,22 +452,23 @@ router.get("/api/v1/admin/clients", requireAuth, requireOwner, async (_req, res)
   return res.json({
     ok: true,
     items: tenants.map((tenant) => {
+      const primaryCompany = pickPrimaryCompany((tenant as any).companies)
       const latestLicense = tenant.licenses[0] || null
       const latestSubscription = tenant.subscriptions[0] || null
 
       return {
         id: tenant.id,
         name: tenant.name,
-        slug: tenant.subdomain || tenant.company?.cui || slugify(tenant.name),
+        slug: tenant.subdomain || primaryCompany?.cui || slugify(tenant.name),
         subdomain: tenant.subdomain,
         portalUrl: buildTenantPortalUrl(tenant.subdomain),
-        company: tenant.company
+        company: primaryCompany
           ? {
-              id: tenant.company.id,
-              name: tenant.company.name,
-              cui: tenant.company.cui,
-              email: tenant.company.email,
-              phone: tenant.company.phone,
+              id: primaryCompany.id,
+              name: primaryCompany.name,
+              cui: primaryCompany.cui,
+              email: primaryCompany.email,
+              phone: primaryCompany.phone,
             }
           : null,
         status: !latestLicense
@@ -508,7 +526,9 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
   const tenant = await prisma.tenant.findUnique({
     where: { id: req.params.id },
     include: {
-      company: true,
+      companies: {
+        orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+      },
       users: {
         where: { isActive: true },
         select: {
@@ -581,6 +601,7 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
   }
 
   const latestLicense = tenant.licenses[0] || null
+  const primaryCompany = pickPrimaryCompany((tenant as any).companies)
   const latestSubscription = tenant.subscriptions[0] || null
   const actorIds = Array.from(new Set(tenant.auditLogs.map((row) => row.actorId).filter(Boolean)))
   const actorUsers = actorIds.length
@@ -611,20 +632,34 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
     item: {
       id: tenant.id,
       name: tenant.name,
-      slug: tenant.subdomain || tenant.company?.cui || slugify(tenant.name),
+      slug: tenant.subdomain || primaryCompany?.cui || slugify(tenant.name),
       subdomain: tenant.subdomain,
       portalUrl: buildTenantPortalUrl(tenant.subdomain),
-      company: tenant.company
+      company: primaryCompany
         ? {
-            id: tenant.company.id,
-            name: tenant.company.name,
-            cui: tenant.company.cui,
-            email: tenant.company.email,
-            phone: tenant.company.phone,
-            regNo: tenant.company.regNo,
-            address: tenant.company.address,
+            id: primaryCompany.id,
+            name: primaryCompany.name,
+            cui: primaryCompany.cui,
+            email: primaryCompany.email,
+            phone: primaryCompany.phone,
+            regNo: primaryCompany.regNo,
+            address: primaryCompany.address,
           }
         : null,
+      companies: Array.isArray((tenant as any).companies)
+        ? (tenant as any).companies.map((company: any) => ({
+            id: company.id,
+            name: company.name,
+            code: company.code,
+            cui: company.cui,
+            regNo: company.regNo,
+            address: company.address,
+            email: company.email,
+            phone: company.phone,
+            isDefault: company.isDefault,
+            createdAt: company.createdAt,
+          }))
+        : [],
       status: !latestLicense
         ? "inactive"
         : latestLicense.isSuspended
@@ -841,9 +876,11 @@ router.post("/api/v1/admin/clients", requireAuth, requireOwner, async (req: Auth
         data: {
           name: data.companyName,
           subdomain,
-          company: {
+          companies: {
             create: {
               name: data.companyName,
+              code: "FIRMA-1",
+              isDefault: true,
               cui: data.cui?.trim() || null,
               regNo: data.regNo?.trim() || null,
               address: data.address?.trim() || null,
@@ -870,7 +907,9 @@ router.post("/api/v1/admin/clients", requireAuth, requireOwner, async (req: Auth
           },
         },
         include: {
-          company: true,
+          companies: {
+            orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+          },
           licenses: {
             orderBy: { createdAt: "desc" },
             take: 1,
@@ -932,7 +971,8 @@ router.post("/api/v1/admin/clients", requireAuth, requireOwner, async (req: Auth
         name: result.tenant.name,
         subdomain: result.tenant.subdomain,
         portalUrl: buildTenantPortalUrl(result.tenant.subdomain),
-        company: result.tenant.company,
+        company: pickPrimaryCompany((result.tenant as any).companies),
+        companies: (result.tenant as any).companies || [],
         license: result.tenant.licenses[0] || null,
         erpUser: {
           id: result.erpUser.id,
@@ -948,6 +988,83 @@ router.post("/api/v1/admin/clients", requireAuth, requireOwner, async (req: Auth
       error: error?.message || "Nu am putut crea clientul",
     })
   }
+})
+
+router.post("/api/v1/admin/clients/:id/companies", requireAuth, requireOwner, async (req: AuthedRequest, res) => {
+  const parsed = AddTenantCompanySchema.safeParse(req.body || {})
+  if (!parsed.success) {
+    return res.status(400).json({ ok: false, error: parsed.error.flatten() })
+  }
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: req.params.id },
+    select: { id: true, name: true },
+  })
+
+  if (!tenant) {
+    return res.status(404).json({ ok: false, error: "Client inexistent" })
+  }
+
+  const existingCompanies = await prisma.company.findMany({
+    where: { tenantId: tenant.id },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, name: true, code: true, isDefault: true },
+  })
+
+  const suggestedCodeBase = slugify(parsed.data.code?.trim() || parsed.data.name).replace(/-/g, "_").toUpperCase().slice(0, 12) || "FIRMA"
+  let nextCode = suggestedCodeBase
+  let codeIndex = 2
+  while (existingCompanies.some((company) => company.code === nextCode)) {
+    nextCode = `${suggestedCodeBase}_${codeIndex}`.slice(0, 20)
+    codeIndex += 1
+  }
+
+  const created = await prisma.company.create({
+    data: {
+      tenantId: tenant.id,
+      name: parsed.data.name.trim(),
+      code: nextCode,
+      isDefault: existingCompanies.length === 0,
+      cui: parsed.data.cui?.trim() || null,
+      regNo: parsed.data.regNo?.trim() || null,
+      address: parsed.data.address?.trim() || null,
+      email: parsed.data.email?.trim() || null,
+      phone: parsed.data.phone?.trim() || null,
+      country: "RO",
+    },
+  })
+
+  await prisma.auditLog.create({
+    data: {
+      tenantId: tenant.id,
+      actorType: "OWNER",
+      actorId: req.auth?.userId,
+      action: "TENANT_COMPANY_CREATED",
+      entityType: "Company",
+      entityId: created.id,
+      payload: {
+        tenantName: tenant.name,
+        companyName: created.name,
+        companyCode: created.code,
+      },
+    },
+  })
+
+  return res.status(201).json({
+    ok: true,
+    item: {
+      id: created.id,
+      name: created.name,
+      code: created.code,
+      cui: created.cui,
+      regNo: created.regNo,
+      address: created.address,
+      email: created.email,
+      phone: created.phone,
+      isDefault: created.isDefault,
+      createdAt: created.createdAt,
+    },
+  })
 })
 
 router.post("/api/v1/admin/clients/:id/users", requireAuth, requireOwner, async (req: AuthedRequest, res) => {

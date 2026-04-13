@@ -4,6 +4,7 @@ import { Router } from "express"
 import PDFDocument from "pdfkit"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
+import { resolveTenantCompany } from "../lib/companyResolver"
 
 const router = Router()
 
@@ -166,9 +167,7 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
 
     const consumptionDoc = docData
 
-    const company = await prisma.company.findUnique({
-      where: { tenantId },
-    })
+    const company = await resolveTenantCompany(prisma, tenantId, req.auth?.activeCompanyId)
 
     const filename = `BonConsum_${safeFilePart(consumptionDoc.docNo)}_${safeFilePart(consumptionDoc.location?.name || "locatie")}.pdf`
 

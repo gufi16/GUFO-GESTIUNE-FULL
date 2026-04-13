@@ -25,6 +25,7 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
   const [terminalId, setTerminalIdState] = useState(getActiveTerminalId())
   const [userLabel, setUserLabel] = useState("Utilizator")
   const [userMeta, setUserMeta] = useState("ERP")
+  const [companyLabel, setCompanyLabel] = useState("Firma activa")
   const [notificationsOpen, setNotificationsOpen] = useState(false)
 
   const isDashboard = location.pathname === "/dashboard"
@@ -94,9 +95,18 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
           typeof (profile as any)?.role === "string" && (profile as any).role.trim()
             ? String((profile as any).role).trim()
             : "ERP"
+        const activeCompanyId =
+          typeof (profile as any)?.active_company_id === "string" ? String((profile as any).active_company_id) : ""
+        const companies = Array.isArray((profile as any)?.companies) ? (profile as any).companies : []
+        const activeCompany =
+          companies.find((item: any) => String(item?.id || "") === activeCompanyId) ||
+          companies.find((item: any) => item?.isDefault) ||
+          companies[0] ||
+          null
 
         setUserLabel(profileName)
         setUserMeta(profileRole)
+        setCompanyLabel(activeCompany?.name || "Firma activa")
       } catch {
         if (!cancelled) {
           setLocations([])
@@ -235,7 +245,7 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
 
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-semibold text-[#17324D]">{userLabel}</div>
-            <div className="truncate text-[11px] text-slate-500">{selectedLocationLabel}</div>
+            <div className="truncate text-[11px] text-slate-500">{companyLabel}</div>
           </div>
 
           <button
@@ -410,7 +420,7 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
               <img src="/favicon.svg" alt="Gufo ERP" className="h-8 w-8 rounded-[10px]" />
               <div className="min-w-0 text-sm">
                 <div className="truncate font-semibold text-[#17324D]">{userLabel}</div>
-                <div className="truncate text-xs uppercase text-slate-500">{userMeta}</div>
+                <div className="truncate text-xs uppercase text-slate-500">{companyLabel} • {userMeta}</div>
               </div>
             </div>
 

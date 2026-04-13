@@ -12,6 +12,7 @@ import path from "path"
 import crypto from "crypto"
 
 import { prisma } from "./lib/prisma"
+import { getPrimaryTenantCompany } from "./lib/companyResolver"
 import { hashSecret, signAccessToken, verifySecret } from "./lib/auth"
 import { writeAuditLogFromRequest, writeExplicitAuditLog } from "./lib/audit"
 import { requireAuth, AuthedRequest } from "./middleware/requireAuth"
@@ -179,6 +180,42 @@ function getTenantSubdomainFromRequest(req: express.Request) {
   return null
 }
 
+async function listTenantCompanies(tenantId?: string | null) {
+  if (!tenantId) return []
+  return prisma.company.findMany({
+    where: { tenantId },
+    orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+    select: {
+      id: true,
+      name: true,
+      code: true,
+      cui: true,
+      isDefault: true,
+    },
+  })
+}
+
+async function resolveActiveCompanyForTenant(tenantId?: string | null, activeCompanyId?: string | null) {
+  const companies = await listTenantCompanies(tenantId)
+  if (!companies.length) {
+    return {
+      companies,
+      activeCompany: null,
+    }
+  }
+
+  const activeCompany =
+    (activeCompanyId ? companies.find((company) => company.id === activeCompanyId) : null) ||
+    (companies.length === 1 ? companies[0] : null) ||
+    companies.find((company) => company.isDefault) ||
+    companies[0]
+
+  return {
+    companies,
+    activeCompany,
+  }
+}
+
 async function resolveTenantIdFromRequestHost(req: express.Request) {
   const subdomain = getTenantSubdomainFromRequest(req)
   if (!subdomain) return null
@@ -220,6 +257,10 @@ const ForgotPasswordSchema = z.object({
 const ResetPasswordSchema = z.object({
   token: z.string().min(20),
   password: z.string().min(6),
+})
+
+const SelectCompanySchema = z.object({
+  companyId: z.string().min(10),
 })
 
 app.post("/api/v1/auth/login", async (req, res) => {
@@ -272,11 +313,14 @@ app.post("/api/v1/auth/login", async (req, res) => {
     return res.status(401).json({ ok: false, error: "Invalid credentials" })
   }
 
+  const { companies, activeCompany } = await resolveActiveCompanyForTenant(user.tenantId, null)
+
   const token = signAccessToken({
     tenantId: user.tenantId,
     userId: user.id,
     role: user.role,
     email: user.email,
+    activeCompanyId: companies.length === 1 ? activeCompany?.id || null : null,
   })
 
   void writeExplicitAuditLog({
@@ -300,6 +344,66 @@ app.post("/api/v1/auth/login", async (req, res) => {
   return res.json({
     ok: true,
     access_token: token,
+    active_company_id: companies.length === 1 ? activeCompany?.id || null : null,
+    requires_company_selection: companies.length > 1,
+    companies: companies.map((company) => ({
+      id: company.id,
+      name: company.name,
+      code: company.code,
+      cui: company.cui,
+      isDefault: company.isDefault,
+    })),
+  })
+})
+
+app.post("/api/v1/auth/select-company", requireAuth, async (req: AuthedRequest, res) => {
+  const auth = req.auth!
+  if (!auth.tenantId) {
+    return res.status(403).json({ ok: false, error: "Selectia firmei este disponibila doar in ERP." })
+  }
+
+  const parsed = SelectCompanySchema.safeParse(req.body || {})
+  if (!parsed.success) {
+    return res.status(400).json({ ok: false, error: parsed.error.flatten() })
+  }
+
+  const company = await prisma.company.findFirst({
+    where: {
+      id: parsed.data.companyId,
+      tenantId: auth.tenantId,
+    },
+    select: {
+      id: true,
+      name: true,
+      code: true,
+      cui: true,
+      isDefault: true,
+    },
+  })
+
+  if (!company) {
+    return res.status(404).json({ ok: false, error: "Firma selectata nu exista." })
+  }
+
+  const token = signAccessToken({
+    tenantId: auth.tenantId,
+    userId: auth.userId,
+    role: auth.role,
+    email: auth.email || undefined,
+    activeCompanyId: company.id,
+  })
+
+  return res.json({
+    ok: true,
+    access_token: token,
+    active_company_id: company.id,
+    company: {
+      id: company.id,
+      name: company.name,
+      code: company.code,
+      cui: company.cui,
+      isDefault: company.isDefault,
+    },
   })
 })
 
@@ -609,6 +713,8 @@ app.get("/api/v1/me", requireAuth, async (req: AuthedRequest, res) => {
       ].filter(Boolean)
     : []
 
+  const { companies, activeCompany } = await resolveActiveCompanyForTenant(auth.tenantId, auth.activeCompanyId)
+
   return res.json({
     ok: true,
     tenant_id: auth.tenantId,
@@ -616,6 +722,15 @@ app.get("/api/v1/me", requireAuth, async (req: AuthedRequest, res) => {
     role: auth.role,
     name: user.name,
     email: user.email,
+    active_company_id: activeCompany?.id || null,
+    requires_company_selection: companies.length > 1 && !auth.activeCompanyId,
+    companies: companies.map((company) => ({
+      id: company.id,
+      name: company.name,
+      code: company.code,
+      cui: company.cui,
+      isDefault: company.isDefault,
+    })),
     modules,
     license: license
       ? {
@@ -887,8 +1002,7 @@ app.get("/api/v1/pos/config", async (req, res) => {
       })
     }
 
-    const company = await prisma.company.findUnique({
-      where: { tenantId: auth.tenantId },
+    const company = await getPrimaryTenantCompany(auth.tenantId, {
       select: {
         posSyncInterval: true,
         isVatPayer: true,
