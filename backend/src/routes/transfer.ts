@@ -8,6 +8,7 @@ import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { assertSufficientStock, decrementStockBalanceStrict, incrementStockBalance } from "../lib/stock"
 import { reserveNextNumber } from "../lib/numbering"
 import { resolveTenantCompany } from "../lib/companyResolver"
+import { requireRequestCompanyId } from "../lib/companyScope"
 
 const router = Router()
 router.use(requireAuth)
@@ -91,11 +92,12 @@ async function recalcTransfer(transferId: string) {
 
 router.get("/api/v1/transfers", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const month = String(req.query.month || "").trim()
   const dateFrom = String(req.query.dateFrom || "").trim()
   const dateTo = String(req.query.dateTo || "").trim()
 
-  const where: any = { tenantId }
+  const where: any = { tenantId, companyId }
 
   if (month) {
     const [y, m] = month.split("-").map(Number)
@@ -132,10 +134,11 @@ router.get("/api/v1/transfers", async (req: AuthedRequest, res) => {
 
 router.get("/api/v1/transfers/:id", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const id = String(req.params.id)
 
   const doc = await prisma.transferDoc.findFirst({
-    where: { id, tenantId },
+    where: { id, tenantId, companyId },
     include: {
       fromLocation: true,
       toLocation: true,
@@ -164,6 +167,7 @@ router.get("/api/v1/transfers/:id", async (req: AuthedRequest, res) => {
 
 router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const { id, header, items, postNow } = req.body || {}
 
   const fromLocationId = String(header?.fromLocationId || "").trim()
@@ -224,6 +228,7 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
       const created = await prisma.transferDoc.create({
         data: {
           tenantId,
+          companyId,
           fromLocationId,
           toLocationId,
           docNo,
@@ -244,7 +249,7 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
       transferId = created.id
     } else {
       const existing = await prisma.transferDoc.findFirst({
-        where: { id: transferId, tenantId }
+        where: { id: transferId, tenantId, companyId }
       })
 
       if (!existing) {
@@ -258,6 +263,7 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
       const duplicate = await prisma.transferDoc.findFirst({
         where: {
           tenantId,
+          companyId,
           docNo,
           NOT: { id: transferId }
         }
@@ -305,7 +311,7 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
       }
 
       const product = await prisma.product.findFirst({
-        where: { id: productId, tenantId },
+        where: { id: productId, tenantId, companyId },
         include: {
           uom: true,
           vatRate: true
@@ -317,8 +323,9 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
       }
 
       await assertSufficientStock(prisma, {
-        tenantId,
-        locationId: fromLocationId,
+          tenantId,
+          companyId,
+          locationId: fromLocationId,
         productId,
         requiredQty: qty,
         productName: product.name,
@@ -344,7 +351,7 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
     if (postNow === true) {
       await prisma.$transaction(async (tx) => {
         const doc = await tx.transferDoc.findFirst({
-          where: { id: transferId, tenantId },
+        where: { id: transferId, tenantId, companyId },
           include: { items: true }
         })
 
@@ -355,12 +362,13 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
           const qty = Number(item.qty || 0)
 
           const product = await tx.product.findFirst({
-            where: { id: item.productId, tenantId },
+            where: { id: item.productId, tenantId, companyId },
             include: { uom: true }
           })
 
           await decrementStockBalanceStrict(tx, {
             tenantId,
+            companyId,
             locationId: doc.fromLocationId,
             productId: item.productId,
             qty: new Prisma.Decimal(qty),
@@ -370,6 +378,7 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
 
           await incrementStockBalance(tx, {
             tenantId,
+            companyId,
             locationId: doc.toLocationId,
             productId: item.productId,
             qty: new Prisma.Decimal(qty)
@@ -378,6 +387,7 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
           await tx.stockMove.create({
             data: {
               tenantId,
+              companyId,
               locationId: doc.fromLocationId,
               productId: item.productId,
               type: "OUT",
@@ -391,6 +401,7 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
           await tx.stockMove.create({
             data: {
               tenantId,
+              companyId,
               locationId: doc.toLocationId,
               productId: item.productId,
               type: "IN",
@@ -410,7 +421,7 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
     }
 
     const doc = await prisma.transferDoc.findFirst({
-      where: { id: transferId, tenantId },
+      where: { id: transferId, tenantId, companyId },
       include: {
         fromLocation: true,
         toLocation: true,
@@ -436,10 +447,11 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
 
 router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const id = String(req.params.id)
 
   const docData = await prisma.transferDoc.findFirst({
-    where: { id, tenantId },
+    where: { id, tenantId, companyId },
     include: {
       fromLocation: true,
       toLocation: true,

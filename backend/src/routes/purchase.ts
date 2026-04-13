@@ -3,6 +3,7 @@ import { Router } from "express"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { reserveNextNumber } from "../lib/numbering"
+import { requireRequestCompanyId } from "../lib/companyScope"
 
 const router = Router()
 
@@ -127,6 +128,7 @@ async function recalcReceipt(receiptId: string) {
 
 async function createOrReplaceReceiptItems(
   tenantId: string,
+  companyId: string,
   receiptId: string,
   fxRate: number,
   items: any[]
@@ -162,7 +164,8 @@ async function createOrReplaceReceiptItems(
     const product = await prisma.product.findFirst({
       where: {
         id: productId,
-        tenantId
+        tenantId,
+        companyId
       },
       include: {
         vatRate: true,
@@ -235,12 +238,13 @@ async function createOrReplaceReceiptItems(
   await recalcReceipt(receiptId)
 }
 
-async function postReceiptToStock(tenantId: string, receiptId: string) {
+async function postReceiptToStock(tenantId: string, companyId: string, receiptId: string) {
   return prisma.$transaction(async (tx) => {
     const receipt = await tx.purchaseReceipt.findFirst({
       where: {
         id: receiptId,
-        tenantId
+        tenantId,
+        companyId
       },
       include: {
         items: true
@@ -315,13 +319,15 @@ async function postReceiptToStock(tenantId: string, receiptId: string) {
 
 router.get("/api/v1/purchase-receipts", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
 
   const dateFrom = String(req.query.dateFrom || "").trim()
   const dateTo = String(req.query.dateTo || "").trim()
   const month = String(req.query.month || "").trim()
 
   const where: any = {
-    tenantId
+    tenantId,
+    companyId
   }
 
   if (month) {
@@ -367,12 +373,14 @@ router.get("/api/v1/purchase-receipts", async (req: AuthedRequest, res) => {
 
 router.get("/api/v1/purchase-receipts/:id", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const id = req.params.id
 
   const receipt = await prisma.purchaseReceipt.findFirst({
     where: {
       id,
-      tenantId
+      tenantId,
+      companyId
     },
     include: {
       location: true,
@@ -411,6 +419,7 @@ router.get("/api/v1/purchase-receipts/:id", async (req: AuthedRequest, res) => {
 
 router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const { id, header, items, postNow } = req.body || {}
 
   try {
@@ -457,7 +466,8 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
       supplier = await prisma.supplier.findFirst({
         where: {
           id: supplierId,
-          tenantId
+          tenantId,
+          companyId
         }
       })
 
@@ -488,6 +498,7 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
       const duplicate = await prisma.purchaseReceipt.findFirst({
         where: {
           tenantId,
+          companyId,
           docNo: finalDocNo
         }
       })
@@ -502,6 +513,7 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
       const created = await prisma.purchaseReceipt.create({
         data: {
           tenantId,
+          companyId,
           locationId,
           supplierId: supplier?.id || null,
           supplierName: supplier?.name || (supplierName ? String(supplierName).trim() : null),
@@ -524,7 +536,8 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
       const existing = await prisma.purchaseReceipt.findFirst({
         where: {
           id: receiptId,
-          tenantId
+          tenantId,
+          companyId
         }
       })
 
@@ -545,6 +558,7 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
       const duplicate = await prisma.purchaseReceipt.findFirst({
         where: {
           tenantId,
+          companyId,
           docNo: finalDocNo,
           NOT: { id: receiptId }
         }
@@ -577,16 +591,17 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
       })
     }
 
-    await createOrReplaceReceiptItems(tenantId, receiptId, normalizedFxRate, items)
+    await createOrReplaceReceiptItems(tenantId, companyId, receiptId, normalizedFxRate, items)
 
     if (postNow === true) {
-      await postReceiptToStock(tenantId, receiptId)
+      await postReceiptToStock(tenantId, companyId, receiptId)
     }
 
     const receipt = await prisma.purchaseReceipt.findFirst({
       where: {
         id: receiptId,
-        tenantId
+        tenantId,
+        companyId
       },
       include: {
         location: true,
@@ -615,6 +630,7 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
         where: {
           tenantId,
           id: sourceIncomingEInvoiceId,
+          companyId,
         },
         data: {
           linkedReceiptId: receiptId,
@@ -638,15 +654,17 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
 
 router.post("/api/v1/purchase-receipts/:id/post", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const id = req.params.id
 
   try {
-    await postReceiptToStock(tenantId, id)
+    await postReceiptToStock(tenantId, companyId, id)
 
     const receipt = await prisma.purchaseReceipt.findFirst({
       where: {
         id,
-        tenantId
+        tenantId,
+        companyId
       },
       include: {
         location: true,
@@ -681,12 +699,14 @@ router.post("/api/v1/purchase-receipts/:id/post", async (req: AuthedRequest, res
 
 router.post("/api/v1/purchase-receipts/:id/cancel", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const id = req.params.id
 
   const receipt = await prisma.purchaseReceipt.findFirst({
     where: {
       id,
-      tenantId
+      tenantId,
+      companyId
     }
   })
 

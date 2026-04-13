@@ -244,8 +244,8 @@ model PlatformConfig {
 }
 
 model Company {
-  id       String  @id @default(cuid())
-  tenantId String
+    id       String  @id @default(cuid())
+    tenantId String
 
   name    String
   code    String?
@@ -299,12 +299,27 @@ model Company {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+    tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+    products Product[]
+    suppliers Supplier[]
+    customers Customer[]
+    purchaseReceipts PurchaseReceipt[]
+    incomingEInvoices IncomingEInvoice[]
+    salesInvoices SalesInvoice[]
+    recipes Recipe[]
+    sales Sale[]
+    stockBalances StockBalance[]
+    stockMoves StockMove[]
+    consumptionDocs ConsumptionDoc[]
+    productionDocs ProductionDoc[]
+    transferDocs TransferDoc[]
+    inventoryDocs InventoryDoc[]
+    minutesDocs MinutesDoc[]
 
-  @@index([tenantId])
-  @@unique([tenantId, name])
-  @@unique([tenantId, code])
-}
+    @@index([tenantId])
+    @@unique([tenantId, name])
+    @@unique([tenantId, code])
+  }
 
 model User {
   id           String   @id @default(cuid())
@@ -504,8 +519,9 @@ model SkuCounter {
 }
 
 model Product {
-  id       String @id @default(cuid())
-  tenantId String
+    id       String @id @default(cuid())
+    tenantId String
+    companyId String?
 
   sku      String
   name     String
@@ -531,8 +547,9 @@ model Product {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant      Tenant      @relation(fields: [tenantId], references: [id])
-  vatRate     VatRate     @relation(fields: [vatRateId], references: [id])
+    tenant      Tenant      @relation(fields: [tenantId], references: [id])
+    company     Company?    @relation(fields: [companyId], references: [id])
+    vatRate     VatRate     @relation(fields: [vatRateId], references: [id])
   uom         Uom         @relation("StockUom", fields: [uomId], references: [id])
   purchaseUom Uom?        @relation("PurchaseUom", fields: [purchaseUomId], references: [id])
   department  Department? @relation(fields: [departmentId], references: [id])
@@ -558,18 +575,21 @@ model Product {
   marketplaceMappings MarketplaceProductMapping[]
   incomingEInvoiceItems IncomingEInvoiceItem[]
 
-  @@unique([tenantId, sku])
-  @@index([tenantId])
-  @@index([tenantId, name])
-  @@index([departmentId])
-  @@index([categoryId])
-  @@index([purchaseUomId])
-}
+    @@unique([tenantId, sku])
+    @@index([tenantId])
+    @@index([tenantId, companyId])
+    @@index([tenantId, name])
+    @@index([companyId])
+    @@index([departmentId])
+    @@index([categoryId])
+    @@index([purchaseUomId])
+  }
 
 model Recipe {
-  id        String       @id @default(cuid())
-  tenantId  String
-  productId String       @unique
+    id        String       @id @default(cuid())
+    tenantId  String
+    companyId String?
+    productId String       @unique
   code      String?
   name      String?
   notes     String?
@@ -579,14 +599,17 @@ model Recipe {
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
-  tenant  Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  product Product      @relation("RecipeProduct", fields: [productId], references: [id], onDelete: Cascade)
-  items   RecipeItem[]
+    tenant  Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+    company Company?     @relation(fields: [companyId], references: [id])
+    product Product      @relation("RecipeProduct", fields: [productId], references: [id], onDelete: Cascade)
+    items   RecipeItem[]
 
-  @@index([tenantId])
-  @@index([productId])
-  @@index([status])
-}
+    @@index([tenantId])
+    @@index([tenantId, companyId])
+    @@index([companyId])
+    @@index([productId])
+    @@index([status])
+  }
 
 model RecipeItem {
   id           String   @id @default(cuid())
@@ -623,9 +646,10 @@ model ProductBarcode {
 }
 
 model Supplier {
-  id         String   @id @default(cuid())
-  tenantId   String
-  name       String
+    id         String   @id @default(cuid())
+    tenantId   String
+    companyId  String?
+    name       String
   code       String?
   cif        String?
   regCom     String?
@@ -641,18 +665,22 @@ model Supplier {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  tenant   Tenant            @relation(fields: [tenantId], references: [id])
-  receipts PurchaseReceipt[]
-  incomingEInvoices IncomingEInvoice[]
+    tenant   Tenant            @relation(fields: [tenantId], references: [id])
+    company  Company?          @relation(fields: [companyId], references: [id])
+    receipts PurchaseReceipt[]
+    incomingEInvoices IncomingEInvoice[]
 
-  @@index([tenantId])
-  @@index([tenantId, name])
-}
+    @@index([tenantId])
+    @@index([tenantId, companyId])
+    @@index([tenantId, name])
+    @@index([companyId])
+  }
 
 model Customer {
-  id         String   @id @default(cuid())
-  tenantId   String
-  name       String
+    id         String   @id @default(cuid())
+    tenantId   String
+    companyId  String?
+    name       String
   code       String?
   cif        String?
   regNo      String?
@@ -668,17 +696,21 @@ model Customer {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  tenant   Tenant         @relation(fields: [tenantId], references: [id])
-  invoices SalesInvoice[]
+    tenant   Tenant         @relation(fields: [tenantId], references: [id])
+    company  Company?       @relation(fields: [companyId], references: [id])
+    invoices SalesInvoice[]
 
-  @@index([tenantId])
-  @@index([tenantId, name])
-}
+    @@index([tenantId])
+    @@index([tenantId, companyId])
+    @@index([tenantId, name])
+    @@index([companyId])
+  }
 
 model Sale {
-  id              String  @id @default(cuid())
-  tenantId        String
-  locationId      String
+    id              String  @id @default(cuid())
+    tenantId        String
+    companyId       String?
+    locationId      String
   terminalId      String?
   externalOrderId String? @unique
 
@@ -695,16 +727,19 @@ model Sale {
 
   createdAt DateTime @default(now())
 
-  tenant        Tenant         @relation(fields: [tenantId], references: [id])
-  location      Location       @relation(fields: [locationId], references: [id])
+    tenant        Tenant         @relation(fields: [tenantId], references: [id])
+    company       Company?       @relation(fields: [companyId], references: [id])
+    location      Location       @relation(fields: [locationId], references: [id])
   terminal      Terminal?      @relation(fields: [terminalId], references: [id])
   externalOrder ExternalOrder? @relation(fields: [externalOrderId], references: [id])
 
   items           SaleItem[]
   consumptionDocs ConsumptionDoc[]
 
-  @@index([tenantId])
-  @@index([locationId])
+    @@index([tenantId])
+    @@index([tenantId, companyId])
+    @@index([companyId])
+    @@index([locationId])
   @@index([terminalId])
   @@index([soldAt])
   @@index([externalOrderId])
@@ -727,28 +762,33 @@ model SaleItem {
 }
 
 model StockBalance {
-  id         String @id @default(cuid())
-  tenantId   String
-  locationId String
-  productId  String
+    id         String @id @default(cuid())
+    tenantId   String
+    companyId  String?
+    locationId String
+    productId  String
 
   qty Decimal @default(0)
 
-  tenant   Tenant   @relation(fields: [tenantId], references: [id])
-  location Location @relation(fields: [locationId], references: [id])
-  product  Product  @relation(fields: [productId], references: [id])
+    tenant   Tenant   @relation(fields: [tenantId], references: [id])
+    company  Company? @relation(fields: [companyId], references: [id])
+    location Location @relation(fields: [locationId], references: [id])
+    product  Product  @relation(fields: [productId], references: [id])
 
-  @@unique([tenantId, locationId, productId])
-  @@index([tenantId])
-  @@index([locationId])
-  @@index([productId])
-}
+    @@unique([tenantId, companyId, locationId, productId])
+    @@index([tenantId])
+    @@index([tenantId, companyId])
+    @@index([companyId])
+    @@index([locationId])
+    @@index([productId])
+  }
 
 model StockMove {
-  id         String @id @default(cuid())
-  tenantId   String
-  locationId String
-  productId  String
+    id         String @id @default(cuid())
+    tenantId   String
+    companyId  String?
+    locationId String
+    productId  String
 
   type StockMoveType
   qty  Decimal
@@ -759,20 +799,24 @@ model StockMove {
 
   createdAt DateTime @default(now())
 
-  tenant   Tenant   @relation(fields: [tenantId], references: [id])
-  location Location @relation(fields: [locationId], references: [id])
-  product  Product  @relation(fields: [productId], references: [id])
+    tenant   Tenant   @relation(fields: [tenantId], references: [id])
+    company  Company? @relation(fields: [companyId], references: [id])
+    location Location @relation(fields: [locationId], references: [id])
+    product  Product  @relation(fields: [productId], references: [id])
 
-  @@index([tenantId])
-  @@index([locationId])
+    @@index([tenantId])
+    @@index([tenantId, companyId])
+    @@index([companyId])
+    @@index([locationId])
   @@index([productId])
   @@index([refType, refId])
 }
 
 model ConsumptionDoc {
-  id         String   @id @default(cuid())
-  tenantId   String
-  locationId String
+    id         String   @id @default(cuid())
+    tenantId   String
+    companyId  String?
+    locationId String
   saleId     String?
   docNo      String
   docDate    DateTime
@@ -780,15 +824,18 @@ model ConsumptionDoc {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  tenant   Tenant   @relation(fields: [tenantId], references: [id])
-  location Location @relation(fields: [locationId], references: [id])
-  sale     Sale?    @relation(fields: [saleId], references: [id])
+    tenant   Tenant   @relation(fields: [tenantId], references: [id])
+    company  Company? @relation(fields: [companyId], references: [id])
+    location Location @relation(fields: [locationId], references: [id])
+    sale     Sale?    @relation(fields: [saleId], references: [id])
 
   items ConsumptionDocItem[]
 
-  @@unique([tenantId, docNo])
-  @@index([tenantId])
-  @@index([locationId])
+    @@unique([tenantId, docNo])
+    @@index([tenantId])
+    @@index([tenantId, companyId])
+    @@index([companyId])
+    @@index([locationId])
   @@index([saleId])
   @@index([docDate])
 }
@@ -813,23 +860,27 @@ model ConsumptionDocItem {
 }
 
 model ProductionDoc {
-  id         String   @id @default(cuid())
-  tenantId   String
-  locationId String
+    id         String   @id @default(cuid())
+    tenantId   String
+    companyId  String?
+    locationId String
   docNo      String
   docDate    DateTime
   note       String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  tenant   Tenant   @relation(fields: [tenantId], references: [id])
-  location Location @relation(fields: [locationId], references: [id])
+    tenant   Tenant   @relation(fields: [tenantId], references: [id])
+    company  Company? @relation(fields: [companyId], references: [id])
+    location Location @relation(fields: [locationId], references: [id])
 
   items ProductionDocItem[]
 
-  @@unique([tenantId, docNo])
-  @@index([tenantId])
-  @@index([locationId])
+    @@unique([tenantId, docNo])
+    @@index([tenantId])
+    @@index([tenantId, companyId])
+    @@index([companyId])
+    @@index([locationId])
   @@index([docDate])
 }
 
@@ -848,9 +899,10 @@ model ProductionDocItem {
 }
 
 model PurchaseReceipt {
-  id           String       @id @default(cuid())
-  tenantId     String
-  locationId   String
+    id           String       @id @default(cuid())
+    tenantId     String
+    companyId    String?
+    locationId   String
   supplierId   String?
   supplierName String?
   supplierCode String?
@@ -877,16 +929,19 @@ model PurchaseReceipt {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant   Tenant                @relation(fields: [tenantId], references: [id])
-  location Location              @relation(fields: [locationId], references: [id])
+    tenant   Tenant                @relation(fields: [tenantId], references: [id])
+    company  Company?              @relation(fields: [companyId], references: [id])
+    location Location              @relation(fields: [locationId], references: [id])
   supplier Supplier?             @relation(fields: [supplierId], references: [id])
   sourceIncomingEInvoice IncomingEInvoice? @relation(fields: [sourceIncomingEInvoiceId], references: [id])
   items    PurchaseReceiptItem[]
 
-  @@unique([tenantId, docNo])
-  @@index([tenantId])
-  @@index([locationId])
-  @@index([supplierId])
+    @@unique([tenantId, docNo])
+    @@index([tenantId])
+    @@index([tenantId, companyId])
+    @@index([companyId])
+    @@index([locationId])
+    @@index([supplierId])
   @@index([status])
   @@index([docDate])
   @@index([spvDownloadId])
@@ -930,9 +985,10 @@ model PurchaseReceiptItem {
 }
 
 model IncomingEInvoice {
-  id                   String                 @id @default(cuid())
-  tenantId             String
-  supplierId           String?
+    id                   String                 @id @default(cuid())
+    tenantId             String
+    companyId            String?
+    supplierId           String?
   linkedReceiptId      String?                @unique
   spvDownloadId        String
   spvUploadIndex       String?
@@ -956,14 +1012,17 @@ model IncomingEInvoice {
   createdAt            DateTime               @default(now())
   updatedAt            DateTime               @updatedAt
 
-  tenant        Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  supplier      Supplier?         @relation(fields: [supplierId], references: [id])
+    tenant        Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+    company       Company?          @relation(fields: [companyId], references: [id])
+    supplier      Supplier?         @relation(fields: [supplierId], references: [id])
   linkedReceipt PurchaseReceipt?
   items         IncomingEInvoiceItem[]
 
-  @@unique([tenantId, spvDownloadId])
-  @@index([tenantId])
-  @@index([supplierId])
+    @@unique([tenantId, spvDownloadId])
+    @@index([tenantId])
+    @@index([tenantId, companyId])
+    @@index([companyId])
+    @@index([supplierId])
   @@index([invoiceDate])
   @@index([invoiceNo])
   @@index([supplierCif])
@@ -996,9 +1055,10 @@ model IncomingEInvoiceItem {
 }
 
 model TransferDoc {
-  id             String         @id @default(cuid())
-  tenantId       String
-  fromLocationId String
+    id             String         @id @default(cuid())
+    tenantId       String
+    companyId      String?
+    fromLocationId String
   toLocationId   String
   docNo          String
   docDate        DateTime
@@ -1017,14 +1077,17 @@ model TransferDoc {
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
-  tenant       Tenant            @relation(fields: [tenantId], references: [id])
-  fromLocation Location          @relation("TransferFromLocation", fields: [fromLocationId], references: [id])
+    tenant       Tenant            @relation(fields: [tenantId], references: [id])
+    company      Company?          @relation(fields: [companyId], references: [id])
+    fromLocation Location          @relation("TransferFromLocation", fields: [fromLocationId], references: [id])
   toLocation   Location          @relation("TransferToLocation", fields: [toLocationId], references: [id])
   items        TransferDocItem[]
 
-  @@unique([tenantId, docNo])
-  @@index([tenantId])
-  @@index([fromLocationId])
+    @@unique([tenantId, docNo])
+    @@index([tenantId])
+    @@index([tenantId, companyId])
+    @@index([companyId])
+    @@index([fromLocationId])
   @@index([toLocationId])
   @@index([status])
   @@index([docDate])
@@ -1054,9 +1117,10 @@ model TransferDocItem {
 }
 
 model InventoryDoc {
-  id          String          @id @default(cuid())
-  tenantId    String
-  locationId  String
+    id          String          @id @default(cuid())
+    tenantId    String
+    companyId   String?
+    locationId  String
   docNo       String
   docDate     DateTime
   note        String?
@@ -1065,14 +1129,17 @@ model InventoryDoc {
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
-  tenant   Tenant   @relation(fields: [tenantId], references: [id])
-  location Location @relation(fields: [locationId], references: [id])
+    tenant   Tenant   @relation(fields: [tenantId], references: [id])
+    company  Company? @relation(fields: [companyId], references: [id])
+    location Location @relation(fields: [locationId], references: [id])
 
   items InventoryDocItem[]
 
-  @@unique([tenantId, docNo])
-  @@index([tenantId])
-  @@index([locationId])
+    @@unique([tenantId, docNo])
+    @@index([tenantId])
+    @@index([tenantId, companyId])
+    @@index([companyId])
+    @@index([locationId])
   @@index([docDate])
   @@index([status])
 }
@@ -1095,9 +1162,10 @@ model InventoryDocItem {
 }
 
 model MinutesDoc {
-  id         String           @id @default(cuid())
-  tenantId   String
-  locationId String
+    id         String           @id @default(cuid())
+    tenantId   String
+    companyId  String?
+    locationId String
   docNo      String
   docDate    DateTime
   type       MinutesDocType
@@ -1119,13 +1187,16 @@ model MinutesDoc {
   createdAt  DateTime         @default(now())
   updatedAt  DateTime         @updatedAt
 
-  tenant   Tenant           @relation(fields: [tenantId], references: [id])
-  location Location         @relation(fields: [locationId], references: [id])
+    tenant   Tenant           @relation(fields: [tenantId], references: [id])
+    company  Company?         @relation(fields: [companyId], references: [id])
+    location Location         @relation(fields: [locationId], references: [id])
   items    MinutesDocItem[]
 
-  @@unique([tenantId, docNo])
-  @@index([tenantId])
-  @@index([locationId])
+    @@unique([tenantId, docNo])
+    @@index([tenantId])
+    @@index([tenantId, companyId])
+    @@index([companyId])
+    @@index([locationId])
   @@index([docDate])
   @@index([type])
   @@index([status])
@@ -1151,9 +1222,10 @@ model MinutesDocItem {
 }
 
 model SalesInvoice {
-  id                  String             @id @default(cuid())
-  tenantId            String
-  locationId          String
+    id                  String             @id @default(cuid())
+    tenantId            String
+    companyId           String?
+    locationId          String
   customerId          String?
   docNo               String
   docDate             DateTime
@@ -1194,15 +1266,18 @@ model SalesInvoice {
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
 
-  tenant       Tenant             @relation(fields: [tenantId], references: [id])
-  location     Location           @relation(fields: [locationId], references: [id])
+    tenant       Tenant             @relation(fields: [tenantId], references: [id])
+    company      Company?           @relation(fields: [companyId], references: [id])
+    location     Location           @relation(fields: [locationId], references: [id])
   customer     Customer?          @relation(fields: [customerId], references: [id])
   items        SalesInvoiceItem[]
   efacturaLogs EFacturaLog[]
 
-  @@unique([tenantId, docNo])
-  @@index([tenantId])
-  @@index([locationId])
+    @@unique([tenantId, docNo])
+    @@index([tenantId])
+    @@index([tenantId, companyId])
+    @@index([companyId])
+    @@index([locationId])
   @@index([customerId])
   @@index([docDate])
   @@index([status])

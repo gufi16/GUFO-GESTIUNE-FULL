@@ -8,6 +8,7 @@ import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { getNextNumberPreview, reserveNextNumber } from "../lib/numbering"
 import { assertSufficientStock, decrementStockBalanceStrict } from "../lib/stock"
 import { resolveTenantCompany } from "../lib/companyResolver"
+import { requireRequestCompanyId } from "../lib/companyScope"
 
 const router = Router()
 
@@ -159,10 +160,10 @@ async function recalcMinutesDoc(docId: string) {
   })
 }
 
-async function applyMinutesDoc(tenantId: string, docId: string) {
+async function applyMinutesDoc(tenantId: string, companyId: string, docId: string) {
   return prisma.$transaction(async (tx) => {
     const doc = await tx.minutesDoc.findFirst({
-      where: { id: docId, tenantId },
+      where: { id: docId, tenantId, companyId },
       include: {
         items: {
           include: {
@@ -183,6 +184,7 @@ async function applyMinutesDoc(tenantId: string, docId: string) {
       for (const item of doc.items) {
         await assertSufficientStock(tx, {
           tenantId,
+          companyId,
           locationId: doc.locationId,
           productId: item.productId,
           requiredQty: item.qty,
@@ -192,6 +194,7 @@ async function applyMinutesDoc(tenantId: string, docId: string) {
 
         await decrementStockBalanceStrict(tx, {
           tenantId,
+          companyId,
           locationId: doc.locationId,
           productId: item.productId,
           qty: item.qty,
@@ -268,11 +271,13 @@ async function assertManualDocNoAvailable(tenantId: string, docNo: string, curre
 
 router.get("/api/v1/minutes-docs", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const type = String(req.query.type || "").trim().toUpperCase()
 
   const docs = await prisma.minutesDoc.findMany({
     where: {
       tenantId,
+      companyId,
       ...(type === "DETERIORATION" || type === "PRICE_CHANGE" ? { type: type as MinutesDocType } : {}),
     },
     include: {
@@ -297,10 +302,11 @@ router.get("/api/v1/minutes-docs", async (req: AuthedRequest, res) => {
 
 router.get("/api/v1/minutes-docs/:id", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const { id } = req.params
 
   const doc = await prisma.minutesDoc.findFirst({
-    where: { id, tenantId },
+    where: { id, tenantId, companyId },
     include: {
       location: true,
       items: {
@@ -324,6 +330,7 @@ router.get("/api/v1/minutes-docs/:id", async (req: AuthedRequest, res) => {
 
 router.post("/api/v1/minutes-docs/full", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const { id, header, items, postNow } = req.body || {}
 
   try {
@@ -363,6 +370,7 @@ router.post("/api/v1/minutes-docs/full", async (req: AuthedRequest, res) => {
       const created = await prisma.minutesDoc.create({
         data: {
           tenantId,
+          companyId,
           locationId,
           type,
           docNo: finalDocNo,
@@ -376,7 +384,7 @@ router.post("/api/v1/minutes-docs/full", async (req: AuthedRequest, res) => {
       docId = created.id
     } else {
       const existing = await prisma.minutesDoc.findFirst({
-        where: { id: docId, tenantId },
+        where: { id: docId, tenantId, companyId },
       })
 
       if (!existing) return res.status(404).json({ ok: false, error: "Documentul nu a fost gasit." })
@@ -430,11 +438,11 @@ router.post("/api/v1/minutes-docs/full", async (req: AuthedRequest, res) => {
     await recalcMinutesDoc(docId)
 
     if (postNow === true) {
-      await applyMinutesDoc(tenantId, docId)
+      await applyMinutesDoc(tenantId, companyId, docId)
     }
 
     const doc = await prisma.minutesDoc.findFirst({
-      where: { id: docId, tenantId },
+      where: { id: docId, tenantId, companyId },
       include: {
         location: true,
         items: {
@@ -460,10 +468,11 @@ router.post("/api/v1/minutes-docs/full", async (req: AuthedRequest, res) => {
 
 router.get("/api/v1/minutes-docs/:id/pdf", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const { id } = req.params
 
   const docData = await prisma.minutesDoc.findFirst({
-    where: { id, tenantId },
+    where: { id, tenantId, companyId },
     include: {
       location: true,
       items: {

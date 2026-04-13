@@ -5,6 +5,7 @@ import PDFDocument from "pdfkit"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { resolveTenantCompany } from "../lib/companyResolver"
+import { requireRequestCompanyId } from "../lib/companyScope"
 
 const router = Router()
 
@@ -121,10 +122,11 @@ function mapStatusToRomanian(status: string) {
 router.get("/:id/pdf", async (req: AuthedRequest, res) => {
   try {
     const tenantId = req.auth!.tenantId
+    const companyId = await requireRequestCompanyId(req)
     const { id } = req.params
 
     const docData: any = await prisma.inventoryDoc.findFirst({
-      where: { id, tenantId },
+      where: { id, tenantId, companyId },
       include: {
         location: true,
         items: {

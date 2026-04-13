@@ -1,7 +1,9 @@
-﻿import { Router, Request, Response } from "express"
+// @ts-nocheck
+import { Router, Response } from "express"
 import { Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma"
-
+import { requireAuth, AuthedRequest } from "../middleware/auth"
+import { requireRequestCompanyId } from "../lib/companyScope"
 const router = Router()
 
 type ActivityType =
@@ -33,9 +35,10 @@ function buildTerminalWhere(terminalId: string | null) {
   return terminalId ? { terminalId } : {}
 }
 
-router.get("/api/v1/dashboard", async (req: Request, res: Response) => {
+router.get("/api/v1/dashboard", requireAuth, async (req: AuthedRequest, res: Response) => {
   try {
-    const tenantId = req.headers["x-tenant-id"] as string
+    const tenantId = req.auth!.tenantId
+    const companyId = await requireRequestCompanyId(req)
     const locationId = req.query.locationId ? String(req.query.locationId) : null
     const terminalId = req.query.terminalId ? String(req.query.terminalId) : null
 
@@ -49,6 +52,7 @@ router.get("/api/v1/dashboard", async (req: Request, res: Response) => {
 
     const saleWhere = {
       tenantId,
+      companyId,
       ...buildLocationWhere(locationId),
       ...buildTerminalWhere(terminalId),
       soldAt: {
@@ -91,6 +95,7 @@ router.get("/api/v1/dashboard", async (req: Request, res: Response) => {
           SUM(total) as total
         FROM "Sale"
         WHERE "tenantId" = ${tenantId}
+          AND "companyId" = ${companyId}
           ${locationId ? Prisma.sql`AND "locationId" = ${locationId}` : Prisma.empty}
           ${terminalId ? Prisma.sql`AND "terminalId" = ${terminalId}` : Prisma.empty}
           AND "soldAt" BETWEEN ${dateFrom} AND ${dateTo}
@@ -111,6 +116,7 @@ router.get("/api/v1/dashboard", async (req: Request, res: Response) => {
         JOIN "Product" p ON p.id = si."productId"
         JOIN "Sale" s ON s.id = si."saleId"
         WHERE s."tenantId" = ${tenantId}
+          AND s."companyId" = ${companyId}
           ${locationId ? Prisma.sql`AND s."locationId" = ${locationId}` : Prisma.empty}
           ${terminalId ? Prisma.sql`AND s."terminalId" = ${terminalId}` : Prisma.empty}
           AND s."soldAt" BETWEEN ${dateFrom} AND ${dateTo}
@@ -121,6 +127,7 @@ router.get("/api/v1/dashboard", async (req: Request, res: Response) => {
       prisma.stockBalance.findMany({
         where: {
           tenantId,
+          companyId,
           ...buildLocationWhere(locationId),
           qty: { lte: 5 },
         },
@@ -145,6 +152,7 @@ router.get("/api/v1/dashboard", async (req: Request, res: Response) => {
       prisma.purchaseReceipt.findMany({
         where: {
           tenantId,
+          companyId,
           ...buildLocationWhere(locationId),
         },
         select: {
@@ -160,6 +168,7 @@ router.get("/api/v1/dashboard", async (req: Request, res: Response) => {
       prisma.transferDoc.findMany({
         where: {
           tenantId,
+          companyId,
           ...(locationId
             ? {
                 OR: [{ fromLocationId: locationId }, { toLocationId: locationId }],
@@ -179,6 +188,7 @@ router.get("/api/v1/dashboard", async (req: Request, res: Response) => {
       prisma.consumptionDoc.findMany({
         where: {
           tenantId,
+          companyId,
           ...buildLocationWhere(locationId),
         },
         select: {
@@ -193,6 +203,7 @@ router.get("/api/v1/dashboard", async (req: Request, res: Response) => {
       prisma.productionDoc.findMany({
         where: {
           tenantId,
+          companyId,
           ...buildLocationWhere(locationId),
         },
         select: {
@@ -207,6 +218,7 @@ router.get("/api/v1/dashboard", async (req: Request, res: Response) => {
       prisma.inventoryDoc.findMany({
         where: {
           tenantId,
+          companyId,
           ...buildLocationWhere(locationId),
         },
         select: {
@@ -221,6 +233,7 @@ router.get("/api/v1/dashboard", async (req: Request, res: Response) => {
       prisma.minutesDoc.findMany({
         where: {
           tenantId,
+          companyId,
           ...buildLocationWhere(locationId),
         },
         select: {

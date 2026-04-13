@@ -2,6 +2,7 @@
 import { Router } from "express"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
+import { requireRequestCompanyId } from "../lib/companyScope"
 
 const router = Router()
 router.use(requireAuth)
@@ -21,11 +22,12 @@ function toPositiveInt(value: any, fallback: number) {
 // stoc global: sumă pe toate locațiile
 router.get("/api/v1/stock/global", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const q = String(req.query.q || "").trim()
 
   const grouped = await prisma.stockBalance.groupBy({
     by: ["productId"],
-    where: { tenantId },
+    where: { tenantId, companyId },
     _sum: { qty: true }
   })
 
@@ -38,6 +40,7 @@ router.get("/api/v1/stock/global", async (req: AuthedRequest, res) => {
   const products = await prisma.product.findMany({
     where: {
       tenantId,
+      companyId,
       id: { in: productIds },
       ...(q
         ? {
@@ -79,10 +82,11 @@ router.get("/api/v1/stock/global", async (req: AuthedRequest, res) => {
 // stoc pe locații
 router.get("/api/v1/stock/by-location", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const locationId = String(req.query.locationId || "").trim()
   const q = String(req.query.q || "").trim()
 
-  const whereBalance: any = { tenantId }
+  const whereBalance: any = { tenantId, companyId }
   if (locationId) whereBalance.locationId = locationId
 
   const balances = await prisma.stockBalance.findMany({
@@ -129,6 +133,7 @@ router.get("/api/v1/stock/by-location", async (req: AuthedRequest, res) => {
 // mișcări de stoc cu filtru dată + paginare
 router.get("/api/v1/stock/moves", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const productId = String(req.query.productId || "").trim()
   const locationId = String(req.query.locationId || "").trim()
   const q = String(req.query.q || "").trim()
@@ -139,7 +144,7 @@ router.get("/api/v1/stock/moves", async (req: AuthedRequest, res) => {
   const limit = Math.min(toPositiveInt(req.query.limit, 20), 200)
   const skip = (page - 1) * limit
 
-  const where: any = { tenantId }
+  const where: any = { tenantId, companyId }
 
   if (productId) where.productId = productId
   if (locationId) where.locationId = locationId
@@ -214,6 +219,7 @@ router.get("/api/v1/stock/moves", async (req: AuthedRequest, res) => {
 // transfer stoc între locații
 router.post("/api/v1/stock/transfer", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
 
   const fromLocationId = String(req.body?.fromLocationId || "").trim()
   const toLocationId = String(req.body?.toLocationId || "").trim()
@@ -249,7 +255,7 @@ router.post("/api/v1/stock/transfer", async (req: AuthedRequest, res) => {
       where: { id: toLocationId, tenantId }
     }),
     prisma.product.findFirst({
-      where: { id: productId, tenantId },
+      where: { id: productId, tenantId, companyId },
       include: { uom: true }
     })
   ])
@@ -270,8 +276,9 @@ router.post("/api/v1/stock/transfer", async (req: AuthedRequest, res) => {
     const result = await prisma.$transaction(async (tx) => {
       const sourceBalance = await tx.stockBalance.findUnique({
         where: {
-          tenantId_locationId_productId: {
+          tenantId_companyId_locationId_productId: {
             tenantId,
+            companyId,
             locationId: fromLocationId,
             productId
           }
@@ -288,8 +295,9 @@ router.post("/api/v1/stock/transfer", async (req: AuthedRequest, res) => {
 
       await tx.stockBalance.update({
         where: {
-          tenantId_locationId_productId: {
+          tenantId_companyId_locationId_productId: {
             tenantId,
+            companyId,
             locationId: fromLocationId,
             productId
           }
@@ -303,8 +311,9 @@ router.post("/api/v1/stock/transfer", async (req: AuthedRequest, res) => {
 
       await tx.stockBalance.upsert({
         where: {
-          tenantId_locationId_productId: {
+          tenantId_companyId_locationId_productId: {
             tenantId,
+            companyId,
             locationId: toLocationId,
             productId
           }
@@ -316,6 +325,7 @@ router.post("/api/v1/stock/transfer", async (req: AuthedRequest, res) => {
         },
         create: {
           tenantId,
+          companyId,
           locationId: toLocationId,
           productId,
           qty
@@ -327,6 +337,7 @@ router.post("/api/v1/stock/transfer", async (req: AuthedRequest, res) => {
       const outMove = await tx.stockMove.create({
         data: {
           tenantId,
+          companyId,
           locationId: fromLocationId,
           productId,
           type: "OUT",
@@ -342,6 +353,7 @@ router.post("/api/v1/stock/transfer", async (req: AuthedRequest, res) => {
       const inMove = await tx.stockMove.create({
         data: {
           tenantId,
+          companyId,
           locationId: toLocationId,
           productId,
           type: "IN",

@@ -5,6 +5,7 @@ import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { decrementStockBalanceStrict, incrementStockBalance } from "../lib/stock"
 import { reserveNextNumber } from "../lib/numbering"
+import { requireRequestCompanyId } from "../lib/companyScope"
 
 const router = Router()
 router.use(requireAuth)
@@ -17,6 +18,7 @@ function toNumber(value: any) {
 router.post("/api/v1/production", async (req: AuthedRequest, res) => {
   try {
     const tenantId = req.auth!.tenantId
+    const companyId = await requireRequestCompanyId(req)
 
     const locationId = String(req.body?.locationId || "").trim()
     const note = String(req.body?.note || "").trim() || null
@@ -62,6 +64,7 @@ router.post("/api/v1/production", async (req: AuthedRequest, res) => {
     const products = await prisma.product.findMany({
       where: {
         tenantId,
+        companyId,
         id: { in: productIds }
       },
       include: {
@@ -112,6 +115,7 @@ router.post("/api/v1/production", async (req: AuthedRequest, res) => {
       const doc = await tx.productionDoc.create({
         data: {
           tenantId,
+          companyId,
           locationId,
           docNo,
           docDate: new Date(),
@@ -144,6 +148,7 @@ router.post("/api/v1/production", async (req: AuthedRequest, res) => {
 
           await decrementStockBalanceStrict(tx, {
             tenantId,
+            companyId,
             locationId,
             productId: recipeItem.ingredientId,
             qty: ingredientQty,
@@ -166,6 +171,7 @@ router.post("/api/v1/production", async (req: AuthedRequest, res) => {
 
         await incrementStockBalance(tx, {
           tenantId,
+          companyId,
           locationId,
           productId: row.productId,
           qty: qtyDecimal
@@ -174,6 +180,7 @@ router.post("/api/v1/production", async (req: AuthedRequest, res) => {
         await tx.stockMove.create({
           data: {
             tenantId,
+            companyId,
             locationId,
             productId: row.productId,
             type: "IN",

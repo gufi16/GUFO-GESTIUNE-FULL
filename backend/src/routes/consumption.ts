@@ -4,6 +4,7 @@ import { Router } from "express";
 import { prisma } from "../lib/prisma";
 import { decrementStockBalanceStrict } from "../lib/stock";
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth";
+import { requireRequestCompanyId } from "../lib/companyScope";
 
 const router = Router();
 
@@ -27,6 +28,8 @@ function createConsumptionDocNo() {
 router.post("/api/v1/consumption-docs", requireAuth, async (req: AuthedRequest, res) => {
   try {
     const tenantId = req.auth!.tenantId;
+    const companyId = await requireRequestCompanyId(req);
+    const companyId = await requireRequestCompanyId(req);
     const locationId = String(req.body?.locationId || "").trim();
     const note = typeof req.body?.note === "string" ? req.body.note.trim() : "";
     const docDateRaw = req.body?.docDate ? new Date(String(req.body.docDate)) : new Date();
@@ -65,6 +68,7 @@ router.post("/api/v1/consumption-docs", requireAuth, async (req: AuthedRequest, 
     const products = await prisma.product.findMany({
       where: {
         tenantId,
+        companyId,
         id: { in: productIds },
       },
       select: {
@@ -86,6 +90,7 @@ router.post("/api/v1/consumption-docs", requireAuth, async (req: AuthedRequest, 
       const doc = await tx.consumptionDoc.create({
         data: {
           tenantId,
+          companyId,
           locationId,
           docNo: createConsumptionDocNo(),
           docDate: docDateRaw,
@@ -99,6 +104,7 @@ router.post("/api/v1/consumption-docs", requireAuth, async (req: AuthedRequest, 
 
         await decrementStockBalanceStrict(tx, {
           tenantId,
+          companyId,
           locationId,
           productId: line.ingredientId,
           qty: qtyDecimal,
@@ -118,6 +124,7 @@ router.post("/api/v1/consumption-docs", requireAuth, async (req: AuthedRequest, 
         await tx.stockMove.create({
           data: {
             tenantId,
+            companyId,
             locationId,
             productId: line.ingredientId,
             type: "OUT",
@@ -168,6 +175,7 @@ router.get("/api/v1/consumption-docs", requireAuth, async (req: AuthedRequest, r
     const docs = await prisma.consumptionDoc.findMany({
       where: {
         tenantId,
+        companyId,
         ...(locationId ? { locationId } : {}),
         ...(dateFrom || dateTo
           ? {
@@ -299,12 +307,14 @@ router.get("/api/v1/consumption-docs", requireAuth, async (req: AuthedRequest, r
 router.get("/api/v1/consumption-docs/:id", requireAuth, async (req: AuthedRequest, res) => {
   try {
     const tenantId = req.auth!.tenantId;
+    const companyId = await requireRequestCompanyId(req);
     const id = String(req.params.id);
 
     const doc = await prisma.consumptionDoc.findFirst({
       where: {
         id,
         tenantId,
+        companyId,
       },
       include: {
         location: {

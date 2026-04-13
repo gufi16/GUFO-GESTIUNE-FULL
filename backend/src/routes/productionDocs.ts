@@ -3,6 +3,7 @@ import { Router } from "express"
 import PDFDocument from "pdfkit"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
+import { requireRequestCompanyId } from "../lib/companyScope"
 
 const router = Router()
 
@@ -240,12 +241,14 @@ function drawTableSection(params: {
 router.get("/api/v1/production-docs", async (req: AuthedRequest, res) => {
   try {
     const tenantId = req.auth!.tenantId
+    const companyId = await requireRequestCompanyId(req)
     const q = String(req.query.q || "").trim()
     const locationId = String(req.query.locationId || "").trim()
 
     const docs = await prisma.productionDoc.findMany({
       where: {
         tenantId,
+        companyId,
         ...(locationId ? { locationId } : {}),
         ...(q
           ? {
@@ -301,12 +304,14 @@ router.get("/api/v1/production-docs", async (req: AuthedRequest, res) => {
 router.get("/api/v1/production-docs/:id", async (req: AuthedRequest, res) => {
   try {
     const tenantId = req.auth!.tenantId
+    const companyId = await requireRequestCompanyId(req)
     const id = String(req.params.id || "").trim()
 
     const doc = await prisma.productionDoc.findFirst({
       where: {
         id,
         tenantId,
+        companyId,
       },
       include: {
         location: true,
@@ -397,12 +402,14 @@ router.get("/api/v1/production-docs/:id", async (req: AuthedRequest, res) => {
 router.get("/api/v1/production-docs/:id/pdf", async (req: AuthedRequest, res) => {
   try {
     const tenantId = req.auth!.tenantId
+    const companyId = await requireRequestCompanyId(req)
     const id = String(req.params.id || "").trim()
 
     const docData = await prisma.productionDoc.findFirst({
       where: {
         id,
         tenantId,
+        companyId,
       },
       include: {
         location: true,

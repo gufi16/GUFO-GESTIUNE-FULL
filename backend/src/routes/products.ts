@@ -7,6 +7,7 @@ import { Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { resolveTenantCompany } from "../lib/companyResolver"
+import { requireRequestCompanyId } from "../lib/companyScope"
 
 const router = Router()
 
@@ -109,7 +110,8 @@ function padNumber(value: number, size = 6) {
 
 async function getNextAvailableProductSkuValue(
   client: typeof prisma | Prisma.TransactionClient,
-  tenantId: string
+  tenantId: string,
+  companyId: string
 ) {
   const counter = await client.skuCounter.findUnique({
     where: {
@@ -127,6 +129,7 @@ async function getNextAvailableProductSkuValue(
     const existing = await client.product.findFirst({
       where: {
         tenantId,
+        companyId,
         sku: candidate
       },
       select: { id: true }
@@ -188,11 +191,13 @@ router.post(
 
 router.get("/api/v1/products", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const q = String(req.query.q || "").trim()
 
   const items = await prisma.product.findMany({
     where: {
       tenantId,
+      companyId,
       ...(q
         ? {
             OR: [
@@ -226,9 +231,10 @@ router.get("/api/v1/products", async (req: AuthedRequest, res) => {
 
 router.get("/api/v1/products/next-sku", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
 
   try {
-    const preview = await getNextAvailableProductSkuValue(prisma, tenantId)
+    const preview = await getNextAvailableProductSkuValue(prisma, tenantId, companyId)
     res.json({ ok: true, sku: preview.sku })
   } catch (e: any) {
     res.status(400).json({ ok: false, error: e?.message || "Nu pot genera urmatorul SKU." })
@@ -237,6 +243,7 @@ router.get("/api/v1/products/next-sku", async (req: AuthedRequest, res) => {
 
 router.post("/api/v1/products", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
 
   const company = await resolveTenantCompany(prisma, tenantId, req.auth?.activeCompanyId, {
     select: {
@@ -374,6 +381,7 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
         const existingSku = await tx.product.findFirst({
           where: {
             tenantId,
+            companyId,
             sku: requestedSku
           },
           select: { id: true }
@@ -383,7 +391,7 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
           throw new Error("Exista deja un produs cu acest cod.")
         }
       } else {
-        const preview = await getNextAvailableProductSkuValue(tx, tenantId)
+        const preview = await getNextAvailableProductSkuValue(tx, tenantId, companyId)
         finalSku = preview.sku
         await tx.skuCounter.upsert({
           where: { tenantId_key: { tenantId, key: "product" } },
@@ -396,6 +404,7 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
       const created = await tx.product.create({
         data: {
           tenantId,
+          companyId,
           sku: finalSku,
           name,
           imageUrl,
@@ -446,6 +455,7 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
 
 router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const id = String(req.params.id)
 
   const company = await resolveTenantCompany(prisma, tenantId, req.auth?.activeCompanyId, {
@@ -510,7 +520,8 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   const current = await prisma.product.findFirst({
     where: {
       id,
-      tenantId
+      tenantId,
+      companyId
     }
   })
 
@@ -568,6 +579,7 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
     prisma.recipe.findFirst({
       where: {
         tenantId,
+        companyId,
         productId: id
       }
     })
@@ -645,12 +657,14 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
 
 router.get("/api/v1/products/:id/recipe", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const productId = String(req.params.id)
 
   const product = await prisma.product.findFirst({
     where: {
       id: productId,
-      tenantId
+      tenantId,
+      companyId
     },
     include: {
       uom: true
@@ -664,6 +678,7 @@ router.get("/api/v1/products/:id/recipe", async (req: AuthedRequest, res) => {
   const recipe = await prisma.recipe.findFirst({
     where: {
       tenantId,
+      companyId,
       productId
     },
     include: {
@@ -691,12 +706,14 @@ router.get("/api/v1/products/:id/recipe", async (req: AuthedRequest, res) => {
 
 router.post("/api/v1/products/:id/recipe", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const productId = String(req.params.id)
 
   const product = await prisma.product.findFirst({
     where: {
       id: productId,
-      tenantId
+      tenantId,
+      companyId
     }
   })
 
@@ -765,6 +782,7 @@ router.post("/api/v1/products/:id/recipe", async (req: AuthedRequest, res) => {
   const ingredients = await prisma.product.findMany({
     where: {
       tenantId,
+      companyId,
       id: { in: ingredientIds }
     },
     include: {
@@ -793,6 +811,7 @@ router.post("/api/v1/products/:id/recipe", async (req: AuthedRequest, res) => {
       const existing = await tx.recipe.findFirst({
         where: {
           tenantId,
+          companyId,
           productId
         }
       })
@@ -812,6 +831,7 @@ router.post("/api/v1/products/:id/recipe", async (req: AuthedRequest, res) => {
         : await tx.recipe.create({
             data: {
               tenantId,
+              companyId,
               productId,
               code,
               name,
@@ -885,12 +905,14 @@ router.post("/api/v1/products/:id/recipe", async (req: AuthedRequest, res) => {
 
 router.delete("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const id = String(req.params.id)
 
   const current = await prisma.product.findFirst({
     where: {
       id,
-      tenantId
+      tenantId,
+      companyId
     }
   })
 

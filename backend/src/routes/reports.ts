@@ -1,4 +1,4 @@
-// @ts-nocheck
+﻿// @ts-nocheck
 import { Router } from "express"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
@@ -42,6 +42,7 @@ function formatDayLabel(date: Date) {
 router.get("/api/v1/reports/advanced", requireAuth, async (req: AuthedRequest, res) => {
   try {
     const tenantId = req.auth!.tenantId
+    const companyId = await requireRequestCompanyId(req)
 
     const from =
       parseDateStart(req.query.dateFrom) ||
@@ -63,6 +64,7 @@ router.get("/api/v1/reports/advanced", requireAuth, async (req: AuthedRequest, r
         prisma.location.findMany({
           where: {
             tenantId,
+            companyId,
             isActive: true,
           },
           orderBy: { name: "asc" },
@@ -76,6 +78,7 @@ router.get("/api/v1/reports/advanced", requireAuth, async (req: AuthedRequest, r
         prisma.product.findMany({
           where: {
             tenantId,
+            companyId,
             isActive: true,
           },
           select: {
@@ -96,6 +99,7 @@ router.get("/api/v1/reports/advanced", requireAuth, async (req: AuthedRequest, r
         prisma.sale.findMany({
           where: {
             tenantId,
+            companyId,
             soldAt: {
               gte: from,
               lte: to,
@@ -121,6 +125,7 @@ router.get("/api/v1/reports/advanced", requireAuth, async (req: AuthedRequest, r
         prisma.stockBalance.findMany({
           where: {
             tenantId,
+            companyId,
             ...whereLocation,
           },
           include: {
@@ -141,6 +146,7 @@ router.get("/api/v1/reports/advanced", requireAuth, async (req: AuthedRequest, r
         prisma.inventoryDoc.findMany({
           where: {
             tenantId,
+            companyId,
             status: "FINALIZED",
             docDate: {
               gte: from,
@@ -166,6 +172,7 @@ router.get("/api/v1/reports/advanced", requireAuth, async (req: AuthedRequest, r
         prisma.consumptionDoc.findMany({
           where: {
             tenantId,
+            companyId,
             docDate: {
               gte: from,
               lte: to,
@@ -191,6 +198,7 @@ router.get("/api/v1/reports/advanced", requireAuth, async (req: AuthedRequest, r
         prisma.stockMove.findMany({
           where: {
             tenantId,
+            companyId,
             createdAt: {
               gte: from,
               lte: to,

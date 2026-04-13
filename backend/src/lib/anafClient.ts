@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { prisma } from "./prisma"
-import { getPrimaryTenantCompany } from "./companyResolver"
+import { resolveTenantCompany } from "./companyResolver"
 import { anafHttpRequest } from "./anafHttp"
 import { getAnafCertificateOptions } from "./efacturaCertificate"
 import {
@@ -24,8 +24,8 @@ const COMPANY_ANAF_SELECT = {
   efacturaCertPasswordEnc: true,
 }
 
-export async function loadAnafCompanyContext(tenantId: string) {
-  return getPrimaryTenantCompany(tenantId, {
+export async function loadAnafCompanyContext(tenantId: string, activeCompanyId?: string | null) {
+  return resolveTenantCompany(prisma, tenantId, activeCompanyId, {
     select: COMPANY_ANAF_SELECT,
   })
 }

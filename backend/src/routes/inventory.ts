@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { reserveNextNumber } from "../lib/numbering"
+import { requireRequestCompanyId } from "../lib/companyScope"
 
 const router = Router()
 router.use(requireAuth)
@@ -53,6 +54,7 @@ type InventoryValidationSuccess = {
 
 async function validateInventoryPayload(
   tenantId: string,
+  companyId: string,
   locationId: string,
   items: Array<{ productId: string; countedQty: number }>
 ): Promise<InventoryValidationError | InventoryValidationSuccess> {
@@ -98,6 +100,7 @@ async function validateInventoryPayload(
   const products = await prisma.product.findMany({
     where: {
       tenantId,
+      companyId,
       id: {
         in: uniqueProductIds
       }
@@ -120,6 +123,7 @@ async function validateInventoryPayload(
   const balances = await prisma.stockBalance.findMany({
     where: {
       tenantId,
+      companyId,
       locationId,
       productId: {
         in: uniqueProductIds
@@ -139,11 +143,12 @@ async function validateInventoryPayload(
   }
 }
 
-async function buildInventoryResponse(tenantId: string, id: string) {
+async function buildInventoryResponse(tenantId: string, companyId: string, id: string) {
   const doc = await prisma.inventoryDoc.findFirst({
     where: {
       id,
-      tenantId
+      tenantId,
+      companyId
     },
     include: {
       location: {
@@ -243,6 +248,7 @@ async function buildInventoryResponse(tenantId: string, id: string) {
 router.get("/api/v1/inventory-docs", async (req: AuthedRequest, res) => {
   try {
     const tenantId = req.auth!.tenantId
+    const companyId = await requireRequestCompanyId(req)
 
     const dateFrom = parseDateStart(req.query.dateFrom)
     const dateTo = parseDateEnd(req.query.dateTo)
@@ -253,6 +259,7 @@ router.get("/api/v1/inventory-docs", async (req: AuthedRequest, res) => {
     const docs = await prisma.inventoryDoc.findMany({
       where: {
         tenantId,
+        companyId,
         ...(locationId ? { locationId } : {}),
         ...(status ? { status: status as any } : {}),
         ...(dateFrom || dateTo
@@ -357,9 +364,10 @@ router.get("/api/v1/inventory-docs", async (req: AuthedRequest, res) => {
 router.get("/api/v1/inventory-docs/:id", async (req: AuthedRequest, res) => {
   try {
     const tenantId = req.auth!.tenantId
+    const companyId = await requireRequestCompanyId(req)
     const id = String(req.params.id)
 
-    const item = await buildInventoryResponse(tenantId, id)
+    const item = await buildInventoryResponse(tenantId, companyId, id)
 
     if (!item) {
       return res.status(404).json({
@@ -384,12 +392,13 @@ router.get("/api/v1/inventory-docs/:id", async (req: AuthedRequest, res) => {
 router.post("/api/v1/inventory", async (req: AuthedRequest, res) => {
   try {
     const tenantId = req.auth!.tenantId
+    const companyId = await requireRequestCompanyId(req)
 
     const locationId = normalizeText(req.body?.locationId)
     const note = normalizeText(req.body?.note) || null
     const items = normalizeItems(Array.isArray(req.body?.items) ? req.body.items : [])
 
-    const validation = await validateInventoryPayload(tenantId, locationId, items)
+    const validation = await validateInventoryPayload(tenantId, companyId, locationId, items)
     if (!validation.ok) {
       return res.status(validation.status).json({
         ok: false,
@@ -403,6 +412,7 @@ router.post("/api/v1/inventory", async (req: AuthedRequest, res) => {
       const doc = await tx.inventoryDoc.create({
         data: {
           tenantId,
+          companyId,
           locationId,
           docNo,
           docDate: new Date(),
@@ -433,7 +443,7 @@ router.post("/api/v1/inventory", async (req: AuthedRequest, res) => {
       return doc
     })
 
-    const item = await buildInventoryResponse(tenantId, result.id)
+    const item = await buildInventoryResponse(tenantId, companyId, result.id)
 
     return res.json({
       ok: true,
@@ -451,12 +461,14 @@ router.post("/api/v1/inventory", async (req: AuthedRequest, res) => {
 router.put("/api/v1/inventory-docs/:id", async (req: AuthedRequest, res) => {
   try {
     const tenantId = req.auth!.tenantId
+    const companyId = await requireRequestCompanyId(req)
     const id = String(req.params.id)
 
     const existingDoc = await prisma.inventoryDoc.findFirst({
       where: {
         id,
-        tenantId
+        tenantId,
+        companyId
       }
     })
 
@@ -478,7 +490,7 @@ router.put("/api/v1/inventory-docs/:id", async (req: AuthedRequest, res) => {
     const note = normalizeText(req.body?.note) || null
     const items = normalizeItems(Array.isArray(req.body?.items) ? req.body.items : [])
 
-    const validation = await validateInventoryPayload(tenantId, locationId, items)
+    const validation = await validateInventoryPayload(tenantId, companyId, locationId, items)
     if (!validation.ok) {
       return res.status(validation.status).json({
         ok: false,
@@ -522,7 +534,7 @@ router.put("/api/v1/inventory-docs/:id", async (req: AuthedRequest, res) => {
       }
     })
 
-    const item = await buildInventoryResponse(tenantId, id)
+    const item = await buildInventoryResponse(tenantId, companyId, id)
 
     return res.json({
       ok: true,
@@ -540,12 +552,14 @@ router.put("/api/v1/inventory-docs/:id", async (req: AuthedRequest, res) => {
 router.post("/api/v1/inventory-docs/:id/finalize", async (req: AuthedRequest, res) => {
   try {
     const tenantId = req.auth!.tenantId
+    const companyId = await requireRequestCompanyId(req)
     const id = String(req.params.id)
 
     const doc = await prisma.inventoryDoc.findFirst({
       where: {
         id,
-        tenantId
+        tenantId,
+        companyId
       },
       include: {
         items: true
@@ -574,6 +588,7 @@ router.post("/api/v1/inventory-docs/:id/finalize", async (req: AuthedRequest, re
         const existingBalance = await tx.stockBalance.findFirst({
           where: {
             tenantId,
+            companyId,
             locationId: doc.locationId,
             productId: item.productId
           }
@@ -590,6 +605,7 @@ router.post("/api/v1/inventory-docs/:id/finalize", async (req: AuthedRequest, re
           await tx.stockBalance.create({
             data: {
               tenantId,
+              companyId,
               locationId: doc.locationId,
               productId: item.productId,
               qty: new Prisma.Decimal(countedQty)
@@ -601,6 +617,7 @@ router.post("/api/v1/inventory-docs/:id/finalize", async (req: AuthedRequest, re
           await tx.stockMove.create({
             data: {
               tenantId,
+              companyId,
               locationId: doc.locationId,
               productId: item.productId,
               type: "ADJUST",
@@ -622,7 +639,7 @@ router.post("/api/v1/inventory-docs/:id/finalize", async (req: AuthedRequest, re
       })
     })
 
-    const item = await buildInventoryResponse(tenantId, id)
+    const item = await buildInventoryResponse(tenantId, companyId, id)
 
     return res.json({
       ok: true,
@@ -640,12 +657,14 @@ router.post("/api/v1/inventory-docs/:id/finalize", async (req: AuthedRequest, re
 router.post("/api/v1/inventory-docs/:id/cancel", async (req: AuthedRequest, res) => {
   try {
     const tenantId = req.auth!.tenantId
+    const companyId = await requireRequestCompanyId(req)
     const id = String(req.params.id)
 
     const doc = await prisma.inventoryDoc.findFirst({
       where: {
         id,
-        tenantId
+        tenantId,
+        companyId
       }
     })
 
@@ -670,7 +689,7 @@ router.post("/api/v1/inventory-docs/:id/cancel", async (req: AuthedRequest, res)
       }
     })
 
-    const item = await buildInventoryResponse(tenantId, id)
+    const item = await buildInventoryResponse(tenantId, companyId, id)
 
     return res.json({
       ok: true,
