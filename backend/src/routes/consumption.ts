@@ -56,7 +56,11 @@ router.post("/api/v1/consumption-docs", requireAuth, async (req: AuthedRequest, 
     }
 
     const location = await prisma.location.findFirst({
-      where: { id: locationId, tenantId },
+      where: {
+        id: locationId,
+        tenantId,
+        OR: [{ companyId }, { companyId: null }],
+      },
       select: { id: true, name: true },
     });
 

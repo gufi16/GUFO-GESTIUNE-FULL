@@ -37,3 +37,15 @@ export function buildCompanyWhere<T extends Record<string, any>>(
     ...extra,
   }
 }
+
+export function buildCompanyScopedTenantWhere<T extends Record<string, any>>(
+  tenantId: string,
+  companyId: string,
+  extra: T = {} as T
+) {
+  return {
+    tenantId,
+    OR: [{ companyId }, { companyId: null }],
+    ...extra,
+  }
+}

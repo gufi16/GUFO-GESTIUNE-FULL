@@ -6,6 +6,7 @@ import multer from "multer"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { reserveNextNumber } from "../lib/numbering"
+import { requireRequestCompanyId } from "../lib/companyScope"
 
 const router = Router()
 
@@ -28,8 +29,17 @@ const DEFAULT_UOMS = [
   { code: "doza", name: "Doză" }
 ] as const
 
-async function ensureDefaultUoms(tenantId: string) {
-  const existing = await prisma.uom.findMany({ where: { tenantId } })
+function buildCompanyScope(companyId: string) {
+  return [{ companyId }, { companyId: null }]
+}
+
+async function ensureDefaultUoms(tenantId: string, companyId: string) {
+  const existing = await prisma.uom.findMany({
+    where: {
+      tenantId,
+      OR: buildCompanyScope(companyId),
+    },
+  })
   const byCode = new Map(existing.map(item => [item.code.trim().toLowerCase(), item]))
 
   for (const def of DEFAULT_UOMS) {
@@ -52,6 +62,7 @@ async function ensureDefaultUoms(tenantId: string) {
     await prisma.uom.create({
       data: {
         tenantId,
+        companyId,
         code: def.code,
         name: def.name,
         isActive: true
@@ -128,9 +139,13 @@ router.post(
 
 router.get("/api/v1/meta/locations", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
 
   const locations = await prisma.location.findMany({
-    where: { tenantId },
+    where: {
+      tenantId,
+      OR: buildCompanyScope(companyId),
+    },
     orderBy: { name: "asc" }
   })
 
@@ -139,11 +154,13 @@ router.get("/api/v1/meta/locations", async (req: AuthedRequest, res) => {
 
 router.get("/api/v1/meta/terminals", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const locationId = String(req.query.locationId || "").trim()
 
   const terminals = await prisma.terminal.findMany({
     where: {
       tenantId,
+      OR: buildCompanyScope(companyId),
       ...(locationId ? { locationId } : {}),
     },
     select: {
@@ -167,6 +184,7 @@ router.get("/api/v1/meta/terminals", async (req: AuthedRequest, res) => {
 
 router.post("/api/v1/meta/locations", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
 
   const name = String(req.body?.name || "").trim()
   const code = String(req.body?.code || "").trim()
@@ -189,7 +207,10 @@ router.post("/api/v1/meta/locations", async (req: AuthedRequest, res) => {
     const existing = await prisma.location.findFirst({
       where: {
         tenantId,
-        OR: [{ name }, { code }]
+        AND: [
+          { OR: buildCompanyScope(companyId) },
+          { OR: [{ name }, { code }] }
+        ]
       }
     })
 
@@ -203,6 +224,7 @@ router.post("/api/v1/meta/locations", async (req: AuthedRequest, res) => {
     const location = await prisma.location.create({
       data: {
         tenantId,
+        companyId,
         name,
         code,
         isActive: true
@@ -220,6 +242,7 @@ router.post("/api/v1/meta/locations", async (req: AuthedRequest, res) => {
 
 router.put("/api/v1/meta/locations/:id", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const id = String(req.params.id)
 
   const name = String(req.body?.name || "").trim()
@@ -242,7 +265,11 @@ router.put("/api/v1/meta/locations/:id", async (req: AuthedRequest, res) => {
 
   try {
     const current = await prisma.location.findFirst({
-      where: { id, tenantId }
+      where: {
+        id,
+        tenantId,
+        OR: buildCompanyScope(companyId),
+      }
     })
 
     if (!current) {
@@ -255,6 +282,7 @@ router.put("/api/v1/meta/locations/:id", async (req: AuthedRequest, res) => {
     const duplicate = await prisma.location.findFirst({
       where: {
         tenantId,
+        companyId: current.companyId ?? companyId,
         OR: [{ name }, { code }],
         NOT: { id }
       }
@@ -287,11 +315,16 @@ router.put("/api/v1/meta/locations/:id", async (req: AuthedRequest, res) => {
 
 router.delete("/api/v1/meta/locations/:id", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const id = String(req.params.id)
 
   try {
     const current = await prisma.location.findFirst({
-      where: { id, tenantId }
+      where: {
+        id,
+        tenantId,
+        OR: buildCompanyScope(companyId),
+      }
     })
 
     if (!current) {
@@ -473,11 +506,15 @@ router.delete("/api/v1/meta/suppliers/:id", async (req: AuthedRequest, res) => {
 
 router.get("/api/v1/meta/uom", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
 
-  await ensureDefaultUoms(tenantId)
+  await ensureDefaultUoms(tenantId, companyId)
 
   const items = await prisma.uom.findMany({
-    where: { tenantId },
+    where: {
+      tenantId,
+      OR: buildCompanyScope(companyId),
+    },
     orderBy: { code: "asc" }
   })
 
@@ -486,6 +523,7 @@ router.get("/api/v1/meta/uom", async (req: AuthedRequest, res) => {
 
 router.post("/api/v1/meta/uom", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
 
   const code = String(req.body?.code || "").trim().toUpperCase()
   const name = String(req.body?.name || "").trim()
@@ -501,6 +539,7 @@ router.post("/api/v1/meta/uom", async (req: AuthedRequest, res) => {
     const existing = await prisma.uom.findFirst({
       where: {
         tenantId,
+        companyId,
         code
       }
     })
@@ -515,6 +554,7 @@ router.post("/api/v1/meta/uom", async (req: AuthedRequest, res) => {
     const item = await prisma.uom.create({
       data: {
         tenantId,
+        companyId,
         code,
         name,
         isActive: true
@@ -532,6 +572,7 @@ router.post("/api/v1/meta/uom", async (req: AuthedRequest, res) => {
 
 router.put("/api/v1/meta/uom/:id", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const id = String(req.params.id)
 
   const code = String(req.body?.code || "").trim().toUpperCase()
@@ -547,7 +588,11 @@ router.put("/api/v1/meta/uom/:id", async (req: AuthedRequest, res) => {
 
   try {
     const current = await prisma.uom.findFirst({
-      where: { id, tenantId }
+      where: {
+        id,
+        tenantId,
+        OR: buildCompanyScope(companyId),
+      }
     })
 
     if (!current) {
@@ -560,6 +605,7 @@ router.put("/api/v1/meta/uom/:id", async (req: AuthedRequest, res) => {
     const duplicate = await prisma.uom.findFirst({
       where: {
         tenantId,
+        companyId: current.companyId ?? companyId,
         code,
         NOT: { id }
       }
@@ -592,11 +638,16 @@ router.put("/api/v1/meta/uom/:id", async (req: AuthedRequest, res) => {
 
 router.delete("/api/v1/meta/uom/:id", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const id = String(req.params.id)
 
   try {
     const current = await prisma.uom.findFirst({
-      where: { id, tenantId }
+      where: {
+        id,
+        tenantId,
+        OR: buildCompanyScope(companyId),
+      }
     })
 
     if (!current) {
@@ -838,9 +889,13 @@ router.delete("/api/v1/meta/vat/:id", async (req: AuthedRequest, res) => {
 
 router.get("/api/v1/meta/departments", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
 
   const items = await prisma.department.findMany({
-    where: { tenantId },
+    where: {
+      tenantId,
+      OR: buildCompanyScope(companyId),
+    },
     orderBy: { name: "asc" }
   })
 
@@ -849,6 +904,7 @@ router.get("/api/v1/meta/departments", async (req: AuthedRequest, res) => {
 
 router.post("/api/v1/meta/departments", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const name = String(req.body?.name || "").trim()
 
   if (!name) {
@@ -860,7 +916,7 @@ router.post("/api/v1/meta/departments", async (req: AuthedRequest, res) => {
 
   try {
     const existing = await prisma.department.findFirst({
-      where: { tenantId, name }
+      where: { tenantId, companyId, name }
     })
 
     if (existing) {
@@ -873,6 +929,7 @@ router.post("/api/v1/meta/departments", async (req: AuthedRequest, res) => {
     const item = await prisma.department.create({
       data: {
         tenantId,
+        companyId,
         name,
         isActive: true
       }
@@ -889,6 +946,7 @@ router.post("/api/v1/meta/departments", async (req: AuthedRequest, res) => {
 
 router.put("/api/v1/meta/departments/:id", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const id = String(req.params.id)
   const name = String(req.body?.name || "").trim()
   const isActive = Boolean(req.body?.isActive)
@@ -902,7 +960,11 @@ router.put("/api/v1/meta/departments/:id", async (req: AuthedRequest, res) => {
 
   try {
     const current = await prisma.department.findFirst({
-      where: { id, tenantId }
+      where: {
+        id,
+        tenantId,
+        OR: buildCompanyScope(companyId),
+      }
     })
 
     if (!current) {
@@ -915,6 +977,7 @@ router.put("/api/v1/meta/departments/:id", async (req: AuthedRequest, res) => {
     const duplicate = await prisma.department.findFirst({
       where: {
         tenantId,
+        companyId: current.companyId ?? companyId,
         name,
         NOT: { id }
       }
@@ -943,11 +1006,16 @@ router.put("/api/v1/meta/departments/:id", async (req: AuthedRequest, res) => {
 
 router.delete("/api/v1/meta/departments/:id", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const id = String(req.params.id)
 
   try {
     const current = await prisma.department.findFirst({
-      where: { id, tenantId }
+      where: {
+        id,
+        tenantId,
+        OR: buildCompanyScope(companyId),
+      }
     })
 
     if (!current) {
@@ -976,9 +1044,13 @@ router.delete("/api/v1/meta/departments/:id", async (req: AuthedRequest, res) =>
 
 router.get("/api/v1/meta/categories", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
 
   const items = await prisma.category.findMany({
-    where: { tenantId },
+    where: {
+      tenantId,
+      OR: buildCompanyScope(companyId),
+    },
     include: {
       department: true
     },
@@ -990,6 +1062,7 @@ router.get("/api/v1/meta/categories", async (req: AuthedRequest, res) => {
 
 router.post("/api/v1/meta/categories", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
 
   const name = String(req.body?.name || "").trim()
   const imageUrl = normalizeImageUrl(req.body?.imageUrl)
@@ -1009,7 +1082,8 @@ router.post("/api/v1/meta/categories", async (req: AuthedRequest, res) => {
       const dep = await prisma.department.findFirst({
         where: {
           id: departmentId,
-          tenantId
+          tenantId,
+          OR: buildCompanyScope(companyId),
         }
       })
 
@@ -1024,6 +1098,7 @@ router.post("/api/v1/meta/categories", async (req: AuthedRequest, res) => {
     const item = await prisma.category.create({
       data: {
         tenantId,
+        companyId,
         name,
         imageUrl,
         departmentId,
@@ -1046,6 +1121,7 @@ router.post("/api/v1/meta/categories", async (req: AuthedRequest, res) => {
 
 router.put("/api/v1/meta/categories/:id", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const id = String(req.params.id)
 
   const name = String(req.body?.name || "").trim()
@@ -1064,7 +1140,11 @@ router.put("/api/v1/meta/categories/:id", async (req: AuthedRequest, res) => {
 
   try {
     const current = await prisma.category.findFirst({
-      where: { id, tenantId }
+      where: {
+        id,
+        tenantId,
+        OR: buildCompanyScope(companyId),
+      }
     })
 
     if (!current) {
@@ -1078,7 +1158,8 @@ router.put("/api/v1/meta/categories/:id", async (req: AuthedRequest, res) => {
       const dep = await prisma.department.findFirst({
         where: {
           id: departmentId,
-          tenantId
+          tenantId,
+          OR: buildCompanyScope(companyId),
         }
       })
 
@@ -1115,11 +1196,16 @@ router.put("/api/v1/meta/categories/:id", async (req: AuthedRequest, res) => {
 
 router.delete("/api/v1/meta/categories/:id", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const id = String(req.params.id)
 
   try {
     const current = await prisma.category.findFirst({
-      where: { id, tenantId }
+      where: {
+        id,
+        tenantId,
+        OR: buildCompanyScope(companyId),
+      }
     })
 
     if (!current) {

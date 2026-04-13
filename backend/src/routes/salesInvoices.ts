@@ -306,12 +306,13 @@ router.post("/api/v1/sales-invoices/full", async (req: AuthedRequest, res) => {
       return res.status(400).json({ ok: false, error: "Factura trebuie sa aiba cel putin o pozitie." })
     }
 
-    const location = await prisma.location.findFirst({
-      where: {
-        id: String(header.locationId),
-        tenantId,
-      },
-    })
+  const location = await prisma.location.findFirst({
+    where: {
+      id: String(header.locationId),
+      tenantId,
+      OR: [{ companyId }, { companyId: null }],
+    },
+  })
 
     if (!location) {
       return res.status(404).json({ ok: false, error: "Locatia nu a fost gasita." })

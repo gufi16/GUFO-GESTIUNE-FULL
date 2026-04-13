@@ -394,13 +394,18 @@ export async function buildCatalogPayload(req: Request, tenantId: string) {
   const isVatPayer = company?.isVatPayer ?? true;
 
   const departments = await prisma.department.findMany({
-    where: { tenantId, isActive: true },
+    where: {
+      tenantId,
+      isActive: true,
+      OR: [{ companyId: company?.id || null }, { companyId: null }],
+    },
     orderBy: { name: "asc" },
   });
 
   const categories = await prisma.category.findMany({
     where: {
       tenantId,
+      OR: [{ companyId: company?.id || null }, { companyId: null }],
       isActive: true,
       isVisibleInPos: true,
     },
@@ -608,6 +613,7 @@ router.post("/api/v1/pos/pair", async (req: Request, res: Response) => {
     const locations = await prisma.location.findMany({
       where: {
         tenantId: terminal.tenantId,
+        OR: [{ companyId: terminal.companyId || terminal.location?.companyId || null }, { companyId: null }],
         isActive: true,
       },
       orderBy: { name: "asc" },
@@ -668,11 +674,16 @@ router.post(
 
     const tenantId = req.auth!.tenantId;
     const terminalId = req.auth!.terminalId!;
+    const currentTerminal = await prisma.terminal.findUnique({
+      where: { id: terminalId },
+      select: { companyId: true },
+    });
 
     const loc = await prisma.location.findFirst({
       where: {
         id: parsed.data.locationId,
         tenantId,
+        OR: [{ companyId: currentTerminal?.companyId || null }, { companyId: null }],
         isActive: true,
       },
     });

@@ -453,7 +453,8 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
     const location = await prisma.location.findFirst({
       where: {
         id: locationId,
-        tenantId
+        tenantId,
+        OR: [{ companyId }, { companyId: null }],
       }
     })
 

@@ -69,7 +69,8 @@ async function validateInventoryPayload(
   const location = await prisma.location.findFirst({
     where: {
       id: locationId,
-      tenantId
+      tenantId,
+      OR: [{ companyId }, { companyId: null }]
     }
   })
 

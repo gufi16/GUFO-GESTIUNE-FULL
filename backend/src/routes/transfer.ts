@@ -196,8 +196,8 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
   }
 
   const [fromLocation, toLocation] = await Promise.all([
-    prisma.location.findFirst({ where: { id: fromLocationId, tenantId } }),
-    prisma.location.findFirst({ where: { id: toLocationId, tenantId } })
+    prisma.location.findFirst({ where: { id: fromLocationId, tenantId, OR: [{ companyId }, { companyId: null }] } }),
+    prisma.location.findFirst({ where: { id: toLocationId, tenantId, OR: [{ companyId }, { companyId: null }] } })
   ])
 
   if (!fromLocation) {

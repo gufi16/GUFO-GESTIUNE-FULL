@@ -303,11 +303,16 @@ model Company {
     products Product[]
     suppliers Supplier[]
     customers Customer[]
-    purchaseReceipts PurchaseReceipt[]
-    incomingEInvoices IncomingEInvoice[]
-    salesInvoices SalesInvoice[]
-    recipes Recipe[]
-    sales Sale[]
+  purchaseReceipts PurchaseReceipt[]
+  incomingEInvoices IncomingEInvoice[]
+  salesInvoices SalesInvoice[]
+  recipes Recipe[]
+  locations Location[]
+  terminals Terminal[]
+  uoms Uom[]
+  departments Department[]
+  categories Category[]
+  sales Sale[]
     stockBalances StockBalance[]
     stockMoves StockMove[]
     consumptionDocs ConsumptionDoc[]
@@ -386,6 +391,7 @@ model License {
 model Location {
   id        String   @id @default(cuid())
   tenantId  String
+  companyId String?
   name      String
   code      String
   isActive  Boolean  @default(true)
@@ -393,6 +399,7 @@ model Location {
   updatedAt DateTime @updatedAt
 
   tenant               Tenant                @relation(fields: [tenantId], references: [id])
+  company              Company?              @relation(fields: [companyId], references: [id])
   terminals            Terminal[]
   sales                Sale[]
   stockBalances        StockBalance[]
@@ -410,13 +417,16 @@ model Location {
   kitchenTickets       KitchenTicket[]
   saleDrafts           SaleDraft[]
 
-  @@unique([tenantId, code])
+  @@unique([tenantId, companyId, code])
   @@index([tenantId])
+  @@index([tenantId, companyId])
+  @@index([companyId])
 }
 
 model Terminal {
   id                 String  @id @default(cuid())
   tenantId           String
+  companyId          String?
   locationId         String?
   deviceId           String
   label              String?
@@ -426,11 +436,14 @@ model Terminal {
   updatedAt DateTime @updatedAt
 
   tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  company  Company?  @relation(fields: [companyId], references: [id])
   location Location? @relation(fields: [locationId], references: [id])
   sales    Sale[]
 
-  @@unique([tenantId, deviceId])
+  @@unique([tenantId, companyId, deviceId])
   @@index([tenantId])
+  @@index([tenantId, companyId])
+  @@index([companyId])
   @@index([locationId])
 }
 
@@ -455,40 +468,49 @@ model VatRate {
 model Uom {
   id        String   @id @default(cuid())
   tenantId  String
+  companyId String?
   code      String
   name      String
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 
   tenant           Tenant                @relation(fields: [tenantId], references: [id])
+  company          Company?              @relation(fields: [companyId], references: [id])
   stockProducts    Product[]             @relation("StockUom")
   purchaseProducts Product[]             @relation("PurchaseUom")
   receiptItems     PurchaseReceiptItem[]
   transferItems    TransferDocItem[]
 
-  @@unique([tenantId, code])
+  @@unique([tenantId, companyId, code])
   @@index([tenantId])
+  @@index([tenantId, companyId])
+  @@index([companyId])
 }
 
 model Department {
   id        String   @id @default(cuid())
   tenantId  String
+  companyId String?
   name      String
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 
   tenant             Tenant              @relation(fields: [tenantId], references: [id])
+  company            Company?            @relation(fields: [companyId], references: [id])
   categories         Category[]
   products           Product[]
   kitchenTicketItems KitchenTicketItem[]
 
-  @@unique([tenantId, name])
+  @@unique([tenantId, companyId, name])
   @@index([tenantId])
+  @@index([tenantId, companyId])
+  @@index([companyId])
 }
 
 model Category {
   id             String   @id @default(cuid())
   tenantId       String
+  companyId      String?
   departmentId   String?
   name           String
   imageUrl       String?
@@ -497,11 +519,14 @@ model Category {
   createdAt      DateTime @default(now())
 
   tenant     Tenant      @relation(fields: [tenantId], references: [id])
+  company    Company?    @relation(fields: [companyId], references: [id])
   department Department? @relation(fields: [departmentId], references: [id])
   products   Product[]
 
-  @@unique([tenantId, name])
+  @@unique([tenantId, companyId, name])
   @@index([tenantId])
+  @@index([tenantId, companyId])
+  @@index([companyId])
   @@index([departmentId])
 }
 

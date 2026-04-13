@@ -249,10 +249,10 @@ router.post("/api/v1/stock/transfer", async (req: AuthedRequest, res) => {
 
   const [fromLocation, toLocation, product] = await Promise.all([
     prisma.location.findFirst({
-      where: { id: fromLocationId, tenantId }
+      where: { id: fromLocationId, tenantId, OR: [{ companyId }, { companyId: null }] }
     }),
     prisma.location.findFirst({
-      where: { id: toLocationId, tenantId }
+      where: { id: toLocationId, tenantId, OR: [{ companyId }, { companyId: null }] }
     }),
     prisma.product.findFirst({
       where: { id: productId, tenantId, companyId },
