@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react"
 import { CalendarDays, ChevronDown, ChevronUp, Download, Mail, Plus, RefreshCw, Save, Search } from "lucide-react"
 import PageHeader from "../components/PageHeader"
 import { api } from "../lib/api"
+import { getActiveLocationId, subscribeToActiveLocation } from "../lib/location"
 
 type AccountingConfig = {
   articleCodeSource: string
@@ -120,7 +121,7 @@ export default function ExportContabilitatePage() {
   const [savingProductId, setSavingProductId] = useState<string | null>(null)
   const [selectedKind, setSelectedKind] = useState("")
   const [selectedValueType, setSelectedValueType] = useState("CANTITATIV_VALORIC")
-  const [selectedLocationId, setSelectedLocationId] = useState("")
+  const [selectedLocationId, setSelectedLocationId] = useState(getActiveLocationId())
   const [partnerSearch, setPartnerSearch] = useState("")
   const [sendEmail, setSendEmail] = useState(false)
   const [showConfig, setShowConfig] = useState(false)
@@ -138,7 +139,14 @@ export default function ExportContabilitatePage() {
       setConfig({ ...emptyConfig, ...(data?.item?.config || {}) })
       setStockTypes(Array.isArray(data?.item?.stockTypes) ? data.item!.stockTypes! : [])
       setExportKinds(Array.isArray(data?.item?.exportKinds) ? data.item!.exportKinds! : [])
-      setLocations(Array.isArray(data?.item?.locations) ? data.item!.locations! : [])
+      const nextLocations = Array.isArray(data?.item?.locations) ? data.item!.locations! : []
+      setLocations(nextLocations)
+      setSelectedLocationId((current) => {
+        const preferred = current || getActiveLocationId()
+        if (preferred && nextLocations.some((item) => item.id === preferred)) return preferred
+        if (nextLocations.length === 1) return nextLocations[0].id
+        return ""
+      })
     } catch (err: any) {
       setError(err?.message || "Nu am putut incarca setarile pentru exportul contabil.")
     } finally {
@@ -165,6 +173,12 @@ export default function ExportContabilitatePage() {
 
   useEffect(() => {
     loadProducts("")
+  }, [])
+
+  useEffect(() => {
+    return subscribeToActiveLocation((nextLocationId) => {
+      setSelectedLocationId(nextLocationId || "")
+    })
   }, [])
 
   const configFields = useMemo(
