@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react"
-import { CalendarDays, Download, Mail, Plus, RefreshCw, Save, Search } from "lucide-react"
+import { CalendarDays, ChevronDown, ChevronUp, Download, Mail, Plus, RefreshCw, Save, Search } from "lucide-react"
 import PageHeader from "../components/PageHeader"
 import { api } from "../lib/api"
 
@@ -60,7 +60,7 @@ type ConfigResponse = {
     }
     config?: AccountingConfig
     stockTypes?: StockType[]
-    exportKinds?: Array<{ code: string; label: string }>
+    exportKinds?: Array<{ code: string; label: string; description?: string; partnerLabel?: string }>
     locations?: Array<{ id: string; name: string; code?: string | null }>
   }
 }
@@ -112,7 +112,7 @@ export default function ExportContabilitatePage() {
   const [config, setConfig] = useState<AccountingConfig>(emptyConfig)
   const [stockTypes, setStockTypes] = useState<StockType[]>([])
   const [stockTypeForm, setStockTypeForm] = useState(emptyStockType)
-  const [exportKinds, setExportKinds] = useState<Array<{ code: string; label: string }>>([])
+  const [exportKinds, setExportKinds] = useState<Array<{ code: string; label: string; description?: string; partnerLabel?: string }>>([])
   const [locations, setLocations] = useState<Array<{ id: string; name: string; code?: string | null }>>([])
   const [products, setProducts] = useState<ProductAccountingItem[]>([])
   const [productSearch, setProductSearch] = useState("")
@@ -123,6 +123,8 @@ export default function ExportContabilitatePage() {
   const [selectedLocationId, setSelectedLocationId] = useState("")
   const [partnerSearch, setPartnerSearch] = useState("")
   const [sendEmail, setSendEmail] = useState(false)
+  const [showConfig, setShowConfig] = useState(false)
+  const [showMappings, setShowMappings] = useState(false)
   const today = new Date()
   const [dateFrom, setDateFrom] = useState(toInputDate(new Date(today.getFullYear(), today.getMonth(), 1)))
   const [dateTo, setDateTo] = useState(toInputDate(today))
@@ -179,6 +181,13 @@ export default function ExportContabilitatePage() {
     ] as Array<{ key: keyof AccountingConfig; label: string; placeholder: string }>,
     []
   )
+
+  const selectedKindMeta = useMemo(
+    () => exportKinds.find((item) => item.code === selectedKind) || null,
+    [exportKinds, selectedKind]
+  )
+
+  const contextualPartnerLabel = selectedKindMeta?.partnerLabel || "Client / partener"
 
   async function handleSaveConfig(event: FormEvent) {
     event.preventDefault()
@@ -316,8 +325,11 @@ export default function ExportContabilitatePage() {
           <div className="grid gap-3 xl:grid-cols-4">
             <label className="block">
               <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Tip export</div>
-              <select className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white" value="SAGA" disabled>
+              <select className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white" value="SAGA">
                 <option value="SAGA">SAGA</option>
+                <option value="OMC" disabled>OMC - in curand</option>
+                <option value="WINMENTOR" disabled>WinMentor - in curand</option>
+                <option value="ALTSOFT" disabled>Alt soft - in curand</option>
               </select>
             </label>
 
@@ -373,6 +385,9 @@ export default function ExportContabilitatePage() {
                   </option>
                 ))}
               </select>
+              {selectedKindMeta?.description ? (
+                <div className="mt-1 text-xs text-slate-500">{selectedKindMeta.description}</div>
+              ) : null}
             </label>
 
             <label className="block">
@@ -405,13 +420,13 @@ export default function ExportContabilitatePage() {
             </label>
 
             <label className="block">
-              <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Client / partener</div>
+              <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{contextualPartnerLabel}</div>
               <div className="relative">
                 <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   value={partnerSearch}
                   onChange={(e) => setPartnerSearch(e.target.value)}
-                  placeholder="Tastezi nume, cod sau CIF"
+                  placeholder={`Cauti dupa nume, cod sau CIF ${contextualPartnerLabel.toLowerCase()}`}
                   className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
                 />
               </div>
@@ -449,82 +464,95 @@ export default function ExportContabilitatePage() {
       </section>
 
       <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-        <form onSubmit={handleSaveConfig} className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex items-start justify-between gap-3">
+        <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+          <button
+            type="button"
+            onClick={() => setShowConfig((value) => !value)}
+            className="flex w-full items-center justify-between gap-3 text-left"
+          >
             <div>
               <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Configurare SAGA</div>
               <div className="mt-1 text-sm font-semibold text-[#17324D]">Conturi contabile si reguli implicite</div>
             </div>
-          </div>
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
+              {showConfig ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </span>
+          </button>
 
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <label className="block">
-              <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Cod articole</div>
-              <select
-                value={config.articleCodeSource}
-                onChange={(e) => setConfig((prev) => ({ ...prev, articleCodeSource: e.target.value }))}
-                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
-              >
-                <option value="SKU">SKU produs</option>
-                <option value="ACCOUNTING_CODE">Cod contabil produs</option>
-              </select>
-            </label>
+          {showConfig ? (
+            <form onSubmit={handleSaveConfig} className="mt-4">
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="block">
+                  <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Cod articole</div>
+                  <select
+                    value={config.articleCodeSource}
+                    onChange={(e) => setConfig((prev) => ({ ...prev, articleCodeSource: e.target.value }))}
+                    className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+                  >
+                    <option value="SKU">SKU produs</option>
+                    <option value="ACCOUNTING_CODE">Cod contabil produs</option>
+                  </select>
+                </label>
 
-            <label className="block">
-              <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Analitic gestiune</div>
-              <select
-                value={config.managementAnalytic}
-                onChange={(e) => setConfig((prev) => ({ ...prev, managementAnalytic: e.target.value }))}
-                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
-              >
-                <option value="NONE">Fara analitic</option>
-                <option value="LOCATION_CODE">Cod locatie</option>
-                <option value="LOCATION_NAME">Nume locatie</option>
-              </select>
-            </label>
+                <label className="block">
+                  <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Analitic gestiune</div>
+                  <select
+                    value={config.managementAnalytic}
+                    onChange={(e) => setConfig((prev) => ({ ...prev, managementAnalytic: e.target.value }))}
+                    className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+                  >
+                    <option value="NONE">Fara analitic</option>
+                    <option value="LOCATION_CODE">Cod locatie</option>
+                    <option value="LOCATION_NAME">Nume locatie</option>
+                  </select>
+                </label>
 
-            {configFields.map((field) => (
-              <label key={field.key} className="block">
-                <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{field.label}</div>
-                <input
-                  value={String(config[field.key] || "")}
-                  onChange={(e) => setConfig((prev) => ({ ...prev, [field.key]: e.target.value }))}
-                  placeholder={field.placeholder}
-                  className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
-                />
-              </label>
-            ))}
-          </div>
-
-          <div className="mt-4">
-            <label className="block">
-              <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Tip de stoc implicit</div>
-              <select
-                value={config.defaultStockTypeId || ""}
-                onChange={(e) => setConfig((prev) => ({ ...prev, defaultStockTypeId: e.target.value || null }))}
-                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
-              >
-                <option value="">Alege tipul implicit</option>
-                {stockTypes.map((stockType) => (
-                  <option key={stockType.id} value={stockType.id}>
-                    {stockType.name} ({stockType.code})
-                  </option>
+                {configFields.map((field) => (
+                  <label key={field.key} className="block">
+                    <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{field.label}</div>
+                    <input
+                      value={String(config[field.key] || "")}
+                      onChange={(e) => setConfig((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                      placeholder={field.placeholder}
+                      className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+                    />
+                  </label>
                 ))}
-              </select>
-            </label>
-          </div>
+              </div>
 
-          <div className="mt-4 flex justify-end">
-            <button
-              type="submit"
-              disabled={saving || loading}
-              className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Save size={15} />
-              {saving ? "Se salveaza..." : "Salveaza configurarea"}
-            </button>
-          </div>
-        </form>
+              <div className="mt-4">
+                <label className="block">
+                  <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Tip de stoc implicit</div>
+                  <select
+                    value={config.defaultStockTypeId || ""}
+                    onChange={(e) => setConfig((prev) => ({ ...prev, defaultStockTypeId: e.target.value || null }))}
+                    className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+                  >
+                    <option value="">Alege tipul implicit</option>
+                    {stockTypes.map((stockType) => (
+                      <option key={stockType.id} value={stockType.id}>
+                        {stockType.name} ({stockType.code})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="submit"
+                  disabled={saving || loading}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Save size={15} />
+                  {saving ? "Se salveaza..." : "Salveaza configurarea"}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div className="mt-3 text-sm text-slate-500">Configurarile avansate sunt ascunse momentan pentru un ecran mai curat.</div>
+          )}
+        </section>
 
         <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
           <div>
@@ -669,111 +697,128 @@ export default function ExportContabilitatePage() {
       </div>
 
       <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <button
+          type="button"
+          onClick={() => setShowMappings((value) => !value)}
+          className="flex w-full items-center justify-between gap-3 text-left"
+        >
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Mapare produse</div>
             <div className="mt-1 text-sm font-semibold text-[#17324D]">Cod contabil si tip de stoc pe fiecare produs</div>
           </div>
+          <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
+            {showMappings ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </span>
+        </button>
 
-          <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
-            <input
-              value={productSearch}
-              onChange={(e) => setProductSearch(e.target.value)}
-              placeholder="Cauta dupa nume, SKU sau cod contabil"
-              className="h-11 min-w-[280px] rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
-            />
-            <button
-              type="button"
-              onClick={() => loadProducts(productSearch)}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700"
-            >
-              <RefreshCw size={15} />
-              {loadingProducts ? "Se cauta..." : "Cauta"}
-            </button>
-          </div>
-        </div>
+        {showMappings ? (
+          <>
+            <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+              <div className="text-sm text-slate-500">Aici pregatesti articolele pentru exporturi curate in SAGA, exact unde conteaza.</div>
 
-        <div className="mt-4 overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead className="text-xs uppercase text-slate-400">
-              <tr>
-                <th className="px-3 py-2 text-left font-semibold">Produs</th>
-                <th className="px-3 py-2 text-left font-semibold">Cod contabil</th>
-                <th className="px-3 py-2 text-left font-semibold">Tip stoc</th>
-                <th className="px-3 py-2 text-left font-semibold">TVA / UM</th>
-                <th className="px-3 py-2 text-right font-semibold">Actiune</th>
-              </tr>
-            </thead>
-            <tbody>
-              {products.map((product) => (
-                <tr key={product.id} className="border-t border-slate-200 align-top">
-                  <td className="px-3 py-3">
-                    <div className="font-semibold text-slate-900">{product.name}</div>
-                    <div className="mt-1 text-xs text-slate-500">SKU: {product.sku}</div>
-                  </td>
-                  <td className="px-3 py-3">
-                    <input
-                      value={product.accountingItemCode || ""}
-                      onChange={(e) =>
-                        setProducts((prev) =>
-                          prev.map((item) =>
-                            item.id === product.id ? { ...item, accountingItemCode: e.target.value } : item
-                          )
-                        )
-                      }
-                      placeholder="Cod import SAGA"
-                      className="h-10 w-full min-w-[180px] rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
-                    />
-                  </td>
-                  <td className="px-3 py-3">
-                    <select
-                      value={product.accountingStockTypeId || ""}
-                      onChange={(e) =>
-                        setProducts((prev) =>
-                          prev.map((item) =>
-                            item.id === product.id ? { ...item, accountingStockTypeId: e.target.value || null } : item
-                          )
-                        )
-                      }
-                      className="h-10 w-full min-w-[220px] rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
-                    >
-                      <option value="">Tip implicit</option>
-                      {stockTypes.map((stockType) => (
-                        <option key={stockType.id} value={stockType.id}>
-                          {stockType.name} ({stockType.code})
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-3 py-3 text-slate-600">
-                    <div>TVA: {product.vatRate?.rate ?? "-" }%</div>
-                    <div className="mt-1 text-xs text-slate-500">
-                      {[product.vatRate?.fiscalCode, product.uom?.code].filter(Boolean).join(" | ") || "-"}
-                    </div>
-                  </td>
-                  <td className="px-3 py-3 text-right">
-                    <button
-                      type="button"
-                      onClick={() => handleSaveProduct(product)}
-                      disabled={savingProductId === product.id}
-                      className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <Save size={14} />
-                      {savingProductId === product.id ? "Se salveaza..." : "Salveaza"}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {!products.length ? (
-                <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center text-sm text-slate-500">
-                    {loadingProducts ? "Se incarca produsele..." : "Nu exista produse pentru criteriul cautat."}
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
+              <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
+                <input
+                  value={productSearch}
+                  onChange={(e) => setProductSearch(e.target.value)}
+                  placeholder="Cauta dupa nume, SKU sau cod contabil"
+                  className="h-11 min-w-[280px] rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+                />
+                <button
+                  type="button"
+                  onClick={() => loadProducts(productSearch)}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700"
+                >
+                  <RefreshCw size={15} />
+                  {loadingProducts ? "Se cauta..." : "Cauta"}
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-4 overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="text-xs uppercase text-slate-400">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-semibold">Produs</th>
+                    <th className="px-3 py-2 text-left font-semibold">Cod contabil</th>
+                    <th className="px-3 py-2 text-left font-semibold">Tip stoc</th>
+                    <th className="px-3 py-2 text-left font-semibold">TVA / UM</th>
+                    <th className="px-3 py-2 text-right font-semibold">Actiune</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {products.map((product) => (
+                    <tr key={product.id} className="border-t border-slate-200 align-top">
+                      <td className="px-3 py-3">
+                        <div className="font-semibold text-slate-900">{product.name}</div>
+                        <div className="mt-1 text-xs text-slate-500">SKU: {product.sku}</div>
+                      </td>
+                      <td className="px-3 py-3">
+                        <input
+                          value={product.accountingItemCode || ""}
+                          onChange={(e) =>
+                            setProducts((prev) =>
+                              prev.map((item) =>
+                                item.id === product.id ? { ...item, accountingItemCode: e.target.value } : item
+                              )
+                            )
+                          }
+                          placeholder="Cod import SAGA"
+                          className="h-10 w-full min-w-[180px] rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+                        />
+                      </td>
+                      <td className="px-3 py-3">
+                        <select
+                          value={product.accountingStockTypeId || ""}
+                          onChange={(e) =>
+                            setProducts((prev) =>
+                              prev.map((item) =>
+                                item.id === product.id ? { ...item, accountingStockTypeId: e.target.value || null } : item
+                              )
+                            )
+                          }
+                          className="h-10 w-full min-w-[220px] rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+                        >
+                          <option value="">Tip implicit</option>
+                          {stockTypes.map((stockType) => (
+                            <option key={stockType.id} value={stockType.id}>
+                              {stockType.name} ({stockType.code})
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-3 py-3 text-slate-600">
+                        <div>TVA: {product.vatRate?.rate ?? "-"}%</div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          {[product.vatRate?.fiscalCode, product.uom?.code].filter(Boolean).join(" | ") || "-"}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => handleSaveProduct(product)}
+                          disabled={savingProductId === product.id}
+                          className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <Save size={14} />
+                          {savingProductId === product.id ? "Se salveaza..." : "Salveaza"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {!products.length ? (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-6 text-center text-sm text-slate-500">
+                        {loadingProducts ? "Se incarca produsele..." : "Nu exista produse pentru criteriul cautat."}
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : (
+          <div className="mt-3 text-sm text-slate-500">Maparile pe produse sunt ascunse momentan, ca sa ramana sus generatorul cat mai clar.</div>
+        )}
       </section>
     </div>
   )
