@@ -641,6 +641,73 @@ function getLastUserQuestion(history?: Array<{ role: "user" | "assistant"; text:
   return ""
 }
 
+function getRecentUserQuestions(history?: Array<{ role: "user" | "assistant"; text: string }>, limit = 3) {
+  if (!Array.isArray(history)) return []
+  const questions: string[] = []
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const item = history[index]
+    if (item?.role === "user" && String(item.text || "").trim()) {
+      questions.push(String(item.text).trim())
+      if (questions.length >= limit) break
+    }
+  }
+  return questions
+}
+
+function shouldBorrowConversationContext(message: string) {
+  const normalized = normalize(message)
+  if (!normalized) return false
+  if (shouldReusePreviousQuestion(message)) return true
+
+  const contextualStarts = [
+    "si ",
+    "dar ",
+    "bun ",
+    "atunci ",
+    "daca ",
+    "iar daca ",
+    "iar ",
+    "acolo ",
+    "aici ",
+  ]
+
+  const contextualTerms = [
+    "ce completez",
+    "ce pun",
+    "cum continui",
+    "ce fac dupa",
+    "dupa aia",
+    "dupa aceea",
+    "la final",
+    "in cazul asta",
+    "in cazul meu",
+  ]
+
+  return (
+    contextualStarts.some((term) => normalized.startsWith(term)) ||
+    contextualTerms.some((term) => normalized.includes(term))
+  )
+}
+
+function mergeConversationContext(
+  rawMessage: string,
+  history?: Array<{ role: "user" | "assistant"; text: string }>,
+) {
+  const recentQuestions = getRecentUserQuestions(history)
+  const previousQuestion = recentQuestions[0] || ""
+
+  if (!previousQuestion) return rawMessage
+  if (!shouldBorrowConversationContext(rawMessage)) return rawMessage
+
+  const normalizedRaw = normalize(rawMessage)
+  const normalizedPrevious = normalize(previousQuestion)
+  if (normalizedPrevious.includes(normalizedRaw)) return previousQuestion
+
+  const secondPrevious = recentQuestions[1]
+  const chain = [secondPrevious, previousQuestion, rawMessage].filter(Boolean).join(". ")
+  return chain
+}
+
 function shouldReusePreviousQuestion(message: string) {
   const normalized = normalize(message)
   return (
@@ -677,11 +744,7 @@ export function generateGufoAiReply(input: GufoAiInput): GufoAiReply {
     }
   }
 
-  const previousUserQuestion = getLastUserQuestion(input.history)
-  const message =
-    shouldReusePreviousQuestion(rawMessage) && previousUserQuestion
-      ? `${previousUserQuestion}. ${rawMessage}`
-      : rawMessage
+  const message = mergeConversationContext(rawMessage, input.history)
 
   if (matchesForbiddenTopic(message)) {
     return {
