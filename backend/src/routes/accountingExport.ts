@@ -3,7 +3,7 @@ import { Router } from "express"
 import { z } from "zod"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
-import { requireRequestCompany, requireRequestCompanyId } from "../lib/companyScope"
+import { buildCompanyScopedTenantWhere, requireRequestCompany, requireRequestCompanyId } from "../lib/companyScope"
 
 const router = Router()
 
@@ -426,12 +426,12 @@ router.get("/api/v1/reports/accounting/saga/config", requireAuth, async (req: Au
 
   const [locations, vatRates] = await Promise.all([
     prisma.location.findMany({
-      where: { tenantId, companyId, isActive: true },
+      where: buildCompanyScopedTenantWhere(tenantId, companyId, { isActive: true }),
       orderBy: { name: "asc" },
       select: { id: true, name: true, code: true },
     }),
     prisma.vatRate.findMany({
-      where: { tenantId, companyId, isActive: true },
+      where: buildCompanyScopedTenantWhere(tenantId, companyId, { isActive: true }),
       orderBy: { rate: "asc" },
       select: { id: true, name: true, rate: true, fiscalCode: true },
     }),
@@ -649,7 +649,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
 
   if (kind === "products") {
     const products = await prisma.product.findMany({
-      where: { tenantId, companyId, isActive: true },
+      where: buildCompanyScopedTenantWhere(tenantId, companyId, { isActive: true }),
       include: {
         vatRate: true,
         uom: true,
@@ -692,7 +692,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     const customers = await prisma.customer.findMany({
       where: {
         tenantId,
-        companyId,
+        OR: [{ companyId }, { companyId: null }],
         isActive: true,
         ...(partnerSearch
           ? {
@@ -733,7 +733,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     const suppliers = await prisma.supplier.findMany({
       where: {
         tenantId,
-        companyId,
+        OR: [{ companyId }, { companyId: null }],
         isActive: true,
         ...(partnerSearch
           ? {
@@ -774,7 +774,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     const invoices = await prisma.salesInvoice.findMany({
       where: {
         tenantId,
-        companyId,
+        OR: [{ companyId }, { companyId: null }],
         status: "ISSUED",
         docDate: { gte: from, lte: to },
         ...(locationId ? { locationId } : {}),
@@ -900,7 +900,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     const receipts = await prisma.purchaseReceipt.findMany({
       where: {
         tenantId,
-        companyId,
+        OR: [{ companyId }, { companyId: null }],
         status: "POSTED",
         docDate: { gte: from, lte: to },
         ...(locationId ? { locationId } : {}),
@@ -1039,7 +1039,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     const documents = await prisma.consumptionDoc.findMany({
       where: {
         tenantId,
-        companyId,
+        OR: [{ companyId }, { companyId: null }],
         docDate: { gte: from, lte: to },
         ...(locationId ? { locationId } : {}),
       },
@@ -1118,7 +1118,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     const documents = await prisma.productionDoc.findMany({
       where: {
         tenantId,
-        companyId,
+        OR: [{ companyId }, { companyId: null }],
         docDate: { gte: from, lte: to },
         ...(locationId ? { locationId } : {}),
       },
