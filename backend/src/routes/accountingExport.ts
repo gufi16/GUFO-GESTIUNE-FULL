@@ -386,6 +386,12 @@ function buildSagaFacturaHeader({
   currency,
   info,
   code,
+  reverseCharge,
+  vatOnCash,
+  facturaTip,
+  greutate,
+  accize,
+  clientGuid,
 }: {
   supplier: Record<string, unknown>
   client: Record<string, unknown>
@@ -395,12 +401,19 @@ function buildSagaFacturaHeader({
   currency?: unknown
   info?: unknown
   code?: unknown
+  reverseCharge?: unknown
+  vatOnCash?: unknown
+  facturaTip?: unknown
+  greutate?: unknown
+  accize?: unknown
+  clientGuid?: unknown
 }) {
   return [
     `      <Antet>`,
     xmlTag("FurnizorNume", supplier.name),
     xmlTag("FurnizorCIF", supplier.cif),
     xmlTag("FurnizorNrRegCom", supplier.regCom),
+    xmlTag("FurnizorCapital", supplier.capital),
     xmlTag("FurnizorTara", supplier.country),
     xmlTag("FurnizorLocalitate", supplier.city),
     xmlTag("FurnizorJudet", supplier.county),
@@ -409,7 +422,10 @@ function buildSagaFacturaHeader({
     xmlTag("FurnizorMail", supplier.email),
     xmlTag("FurnizorBanca", supplier.bank),
     xmlTag("FurnizorIBAN", supplier.iban),
+    xmlTag("FurnizorInformatiiSuplimentare", supplier.info),
+    xmlTag("GUID_cod_client", clientGuid),
     xmlTag("ClientNume", client.name),
+    xmlTag("ClientInformatiiSuplimentare", client.info),
     xmlTag("ClientCIF", client.cif),
     xmlTag("ClientNrRegCom", client.regCom),
     xmlTag("ClientJudet", client.county),
@@ -423,8 +439,13 @@ function buildSagaFacturaHeader({
     xmlTag("FacturaNumar", number),
     xmlTag("FacturaData", formatDate(date)),
     xmlTag("FacturaScadenta", dueDate ? formatDate(dueDate) : ""),
+    xmlTag("FacturaTaxareInversa", reverseCharge ? "Da" : "Nu"),
+    xmlTag("FacturaTVAIncasare", vatOnCash ? "Da" : "Nu"),
+    xmlTag("FacturaTip", facturaTip || ""),
     xmlTag("FacturaMoneda", currency || "RON"),
     xmlTag("FacturaInformatiiSuplimentare", info),
+    xmlTag("FacturaGreutate", greutate || ""),
+    xmlTag("FacturaAccize", accize || ""),
     xmlTag("Cod", code),
     `      </Antet>`,
   ].join("\n")
@@ -447,11 +468,14 @@ function buildSagaFacturaLine(line: {
   vatValue?: unknown
   account?: unknown
   priceSale?: unknown
+  activity?: unknown
+  deductionType?: unknown
 }) {
   return [
     `          <Linie>`,
     xmlLineTag("LinieNrCrt", line.index),
     xmlLineTag("Gestiune", line.management),
+    xmlLineTag("Activitate", line.activity),
     xmlLineTag("Descriere", line.description),
     xmlLineTag("CodArticolFurnizor", line.supplierCode),
     xmlLineTag("CodArticolClient", line.clientCode),
@@ -465,6 +489,7 @@ function buildSagaFacturaLine(line: {
     xmlLineTag("ProcTVA", line.vatRate),
     xmlLineTag("TVA", line.vatValue),
     xmlLineTag("Cont", line.account),
+    xmlLineTag("TipDeducere", line.deductionType),
     xmlLineTag("PretVanzare", line.priceSale),
     `          </Linie>`,
   ].join("\n")
@@ -1050,6 +1075,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
               name: company.name,
               cif: company.cui,
               regCom: company.regNo,
+              capital: "",
               country: company.country,
               city: company.city,
               county: company.county,
@@ -1058,6 +1084,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
               email: company.email,
               bank: company.bank,
               iban: company.iban,
+              info: "",
             },
             client: {
               name: invoice.customerName,
@@ -1071,6 +1098,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
               iban: "",
               phone: "",
               email: "",
+              info: "",
             },
             number: invoice.docNo,
             date: invoice.docDate,
@@ -1078,6 +1106,12 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
             currency: invoice.currency || "RON",
             info: valueType === "GLOBAL_VALORIC" ? "Export global valoric" : "Export cantitativ valoric",
             code: invoice.customerCode || "",
+            reverseCharge: false,
+            vatOnCash: false,
+            facturaTip: "Iesire",
+            greutate: "",
+            accize: "",
+            clientGuid: invoice.customerCode || invoice.customerCif || invoice.customerName || "",
           }),
           `      <Detalii>`,
           `        <Continut>`,
@@ -1096,10 +1130,13 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
                   vatRate: decimal(line.vatRateValue),
                   vatValue: "",
                   account: config.salesAccount,
+                  activity: "",
+                  deductionType: "",
                 })
               : buildSagaFacturaLine({
                   index: groupedLines.indexOf(line) + 1,
                   management: invoice.location?.code || invoice.location?.name || "",
+                  activity: "",
                   description: line.productName,
                   clientCode: line.productCode || slugCode(line.productName, "ART"),
                   guid: line.productId || line.productCode || "",
@@ -1111,6 +1148,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
                   vatRate: decimal(line.vatRateValue),
                   vatValue: decimal(line.lineVatRon),
                   account: config.salesAccount,
+                  deductionType: "",
                 })
           ),
           `        </Continut>`,
@@ -1238,6 +1276,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
                 name: receipt.supplierName || receipt.supplier?.name || "",
                 cif: receipt.supplier?.cif || "",
                 regCom: receipt.supplier?.regCom || "",
+                capital: "",
                 country: receipt.supplier?.country || "",
                 city: receipt.supplier?.city || "",
                 county: receipt.supplier?.county || "",
@@ -1246,6 +1285,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
                 email: receipt.supplier?.email || "",
                 bank: "",
                 iban: "",
+                info: "",
               },
               client: {
                 name: company.name,
@@ -1259,6 +1299,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
                 iban: company.iban,
                 phone: company.phone,
                 email: company.email,
+                info: "",
               },
               number: receipt.spvInvoiceNo || receipt.docNo,
               date: receipt.docDate,
@@ -1266,6 +1307,12 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
               currency: receipt.currency || "RON",
               info: valueType === "GLOBAL_VALORIC" ? "Export global valoric" : "Export cantitativ valoric",
               code: receipt.supplierCode || receipt.supplier?.code || "",
+              reverseCharge: false,
+              vatOnCash: false,
+              facturaTip: "Intrare",
+              greutate: "",
+              accize: "",
+              clientGuid: receipt.supplierCode || receipt.supplier?.code || receipt.supplier?.cif || "",
             }),
             `      <Detalii>`,
             `        <Continut>`,
@@ -1280,6 +1327,8 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
                   value: decimal(line.valueRon),
                   vatRate: decimal(line.vatRateValue),
                   account: line.stockAccount,
+                  activity: "",
+                  deductionType: "Integral",
                 })
               }
 
@@ -1287,6 +1336,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
               return buildSagaFacturaLine({
                 index: groupedLines.indexOf(line) + 1,
                 management: receipt.location?.code || receipt.location?.name || "",
+                activity: "",
                 description: line.product?.name || "",
                 supplierCode: line.product?.accountingItemCode || line.product?.sku || slugCode(line.product?.name || "ART", "ART"),
                 guid: line.product?.id || "",
@@ -1298,6 +1348,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
                 vatRate: decimal(line.vatRateValue),
                 vatValue: decimal(line.lineVatRon),
                 account: stockType?.inventoryAccount || config.inventoryAccount,
+                deductionType: "Integral",
                 priceSale: "",
               })
             }),
