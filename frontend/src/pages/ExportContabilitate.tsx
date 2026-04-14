@@ -121,6 +121,7 @@ export default function ExportContabilitatePage() {
   const [savingProductId, setSavingProductId] = useState<string | null>(null)
   const [selectedKind, setSelectedKind] = useState("")
   const [selectedValueType, setSelectedValueType] = useState("CANTITATIV_VALORIC")
+  const [selectedFileFormat, setSelectedFileFormat] = useState("xml")
   const [selectedLocationId, setSelectedLocationId] = useState(getActiveLocationId())
   const [partnerSearch, setPartnerSearch] = useState("")
   const [sendEmail, setSendEmail] = useState(false)
@@ -292,7 +293,7 @@ export default function ExportContabilitatePage() {
           dateFrom
         )}&dateTo=${encodeURIComponent(dateTo)}&locationId=${encodeURIComponent(selectedLocationId)}&partnerSearch=${encodeURIComponent(
           partnerSearch
-        )}&valueType=${encodeURIComponent(selectedValueType)}`,
+        )}&valueType=${encodeURIComponent(selectedValueType)}&fileFormat=${encodeURIComponent(selectedFileFormat)}`,
         { raw: true }
       )
 
@@ -307,7 +308,7 @@ export default function ExportContabilitatePage() {
       const disposition = response.headers.get("content-disposition") || ""
       const match = disposition.match(/filename=\"?([^\";]+)\"?/)
       link.href = url
-      link.download = match?.[1] || `export-saga-${kind}.xml`
+      link.download = match?.[1] || `export-saga-${kind}.${selectedFileFormat}`
       document.body.appendChild(link)
       link.click()
       link.remove()
@@ -355,7 +356,7 @@ export default function ExportContabilitatePage() {
       <PageHeader
         badge="rapoarte"
         title="Export contabilitate"
-        subtitle="Configureaza conturile si genereaza fisiere XML compatibile cu importul SAGA pentru firma activa."
+        subtitle="Configureaza conturile si genereaza fisiere XML, XLSX sau CSV pentru importul contabil al firmei active."
       />
 
       {message ? <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</div> : null}
@@ -379,7 +380,7 @@ export default function ExportContabilitatePage() {
             </button>
           </div>
 
-          <div className="grid gap-3 xl:grid-cols-4">
+          <div className="grid gap-3 xl:grid-cols-5">
             <label className="block">
               <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Tip export</div>
               <select className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white" value="SAGA">
@@ -405,6 +406,20 @@ export default function ExportContabilitatePage() {
               {needsValueType && !supportsGlobalValueType ? (
                 <div className="mt-1 text-xs text-slate-500">Pentru acest tip de document folosim momentan varianta cantitativ valorica.</div>
               ) : null}
+            </label>
+
+            <label className="block">
+              <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Format fisier</div>
+              <select
+                value={selectedFileFormat}
+                onChange={(e) => setSelectedFileFormat(e.target.value)}
+                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+              >
+                <option value="xml">XML</option>
+                <option value="xlsx">XLSX</option>
+                <option value="csv">CSV</option>
+              </select>
+              <div className="mt-1 text-xs text-slate-500">Pentru unele ferestre SAGA, importul merge tabelar din XLSX sau CSV.</div>
             </label>
 
             <label className="block">
@@ -530,7 +545,7 @@ export default function ExportContabilitatePage() {
           </div>
 
           <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-            Exportul se descarca instant in format XML compatibil cu importul din SAGA. Optiunea de trimitere pe email ramane rezervata pentru etapa urmatoare.
+            Exportul se descarca instant in formatul ales. Pastrezi XML unde este util, dar poti folosi si XLSX sau CSV pentru ferestrele SAGA care importa tabelar.
           </div>
         </div>
       </section>
@@ -661,7 +676,7 @@ export default function ExportContabilitatePage() {
               >
                 <div>
                   <div className="font-semibold text-slate-900">{item.label}</div>
-                  <div className="mt-1 text-xs text-slate-500">Fisier XML pentru import SAGA</div>
+                  <div className="mt-1 text-xs text-slate-500">Disponibil pentru export in XML, XLSX sau CSV</div>
                 </div>
                 <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                   {selectedKind === item.code ? "selectat" : "disponibil"}

@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { Router } from "express"
+import ExcelJS from "exceljs"
 import { z } from "zod"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
@@ -235,6 +236,10 @@ function downloadName(kind: string, from: string, to: string, options?: { compan
   return `saga_${safeKind}_${fromChunk}_${toChunk}.xml`
 }
 
+function replaceFileExtension(fileName: string, extension: "xml" | "xlsx" | "csv") {
+  return fileName.replace(/\.[^.]+$/i, `.${extension}`)
+}
+
 function managementValue(config: any, location: { code?: string | null; name?: string | null } | null | undefined) {
   if (!location) return ""
   switch (config?.managementAnalytic) {
@@ -268,6 +273,63 @@ function xmlTag(name: string, value: unknown) {
 
 function xmlLineTag(name: string, value: unknown) {
   return `            <${name}>${xmlEscape(value ?? "")}</${name}>`
+}
+
+function normalizeFileFormat(value: unknown) {
+  const normalized = String(value || "").trim().toLowerCase()
+  if (normalized === "xlsx") return "xlsx"
+  if (normalized === "csv") return "csv"
+  return "xml"
+}
+
+function readablePaymentType(value: unknown) {
+  switch (String(value || "").toUpperCase()) {
+    case "CASH":
+      return "Numerar"
+    case "CARD":
+      return "Card"
+    case "MIXED":
+      return "Mixt"
+    default:
+      return ""
+  }
+}
+
+async function buildSpreadsheetBuffer(sheetName: string, rows: Record<string, unknown>[], fileFormat: "xlsx" | "csv") {
+  const workbook = new ExcelJS.Workbook()
+  const worksheet = workbook.addWorksheet(sheetName.slice(0, 31) || "Export")
+
+  const headers = Array.from(
+    rows.reduce((acc, row) => {
+      Object.keys(row || {}).forEach((key) => acc.add(key))
+      return acc
+    }, new Set<string>())
+  )
+
+  worksheet.columns = headers.map((header) => ({
+    header,
+    key: header,
+    width: Math.min(Math.max(header.length + 4, 14), 28),
+  }))
+
+  rows.forEach((row) => {
+    const normalizedRow: Record<string, unknown> = {}
+    headers.forEach((header) => {
+      normalizedRow[header] = row?.[header] ?? ""
+    })
+    worksheet.addRow(normalizedRow)
+  })
+
+  worksheet.getRow(1).font = { bold: true }
+  worksheet.views = [{ state: "frozen", ySplit: 1 }]
+
+  if (fileFormat === "csv") {
+    const buffer = await workbook.csv.writeBuffer()
+    return Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer)
+  }
+
+  const buffer = await workbook.xlsx.writeBuffer()
+  return Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer)
 }
 
 function formatSagaImportDate(value: Date | string | null | undefined) {
@@ -689,6 +751,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
   const company = await requireRequestCompany(req)
   const companyId = company.id
   const kind = String(req.query.kind || "").trim().toLowerCase()
+  const fileFormat = normalizeFileFormat(req.query.fileFormat)
   const dateFrom = String(req.query.dateFrom || "").trim()
   const dateTo = String(req.query.dateTo || "").trim()
   const locationId = String(req.query.locationId || "").trim()
@@ -699,6 +762,8 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
 
   const { config, stockTypes } = await ensureAccountingConfig(tenantId, companyId)
   let xml = ""
+  let sheetName = "Export contabilitate"
+  let spreadsheetRows: Record<string, unknown>[] = []
 
   if (kind === "products") {
     const products = await prisma.product.findMany({
@@ -709,6 +774,28 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         accountingStockType: true,
       },
       orderBy: { name: "asc" },
+    })
+
+    sheetName = "Articole"
+    spreadsheetRows = products.map((product) => {
+      const stockType = pickStockType(product, stockTypes, config)
+      const articleCode =
+        config.articleCodeSource === "SKU"
+          ? product.sku
+          : product.accountingItemCode || product.sku
+
+      return {
+        Cod: articleCode,
+        Denumire: product.name,
+        UM: product.uom?.code || "BUC",
+        TVA: Number(product.vatRate?.rate ?? 0),
+        CodTVA: product.vatRate?.fiscalCode || "",
+        TipStoc: stockType?.name || "",
+        ContStoc: stockType?.inventoryAccount || config.inventoryAccount,
+        ContCheltuiala: stockType?.expenseAccount || config.expenseAccount,
+        ContVenit: stockType?.salesAccount || config.salesAccount,
+        PretVanzare: Number(product.price || 0),
+      }
     })
 
     xml = [
@@ -760,6 +847,19 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       orderBy: { name: "asc" },
     })
 
+    sheetName = "Clienti"
+    spreadsheetRows = customers.map((customer) => ({
+      "Denumire client": customer.name,
+      "Cod fiscal": customer.cif || "",
+      "Registru Comert": customer.regNo || "",
+      Judet: customer.county || "",
+      Adresa: customer.address || "",
+      Tara: customer.country || "",
+      Telefon: customer.phone || "",
+      Email: customer.email || "",
+      Cont: config.customerAccount,
+    }))
+
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
       `<SAGA tip="Clienti">`,
@@ -800,6 +900,19 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       },
       orderBy: { name: "asc" },
     })
+
+    sheetName = "Furnizori"
+    spreadsheetRows = suppliers.map((supplier) => ({
+      "Denumire furnizor": supplier.name,
+      "Cod fiscal": supplier.cif || "",
+      "Registru Comert": supplier.regCom || "",
+      Judet: supplier.county || "",
+      Adresa: supplier.address || "",
+      Tara: supplier.country || "",
+      Telefon: supplier.phone || "",
+      Email: supplier.email || "",
+      Cont: config.supplierAccount,
+    }))
 
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
@@ -847,6 +960,35 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       },
       orderBy: { docDate: "asc" },
     })
+
+    sheetName = "Facturi iesire"
+    spreadsheetRows = invoices.flatMap((invoice) =>
+      invoice.items.map((line) => ({
+        "Denumire client": invoice.customerName || "",
+        "Cod fiscal": invoice.customerCif || "",
+        "Registru Comert": "",
+        Judet: "",
+        Adresa: invoice.customerAddress || "",
+        Tara: "RO",
+        Moneda: invoice.currency || "RON",
+        "Numar factura": invoice.docNo,
+        Data: formatDate(invoice.docDate),
+        TVA: Number(line.vatRateValue || 0),
+        "Valoare neta": Number(line.lineNetRon || 0),
+        "Valoare bruta": Number(line.lineGrossRon || 0),
+        Discount: 0,
+        "Denumire articol/serviciu": line.productName || "",
+        "Cont factura": config.salesAccount,
+        "Incasare numerar": readablePaymentType(invoice.paymentType || ""),
+        "Cont numerar": config.cashAccount,
+        "Plata automata": invoice.paymentType === "CARD" ? "Da" : "",
+        "Cont plata": invoice.paymentType === "CARD" ? config.cardAccount : "",
+        "Tip document": "Factura iesire",
+        Gestiune: invoice.location?.code || invoice.location?.name || "",
+        Grupa: "",
+        Agent: "",
+      }))
+    )
 
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
@@ -981,6 +1123,35 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       },
       orderBy: { docDate: "asc" },
     })
+
+    sheetName = "Facturi intrare"
+    spreadsheetRows = receipts.flatMap((receipt) =>
+      receipt.items.map((line) => ({
+        "Denumire client": receipt.supplierName || receipt.supplier?.name || "",
+        "Cod fiscal": receipt.supplier?.cif || "",
+        "Registru Comert": receipt.supplier?.regCom || "",
+        Judet: receipt.supplier?.county || "",
+        Adresa: receipt.supplier?.address || "",
+        Tara: receipt.supplier?.country || "",
+        Moneda: receipt.currency || "RON",
+        "Numar factura": receipt.spvInvoiceNo || receipt.docNo,
+        Data: formatDate(receipt.docDate),
+        TVA: Number(line.vatRateValue || 0),
+        "Valoare neta": Number(line.lineNetRon || 0),
+        "Valoare bruta": Number(line.lineGrossRon || 0),
+        Discount: 0,
+        "Denumire articol/serviciu": line.product?.name || "",
+        "Cont factura": pickStockType(line.product, stockTypes, config)?.inventoryAccount || config.inventoryAccount,
+        "Incasare numerar": "",
+        "Cont numerar": "",
+        "Plata automata": "",
+        "Cont plata": "",
+        "Tip document": "Factura intrare",
+        Gestiune: receipt.location?.code || receipt.location?.name || "",
+        Grupa: "",
+        Agent: "",
+      }))
+    )
 
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
@@ -1120,6 +1291,28 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       orderBy: { docDate: "asc" },
     })
 
+    sheetName = "Bonuri consum"
+    spreadsheetRows = documents.flatMap((document) =>
+      document.items.map((line) => {
+        const stockType = pickStockType(line.ingredient, stockTypes, config)
+        const unitCost = Number(line.ingredient?.costPrice || 0)
+        return {
+          Document: document.docNo,
+          Data: formatDate(document.docDate),
+          Gestiune: managementValue(config, document.location),
+          Articol: line.ingredient.name,
+          Cod: line.ingredient.accountingItemCode || line.ingredient.sku || slugCode(line.ingredient.name, "ART"),
+          UM: line.ingredient.uom?.code || "BUC",
+          Cantitate: Number(line.qty || 0),
+          Pret: unitCost,
+          Valoare: unitCost * Number(line.qty || 0),
+          TVA: Number(line.ingredient.vatRate?.rate ?? 0),
+          ContCheltuiala: stockType?.expenseAccount || config.expenseAccount,
+          ContStoc: stockType?.inventoryAccount || config.inventoryAccount,
+        }
+      })
+    )
+
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
       `<SAGA tip="BonuriConsum">`,
@@ -1192,6 +1385,29 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       orderBy: { docDate: "asc" },
     })
 
+    sheetName = "Productie"
+    spreadsheetRows = documents.flatMap((document) =>
+      document.items.map((line) => {
+        const stockType = pickStockType(line.product, stockTypes, config)
+        const unitCost = Number(line.product.costPrice || 0)
+        return {
+          Document: document.docNo,
+          Data: formatDate(document.docDate),
+          Gestiune: managementValue(config, document.location),
+          Articol: line.product.name,
+          Cod: line.product.accountingItemCode || line.product.sku || slugCode(line.product.name, "ART"),
+          UM: line.product.uom?.code || "BUC",
+          Cantitate: Number(line.qty || 0),
+          Pret: unitCost,
+          Valoare: unitCost * Number(line.qty || 0),
+          TVA: Number(line.product.vatRate?.rate ?? 0),
+          ContStoc: stockType?.inventoryAccount || config.inventoryAccount,
+          ContCheltuiala: stockType?.expenseAccount || config.expenseAccount,
+          ContVenit: stockType?.salesAccount || config.salesAccount,
+        }
+      })
+    )
+
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
       `<SAGA tip="Productie">`,
@@ -1243,7 +1459,6 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     return res.status(400).json({ ok: false, error: "Tip de export contabil necunoscut." })
   }
 
-  res.setHeader("Content-Type", "application/xml; charset=utf-8")
   const firstDoc =
     kind === "purchase-receipts"
       ? await prisma.purchaseReceipt.findFirst({
@@ -1269,7 +1484,22 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
           })
         : null
 
-  res.setHeader("Content-Disposition", `attachment; filename="${downloadName(kind, dateFrom, dateTo, { company, firstDoc })}"`)
+  const baseFileName = downloadName(kind, dateFrom, dateTo, { company, firstDoc })
+
+  if (fileFormat === "xlsx" || fileFormat === "csv") {
+    const buffer = await buildSpreadsheetBuffer(sheetName, spreadsheetRows, fileFormat)
+    res.setHeader(
+      "Content-Type",
+      fileFormat === "xlsx"
+        ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        : "text/csv; charset=utf-8"
+    )
+    res.setHeader("Content-Disposition", `attachment; filename="${replaceFileExtension(baseFileName, fileFormat)}"`)
+    return res.status(200).send(buffer)
+  }
+
+  res.setHeader("Content-Type", "application/xml; charset=utf-8")
+  res.setHeader("Content-Disposition", `attachment; filename="${replaceFileExtension(baseFileName, "xml")}"`)
   return res.status(200).send(xml)
 })
 
