@@ -240,6 +240,10 @@ function replaceFileExtension(fileName: string, extension: "xml" | "xlsx" | "csv
   return fileName.replace(/\.[^.]+$/i, `.${extension}`)
 }
 
+function spreadsheetSheets(sheets: Array<{ name: string; rows: Record<string, unknown>[] }>) {
+  return Object.assign([], { __sheets: sheets })
+}
+
 function managementValue(config: any, location: { code?: string | null; name?: string | null } | null | undefined) {
   if (!location) return ""
   switch (config?.managementAnalytic) {
@@ -297,31 +301,38 @@ function readablePaymentType(value: unknown) {
 
 async function buildSpreadsheetBuffer(sheetName: string, rows: Record<string, unknown>[], fileFormat: "xlsx" | "csv") {
   const workbook = new ExcelJS.Workbook()
-  const worksheet = workbook.addWorksheet(sheetName.slice(0, 31) || "Export")
+  const sheets = Array.isArray((rows as any)?.__sheets)
+    ? (rows as any).__sheets
+    : [{ name: sheetName, rows }]
 
-  const headers = Array.from(
-    rows.reduce((acc, row) => {
-      Object.keys(row || {}).forEach((key) => acc.add(key))
-      return acc
-    }, new Set<string>())
-  )
+  for (const sheet of sheets) {
+    const sheetRows = Array.isArray(sheet?.rows) ? sheet.rows : []
+    const worksheet = workbook.addWorksheet(String(sheet?.name || sheetName).slice(0, 31) || "Export")
 
-  worksheet.columns = headers.map((header) => ({
-    header,
-    key: header,
-    width: Math.min(Math.max(header.length + 4, 14), 28),
-  }))
+    const headers = Array.from(
+      sheetRows.reduce((acc: Set<string>, row: Record<string, unknown>) => {
+        Object.keys(row || {}).forEach((key) => acc.add(key))
+        return acc
+      }, new Set<string>())
+    )
 
-  rows.forEach((row) => {
-    const normalizedRow: Record<string, unknown> = {}
-    headers.forEach((header) => {
-      normalizedRow[header] = row?.[header] ?? ""
+    worksheet.columns = headers.map((header) => ({
+      header,
+      key: header,
+      width: Math.min(Math.max(header.length + 4, 14), 28),
+    }))
+
+    sheetRows.forEach((row: Record<string, unknown>) => {
+      const normalizedRow: Record<string, unknown> = {}
+      headers.forEach((header) => {
+        normalizedRow[header] = row?.[header] ?? ""
+      })
+      worksheet.addRow(normalizedRow)
     })
-    worksheet.addRow(normalizedRow)
-  })
 
-  worksheet.getRow(1).font = { bold: true }
-  worksheet.views = [{ state: "frozen", ySplit: 1 }]
+    worksheet.getRow(1).font = { bold: true }
+    worksheet.views = [{ state: "frozen", ySplit: 1 }]
+  }
 
   if (fileFormat === "csv") {
     const buffer = await workbook.csv.writeBuffer()
@@ -962,33 +973,53 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     })
 
     sheetName = "Facturi iesire"
-    spreadsheetRows = invoices.flatMap((invoice) =>
-      invoice.items.map((line) => ({
-        "Denumire client": invoice.customerName || "",
-        "Cod fiscal": invoice.customerCif || "",
-        "Registru Comert": "",
-        Judet: "",
-        Adresa: invoice.customerAddress || "",
-        Tara: "RO",
-        Moneda: invoice.currency || "RON",
-        "Numar factura": invoice.docNo,
-        Data: formatDate(invoice.docDate),
-        TVA: Number(line.vatRateValue || 0),
-        "Valoare neta": Number(line.lineNetRon || 0),
-        "Valoare bruta": Number(line.lineGrossRon || 0),
-        Discount: 0,
-        "Denumire articol/serviciu": line.productName || "",
-        "Cont factura": config.salesAccount,
-        "Incasare numerar": readablePaymentType(invoice.paymentType || ""),
-        "Cont numerar": config.cashAccount,
-        "Plata automata": invoice.paymentType === "CARD" ? "Da" : "",
-        "Cont plata": invoice.paymentType === "CARD" ? config.cardAccount : "",
-        "Tip document": "Factura iesire",
-        Gestiune: invoice.location?.code || invoice.location?.name || "",
-        Grupa: "",
-        Agent: "",
-      }))
-    )
+    spreadsheetRows = spreadsheetSheets([
+      {
+        name: "Facturi",
+        rows: invoices.map((invoice) => ({
+          "Denumire client": invoice.customerName || "",
+          "Cod fiscal": invoice.customerCif || "",
+          "Registru Comert": invoice.customerRegNo || "",
+          Judet: "",
+          Adresa: invoice.customerAddress || "",
+          Tara: "RO",
+          Moneda: invoice.currency || "RON",
+          "Numar factura": invoice.docNo,
+          Data: formatDate(invoice.docDate),
+          TVA: Number(invoice.totalVatRon || 0),
+          "Valoare neta": Number(invoice.totalNetRon || 0),
+          "Valoare bruta": Number(invoice.totalGrossRon || 0),
+          Discount: 0,
+        })),
+      },
+      {
+        name: "Continut factura",
+        rows: invoices.flatMap((invoice) =>
+          invoice.items.map((line) => ({
+            Tip: "Marfa",
+            "Denumire articol/serviciu": line.productName || "",
+            "Cont factura": config.salesAccount,
+            "Incasare numerar": readablePaymentType(invoice.paymentType || ""),
+            "Cont numerar": invoice.paymentType === "CASH" ? config.cashAccount : "",
+            "Plata automata": invoice.paymentType === "CARD" ? "Da" : "",
+            "Cont plata": invoice.paymentType === "CARD" ? config.cardAccount : "",
+            "Tip document": "Factura iesire",
+            Gestiune: invoice.location?.code || invoice.location?.name || "",
+            Grupa: "",
+            Agent: "",
+            Cod: line.productCode || "",
+            UM: line.uomCode || "BUC",
+            "TVA %": Number(line.vatRateValue || 0),
+            Cantitate: Number(line.qty || 0),
+            "Pret unitar": Number(line.unitPriceFc || 0),
+            Valoare: Number(line.lineNetRon || 0),
+            Total: Number(line.lineGrossRon || 0),
+            TVA: Number(line.lineVatRon || 0),
+            Ned: "N",
+          }))
+        ),
+      },
+    ])
 
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
@@ -1125,33 +1156,53 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     })
 
     sheetName = "Facturi intrare"
-    spreadsheetRows = receipts.flatMap((receipt) =>
-      receipt.items.map((line) => ({
-        "Denumire client": receipt.supplierName || receipt.supplier?.name || "",
-        "Cod fiscal": receipt.supplier?.cif || "",
-        "Registru Comert": receipt.supplier?.regCom || "",
-        Judet: receipt.supplier?.county || "",
-        Adresa: receipt.supplier?.address || "",
-        Tara: receipt.supplier?.country || "",
-        Moneda: receipt.currency || "RON",
-        "Numar factura": receipt.spvInvoiceNo || receipt.docNo,
-        Data: formatDate(receipt.docDate),
-        TVA: Number(line.vatRateValue || 0),
-        "Valoare neta": Number(line.lineNetRon || 0),
-        "Valoare bruta": Number(line.lineGrossRon || 0),
-        Discount: 0,
-        "Denumire articol/serviciu": line.product?.name || "",
-        "Cont factura": pickStockType(line.product, stockTypes, config)?.inventoryAccount || config.inventoryAccount,
-        "Incasare numerar": "",
-        "Cont numerar": "",
-        "Plata automata": "",
-        "Cont plata": "",
-        "Tip document": "Factura intrare",
-        Gestiune: receipt.location?.code || receipt.location?.name || "",
-        Grupa: "",
-        Agent: "",
-      }))
-    )
+    spreadsheetRows = spreadsheetSheets([
+      {
+        name: "Facturi",
+        rows: receipts.map((receipt) => ({
+          "Denumire client": receipt.supplierName || receipt.supplier?.name || "",
+          "Cod fiscal": receipt.supplier?.cif || "",
+          "Registru Comert": receipt.supplier?.regCom || "",
+          Judet: receipt.supplier?.county || "",
+          Adresa: receipt.supplier?.address || "",
+          Tara: receipt.supplier?.country || "",
+          Moneda: receipt.currency || "RON",
+          "Numar factura": receipt.spvInvoiceNo || receipt.docNo,
+          Data: formatDate(receipt.docDate),
+          TVA: Number(receipt.totalVatRon || 0),
+          "Valoare neta": Number(receipt.totalNetRon || 0),
+          "Valoare bruta": Number(receipt.totalGrossRon || 0),
+          Discount: 0,
+        })),
+      },
+      {
+        name: "Continut factura",
+        rows: receipts.flatMap((receipt) =>
+          receipt.items.map((line) => ({
+            Tip: "Marfa",
+            "Denumire articol/serviciu": line.product?.name || "",
+            "Cont factura": pickStockType(line.product, stockTypes, config)?.inventoryAccount || config.inventoryAccount,
+            "Incasare numerar": "",
+            "Cont numerar": "",
+            "Plata automata": "",
+            "Cont plata": "",
+            "Tip document": "Factura intrare",
+            Gestiune: receipt.location?.code || receipt.location?.name || "",
+            Grupa: "",
+            Agent: "",
+            Cod: line.product?.accountingItemCode || line.product?.sku || "",
+            UM: line.product?.uom?.code || "BUC",
+            "TVA %": Number(line.vatRateValue || 0),
+            Cantitate: Number(line.stockQty || line.qty || 0),
+            "Pret unitar": Number(line.unitCostNetRon || 0),
+            Valoare: Number(line.lineNetRon || 0),
+            Total: Number(line.lineGrossRon || 0),
+            TVA: Number(line.lineVatRon || 0),
+            Ned: "N",
+          }))
+        ),
+      },
+    ])
 
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
