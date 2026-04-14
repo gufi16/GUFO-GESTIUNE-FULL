@@ -803,7 +803,10 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
 
   if (kind === "products") {
     const products = await prisma.product.findMany({
-      where: buildCompanyScopedTenantWhere(tenantId, companyId, { isActive: true }),
+      where: {
+        tenantId,
+        companyId,
+      },
       include: {
         vatRate: true,
         uom: true,
