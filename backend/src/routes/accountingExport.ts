@@ -240,6 +240,14 @@ function replaceFileExtension(fileName: string, extension: "xml" | "xlsx" | "csv
   return fileName.replace(/\.[^.]+$/i, `.${extension}`)
 }
 
+function excelSerialDate(value: Date | string | null | undefined) {
+  if (!value) return ""
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return ""
+  const utc = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())
+  return Math.floor(utc / 86400000) + 25569
+}
+
 function spreadsheetSheets(sheets: Array<{ name: string; rows: Record<string, unknown>[] }>) {
   return Object.assign([], { __sheets: sheets })
 }
@@ -1251,47 +1259,65 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     sheetName = "Facturi intrare"
     spreadsheetRows = spreadsheetSheets([
       {
-        name: "Facturi",
+        name: "Intrari",
         rows: receipts.map((receipt) => ({
-          "Denumire client": receipt.supplierName || receipt.supplier?.name || "",
-          "Cod fiscal": receipt.supplier?.cif || "",
-          "Registru Comert": receipt.supplier?.regCom || "",
-          Judet: receipt.supplier?.county || "",
-          Adresa: receipt.supplier?.address || "",
-          Tara: receipt.supplier?.country || "",
-          Moneda: receipt.currency || "RON",
-          "Numar factura": receipt.spvInvoiceNo || receipt.docNo,
-          Data: formatDate(receipt.docDate),
-          TVA: Number(receipt.totalVatRon || 0),
-          "Valoare neta": Number(receipt.totalNetRon || 0),
-          "Valoare bruta": Number(receipt.totalGrossRon || 0),
-          Discount: 0,
+          tip: "R",
+          nr_nir: extractSagaNumber(receipt.docNo || ""),
+          nr_intrare: extractSagaNumber(receipt.spvInvoiceNo || receipt.docNo || ""),
+          cod: receipt.supplierCode || receipt.supplier?.code || "",
+          denumire: receipt.supplierName || receipt.supplier?.name || "",
+          tvai: 0,
+          data: excelSerialDate(receipt.docDate),
+          scadent: receipt.docDate ? excelSerialDate(receipt.docDate) : "",
+          baza_tva: Number(receipt.totalNetRon || 0),
+          transp_lei: 0,
+          tva: Number(receipt.totalVatRon || 0),
+          total: Number(receipt.totalGrossRon || 0),
+          neachitat: Number(receipt.totalGrossRon || 0),
+          data_doc: "",
+          inf_suplm: "",
+          den_agent: "",
+          id_solicit: "",
         })),
       },
       {
-        name: "Continut factura",
+        name: "IntrariDetalii",
         rows: receipts.flatMap((receipt) =>
           receipt.items.map((line) => ({
-            Tip: "Marfa",
-            "Denumire articol/serviciu": line.product?.name || "",
-            "Cont factura": pickStockType(line.product, stockTypes, config)?.inventoryAccount || config.inventoryAccount,
-            "Incasare numerar": "",
-            "Cont numerar": "",
-            "Plata automata": "",
-            "Cont plata": "",
-            "Tip document": "Factura intrare",
-            Gestiune: receipt.location?.code || receipt.location?.name || "",
-            Grupa: "",
-            Agent: "",
-            Cod: line.product?.accountingItemCode || line.product?.sku || "",
-            UM: line.product?.uom?.code || "BUC",
-            "TVA %": Number(line.vatRateValue || 0),
-            Cantitate: Number(line.stockQty || line.qty || 0),
-            "Pret unitar": Number(line.unitCostNetRon || 0),
-            Valoare: Number(line.lineNetRon || 0),
-            Total: Number(line.lineGrossRon || 0),
-            TVA: Number(line.lineVatRon || 0),
-            Ned: "N",
+            den_tip: "Nedefinit",
+            den_gest: receipt.location?.code || receipt.location?.name || "",
+            denumire: line.product?.name || "",
+            cod: line.product?.accountingItemCode || line.product?.sku || "",
+            um: line.product?.uom?.code || "BUC",
+            tva_art: Number(line.vatRateValue || 0),
+            cantitate: Number(line.stockQty || line.qty || 0),
+            pret_unitar: Number(line.unitCostNetRon || 0),
+            valoare: Number(line.lineNetRon || 0),
+            transp_lei: 0,
+            total: Number(line.lineGrossRon || 0),
+            tva_ded: Number(line.lineVatRon || 0),
+            tip_ded: "N50",
+            cont: pickStockType(line.product, stockTypes, config)?.inventoryAccount || config.inventoryAccount,
+            pret_vanz: Number(line.product?.price || 0),
+            adaos: 0,
+            adaos_proc: 0,
+            text_supl: "",
+            categorie: "",
+            ID_U: "",
+            ID_INTRARE: "",
+            GESTIUNE: receipt.location?.code || receipt.location?.name || "",
+            PTVA_VANZ: 0,
+            IS_FACTURAT: 0,
+            DISCOUNT: 0,
+            ID_BC: 0,
+            plan: "",
+            SECTOR: "",
+            SURSA: "",
+            CAPITOL: "",
+            ARTICOL: "",
+            LOT: "",
+            COD_TAXA: "",
+            ID_SGR: 0,
           }))
         ),
       },
