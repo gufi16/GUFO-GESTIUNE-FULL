@@ -115,6 +115,11 @@ function decimal(value: unknown, digits = 2) {
   return Number.isFinite(number) ? number.toFixed(digits) : (0).toFixed(digits)
 }
 
+function normalizeValueType(value: unknown) {
+  const normalized = String(value || "").trim().toUpperCase()
+  return normalized === "GLOBAL_VALORIC" ? "GLOBAL_VALORIC" : "CANTITATIV_VALORIC"
+}
+
 function slugCode(value: string, fallback = "COD") {
   return (
     String(value || "")
@@ -222,6 +227,32 @@ function managementValue(config: any, location: { code?: string | null; name?: s
     default:
       return location.code || location.name || ""
   }
+}
+
+function xmlMeta(company: any, kind: string, dateFrom: string, dateTo: string, valueType: string) {
+  return [
+    `  <Meta>`,
+    `    <Firma>${xmlEscape(company?.name || "")}</Firma>`,
+    `    <CodFirma>${xmlEscape(company?.code || "")}</CodFirma>`,
+    `    <TipExport>${xmlEscape(kind)}</TipExport>`,
+    `    <TipValoare>${xmlEscape(valueType)}</TipValoare>`,
+    `    <DataStart>${xmlEscape(dateFrom || "")}</DataStart>`,
+    `    <DataStop>${xmlEscape(dateTo || "")}</DataStop>`,
+    `    <GeneratLa>${xmlEscape(new Date().toISOString())}</GeneratLa>`,
+    `  </Meta>`,
+  ].join("\n")
+}
+
+function aggregateByKey<T>(items: T[], buildKey: (item: T) => string, seed: (item: T) => any, merge: (target: any, item: T) => void) {
+  const map = new Map<string, any>()
+  for (const item of items) {
+    const key = buildKey(item)
+    if (!map.has(key)) {
+      map.set(key, seed(item))
+    }
+    merge(map.get(key), item)
+  }
+  return Array.from(map.values())
 }
 
 router.get("/api/v1/reports/accounting/saga/config", requireAuth, async (req: AuthedRequest, res) => {
@@ -446,6 +477,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
   const dateTo = String(req.query.dateTo || "").trim()
   const locationId = String(req.query.locationId || "").trim()
   const partnerSearch = String(req.query.partnerSearch || "").trim()
+  const valueType = normalizeValueType(req.query.valueType)
   const from = dateFrom ? new Date(`${dateFrom}T00:00:00`) : new Date("2000-01-01T00:00:00")
   const to = dateTo ? new Date(`${dateTo}T23:59:59.999`) : new Date()
 
@@ -466,6 +498,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
       `<SAGA tip="Articole">`,
+      xmlMeta(company, kind, dateFrom, dateTo, valueType),
       `  <Articole>`,
       ...products.map((product) => {
         const stockType = pickStockType(product, stockTypes, config)
@@ -514,6 +547,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
       `<SAGA tip="Clienti">`,
+      xmlMeta(company, kind, dateFrom, dateTo, valueType),
       `  <Clienti>`,
       ...customers.map((customer) =>
         [
@@ -554,6 +588,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
       `<SAGA tip="Furnizori">`,
+      xmlMeta(company, kind, dateFrom, dateTo, valueType),
       `  <Furnizori>`,
       ...suppliers.map((supplier) =>
         [
@@ -600,9 +635,28 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
       `<SAGA tip="Iesiri">`,
+      xmlMeta(company, kind, dateFrom, dateTo, valueType),
       `  <Iesiri>`,
       ...invoices.map((invoice) =>
-        [
+        (() => {
+          const groupedLines =
+            valueType === "GLOBAL_VALORIC"
+              ? aggregateByKey(
+                  invoice.items,
+                  (line) => `${line.vatRateValue || 0}|${line.productCode || ""}`,
+                  (line) => ({
+                    code: line.productCode || slugCode(line.productName, "ART"),
+                    name: line.productName,
+                    vatRateValue: Number(line.vatRateValue || 0),
+                    valueRon: 0,
+                  }),
+                  (target, line) => {
+                    target.valueRon += Number(line.lineNetRon || 0)
+                  }
+                )
+              : invoice.items
+
+          return [
           `    <Iesire>`,
           `      <Numar>${xmlEscape(invoice.docNo)}</Numar>`,
           `      <Data>${xmlEscape(formatDate(invoice.docDate))}</Data>`,
@@ -616,23 +670,34 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
           `      <Valoare>${decimal(invoice.totalNetRon)}</Valoare>`,
           `      <TVA>${decimal(invoice.totalVatRon)}</TVA>`,
           `      <Total>${decimal(invoice.totalGrossRon)}</Total>`,
+          valueType === "GLOBAL_VALORIC" ? `      <ModExport>global-valoric</ModExport>` : `      <ModExport>cantitativ-valoric</ModExport>`,
           `      <Linii>`,
-          ...invoice.items.map((line) =>
-            [
-              `        <Linie>`,
-              `          <Cod>${xmlEscape(line.productCode || slugCode(line.productName, "ART"))}</Cod>`,
-              `          <Denumire>${xmlEscape(line.productName)}</Denumire>`,
-              `          <UM>${xmlEscape(line.uomCode || "BUC")}</UM>`,
-              `          <Cantitate>${decimal(line.qty, 3)}</Cantitate>`,
-              `          <Pret>${decimal(line.unitPriceFc)}</Pret>`,
-              `          <CotaTVA>${decimal(line.vatRateValue)}</CotaTVA>`,
-              `          <Valoare>${decimal(line.lineNetRon)}</Valoare>`,
-              `        </Linie>`,
-            ].join("\n")
+          ...groupedLines.map((line) =>
+            valueType === "GLOBAL_VALORIC"
+              ? [
+                  `        <Linie>`,
+                  `          <Cod>${xmlEscape(line.code)}</Cod>`,
+                  `          <Denumire>${xmlEscape(line.name)}</Denumire>`,
+                  `          <CotaTVA>${decimal(line.vatRateValue)}</CotaTVA>`,
+                  `          <Valoare>${decimal(line.valueRon)}</Valoare>`,
+                  `        </Linie>`,
+                ].join("\n")
+              : [
+                  `        <Linie>`,
+                  `          <Cod>${xmlEscape(line.productCode || slugCode(line.productName, "ART"))}</Cod>`,
+                  `          <Denumire>${xmlEscape(line.productName)}</Denumire>`,
+                  `          <UM>${xmlEscape(line.uomCode || "BUC")}</UM>`,
+                  `          <Cantitate>${decimal(line.qty, 3)}</Cantitate>`,
+                  `          <Pret>${decimal(line.unitPriceFc)}</Pret>`,
+                  `          <CotaTVA>${decimal(line.vatRateValue)}</CotaTVA>`,
+                  `          <Valoare>${decimal(line.lineNetRon)}</Valoare>`,
+                  `        </Linie>`,
+                ].join("\n")
           ),
           `      </Linii>`,
           `    </Iesire>`,
         ].join("\n")
+        })()
       ),
       `  </Iesiri>`,
       `</SAGA>`,
@@ -672,9 +737,33 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
       `<SAGA tip="Intrari">`,
+      xmlMeta(company, kind, dateFrom, dateTo, valueType),
       `  <Intrari>`,
       ...receipts.map((receipt) =>
-        [
+        (() => {
+          const groupedLines =
+            valueType === "GLOBAL_VALORIC"
+              ? aggregateByKey(
+                  receipt.items,
+                  (line) => `${line.vatRateValue || 0}|${line.product?.accountingItemCode || line.product?.sku || line.productId}`,
+                  (line) => ({
+                    code: line.product?.accountingItemCode || line.product?.sku || slugCode(line.product?.name || "ART", "ART"),
+                    name: line.product?.name || "",
+                    vatRateValue: Number(line.vatRateValue || 0),
+                    valueRon: 0,
+                    stockAccount: "",
+                    expenseAccount: "",
+                  }),
+                  (target, line) => {
+                    const stockType = pickStockType(line.product, stockTypes, config)
+                    target.valueRon += Number(line.lineNetRon || 0)
+                    target.stockAccount = stockType?.inventoryAccount || config.inventoryAccount
+                    target.expenseAccount = stockType?.expenseAccount || config.expenseAccount
+                  }
+                )
+              : receipt.items
+
+          return [
           `    <Intrare>`,
           `      <Numar>${xmlEscape(receipt.docNo)}</Numar>`,
           `      <Data>${xmlEscape(formatDate(receipt.docDate))}</Data>`,
@@ -686,8 +775,22 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
           `      <Valoare>${decimal(receipt.totalNetRon)}</Valoare>`,
           `      <TVA>${decimal(receipt.totalVatRon)}</TVA>`,
           `      <Total>${decimal(receipt.totalGrossRon)}</Total>`,
+          valueType === "GLOBAL_VALORIC" ? `      <ModExport>global-valoric</ModExport>` : `      <ModExport>cantitativ-valoric</ModExport>`,
           `      <Linii>`,
-          ...receipt.items.map((line) => {
+          ...groupedLines.map((line) => {
+            if (valueType === "GLOBAL_VALORIC") {
+              return [
+                `        <Linie>`,
+                `          <Cod>${xmlEscape(line.code)}</Cod>`,
+                `          <Denumire>${xmlEscape(line.name)}</Denumire>`,
+                `          <CotaTVA>${decimal(line.vatRateValue)}</CotaTVA>`,
+                `          <Valoare>${decimal(line.valueRon)}</Valoare>`,
+                `          <ContStoc>${xmlEscape(line.stockAccount)}</ContStoc>`,
+                `          <ContCheltuiala>${xmlEscape(line.expenseAccount)}</ContCheltuiala>`,
+                `        </Linie>`,
+              ].join("\n")
+            }
+
             const stockType = pickStockType(line.product, stockTypes, config)
             return [
               `        <Linie>`,
@@ -704,6 +807,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
           `      </Linii>`,
           `    </Intrare>`,
         ].join("\n")
+        })()
       ),
       `  </Intrari>`,
       `</SAGA>`,
@@ -741,6 +845,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
       `<SAGA tip="BonuriConsum">`,
+      xmlMeta(company, kind, dateFrom, dateTo, valueType),
       `  <BonuriConsum>`,
       ...documents.map((document) =>
         [
@@ -799,6 +904,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
       `<SAGA tip="Productie">`,
+      xmlMeta(company, kind, dateFrom, dateTo, valueType),
       `  <Productie>`,
       ...documents.map((document) =>
         [

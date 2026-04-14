@@ -231,8 +231,20 @@ export default function ExportContabilitatePage() {
 
   const needsLocationFilter = selectedKindCategory === "documents"
   const needsPartnerFilter = ["customers", "suppliers", "sales-invoices", "purchase-receipts"].includes(selectedKind)
+  const supportsGlobalValueType = ["sales-invoices", "purchase-receipts"].includes(selectedKind)
   const needsValueType = selectedKindCategory === "documents"
   const contextualPartnerLabel = selectedKindMeta?.partnerLabel || "Client / partener"
+
+  useEffect(() => {
+    if (!needsValueType) {
+      setSelectedValueType("CANTITATIV_VALORIC")
+      return
+    }
+
+    if (!supportsGlobalValueType && selectedValueType !== "CANTITATIV_VALORIC") {
+      setSelectedValueType("CANTITATIV_VALORIC")
+    }
+  }, [needsValueType, selectedKind, selectedValueType, supportsGlobalValueType])
 
   async function handleSaveConfig(event: FormEvent) {
     event.preventDefault()
@@ -280,7 +292,7 @@ export default function ExportContabilitatePage() {
           dateFrom
         )}&dateTo=${encodeURIComponent(dateTo)}&locationId=${encodeURIComponent(selectedLocationId)}&partnerSearch=${encodeURIComponent(
           partnerSearch
-        )}`,
+        )}&valueType=${encodeURIComponent(selectedValueType)}`,
         { raw: true }
       )
 
@@ -387,9 +399,12 @@ export default function ExportContabilitatePage() {
                 className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
               >
                 <option value="CANTITATIV_VALORIC">Cantitativ valoric</option>
-                <option value="GLOBAL_VALORIC">Global valoric</option>
+                <option value="GLOBAL_VALORIC" disabled={!supportsGlobalValueType}>Global valoric</option>
               </select>
               {!needsValueType ? <div className="mt-1 text-xs text-slate-500">Nu este necesar pentru nomenclatoare.</div> : null}
+              {needsValueType && !supportsGlobalValueType ? (
+                <div className="mt-1 text-xs text-slate-500">Pentru acest tip de document folosim momentan varianta cantitativ valorica.</div>
+              ) : null}
             </label>
 
             <label className="block">
@@ -621,6 +636,7 @@ export default function ExportContabilitatePage() {
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
               <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Selectie curenta</div>
               <div className="mt-1 text-sm font-semibold text-slate-900">{selectedKindMeta?.label || "Niciun tip selectat"}</div>
+              <div className="mt-1 text-xs text-slate-500">{selectedValueType === "GLOBAL_VALORIC" ? "Global valoric" : "Cantitativ valoric"}</div>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
               <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Filtrare locatie</div>
