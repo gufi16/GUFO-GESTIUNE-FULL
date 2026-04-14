@@ -1259,28 +1259,6 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     sheetName = "Facturi intrare"
     spreadsheetRows = spreadsheetSheets([
       {
-        name: "Intrari",
-        rows: receipts.map((receipt) => ({
-          tip: "R",
-          nr_nir: extractSagaNumber(receipt.docNo || ""),
-          nr_intrare: extractSagaNumber(receipt.spvInvoiceNo || receipt.docNo || ""),
-          cod: receipt.supplierCode || receipt.supplier?.code || "",
-          denumire: receipt.supplierName || receipt.supplier?.name || "",
-          tvai: 0,
-          data: excelSerialDate(receipt.docDate),
-          scadent: receipt.docDate ? excelSerialDate(receipt.docDate) : "",
-          baza_tva: Number(receipt.totalNetRon || 0),
-          transp_lei: 0,
-          tva: Number(receipt.totalVatRon || 0),
-          total: Number(receipt.totalGrossRon || 0),
-          neachitat: Number(receipt.totalGrossRon || 0),
-          data_doc: "",
-          inf_suplm: "",
-          den_agent: "",
-          id_solicit: "",
-        })),
-      },
-      {
         name: "IntrariDetalii",
         rows: receipts.flatMap((receipt) =>
           receipt.items.map((line) => ({
@@ -1320,6 +1298,28 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
             ID_SGR: 0,
           }))
         ),
+      },
+      {
+        name: "Intrari",
+        rows: receipts.map((receipt) => ({
+          tip: "R",
+          nr_nir: extractSagaNumber(receipt.docNo || ""),
+          nr_intrare: extractSagaNumber(receipt.spvInvoiceNo || receipt.docNo || ""),
+          cod: receipt.supplierCode || receipt.supplier?.code || "",
+          denumire: receipt.supplierName || receipt.supplier?.name || "",
+          tvai: 0,
+          data: excelSerialDate(receipt.docDate),
+          scadent: receipt.docDate ? excelSerialDate(receipt.docDate) : "",
+          baza_tva: Number(receipt.totalNetRon || 0),
+          transp_lei: 0,
+          tva: Number(receipt.totalVatRon || 0),
+          total: Number(receipt.totalGrossRon || 0),
+          neachitat: Number(receipt.totalGrossRon || 0),
+          data_doc: "",
+          inf_suplm: "",
+          den_agent: "",
+          id_solicit: "",
+        })),
       },
     ])
 
