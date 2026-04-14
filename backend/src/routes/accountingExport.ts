@@ -243,6 +243,107 @@ function xmlMeta(company: any, kind: string, dateFrom: string, dateTo: string, v
   ].join("\n")
 }
 
+function xmlTag(name: string, value: unknown) {
+  return `      <${name}>${xmlEscape(value ?? "")}</${name}>`
+}
+
+function xmlLineTag(name: string, value: unknown) {
+  return `            <${name}>${xmlEscape(value ?? "")}</${name}>`
+}
+
+function buildSagaFacturaHeader({
+  supplier,
+  client,
+  number,
+  date,
+  dueDate,
+  currency,
+  info,
+  code,
+}: {
+  supplier: Record<string, unknown>
+  client: Record<string, unknown>
+  number: unknown
+  date: unknown
+  dueDate?: unknown
+  currency?: unknown
+  info?: unknown
+  code?: unknown
+}) {
+  return [
+    `      <Antet>`,
+    xmlTag("FurnizorNume", supplier.name),
+    xmlTag("FurnizorCIF", supplier.cif),
+    xmlTag("FurnizorNrRegCom", supplier.regCom),
+    xmlTag("FurnizorTara", supplier.country),
+    xmlTag("FurnizorLocalitate", supplier.city),
+    xmlTag("FurnizorJudet", supplier.county),
+    xmlTag("FurnizorAdresa", supplier.address),
+    xmlTag("FurnizorTelefon", supplier.phone),
+    xmlTag("FurnizorMail", supplier.email),
+    xmlTag("FurnizorBanca", supplier.bank),
+    xmlTag("FurnizorIBAN", supplier.iban),
+    xmlTag("ClientNume", client.name),
+    xmlTag("ClientCIF", client.cif),
+    xmlTag("ClientNrRegCom", client.regCom),
+    xmlTag("ClientJudet", client.county),
+    xmlTag("ClientTara", client.country),
+    xmlTag("ClientLocalitate", client.city),
+    xmlTag("ClientAdresa", client.address),
+    xmlTag("ClientBanca", client.bank),
+    xmlTag("ClientIBAN", client.iban),
+    xmlTag("ClientTelefon", client.phone),
+    xmlTag("ClientMail", client.email),
+    xmlTag("FacturaNumar", number),
+    xmlTag("FacturaData", formatDate(date)),
+    xmlTag("FacturaScadenta", dueDate ? formatDate(dueDate) : ""),
+    xmlTag("FacturaMoneda", currency || "RON"),
+    xmlTag("FacturaInformatiiSuplimentare", info),
+    xmlTag("Cod", code),
+    `      </Antet>`,
+  ].join("\n")
+}
+
+function buildSagaFacturaLine(line: {
+  index: number
+  management?: unknown
+  description?: unknown
+  supplierCode?: unknown
+  clientCode?: unknown
+  guid?: unknown
+  barcode?: unknown
+  info?: unknown
+  uom?: unknown
+  qty?: unknown
+  price?: unknown
+  value?: unknown
+  vatRate?: unknown
+  vatValue?: unknown
+  account?: unknown
+  priceSale?: unknown
+}) {
+  return [
+    `          <Linie>`,
+    xmlLineTag("LinieNrCrt", line.index),
+    xmlLineTag("Gestiune", line.management),
+    xmlLineTag("Descriere", line.description),
+    xmlLineTag("CodArticolFurnizor", line.supplierCode),
+    xmlLineTag("CodArticolClient", line.clientCode),
+    xmlLineTag("GUID_cod_articol", line.guid),
+    xmlLineTag("CodBare", line.barcode),
+    xmlLineTag("InformatiiSuplimentare", line.info),
+    xmlLineTag("UM", line.uom),
+    xmlLineTag("Cantitate", line.qty),
+    xmlLineTag("Pret", line.price),
+    xmlLineTag("Valoare", line.value),
+    xmlLineTag("ProcTVA", line.vatRate),
+    xmlLineTag("TVA", line.vatValue),
+    xmlLineTag("Cont", line.account),
+    xmlLineTag("PretVanzare", line.priceSale),
+    `          </Linie>`,
+  ].join("\n")
+}
+
 function aggregateByKey<T>(items: T[], buildKey: (item: T) => string, seed: (item: T) => any, merge: (target: any, item: T) => void) {
   const map = new Map<string, any>()
   for (const item of items) {
@@ -634,9 +735,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
 
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
-      `<SAGA tip="Iesiri">`,
-      xmlMeta(company, kind, dateFrom, dateTo, valueType),
-      `  <Iesiri>`,
+      `<Facturi>`,
       ...invoices.map((invoice) =>
         (() => {
           const groupedLines =
@@ -657,50 +756,83 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
               : invoice.items
 
           return [
-          `    <Iesire>`,
-          `      <Numar>${xmlEscape(invoice.docNo)}</Numar>`,
-          `      <Data>${xmlEscape(formatDate(invoice.docDate))}</Data>`,
-          `      <Scadenta>${xmlEscape(formatDate(invoice.dueDate || invoice.docDate))}</Scadenta>`,
-          `      <Client>${xmlEscape(invoice.customerName)}</Client>`,
-          `      <CIF>${xmlEscape(invoice.customerCif || "")}</CIF>`,
-          `      <Gestiune>${xmlEscape(invoice.location?.code || invoice.location?.name || "")}</Gestiune>`,
-          `      <ContClient>${xmlEscape(config.customerAccount)}</ContClient>`,
-          `      <ContVenit>${xmlEscape(config.salesAccount)}</ContVenit>`,
-          `      <ContTVA>${xmlEscape(config.vatCollectedAccount)}</ContTVA>`,
-          `      <Valoare>${decimal(invoice.totalNetRon)}</Valoare>`,
-          `      <TVA>${decimal(invoice.totalVatRon)}</TVA>`,
-          `      <Total>${decimal(invoice.totalGrossRon)}</Total>`,
-          valueType === "GLOBAL_VALORIC" ? `      <ModExport>global-valoric</ModExport>` : `      <ModExport>cantitativ-valoric</ModExport>`,
-          `      <Linii>`,
+          `  <Factura>`,
+          buildSagaFacturaHeader({
+            supplier: {
+              name: company.name,
+              cif: company.cui,
+              regCom: company.regNo,
+              country: company.country,
+              city: company.city,
+              county: company.county,
+              address: company.address,
+              phone: company.phone,
+              email: company.email,
+              bank: company.bank,
+              iban: company.iban,
+            },
+            client: {
+              name: invoice.customerName,
+              cif: invoice.customerCif,
+              regCom: "",
+              country: "RO",
+              city: "",
+              county: "",
+              address: invoice.customerAddress,
+              bank: "",
+              iban: "",
+              phone: "",
+              email: "",
+            },
+            number: invoice.docNo,
+            date: invoice.docDate,
+            dueDate: invoice.dueDate || invoice.docDate,
+            currency: invoice.currency || "RON",
+            info: valueType === "GLOBAL_VALORIC" ? "Export global valoric" : "Export cantitativ valoric",
+            code: invoice.customerCode || "",
+          }),
+          `      <Detalii>`,
+          `        <Continut>`,
           ...groupedLines.map((line) =>
             valueType === "GLOBAL_VALORIC"
-              ? [
-                  `        <Linie>`,
-                  `          <Cod>${xmlEscape(line.code)}</Cod>`,
-                  `          <Denumire>${xmlEscape(line.name)}</Denumire>`,
-                  `          <CotaTVA>${decimal(line.vatRateValue)}</CotaTVA>`,
-                  `          <Valoare>${decimal(line.valueRon)}</Valoare>`,
-                  `        </Linie>`,
-                ].join("\n")
-              : [
-                  `        <Linie>`,
-                  `          <Cod>${xmlEscape(line.productCode || slugCode(line.productName, "ART"))}</Cod>`,
-                  `          <Denumire>${xmlEscape(line.productName)}</Denumire>`,
-                  `          <UM>${xmlEscape(line.uomCode || "BUC")}</UM>`,
-                  `          <Cantitate>${decimal(line.qty, 3)}</Cantitate>`,
-                  `          <Pret>${decimal(line.unitPriceFc)}</Pret>`,
-                  `          <CotaTVA>${decimal(line.vatRateValue)}</CotaTVA>`,
-                  `          <Valoare>${decimal(line.lineNetRon)}</Valoare>`,
-                  `        </Linie>`,
-                ].join("\n")
+              ? buildSagaFacturaLine({
+                  index: groupedLines.indexOf(line) + 1,
+                  management: invoice.location?.code || invoice.location?.name || "",
+                  description: line.name,
+                  clientCode: line.code,
+                  guid: line.code,
+                  uom: "",
+                  qty: "",
+                  price: "",
+                  value: decimal(line.valueRon),
+                  vatRate: decimal(line.vatRateValue),
+                  vatValue: "",
+                  account: config.salesAccount,
+                })
+              : buildSagaFacturaLine({
+                  index: groupedLines.indexOf(line) + 1,
+                  management: invoice.location?.code || invoice.location?.name || "",
+                  description: line.productName,
+                  clientCode: line.productCode || slugCode(line.productName, "ART"),
+                  guid: line.productId || line.productCode || "",
+                  barcode: line.barcode || "",
+                  uom: line.uomCode || "BUC",
+                  qty: decimal(line.qty, 3),
+                  price: decimal(line.unitPriceFc),
+                  value: decimal(line.lineNetRon),
+                  vatRate: decimal(line.vatRateValue),
+                  vatValue: decimal(line.lineVatRon),
+                  account: config.salesAccount,
+                })
           ),
-          `      </Linii>`,
-          `    </Iesire>`,
+          `        </Continut>`,
+          `      </Detalii>`,
+          `      <FacturaID>${xmlEscape(invoice.id)}</FacturaID>`,
+          `  </Factura>`,
         ].join("\n")
         })()
       ),
-      `  </Iesiri>`,
-      `</SAGA>`,
+      `</Facturi>`,
     ].join("\n")
   } else if (kind === "purchase-receipts") {
     const receipts = await prisma.purchaseReceipt.findMany({
@@ -721,6 +853,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       },
       include: {
         location: true,
+        supplier: true,
         items: {
           include: {
             product: {
@@ -736,9 +869,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
 
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
-      `<SAGA tip="Intrari">`,
-      xmlMeta(company, kind, dateFrom, dateTo, valueType),
-      `  <Intrari>`,
+      `<Facturi>`,
       ...receipts.map((receipt) =>
         (() => {
           const groupedLines =
@@ -764,53 +895,83 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
               : receipt.items
 
           return [
-          `    <Intrare>`,
-          `      <Numar>${xmlEscape(receipt.docNo)}</Numar>`,
-          `      <Data>${xmlEscape(formatDate(receipt.docDate))}</Data>`,
-          `      <Furnizor>${xmlEscape(receipt.supplierName || "")}</Furnizor>`,
-          `      <CIF>${xmlEscape(receipt.supplier?.cif || "")}</CIF>`,
-          `      <Gestiune>${xmlEscape(receipt.location?.code || receipt.location?.name || "")}</Gestiune>`,
-          `      <ContFurnizor>${xmlEscape(config.supplierAccount)}</ContFurnizor>`,
-          `      <ContTVA>${xmlEscape(config.vatDeductibleAccount)}</ContTVA>`,
-          `      <Valoare>${decimal(receipt.totalNetRon)}</Valoare>`,
-          `      <TVA>${decimal(receipt.totalVatRon)}</TVA>`,
-          `      <Total>${decimal(receipt.totalGrossRon)}</Total>`,
-          valueType === "GLOBAL_VALORIC" ? `      <ModExport>global-valoric</ModExport>` : `      <ModExport>cantitativ-valoric</ModExport>`,
-          `      <Linii>`,
+          `  <Factura>`,
+          buildSagaFacturaHeader({
+            supplier: {
+              name: receipt.supplierName || receipt.supplier?.name || "",
+              cif: receipt.supplier?.cif || "",
+              regCom: receipt.supplier?.regCom || "",
+              country: receipt.supplier?.country || "",
+              city: receipt.supplier?.city || "",
+              county: receipt.supplier?.county || "",
+              address: receipt.supplier?.address || "",
+              phone: receipt.supplier?.phone || "",
+              email: receipt.supplier?.email || "",
+              bank: "",
+              iban: "",
+            },
+            client: {
+              name: company.name,
+              cif: company.cui,
+              regCom: company.regNo,
+              country: company.country,
+              city: company.city,
+              county: company.county,
+              address: company.address,
+              bank: company.bank,
+              iban: company.iban,
+              phone: company.phone,
+              email: company.email,
+            },
+            number: receipt.docNo,
+            date: receipt.docDate,
+            dueDate: receipt.docDate,
+            currency: receipt.currency || "RON",
+            info: valueType === "GLOBAL_VALORIC" ? "Export global valoric" : "Export cantitativ valoric",
+            code: receipt.supplierCode || receipt.supplier?.code || "",
+          }),
+          `      <Detalii>`,
+          `        <Continut>`,
           ...groupedLines.map((line) => {
             if (valueType === "GLOBAL_VALORIC") {
-              return [
-                `        <Linie>`,
-                `          <Cod>${xmlEscape(line.code)}</Cod>`,
-                `          <Denumire>${xmlEscape(line.name)}</Denumire>`,
-                `          <CotaTVA>${decimal(line.vatRateValue)}</CotaTVA>`,
-                `          <Valoare>${decimal(line.valueRon)}</Valoare>`,
-                `          <ContStoc>${xmlEscape(line.stockAccount)}</ContStoc>`,
-                `          <ContCheltuiala>${xmlEscape(line.expenseAccount)}</ContCheltuiala>`,
-                `        </Linie>`,
-              ].join("\n")
+              return buildSagaFacturaLine({
+                index: groupedLines.indexOf(line) + 1,
+                management: receipt.location?.code || receipt.location?.name || "",
+                description: line.name,
+                supplierCode: line.code,
+                guid: line.code,
+                value: decimal(line.valueRon),
+                vatRate: decimal(line.vatRateValue),
+                account: line.stockAccount,
+              })
             }
 
             const stockType = pickStockType(line.product, stockTypes, config)
-            return [
-              `        <Linie>`,
-              `          <Cod>${xmlEscape(line.product?.accountingItemCode || line.product?.sku || slugCode(line.product?.name || "ART", "ART"))}</Cod>`,
-              `          <Denumire>${xmlEscape(line.product?.name || "")}</Denumire>`,
-              `          <Cantitate>${decimal(line.stockQty || line.qty, 3)}</Cantitate>`,
-              `          <Pret>${decimal(line.unitCostNetRon)}</Pret>`,
-              `          <CotaTVA>${decimal(line.vatRateValue)}</CotaTVA>`,
-              `          <ContStoc>${xmlEscape(stockType?.inventoryAccount || config.inventoryAccount)}</ContStoc>`,
-              `          <ContCheltuiala>${xmlEscape(stockType?.expenseAccount || config.expenseAccount)}</ContCheltuiala>`,
-              `        </Linie>`,
-            ].join("\n")
+            return buildSagaFacturaLine({
+              index: groupedLines.indexOf(line) + 1,
+              management: receipt.location?.code || receipt.location?.name || "",
+              description: line.product?.name || "",
+              supplierCode: line.product?.accountingItemCode || line.product?.sku || slugCode(line.product?.name || "ART", "ART"),
+              guid: line.product?.id || "",
+              barcode: "",
+              uom: line.product?.uom?.code || "BUC",
+              qty: decimal(line.stockQty || line.qty, 3),
+              price: decimal(line.unitCostNetRon),
+              value: decimal(line.lineNetRon),
+              vatRate: decimal(line.vatRateValue),
+              vatValue: decimal(line.lineVatRon),
+              account: stockType?.inventoryAccount || config.inventoryAccount,
+              priceSale: "",
+            })
           }),
-          `      </Linii>`,
-          `    </Intrare>`,
+          `        </Continut>`,
+          `      </Detalii>`,
+          `      <FacturaID>${xmlEscape(receipt.id)}</FacturaID>`,
+          `  </Factura>`,
         ].join("\n")
         })()
       ),
-      `  </Intrari>`,
-      `</SAGA>`,
+      `</Facturi>`,
     ].join("\n")
   } else if (kind === "consumption-docs") {
     const documents = await prisma.consumptionDoc.findMany({
