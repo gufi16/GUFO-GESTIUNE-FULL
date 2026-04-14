@@ -214,7 +214,21 @@ function pickStockType(product: any, stockTypes: any[], config: any) {
   return stockTypes[0] || null
 }
 
-function downloadName(kind: string, from: string, to: string) {
+function compactDateToken(value: Date | string | null | undefined) {
+  if (!value) return "00000000"
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return "00000000"
+  return `${date.getFullYear()}${`${date.getMonth() + 1}`.padStart(2, "0")}${`${date.getDate()}`.padStart(2, "0")}`
+}
+
+function downloadName(kind: string, from: string, to: string, options?: { company?: any; firstDoc?: any }) {
+  if ((kind === "purchase-receipts" || kind === "sales-invoices") && options?.company) {
+    const companyCode = String(options.company.cui || options.company.code || "FIRMA").replace(/[^A-Za-z0-9]/g, "")
+    const docNumber = extractSagaNumber(options.firstDoc?.spvInvoiceNo || options.firstDoc?.docNo || "EXPORT")
+    const docDate = compactDateToken(options.firstDoc?.docDate || from || to || new Date())
+    return `F_${companyCode || "FIRMA"}_${docNumber || "EXPORT"}_${docDate}.xml`
+  }
+
   const safeKind = slugCode(kind, "EXPORT")
   const fromChunk = from ? from.replace(/[^0-9]/g, "") : "ALL"
   const toChunk = to ? to.replace(/[^0-9]/g, "") : "ALL"
@@ -288,38 +302,6 @@ function extractSagaNumber(value: unknown) {
   if (!source) return ""
   const digits = source.match(/\d+/g)?.join("") || ""
   return digits || source
-}
-
-function buildSagaPurchaseReceiptRow(receipt: any) {
-  const supplierCode =
-    receipt.supplierCode ||
-    receipt.supplier?.code ||
-    slugCode(receipt.supplierName || receipt.supplier?.name || "FURNIZOR", "FURNIZOR")
-  const isPaid = Number(receipt.totalGrossRon || 0) > 0 && Number(receipt.unpaidAmountRon || 0) <= 0
-  const unpaidAmount = isPaid ? 0 : Number(receipt.totalGrossRon || 0)
-  const grossAmount = Number(receipt.totalGrossRon || 0)
-  const shouldIncludeDueDate = grossAmount > 0
-
-  return [
-    `  <c_xml>`,
-    `    <tip>${xmlEscape(isPaid ? "R" : "")}</tip>`,
-    `    <nr_nir>${xmlEscape(extractSagaNumber(receipt.docNo))}</nr_nir>`,
-    `    <nr_intrare>${xmlEscape(extractSagaNumber(receipt.spvInvoiceNo || receipt.docNo))}</nr_intrare>`,
-    `    <cod>${xmlEscape(supplierCode)}</cod>`,
-    `    <denumire>${xmlEscape(receipt.supplierName || receipt.supplier?.name || "")}</denumire>`,
-    `    <tvai>0</tvai>`,
-    `    <data>${xmlEscape(formatSagaImportDate(receipt.docDate))}</data>`,
-    ...(shouldIncludeDueDate ? [`    <scadent>${xmlEscape(formatSagaImportDate(receipt.docDate))}</scadent>`] : []),
-    `    <baza_tva>${xmlEscape(sagaNumber(receipt.totalNetRon))}</baza_tva>`,
-    `    <transp_lei>0</transp_lei>`,
-    `    <tva>${xmlEscape(sagaNumber(receipt.totalVatRon))}</tva>`,
-    `    <total>${xmlEscape(sagaNumber(receipt.totalGrossRon))}</total>`,
-    `    <neachitat>${xmlEscape(sagaNumber(unpaidAmount))}</neachitat>`,
-    `    <inf_suplm>${xmlEscape(receipt.note || "")}</inf_suplm>`,
-    `    <den_agent></den_agent>`,
-    `    <id_solicit></id_solicit>`,
-    `  </c_xml>`,
-  ].join("\n")
 }
 
 function buildSagaFacturaHeader({
@@ -1001,10 +983,110 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     })
 
     xml = [
-      `<?xml version="1.0" standalone="yes"?>`,
-      `<DocumentElement>`,
-      ...receipts.map((receipt) => buildSagaPurchaseReceiptRow(receipt)),
-      `</DocumentElement>`,
+      `<?xml version="1.0" encoding="utf-8"?>`,
+      `<Facturi>`,
+      ...receipts.map((receipt) =>
+        (() => {
+          const groupedLines =
+            valueType === "GLOBAL_VALORIC"
+              ? aggregateByKey(
+                  receipt.items,
+                  (line) => `${line.vatRateValue || 0}|${line.product?.accountingItemCode || line.product?.sku || line.productId}`,
+                  (line) => ({
+                    code: line.product?.accountingItemCode || line.product?.sku || slugCode(line.product?.name || "ART", "ART"),
+                    name: line.product?.name || "",
+                    vatRateValue: Number(line.vatRateValue || 0),
+                    valueRon: 0,
+                    stockAccount: "",
+                    expenseAccount: "",
+                  }),
+                  (target, line) => {
+                    const stockType = pickStockType(line.product, stockTypes, config)
+                    target.valueRon += Number(line.lineNetRon || 0)
+                    target.stockAccount = stockType?.inventoryAccount || config.inventoryAccount
+                    target.expenseAccount = stockType?.expenseAccount || config.expenseAccount
+                  }
+                )
+              : receipt.items
+
+          return [
+            `  <Factura>`,
+            buildSagaFacturaHeader({
+              supplier: {
+                name: receipt.supplierName || receipt.supplier?.name || "",
+                cif: receipt.supplier?.cif || "",
+                regCom: receipt.supplier?.regCom || "",
+                country: receipt.supplier?.country || "",
+                city: receipt.supplier?.city || "",
+                county: receipt.supplier?.county || "",
+                address: receipt.supplier?.address || "",
+                phone: receipt.supplier?.phone || "",
+                email: receipt.supplier?.email || "",
+                bank: "",
+                iban: "",
+              },
+              client: {
+                name: company.name,
+                cif: company.cui,
+                regCom: company.regNo,
+                country: company.country,
+                city: company.city,
+                county: company.county,
+                address: company.address,
+                bank: company.bank,
+                iban: company.iban,
+                phone: company.phone,
+                email: company.email,
+              },
+              number: receipt.spvInvoiceNo || receipt.docNo,
+              date: receipt.docDate,
+              dueDate: receipt.docDate,
+              currency: receipt.currency || "RON",
+              info: valueType === "GLOBAL_VALORIC" ? "Export global valoric" : "Export cantitativ valoric",
+              code: receipt.supplierCode || receipt.supplier?.code || "",
+            }),
+            `      <Detalii>`,
+            `        <Continut>`,
+            ...groupedLines.map((line) => {
+              if (valueType === "GLOBAL_VALORIC") {
+                return buildSagaFacturaLine({
+                  index: groupedLines.indexOf(line) + 1,
+                  management: receipt.location?.code || receipt.location?.name || "",
+                  description: line.name,
+                  supplierCode: line.code,
+                  guid: line.code,
+                  value: decimal(line.valueRon),
+                  vatRate: decimal(line.vatRateValue),
+                  account: line.stockAccount,
+                })
+              }
+
+              const stockType = pickStockType(line.product, stockTypes, config)
+              return buildSagaFacturaLine({
+                index: groupedLines.indexOf(line) + 1,
+                management: receipt.location?.code || receipt.location?.name || "",
+                description: line.product?.name || "",
+                supplierCode: line.product?.accountingItemCode || line.product?.sku || slugCode(line.product?.name || "ART", "ART"),
+                guid: line.product?.id || "",
+                barcode: "",
+                uom: line.product?.uom?.code || "BUC",
+                qty: decimal(line.stockQty || line.qty, 3),
+                price: decimal(line.unitCostNetRon),
+                value: decimal(line.lineNetRon),
+                vatRate: decimal(line.vatRateValue),
+                vatValue: decimal(line.lineVatRon),
+                account: stockType?.inventoryAccount || config.inventoryAccount,
+                priceSale: "",
+              })
+            }),
+            `        </Continut>`,
+            `      </Detalii>`,
+            `      <FacturaID>${xmlEscape(receipt.id)}</FacturaID>`,
+            `  </Factura>`,
+          ].join("\n")
+        })()
+      ),
+      `</Facturi>`,
     ].join("\n")
   } else if (kind === "consumption-docs") {
     const documents = await prisma.consumptionDoc.findMany({
@@ -1162,7 +1244,32 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
   }
 
   res.setHeader("Content-Type", "application/xml; charset=utf-8")
-  res.setHeader("Content-Disposition", `attachment; filename="${downloadName(kind, dateFrom, dateTo)}"`)
+  const firstDoc =
+    kind === "purchase-receipts"
+      ? await prisma.purchaseReceipt.findFirst({
+          where: {
+            tenantId,
+            OR: [{ companyId }, { companyId: null }],
+            status: "POSTED",
+            docDate: { gte: from, lte: to },
+            ...(locationId ? { locationId } : {}),
+          },
+          orderBy: { docDate: "asc" },
+        })
+      : kind === "sales-invoices"
+        ? await prisma.salesInvoice.findFirst({
+            where: {
+              tenantId,
+              OR: [{ companyId }, { companyId: null }],
+              status: "ISSUED",
+              docDate: { gte: from, lte: to },
+              ...(locationId ? { locationId } : {}),
+            },
+            orderBy: { docDate: "asc" },
+          })
+        : null
+
+  res.setHeader("Content-Disposition", `attachment; filename="${downloadName(kind, dateFrom, dateTo, { company, firstDoc })}"`)
   return res.status(200).send(xml)
 })
 
