@@ -678,7 +678,7 @@ model Product {
   marketplaceMappings MarketplaceProductMapping[]
   incomingEInvoiceItems IncomingEInvoiceItem[]
 
-    @@unique([tenantId, sku])
+    @@unique([tenantId, companyId, sku])
     @@index([tenantId])
     @@index([tenantId, companyId])
     @@index([tenantId, name])
