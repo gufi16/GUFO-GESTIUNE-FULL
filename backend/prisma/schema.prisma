@@ -935,7 +935,7 @@ model ConsumptionDoc {
 
   items ConsumptionDocItem[]
 
-    @@unique([tenantId, docNo])
+    @@unique([tenantId, companyId, docNo])
     @@index([tenantId])
     @@index([tenantId, companyId])
     @@index([companyId])
@@ -980,7 +980,7 @@ model ProductionDoc {
 
   items ProductionDocItem[]
 
-    @@unique([tenantId, docNo])
+    @@unique([tenantId, companyId, docNo])
     @@index([tenantId])
     @@index([tenantId, companyId])
     @@index([companyId])
@@ -1040,7 +1040,7 @@ model PurchaseReceipt {
   sourceIncomingEInvoice IncomingEInvoice? @relation(fields: [sourceIncomingEInvoiceId], references: [id])
   items    PurchaseReceiptItem[]
 
-    @@unique([tenantId, docNo])
+    @@unique([tenantId, companyId, docNo])
     @@index([tenantId])
     @@index([tenantId, companyId])
     @@index([companyId])
@@ -1187,7 +1187,7 @@ model TransferDoc {
   toLocation   Location          @relation("TransferToLocation", fields: [toLocationId], references: [id])
   items        TransferDocItem[]
 
-    @@unique([tenantId, docNo])
+    @@unique([tenantId, companyId, docNo])
     @@index([tenantId])
     @@index([tenantId, companyId])
     @@index([companyId])
@@ -1239,7 +1239,7 @@ model InventoryDoc {
 
   items InventoryDocItem[]
 
-    @@unique([tenantId, docNo])
+    @@unique([tenantId, companyId, docNo])
     @@index([tenantId])
     @@index([tenantId, companyId])
     @@index([companyId])
@@ -1296,7 +1296,7 @@ model MinutesDoc {
     location Location         @relation(fields: [locationId], references: [id])
   items    MinutesDocItem[]
 
-    @@unique([tenantId, docNo])
+    @@unique([tenantId, companyId, docNo])
     @@index([tenantId])
     @@index([tenantId, companyId])
     @@index([companyId])
@@ -1377,7 +1377,7 @@ model SalesInvoice {
   items        SalesInvoiceItem[]
   efacturaLogs EFacturaLog[]
 
-    @@unique([tenantId, docNo])
+    @@unique([tenantId, companyId, docNo])
     @@index([tenantId])
     @@index([tenantId, companyId])
     @@index([companyId])

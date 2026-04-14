@@ -466,8 +466,7 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
       supplier = await prisma.supplier.findFirst({
         where: {
           id: supplierId,
-          tenantId,
-          companyId
+          ...buildCompanyScopedTenantWhere(tenantId, companyId),
         }
       })
 

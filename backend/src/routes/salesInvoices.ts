@@ -9,7 +9,7 @@ import { generateInvoiceEFacturaXml, validateInvoiceForEFactura } from "../lib/e
 import { requireTenantModule } from "../lib/tenantModules"
 import { readAnafHeader } from "../lib/anafHttp"
 import { resolveTenantCompany } from "../lib/companyResolver"
-import { requireRequestCompanyId } from "../lib/companyScope"
+import { buildCompanyScopedTenantWhere, requireRequestCompanyId } from "../lib/companyScope"
 import {
   anafCheckUploadStatus,
   anafDownloadById,
@@ -325,8 +325,7 @@ router.post("/api/v1/sales-invoices/full", async (req: AuthedRequest, res) => {
       customer = await prisma.customer.findFirst({
         where: {
           id: customerId,
-          tenantId,
-          companyId,
+          ...buildCompanyScopedTenantWhere(tenantId, companyId),
         },
       })
 
