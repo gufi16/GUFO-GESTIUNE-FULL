@@ -1461,27 +1461,17 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     sheetName = "Bonuri consum"
     spreadsheetRows = documents.flatMap((document) =>
       document.items.map((line) => {
-        const stockType = pickStockType(line.ingredient, stockTypes, config)
         const unitCost = latestCostMap.get(line.ingredientId) ?? Number(line.ingredient?.costPrice || 0)
         return {
-          Cod: line.ingredient.accountingItemCode || line.ingredient.sku || slugCode(line.ingredient.name, "ART"),
-          Denumire: line.ingredient.name,
-          UM: line.ingredient.uom?.code || "BUC",
-          Cantitate: Number(line.qty || 0),
-          "Pret unitar": unitCost,
-          Valoare: unitCost * Number(line.qty || 0),
-          Gestiune: managementValue(config, document.location),
-          Data: formatDate(document.docDate),
-          "Nr. doc": document.docNo,
-          Explicatie: document.note || "Bon de consum",
-          TVA: Number(line.ingredient.vatRate?.rate ?? 0),
-          "Cont cheltuiala": stockType?.expenseAccount || config.expenseAccount,
-          "Cont stoc": stockType?.inventoryAccount || config.inventoryAccount,
-          Document: document.docNo,
-          Articol: line.ingredient.name,
-          Pret: unitCost,
-          ContCheltuiala: stockType?.expenseAccount || config.expenseAccount,
-          ContStoc: stockType?.inventoryAccount || config.inventoryAccount,
+          cod: line.ingredient.accountingItemCode || line.ingredient.sku || slugCode(line.ingredient.name, "ART"),
+          denumire: line.ingredient.name,
+          um: line.ingredient.uom?.code || "BUC",
+          cantitate: Number(line.qty || 0),
+          pret: unitCost,
+          valoare: unitCost * Number(line.qty || 0),
+          explicatie: line.note || document.note || "",
+          categorie: "",
+          capitol: "",
         }
       })
     )
