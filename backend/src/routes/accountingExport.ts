@@ -833,6 +833,8 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         ContStoc: stockType?.inventoryAccount || config.inventoryAccount,
         ContCheltuiala: stockType?.expenseAccount || config.expenseAccount,
         ContVenit: stockType?.salesAccount || config.salesAccount,
+        "Pret unitar": Number(product.price || 0),
+        "Pret achizitie": Number(product.costPrice || 0),
         PretVanzare: Number(product.price || 0),
       }
     })
