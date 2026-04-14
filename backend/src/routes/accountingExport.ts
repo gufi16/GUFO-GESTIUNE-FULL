@@ -569,6 +569,56 @@ function aggregateByKey<T>(items: T[], buildKey: (item: T) => string, seed: (ite
   return Array.from(map.values())
 }
 
+async function buildLatestPurchaseCostMap(
+  tenantId: string,
+  companyId: string,
+  productIds: string[],
+  options?: {
+    locationId?: string
+    dateTo?: Date
+  }
+) {
+  const uniqueIds = Array.from(new Set(productIds.filter(Boolean)))
+  if (!uniqueIds.length) return new Map<string, number>()
+
+  const receiptItems = await prisma.purchaseReceiptItem.findMany({
+    where: {
+      productId: { in: uniqueIds },
+      receipt: {
+        tenantId,
+        OR: [{ companyId }, { companyId: null }],
+        status: "POSTED",
+        ...(options?.locationId ? { locationId: options.locationId } : {}),
+        ...(options?.dateTo ? { docDate: { lte: options.dateTo } } : {}),
+      },
+    },
+    include: {
+      receipt: {
+        select: {
+          docDate: true,
+          createdAt: true,
+        },
+      },
+    },
+    orderBy: [
+      { receipt: { docDate: "desc" } },
+      { receipt: { createdAt: "desc" } },
+      { createdAt: "desc" },
+    ],
+  })
+
+  const costMap = new Map<string, number>()
+  for (const item of receiptItems) {
+    if (costMap.has(item.productId)) continue
+    const unitCost = Number(item.unitCostNetRon || 0)
+    if (Number.isFinite(unitCost) && unitCost > 0) {
+      costMap.set(item.productId, unitCost)
+    }
+  }
+
+  return costMap
+}
+
 router.get("/api/v1/reports/accounting/saga/config", requireAuth, async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
   const company = await requireRequestCompany(req)
@@ -1398,11 +1448,21 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       orderBy: { docDate: "asc" },
     })
 
+    const latestCostMap = await buildLatestPurchaseCostMap(
+      tenantId,
+      companyId,
+      documents.flatMap((document) => document.items.map((line) => line.ingredientId)),
+      {
+        locationId: locationId || undefined,
+        dateTo: to,
+      }
+    )
+
     sheetName = "Bonuri consum"
     spreadsheetRows = documents.flatMap((document) =>
       document.items.map((line) => {
         const stockType = pickStockType(line.ingredient, stockTypes, config)
-        const unitCost = Number(line.ingredient?.costPrice || 0)
+        const unitCost = latestCostMap.get(line.ingredientId) ?? Number(line.ingredient?.costPrice || 0)
         return {
           Document: document.docNo,
           Data: formatDate(document.docDate),
@@ -1439,7 +1499,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
           `        <Continut>`,
           ...document.items.map((line, index) => {
             const stockType = pickStockType(line.ingredient, stockTypes, config)
-            const unitCost = Number(line.ingredient?.costPrice || 0)
+            const unitCost = latestCostMap.get(line.ingredientId) ?? Number(line.ingredient?.costPrice || 0)
             return buildSagaOperationalLine({
               index: index + 1,
               management: managementValue(config, document.location),
@@ -1492,11 +1552,21 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       orderBy: { docDate: "asc" },
     })
 
+    const latestCostMap = await buildLatestPurchaseCostMap(
+      tenantId,
+      companyId,
+      documents.flatMap((document) => document.items.map((line) => line.productId)),
+      {
+        locationId: locationId || undefined,
+        dateTo: to,
+      }
+    )
+
     sheetName = "Productie"
     spreadsheetRows = documents.flatMap((document) =>
       document.items.map((line) => {
         const stockType = pickStockType(line.product, stockTypes, config)
-        const unitCost = Number(line.product.costPrice || 0)
+        const unitCost = latestCostMap.get(line.productId) ?? Number(line.product.costPrice || 0)
         return {
           Document: document.docNo,
           Data: formatDate(document.docDate),
@@ -1534,7 +1604,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
           `        <Continut>`,
           ...document.items.map((line, index) => {
             const stockType = pickStockType(line.product, stockTypes, config)
-            const unitCost = Number(line.product.costPrice || 0)
+            const unitCost = latestCostMap.get(line.productId) ?? Number(line.product.costPrice || 0)
             return buildSagaOperationalLine({
               index: index + 1,
               management: managementValue(config, document.location),
