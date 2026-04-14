@@ -344,6 +344,68 @@ function buildSagaFacturaLine(line: {
   ].join("\n")
 }
 
+function buildSagaOperationalHeader({
+  docNo,
+  docDate,
+  location,
+  explanation,
+  mode,
+}: {
+  docNo: unknown
+  docDate: unknown
+  location?: { code?: string | null; name?: string | null } | null
+  explanation?: unknown
+  mode?: unknown
+}) {
+  return [
+    `      <Antet>`,
+    xmlTag("Numar", docNo),
+    xmlTag("Data", formatDate(docDate)),
+    xmlTag("Gestiune", location?.code || location?.name || ""),
+    xmlTag("Explicatie", explanation),
+    xmlTag("ModExport", mode || "cantitativ-valoric"),
+    `      </Antet>`,
+  ].join("\n")
+}
+
+function buildSagaOperationalLine(line: {
+  index: number
+  management?: unknown
+  description?: unknown
+  code?: unknown
+  guid?: unknown
+  barcode?: unknown
+  info?: unknown
+  uom?: unknown
+  qty?: unknown
+  price?: unknown
+  value?: unknown
+  expenseAccount?: unknown
+  inventoryAccount?: unknown
+  salesAccount?: unknown
+  vatRate?: unknown
+}) {
+  return [
+    `          <Linie>`,
+    xmlLineTag("LinieNrCrt", line.index),
+    xmlLineTag("Gestiune", line.management),
+    xmlLineTag("Descriere", line.description),
+    xmlLineTag("CodArticol", line.code),
+    xmlLineTag("GUID_cod_articol", line.guid),
+    xmlLineTag("CodBare", line.barcode),
+    xmlLineTag("InformatiiSuplimentare", line.info),
+    xmlLineTag("UM", line.uom),
+    xmlLineTag("Cantitate", line.qty),
+    xmlLineTag("Pret", line.price),
+    xmlLineTag("Valoare", line.value),
+    xmlLineTag("ProcTVA", line.vatRate),
+    xmlLineTag("ContCheltuiala", line.expenseAccount),
+    xmlLineTag("ContStoc", line.inventoryAccount),
+    xmlLineTag("ContVenit", line.salesAccount),
+    `          </Linie>`,
+  ].join("\n")
+}
+
 function aggregateByKey<T>(items: T[], buildKey: (item: T) => string, seed: (item: T) => any, merge: (target: any, item: T) => void) {
   const map = new Map<string, any>()
   for (const item of items) {
@@ -995,6 +1057,8 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
             finishedProduct: {
               include: {
                 accountingStockType: true,
+                uom: true,
+                vatRate: true,
               },
             },
           },
@@ -1011,26 +1075,39 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       ...documents.map((document) =>
         [
           `    <BonConsum>`,
-          `      <Numar>${xmlEscape(document.docNo)}</Numar>`,
-          `      <Data>${xmlEscape(formatDate(document.docDate))}</Data>`,
-          `      <Gestiune>${xmlEscape(managementValue(config, document.location))}</Gestiune>`,
-          `      <Explicatie>${xmlEscape(document.note || "Bon de consum")}</Explicatie>`,
-          `      <Linii>`,
-          ...document.items.map((line) => {
-            const stockType = pickStockType(line.ingredient, stockTypes, config)
-            return [
-              `        <Linie>`,
-              `          <Cod>${xmlEscape(line.ingredient.accountingItemCode || line.ingredient.sku || slugCode(line.ingredient.name, "ART"))}</Cod>`,
-              `          <Denumire>${xmlEscape(line.ingredient.name)}</Denumire>`,
-              `          <UM>${xmlEscape(line.ingredient.uom?.code || "BUC")}</UM>`,
-              `          <Cantitate>${decimal(line.qty, 3)}</Cantitate>`,
-              `          <ContCheltuiala>${xmlEscape(stockType?.expenseAccount || config.expenseAccount)}</ContCheltuiala>`,
-              `          <ContStoc>${xmlEscape(stockType?.inventoryAccount || config.inventoryAccount)}</ContStoc>`,
-              `          <ProdusFinal>${xmlEscape(line.finishedProduct?.name || "")}</ProdusFinal>`,
-              `        </Linie>`,
-            ].join("\n")
+          buildSagaOperationalHeader({
+            docNo: document.docNo,
+            docDate: document.docDate,
+            location: document.location,
+            explanation: document.note || "Bon de consum",
+            mode: "cantitativ-valoric",
           }),
-          `      </Linii>`,
+          `      <Detalii>`,
+          `        <Continut>`,
+          ...document.items.map((line, index) => {
+            const stockType = pickStockType(line.ingredient, stockTypes, config)
+            const unitCost = Number(line.ingredient?.costPrice || 0)
+            return buildSagaOperationalLine({
+              index: index + 1,
+              management: managementValue(config, document.location),
+              description: line.ingredient.name,
+              code: line.ingredient.accountingItemCode || line.ingredient.sku || slugCode(line.ingredient.name, "ART"),
+              guid: line.ingredient.id,
+              barcode: "",
+              info: line.finishedProduct?.name ? `Produs final: ${line.finishedProduct.name}` : line.note || "",
+              uom: line.ingredient.uom?.code || "BUC",
+              qty: decimal(line.qty, 3),
+              price: decimal(unitCost),
+              value: decimal(unitCost * Number(line.qty || 0)),
+              vatRate: decimal(line.ingredient.vatRate?.rate ?? 0),
+              expenseAccount: stockType?.expenseAccount || config.expenseAccount,
+              inventoryAccount: stockType?.inventoryAccount || config.inventoryAccount,
+              salesAccount: stockType?.salesAccount || config.salesAccount,
+            })
+          }),
+          `        </Continut>`,
+          `      </Detalii>`,
+          `      <DocumentID>${xmlEscape(document.id)}</DocumentID>`,
           `    </BonConsum>`,
         ].join("\n")
       ),
@@ -1070,25 +1147,39 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       ...documents.map((document) =>
         [
           `    <DocumentProductie>`,
-          `      <Numar>${xmlEscape(document.docNo)}</Numar>`,
-          `      <Data>${xmlEscape(formatDate(document.docDate))}</Data>`,
-          `      <Gestiune>${xmlEscape(managementValue(config, document.location))}</Gestiune>`,
-          `      <Explicatie>${xmlEscape(document.note || "Nota de productie")}</Explicatie>`,
-          `      <Linii>`,
-          ...document.items.map((line) => {
-            const stockType = pickStockType(line.product, stockTypes, config)
-            return [
-              `        <Linie>`,
-              `          <Cod>${xmlEscape(line.product.accountingItemCode || line.product.sku || slugCode(line.product.name, "ART"))}</Cod>`,
-              `          <Denumire>${xmlEscape(line.product.name)}</Denumire>`,
-              `          <UM>${xmlEscape(line.product.uom?.code || "BUC")}</UM>`,
-              `          <Cantitate>${decimal(line.qty, 3)}</Cantitate>`,
-              `          <ContStoc>${xmlEscape(stockType?.inventoryAccount || config.inventoryAccount)}</ContStoc>`,
-              `          <ContVenit>${xmlEscape(stockType?.salesAccount || config.salesAccount)}</ContVenit>`,
-              `        </Linie>`,
-            ].join("\n")
+          buildSagaOperationalHeader({
+            docNo: document.docNo,
+            docDate: document.docDate,
+            location: document.location,
+            explanation: document.note || "Nota de productie",
+            mode: "cantitativ-valoric",
           }),
-          `      </Linii>`,
+          `      <Detalii>`,
+          `        <Continut>`,
+          ...document.items.map((line, index) => {
+            const stockType = pickStockType(line.product, stockTypes, config)
+            const unitCost = Number(line.product.costPrice || 0)
+            return buildSagaOperationalLine({
+              index: index + 1,
+              management: managementValue(config, document.location),
+              description: line.product.name,
+              code: line.product.accountingItemCode || line.product.sku || slugCode(line.product.name, "ART"),
+              guid: line.product.id,
+              barcode: "",
+              info: document.note || "",
+              uom: line.product.uom?.code || "BUC",
+              qty: decimal(line.qty, 3),
+              price: decimal(unitCost),
+              value: decimal(unitCost * Number(line.qty || 0)),
+              vatRate: decimal(line.product.vatRate?.rate ?? 0),
+              expenseAccount: stockType?.expenseAccount || config.expenseAccount,
+              inventoryAccount: stockType?.inventoryAccount || config.inventoryAccount,
+              salesAccount: stockType?.salesAccount || config.salesAccount,
+            })
+          }),
+          `        </Continut>`,
+          `      </Detalii>`,
+          `      <DocumentID>${xmlEscape(document.id)}</DocumentID>`,
           `    </DocumentProductie>`,
         ].join("\n")
       ),
