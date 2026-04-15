@@ -889,7 +889,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
           : product.accountingItemCode || product.sku
 
       return {
-        COD: String(articleCode || ""),
+        COD: String(articleCode || "").trim(),
         DENUMIRE: product.name,
         UM: product.uom?.code || "BUC",
         P_TVA: Number(product.vatRate?.rate ?? 0),
@@ -899,9 +899,6 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
             : stockType?.code === "MARFA"
               ? "A"
               : "",
-        TIP: stockType?.name || "",
-        CONT_STOC: stockType?.inventoryAccount || config.inventoryAccount,
-        CONT_CHELTUIALA: stockType?.expenseAccount || config.expenseAccount,
         PRET: Number(product.price || 0),
       }
     })
