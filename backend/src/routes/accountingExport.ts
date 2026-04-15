@@ -289,9 +289,184 @@ function xmlLineTag(name: string, value: unknown) {
 
 function normalizeFileFormat(value: unknown) {
   const normalized = String(value || "").trim().toLowerCase()
+  if (normalized === "dbf") return "dbf"
   if (normalized === "xlsx") return "xlsx"
   if (normalized === "csv") return "csv"
   return "xml"
+}
+
+function sanitizeDbfFieldName(name: string, fallback: string) {
+  const normalized = String(name || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9_]/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toUpperCase()
+  return (normalized || fallback).slice(0, 10)
+}
+
+function parseDbfDateValue(value: unknown) {
+  if (!value) return null
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value
+
+  const text = String(value).trim()
+  if (!text) return null
+
+  const dotMatch = text.match(/^(\d{2})\.(\d{2})\.(\d{4})$/)
+  if (dotMatch) {
+    const [, day, month, year] = dotMatch
+    const date = new Date(`${year}-${month}-${day}T00:00:00`)
+    return Number.isNaN(date.getTime()) ? null : date
+  }
+
+  const isoMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch
+    const date = new Date(`${year}-${month}-${day}T00:00:00`)
+    return Number.isNaN(date.getTime()) ? null : date
+  }
+
+  return null
+}
+
+function detectDbfFieldType(values: unknown[]) {
+  const nonEmpty = values.filter((value) => value !== null && value !== undefined && String(value).trim() !== "")
+  if (!nonEmpty.length) return { type: "C" as const, length: 40, decimals: 0 }
+
+  if (nonEmpty.every((value) => typeof value === "boolean")) {
+    return { type: "L" as const, length: 1, decimals: 0 }
+  }
+
+  if (nonEmpty.every((value) => parseDbfDateValue(value))) {
+    return { type: "D" as const, length: 8, decimals: 0 }
+  }
+
+  if (
+    nonEmpty.every((value) => {
+      const number = Number(value)
+      return Number.isFinite(number)
+    })
+  ) {
+    const decimals = nonEmpty.reduce((max, value) => {
+      const text = String(value)
+      const fraction = text.includes(".") ? text.split(".")[1] : ""
+      return Math.max(max, fraction.length)
+    }, 0)
+
+    const length = Math.min(
+      18,
+      Math.max(
+        6,
+        ...nonEmpty.map((value) => {
+          const number = Number(value)
+          const text = decimals > 0 ? number.toFixed(decimals) : `${Math.trunc(number)}`
+          return text.replace("-", "").length + (number < 0 ? 1 : 0)
+        })
+      )
+    )
+
+    return { type: "N" as const, length, decimals: Math.min(decimals, 4) }
+  }
+
+  const maxLength = Math.min(
+    254,
+    Math.max(
+      1,
+      ...nonEmpty.map((value) => Buffer.byteLength(String(value), "ascii"))
+    )
+  )
+  return { type: "C" as const, length: Math.max(12, maxLength), decimals: 0 }
+}
+
+function encodeDbfValue(value: unknown, field: { type: "C" | "N" | "D" | "L"; length: number; decimals: number }) {
+  if (field.type === "L") {
+    const raw = value === true || String(value).trim().toLowerCase() === "true" ? "T" : "F"
+    return Buffer.from(raw.padEnd(field.length, " "), "ascii")
+  }
+
+  if (field.type === "D") {
+    const date = parseDbfDateValue(value)
+    const text = date
+      ? `${date.getFullYear()}${`${date.getMonth() + 1}`.padStart(2, "0")}${`${date.getDate()}`.padStart(2, "0")}`
+      : "".padEnd(field.length, " ")
+    return Buffer.from(text.padEnd(field.length, " "), "ascii")
+  }
+
+  if (field.type === "N") {
+    const number = Number(value)
+    const text = Number.isFinite(number)
+      ? (field.decimals > 0 ? number.toFixed(field.decimals) : `${Math.trunc(number)}`).slice(0, field.length)
+      : ""
+    return Buffer.from(text.padStart(field.length, " "), "ascii")
+  }
+
+  const text = String(value ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\x20-\x7E]/g, " ")
+    .slice(0, field.length)
+  return Buffer.from(text.padEnd(field.length, " "), "ascii")
+}
+
+async function buildDbfBuffer(rows: Record<string, unknown>[]) {
+  const tableRows = Array.isArray((rows as any)?.__sheets)
+    ? Array.isArray((rows as any).__sheets?.[0]?.rows)
+      ? (rows as any).__sheets[0].rows
+      : []
+    : rows
+
+  const headers = Array.from(
+    tableRows.reduce((acc: Set<string>, row: Record<string, unknown>) => {
+      Object.keys(row || {}).forEach((key) => acc.add(key))
+      return acc
+    }, new Set<string>())
+  )
+
+  const fields = headers.map((header, index) => {
+    const spec = detectDbfFieldType(tableRows.map((row) => row?.[header]))
+    return {
+      name: sanitizeDbfFieldName(header, `FIELD${index + 1}`),
+      source: header,
+      ...spec,
+    }
+  })
+
+  const headerLength = 32 + fields.length * 32 + 1
+  const recordLength = 1 + fields.reduce((sum, field) => sum + field.length, 0)
+  const totalLength = headerLength + tableRows.length * recordLength + 1
+  const buffer = Buffer.alloc(totalLength, 0)
+  const now = new Date()
+
+  buffer[0] = 0x03
+  buffer[1] = now.getFullYear() - 1900
+  buffer[2] = now.getMonth() + 1
+  buffer[3] = now.getDate()
+  buffer.writeUInt32LE(tableRows.length, 4)
+  buffer.writeUInt16LE(headerLength, 8)
+  buffer.writeUInt16LE(recordLength, 10)
+
+  fields.forEach((field, index) => {
+    const offset = 32 + index * 32
+    buffer.write(field.name.padEnd(11, "\0"), offset, "ascii")
+    buffer.write(field.type, offset + 11, "ascii")
+    buffer.writeUInt8(field.length, offset + 16)
+    buffer.writeUInt8(field.decimals, offset + 17)
+  })
+
+  buffer[32 + fields.length * 32] = 0x0d
+
+  tableRows.forEach((row, rowIndex) => {
+    let offset = headerLength + rowIndex * recordLength
+    buffer[offset] = 0x20
+    offset += 1
+    fields.forEach((field) => {
+      encodeDbfValue(row?.[field.source], field).copy(buffer, offset)
+      offset += field.length
+    })
+  })
+
+  buffer[totalLength - 1] = 0x1a
+  return buffer
 }
 
 function readablePaymentType(value: unknown) {
@@ -1699,13 +1874,18 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
 
   const baseFileName = downloadName(kind, dateFrom, dateTo, { company, firstDoc })
 
-  if (fileFormat === "xlsx" || fileFormat === "csv") {
-    const buffer = await buildSpreadsheetBuffer(sheetName, spreadsheetRows, fileFormat)
+  if (fileFormat === "xlsx" || fileFormat === "csv" || fileFormat === "dbf") {
+    const buffer =
+      fileFormat === "dbf"
+        ? await buildDbfBuffer(spreadsheetRows)
+        : await buildSpreadsheetBuffer(sheetName, spreadsheetRows, fileFormat)
     res.setHeader(
       "Content-Type",
       fileFormat === "xlsx"
         ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        : "text/csv; charset=utf-8"
+        : fileFormat === "csv"
+          ? "text/csv; charset=utf-8"
+          : "application/x-dbf"
     )
     res.setHeader("Content-Disposition", `attachment; filename="${replaceFileExtension(baseFileName, fileFormat)}"`)
     return res.status(200).send(buffer)

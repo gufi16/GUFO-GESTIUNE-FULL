@@ -356,7 +356,7 @@ export default function ExportContabilitatePage() {
       <PageHeader
         badge="rapoarte"
         title="Export contabilitate"
-        subtitle="Configureaza conturile si genereaza fisiere XML, XLSX sau CSV pentru importul contabil al firmei active."
+        subtitle="Configureaza conturile si genereaza fisiere XML, DBF, XLSX sau CSV pentru importul contabil al firmei active."
       />
 
       {message ? <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</div> : null}
@@ -416,10 +416,11 @@ export default function ExportContabilitatePage() {
                 className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
               >
                 <option value="xml">XML</option>
+                <option value="dbf">DBF</option>
                 <option value="xlsx">XLSX</option>
                 <option value="csv">CSV</option>
               </select>
-              <div className="mt-1 text-xs text-slate-500">Pentru unele ferestre SAGA, importul merge tabelar din XLSX sau CSV.</div>
+              <div className="mt-1 text-xs text-slate-500">Pentru SAGA clasic, formatele principale raman XML si DBF. XLSX sau CSV raman doar pentru ferestrele care importa tabelar.</div>
             </label>
 
             <label className="block">
@@ -676,7 +677,7 @@ export default function ExportContabilitatePage() {
               >
                 <div>
                   <div className="font-semibold text-slate-900">{item.label}</div>
-                  <div className="mt-1 text-xs text-slate-500">Disponibil pentru export in XML, XLSX sau CSV</div>
+                  <div className="mt-1 text-xs text-slate-500">Disponibil pentru export in XML, DBF, XLSX sau CSV</div>
                 </div>
                 <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                   {selectedKind === item.code ? "selectat" : "disponibil"}
