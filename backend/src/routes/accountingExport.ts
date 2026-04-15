@@ -340,6 +340,13 @@ async function buildSpreadsheetBuffer(sheetName: string, rows: Record<string, un
 
     worksheet.getRow(1).font = { bold: true }
     worksheet.views = [{ state: "frozen", ySplit: 1 }]
+
+    headers.forEach((header, index) => {
+      const normalizedHeader = String(header || "").trim().toUpperCase()
+      if (["COD", "COD_BARE", "COD_ARTICOL", "PLU"].includes(normalizedHeader)) {
+        worksheet.getColumn(index + 1).numFmt = "@"
+      }
+    })
   }
 
   if (fileFormat === "csv") {
@@ -882,18 +889,20 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
           : product.accountingItemCode || product.sku
 
       return {
-        Cod: articleCode,
-        Denumire: product.name,
+        COD: String(articleCode || ""),
+        DENUMIRE: product.name,
         UM: product.uom?.code || "BUC",
-        TVA: Number(product.vatRate?.rate ?? 0),
-        CodTVA: product.vatRate?.fiscalCode || "",
-        TipStoc: stockType?.name || "",
-        ContStoc: stockType?.inventoryAccount || config.inventoryAccount,
-        ContCheltuiala: stockType?.expenseAccount || config.expenseAccount,
-        ContVenit: stockType?.salesAccount || config.salesAccount,
-        "Pret unitar": Number(product.price || 0),
-        "Pret achizitie": Number(product.costPrice || 0),
-        PretVanzare: Number(product.price || 0),
+        P_TVA: Number(product.vatRate?.rate ?? 0),
+        GRUPA:
+          stockType?.code === "MATERII"
+            ? "C"
+            : stockType?.code === "MARFA"
+              ? "A"
+              : "",
+        TIP: stockType?.name || "",
+        CONT_STOC: stockType?.inventoryAccount || config.inventoryAccount,
+        CONT_CHELTUIALA: stockType?.expenseAccount || config.expenseAccount,
+        PRET: Number(product.price || 0),
       }
     })
 
@@ -1489,15 +1498,16 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       document.items.map((line) => {
         const unitCost = latestCostMap.get(line.ingredientId) ?? Number(line.ingredient?.costPrice || 0)
         return {
-          cod: line.ingredient.accountingItemCode || line.ingredient.sku || slugCode(line.ingredient.name, "ART"),
-          denumire: line.ingredient.name,
-          um: line.ingredient.uom?.code || "BUC",
-          cantitate: Number(line.qty || 0),
-          pret: unitCost,
-          valoare: unitCost * Number(line.qty || 0),
-          explicatie: line.note || document.note || "",
-          categorie: "",
-          capitol: "",
+          NR: document.docNo,
+          DATA: formatDate(document.docDate),
+          GESTIUNE: managementValue(config, document.location),
+          DEN_GEST: document.location?.name || document.location?.code || "",
+          EXPLICATIE: line.note || document.note || "",
+          COD: String(line.ingredient.accountingItemCode || line.ingredient.sku || slugCode(line.ingredient.name, "ART")),
+          COD_BARE: "",
+          DENUMIRE: line.ingredient.name,
+          UM: line.ingredient.uom?.code || "BUC",
+          CANTITATE: Number(line.qty || 0),
         }
       })
     )
