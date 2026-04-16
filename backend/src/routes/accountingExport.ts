@@ -1,7 +1,6 @@
 // @ts-nocheck
 import { Router } from "express"
 import ExcelJS from "exceljs"
-import AdmZip from "adm-zip"
 import { z } from "zod"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
@@ -318,6 +317,25 @@ function buildVfpXml(rows: Record<string, unknown>[]) {
         }),
         `</c_xml>`,
       ].join("\n")
+    ),
+    `</VFPData>`,
+  ].join("\n")
+}
+
+function buildVfpXmlSections(sections: Array<{ name: string; rows: Record<string, unknown>[] }>) {
+  return [
+    `<VFPData>`,
+    ...sections.flatMap((section) =>
+      section.rows.map((row) =>
+        [
+          `<c_xml sectiune="${xmlEscape(section.name)}">`,
+          ...Object.entries(row).map(([key, value]) => {
+            const normalizedValue = value ?? ""
+            return normalizedValue === "" ? `<${key}/>` : `<${key}>${xmlEscape(normalizedValue)}</${key}>`
+          }),
+          `</c_xml>`,
+        ].join("\n")
+      )
     ),
     `</VFPData>`,
   ].join("\n")
@@ -1082,7 +1100,6 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
 
   const { config, stockTypes } = await ensureAccountingConfig(tenantId, companyId)
   let xml = ""
-  let xmlFiles: Array<{ fileName: string; content: string }> | null = null
   let sheetName = "Export contabilitate"
   let spreadsheetRows: Record<string, unknown>[] = []
 
@@ -1382,17 +1399,10 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       })
     )
 
-    xml = buildVfpXml(invoiceHeaderXmlRows)
-    xmlFiles = [
-      {
-        fileName: "IESIRI.xml",
-        content: buildVfpXml(invoiceHeaderXmlRows),
-      },
-      {
-        fileName: "IESIRI_DETALII.xml",
-        content: buildVfpXml(invoiceLineXmlRows),
-      },
-    ]
+    xml = buildVfpXmlSections([
+      { name: "IESIRI", rows: invoiceHeaderXmlRows },
+      { name: "IESIRI_DETALII", rows: invoiceLineXmlRows },
+    ])
   } else if (kind === "purchase-receipts") {
     const receipts = await prisma.purchaseReceipt.findMany({
       where: {
@@ -1878,17 +1888,6 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     )
     res.setHeader("Content-Disposition", `attachment; filename="${replaceFileExtension(baseFileName, fileFormat)}"`)
     return res.status(200).send(buffer)
-  }
-
-  if (xmlFiles?.length) {
-    const zip = new AdmZip()
-    for (const file of xmlFiles) {
-      zip.addFile(file.fileName, Buffer.from(file.content, "utf8"))
-    }
-    const zipBuffer = zip.toBuffer()
-    res.setHeader("Content-Type", "application/zip")
-    res.setHeader("Content-Disposition", `attachment; filename="${replaceFileExtension(baseFileName, "zip" as any)}"`)
-    return res.status(200).send(zipBuffer)
   }
 
   res.setHeader("Content-Type", "application/xml; charset=utf-8")
