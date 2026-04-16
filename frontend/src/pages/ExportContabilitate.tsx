@@ -70,6 +70,44 @@ type ProductsResponse = {
   items?: ProductAccountingItem[]
 }
 
+const exportFormatGuide: Record<string, { primary: string; secondary?: string; note: string }> = {
+  products: {
+    primary: "DBF",
+    secondary: "XML",
+    note: "Nomenclatorul de articole merge cel mai bine pe DBF.",
+  },
+  customers: {
+    primary: "DBF",
+    secondary: "XML",
+    note: "Partea de sus pentru clienti se pregateste cel mai bine pe DBF.",
+  },
+  suppliers: {
+    primary: "DBF",
+    secondary: "XML",
+    note: "Furnizorii se pregatesc simplu pe DBF.",
+  },
+  "sales-invoices": {
+    primary: "DBF",
+    secondary: "XLSX/CSV",
+    note: "Sus folosesti DBF pentru antet, jos ai util fisier de linii tabelar.",
+  },
+  "purchase-receipts": {
+    primary: "DBF",
+    secondary: "XML",
+    note: "Intrarile cer formatul clasic de import, in special DBF sau XML.",
+  },
+  "consumption-docs": {
+    primary: "DBF",
+    secondary: "XLSX/CSV",
+    note: "Bonurile pot cere import pe linii, deci tabelarul ramane util.",
+  },
+  "production-docs": {
+    primary: "DBF",
+    secondary: "XLSX/CSV",
+    note: "Productia e mai usor de controlat cu format de linii.",
+  },
+}
+
 const emptyConfig: AccountingConfig = {
   articleCodeSource: "SKU",
   managementAnalytic: "LOCATION_CODE",
@@ -187,6 +225,11 @@ export default function ExportContabilitatePage() {
   const selectedKindMeta = useMemo(
     () => exportKinds.find((item) => item.code === selectedKind) || null,
     [exportKinds, selectedKind]
+  )
+
+  const selectedFormatGuide = useMemo(
+    () => (selectedKind ? exportFormatGuide[selectedKind] || null : null),
+    [selectedKind]
   )
 
   const exportGroups = useMemo(
@@ -413,22 +456,37 @@ export default function ExportContabilitatePage() {
 
             <label className="block">
               <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Tip document</div>
-              <select
-                value={selectedKind}
-                onChange={(e) => setSelectedKind(e.target.value)}
-                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
-              >
-                <option value="">Nu ai selectat niciun tip de document</option>
-                {exportGroups.map((group) => (
-                  <optgroup key={group.label} label={group.label}>
-                    {group.items.map((item) => (
-                      <option key={item.code} value={item.code}>
-                        {item.label}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2">
+                <div className="grid gap-2">
+                  {exportGroups.map((group) => (
+                    <div key={group.label}>
+                      <div className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{group.label}</div>
+                      <div className="grid gap-2">
+                        {group.items.map((item) => (
+                          <button
+                            key={item.code}
+                            type="button"
+                            onClick={() => setSelectedKind(item.code)}
+                            className={[
+                              "rounded-2xl border px-3 py-3 text-left transition",
+                              selectedKind === item.code
+                                ? "border-[#17324D] bg-white shadow-sm"
+                                : "border-slate-200 bg-white/70 hover:border-slate-300",
+                            ].join(" ")}
+                          >
+                            <div className="text-sm font-semibold text-slate-900">{item.label}</div>
+                            <div className="mt-1 text-xs text-slate-500">
+                              {exportFormatGuide[item.code]?.primary
+                                ? `Recomandat: ${exportFormatGuide[item.code]?.primary}${exportFormatGuide[item.code]?.secondary ? ` • Alternativ: ${exportFormatGuide[item.code]?.secondary}` : ""}`
+                                : item.description || "Export disponibil"}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </label>
 
             <label className="block">
@@ -474,6 +532,21 @@ export default function ExportContabilitatePage() {
               {downloadingKind === selectedKind ? "Se genereaza..." : "Genereaza"}
             </button>
           </div>
+
+          {selectedKindMeta || selectedFormatGuide ? (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Selectie curenta</div>
+              <div className="mt-1 text-sm font-semibold text-slate-900">{selectedKindMeta?.label || "Niciun document selectat"}</div>
+              {selectedFormatGuide ? (
+                <div className="mt-1 text-xs text-slate-500">
+                  Format recomandat: {selectedFormatGuide.primary}
+                  {selectedFormatGuide.secondary ? ` • Alternativ: ${selectedFormatGuide.secondary}` : ""}
+                  {" • "}
+                  {selectedFormatGuide.note}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </section>
 
@@ -586,6 +659,12 @@ export default function ExportContabilitatePage() {
                 <div>
                   <div className="font-semibold text-slate-900">{item.label}</div>
                   {item.description ? <div className="mt-1 text-xs text-slate-500">{item.description}</div> : null}
+                  {exportFormatGuide[item.code] ? (
+                    <div className="mt-1 text-xs text-slate-500">
+                      {exportFormatGuide[item.code].primary}
+                      {exportFormatGuide[item.code].secondary ? ` • ${exportFormatGuide[item.code].secondary}` : ""}
+                    </div>
+                  ) : null}
                 </div>
                 <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                   {selectedKind === item.code ? "selectat" : "disponibil"}
