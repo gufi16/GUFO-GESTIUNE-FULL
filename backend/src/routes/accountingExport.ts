@@ -705,6 +705,7 @@ function buildSagaFacturaHeader({
 
 function buildSagaFacturaLine(line: {
   index: number
+  type?: unknown
   management?: unknown
   description?: unknown
   supplierCode?: unknown
@@ -726,6 +727,7 @@ function buildSagaFacturaLine(line: {
   return [
     `          <Linie>`,
     xmlLineTag("LinieNrCrt", line.index),
+    xmlLineTag("Tip", line.type),
     xmlLineTag("Gestiune", line.management),
     xmlLineTag("Activitate", line.activity),
     xmlLineTag("Descriere", line.description),
@@ -1322,6 +1324,8 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
 
     const invoiceDetailRows = invoices.flatMap((invoice) =>
       invoice.items.map((line) => ({
+        TIP: "Marfuri",
+        GESTIUNE: invoice.location?.code || invoice.location?.name || "",
         COD: String(line.productCode || "").trim(),
         COD_BARE: "",
         DENUMIRE: line.productName || "",
@@ -1339,7 +1343,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
 
     spreadsheetRows =
       fileFormat === "dbf"
-        ? invoiceHeaderRows
+        ? invoiceDetailRows
         : spreadsheetSheets([
             {
               name: "ContinutFactura",
@@ -1405,6 +1409,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
           ...invoice.items.map((line, index) =>
             buildSagaFacturaLine({
               index: index + 1,
+              type: "Marfuri",
               management: invoice.location?.code || invoice.location?.name || "",
               activity: "",
               description: line.productName,
