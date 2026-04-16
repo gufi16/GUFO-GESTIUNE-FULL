@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { Router } from "express"
 import ExcelJS from "exceljs"
+import AdmZip from "adm-zip"
 import { z } from "zod"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
@@ -277,6 +278,13 @@ function downloadName(kind: string, from: string, to: string, options?: { compan
 
 function replaceFileExtension(fileName: string, extension: "xml" | "xlsx" | "csv") {
   return fileName.replace(/\.[^.]+$/i, `.${extension}`)
+}
+
+function zipDownloadName(kind: string, from: string, to: string) {
+  const safeKind = slugCode(kind, "EXPORT")
+  const fromChunk = from ? from.replace(/[^0-9]/g, "") : "ALL"
+  const toChunk = to ? to.replace(/[^0-9]/g, "") : "ALL"
+  return `${safeKind}_${fromChunk}_${toChunk}.zip`
 }
 
 function excelSerialDate(value: Date | string | null | undefined) {
@@ -1149,6 +1157,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
   const locationId = String(req.query.locationId || "").trim()
   const partnerSearch = String(req.query.partnerSearch || "").trim()
   const valueType = normalizeValueType(req.query.valueType)
+  const splitFiles = String(req.query.splitFiles || "").trim().toLowerCase() === "true"
   const from = dateFrom ? new Date(`${dateFrom}T00:00:00`) : new Date("2000-01-01T00:00:00")
   const to = dateTo ? new Date(`${dateTo}T23:59:59.999`) : new Date()
 
@@ -1157,6 +1166,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
   let sheetName = "Export contabilitate"
   let spreadsheetRows: Record<string, unknown>[] = []
   let exportedFileDoc: any = null
+  let xmlFiles: Array<{ fileName: string; content: string }> = []
 
   if (kind === "products") {
     const products = await prisma.product.findMany({
@@ -1263,6 +1273,35 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       GUID_COD: customer.id,
     }))
 
+    const buildCustomerXml = (customer: any) =>
+      [
+        `<?xml version="1.0" encoding="utf-8"?>`,
+        `<Clienti>`,
+        `  <Linie>`,
+        `    <Cod>${xmlEscape(customer.code || slugCode(customer.name, "CLI"))}</Cod>`,
+        `    <Denumire>${xmlEscape(customer.name || "")}</Denumire>`,
+        `    <Cod_fiscal>${xmlEscape(customer.cif || "")}</Cod_fiscal>`,
+        `    <Reg_com>${xmlEscape(customer.regNo || "")}</Reg_com>`,
+        `    <Tara>${xmlEscape(sagaCountryCode(customer.country))}</Tara>`,
+        `    <Judet>${xmlEscape(customer.county || "")}</Judet>`,
+        `    <Localitate>${xmlEscape(customer.city || "")}</Localitate>`,
+        `    <Adresa>${xmlEscape(customer.address || "")}</Adresa>`,
+        `    <Cont_banca/>`,
+        `    <Banca/>`,
+        `    <Tel>${xmlEscape(customer.phone || "")}</Tel>`,
+        `    <Email>${xmlEscape(customer.email || "")}</Email>`,
+        `    <Discount>0</Discount>`,
+        `    <Informatii/>`,
+        `    <Guid_cod>${xmlEscape(customer.id)}</Guid_cod>`,
+        `  </Linie>`,
+        `</Clienti>`,
+      ].join("\n")
+
+    xmlFiles = customers.map((customer) => ({
+      fileName: `CLI_${slugCode(customer.code || customer.name, "CLIENT")}_${compactDateToken(dateTo || new Date())}.xml`,
+      content: buildCustomerXml(customer),
+    }))
+
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
       `<Clienti>`,
@@ -1322,6 +1361,32 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       EMAIL: supplier.email || "",
       INFORMATII: "",
       GUID_COD: supplier.id,
+    }))
+
+    const buildSupplierXml = (supplier: any) =>
+      [
+        `<?xml version="1.0" encoding="utf-8"?>`,
+        `<Furnizori>`,
+        `  <Linie>`,
+        `    <Cod>${xmlEscape(supplier.code || slugCode(supplier.name, "FUR"))}</Cod>`,
+        `    <Denumire>${xmlEscape(supplier.name || "")}</Denumire>`,
+        `    <Cod_fiscal>${xmlEscape(supplier.cif || "")}</Cod_fiscal>`,
+        `    <Tara>${xmlEscape(sagaCountryCode(supplier.country))}</Tara>`,
+        `    <Localitate>${xmlEscape(supplier.city || "")}</Localitate>`,
+        `    <Adresa>${xmlEscape(supplier.address || "")}</Adresa>`,
+        `    <Cont_banca/>`,
+        `    <Banca/>`,
+        `    <Tel>${xmlEscape(supplier.phone || "")}</Tel>`,
+        `    <Email>${xmlEscape(supplier.email || "")}</Email>`,
+        `    <Informatii/>`,
+        `    <Guid_cod>${xmlEscape(supplier.id)}</Guid_cod>`,
+        `  </Linie>`,
+        `</Furnizori>`,
+      ].join("\n")
+
+    xmlFiles = suppliers.map((supplier) => ({
+      fileName: `FUR_${slugCode(supplier.code || supplier.name, "FURNIZOR")}_${compactDateToken(dateTo || new Date())}.xml`,
+      content: buildSupplierXml(supplier),
     }))
 
     xml = [
@@ -1438,84 +1503,90 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
             },
           ])
 
+    const buildInvoiceXml = (invoice: any) =>
+      [
+        `  <Factura>`,
+        buildSagaFacturaHeader({
+          supplier: {
+            name: company.name,
+            cif: company.cui,
+            regCom: company.regNo,
+            capital: "",
+            country: sagaCountryCode(company.country),
+            city: company.city,
+            county: company.county,
+            address: company.address,
+            phone: company.phone,
+            email: company.email,
+            bank: company.bank,
+            iban: company.iban,
+            info: "",
+          },
+          client: {
+            name: invoice.customerName,
+            cif: invoice.customerCif,
+            regCom: invoice.customerRegNo || "",
+            country: "RO",
+            city: "",
+            county: "",
+            address: invoice.customerAddress,
+            bank: "",
+            iban: "",
+            phone: "",
+            email: "",
+            info: "",
+          },
+          number: invoice.docNo,
+          date: invoice.docDate,
+          dueDate: invoice.dueDate || invoice.docDate,
+          currency: invoice.currency || "RON",
+          info: "",
+          code: invoice.customerCode || "",
+          reverseCharge: false,
+          vatOnCash: false,
+          facturaTip: "",
+          greutate: "",
+          accize: "",
+          clientGuid: invoice.customerCode || invoice.customerCif || invoice.customerName || "",
+        }),
+        `      <Detalii>`,
+        `        <Continut>`,
+        ...invoice.items.map((line: any, index: number) => {
+          const stockType = pickStockType(line.product, stockTypes, config)
+          return buildSagaFacturaLine({
+            index: index + 1,
+            type: sagaInvoiceLineTypeFromProduct(line.product),
+            management: invoice.location?.code || invoice.location?.name || "",
+            activity: "",
+            description: line.productName || line.product?.name,
+            clientCode: line.productCode || line.product?.accountingItemCode || line.product?.sku || slugCode(line.productName, "ART"),
+            guid: line.productId || line.productCode || "",
+            barcode: line.product?.barcodes?.[0]?.barcode || "",
+            uom: line.uomCode || "BUC",
+            qty: decimal(line.qty, 3),
+            price: decimal(line.unitPriceFc),
+            value: decimal(line.lineNetRon),
+            vatRate: sagaNumber(line.vatRateValue, 2),
+            vatValue: decimal(line.lineVatRon),
+            account: stockType?.salesAccount || config.salesAccount,
+            deductionType: "",
+          })
+        }),
+        `        </Continut>`,
+        `      </Detalii>`,
+        `      <FacturaID>${xmlEscape(invoice.id)}</FacturaID>`,
+        `  </Factura>`,
+      ].join("\n")
+
+    xmlFiles = invoices.map((invoice) => ({
+      fileName: downloadName("sales-invoices", dateFrom, dateTo, { company, firstDoc: invoice }),
+      content: [`<?xml version="1.0" encoding="utf-8"?>`, `<Facturi>`, buildInvoiceXml(invoice), `</Facturi>`].join("\n"),
+    }))
+
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
       `<Facturi>`,
-      ...invoices.map((invoice) =>
-        [
-          `  <Factura>`,
-          buildSagaFacturaHeader({
-            supplier: {
-              name: company.name,
-              cif: company.cui,
-              regCom: company.regNo,
-              capital: "",
-              country: sagaCountryCode(company.country),
-              city: company.city,
-              county: company.county,
-              address: company.address,
-              phone: company.phone,
-              email: company.email,
-              bank: company.bank,
-              iban: company.iban,
-              info: "",
-            },
-            client: {
-              name: invoice.customerName,
-              cif: invoice.customerCif,
-              regCom: invoice.customerRegNo || "",
-              country: "RO",
-              city: "",
-              county: "",
-              address: invoice.customerAddress,
-              bank: "",
-              iban: "",
-              phone: "",
-              email: "",
-              info: "",
-            },
-            number: invoice.docNo,
-            date: invoice.docDate,
-            dueDate: invoice.dueDate || invoice.docDate,
-            currency: invoice.currency || "RON",
-            info: "",
-            code: invoice.customerCode || "",
-            reverseCharge: false,
-            vatOnCash: false,
-            facturaTip: "",
-            greutate: "",
-            accize: "",
-            clientGuid: invoice.customerCode || invoice.customerCif || invoice.customerName || "",
-          }),
-          `      <Detalii>`,
-          `        <Continut>`,
-          ...invoice.items.map((line, index) => {
-            const stockType = pickStockType(line.product, stockTypes, config)
-            return buildSagaFacturaLine({
-              index: index + 1,
-              type: sagaInvoiceLineTypeFromProduct(line.product),
-              management: invoice.location?.code || invoice.location?.name || "",
-              activity: "",
-              description: line.productName || line.product?.name,
-              clientCode: line.productCode || line.product?.accountingItemCode || line.product?.sku || slugCode(line.productName, "ART"),
-              guid: line.productId || line.productCode || "",
-              barcode: line.product?.barcodes?.[0]?.barcode || "",
-              uom: line.uomCode || "BUC",
-              qty: decimal(line.qty, 3),
-              price: decimal(line.unitPriceFc),
-              value: decimal(line.lineNetRon),
-              vatRate: sagaNumber(line.vatRateValue, 2),
-              vatValue: decimal(line.lineVatRon),
-              account: stockType?.salesAccount || config.salesAccount,
-              deductionType: "",
-            })
-          }),
-          `        </Continut>`,
-          `      </Detalii>`,
-          `      <FacturaID>${xmlEscape(invoice.id)}</FacturaID>`,
-          `  </Factura>`,
-        ].join("\n")
-      ),
+      ...invoices.map((invoice) => buildInvoiceXml(invoice)),
       `</Facturi>`,
     ].join("\n")
   } else if (kind === "purchase-receipts") {
@@ -1963,6 +2034,17 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
   }
 
   const baseFileName = downloadName(kind, dateFrom, dateTo, { company, firstDoc: exportedFileDoc })
+
+  if (fileFormat === "xml" && splitFiles && xmlFiles.length > 0) {
+    const zip = new AdmZip()
+    xmlFiles.forEach((file) => {
+      zip.addFile(file.fileName, Buffer.from(file.content, "utf8"))
+    })
+    const zipBuffer = zip.toBuffer()
+    res.setHeader("Content-Type", "application/zip")
+    res.setHeader("Content-Disposition", `attachment; filename="${zipDownloadName(kind, dateFrom, dateTo)}"`)
+    return res.status(200).send(zipBuffer)
+  }
 
   if (fileFormat === "xlsx" || fileFormat === "csv" || fileFormat === "dbf") {
     const buffer =

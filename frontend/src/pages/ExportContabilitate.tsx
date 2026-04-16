@@ -110,6 +110,7 @@ export default function ExportContabilitatePage() {
   const [selectedKind, setSelectedKind] = useState("")
   const [selectedValueType, setSelectedValueType] = useState("CANTITATIV_VALORIC")
   const [selectedFileFormat, setSelectedFileFormat] = useState("xml")
+  const [splitFiles, setSplitFiles] = useState(false)
   const [selectedLocationId, setSelectedLocationId] = useState(getActiveLocationId())
   const [partnerSearch, setPartnerSearch] = useState("")
   const [showConfig, setShowConfig] = useState(false)
@@ -220,6 +221,7 @@ export default function ExportContabilitatePage() {
   const needsLocationFilter = selectedKindCategory === "documents"
   const needsPartnerFilter = ["customers", "suppliers", "sales-invoices", "purchase-receipts"].includes(selectedKind)
   const supportsGlobalValueType = ["sales-invoices", "purchase-receipts"].includes(selectedKind)
+  const supportsSplitFiles = selectedFileFormat === "xml" && ["customers", "suppliers", "sales-invoices"].includes(selectedKind)
   const needsValueType = selectedKindCategory === "documents"
   const contextualPartnerLabel = selectedKindMeta?.partnerLabel || "Client / partener"
 
@@ -233,6 +235,12 @@ export default function ExportContabilitatePage() {
       setSelectedValueType("CANTITATIV_VALORIC")
     }
   }, [needsValueType, selectedKind, selectedValueType, supportsGlobalValueType])
+
+  useEffect(() => {
+    if (!supportsSplitFiles && splitFiles) {
+      setSplitFiles(false)
+    }
+  }, [splitFiles, supportsSplitFiles])
 
   async function handleSaveConfig(event: FormEvent) {
     event.preventDefault()
@@ -261,7 +269,9 @@ export default function ExportContabilitatePage() {
           dateFrom
         )}&dateTo=${encodeURIComponent(dateTo)}&locationId=${encodeURIComponent(selectedLocationId)}&partnerSearch=${encodeURIComponent(
           partnerSearch
-        )}&valueType=${encodeURIComponent(selectedValueType)}&fileFormat=${encodeURIComponent(selectedFileFormat)}`,
+        )}&valueType=${encodeURIComponent(selectedValueType)}&fileFormat=${encodeURIComponent(selectedFileFormat)}&splitFiles=${encodeURIComponent(
+          supportsSplitFiles && splitFiles ? "true" : "false"
+        )}`,
         { raw: true }
       )
 
@@ -383,6 +393,22 @@ export default function ExportContabilitatePage() {
                 <option value="xlsx">XLSX</option>
                 <option value="csv">CSV</option>
               </select>
+            </label>
+
+            <label className="flex min-h-[68px] items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+              <input
+                type="checkbox"
+                checked={splitFiles}
+                onChange={(e) => setSplitFiles(e.target.checked)}
+                disabled={!supportsSplitFiles}
+                className="h-4 w-4 rounded border-slate-300 text-[#17324D]"
+              />
+              <span>
+                <span className="block text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Separare fisiere</span>
+                <span className="mt-1 block text-sm text-slate-700">
+                  {supportsSplitFiles ? "Un XML separat in ZIP" : "Disponibil pentru XML clienti, furnizori si facturi"}
+                </span>
+              </span>
             </label>
 
             <label className="block">
