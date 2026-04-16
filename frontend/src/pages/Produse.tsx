@@ -87,9 +87,14 @@ const CLASS_OPTIONS = [
   { value: "PRODUS_FIN", label: "produs finit" },
   { value: "MARFA", label: "marfa" },
   { value: "AMBALAJE", label: "ambalaje" },
+  { value: "AMBALAJ_SGR", label: "ambalaj SGR" },
   { value: "SEMIFABRICATE", label: "semifabricate" },
   { value: "REZIDUALE", label: "reziduale" },
-  { value: "CONSUMABILE", label: "consumabile" }
+  { value: "CONSUMABILE", label: "consumabile" },
+  { value: "SERVICIU_VANDUT", label: "serviciu vandut" },
+  { value: "DISCOUNT_FINANCIAR_IESIRI", label: "discount financiar iesiri" },
+  { value: "DISCOUNT_COMERCIAL_IESIRI", label: "discount comercial iesiri" },
+  { value: "TAXA_VERDE", label: "taxa verde" }
 ]
 
 const CLASS_LABEL_MAP: Record<string, string> = Object.fromEntries(

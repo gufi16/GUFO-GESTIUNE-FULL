@@ -349,6 +349,37 @@ function sagaInvoiceStockTypeName(stockType: any) {
   return stockType?.name || "Marfuri"
 }
 
+function sagaInvoiceLineTypeFromProduct(product: any) {
+  switch (String(product?.class || "").toUpperCase()) {
+    case "MARFA":
+      return "Marfuri"
+    case "PRODUS_FIN":
+      return "Produse finite"
+    case "AMBALAJE":
+      return "Ambalaje"
+    case "AMBALAJ_SGR":
+      return "Ambalaje SGR"
+    case "REZIDUALE":
+      return "Produse reziduale"
+    case "SEMIFABRICATE":
+      return "Semifabricate"
+    case "SERVICIU_VANDUT":
+      return "Servicii vandute"
+    case "DISCOUNT_FINANCIAR_IESIRI":
+      return "Discount financiar iesiri"
+    case "DISCOUNT_COMERCIAL_IESIRI":
+      return "Discount comercial iesiri"
+    case "TAXA_VERDE":
+      return "Taxa verde"
+    case "MATERIE_PRIMA":
+    case "CONSUMABILE":
+    case "ALTE_MATERIALE":
+      return "Marfuri"
+    default:
+      return "Nedefinit"
+  }
+}
+
 function normalizeFileFormat(value: unknown) {
   const normalized = String(value || "").trim().toLowerCase()
   if (normalized === "dbf") return "dbf"
@@ -1300,7 +1331,19 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       },
       include: {
         location: true,
-        items: true,
+        items: {
+          include: {
+            product: {
+              include: {
+                accountingStockType: true,
+                barcodes: {
+                  take: 1,
+                  orderBy: { createdAt: "asc" },
+                },
+              },
+            },
+          },
+        },
       },
       orderBy: { docDate: "asc" },
     })
@@ -1323,22 +1366,25 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     }))
 
     const invoiceDetailRows = invoices.flatMap((invoice) =>
-      invoice.items.map((line) => ({
-        TIP: "Marfuri",
-        GESTIUNE: invoice.location?.code || invoice.location?.name || "",
-        COD: String(line.productCode || "").trim(),
-        COD_BARE: "",
-        DENUMIRE: line.productName || "",
-        UM: line.uomCode || "BUC",
-        P_TVA: Number(line.vatRateValue || 0),
-        CANTITATE: Number(line.qty || 0),
-        PRET: Number(line.unitPriceFc || 0),
-        VALOARE: unitAmount(line.lineNetRon, line.qty),
-        TOTAL: unitAmount(line.lineGrossRon, line.qty),
-        TEXT_SUPL: "",
-        CONT: config.salesAccount,
-        ACTIVITATE: "",
-      }))
+      invoice.items.map((line) => {
+        const stockType = pickStockType(line.product, stockTypes, config)
+        return {
+          TIP: sagaInvoiceLineTypeFromProduct(line.product),
+          GESTIUNE: invoice.location?.code || invoice.location?.name || "",
+          COD: String(line.productCode || line.product?.accountingItemCode || line.product?.sku || "").trim(),
+          COD_BARE: line.product?.barcodes?.[0]?.barcode || "",
+          DENUMIRE: line.productName || line.product?.name || "",
+          UM: line.uomCode || "BUC",
+          P_TVA: Number(line.vatRateValue || 0),
+          CANTITATE: Number(line.qty || 0),
+          PRET: Number(line.unitPriceFc || 0),
+          VALOARE: unitAmount(line.lineNetRon, line.qty),
+          TOTAL: unitAmount(line.lineGrossRon, line.qty),
+          TEXT_SUPL: "",
+          CONT: stockType?.salesAccount || config.salesAccount,
+          ACTIVITATE: "",
+        }
+      })
     )
 
     spreadsheetRows =
@@ -1406,26 +1452,27 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
           }),
           `      <Detalii>`,
           `        <Continut>`,
-          ...invoice.items.map((line, index) =>
-            buildSagaFacturaLine({
+          ...invoice.items.map((line, index) => {
+            const stockType = pickStockType(line.product, stockTypes, config)
+            return buildSagaFacturaLine({
               index: index + 1,
-              type: "Marfuri",
+              type: sagaInvoiceLineTypeFromProduct(line.product),
               management: invoice.location?.code || invoice.location?.name || "",
               activity: "",
-              description: line.productName,
-              clientCode: line.productCode || slugCode(line.productName, "ART"),
+              description: line.productName || line.product?.name,
+              clientCode: line.productCode || line.product?.accountingItemCode || line.product?.sku || slugCode(line.productName, "ART"),
               guid: line.productId || line.productCode || "",
-              barcode: line.barcode || "",
+              barcode: line.product?.barcodes?.[0]?.barcode || "",
               uom: line.uomCode || "BUC",
               qty: decimal(line.qty, 3),
               price: decimal(line.unitPriceFc),
               value: decimal(line.lineNetRon),
               vatRate: sagaNumber(line.vatRateValue, 2),
               vatValue: decimal(line.lineVatRon),
-              account: config.salesAccount,
+              account: stockType?.salesAccount || config.salesAccount,
               deductionType: "",
             })
-          ),
+          }),
           `        </Continut>`,
           `      </Detalii>`,
           `      <FacturaID>${xmlEscape(invoice.id)}</FacturaID>`,

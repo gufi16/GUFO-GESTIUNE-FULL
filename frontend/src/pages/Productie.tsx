@@ -52,10 +52,15 @@ const PRODUCT_CLASS_LABEL: Record<string, string> = {
   MATERIE_PRIMA: "materie prima",
   MARFA: "marfa",
   AMBALAJE: "ambalaje",
+  AMBALAJ_SGR: "ambalaj SGR",
   CONSUMABILE: "consumabile",
   SEMIFABRICATE: "semifabricate",
   REZIDUALE: "reziduale",
   ALTE_MATERIALE: "alte materiale",
+  SERVICIU_VANDUT: "serviciu vandut",
+  DISCOUNT_FINANCIAR_IESIRI: "discount financiar iesiri",
+  DISCOUNT_COMERCIAL_IESIRI: "discount comercial iesiri",
+  TAXA_VERDE: "taxa verde",
 }
 
 export default function ProductiePage() {
