@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { Router } from "express"
 import ExcelJS from "exceljs"
+import AdmZip from "adm-zip"
 import { z } from "zod"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
@@ -303,6 +304,31 @@ function xmlTag(name: string, value: unknown) {
 
 function xmlLineTag(name: string, value: unknown) {
   return `            <${name}>${xmlEscape(value ?? "")}</${name}>`
+}
+
+function buildVfpXml(rows: Record<string, unknown>[]) {
+  return [
+    `<VFPData>`,
+    ...rows.map((row) =>
+      [
+        `<c_xml>`,
+        ...Object.entries(row).map(([key, value]) => {
+          const normalizedValue = value ?? ""
+          return normalizedValue === "" ? `<${key}/>` : `<${key}>${xmlEscape(normalizedValue)}</${key}>`
+        }),
+        `</c_xml>`,
+      ].join("\n")
+    ),
+    `</VFPData>`,
+  ].join("\n")
+}
+
+function sagaInvoiceStockTypeName(stockType: any) {
+  const code = String(stockType?.code || "").toUpperCase()
+  if (code === "MARFA") return "Marfuri"
+  if (code === "MATERII") return "Materii prime"
+  if (code === "PRODUSE") return "Produse finite"
+  return stockType?.name || "Marfuri"
 }
 
 function normalizeFileFormat(value: unknown) {
@@ -1056,6 +1082,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
 
   const { config, stockTypes } = await ensureAccountingConfig(tenantId, companyId)
   let xml = ""
+  let xmlFiles: Array<{ fileName: string; content: string }> | null = null
   let sheetName = "Export contabilitate"
   let spreadsheetRows: Record<string, unknown>[] = []
 
@@ -1307,41 +1334,65 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
             },
           ])
 
-    xml = [
-      `<?xml version="1.0" encoding="utf-8"?>`,
-      `<SAGA>`,
-      `  <FACTURI>`,
-      ...invoices.map((invoice) =>
-        [
-          `    <FACTURA>`,
-          `      <TIP>F</TIP>`,
-          `      <NUMAR>${xmlEscape(invoice.docNo || "")}</NUMAR>`,
-          `      <DATA>${xmlEscape(formatIsoDate(invoice.docDate))}</DATA>`,
-          `      <SCADENTA>${xmlEscape(formatIsoDate(invoice.dueDate || invoice.docDate))}</SCADENTA>`,
-          `      <CLIENT>`,
-          `        <DENUMIRE>${xmlEscape(invoice.customerName || "")}</DENUMIRE>`,
-          `        <CUI>${xmlEscape(invoice.customerCif || "")}</CUI>`,
-          `        <ADRESA>${xmlEscape(invoice.customerAddress || "")}</ADRESA>`,
-          `      </CLIENT>`,
-          `      <ARTICOLE>`,
-          ...invoice.items.map((line) =>
-            [
-              `        <ARTICOL>`,
-              `          <COD>${xmlEscape(line.productCode || slugCode(line.productName, "ART"))}</COD>`,
-              `          <DENUMIRE>${xmlEscape(line.productName || "")}</DENUMIRE>`,
-              `          <CANTITATE>${xmlEscape(decimal(line.qty, 3))}</CANTITATE>`,
-              `          <PRET>${xmlEscape(decimal(line.unitPriceFc))}</PRET>`,
-              `          <TVA>${xmlEscape(sagaNumber(line.vatRateValue, 2))}</TVA>`,
-              `        </ARTICOL>`,
-            ].join("\n")
-          ),
-          `      </ARTICOLE>`,
-          `    </FACTURA>`,
-        ].join("\n")
-      ),
-      `  </FACTURI>`,
-      `</SAGA>`,
-    ].join("\n")
+    const invoiceHeaderXmlRows = invoices.map((invoice) => ({
+      tip: "",
+      nr_iesire: extractSagaNumber(invoice.docNo || ""),
+      cod: invoice.customerCode || "",
+      denumire: invoice.customerName || "",
+      tvai: 1,
+      data: formatIsoDate(invoice.docDate),
+      nr_bonuri: 0,
+      baza_tva: decimal(invoice.totalNetRon),
+      tva: decimal(invoice.totalVatRon),
+      total: decimal(invoice.totalGrossRon),
+      neachitat: decimal(invoice.totalGrossRon),
+      inf_suplm: "",
+      den_agent: "",
+      cont_d_a: "",
+      cont_c_a: "",
+      accize: 0,
+      adaos: 0,
+      curs_ref: decimal(invoice.fxRate || 1, 4),
+      id_solicit: "",
+    }))
+
+    const invoiceLineXmlRows = invoices.flatMap((invoice) =>
+      invoice.items.map((line) => {
+        const stockType = pickStockType({ class: "MARFA" }, stockTypes, config)
+        const vatRate = Number(line.vatRateValue || 0)
+        const unitPrice = Number(line.unitPriceFc || 0)
+        const unitPriceWithVat = unitPrice * (1 + vatRate / 100)
+        return {
+          den_tip: sagaInvoiceStockTypeName(stockType),
+          den_gest: invoice.location?.code || invoice.location?.name || "",
+          denumire: line.productName || "",
+          cod: line.productCode || slugCode(line.productName || "ART", "ART"),
+          um: line.uomCode || "BUC",
+          tva_art: sagaNumber(vatRate, 2),
+          cantitate: decimal(line.qty, 3),
+          pret_unitar: decimal(unitPrice, 4),
+          pu_tva: decimal(unitPriceWithVat, 4),
+          valoare: decimal(line.lineNetRon),
+          total: decimal(line.lineGrossRon),
+          tva_ded: decimal(line.lineVatRon),
+          cont: config.salesAccount,
+          adaos: 0,
+          text_supl: "",
+        }
+      })
+    )
+
+    xml = buildVfpXml(invoiceHeaderXmlRows)
+    xmlFiles = [
+      {
+        fileName: "IESIRI.xml",
+        content: buildVfpXml(invoiceHeaderXmlRows),
+      },
+      {
+        fileName: "IESIRI_DETALII.xml",
+        content: buildVfpXml(invoiceLineXmlRows),
+      },
+    ]
   } else if (kind === "purchase-receipts") {
     const receipts = await prisma.purchaseReceipt.findMany({
       where: {
@@ -1827,6 +1878,17 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     )
     res.setHeader("Content-Disposition", `attachment; filename="${replaceFileExtension(baseFileName, fileFormat)}"`)
     return res.status(200).send(buffer)
+  }
+
+  if (xmlFiles?.length) {
+    const zip = new AdmZip()
+    for (const file of xmlFiles) {
+      zip.addFile(file.fileName, Buffer.from(file.content, "utf8"))
+    }
+    const zipBuffer = zip.toBuffer()
+    res.setHeader("Content-Type", "application/zip")
+    res.setHeader("Content-Disposition", `attachment; filename="${replaceFileExtension(baseFileName, "zip" as any)}"`)
+    return res.status(200).send(zipBuffer)
   }
 
   res.setHeader("Content-Type", "application/xml; charset=utf-8")
