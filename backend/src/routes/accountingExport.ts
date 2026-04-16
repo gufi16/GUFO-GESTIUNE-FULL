@@ -116,6 +116,14 @@ function decimal(value: unknown, digits = 2) {
   return Number.isFinite(number) ? number.toFixed(digits) : (0).toFixed(digits)
 }
 
+function unitAmount(total: unknown, qty: unknown) {
+  const numericTotal = Number(total || 0)
+  const quantity = Number(qty || 0)
+  if (!Number.isFinite(numericTotal)) return 0
+  if (!Number.isFinite(quantity) || quantity === 0) return numericTotal
+  return numericTotal / quantity
+}
+
 function sagaNumber(value: unknown, digits = 2) {
   const fixed = decimal(value, digits)
   return fixed.replace(/\.?0+$/, "") || "0"
@@ -1267,8 +1275,8 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         P_TVA: Number(line.vatRateValue || 0),
         CANTITATE: Number(line.qty || 0),
         PRET: Number(line.unitPriceFc || 0),
-        VALOARE: Number(line.lineNetRon || 0),
-        TOTAL: Number(line.lineGrossRon || 0),
+        VALOARE: unitAmount(line.lineNetRon, line.qty),
+        TOTAL: unitAmount(line.lineGrossRon, line.qty),
         TEXT_SUPL: "",
         CONT: config.salesAccount,
         ACTIVITATE: "",
@@ -1387,13 +1395,13 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
                   uom: line.uomCode || "BUC",
                   qty: decimal(line.qty, 3),
                   price: decimal(line.unitPriceFc),
-                  value: decimal(line.lineNetRon),
+                  value: decimal(unitAmount(line.lineNetRon, line.qty)),
                   vatRate: decimal(line.vatRateValue),
-                  vatValue: decimal(line.lineVatRon),
+                  vatValue: decimal(unitAmount(line.lineVatRon, line.qty)),
                   account: config.salesAccount,
                   deductionType: "",
                 })
-          ),
+            ),
           `        </Continut>`,
           `      </Detalii>`,
           `      <FacturaID>${xmlEscape(invoice.id)}</FacturaID>`,
@@ -1450,10 +1458,10 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
             tva_art: Number(line.vatRateValue || 0),
             cantitate: Number(line.stockQty || line.qty || 0),
             pret_unitar: Number(line.unitCostNetRon || 0),
-            valoare: Number(line.lineNetRon || 0),
+            valoare: unitAmount(line.lineNetRon, line.stockQty || line.qty),
             transp_lei: 0,
-            total: Number(line.lineGrossRon || 0),
-            tva_ded: Number(line.lineVatRon || 0),
+            total: unitAmount(line.lineGrossRon, line.stockQty || line.qty),
+            tva_ded: unitAmount(line.lineVatRon, line.stockQty || line.qty),
             tip_ded: "N50",
             cont: pickStockType(line.product, stockTypes, config)?.inventoryAccount || config.inventoryAccount,
             pret_vanz: Number(line.product?.price || 0),
@@ -1605,9 +1613,9 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
                 uom: line.product?.uom?.code || "BUC",
                 qty: decimal(line.stockQty || line.qty, 3),
                 price: decimal(line.unitCostNetRon),
-                value: decimal(line.lineNetRon),
+                value: decimal(unitAmount(line.lineNetRon, line.stockQty || line.qty)),
                 vatRate: decimal(line.vatRateValue),
-                vatValue: decimal(line.lineVatRon),
+                vatValue: decimal(unitAmount(line.lineVatRon, line.stockQty || line.qty)),
                 account: stockType?.inventoryAccount || config.inventoryAccount,
                 deductionType: "Integral",
                 priceSale: "",
@@ -1714,7 +1722,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
               uom: line.ingredient.uom?.code || "BUC",
               qty: decimal(line.qty, 3),
               price: decimal(unitCost),
-              value: decimal(unitCost * Number(line.qty || 0)),
+              value: decimal(unitCost),
               vatRate: decimal(line.ingredient.vatRate?.rate ?? 0),
               expenseAccount: stockType?.expenseAccount || config.expenseAccount,
               inventoryAccount: stockType?.inventoryAccount || config.inventoryAccount,
@@ -1776,7 +1784,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
           UM: line.product.uom?.code || "BUC",
           Cantitate: Number(line.qty || 0),
           "Pret unitar": unitCost,
-          Valoare: unitCost * Number(line.qty || 0),
+          Valoare: unitCost,
           Gestiune: managementValue(config, document.location),
           Data: formatDate(document.docDate),
           "Nr. doc": document.docNo,
@@ -1826,7 +1834,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
               uom: line.product.uom?.code || "BUC",
               qty: decimal(line.qty, 3),
               price: decimal(unitCost),
-              value: decimal(unitCost * Number(line.qty || 0)),
+              value: decimal(unitCost),
               vatRate: decimal(line.product.vatRate?.rate ?? 0),
               expenseAccount: stockType?.expenseAccount || config.expenseAccount,
               inventoryAccount: stockType?.inventoryAccount || config.inventoryAccount,
