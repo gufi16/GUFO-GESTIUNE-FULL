@@ -256,7 +256,11 @@ function compactDateToken(value: Date | string | null | undefined) {
 
 function downloadName(kind: string, from: string, to: string, options?: { company?: any; firstDoc?: any }) {
   if ((kind === "purchase-receipts" || kind === "sales-invoices") && options?.company) {
-    const companyCode = String(options.company.cui || options.company.code || "FIRMA").replace(/[^A-Za-z0-9]/g, "")
+    const companyCode = String(
+      kind === "purchase-receipts"
+        ? options.firstDoc?.supplier?.cif || options.firstDoc?.supplierCode || options.firstDoc?.supplier?.code || options.company.cui || options.company.code || "FIRMA"
+        : options.company.cui || options.company.code || "FIRMA"
+    ).replace(/[^A-Za-z0-9]/g, "")
     const docNumber = extractSagaNumber(options.firstDoc?.spvInvoiceNo || options.firstDoc?.docNo || "EXPORT")
     const docDate = compactDateToken(options.firstDoc?.docDate || from || to || new Date())
     return `F_${companyCode || "FIRMA"}_${docNumber || "EXPORT"}_${docDate}.xml`
@@ -268,6 +272,10 @@ function downloadName(kind: string, from: string, to: string, options?: { compan
 
   if (kind === "suppliers") {
     return `FUR_${compactDateToken(to || from || new Date())}.xml`
+  }
+
+  if (kind === "products") {
+    return `ART_${compactDateToken(to || from || new Date())}.xml`
   }
 
   const safeKind = slugCode(kind, "EXPORT")
@@ -406,6 +414,37 @@ function sagaInvoiceLineTypeFromProduct(product: any) {
       return "Marfuri"
     default:
       return "Nedefinit"
+  }
+}
+
+function sagaArticleTypeFromProduct(product: any) {
+  switch (String(product?.class || "").toUpperCase()) {
+    case "MARFA":
+      return "Marfa"
+    case "MATERIE_PRIMA":
+    case "CONSUMABILE":
+    case "ALTE_MATERIALE":
+      return "Materii prime"
+    case "PRODUS_FIN":
+      return "Produse finite"
+    case "AMBALAJE":
+      return "Ambalaje"
+    case "AMBALAJ_SGR":
+      return "Ambalaje SGR"
+    case "REZIDUALE":
+      return "Produse reziduale"
+    case "SEMIFABRICATE":
+      return "Semifabricate"
+    case "SERVICIU_VANDUT":
+      return "Servicii vandute"
+    case "DISCOUNT_FINANCIAR_IESIRI":
+      return "Discount financiar iesiri"
+    case "DISCOUNT_COMERCIAL_IESIRI":
+      return "Discount comercial iesiri"
+    case "TAXA_VERDE":
+      return "Taxa verde"
+    default:
+      return "Marfa"
   }
 }
 
@@ -1178,13 +1217,16 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         vatRate: true,
         uom: true,
         accountingStockType: true,
+        barcodes: {
+          take: 1,
+          orderBy: { createdAt: "asc" },
+        },
       },
       orderBy: { name: "asc" },
     })
 
     sheetName = "Articole"
     spreadsheetRows = products.map((product) => {
-      const stockType = pickStockType(product, stockTypes, config)
       const articleCode =
         config.articleCodeSource === "SKU"
           ? product.sku
@@ -1193,47 +1235,52 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       return {
         COD: String(articleCode || "").trim(),
         DENUMIRE: product.name,
+        COD_NC: "",
+        COD_CPV: "",
         UM: product.uom?.code || "BUC",
-        P_TVA: Number(product.vatRate?.rate ?? 0),
-        GRUPA:
-          stockType?.code === "MATERII"
-            ? "C"
-            : stockType?.code === "MARFA"
-              ? "A"
-              : "",
+        TIP: sagaArticleTypeFromProduct(product),
+        TVA: Number(product.vatRate?.rate ?? 0),
         PRET: Number(product.price || 0),
+        PRET_TVA: Number(product.price || 0) * (1 + Number(product.vatRate?.rate ?? 0) / 100),
+        COD_BARE: product.barcodes?.[0]?.barcode || "",
+        INFORMATII: "",
+        GUID_COD: product.id,
       }
     })
 
+    const buildArticleXmlLine = (product: any) => {
+      const articleCode =
+        config.articleCodeSource === "SKU"
+          ? product.sku
+          : product.accountingItemCode || product.sku
+      return [
+        `  <Linie>`,
+        `    <Cod>${xmlEscape(articleCode)}</Cod>`,
+        `    <Denumire>${xmlEscape(product.name)}</Denumire>`,
+        `    <Cod_NC/>`,
+        `    <Cod_CPV/>`,
+        `    <UM>${xmlEscape(product.uom?.code || "BUC")}</UM>`,
+        `    <Tip>${xmlEscape(sagaArticleTypeFromProduct(product))}</Tip>`,
+        `    <TVA>${xmlEscape(sagaNumber(product.vatRate?.rate ?? 0, 2))}</TVA>`,
+        `    <Pret>${decimal(product.price)}</Pret>`,
+        `    <Pret_TVA>${decimal(Number(product.price || 0) * (1 + Number(product.vatRate?.rate ?? 0) / 100))}</Pret_TVA>`,
+        `    <Cod_bare>${xmlEscape(product.barcodes?.[0]?.barcode || "")}</Cod_bare>`,
+        `    <Informatii/>`,
+        `    <Guid_cod>${xmlEscape(product.id)}</Guid_cod>`,
+        `  </Linie>`,
+      ].join("\n")
+    }
+
+    xmlFiles = products.map((product) => ({
+      fileName: `ART_${slugCode(product.accountingItemCode || product.sku || product.name, "ART")}_${compactDateToken(dateTo || new Date())}.xml`,
+      content: [`<?xml version="1.0" encoding="utf-8"?>`, `<Articole>`, buildArticleXmlLine(product), `</Articole>`].join("\n"),
+    }))
+
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
-      `<SAGA tip="Articole">`,
-      xmlMeta(company, kind, dateFrom, dateTo, valueType),
-      `  <Articole>`,
-      ...products.map((product) => {
-        const stockType = pickStockType(product, stockTypes, config)
-        const articleCode =
-          config.articleCodeSource === "SKU"
-            ? product.sku
-            : product.accountingItemCode || product.sku
-
-        return [
-          `    <Articol>`,
-          `      <Cod>${xmlEscape(articleCode)}</Cod>`,
-          `      <Denumire>${xmlEscape(product.name)}</Denumire>`,
-          `      <UM>${xmlEscape(product.uom?.code || "BUC")}</UM>`,
-          `      <CotaTVA>${xmlEscape(product.vatRate?.rate ?? 0)}</CotaTVA>`,
-          `      <CodTVA>${xmlEscape(product.vatRate?.fiscalCode || "")}</CodTVA>`,
-          `      <TipStoc>${xmlEscape(stockType?.name || "")}</TipStoc>`,
-          `      <ContStoc>${xmlEscape(stockType?.inventoryAccount || config.inventoryAccount)}</ContStoc>`,
-          `      <ContCheltuiala>${xmlEscape(stockType?.expenseAccount || config.expenseAccount)}</ContCheltuiala>`,
-          `      <ContVenit>${xmlEscape(stockType?.salesAccount || config.salesAccount)}</ContVenit>`,
-          `      <PretVanzare>${decimal(product.price)}</PretVanzare>`,
-          `    </Articol>`,
-        ].join("\n")
-      }),
-      `  </Articole>`,
-      `</SAGA>`,
+      `<Articole>`,
+      ...products.map((product) => buildArticleXmlLine(product)),
+      `</Articole>`,
     ].join("\n")
   } else if (kind === "customers") {
     const customers = await prisma.customer.findMany({
@@ -1614,6 +1661,12 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
             product: {
               include: {
                 accountingStockType: true,
+                uom: true,
+                vatRate: true,
+                barcodes: {
+                  take: 1,
+                  orderBy: { createdAt: "asc" },
+                },
               },
             },
           },
@@ -1690,123 +1743,136 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       },
     ])
 
+    const buildReceiptXml = (receipt: any) => {
+      const groupedLines =
+        valueType === "GLOBAL_VALORIC"
+          ? aggregateByKey(
+              receipt.items,
+              (line) => `${line.vatRateValue || 0}|${line.product?.accountingItemCode || line.product?.sku || line.productId}`,
+              (line) => ({
+                code: line.product?.accountingItemCode || line.product?.sku || slugCode(line.product?.name || "ART", "ART"),
+                name: line.product?.name || "",
+                vatRateValue: Number(line.vatRateValue || 0),
+                valueRon: 0,
+                vatRon: 0,
+                stockAccount: "",
+                expenseAccount: "",
+              }),
+              (target, line) => {
+                const stockType = pickStockType(line.product, stockTypes, config)
+                target.valueRon += Number(line.lineNetRon || 0)
+                target.vatRon += Number(line.lineVatRon || 0)
+                target.stockAccount = stockType?.inventoryAccount || config.inventoryAccount
+                target.expenseAccount = stockType?.expenseAccount || config.expenseAccount
+              }
+            )
+          : receipt.items
+
+      return [
+        `  <Factura>`,
+        buildSagaFacturaHeader({
+          supplier: {
+            name: receipt.supplierName || receipt.supplier?.name || "",
+            cif: receipt.supplier?.cif || "",
+            regCom: receipt.supplier?.regCom || "",
+            capital: "",
+            country: sagaCountryCode(receipt.supplier?.country),
+            city: receipt.supplier?.city || "",
+            county: receipt.supplier?.county || "",
+            address: receipt.supplier?.address || "",
+            phone: receipt.supplier?.phone || "",
+            email: receipt.supplier?.email || "",
+            bank: "",
+            iban: "",
+            info: "",
+          },
+          client: {
+            name: company.name,
+            cif: company.cui,
+            regCom: company.regNo,
+            country: sagaCountryCode(company.country),
+            city: company.city,
+            county: company.county,
+            address: company.address,
+            bank: company.bank,
+            iban: company.iban,
+            phone: company.phone,
+            email: company.email,
+            info: "",
+          },
+          number: receipt.spvInvoiceNo || receipt.docNo,
+          date: receipt.docDate,
+          dueDate: receipt.docDate,
+          currency: receipt.currency || "RON",
+          info: valueType === "GLOBAL_VALORIC" ? "Export global valoric" : "Export cantitativ valoric",
+          code: receipt.supplierCode || receipt.supplier?.code || "",
+          reverseCharge: false,
+          vatOnCash: false,
+          facturaTip: "",
+          greutate: "",
+          accize: "",
+          clientGuid: receipt.supplierCode || receipt.supplier?.code || receipt.supplier?.cif || "",
+        }),
+        `      <Detalii>`,
+        `        <Continut>`,
+        ...groupedLines.map((line, index) => {
+          if (valueType === "GLOBAL_VALORIC") {
+            return buildSagaFacturaLine({
+              index: index + 1,
+              management: receipt.location?.code || receipt.location?.name || "",
+              description: line.name,
+              supplierCode: line.code,
+              guid: line.code,
+              value: decimal(line.valueRon),
+              vatRate: sagaNumber(line.vatRateValue, 2),
+              vatValue: decimal(line.vatRon),
+              account: line.stockAccount,
+              activity: "",
+              deductionType: "",
+            })
+          }
+
+          const stockType = pickStockType(line.product, stockTypes, config)
+          return buildSagaFacturaLine({
+            index: index + 1,
+            management: receipt.location?.code || receipt.location?.name || "",
+            activity: "",
+            description: line.product?.name || "",
+            supplierCode: line.product?.accountingItemCode || line.product?.sku || slugCode(line.product?.name || "ART", "ART"),
+            guid: line.product?.id || "",
+            barcode: line.product?.barcodes?.[0]?.barcode || "",
+            uom: line.product?.uom?.code || "BUC",
+            qty: decimal(line.stockQty || line.qty, 3),
+            price: decimal(line.unitCostNetRon),
+            value: decimal(line.lineNetRon),
+            vatRate: sagaNumber(line.vatRateValue, 2),
+            vatValue: decimal(line.lineVatRon),
+            account: stockType?.inventoryAccount || config.inventoryAccount,
+            deductionType: "",
+            priceSale: line.product?.price ? decimal(line.product.price) : "",
+          })
+        }),
+        `        </Continut>`,
+        `      </Detalii>`,
+        `      <FacturaID>${xmlEscape(receipt.id)}</FacturaID>`,
+        `  </Factura>`,
+      ].join("\n")
+    }
+
+    xmlFiles = receipts.map((receipt) => {
+      const supplierCode = String(receipt.supplier?.cif || receipt.supplierCode || receipt.supplier?.code || "FURNIZOR").replace(/[^A-Za-z0-9]/g, "")
+      const docNumber = extractSagaNumber(receipt.spvInvoiceNo || receipt.docNo || "NIR")
+      const docDate = compactDateToken(receipt.docDate || dateTo || new Date())
+      return {
+        fileName: `F_${supplierCode || "FURNIZOR"}_${docNumber || "NIR"}_${docDate}.xml`,
+        content: [`<?xml version="1.0" encoding="utf-8"?>`, `<Facturi>`, buildReceiptXml(receipt), `</Facturi>`].join("\n"),
+      }
+    })
+
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
       `<Facturi>`,
-      ...receipts.map((receipt) =>
-        (() => {
-          const groupedLines =
-            valueType === "GLOBAL_VALORIC"
-              ? aggregateByKey(
-                  receipt.items,
-                  (line) => `${line.vatRateValue || 0}|${line.product?.accountingItemCode || line.product?.sku || line.productId}`,
-                  (line) => ({
-                    code: line.product?.accountingItemCode || line.product?.sku || slugCode(line.product?.name || "ART", "ART"),
-                    name: line.product?.name || "",
-                    vatRateValue: Number(line.vatRateValue || 0),
-                    valueRon: 0,
-                    stockAccount: "",
-                    expenseAccount: "",
-                  }),
-                  (target, line) => {
-                    const stockType = pickStockType(line.product, stockTypes, config)
-                    target.valueRon += Number(line.lineNetRon || 0)
-                    target.stockAccount = stockType?.inventoryAccount || config.inventoryAccount
-                    target.expenseAccount = stockType?.expenseAccount || config.expenseAccount
-                  }
-                )
-              : receipt.items
-
-          return [
-            `  <Factura>`,
-            buildSagaFacturaHeader({
-              supplier: {
-                name: receipt.supplierName || receipt.supplier?.name || "",
-                cif: receipt.supplier?.cif || "",
-                regCom: receipt.supplier?.regCom || "",
-                capital: "",
-                country: sagaCountryCode(receipt.supplier?.country),
-                city: receipt.supplier?.city || "",
-                county: receipt.supplier?.county || "",
-                address: receipt.supplier?.address || "",
-                phone: receipt.supplier?.phone || "",
-                email: receipt.supplier?.email || "",
-                bank: "",
-                iban: "",
-                info: "",
-              },
-              client: {
-                name: company.name,
-                cif: company.cui,
-                regCom: company.regNo,
-                country: sagaCountryCode(company.country),
-                city: company.city,
-                county: company.county,
-                address: company.address,
-                bank: company.bank,
-                iban: company.iban,
-                phone: company.phone,
-                email: company.email,
-                info: "",
-              },
-              number: receipt.spvInvoiceNo || receipt.docNo,
-              date: receipt.docDate,
-              dueDate: receipt.docDate,
-              currency: receipt.currency || "RON",
-              info: valueType === "GLOBAL_VALORIC" ? "Export global valoric" : "Export cantitativ valoric",
-              code: receipt.supplierCode || receipt.supplier?.code || "",
-              reverseCharge: false,
-              vatOnCash: false,
-              facturaTip: "Intrare",
-              greutate: "",
-              accize: "",
-              clientGuid: receipt.supplierCode || receipt.supplier?.code || receipt.supplier?.cif || "",
-            }),
-            `      <Detalii>`,
-            `        <Continut>`,
-            ...groupedLines.map((line) => {
-              if (valueType === "GLOBAL_VALORIC") {
-                return buildSagaFacturaLine({
-                  index: groupedLines.indexOf(line) + 1,
-                  management: receipt.location?.code || receipt.location?.name || "",
-                  description: line.name,
-                  supplierCode: line.code,
-                  guid: line.code,
-                  value: decimal(line.valueRon),
-                  vatRate: decimal(line.vatRateValue),
-                  account: line.stockAccount,
-                  activity: "",
-                  deductionType: "Integral",
-                })
-              }
-
-              const stockType = pickStockType(line.product, stockTypes, config)
-              return buildSagaFacturaLine({
-                index: groupedLines.indexOf(line) + 1,
-                management: receipt.location?.code || receipt.location?.name || "",
-                activity: "",
-                description: line.product?.name || "",
-                supplierCode: line.product?.accountingItemCode || line.product?.sku || slugCode(line.product?.name || "ART", "ART"),
-                guid: line.product?.id || "",
-                barcode: "",
-                uom: line.product?.uom?.code || "BUC",
-                qty: decimal(line.stockQty || line.qty, 3),
-                price: decimal(line.unitCostNetRon),
-                value: decimal(unitAmount(line.lineNetRon, line.stockQty || line.qty)),
-                vatRate: decimal(line.vatRateValue),
-                vatValue: decimal(unitAmount(line.lineVatRon, line.stockQty || line.qty)),
-                account: stockType?.inventoryAccount || config.inventoryAccount,
-                deductionType: "Integral",
-                priceSale: "",
-              })
-            }),
-            `        </Continut>`,
-            `      </Detalii>`,
-            `      <FacturaID>${xmlEscape(receipt.id)}</FacturaID>`,
-            `  </Factura>`,
-          ].join("\n")
-        })()
-      ),
+      ...receipts.map((receipt) => buildReceiptXml(receipt)),
       `</Facturi>`,
     ].join("\n")
   } else if (kind === "consumption-docs") {
@@ -1982,50 +2048,64 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       })
     )
 
+    const buildProductionXml = (document: any) =>
+      [
+        `    <DocumentProductie>`,
+        buildSagaOperationalHeader({
+          docNo: document.docNo,
+          docDate: document.docDate,
+          location: document.location,
+          explanation: document.note || "Nota de productie",
+          mode: "cantitativ-valoric",
+        }),
+        `      <Detalii>`,
+        `        <Continut>`,
+        ...document.items.map((line: any, index: number) => {
+          const stockType = pickStockType(line.product, stockTypes, config)
+          const unitCost = latestCostMap.get(line.productId) ?? Number(line.product.costPrice || 0)
+          return buildSagaOperationalLine({
+            index: index + 1,
+            management: managementValue(config, document.location),
+            description: line.product.name,
+            code: line.product.accountingItemCode || line.product.sku || slugCode(line.product.name, "ART"),
+            guid: line.product.id,
+            barcode: "",
+            info: document.note || "",
+            uom: line.product.uom?.code || "BUC",
+            qty: decimal(line.qty, 3),
+            price: decimal(unitCost),
+            value: decimal(Number(line.qty || 0) * unitCost),
+            vatRate: decimal(line.product.vatRate?.rate ?? 0),
+            expenseAccount: stockType?.expenseAccount || config.expenseAccount,
+            inventoryAccount: stockType?.inventoryAccount || config.inventoryAccount,
+            salesAccount: stockType?.salesAccount || config.salesAccount,
+          })
+        }),
+        `        </Continut>`,
+        `      </Detalii>`,
+        `      <DocumentID>${xmlEscape(document.id)}</DocumentID>`,
+        `    </DocumentProductie>`,
+      ].join("\n")
+
+    xmlFiles = documents.map((document) => ({
+      fileName: `PROD_${extractSagaNumber(document.docNo || "DOC")}_${compactDateToken(document.docDate || dateTo || new Date())}.xml`,
+      content: [
+        `<?xml version="1.0" encoding="utf-8"?>`,
+        `<SAGA tip="Productie">`,
+        xmlMeta(company, kind, dateFrom, dateTo, valueType),
+        `  <Productie>`,
+        buildProductionXml(document),
+        `  </Productie>`,
+        `</SAGA>`,
+      ].join("\n"),
+    }))
+
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
       `<SAGA tip="Productie">`,
       xmlMeta(company, kind, dateFrom, dateTo, valueType),
       `  <Productie>`,
-      ...documents.map((document) =>
-        [
-          `    <DocumentProductie>`,
-          buildSagaOperationalHeader({
-            docNo: document.docNo,
-            docDate: document.docDate,
-            location: document.location,
-            explanation: document.note || "Nota de productie",
-            mode: "cantitativ-valoric",
-          }),
-          `      <Detalii>`,
-          `        <Continut>`,
-          ...document.items.map((line, index) => {
-            const stockType = pickStockType(line.product, stockTypes, config)
-            const unitCost = latestCostMap.get(line.productId) ?? Number(line.product.costPrice || 0)
-            return buildSagaOperationalLine({
-              index: index + 1,
-              management: managementValue(config, document.location),
-              description: line.product.name,
-              code: line.product.accountingItemCode || line.product.sku || slugCode(line.product.name, "ART"),
-              guid: line.product.id,
-              barcode: "",
-              info: document.note || "",
-              uom: line.product.uom?.code || "BUC",
-              qty: decimal(line.qty, 3),
-              price: decimal(unitCost),
-              value: decimal(unitCost),
-              vatRate: decimal(line.product.vatRate?.rate ?? 0),
-              expenseAccount: stockType?.expenseAccount || config.expenseAccount,
-              inventoryAccount: stockType?.inventoryAccount || config.inventoryAccount,
-              salesAccount: stockType?.salesAccount || config.salesAccount,
-            })
-          }),
-          `        </Continut>`,
-          `      </Detalii>`,
-          `      <DocumentID>${xmlEscape(document.id)}</DocumentID>`,
-          `    </DocumentProductie>`,
-        ].join("\n")
-      ),
+      ...documents.map((document) => buildProductionXml(document)),
       `  </Productie>`,
       `</SAGA>`,
     ].join("\n")

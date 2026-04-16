@@ -221,7 +221,9 @@ export default function ExportContabilitatePage() {
   const needsLocationFilter = selectedKindCategory === "documents"
   const needsPartnerFilter = ["customers", "suppliers", "sales-invoices", "purchase-receipts"].includes(selectedKind)
   const supportsGlobalValueType = ["sales-invoices", "purchase-receipts"].includes(selectedKind)
-  const supportsSplitFiles = selectedFileFormat === "xml" && ["customers", "suppliers", "sales-invoices"].includes(selectedKind)
+  const supportsSplitFiles =
+    selectedFileFormat === "xml" &&
+    ["products", "customers", "suppliers", "sales-invoices", "purchase-receipts", "production-docs"].includes(selectedKind)
   const needsValueType = selectedKindCategory === "documents"
   const contextualPartnerLabel = selectedKindMeta?.partnerLabel || "Client / partener"
 
@@ -406,7 +408,7 @@ export default function ExportContabilitatePage() {
               <span>
                 <span className="block text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Separare fisiere</span>
                 <span className="mt-1 block text-sm text-slate-700">
-                  {supportsSplitFiles ? "Un XML separat in ZIP" : "Disponibil pentru XML clienti, furnizori si facturi"}
+                  {supportsSplitFiles ? "Un XML separat in ZIP" : "Disponibil pentru XML articole, clienti, furnizori, facturi, NIR si productie"}
                 </span>
               </span>
             </label>
