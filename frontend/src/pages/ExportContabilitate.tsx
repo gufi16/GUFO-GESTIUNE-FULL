@@ -276,7 +276,7 @@ export default function ExportContabilitatePage() {
       const disposition = response.headers.get("content-disposition") || ""
       const match = disposition.match(/filename=\"?([^\";]+)\"?/)
       link.href = url
-      link.download = match?.[1] || `export-saga-${kind}.${selectedFileFormat}`
+      link.download = match?.[1] || `saga-${kind}.${selectedFileFormat}`
       document.body.appendChild(link)
       link.click()
       link.remove()

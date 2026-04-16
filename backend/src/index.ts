@@ -93,6 +93,7 @@ app.use(
       callback(null, isAllowedOrigin(origin))
     },
     credentials: true,
+    exposedHeaders: ["Content-Disposition"],
   })
 )
 app.use((req, res, next) => {
