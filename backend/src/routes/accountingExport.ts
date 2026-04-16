@@ -1129,15 +1129,15 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
 
     sheetName = "Clienti"
     spreadsheetRows = customers.map((customer) => ({
-      "Denumire client": customer.name,
-      "Cod fiscal": customer.cif || "",
-      "Registru Comert": customer.regNo || "",
-      Judet: customer.county || "",
-      Adresa: customer.address || "",
-      Tara: customer.country || "",
-      Telefon: customer.phone || "",
-      Email: customer.email || "",
-      Cont: config.customerAccount,
+      DENUMIRE_C: customer.name || "",
+      COD_FISCAL: Number(String(customer.cif || "").replace(/\D/g, "") || 0),
+      REGISTRU_C: customer.regNo || "",
+      JUDET: customer.county || "",
+      ADRESA: customer.address || "",
+      TARA: customer.country || "RO",
+      TELEFON: customer.phone || "",
+      EMAIL: customer.email || "",
+      CONT: Number(String(config.customerAccount || "").replace(/\D/g, "") || 0),
     }))
 
     xml = [
@@ -1242,53 +1242,52 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     })
 
     sheetName = "Facturi iesire"
-    spreadsheetRows = spreadsheetSheets([
-      {
-        name: "Facturi",
-        rows: invoices.map((invoice) => ({
-          "Denumire client": invoice.customerName || "",
-          "Cod fiscal": invoice.customerCif || "",
-          "Registru Comert": invoice.customerRegNo || "",
-          Judet: "",
-          Adresa: invoice.customerAddress || "",
-          Tara: "RO",
-          Moneda: invoice.currency || "RON",
-          "Numar factura": invoice.docNo,
-          Data: formatDate(invoice.docDate),
-          TVA: Number(invoice.totalVatRon || 0),
-          "Valoare neta": Number(invoice.totalNetRon || 0),
-          "Valoare bruta": Number(invoice.totalGrossRon || 0),
-          Discount: 0,
-        })),
-      },
-      {
-        name: "Continut factura",
-        rows: invoices.flatMap((invoice) =>
-          invoice.items.map((line) => ({
-            Tip: "Marfa",
-            "Denumire articol/serviciu": line.productName || "",
-            "Cont factura": config.salesAccount,
-            "Incasare numerar": readablePaymentType(invoice.paymentType || ""),
-            "Cont numerar": invoice.paymentType === "CASH" ? config.cashAccount : "",
-            "Plata automata": invoice.paymentType === "CARD" ? "Da" : "",
-            "Cont plata": invoice.paymentType === "CARD" ? config.cardAccount : "",
-            "Tip document": "Factura iesire",
-            Gestiune: invoice.location?.code || invoice.location?.name || "",
-            Grupa: "",
-            Agent: "",
-            Cod: line.productCode || "",
-            UM: line.uomCode || "BUC",
-            "TVA %": Number(line.vatRateValue || 0),
-            Cantitate: Number(line.qty || 0),
-            "Pret unitar": Number(line.unitPriceFc || 0),
-            Valoare: Number(line.lineNetRon || 0),
-            Total: Number(line.lineGrossRon || 0),
-            TVA: Number(line.lineVatRon || 0),
-            Ned: "N",
-          }))
-        ),
-      },
-    ])
+    const invoiceHeaderRows = invoices.map((invoice) => ({
+      DENUMIRE_C: invoice.customerName || "",
+      COD_FISCAL: Number(String(invoice.customerCif || "").replace(/\D/g, "") || 0),
+      REGISTRU_C: invoice.customerRegNo || "",
+      JUDET: "",
+      ADRESA: invoice.customerAddress || "",
+      TARA: "RO",
+      MONEDA: invoice.currency || "RON",
+      NUMAR_FACT: invoice.docNo || "",
+      DATA: formatDate(invoice.docDate),
+      TVA: Number(invoice.totalVatRon || 0),
+      VALOARE_NE: Number(invoice.totalNetRon || 0),
+      VALOARE_BR: Number(invoice.totalGrossRon || 0),
+      DISCOUNT: 0,
+    }))
+
+    const invoiceDetailRows = invoices.flatMap((invoice) =>
+      invoice.items.map((line) => ({
+        COD: String(line.productCode || "").trim(),
+        COD_BARE: "",
+        DENUMIRE: line.productName || "",
+        UM: line.uomCode || "BUC",
+        P_TVA: Number(line.vatRateValue || 0),
+        CANTITATE: Number(line.qty || 0),
+        PRET: Number(line.unitPriceFc || 0),
+        VALOARE: Number(line.lineNetRon || 0),
+        TOTAL: Number(line.lineGrossRon || 0),
+        TEXT_SUPL: "",
+        CONT: config.salesAccount,
+        ACTIVITATE: "",
+      }))
+    )
+
+    spreadsheetRows =
+      fileFormat === "dbf"
+        ? invoiceHeaderRows
+        : spreadsheetSheets([
+            {
+              name: "ContinutFactura",
+              rows: invoiceDetailRows,
+            },
+            {
+              name: "Facturi",
+              rows: invoiceHeaderRows,
+            },
+          ])
 
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
