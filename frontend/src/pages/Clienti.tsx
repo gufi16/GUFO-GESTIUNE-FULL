@@ -166,7 +166,7 @@ export default function ClientiPage() {
         },
         body: JSON.stringify({
           ...form,
-          code: form.code.trim() || null,
+          code: form.id ? form.code.trim() || null : null,
           cif: form.cif.trim() || null,
           regNo: form.regNo.trim() || null,
           address: form.address.trim() || null,

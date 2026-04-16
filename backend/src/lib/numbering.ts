@@ -59,10 +59,45 @@ function normalizePrefix(value: unknown, fallback: string) {
   return cleaned || fallback
 }
 
-function buildFormattedNumber(prefix: string, nextNumber: number) {
+function numberWidthForKey(key: NumberingKey) {
+  return key === "customer" || key === "supplier" ? 4 : 5
+}
+
+function buildFormattedNumber(prefix: string, nextNumber: number, key: NumberingKey) {
   const normalizedPrefix = normalizePrefix(prefix, "")
-  const padded = String(Math.max(1, nextNumber)).padStart(5, "0")
+  const padded = String(Math.max(1, nextNumber)).padStart(numberWidthForKey(key), "0")
   return normalizedPrefix ? `${normalizedPrefix}-${padded}` : padded
+}
+
+function extractFormattedNumber(value: unknown, prefix: string) {
+  const normalizedPrefix = normalizePrefix(prefix, "")
+  const text = String(value || "").trim().toUpperCase()
+  const escapedPrefix = normalizedPrefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  const match = text.match(new RegExp(`^${escapedPrefix}-(\\d+)$`, "i"))
+  return match ? Number(match[1]) || 0 : 0
+}
+
+async function getExistingMaxNumber(
+  client: Prisma.TransactionClient | typeof prisma,
+  tenantId: string,
+  key: NumberingKey,
+  prefix: string
+) {
+  if (key !== "customer" && key !== "supplier") return 0
+
+  const where = {
+    tenantId,
+    code: {
+      startsWith: `${normalizePrefix(prefix, "")}-`,
+      mode: "insensitive" as const,
+    },
+  }
+  const rows =
+    key === "customer"
+      ? await client.customer.findMany({ where, select: { code: true } })
+      : await client.supplier.findMany({ where, select: { code: true } })
+
+  return rows.reduce((max, row) => Math.max(max, extractFormattedNumber(row.code, prefix)), 0)
 }
 
 async function ensureCompany(tenantId: string) {
@@ -98,10 +133,11 @@ export async function getNextNumberPreview(tenantId: string, key: NumberingKey) 
     },
   })
 
-  const nextNumber = (counter?.value || 0) + 1
+  const existingMax = await getExistingMaxNumber(prisma, tenantId, key, prefix)
+  const nextNumber = Math.max((counter?.value || 0) + 1, existingMax + 1)
   return {
     nextNumber,
-    value: buildFormattedNumber(prefix, nextNumber),
+    value: buildFormattedNumber(prefix, nextNumber, key),
     prefix,
   }
 }
@@ -124,7 +160,7 @@ export async function reserveNextNumber(
     supplierCodePrefix: normalizePrefix(company?.supplierCodePrefix, defaults.supplierCodePrefix),
   }
 
-  const counter = await tx.skuCounter.upsert({
+  let counter = await tx.skuCounter.upsert({
     where: {
       tenantId_key: {
         tenantId,
@@ -143,7 +179,23 @@ export async function reserveNextNumber(
     },
   })
 
-  return buildFormattedNumber(config[keyMap[key]], counter.value)
+  const prefix = config[keyMap[key]]
+  const existingMax = await getExistingMaxNumber(tx, tenantId, key, prefix)
+  const reservedValue = Math.max(counter.value, existingMax + 1)
+
+  if (reservedValue !== counter.value) {
+    counter = await tx.skuCounter.update({
+      where: {
+        tenantId_key: {
+          tenantId,
+          key,
+        },
+      },
+      data: { value: reservedValue },
+    })
+  }
+
+  return buildFormattedNumber(prefix, counter.value, key)
 }
 
 export function normalizeNumberingPayload(body: any) {

@@ -489,7 +489,7 @@ export default function FacturaPage() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           name: quickCustomerForm.name.trim(),
-          code: quickCustomerForm.code.trim() || null,
+          code: null,
           cif: quickCustomerForm.cif.trim() || null,
           regNo: quickCustomerForm.regNo.trim() || null,
           address: quickCustomerForm.address.trim() || null,
