@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react"
-import { CalendarDays, ChevronDown, ChevronUp, Download, Mail, Plus, RefreshCw, Save, Search } from "lucide-react"
+import { CalendarDays, ChevronDown, ChevronUp, Download, RefreshCw, Save, Search } from "lucide-react"
 import PageHeader from "../components/PageHeader"
 import { api } from "../lib/api"
 import { getActiveLocationId, subscribeToActiveLocation } from "../lib/location"
@@ -85,16 +85,6 @@ const emptyConfig: AccountingConfig = {
   defaultStockTypeId: null,
 }
 
-const emptyStockType = {
-  code: "",
-  name: "",
-  inventoryAccount: "",
-  expenseAccount: "",
-  salesAccount: "",
-  analyticMode: "LOCATION_CODE",
-  isDefault: false,
-}
-
 function toInputDate(value: Date) {
   const year = value.getFullYear()
   const month = `${value.getMonth() + 1}`.padStart(2, "0")
@@ -105,14 +95,12 @@ function toInputDate(value: Date) {
 export default function ExportContabilitatePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [savingStockType, setSavingStockType] = useState(false)
   const [downloadingKind, setDownloadingKind] = useState<string | null>(null)
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
   const [companyName, setCompanyName] = useState("Firma activa")
   const [config, setConfig] = useState<AccountingConfig>(emptyConfig)
   const [stockTypes, setStockTypes] = useState<StockType[]>([])
-  const [stockTypeForm, setStockTypeForm] = useState(emptyStockType)
   const [exportKinds, setExportKinds] = useState<Array<{ code: string; label: string; description?: string; partnerLabel?: string }>>([])
   const [locations, setLocations] = useState<Array<{ id: string; name: string; code?: string | null }>>([])
   const [products, setProducts] = useState<ProductAccountingItem[]>([])
@@ -124,7 +112,6 @@ export default function ExportContabilitatePage() {
   const [selectedFileFormat, setSelectedFileFormat] = useState("xml")
   const [selectedLocationId, setSelectedLocationId] = useState(getActiveLocationId())
   const [partnerSearch, setPartnerSearch] = useState("")
-  const [sendEmail, setSendEmail] = useState(false)
   const [showConfig, setShowConfig] = useState(false)
   const [showMappings, setShowMappings] = useState(false)
   const today = new Date()
@@ -265,25 +252,6 @@ export default function ExportContabilitatePage() {
     }
   }
 
-  async function handleCreateStockType(event: FormEvent) {
-    event.preventDefault()
-    try {
-      setSavingStockType(true)
-      setError("")
-      await api("/api/v1/reports/accounting/saga/stock-types", {
-        method: "POST",
-        body: JSON.stringify(stockTypeForm),
-      })
-      setStockTypeForm(emptyStockType)
-      setMessage("Tipul de stoc a fost adaugat.")
-      await load()
-    } catch (err: any) {
-      setError(err?.message || "Nu am putut salva tipul de stoc.")
-    } finally {
-      setSavingStockType(false)
-    }
-  }
-
   async function handleDownload(kind: string) {
     try {
       setDownloadingKind(kind)
@@ -356,7 +324,7 @@ export default function ExportContabilitatePage() {
       <PageHeader
         badge="rapoarte"
         title="Export contabilitate"
-        subtitle="Configureaza conturile si genereaza fisiere XML, DBF, XLSX sau CSV pentru importul contabil al firmei active."
+        subtitle="Genereaza rapid fisierele contabile pentru firma activa."
       />
 
       {message ? <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</div> : null}
@@ -368,7 +336,7 @@ export default function ExportContabilitatePage() {
             <div>
               <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Generator export contabilitate</div>
               <div className="mt-1 text-lg font-semibold text-[#17324D]">{companyName}</div>
-              <div className="mt-1 text-sm text-slate-500">Flux compact de export, separat de rapoartele generale, inspirat de structura din Freya.</div>
+              <div className="mt-1 text-sm text-slate-500">Alegi documentul, perioada si formatul, apoi descarci fisierul.</div>
             </div>
             <button
               type="button"
@@ -380,15 +348,14 @@ export default function ExportContabilitatePage() {
             </button>
           </div>
 
-          <div className="grid gap-3 xl:grid-cols-5">
+          <div className="grid gap-3 xl:grid-cols-4">
             <label className="block">
               <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Tip export</div>
-              <select className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white" value="SAGA">
-                <option value="SAGA">SAGA</option>
-                <option value="OMC" disabled>OMC - in curand</option>
-                <option value="WINMENTOR" disabled>WinMentor - in curand</option>
-                <option value="ALTSOFT" disabled>Alt soft - in curand</option>
-              </select>
+              <input
+                value="SAGA"
+                readOnly
+                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-100 px-3 text-sm font-medium text-slate-700 outline-none"
+              />
             </label>
 
             <label className="block">
@@ -402,10 +369,6 @@ export default function ExportContabilitatePage() {
                 <option value="CANTITATIV_VALORIC">Cantitativ valoric</option>
                 <option value="GLOBAL_VALORIC" disabled={!supportsGlobalValueType}>Global valoric</option>
               </select>
-              {!needsValueType ? <div className="mt-1 text-xs text-slate-500">Nu este necesar pentru nomenclatoare.</div> : null}
-              {needsValueType && !supportsGlobalValueType ? (
-                <div className="mt-1 text-xs text-slate-500">Pentru acest tip de document folosim momentan varianta cantitativ valorica.</div>
-              ) : null}
             </label>
 
             <label className="block">
@@ -420,7 +383,6 @@ export default function ExportContabilitatePage() {
                 <option value="xlsx">XLSX</option>
                 <option value="csv">CSV</option>
               </select>
-              <div className="mt-1 text-xs text-slate-500">Pentru SAGA clasic, formatele principale raman XML si DBF. XLSX sau CSV raman doar pentru ferestrele care importa tabelar.</div>
             </label>
 
             <label className="block">
@@ -467,9 +429,6 @@ export default function ExportContabilitatePage() {
                   </optgroup>
                 ))}
               </select>
-              {selectedKindMeta?.description ? (
-                <div className="mt-1 text-xs text-slate-500">{selectedKindMeta.description}</div>
-              ) : null}
             </label>
 
             <label className="block">
@@ -487,22 +446,6 @@ export default function ExportContabilitatePage() {
                   </option>
                 ))}
               </select>
-              {!needsLocationFilter ? <div className="mt-1 text-xs text-slate-500">Filtrul pe locatie se aplica doar pe documente.</div> : null}
-            </label>
-
-            <label className="block">
-              <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Gestiune</div>
-              <input
-                value={
-                  needsLocationFilter && selectedLocationId
-                    ? locations.find((item) => item.id === selectedLocationId)?.name || ""
-                    : needsLocationFilter
-                      ? "Nu ai selectat gestiunea"
-                      : "Nu se aplica pentru acest export"
-                }
-                readOnly
-                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-100 px-3 text-sm text-slate-500 outline-none"
-              />
             </label>
 
             <label className="block">
@@ -517,23 +460,10 @@ export default function ExportContabilitatePage() {
                   className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
                 />
               </div>
-              {!needsPartnerFilter ? <div className="mt-1 text-xs text-slate-500">Filtrul pe partener este disponibil unde are sens.</div> : null}
             </label>
           </div>
 
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <label className="inline-flex items-center gap-2 text-sm text-slate-600">
-              <input
-                type="checkbox"
-                checked={sendEmail}
-                onChange={(e) => setSendEmail(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-[#17324D] focus:ring-[#17324D]"
-              />
-              <Mail size={14} />
-              Trimite pe email
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500">in curand</span>
-            </label>
-
+          <div className="flex justify-end">
             <button
               type="button"
               onClick={handleGenerate}
@@ -543,10 +473,6 @@ export default function ExportContabilitatePage() {
               <Download size={15} />
               {downloadingKind === selectedKind ? "Se genereaza..." : "Genereaza"}
             </button>
-          </div>
-
-          <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-            Exportul se descarca instant in formatul ales. Pastrezi XML unde este util, dar poti folosi si XLSX sau CSV pentru ferestrele SAGA care importa tabelar.
           </div>
         </div>
       </section>
@@ -638,32 +564,14 @@ export default function ExportContabilitatePage() {
               </div>
             </form>
           ) : (
-            <div className="mt-3 text-sm text-slate-500">Configurarile avansate sunt ascunse momentan pentru un ecran mai curat.</div>
+            <div className="mt-3 text-sm text-slate-500">Configurarea avansata este ascunsa.</div>
           )}
         </section>
 
         <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
           <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Rezumat export</div>
-            <div className="mt-1 text-sm font-semibold text-[#17324D]">Tipurile de document pregatite pentru generator</div>
-          </div>
-
-          <div className="mt-4 grid gap-2 md:grid-cols-2">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Selectie curenta</div>
-              <div className="mt-1 text-sm font-semibold text-slate-900">{selectedKindMeta?.label || "Niciun tip selectat"}</div>
-              <div className="mt-1 text-xs text-slate-500">{selectedValueType === "GLOBAL_VALORIC" ? "Global valoric" : "Cantitativ valoric"}</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Filtrare locatie</div>
-              <div className="mt-1 text-sm font-semibold text-slate-900">
-                {needsLocationFilter
-                  ? selectedLocationId
-                    ? locations.find((item) => item.id === selectedLocationId)?.name || "Locatie selectata"
-                    : "Toate locatiile"
-                  : "Nu se aplica"}
-              </div>
-            </div>
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Documente disponibile</div>
+            <div className="mt-1 text-sm font-semibold text-[#17324D]">Lista scurta pentru export</div>
           </div>
 
           <div className="mt-4 space-y-2">
@@ -677,7 +585,7 @@ export default function ExportContabilitatePage() {
               >
                 <div>
                   <div className="font-semibold text-slate-900">{item.label}</div>
-                  <div className="mt-1 text-xs text-slate-500">Disponibil pentru export in XML, DBF, XLSX sau CSV</div>
+                  {item.description ? <div className="mt-1 text-xs text-slate-500">{item.description}</div> : null}
                 </div>
                 <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                   {selectedKind === item.code ? "selectat" : "disponibil"}
@@ -688,78 +596,7 @@ export default function ExportContabilitatePage() {
         </section>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1fr_1.1fr]">
-        <form onSubmit={handleCreateStockType} className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Tip de stoc nou</div>
-            <div className="mt-1 text-sm font-semibold text-[#17324D]">Configureaza reguli contabile asemanatoare cu Freya</div>
-          </div>
-
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <input
-              value={stockTypeForm.code}
-              onChange={(e) => setStockTypeForm((prev) => ({ ...prev, code: e.target.value }))}
-              placeholder="Cod tip stoc"
-              className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
-            />
-            <input
-              value={stockTypeForm.name}
-              onChange={(e) => setStockTypeForm((prev) => ({ ...prev, name: e.target.value }))}
-              placeholder="Denumire"
-              className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
-            />
-            <input
-              value={stockTypeForm.inventoryAccount}
-              onChange={(e) => setStockTypeForm((prev) => ({ ...prev, inventoryAccount: e.target.value }))}
-              placeholder="Cont stoc"
-              className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
-            />
-            <input
-              value={stockTypeForm.expenseAccount}
-              onChange={(e) => setStockTypeForm((prev) => ({ ...prev, expenseAccount: e.target.value }))}
-              placeholder="Cont cheltuiala"
-              className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
-            />
-            <input
-              value={stockTypeForm.salesAccount}
-              onChange={(e) => setStockTypeForm((prev) => ({ ...prev, salesAccount: e.target.value }))}
-              placeholder="Cont venit"
-              className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
-            />
-            <select
-              value={stockTypeForm.analyticMode}
-              onChange={(e) => setStockTypeForm((prev) => ({ ...prev, analyticMode: e.target.value }))}
-              className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
-            >
-              <option value="NONE">Fara analitic</option>
-              <option value="LOCATION_CODE">Analitic dupa cod locatie</option>
-              <option value="LOCATION_NAME">Analitic dupa nume locatie</option>
-            </select>
-          </div>
-
-          <label className="mt-3 flex items-center gap-2 text-sm text-slate-600">
-            <input
-              type="checkbox"
-              checked={stockTypeForm.isDefault}
-              onChange={(e) => setStockTypeForm((prev) => ({ ...prev, isDefault: e.target.checked }))}
-              className="h-4 w-4 rounded border-slate-300 text-[#17324D] focus:ring-[#17324D]"
-            />
-            Tip de stoc implicit
-          </label>
-
-          <div className="mt-4 flex justify-end">
-            <button
-              type="submit"
-              disabled={savingStockType}
-              className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Plus size={15} />
-              {savingStockType ? "Se adauga..." : "Adauga tip de stoc"}
-            </button>
-          </div>
-        </form>
-
-        <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Tipuri de stoc</div>
             <div className="mt-1 text-sm font-semibold text-[#17324D]">Baza pentru maparea contabila a produselor</div>
@@ -800,7 +637,6 @@ export default function ExportContabilitatePage() {
             </table>
           </div>
         </section>
-      </div>
 
       <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
         <button
@@ -820,7 +656,7 @@ export default function ExportContabilitatePage() {
         {showMappings ? (
           <>
             <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-              <div className="text-sm text-slate-500">Aici pregatesti articolele pentru exporturi curate in SAGA, exact unde conteaza.</div>
+              <div className="text-sm text-slate-500">Salvezi aici codul de import si tipul de stoc pentru fiecare produs.</div>
 
               <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
                 <input
