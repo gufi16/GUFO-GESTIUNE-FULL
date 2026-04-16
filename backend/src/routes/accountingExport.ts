@@ -1135,6 +1135,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
   let xml = ""
   let sheetName = "Export contabilitate"
   let spreadsheetRows: Record<string, unknown>[] = []
+  let exportedFileDoc: any = null
 
   if (kind === "products") {
     const products = await prisma.product.findMany({
@@ -1347,6 +1348,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       },
       orderBy: { docDate: "asc" },
     })
+    exportedFileDoc = invoices[invoices.length - 1] || null
 
     sheetName = "Facturi iesire"
     const invoiceHeaderRows = invoices.map((invoice) => ({
@@ -1513,6 +1515,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       },
       orderBy: { docDate: "asc" },
     })
+    exportedFileDoc = receipts[receipts.length - 1] || null
 
     sheetName = "Facturi intrare"
     spreadsheetRows = spreadsheetSheets([
@@ -1924,32 +1927,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     return res.status(400).json({ ok: false, error: "Tip de export contabil necunoscut." })
   }
 
-  const firstDoc =
-    kind === "purchase-receipts"
-      ? await prisma.purchaseReceipt.findFirst({
-          where: {
-            tenantId,
-            OR: [{ companyId }, { companyId: null }],
-            status: "POSTED",
-            docDate: { gte: from, lte: to },
-            ...(locationId ? { locationId } : {}),
-          },
-          orderBy: { docDate: "asc" },
-        })
-      : kind === "sales-invoices"
-        ? await prisma.salesInvoice.findFirst({
-            where: {
-              tenantId,
-              OR: [{ companyId }, { companyId: null }],
-              status: "ISSUED",
-              docDate: { gte: from, lte: to },
-              ...(locationId ? { locationId } : {}),
-            },
-            orderBy: { docDate: "asc" },
-          })
-        : null
-
-  const baseFileName = downloadName(kind, dateFrom, dateTo, { company, firstDoc })
+  const baseFileName = downloadName(kind, dateFrom, dateTo, { company, firstDoc: exportedFileDoc })
 
   if (fileFormat === "xlsx" || fileFormat === "csv" || fileFormat === "dbf") {
     const buffer =
