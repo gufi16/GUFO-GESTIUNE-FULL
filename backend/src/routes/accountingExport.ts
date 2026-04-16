@@ -1351,58 +1351,84 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
             },
           ])
 
-    const invoiceHeaderXmlRows = invoices.map((invoice) => ({
-      tip: "",
-      nr_iesire: extractSagaNumber(invoice.docNo || ""),
-      cod: invoice.customerCode || "",
-      denumire: invoice.customerName || "",
-      tvai: 1,
-      data: formatIsoDate(invoice.docDate),
-      nr_bonuri: 0,
-      baza_tva: decimal(invoice.totalNetRon),
-      tva: decimal(invoice.totalVatRon),
-      total: decimal(invoice.totalGrossRon),
-      neachitat: decimal(invoice.totalGrossRon),
-      inf_suplm: "",
-      den_agent: "",
-      cont_d_a: "",
-      cont_c_a: "",
-      accize: 0,
-      adaos: 0,
-      curs_ref: decimal(invoice.fxRate || 1, 4),
-      id_solicit: "",
-    }))
-
-    const invoiceLineXmlRows = invoices.flatMap((invoice) =>
-      invoice.items.map((line) => {
-        const stockType = pickStockType({ class: "MARFA" }, stockTypes, config)
-        const vatRate = Number(line.vatRateValue || 0)
-        const unitPrice = Number(line.unitPriceFc || 0)
-        const unitPriceWithVat = unitPrice * (1 + vatRate / 100)
-        return {
-          den_tip: sagaInvoiceStockTypeName(stockType),
-          den_gest: invoice.location?.code || invoice.location?.name || "",
-          denumire: line.productName || "",
-          cod: line.productCode || slugCode(line.productName || "ART", "ART"),
-          um: line.uomCode || "BUC",
-          tva_art: sagaNumber(vatRate, 2),
-          cantitate: decimal(line.qty, 3),
-          pret_unitar: decimal(unitPrice, 4),
-          pu_tva: decimal(unitPriceWithVat, 4),
-          valoare: decimal(line.lineNetRon),
-          total: decimal(line.lineGrossRon),
-          tva_ded: decimal(line.lineVatRon),
-          cont: config.salesAccount,
-          adaos: 0,
-          text_supl: "",
-        }
-      })
-    )
-
-    xml = buildVfpXmlSections([
-      { name: "IESIRI", rows: invoiceHeaderXmlRows },
-      { name: "IESIRI_DETALII", rows: invoiceLineXmlRows },
-    ])
+    xml = [
+      `<?xml version="1.0" encoding="utf-8"?>`,
+      `<Facturi>`,
+      ...invoices.map((invoice) =>
+        [
+          `  <Factura>`,
+          buildSagaFacturaHeader({
+            supplier: {
+              name: company.name,
+              cif: company.cui,
+              regCom: company.regNo,
+              capital: "",
+              country: company.country || "RO",
+              city: company.city,
+              county: company.county,
+              address: company.address,
+              phone: company.phone,
+              email: company.email,
+              bank: company.bank,
+              iban: company.iban,
+              info: "",
+            },
+            client: {
+              name: invoice.customerName,
+              cif: invoice.customerCif,
+              regCom: invoice.customerRegNo || "",
+              country: "RO",
+              city: "",
+              county: "",
+              address: invoice.customerAddress,
+              bank: "",
+              iban: "",
+              phone: "",
+              email: "",
+              info: "",
+            },
+            number: invoice.docNo,
+            date: invoice.docDate,
+            dueDate: invoice.dueDate || invoice.docDate,
+            currency: invoice.currency || "RON",
+            info: "",
+            code: invoice.customerCode || "",
+            reverseCharge: false,
+            vatOnCash: false,
+            facturaTip: "",
+            greutate: "",
+            accize: "",
+            clientGuid: invoice.customerCode || invoice.customerCif || invoice.customerName || "",
+          }),
+          `      <Detalii>`,
+          `        <Continut>`,
+          ...invoice.items.map((line, index) =>
+            buildSagaFacturaLine({
+              index: index + 1,
+              management: invoice.location?.code || invoice.location?.name || "",
+              activity: "",
+              description: line.productName,
+              clientCode: line.productCode || slugCode(line.productName, "ART"),
+              guid: line.productId || line.productCode || "",
+              barcode: line.barcode || "",
+              uom: line.uomCode || "BUC",
+              qty: decimal(line.qty, 3),
+              price: decimal(line.unitPriceFc),
+              value: decimal(line.lineNetRon),
+              vatRate: sagaNumber(line.vatRateValue, 2),
+              vatValue: decimal(line.lineVatRon),
+              account: config.salesAccount,
+              deductionType: "",
+            })
+          ),
+          `        </Continut>`,
+          `      </Detalii>`,
+          `      <FacturaID>${xmlEscape(invoice.id)}</FacturaID>`,
+          `  </Factura>`,
+        ].join("\n")
+      ),
+      `</Facturi>`,
+    ].join("\n")
   } else if (kind === "purchase-receipts") {
     const receipts = await prisma.purchaseReceipt.findMany({
       where: {
