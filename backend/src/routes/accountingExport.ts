@@ -248,6 +248,14 @@ function downloadName(kind: string, from: string, to: string, options?: { compan
     return `F_${companyCode || "FIRMA"}_${docNumber || "EXPORT"}_${docDate}.xml`
   }
 
+  if (kind === "customers") {
+    return `CLI_${compactDateToken(to || from || new Date())}.xml`
+  }
+
+  if (kind === "suppliers") {
+    return `FUR_${compactDateToken(to || from || new Date())}.xml`
+  }
+
   const safeKind = slugCode(kind, "EXPORT")
   const fromChunk = from ? from.replace(/[^0-9]/g, "") : "ALL"
   const toChunk = to ? to.replace(/[^0-9]/g, "") : "ALL"
@@ -1225,38 +1233,48 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
 
     sheetName = "Clienti"
     spreadsheetRows = customers.map((customer) => ({
-      DENUMIRE_C: customer.name || "",
-      COD_FISCAL: Number(String(customer.cif || "").replace(/\D/g, "") || 0),
-      REGISTRU_C: customer.regNo || "",
-      JUDET: customer.county || "",
-      ADRESA: customer.address || "",
+      COD: customer.code || slugCode(customer.name, "CLI"),
+      DENUMIRE: customer.name || "",
+      COD_FISCAL: customer.cif || "",
+      REG_COM: customer.regNo || "",
       TARA: customer.country || "RO",
-      TELEFON: customer.phone || "",
+      JUDET: customer.county || "",
+      LOCALITATE: customer.city || "",
+      ADRESA: customer.address || "",
+      CONT_BANCA: "",
+      BANCA: "",
+      TEL: customer.phone || "",
       EMAIL: customer.email || "",
-      CONT: Number(String(config.customerAccount || "").replace(/\D/g, "") || 0),
+      DISCOUNT: 0,
+      INFORMATII: "",
+      GUID_COD: customer.id,
     }))
 
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
-      `<SAGA tip="Clienti">`,
-      xmlMeta(company, kind, dateFrom, dateTo, valueType),
-      `  <Clienti>`,
+      `<Clienti>`,
       ...customers.map((customer) =>
         [
-          `    <Client>`,
-          `      <Cod>${xmlEscape(customer.code || slugCode(customer.name, "CLI"))}</Cod>`,
-          `      <Denumire>${xmlEscape(customer.name)}</Denumire>`,
-          `      <CIF>${xmlEscape(customer.cif || "")}</CIF>`,
-          `      <RegCom>${xmlEscape(customer.regNo || "")}</RegCom>`,
-          `      <Adresa>${xmlEscape(customer.address || "")}</Adresa>`,
-          `      <Telefon>${xmlEscape(customer.phone || "")}</Telefon>`,
-          `      <Email>${xmlEscape(customer.email || "")}</Email>`,
-          `      <Cont>${xmlEscape(config.customerAccount)}</Cont>`,
-          `    </Client>`,
+          `  <Linie>`,
+          `    <Cod>${xmlEscape(customer.code || slugCode(customer.name, "CLI"))}</Cod>`,
+          `    <Denumire>${xmlEscape(customer.name || "")}</Denumire>`,
+          `    <Cod_fiscal>${xmlEscape(customer.cif || "")}</Cod_fiscal>`,
+          `    <Reg_com>${xmlEscape(customer.regNo || "")}</Reg_com>`,
+          `    <Tara>${xmlEscape(customer.country || "RO")}</Tara>`,
+          `    <Judet>${xmlEscape(customer.county || "")}</Judet>`,
+          `    <Localitate>${xmlEscape(customer.city || "")}</Localitate>`,
+          `    <Adresa>${xmlEscape(customer.address || "")}</Adresa>`,
+          `    <Cont_banca/>`,
+          `    <Banca/>`,
+          `    <Tel>${xmlEscape(customer.phone || "")}</Tel>`,
+          `    <Email>${xmlEscape(customer.email || "")}</Email>`,
+          `    <Discount>0</Discount>`,
+          `    <Informatii/>`,
+          `    <Guid_cod>${xmlEscape(customer.id)}</Guid_cod>`,
+          `  </Linie>`,
         ].join("\n")
       ),
-      `  </Clienti>`,
-      `</SAGA>`,
+      `</Clienti>`,
     ].join("\n")
   } else if (kind === "suppliers") {
     const suppliers = await prisma.supplier.findMany({
@@ -1279,38 +1297,42 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
 
     sheetName = "Furnizori"
     spreadsheetRows = suppliers.map((supplier) => ({
-      "Denumire furnizor": supplier.name,
-      "Cod fiscal": supplier.cif || "",
-      "Registru Comert": supplier.regCom || "",
-      Judet: supplier.county || "",
-      Adresa: supplier.address || "",
-      Tara: supplier.country || "",
-      Telefon: supplier.phone || "",
-      Email: supplier.email || "",
-      Cont: config.supplierAccount,
+      COD: supplier.code || slugCode(supplier.name, "FUR"),
+      DENUMIRE: supplier.name || "",
+      COD_FISCAL: supplier.cif || "",
+      TARA: supplier.country || "RO",
+      LOCALITATE: supplier.city || "",
+      ADRESA: supplier.address || "",
+      CONT_BANCA: "",
+      BANCA: "",
+      TEL: supplier.phone || "",
+      EMAIL: supplier.email || "",
+      INFORMATII: "",
+      GUID_COD: supplier.id,
     }))
 
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
-      `<SAGA tip="Furnizori">`,
-      xmlMeta(company, kind, dateFrom, dateTo, valueType),
-      `  <Furnizori>`,
+      `<Furnizori>`,
       ...suppliers.map((supplier) =>
         [
-          `    <Furnizor>`,
-          `      <Cod>${xmlEscape(supplier.code || slugCode(supplier.name, "FUR"))}</Cod>`,
-          `      <Denumire>${xmlEscape(supplier.name)}</Denumire>`,
-          `      <CIF>${xmlEscape(supplier.cif || "")}</CIF>`,
-          `      <RegCom>${xmlEscape(supplier.regCom || "")}</RegCom>`,
-          `      <Adresa>${xmlEscape(supplier.address || "")}</Adresa>`,
-          `      <Telefon>${xmlEscape(supplier.phone || "")}</Telefon>`,
-          `      <Email>${xmlEscape(supplier.email || "")}</Email>`,
-          `      <Cont>${xmlEscape(config.supplierAccount)}</Cont>`,
-          `    </Furnizor>`,
+          `  <Linie>`,
+          `    <Cod>${xmlEscape(supplier.code || slugCode(supplier.name, "FUR"))}</Cod>`,
+          `    <Denumire>${xmlEscape(supplier.name || "")}</Denumire>`,
+          `    <Cod_fiscal>${xmlEscape(supplier.cif || "")}</Cod_fiscal>`,
+          `    <Tara>${xmlEscape(supplier.country || "RO")}</Tara>`,
+          `    <Localitate>${xmlEscape(supplier.city || "")}</Localitate>`,
+          `    <Adresa>${xmlEscape(supplier.address || "")}</Adresa>`,
+          `    <Cont_banca/>`,
+          `    <Banca/>`,
+          `    <Tel>${xmlEscape(supplier.phone || "")}</Tel>`,
+          `    <Email>${xmlEscape(supplier.email || "")}</Email>`,
+          `    <Informatii/>`,
+          `    <Guid_cod>${xmlEscape(supplier.id)}</Guid_cod>`,
+          `  </Linie>`,
         ].join("\n")
       ),
-      `  </Furnizori>`,
-      `</SAGA>`,
+      `</Furnizori>`,
     ].join("\n")
   } else if (kind === "sales-invoices") {
     const invoices = await prisma.salesInvoice.findMany({
