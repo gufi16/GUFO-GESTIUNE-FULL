@@ -156,6 +156,19 @@ function slugCode(value: string, fallback = "COD") {
   )
 }
 
+function sagaCountryCode(value: unknown, fallback = "RO") {
+  const raw = String(value || "")
+    .trim()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+
+  if (!raw) return fallback
+  if (["RO", "ROU", "ROM", "ROMANIA", "ROMANIE"].includes(raw)) return "RO"
+  if (/^[A-Z]{2}$/.test(raw)) return raw
+  return fallback
+}
+
 function mapProductClassToDefaultCode(productClass?: string | null) {
   switch (productClass) {
     case "MARFA":
@@ -1237,7 +1250,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       DENUMIRE: customer.name || "",
       COD_FISCAL: customer.cif || "",
       REG_COM: customer.regNo || "",
-      TARA: customer.country || "RO",
+      TARA: sagaCountryCode(customer.country),
       JUDET: customer.county || "",
       LOCALITATE: customer.city || "",
       ADRESA: customer.address || "",
@@ -1260,7 +1273,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
           `    <Denumire>${xmlEscape(customer.name || "")}</Denumire>`,
           `    <Cod_fiscal>${xmlEscape(customer.cif || "")}</Cod_fiscal>`,
           `    <Reg_com>${xmlEscape(customer.regNo || "")}</Reg_com>`,
-          `    <Tara>${xmlEscape(customer.country || "RO")}</Tara>`,
+          `    <Tara>${xmlEscape(sagaCountryCode(customer.country))}</Tara>`,
           `    <Judet>${xmlEscape(customer.county || "")}</Judet>`,
           `    <Localitate>${xmlEscape(customer.city || "")}</Localitate>`,
           `    <Adresa>${xmlEscape(customer.address || "")}</Adresa>`,
@@ -1300,7 +1313,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       COD: supplier.code || slugCode(supplier.name, "FUR"),
       DENUMIRE: supplier.name || "",
       COD_FISCAL: supplier.cif || "",
-      TARA: supplier.country || "RO",
+      TARA: sagaCountryCode(supplier.country),
       LOCALITATE: supplier.city || "",
       ADRESA: supplier.address || "",
       CONT_BANCA: "",
@@ -1320,7 +1333,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
           `    <Cod>${xmlEscape(supplier.code || slugCode(supplier.name, "FUR"))}</Cod>`,
           `    <Denumire>${xmlEscape(supplier.name || "")}</Denumire>`,
           `    <Cod_fiscal>${xmlEscape(supplier.cif || "")}</Cod_fiscal>`,
-          `    <Tara>${xmlEscape(supplier.country || "RO")}</Tara>`,
+          `    <Tara>${xmlEscape(sagaCountryCode(supplier.country))}</Tara>`,
           `    <Localitate>${xmlEscape(supplier.city || "")}</Localitate>`,
           `    <Adresa>${xmlEscape(supplier.address || "")}</Adresa>`,
           `    <Cont_banca/>`,
@@ -1437,7 +1450,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
               cif: company.cui,
               regCom: company.regNo,
               capital: "",
-              country: company.country || "RO",
+              country: sagaCountryCode(company.country),
               city: company.city,
               county: company.county,
               address: company.address,
@@ -1641,7 +1654,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
                 cif: receipt.supplier?.cif || "",
                 regCom: receipt.supplier?.regCom || "",
                 capital: "",
-                country: receipt.supplier?.country || "",
+                country: sagaCountryCode(receipt.supplier?.country),
                 city: receipt.supplier?.city || "",
                 county: receipt.supplier?.county || "",
                 address: receipt.supplier?.address || "",
@@ -1655,7 +1668,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
                 name: company.name,
                 cif: company.cui,
                 regCom: company.regNo,
-                country: company.country,
+                country: sagaCountryCode(company.country),
                 city: company.city,
                 county: company.county,
                 address: company.address,
