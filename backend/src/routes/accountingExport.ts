@@ -170,6 +170,26 @@ function sagaCountryCode(value: unknown, fallback = "RO") {
   return fallback
 }
 
+function parseIdList(value: unknown) {
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+function uniqueSagaCode(rawCode: unknown, fallbackPrefix: string, index: number, used: Set<string>) {
+  const fallback = `${fallbackPrefix}-${String(index + 1).padStart(6, "0")}`
+  const base = String(rawCode || "").trim() || fallback
+  let candidate = base
+  let suffix = 1
+  while (used.has(candidate.toUpperCase())) {
+    candidate = `${fallbackPrefix}-${String(index + suffix).padStart(6, "0")}`
+    suffix += 1
+  }
+  used.add(candidate.toUpperCase())
+  return candidate
+}
+
 function mapProductClassToDefaultCode(productClass?: string | null) {
   switch (productClass) {
     case "MARFA":
@@ -1185,6 +1205,127 @@ router.patch("/api/v1/reports/accounting/saga/products/:id", requireAuth, async 
   return res.json({ ok: true, item: updated })
 })
 
+router.get("/api/v1/reports/accounting/saga/export-preview", requireAuth, async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
+  const kind = String(req.query.kind || "").trim().toLowerCase()
+  const dateFrom = String(req.query.dateFrom || "").trim()
+  const dateTo = String(req.query.dateTo || "").trim()
+  const locationId = String(req.query.locationId || "").trim()
+  const partnerSearch = String(req.query.partnerSearch || "").trim()
+  const selectedIds = parseIdList(req.query.selectedIds)
+  const selectedIdWhere = selectedIds.length ? { id: { in: selectedIds } } : {}
+  const from = dateFrom ? new Date(`${dateFrom}T00:00:00`) : new Date("2000-01-01T00:00:00")
+  const to = dateTo ? new Date(`${dateTo}T23:59:59.999`) : new Date()
+  const response = (items: any[]) => res.json({ ok: true, items })
+
+  if (kind === "customers") {
+    const used = new Set<string>()
+    const items = await prisma.customer.findMany({
+      where: {
+        tenantId,
+        OR: [{ companyId }, { companyId: null }],
+        isActive: true,
+        createdAt: { gte: from, lte: to },
+        ...selectedIdWhere,
+        ...(partnerSearch
+          ? { AND: [{ OR: [{ name: { contains: partnerSearch, mode: "insensitive" } }, { code: { contains: partnerSearch, mode: "insensitive" } }, { cif: { contains: partnerSearch, mode: "insensitive" } }] }] }
+          : {}),
+      },
+      orderBy: [{ createdAt: "asc" }, { name: "asc" }],
+    })
+    return response(items.map((item, index) => ({ id: item.id, code: uniqueSagaCode(item.code, "CLI", index, used), label: item.name, partner: item.cif || "", date: formatDate(item.createdAt), status: "Activ" })))
+  }
+
+  if (kind === "suppliers") {
+    const used = new Set<string>()
+    const items = await prisma.supplier.findMany({
+      where: {
+        tenantId,
+        OR: [{ companyId }, { companyId: null }],
+        isActive: true,
+        createdAt: { gte: from, lte: to },
+        ...selectedIdWhere,
+        ...(partnerSearch
+          ? { AND: [{ OR: [{ name: { contains: partnerSearch, mode: "insensitive" } }, { code: { contains: partnerSearch, mode: "insensitive" } }, { cif: { contains: partnerSearch, mode: "insensitive" } }] }] }
+          : {}),
+      },
+      orderBy: [{ createdAt: "asc" }, { name: "asc" }],
+    })
+    return response(items.map((item, index) => ({ id: item.id, code: uniqueSagaCode(item.code, "FUR", index, used), label: item.name, partner: item.cif || "", date: formatDate(item.createdAt), status: "Activ" })))
+  }
+
+  if (kind === "products") {
+    const items = await prisma.product.findMany({
+      where: {
+        tenantId,
+        companyId,
+        createdAt: { gte: from, lte: to },
+        ...selectedIdWhere,
+        ...(partnerSearch
+          ? { OR: [{ name: { contains: partnerSearch, mode: "insensitive" } }, { sku: { contains: partnerSearch, mode: "insensitive" } }, { accountingItemCode: { contains: partnerSearch, mode: "insensitive" } }] }
+          : {}),
+      },
+      orderBy: [{ createdAt: "asc" }, { name: "asc" }],
+    })
+    return response(items.map((item) => ({ id: item.id, code: item.accountingItemCode || item.sku, label: item.name, date: formatDate(item.createdAt), status: item.isActive ? "Activ" : "Inactiv" })))
+  }
+
+  if (kind === "sales-invoices") {
+    const items = await prisma.salesInvoice.findMany({
+      where: {
+        tenantId,
+        OR: [{ companyId }, { companyId: null }],
+        status: "ISSUED",
+        docDate: { gte: from, lte: to },
+        ...selectedIdWhere,
+        ...(locationId ? { locationId } : {}),
+        ...(partnerSearch
+          ? { AND: [{ OR: [{ customerName: { contains: partnerSearch, mode: "insensitive" } }, { customerCode: { contains: partnerSearch, mode: "insensitive" } }, { customerCif: { contains: partnerSearch, mode: "insensitive" } }] }] }
+          : {}),
+      },
+      orderBy: [{ docDate: "asc" }, { docNo: "asc" }],
+    })
+    return response(items.map((item) => ({ id: item.id, code: item.docNo, label: `Factura ${item.docNo}`, partner: item.customerName, date: formatDate(item.docDate), status: "Emisa", total: Number(item.totalGrossRon || 0) })))
+  }
+
+  if (kind === "purchase-receipts") {
+    const items = await prisma.purchaseReceipt.findMany({
+      where: {
+        tenantId,
+        OR: [{ companyId }, { companyId: null }],
+        status: "POSTED",
+        docDate: { gte: from, lte: to },
+        ...selectedIdWhere,
+        ...(locationId ? { locationId } : {}),
+        ...(partnerSearch
+          ? { AND: [{ OR: [{ supplierName: { contains: partnerSearch, mode: "insensitive" } }, { supplierCode: { contains: partnerSearch, mode: "insensitive" } }] }] }
+          : {}),
+      },
+      orderBy: [{ docDate: "asc" }, { docNo: "asc" }],
+    })
+    return response(items.map((item) => ({ id: item.id, code: item.docNo, label: `NIR ${item.docNo}`, partner: item.supplierName || "", date: formatDate(item.docDate), status: "Finalizat", total: Number(item.totalGrossRon || 0) })))
+  }
+
+  if (kind === "consumption-docs") {
+    const items = await prisma.consumptionDoc.findMany({
+      where: { tenantId, OR: [{ companyId }, { companyId: null }], docDate: { gte: from, lte: to }, ...selectedIdWhere, ...(locationId ? { locationId } : {}) },
+      orderBy: [{ docDate: "asc" }, { docNo: "asc" }],
+    })
+    return response(items.map((item) => ({ id: item.id, code: item.docNo, label: `Bon consum ${item.docNo}`, date: formatDate(item.docDate), status: "Creat" })))
+  }
+
+  if (kind === "production-docs") {
+    const items = await prisma.productionDoc.findMany({
+      where: { tenantId, OR: [{ companyId }, { companyId: null }], docDate: { gte: from, lte: to }, ...selectedIdWhere, ...(locationId ? { locationId } : {}) },
+      orderBy: [{ docDate: "asc" }, { docNo: "asc" }],
+    })
+    return response(items.map((item) => ({ id: item.id, code: item.docNo, label: `Productie ${item.docNo}`, date: formatDate(item.docDate), status: "Creat" })))
+  }
+
+  return res.status(400).json({ ok: false, error: "Tip de export contabil necunoscut." })
+})
+
 router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
   const company = await requireRequestCompany(req)
@@ -1197,6 +1338,8 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
   const partnerSearch = String(req.query.partnerSearch || "").trim()
   const valueType = normalizeValueType(req.query.valueType)
   const splitFiles = String(req.query.splitFiles || "").trim().toLowerCase() === "true"
+  const selectedIds = parseIdList(req.query.selectedIds)
+  const selectedIdWhere = selectedIds.length ? { id: { in: selectedIds } } : {}
   const from = dateFrom ? new Date(`${dateFrom}T00:00:00`) : new Date("2000-01-01T00:00:00")
   const to = dateTo ? new Date(`${dateTo}T23:59:59.999`) : new Date()
 
@@ -1212,6 +1355,17 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       where: {
         tenantId,
         companyId,
+        createdAt: { gte: from, lte: to },
+        ...selectedIdWhere,
+        ...(partnerSearch
+          ? {
+              OR: [
+                { name: { contains: partnerSearch, mode: "insensitive" } },
+                { sku: { contains: partnerSearch, mode: "insensitive" } },
+                { accountingItemCode: { contains: partnerSearch, mode: "insensitive" } },
+              ],
+            }
+          : {}),
       },
       include: {
         vatRate: true,
@@ -1288,22 +1442,33 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         tenantId,
         OR: [{ companyId }, { companyId: null }],
         isActive: true,
+        createdAt: { gte: from, lte: to },
+        ...selectedIdWhere,
         ...(partnerSearch
           ? {
-              OR: [
-                { name: { contains: partnerSearch, mode: "insensitive" } },
-                { code: { contains: partnerSearch, mode: "insensitive" } },
-                { cif: { contains: partnerSearch, mode: "insensitive" } },
+              AND: [
+                {
+                  OR: [
+                    { name: { contains: partnerSearch, mode: "insensitive" } },
+                    { code: { contains: partnerSearch, mode: "insensitive" } },
+                    { cif: { contains: partnerSearch, mode: "insensitive" } },
+                  ],
+                },
               ],
             }
           : {}),
       },
       orderBy: { name: "asc" },
     })
+    const usedCustomerCodes = new Set<string>()
+    const customerCodeById = new Map(
+      customers.map((customer, index) => [customer.id, uniqueSagaCode(customer.code, "CLI", index, usedCustomerCodes)])
+    )
+    const customerCode = (customer: any) => customerCodeById.get(customer.id) || customer.code || slugCode(customer.name, "CLI")
 
     sheetName = "Clienti"
     spreadsheetRows = customers.map((customer) => ({
-      COD: customer.code || slugCode(customer.name, "CLI"),
+      COD: customerCode(customer),
       DENUMIRE: customer.name || "",
       COD_FISCAL: customer.cif || "",
       REG_COM: customer.regNo || "",
@@ -1325,7 +1490,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         `<?xml version="1.0" encoding="utf-8"?>`,
         `<Clienti>`,
         `  <Linie>`,
-        `    <Cod>${xmlEscape(customer.code || slugCode(customer.name, "CLI"))}</Cod>`,
+        `    <Cod>${xmlEscape(customerCode(customer))}</Cod>`,
         `    <Denumire>${xmlEscape(customer.name || "")}</Denumire>`,
         `    <Cod_fiscal>${xmlEscape(customer.cif || "")}</Cod_fiscal>`,
         `    <Reg_com>${xmlEscape(customer.regNo || "")}</Reg_com>`,
@@ -1345,7 +1510,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       ].join("\n")
 
     xmlFiles = customers.map((customer) => ({
-      fileName: `CLI_${slugCode(customer.code || customer.name, "CLIENT")}_${compactDateToken(dateTo || new Date())}.xml`,
+      fileName: `CLI_${slugCode(customerCode(customer) || customer.name, "CLIENT")}_${compactDateToken(dateTo || new Date())}.xml`,
       content: buildCustomerXml(customer),
     }))
 
@@ -1355,7 +1520,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       ...customers.map((customer) =>
         [
           `  <Linie>`,
-          `    <Cod>${xmlEscape(customer.code || slugCode(customer.name, "CLI"))}</Cod>`,
+          `    <Cod>${xmlEscape(customerCode(customer))}</Cod>`,
           `    <Denumire>${xmlEscape(customer.name || "")}</Denumire>`,
           `    <Cod_fiscal>${xmlEscape(customer.cif || "")}</Cod_fiscal>`,
           `    <Reg_com>${xmlEscape(customer.regNo || "")}</Reg_com>`,
@@ -1381,22 +1546,33 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         tenantId,
         OR: [{ companyId }, { companyId: null }],
         isActive: true,
+        createdAt: { gte: from, lte: to },
+        ...selectedIdWhere,
         ...(partnerSearch
           ? {
-              OR: [
-                { name: { contains: partnerSearch, mode: "insensitive" } },
-                { code: { contains: partnerSearch, mode: "insensitive" } },
-                { cif: { contains: partnerSearch, mode: "insensitive" } },
+              AND: [
+                {
+                  OR: [
+                    { name: { contains: partnerSearch, mode: "insensitive" } },
+                    { code: { contains: partnerSearch, mode: "insensitive" } },
+                    { cif: { contains: partnerSearch, mode: "insensitive" } },
+                  ],
+                },
               ],
             }
           : {}),
       },
       orderBy: { name: "asc" },
     })
+    const usedSupplierCodes = new Set<string>()
+    const supplierCodeById = new Map(
+      suppliers.map((supplier, index) => [supplier.id, uniqueSagaCode(supplier.code, "FUR", index, usedSupplierCodes)])
+    )
+    const supplierCode = (supplier: any) => supplierCodeById.get(supplier.id) || supplier.code || slugCode(supplier.name, "FUR")
 
     sheetName = "Furnizori"
     spreadsheetRows = suppliers.map((supplier) => ({
-      COD: supplier.code || slugCode(supplier.name, "FUR"),
+      COD: supplierCode(supplier),
       DENUMIRE: supplier.name || "",
       COD_FISCAL: supplier.cif || "",
       TARA: sagaCountryCode(supplier.country),
@@ -1415,7 +1591,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         `<?xml version="1.0" encoding="utf-8"?>`,
         `<Furnizori>`,
         `  <Linie>`,
-        `    <Cod>${xmlEscape(supplier.code || slugCode(supplier.name, "FUR"))}</Cod>`,
+        `    <Cod>${xmlEscape(supplierCode(supplier))}</Cod>`,
         `    <Denumire>${xmlEscape(supplier.name || "")}</Denumire>`,
         `    <Cod_fiscal>${xmlEscape(supplier.cif || "")}</Cod_fiscal>`,
         `    <Tara>${xmlEscape(sagaCountryCode(supplier.country))}</Tara>`,
@@ -1432,7 +1608,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       ].join("\n")
 
     xmlFiles = suppliers.map((supplier) => ({
-      fileName: `FUR_${slugCode(supplier.code || supplier.name, "FURNIZOR")}_${compactDateToken(dateTo || new Date())}.xml`,
+      fileName: `FUR_${slugCode(supplierCode(supplier) || supplier.name, "FURNIZOR")}_${compactDateToken(dateTo || new Date())}.xml`,
       content: buildSupplierXml(supplier),
     }))
 
@@ -1442,7 +1618,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       ...suppliers.map((supplier) =>
         [
           `  <Linie>`,
-          `    <Cod>${xmlEscape(supplier.code || slugCode(supplier.name, "FUR"))}</Cod>`,
+          `    <Cod>${xmlEscape(supplierCode(supplier))}</Cod>`,
           `    <Denumire>${xmlEscape(supplier.name || "")}</Denumire>`,
           `    <Cod_fiscal>${xmlEscape(supplier.cif || "")}</Cod_fiscal>`,
           `    <Tara>${xmlEscape(sagaCountryCode(supplier.country))}</Tara>`,
@@ -1466,13 +1642,18 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         OR: [{ companyId }, { companyId: null }],
         status: "ISSUED",
         docDate: { gte: from, lte: to },
+        ...selectedIdWhere,
         ...(locationId ? { locationId } : {}),
         ...(partnerSearch
           ? {
-              OR: [
-                { customerName: { contains: partnerSearch, mode: "insensitive" } },
-                { customerCode: { contains: partnerSearch, mode: "insensitive" } },
-                { customerCif: { contains: partnerSearch, mode: "insensitive" } },
+              AND: [
+                {
+                  OR: [
+                    { customerName: { contains: partnerSearch, mode: "insensitive" } },
+                    { customerCode: { contains: partnerSearch, mode: "insensitive" } },
+                    { customerCif: { contains: partnerSearch, mode: "insensitive" } },
+                  ],
+                },
               ],
             }
           : {}),
@@ -1643,12 +1824,17 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         OR: [{ companyId }, { companyId: null }],
         status: "POSTED",
         docDate: { gte: from, lte: to },
+        ...selectedIdWhere,
         ...(locationId ? { locationId } : {}),
         ...(partnerSearch
           ? {
-              OR: [
-                { supplierName: { contains: partnerSearch, mode: "insensitive" } },
-                { supplierCode: { contains: partnerSearch, mode: "insensitive" } },
+              AND: [
+                {
+                  OR: [
+                    { supplierName: { contains: partnerSearch, mode: "insensitive" } },
+                    { supplierCode: { contains: partnerSearch, mode: "insensitive" } },
+                  ],
+                },
               ],
             }
           : {}),
@@ -1881,6 +2067,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         tenantId,
         OR: [{ companyId }, { companyId: null }],
         docDate: { gte: from, lte: to },
+        ...selectedIdWhere,
         ...(locationId ? { locationId } : {}),
       },
       include: {
@@ -1989,6 +2176,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         tenantId,
         OR: [{ companyId }, { companyId: null }],
         docDate: { gte: from, lte: to },
+        ...selectedIdWhere,
         ...(locationId ? { locationId } : {}),
       },
       include: {

@@ -19,6 +19,18 @@ function normalizeText(value: any) {
   return text || null
 }
 
+async function reserveUniqueCustomerCode(tx: any, tenantId: string, companyId: string) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const code = await reserveNextNumber(tx, tenantId, "customer")
+    const existing = await tx.customer.findFirst({
+      where: { tenantId, companyId, code },
+      select: { id: true },
+    })
+    if (!existing) return code
+  }
+  throw new Error("Nu am putut genera un cod unic pentru client.")
+}
+
 router.get("/api/v1/customers", async (req: AuthedRequest, res) => {
   const tenantId = getTenantId(req)
   if (!tenantId) {
@@ -91,7 +103,15 @@ router.post("/api/v1/customers", async (req: AuthedRequest, res) => {
 
   try {
     const customer = await prisma.$transaction(async (tx) => {
-      const code = normalizeText(req.body?.code) || (await reserveNextNumber(tx, tenantId, "customer"))
+      const manualCode = normalizeText(req.body?.code)
+      if (manualCode) {
+        const duplicate = await tx.customer.findFirst({
+          where: { tenantId, companyId, code: manualCode },
+          select: { id: true },
+        })
+        if (duplicate) throw new Error("Exista deja un client cu acest cod.")
+      }
+      const code = manualCode || (await reserveUniqueCustomerCode(tx, tenantId, companyId))
 
       return tx.customer.create({
         data: {
@@ -149,11 +169,22 @@ router.put("/api/v1/customers/:id", async (req: AuthedRequest, res) => {
   }
 
   try {
+    const nextCode = normalizeText(req.body?.code)
+    if (nextCode) {
+      const duplicate = await prisma.customer.findFirst({
+        where: { tenantId, companyId, code: nextCode, NOT: { id } },
+        select: { id: true },
+      })
+      if (duplicate) {
+        return res.status(400).json({ ok: false, error: "Exista deja un client cu acest cod." })
+      }
+    }
+
     const customer = await prisma.customer.update({
       where: { id },
       data: {
         name,
-        code: normalizeText(req.body?.code),
+        code: nextCode,
         cif: normalizeText(req.body?.cif),
         regNo: normalizeText(req.body?.regNo),
         address: normalizeText(req.body?.address),

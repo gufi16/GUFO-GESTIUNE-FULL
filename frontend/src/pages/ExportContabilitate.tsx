@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react"
-import { CalendarDays, ChevronDown, ChevronUp, Download, RefreshCw, Save, Search } from "lucide-react"
+import { CalendarDays, ChevronDown, ChevronUp, Download, Eye, RefreshCw, Save, Search, X } from "lucide-react"
 import PageHeader from "../components/PageHeader"
 import { api } from "../lib/api"
 import { getActiveLocationId, subscribeToActiveLocation } from "../lib/location"
@@ -70,6 +70,20 @@ type ProductsResponse = {
   items?: ProductAccountingItem[]
 }
 
+type ExportPreviewItem = {
+  id: string
+  code?: string
+  label: string
+  partner?: string
+  date?: string
+  status?: string
+  total?: number
+}
+
+type ExportPreviewResponse = {
+  items?: ExportPreviewItem[]
+}
+
 const emptyConfig: AccountingConfig = {
   articleCodeSource: "SKU",
   managementAnalytic: "LOCATION_CODE",
@@ -115,6 +129,10 @@ export default function ExportContabilitatePage() {
   const [partnerSearch, setPartnerSearch] = useState("")
   const [showConfig, setShowConfig] = useState(false)
   const [showMappings, setShowMappings] = useState(false)
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [previewItems, setPreviewItems] = useState<ExportPreviewItem[]>([])
+  const [selectedPreviewIds, setSelectedPreviewIds] = useState<string[]>([])
   const today = new Date()
   const [dateFrom, setDateFrom] = useState(toInputDate(new Date(today.getFullYear(), today.getMonth(), 1)))
   const [dateTo, setDateTo] = useState(toInputDate(today))
@@ -244,6 +262,12 @@ export default function ExportContabilitatePage() {
     }
   }, [splitFiles, supportsSplitFiles])
 
+  useEffect(() => {
+    setPreviewItems([])
+    setSelectedPreviewIds([])
+    setPreviewOpen(false)
+  }, [selectedKind, dateFrom, dateTo, selectedLocationId, partnerSearch])
+
   async function handleSaveConfig(event: FormEvent) {
     event.preventDefault()
     try {
@@ -264,8 +288,14 @@ export default function ExportContabilitatePage() {
 
   async function handleDownload(kind: string) {
     try {
+      if (previewItems.length > 0 && selectedPreviewIds.length === 0) {
+        setError("Nu ai selectat niciun document din previzualizare.")
+        return
+      }
+
       setDownloadingKind(kind)
       setError("")
+      const selectedIdsParam = previewItems.length > 0 ? selectedPreviewIds.join(",") : ""
       const response = await api<Response>(
         `/api/v1/reports/accounting/saga/export?kind=${encodeURIComponent(kind)}&dateFrom=${encodeURIComponent(
           dateFrom
@@ -273,7 +303,7 @@ export default function ExportContabilitatePage() {
           partnerSearch
         )}&valueType=${encodeURIComponent(selectedValueType)}&fileFormat=${encodeURIComponent(selectedFileFormat)}&splitFiles=${encodeURIComponent(
           supportsSplitFiles && splitFiles ? "true" : "false"
-        )}`,
+        )}&selectedIds=${encodeURIComponent(selectedIdsParam)}`,
         { raw: true }
       )
 
@@ -308,6 +338,41 @@ export default function ExportContabilitatePage() {
 
     setMessage("")
     await handleDownload(selectedKind)
+  }
+
+  async function handlePreview() {
+    if (!selectedKind) {
+      setError("Alege mai intai tipul de document pentru previzualizare.")
+      return
+    }
+
+    try {
+      setPreviewLoading(true)
+      setError("")
+      const data = await api<ExportPreviewResponse>(
+        `/api/v1/reports/accounting/saga/export-preview?kind=${encodeURIComponent(selectedKind)}&dateFrom=${encodeURIComponent(
+          dateFrom
+        )}&dateTo=${encodeURIComponent(dateTo)}&locationId=${encodeURIComponent(selectedLocationId)}&partnerSearch=${encodeURIComponent(
+          partnerSearch
+        )}`
+      )
+      const items = Array.isArray(data?.items) ? data.items : []
+      setPreviewItems(items)
+      setSelectedPreviewIds(items.map((item) => item.id))
+      setPreviewOpen(true)
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut incarca previzualizarea exportului.")
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
+
+  function togglePreviewItem(id: string) {
+    setSelectedPreviewIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]))
+  }
+
+  function toggleAllPreviewItems() {
+    setSelectedPreviewIds((prev) => (prev.length === previewItems.length ? [] : previewItems.map((item) => item.id)))
   }
 
   async function handleSaveProduct(product: ProductAccountingItem) {
@@ -492,7 +557,16 @@ export default function ExportContabilitatePage() {
             </label>
           </div>
 
-          <div className="flex justify-end">
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={handlePreview}
+              disabled={!selectedKind || previewLoading}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-[#17324D] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Eye size={15} />
+              {previewLoading ? "Se incarca..." : "Vizualizeaza"}
+            </button>
             <button
               type="button"
               onClick={handleGenerate}
@@ -791,6 +865,108 @@ export default function ExportContabilitatePage() {
           <div className="mt-3 text-sm text-slate-500">Maparile pe produse sunt ascunse momentan, ca sa ramana sus generatorul cat mai clar.</div>
         )}
       </section>
+
+      {previewOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 py-6">
+          <div className="max-h-[86vh] w-full max-w-5xl overflow-hidden rounded-[28px] bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Previzualizare export</div>
+                <div className="mt-1 text-lg font-semibold text-[#17324D]">
+                  {selectedKindMeta?.label || "Documente"}: {dateFrom} - {dateTo}
+                </div>
+                <div className="mt-1 text-sm text-slate-500">
+                  Bifeaza exact ce vrei sa intre in fisier. Daca nu folosesti previzualizarea, se exporta tot intervalul.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewOpen(false)}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 text-slate-500"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="max-h-[56vh] overflow-auto px-5 py-4">
+              <table className="min-w-full text-sm">
+                <thead className="sticky top-0 bg-white text-xs uppercase text-slate-400">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-semibold">
+                      <input
+                        type="checkbox"
+                        checked={previewItems.length > 0 && selectedPreviewIds.length === previewItems.length}
+                        onChange={toggleAllPreviewItems}
+                        className="h-4 w-4 rounded border-slate-300 text-[#17324D]"
+                      />
+                    </th>
+                    <th className="px-3 py-2 text-left font-semibold">Cod / nr.</th>
+                    <th className="px-3 py-2 text-left font-semibold">Denumire</th>
+                    <th className="px-3 py-2 text-left font-semibold">Partener</th>
+                    <th className="px-3 py-2 text-left font-semibold">Data</th>
+                    <th className="px-3 py-2 text-left font-semibold">Status</th>
+                    <th className="px-3 py-2 text-right font-semibold">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {previewItems.map((item) => (
+                    <tr key={item.id} className="border-t border-slate-200">
+                      <td className="px-3 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedPreviewIds.includes(item.id)}
+                          onChange={() => togglePreviewItem(item.id)}
+                          className="h-4 w-4 rounded border-slate-300 text-[#17324D]"
+                        />
+                      </td>
+                      <td className="px-3 py-3 font-semibold text-slate-800">{item.code || "-"}</td>
+                      <td className="px-3 py-3 text-slate-700">{item.label}</td>
+                      <td className="px-3 py-3 text-slate-600">{item.partner || "-"}</td>
+                      <td className="px-3 py-3 text-slate-600">{item.date || "-"}</td>
+                      <td className="px-3 py-3 text-slate-600">{item.status || "-"}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{typeof item.total === "number" ? item.total.toFixed(2) : "-"}</td>
+                    </tr>
+                  ))}
+                  {!previewItems.length ? (
+                    <tr>
+                      <td colSpan={7} className="px-3 py-8 text-center text-sm text-slate-500">
+                        Nu exista documente in intervalul selectat.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex flex-col gap-2 border-t border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-sm text-slate-500">
+                Selectate: <span className="font-semibold text-slate-800">{selectedPreviewIds.length}</span> din {previewItems.length}
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={() => setPreviewOpen(false)}
+                  className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"
+                >
+                  Inchide
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setPreviewOpen(false)
+                    await handleGenerate()
+                  }}
+                  disabled={!previewItems.length || !selectedPreviewIds.length || downloadingKind === selectedKind}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#2d2a5f] px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Download size={15} />
+                  Genereaza selectate
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

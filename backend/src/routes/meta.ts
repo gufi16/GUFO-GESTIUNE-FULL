@@ -389,6 +389,18 @@ router.get("/api/v1/meta/suppliers", async (req: AuthedRequest, res) => {
   res.json({ ok: true, suppliers })
 })
 
+async function reserveUniqueSupplierCode(tx: any, tenantId: string) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const code = await reserveNextNumber(tx, tenantId, "supplier")
+    const existing = await tx.supplier.findFirst({
+      where: { tenantId, code },
+      select: { id: true },
+    })
+    if (!existing) return code
+  }
+  throw new Error("Nu am putut genera un cod unic pentru furnizor.")
+}
+
 router.post("/api/v1/meta/suppliers", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
 
@@ -411,7 +423,14 @@ router.post("/api/v1/meta/suppliers", async (req: AuthedRequest, res) => {
 
   try {
     const supplier = await prisma.$transaction(async (tx) => {
-      const nextCode = code || (await reserveNextNumber(tx, tenantId, "supplier"))
+      if (code) {
+        const duplicate = await tx.supplier.findFirst({
+          where: { tenantId, code },
+          select: { id: true },
+        })
+        if (duplicate) throw new Error("Exista deja un furnizor cu acest cod.")
+      }
+      const nextCode = code || (await reserveUniqueSupplierCode(tx, tenantId))
 
       return tx.supplier.create({
         data: {
@@ -471,6 +490,16 @@ router.put("/api/v1/meta/suppliers/:id", async (req: AuthedRequest, res) => {
         ok: false,
         error: "Furnizorul nu există."
       })
+    }
+
+    if (code) {
+      const duplicate = await prisma.supplier.findFirst({
+        where: { tenantId, code, NOT: { id } },
+        select: { id: true },
+      })
+      if (duplicate) {
+        return res.status(400).json({ ok: false, error: "Exista deja un furnizor cu acest cod." })
+      }
     }
 
     const supplier = await prisma.supplier.update({
