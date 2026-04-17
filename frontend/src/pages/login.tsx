@@ -30,17 +30,13 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(circle_at_top,_#f4fbfc,_#eef3f8_48%,_#ffffff_100%)] p-6">
       <div className="card w-full max-w-md rounded-[28px] border border-slate-200/80 bg-white/95 p-7 shadow-[0_24px_80px_rgba(15,23,42,0.08)] backdrop-blur">
-        <div className="flex items-center gap-4">
-          <div className="flex h-16 w-16 items-center justify-center rounded-[20px] bg-[linear-gradient(145deg,#ffffff_0%,#f5fbfb_55%,#eef7f8_100%)] shadow-[0_14px_32px_rgba(30,157,176,0.12)]">
-            <img src="/gufo-logo.png" alt="Gufo" className="h-12 w-12 object-contain" />
+        <div className="flex flex-col items-center text-center">
+          <div className="flex h-20 w-20 items-center justify-center rounded-[24px] bg-[linear-gradient(145deg,#ffffff_0%,#f5fbfb_55%,#eef7f8_100%)] shadow-[0_14px_32px_rgba(30,157,176,0.12)]">
+            <img src="/gufo-logo.png" alt="Gufo" className="h-14 w-14 object-contain" />
           </div>
-          <div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-[2rem] font-black tracking-[-0.05em] text-[#17324D]">Gufo</span>
-              <span className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#1E9DB0]">ERP</span>
-            </div>
-            <p className="mt-0.5 text-sm text-neutral-500">Autentificare ERP</p>
-          </div>
+          <p className="mt-4 max-w-[250px] text-sm font-medium leading-6 text-neutral-500">
+            Totul sub control, simplu si clar.
+          </p>
         </div>
 
         <form className="mt-6 space-y-3" onSubmit={onSubmit}>

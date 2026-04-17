@@ -100,25 +100,22 @@ function BrandBlock({ mobile = false }: { mobile?: boolean }) {
         mobile ? "p-3" : "p-4"
       )}
     >
-      <div className={clsx("flex items-center", mobile ? "gap-3" : "gap-4")}>
+      <div className="flex flex-col items-center justify-center text-center">
         <img
           src="/gufo-logo.png"
           alt="Gufo"
-          className={clsx("shrink-0 object-contain drop-shadow-[0_8px_16px_rgba(30,157,176,0.18)]", mobile ? "h-10 w-10" : "h-12 w-12")}
+          className={clsx(
+            "shrink-0 object-contain drop-shadow-[0_8px_16px_rgba(30,157,176,0.18)]",
+            mobile ? "h-14 w-14" : "h-16 w-16"
+          )}
         />
-
-        <div className="min-w-0">
-          <div className="flex items-baseline gap-1.5">
-            <span className={clsx("font-black tracking-[-0.04em] text-[#17324D]", mobile ? "text-xl" : "text-[1.65rem]")}>
-              Gufo
-            </span>
-            <span className={clsx("font-semibold uppercase tracking-[0.22em] text-[#1E9DB0]", mobile ? "text-[10px]" : "text-[11px]")}>
-              ERP
-            </span>
-          </div>
-          <div className={clsx("mt-0.5 font-medium tracking-[0.16em] text-slate-500 uppercase", mobile ? "text-[9px]" : "text-[10px]")}>
-            Smart Business Suite
-          </div>
+        <div
+          className={clsx(
+            "mt-3 max-w-[180px] font-medium leading-5 text-slate-500",
+            mobile ? "text-[11px]" : "text-xs"
+          )}
+        >
+          Totul sub control, simplu si clar.
         </div>
       </div>
     </div>
