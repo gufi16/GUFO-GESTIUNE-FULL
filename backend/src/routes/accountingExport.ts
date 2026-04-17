@@ -506,6 +506,20 @@ function sagaInvoiceLineTypeFromProduct(product: any) {
   }
 }
 
+function sagaPurchaseReceiptLineType(product: any, stockTypes: any[], config: any) {
+  const stockType = pickStockType(product, stockTypes, config)
+  const stockTypeName = sagaInvoiceStockTypeName(stockType)
+  const productClass = String(product?.class || "").toUpperCase()
+  const productType = sagaInvoiceLineTypeFromProduct(product)
+
+  if (["MATERIE_PRIMA", "CONSUMABILE", "ALTE_MATERIALE"].includes(productClass)) {
+    return stockTypeName || "Materii prime"
+  }
+
+  if (productType && productType !== "Nedefinit") return productType
+  return stockTypeName || "Marfuri"
+}
+
 function sgrUnitValue(product: any) {
   if (!product?.isSgr) return 0
   const value = toFiniteNumber(product?.sgrValue)
@@ -990,12 +1004,14 @@ function buildSagaFacturaLine(line: {
   qty?: unknown
   price?: unknown
   value?: unknown
+  total?: unknown
   vatRate?: unknown
   vatValue?: unknown
   account?: unknown
   priceSale?: unknown
   activity?: unknown
   deductionType?: unknown
+  sagaAliases?: boolean
 }) {
   return [
     `          <Linie>`,
@@ -1018,6 +1034,25 @@ function buildSagaFacturaLine(line: {
     xmlLineTag("Cont", line.account),
     xmlLineTag("TipDeducere", line.deductionType),
     xmlLineTag("PretVanzare", line.priceSale),
+    ...(line.sagaAliases
+      ? [
+          xmlLineTag("den_tip", line.type),
+          xmlLineTag("den_gest", line.management),
+          xmlLineTag("denumire", line.description),
+          xmlLineTag("cod", line.supplierCode || line.clientCode),
+          xmlLineTag("um", line.uom),
+          xmlLineTag("tva_art", line.vatRate),
+          xmlLineTag("cantitate", line.qty),
+          xmlLineTag("pret_unitar", line.price),
+          xmlLineTag("valoare", line.value),
+          xmlLineTag("total", line.total || line.value),
+          xmlLineTag("tva_ded", line.vatValue),
+          xmlLineTag("cont", line.account),
+          xmlLineTag("tip_ded", line.deductionType),
+          xmlLineTag("pret_vanz", line.priceSale),
+          xmlLineTag("text_supl", line.info),
+        ]
+      : []),
     `          </Linie>`,
   ].join("\n")
 }
@@ -2039,8 +2074,9 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         name: "IntrariDetalii",
         rows: receipts.flatMap((receipt) =>
           receipt.items.flatMap((line) => {
+            const lineType = sagaPurchaseReceiptLineType(line.product, stockTypes, config)
             const productRow = {
-              den_tip: sagaInvoiceLineTypeFromProduct(line.product),
+              den_tip: lineType,
               den_gest: receipt.location?.code || receipt.location?.name || "",
               denumire: line.product?.name || "",
               cod: line.product?.accountingItemCode || line.product?.sku || "",
@@ -2154,7 +2190,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
               (line) => ({
                 code: line.product?.accountingItemCode || line.product?.sku || slugCode(line.product?.name || "ART", "ART"),
                 name: line.product?.name || "",
-                type: sagaInvoiceLineTypeFromProduct(line.product),
+                type: sagaPurchaseReceiptLineType(line.product, stockTypes, config),
                 vatRateValue: Number(line.vatRateValue || 0),
                 valueRon: 0,
                 vatRon: 0,
@@ -2228,18 +2264,20 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
               supplierCode: line.code,
               guid: line.code,
               value: decimal(line.valueRon),
+              total: decimal(Number(line.valueRon || 0) + Number(line.vatRon || 0)),
               vatRate: sagaNumber(line.vatRateValue, 2),
               vatValue: decimal(line.vatRon),
               account: line.stockAccount,
               activity: "",
               deductionType: "",
+              sagaAliases: true,
             })
           }
 
           const stockType = pickStockType(line.product, stockTypes, config)
           return buildSagaFacturaLine({
             index: index + 1,
-            type: sagaInvoiceLineTypeFromProduct(line.product),
+            type: sagaPurchaseReceiptLineType(line.product, stockTypes, config),
             management: receipt.location?.code || receipt.location?.name || "",
             activity: "",
             description: line.product?.name || "",
@@ -2250,11 +2288,13 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
             qty: decimal(line.stockQty || line.qty, 3),
             price: decimal(line.unitCostNetRon),
             value: decimal(line.lineNetRon),
+            total: decimal(line.lineGrossRon),
             vatRate: sagaNumber(line.vatRateValue, 2),
             vatValue: decimal(line.lineVatRon),
             account: stockType?.inventoryAccount || config.inventoryAccount,
             deductionType: "",
             priceSale: line.product?.price ? decimal(line.product.price) : "",
+            sagaAliases: true,
           })
         }),
         `        </Continut>`,
