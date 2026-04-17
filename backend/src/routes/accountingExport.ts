@@ -533,8 +533,7 @@ function sgrUnitValue(product: any) {
 }
 
 function sgrArticleCode(product: any, fallbackCode?: unknown) {
-  const base = product?.accountingItemCode || product?.sku || fallbackCode || product?.name || "SGR"
-  return `SGR_${slugCode(String(base), "ART").slice(0, 16)}`
+  return "SGR"
 }
 
 function sgrArticleName(product: any, fallbackName?: unknown) {
@@ -544,7 +543,7 @@ function sgrArticleName(product: any, fallbackName?: unknown) {
 function sgrProductShape(product: any, fallbackCode?: unknown, fallbackName?: unknown) {
   return {
     ...(product || {}),
-    id: `${product?.id || fallbackCode || "sgr"}:sgr`,
+    id: "SGR",
     sku: sgrArticleCode(product, fallbackCode),
     accountingItemCode: sgrArticleCode(product, fallbackCode),
     name: sgrArticleName(product, fallbackName),
@@ -590,7 +589,7 @@ function buildSalesInvoiceSgrLine(invoice: any, line: any, index: number, stockT
       activity: "",
       description: product.name,
       clientCode: product.accountingItemCode,
-      guid: product.id,
+      guid: product.accountingItemCode,
       barcode: "",
       uom: line.uomCode || product.uom?.code || "BUC",
       qty: decimal(qty, 3),
@@ -658,11 +657,13 @@ function buildSagaArticleXmlLine(product: any, config: any) {
     `    <UM>${xmlEscape(product?.uom?.code || "BUC")}</UM>`,
     `    <Tip>${xmlEscape(sagaArticleTypeFromProduct(product))}</Tip>`,
     `    <TVA>${xmlEscape(sagaNumber(product?.vatRate?.rate ?? 0, 2))}</TVA>`,
+    `    <P_TVA>${xmlEscape(sagaNumber(product?.vatRate?.rate ?? 0, 2))}</P_TVA>`,
     `    <Pret>${decimal(product?.price)}</Pret>`,
     `    <Pret_TVA>${decimal(Number(product?.price || 0) * (1 + Number(product?.vatRate?.rate ?? 0) / 100))}</Pret_TVA>`,
+    `    <Pret_cuTVA>${decimal(Number(product?.price || 0) * (1 + Number(product?.vatRate?.rate ?? 0) / 100))}</Pret_cuTVA>`,
     `    <Cod_bare>${xmlEscape(product?.barcodes?.[0]?.barcode || "")}</Cod_bare>`,
     `    <Informatii/>`,
-    `    <Guid_cod>${xmlEscape(product?.id || articleCode)}</Guid_cod>`,
+    `    <Guid_cod>${xmlEscape(articleCode)}</Guid_cod>`,
     `  </Linie>`,
   ].join("\n")
 }
@@ -1621,16 +1622,15 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       return {
         COD: String(articleCode || "").trim(),
         DENUMIRE: product.name,
-        COD_NC: "",
-        COD_CPV: "",
         UM: product.uom?.code || "BUC",
         TIP: sagaArticleTypeFromProduct(product),
-        TVA: Number(product.vatRate?.rate ?? 0),
+        P_TVA: Number(product.vatRate?.rate ?? 0),
         PRET: Number(product.price || 0),
-        PRET_TVA: Number(product.price || 0) * (1 + Number(product.vatRate?.rate ?? 0) / 100),
+        PRET_CUTVA: Number(product.price || 0) * (1 + Number(product.vatRate?.rate ?? 0) / 100),
         COD_BARE: product.barcodes?.[0]?.barcode || "",
-        INFORMATII: "",
-        GUID_COD: product.id,
+        COD_NC: "",
+        COD_CPV: "",
+        TEXT_SUPL: "",
       }
     })
 
@@ -2292,7 +2292,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
             description: line.product?.name || "",
             supplierCode: sagaArticleCodeForProduct(line.product, config),
             clientCode: sagaArticleCodeForProduct(line.product, config),
-            guid: line.product?.id || "",
+            guid: sagaArticleCodeForProduct(line.product, config),
             barcode: line.product?.barcodes?.[0]?.barcode || "",
             uom: line.product?.uom?.code || "BUC",
             qty: decimal(line.stockQty || line.qty, 3),
