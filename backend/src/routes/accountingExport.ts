@@ -613,7 +613,7 @@ function receiptSgrValues(line: any, receipt: any) {
 function sagaArticleTypeFromProduct(product: any) {
   switch (String(product?.class || "").toUpperCase()) {
     case "MARFA":
-      return "Marfa"
+      return "Marfuri"
     case "MATERIE_PRIMA":
     case "CONSUMABILE":
     case "ALTE_MATERIALE":
@@ -637,7 +637,7 @@ function sagaArticleTypeFromProduct(product: any) {
     case "TAXA_VERDE":
       return "Taxa verde"
     default:
-      return "Marfa"
+      return "Marfuri"
   }
 }
 
