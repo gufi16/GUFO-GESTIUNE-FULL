@@ -101,7 +101,7 @@ function BrandBlock({ mobile = false }: { mobile?: boolean }) {
       )}
     >
       <div className="flex flex-col items-center justify-center text-center">
-        <div className={clsx("flex items-center justify-center", mobile ? "gap-2" : "gap-2.5")}>
+        <div className={clsx("flex items-center justify-center", mobile ? "-space-x-1" : "-space-x-1.5")}>
           <img
             src="/gufo-logo.png?v=20260417-6"
             alt="Gufo"
