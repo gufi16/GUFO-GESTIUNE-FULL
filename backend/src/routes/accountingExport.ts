@@ -590,10 +590,12 @@ function buildSalesInvoiceSgrLine(invoice: any, line: any, index: number, stockT
       qty: decimal(qty, 3),
       price: decimal(unit),
       value: decimal(sgrTotal),
+      total: decimal(sgrTotal),
       vatRate: "0",
       vatValue: "0.00",
       account: stockType?.salesAccount || config.salesAccount,
       deductionType: "",
+      sagaAliases: true,
     }),
   }
 }
@@ -1974,10 +1976,12 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
             qty: decimal(line.qty, 3),
             price: decimal(line.unitPriceFc),
             value: decimal(line.lineNetRon),
+            total: decimal(line.lineGrossRon),
             vatRate: sagaNumber(line.vatRateValue, 2),
             vatValue: decimal(line.lineVatRon),
             account: stockType?.salesAccount || config.salesAccount,
             deductionType: "",
+            sagaAliases: true,
           })
           const sgrLine = buildSalesInvoiceSgrLine(invoice, line, index * 2 + 2, stockTypes, config)
           return sgrLine ? [productLine, sgrLine.xml] : [productLine]
