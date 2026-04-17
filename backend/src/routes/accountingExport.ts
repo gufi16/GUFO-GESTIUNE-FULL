@@ -481,10 +481,15 @@ function sagaInvoiceStockTypeName(stockType: any) {
   return "Marfuri"
 }
 
-function sagaInvoiceLineTypeFromProduct(product: any) {
-  switch (String(product?.class || "").toUpperCase()) {
+function sagaProductTypeFromClass(classValue: unknown) {
+  switch (String(classValue || "").toUpperCase()) {
     case "MARFA":
       return "Marfuri"
+    case "MATERIE_PRIMA":
+      return "Materii prime"
+    case "CONSUMABILE":
+    case "ALTE_MATERIALE":
+      return "Alte mat. consumabile"
     case "PRODUS_FIN":
       return "Produse finite"
     case "AMBALAJE":
@@ -503,27 +508,17 @@ function sagaInvoiceLineTypeFromProduct(product: any) {
       return "Discount comercial iesiri"
     case "TAXA_VERDE":
       return "Taxa verde"
-    case "MATERIE_PRIMA":
-    case "CONSUMABILE":
-    case "ALTE_MATERIALE":
-      return "Marfuri"
     default:
-      return "Nedefinit"
+      return "Marfuri"
   }
 }
 
-function sagaPurchaseReceiptLineType(product: any, stockTypes: any[], config: any) {
-  const stockType = pickStockType(product, stockTypes, config)
-  const stockTypeName = sagaInvoiceStockTypeName(stockType)
-  const productClass = String(product?.class || "").toUpperCase()
-  const productType = sagaInvoiceLineTypeFromProduct(product)
+function sagaInvoiceLineTypeFromProduct(product: any) {
+  return sagaProductTypeFromClass(product?.class)
+}
 
-  if (["MATERIE_PRIMA", "CONSUMABILE", "ALTE_MATERIALE"].includes(productClass)) {
-    return stockTypeName || "Materii prime"
-  }
-
-  if (productType && productType !== "Nedefinit") return productType
-  return stockTypeName || "Marfuri"
+function sagaPurchaseReceiptLineType(product: any, _stockTypes: any[], _config: any) {
+  return sagaProductTypeFromClass(product?.class)
 }
 
 function sgrUnitValue(product: any) {
@@ -611,34 +606,7 @@ function receiptSgrValues(line: any, receipt: any) {
 }
 
 function sagaArticleTypeFromProduct(product: any) {
-  switch (String(product?.class || "").toUpperCase()) {
-    case "MARFA":
-      return "Marfuri"
-    case "MATERIE_PRIMA":
-    case "CONSUMABILE":
-    case "ALTE_MATERIALE":
-      return "Materii prime"
-    case "PRODUS_FIN":
-      return "Produse finite"
-    case "AMBALAJE":
-      return "Ambalaje"
-    case "AMBALAJ_SGR":
-      return "Ambalaje SGR"
-    case "REZIDUALE":
-      return "Produse reziduale"
-    case "SEMIFABRICATE":
-      return "Semifabricate"
-    case "SERVICIU_VANDUT":
-      return "Servicii vandute"
-    case "DISCOUNT_FINANCIAR_IESIRI":
-      return "Discount financiar iesiri"
-    case "DISCOUNT_COMERCIAL_IESIRI":
-      return "Discount comercial iesiri"
-    case "TAXA_VERDE":
-      return "Taxa verde"
-    default:
-      return "Marfuri"
-  }
+  return sagaProductTypeFromClass(product?.class)
 }
 
 function sagaArticleCodeForProduct(product: any, config: any) {
