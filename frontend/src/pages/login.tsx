@@ -35,7 +35,7 @@ export default function Login() {
             A system behind every sound decision
           </p>
           <div className="mt-4 flex h-24 w-24 items-center justify-center rounded-[24px] bg-[linear-gradient(145deg,#ffffff_0%,#f5fbfb_55%,#eef7f8_100%)] shadow-[0_14px_32px_rgba(30,157,176,0.12)]">
-            <img src="/gufo-mark.svg?v=20260417-3" alt="Gufo" className="h-16 w-16 object-contain" />
+            <img src="/gufo-mark.svg?v=20260417-4" alt="Gufo" className="h-16 w-16 object-contain" />
           </div>
         </div>
 

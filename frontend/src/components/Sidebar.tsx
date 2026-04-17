@@ -102,11 +102,11 @@ function BrandBlock({ mobile = false }: { mobile?: boolean }) {
     >
       <div className="flex flex-col items-center justify-center text-center">
         <img
-          src="/gufo-lockup.svg?v=20260417-3"
+          src="/gufo-lockup.svg?v=20260417-4"
           alt="Gufo"
           className={clsx(
             "shrink-0 object-contain drop-shadow-[0_8px_16px_rgba(30,157,176,0.14)]",
-            mobile ? "h-12 w-[132px]" : "h-14 w-[168px]"
+            mobile ? "h-12 w-[138px]" : "h-14 w-[176px]"
           )}
         />
         <div
