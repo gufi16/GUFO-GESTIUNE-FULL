@@ -212,8 +212,8 @@ export default function Sidebar() {
           <div className="border-b border-slate-200/80 px-5 pb-4 pt-5">
             <div className="rounded-[28px] border border-slate-200/80 bg-gradient-to-br from-slate-50 to-white p-4 shadow-sm">
               <div className="flex items-start gap-3">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-sm font-bold text-white shadow-sm">
-                  GF
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/80">
+                  <img src="/gufo-logo.png?v=20260417-2" alt="Gufo" className="h-10 w-10 object-contain" />
                 </div>
 
                 <div className="min-w-0 flex-1">

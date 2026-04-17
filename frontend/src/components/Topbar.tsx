@@ -497,7 +497,7 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
             </div>
 
             <div className="flex min-w-[190px] items-center gap-2 rounded-[12px] border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm shadow-slate-900/[0.03]">
-              <img src="/favicon.svg" alt="Gufo ERP" className="h-8 w-8 rounded-[10px]" />
+              <img src="/gufo-logo.png?v=20260417-2" alt="Gufo ERP" className="h-8 w-8 object-contain" />
               <div className="min-w-0 text-sm">
                 <div className="truncate font-semibold text-[#17324D]">{userLabel}</div>
                 <div className="truncate text-xs uppercase text-slate-500">{companyLabel} • {userMeta}</div>

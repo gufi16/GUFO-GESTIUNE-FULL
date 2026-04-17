@@ -1,28 +1,3 @@
-<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="core" x1="320" y1="270" x2="710" y2="720" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#1E476F"/>
-      <stop offset="1" stop-color="#17324D"/>
-    </linearGradient>
-    <linearGradient id="accent" x1="256" y1="240" x2="798" y2="792" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#F7C65A"/>
-      <stop offset="1" stop-color="#E99A1A"/>
-    </linearGradient>
-  </defs>
-
-  <rect width="1024" height="1024" rx="220" fill="#F6F8FB"/>
-
-  <rect x="316" y="284" width="392" height="392" rx="116" fill="url(#core)"/>
-
-  <path d="M316 284H260C240.118 284 224 300.118 224 320V376C224 395.882 240.118 412 260 412H316V284Z" fill="url(#accent)"/>
-  <path d="M708 284H764C783.882 284 800 300.118 800 320V376C800 395.882 783.882 412 764 412H708V284Z" fill="url(#accent)"/>
-  <path d="M316 676H260C240.118 676 224 659.882 224 640V584C224 564.118 240.118 548 260 548H316V676Z" fill="url(#accent)"/>
-  <path d="M708 676H764C783.882 676 800 659.882 800 640V584C800 564.118 783.882 548 764 548H708V676Z" fill="url(#accent)"/>
-
-  <rect x="204" y="238" width="74" height="74" rx="22" fill="#E99A1A"/>
-  <rect x="746" y="238" width="74" height="74" rx="22" fill="#E99A1A"/>
-  <rect x="204" y="712" width="74" height="74" rx="22" fill="#E99A1A"/>
-  <rect x="746" y="712" width="74" height="74" rx="22" fill="#E99A1A"/>
-
-  <path d="M512.95 388C461.639 388 424 425.431 424 472.999C424 521.226 460.907 558 518.298 558C553.357 558 579.585 545.862 596 524.621V478.155H516.713V506.684H558.106V512.487C549.581 519.645 536.852 523.869 522.775 523.869C490.245 523.869 469.132 502.698 469.132 472.999C469.132 444.054 489.508 422.131 520.611 422.131C541.105 422.131 554.362 428.86 565.305 440.747L592.271 417.366C574.545 397.739 548.707 388 512.95 388Z" fill="white"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1600" viewBox="0 0 1600 1600">
+  <image href="/gufo-logo.png?v=20260417-2" width="1600" height="1600" preserveAspectRatio="xMidYMid meet" />
 </svg>

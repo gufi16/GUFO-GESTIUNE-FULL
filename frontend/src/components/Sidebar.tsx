@@ -1,4 +1,4 @@
-import { NavLink } from "react-router-dom"
+﻿import { NavLink } from "react-router-dom"
 import clsx from "clsx"
 import {
   BarChart3,
@@ -92,6 +92,39 @@ function SidebarLink({ item }: { item: SidebarItem }) {
   )
 }
 
+function BrandBlock({ mobile = false }: { mobile?: boolean }) {
+  return (
+    <div
+      className={clsx(
+        "overflow-hidden rounded-[24px] border border-[#dbe8ea] bg-[linear-gradient(145deg,#ffffff_0%,#f5fbfb_55%,#eef7f8_100%)] shadow-[0_14px_36px_rgba(23,50,77,0.06)]",
+        mobile ? "p-3" : "p-4"
+      )}
+    >
+      <div className={clsx("flex items-center", mobile ? "gap-3" : "gap-4")}>
+        <img
+          src="/gufo-logo.png"
+          alt="Gufo"
+          className={clsx("shrink-0 object-contain drop-shadow-[0_8px_16px_rgba(30,157,176,0.18)]", mobile ? "h-10 w-10" : "h-12 w-12")}
+        />
+
+        <div className="min-w-0">
+          <div className="flex items-baseline gap-1.5">
+            <span className={clsx("font-black tracking-[-0.04em] text-[#17324D]", mobile ? "text-xl" : "text-[1.65rem]")}>
+              Gufo
+            </span>
+            <span className={clsx("font-semibold uppercase tracking-[0.22em] text-[#1E9DB0]", mobile ? "text-[10px]" : "text-[11px]")}>
+              ERP
+            </span>
+          </div>
+          <div className={clsx("mt-0.5 font-medium tracking-[0.16em] text-slate-500 uppercase", mobile ? "text-[9px]" : "text-[10px]")}>
+            Smart Business Suite
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function SidebarContent({
   visibleSections,
   onNavigate,
@@ -107,7 +140,7 @@ function SidebarContent({
     <div className="flex h-full w-full flex-col overflow-hidden">
       <div className="border-b border-slate-200/80 px-4 pb-3 pt-4">
         {mobile ? (
-          <div className="mb-1 flex items-center justify-end">
+          <div className="mb-3 flex items-center justify-end">
             <button
               type="button"
               onClick={onCloseMobile}
@@ -118,17 +151,7 @@ function SidebarContent({
           </div>
         ) : null}
 
-        {!mobile ? (
-          <div className="rounded-[16px] border border-slate-200 bg-white p-3 shadow-sm shadow-slate-900/[0.03]">
-            <div className="flex items-center">
-              <img src="/favicon.svg" alt="Gufo ERP" className="h-12 w-12 rounded-[14px]" />
-            </div>
-          </div>
-        ) : (
-          <div className="mt-2 flex items-center">
-            <img src="/favicon.svg" alt="Gufo ERP" className="h-9 w-9 rounded-[12px]" />
-          </div>
-        )}
+        <BrandBlock mobile={mobile} />
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
