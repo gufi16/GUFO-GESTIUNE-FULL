@@ -656,18 +656,6 @@ function buildSagaArticlesXml(products: any[], config: any) {
   ].join("\n")
 }
 
-function sagaSgrArticleFile(config: any, dateValue: Date | string | null | undefined) {
-  const product = sgrProductShape({ uom: { code: "BUC", name: "Bucata" }, price: 0.5, sgrValue: 0.5 })
-  return {
-    fileName: `ART_SGR_${compactDateToken(dateValue || new Date())}.xml`,
-    content: buildSagaArticlesXml([product], config),
-  }
-}
-
-function hasSgrLines(documents: any[]) {
-  return documents.some((document) => document.items?.some((line: any) => line.product?.isSgr || isSagaSgrArticle(line.product)))
-}
-
 function normalizeFileFormat(value: unknown) {
   const normalized = String(value || "").trim().toLowerCase()
   if (normalized === "dbf") return "dbf"
@@ -2017,7 +2005,6 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       fileName: downloadName("sales-invoices", dateFrom, dateTo, { company, firstDoc: invoice }),
       content: [`<?xml version="1.0" encoding="utf-8"?>`, `<Facturi>`, buildInvoiceXml(invoice), `</Facturi>`].join("\n"),
     }))
-    if (hasSgrLines(invoices)) xmlFiles.unshift(sagaSgrArticleFile(config, dateTo || invoices[0]?.docDate || new Date()))
 
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
@@ -2321,7 +2308,6 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         content: [`<?xml version="1.0" encoding="utf-8"?>`, `<Facturi>`, buildReceiptXml(receipt), `</Facturi>`].join("\n"),
       }
     })
-    if (hasSgrLines(receipts)) xmlFiles.unshift(sagaSgrArticleFile(config, dateTo || receipts[0]?.docDate || new Date()))
 
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
