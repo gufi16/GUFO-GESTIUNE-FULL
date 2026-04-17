@@ -31,8 +31,9 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(circle_at_top,_#f4fbfc,_#eef3f8_48%,_#ffffff_100%)] p-6">
       <div className="card w-full max-w-md rounded-[28px] border border-slate-200/80 bg-white/95 p-7 shadow-[0_24px_80px_rgba(15,23,42,0.08)] backdrop-blur">
         <div className="flex flex-col items-center text-center">
-          <div className="flex h-24 w-24 items-center justify-center rounded-[24px] bg-[linear-gradient(145deg,#ffffff_0%,#f5fbfb_55%,#eef7f8_100%)] shadow-[0_14px_32px_rgba(30,157,176,0.12)]">
-            <img src="/gufo-logo.png?v=20260417-6" alt="Gufo" className="h-16 w-16 object-contain" />
+          <div className="-space-x-2 pr-1.5 flex items-center justify-center">
+            <img src="/gufo-logo.png?v=20260417-6" alt="Gufo" className="h-16 w-16 object-contain drop-shadow-[0_8px_16px_rgba(30,157,176,0.14)]" />
+            <span className="text-[2.6rem] font-black tracking-[-0.05em] text-[#17324D]">ufo</span>
           </div>
           <p className="mt-3 max-w-[270px] text-sm font-medium leading-6 text-neutral-500">
             A system behind every sound decision
