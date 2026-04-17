@@ -2286,41 +2286,74 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       ].join("\n")
     }
 
-    const receiptArticleMap = new Map<string, any>()
-    receipts.forEach((receipt) => {
+    const receiptArticles = (receipt: any) => {
+      const map = new Map<string, any>()
       receipt.items.forEach((line: any) => {
         if (line.product) {
-          receiptArticleMap.set(sagaArticleCodeForProduct(line.product, config), line.product)
+          map.set(sagaArticleCodeForProduct(line.product, config), line.product)
           const sgr = receiptSgrValues(line, receipt)
           if (line.product?.isSgr && sgr.qty > 0 && sgr.unit > 0) {
             const sgrProduct = sgrProductShape(line.product)
-            receiptArticleMap.set(sagaArticleCodeForProduct(sgrProduct, config), sgrProduct)
+            map.set(sagaArticleCodeForProduct(sgrProduct, config), sgrProduct)
           }
         }
       })
-    })
+      return Array.from(map.values())
+    }
 
-    const receiptArticleFiles = Array.from(receiptArticleMap.values()).map((product) => ({
-      fileName: `ART_${slugCode(sagaArticleCodeForProduct(product, config) || product.name, "ART")}_${compactDateToken(dateTo || new Date())}.xml`,
-      content: buildSagaArticlesXml([product], config),
-    }))
+    const buildCompleteReceiptXml = (receipt: any) =>
+      [
+        `<?xml version="1.0" encoding="utf-8"?>`,
+        `<SAGA>`,
+        `  <Articole>`,
+        ...receiptArticles(receipt).map((product) =>
+          buildSagaArticleXmlLine(product, config)
+            .split("\n")
+            .map((line) => `  ${line}`)
+            .join("\n")
+        ),
+        `  </Articole>`,
+        `  <Facturi>`,
+        buildReceiptXml(receipt)
+          .split("\n")
+          .map((line) => `  ${line}`)
+          .join("\n"),
+        `  </Facturi>`,
+        `</SAGA>`,
+      ].join("\n")
 
-    const receiptInvoiceFiles = receipts.map((receipt) => {
+    xmlFiles = receipts.map((receipt) => {
       const supplierCode = String(receipt.supplier?.cif || receipt.supplierCode || receipt.supplier?.code || "FURNIZOR").replace(/[^A-Za-z0-9]/g, "")
       const docNumber = extractSagaNumber(receipt.spvInvoiceNo || receipt.docNo || "NIR")
       const docDate = compactDateToken(receipt.docDate || dateTo || new Date())
       return {
-        fileName: `F_${supplierCode || "FURNIZOR"}_${docNumber || "NIR"}_${docDate}.xml`,
-        content: [`<?xml version="1.0" encoding="utf-8"?>`, `<Facturi>`, buildReceiptXml(receipt), `</Facturi>`].join("\n"),
+        fileName: `NIR_COMPLET_${supplierCode || "FURNIZOR"}_${docNumber || "NIR"}_${docDate}.xml`,
+        content: buildCompleteReceiptXml(receipt),
       }
     })
-    xmlFiles = [...receiptArticleFiles, ...receiptInvoiceFiles]
 
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
-      `<Facturi>`,
-      ...receipts.map((receipt) => buildReceiptXml(receipt)),
-      `</Facturi>`,
+      `<SAGA>`,
+      `  <Articole>`,
+      ...receipts
+        .flatMap((receipt) => receiptArticles(receipt))
+        .map((product) =>
+          buildSagaArticleXmlLine(product, config)
+            .split("\n")
+            .map((line) => `  ${line}`)
+            .join("\n")
+        ),
+      `  </Articole>`,
+      `  <Facturi>`,
+      ...receipts.map((receipt) =>
+        buildReceiptXml(receipt)
+          .split("\n")
+          .map((line) => `  ${line}`)
+          .join("\n")
+      ),
+      `  </Facturi>`,
+      `</SAGA>`,
     ].join("\n")
   } else if (kind === "consumption-docs") {
     const documents = await prisma.consumptionDoc.findMany({
