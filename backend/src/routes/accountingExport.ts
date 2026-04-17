@@ -1078,7 +1078,9 @@ function buildSagaFacturaLine(line: {
     ...(line.sagaAliases
       ? [
           xmlLineTag("den_tip", line.type),
+          xmlLineTag("gestiune", line.management),
           xmlLineTag("den_gest", line.management),
+          xmlLineTag("GESTIUNE", line.management),
           xmlLineTag("denumire", line.description),
           xmlLineTag("cod", line.supplierCode || line.clientCode),
           xmlLineTag("um", line.uom),
@@ -2084,11 +2086,14 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         rows: receipts.flatMap((receipt) =>
           receipt.items.flatMap((line) => {
             const lineType = sagaPurchaseReceiptLineType(line.product, stockTypes, config)
+            const lineManagement = receipt.location?.code || receipt.location?.name || ""
             const productRow = {
               den_tip: lineType,
-              den_gest: receipt.location?.code || receipt.location?.name || "",
+              gestiune: lineManagement,
+              den_gest: lineManagement,
+              GESTIUNE: lineManagement,
               denumire: line.product?.name || "",
-              cod: line.product?.accountingItemCode || line.product?.sku || "",
+              cod: sagaArticleCodeForProduct(line.product, config),
               um: line.product?.uom?.code || "BUC",
               tva_art: Number(line.vatRateValue || 0),
               cantitate: Number(line.stockQty || line.qty || 0),
@@ -2106,7 +2111,6 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
               categorie: "",
               ID_U: "",
               ID_INTRARE: "",
-              GESTIUNE: receipt.location?.code || receipt.location?.name || "",
               PTVA_VANZ: 0,
               IS_FACTURAT: 0,
               DISCOUNT: 0,
