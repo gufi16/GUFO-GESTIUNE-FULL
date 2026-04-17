@@ -642,6 +642,40 @@ function sagaArticleTypeFromProduct(product: any) {
   }
 }
 
+function sagaArticleCodeForProduct(product: any, config: any) {
+  const code = config?.articleCodeSource === "SKU" ? product?.sku : product?.accountingItemCode || product?.sku
+  return String(code || product?.sku || product?.accountingItemCode || slugCode(product?.name || "ART", "ART")).trim()
+}
+
+function buildSagaArticleXmlLine(product: any, config: any) {
+  const articleCode = sagaArticleCodeForProduct(product, config)
+  return [
+    `  <Linie>`,
+    `    <Cod>${xmlEscape(articleCode)}</Cod>`,
+    `    <Denumire>${xmlEscape(product?.name || "")}</Denumire>`,
+    `    <Cod_NC/>`,
+    `    <Cod_CPV/>`,
+    `    <UM>${xmlEscape(product?.uom?.code || "BUC")}</UM>`,
+    `    <Tip>${xmlEscape(sagaArticleTypeFromProduct(product))}</Tip>`,
+    `    <TVA>${xmlEscape(sagaNumber(product?.vatRate?.rate ?? 0, 2))}</TVA>`,
+    `    <Pret>${decimal(product?.price)}</Pret>`,
+    `    <Pret_TVA>${decimal(Number(product?.price || 0) * (1 + Number(product?.vatRate?.rate ?? 0) / 100))}</Pret_TVA>`,
+    `    <Cod_bare>${xmlEscape(product?.barcodes?.[0]?.barcode || "")}</Cod_bare>`,
+    `    <Informatii/>`,
+    `    <Guid_cod>${xmlEscape(product?.id || articleCode)}</Guid_cod>`,
+    `  </Linie>`,
+  ].join("\n")
+}
+
+function buildSagaArticlesXml(products: any[], config: any) {
+  return [
+    `<?xml version="1.0" encoding="utf-8"?>`,
+    `<Articole>`,
+    ...products.map((product) => buildSagaArticleXmlLine(product, config)),
+    `</Articole>`,
+  ].join("\n")
+}
+
 function normalizeFileFormat(value: unknown) {
   const normalized = String(value || "").trim().toLowerCase()
   if (normalized === "dbf") return "dbf"
@@ -1582,10 +1616,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     })
 
     spreadsheetRows = articleProducts.map((product) => {
-      const articleCode =
-        config.articleCodeSource === "SKU"
-          ? product.sku
-          : product.accountingItemCode || product.sku
+      const articleCode = sagaArticleCodeForProduct(product, config)
 
       return {
         COD: String(articleCode || "").trim(),
@@ -1603,40 +1634,12 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       }
     })
 
-    const buildArticleXmlLine = (product: any) => {
-      const articleCode =
-        config.articleCodeSource === "SKU"
-          ? product.sku
-          : product.accountingItemCode || product.sku
-      return [
-        `  <Linie>`,
-        `    <Cod>${xmlEscape(articleCode)}</Cod>`,
-        `    <Denumire>${xmlEscape(product.name)}</Denumire>`,
-        `    <Cod_NC/>`,
-        `    <Cod_CPV/>`,
-        `    <UM>${xmlEscape(product.uom?.code || "BUC")}</UM>`,
-        `    <Tip>${xmlEscape(sagaArticleTypeFromProduct(product))}</Tip>`,
-        `    <TVA>${xmlEscape(sagaNumber(product.vatRate?.rate ?? 0, 2))}</TVA>`,
-        `    <Pret>${decimal(product.price)}</Pret>`,
-        `    <Pret_TVA>${decimal(Number(product.price || 0) * (1 + Number(product.vatRate?.rate ?? 0) / 100))}</Pret_TVA>`,
-        `    <Cod_bare>${xmlEscape(product.barcodes?.[0]?.barcode || "")}</Cod_bare>`,
-        `    <Informatii/>`,
-        `    <Guid_cod>${xmlEscape(product.id)}</Guid_cod>`,
-        `  </Linie>`,
-      ].join("\n")
-    }
-
     xmlFiles = articleProducts.map((product) => ({
       fileName: `ART_${slugCode(product.accountingItemCode || product.sku || product.name, "ART")}_${compactDateToken(dateTo || new Date())}.xml`,
-      content: [`<?xml version="1.0" encoding="utf-8"?>`, `<Articole>`, buildArticleXmlLine(product), `</Articole>`].join("\n"),
+      content: buildSagaArticlesXml([product], config),
     }))
 
-    xml = [
-      `<?xml version="1.0" encoding="utf-8"?>`,
-      `<Articole>`,
-      ...articleProducts.map((product) => buildArticleXmlLine(product)),
-      `</Articole>`,
-    ].join("\n")
+    xml = buildSagaArticlesXml(articleProducts, config)
   } else if (kind === "customers") {
     const customers = await prisma.customer.findMany({
       where: {
@@ -2287,7 +2290,8 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
             management: receipt.location?.code || receipt.location?.name || "",
             activity: "",
             description: line.product?.name || "",
-            supplierCode: line.product?.accountingItemCode || line.product?.sku || slugCode(line.product?.name || "ART", "ART"),
+            supplierCode: sagaArticleCodeForProduct(line.product, config),
+            clientCode: sagaArticleCodeForProduct(line.product, config),
             guid: line.product?.id || "",
             barcode: line.product?.barcodes?.[0]?.barcode || "",
             uom: line.product?.uom?.code || "BUC",
@@ -2310,7 +2314,26 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       ].join("\n")
     }
 
-    xmlFiles = receipts.map((receipt) => {
+    const receiptArticleMap = new Map<string, any>()
+    receipts.forEach((receipt) => {
+      receipt.items.forEach((line: any) => {
+        if (line.product) {
+          receiptArticleMap.set(sagaArticleCodeForProduct(line.product, config), line.product)
+          const sgr = receiptSgrValues(line, receipt)
+          if (line.product?.isSgr && sgr.qty > 0 && sgr.unit > 0) {
+            const sgrProduct = sgrProductShape(line.product)
+            receiptArticleMap.set(sagaArticleCodeForProduct(sgrProduct, config), sgrProduct)
+          }
+        }
+      })
+    })
+
+    const receiptArticleFiles = Array.from(receiptArticleMap.values()).map((product) => ({
+      fileName: `ART_${slugCode(sagaArticleCodeForProduct(product, config) || product.name, "ART")}_${compactDateToken(dateTo || new Date())}.xml`,
+      content: buildSagaArticlesXml([product], config),
+    }))
+
+    const receiptInvoiceFiles = receipts.map((receipt) => {
       const supplierCode = String(receipt.supplier?.cif || receipt.supplierCode || receipt.supplier?.code || "FURNIZOR").replace(/[^A-Za-z0-9]/g, "")
       const docNumber = extractSagaNumber(receipt.spvInvoiceNo || receipt.docNo || "NIR")
       const docDate = compactDateToken(receipt.docDate || dateTo || new Date())
@@ -2319,6 +2342,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         content: [`<?xml version="1.0" encoding="utf-8"?>`, `<Facturi>`, buildReceiptXml(receipt), `</Facturi>`].join("\n"),
       }
     })
+    xmlFiles = [...receiptArticleFiles, ...receiptInvoiceFiles]
 
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
