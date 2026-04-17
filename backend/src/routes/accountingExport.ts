@@ -170,6 +170,69 @@ function sagaCountryCode(value: unknown, fallback = "RO") {
   return fallback
 }
 
+const SAGA_COUNTY_CODES: Record<string, string> = {
+  ALBA: "AB",
+  ARAD: "AR",
+  ARGES: "AG",
+  BACAU: "BC",
+  BIHOR: "BH",
+  "BISTRITA NASAUD": "BN",
+  "BISTRITA-NASAUD": "BN",
+  BOTOSANI: "BT",
+  BRASOV: "BV",
+  BRAILA: "BR",
+  BUCURESTI: "B",
+  BUCHAREST: "B",
+  BUZAU: "BZ",
+  "CARAS SEVERIN": "CS",
+  "CARAS-SEVERIN": "CS",
+  CALARASI: "CL",
+  CLUJ: "CJ",
+  CONSTANTA: "CT",
+  COVASNA: "CV",
+  DAMBOVITA: "DB",
+  DOLJ: "DJ",
+  GALATI: "GL",
+  GIURGIU: "GR",
+  GORJ: "GJ",
+  HARGHITA: "HR",
+  HUNEDOARA: "HD",
+  IALOMITA: "IL",
+  IASI: "IS",
+  ILFOV: "IF",
+  MARAMURES: "MM",
+  MEHEDINTI: "MH",
+  MURES: "MS",
+  NEAMT: "NT",
+  OLT: "OT",
+  PRAHOVA: "PH",
+  "SATU MARE": "SM",
+  SALAJ: "SJ",
+  SIBIU: "SB",
+  SUCEAVA: "SV",
+  TELEORMAN: "TR",
+  TIMIS: "TM",
+  TULCEA: "TL",
+  VASLUI: "VS",
+  VALCEA: "VL",
+  VRANCEA: "VN",
+}
+
+function sagaCountyCode(value: unknown) {
+  const raw = String(value || "")
+    .trim()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/^JUDET(UL)?\s+/, "")
+    .replace(/\s+/g, " ")
+
+  if (!raw) return ""
+  if (/^SECTOR\s*[1-6]$/.test(raw)) return "B"
+  if (/^[A-Z]{1,2}$/.test(raw)) return raw === "BU" ? "B" : raw
+  return SAGA_COUNTY_CODES[raw] || ""
+}
+
 function parseIdList(value: unknown) {
   return String(value || "")
     .split(",")
@@ -787,7 +850,7 @@ function buildSagaFacturaHeader({
     xmlTag("FurnizorCapital", supplier.capital),
     xmlTag("FurnizorTara", supplier.country),
     xmlTag("FurnizorLocalitate", supplier.city),
-    xmlTag("FurnizorJudet", supplier.county),
+    xmlTag("FurnizorJudet", sagaCountyCode(supplier.county)),
     xmlTag("FurnizorAdresa", supplier.address),
     xmlTag("FurnizorTelefon", supplier.phone),
     xmlTag("FurnizorMail", supplier.email),
@@ -799,7 +862,7 @@ function buildSagaFacturaHeader({
     xmlTag("ClientInformatiiSuplimentare", client.info),
     xmlTag("ClientCIF", client.cif),
     xmlTag("ClientNrRegCom", client.regCom),
-    xmlTag("ClientJudet", client.county),
+    xmlTag("ClientJudet", sagaCountyCode(client.county)),
     xmlTag("ClientTara", client.country),
     xmlTag("ClientLocalitate", client.city),
     xmlTag("ClientAdresa", client.address),
@@ -1473,7 +1536,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       COD_FISCAL: customer.cif || "",
       REG_COM: customer.regNo || "",
       TARA: sagaCountryCode(customer.country),
-      JUDET: customer.county || "",
+      JUDET: sagaCountyCode(customer.county),
       LOCALITATE: customer.city || "",
       ADRESA: customer.address || "",
       CONT_BANCA: "",
@@ -1495,7 +1558,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         `    <Cod_fiscal>${xmlEscape(customer.cif || "")}</Cod_fiscal>`,
         `    <Reg_com>${xmlEscape(customer.regNo || "")}</Reg_com>`,
         `    <Tara>${xmlEscape(sagaCountryCode(customer.country))}</Tara>`,
-        `    <Judet>${xmlEscape(customer.county || "")}</Judet>`,
+        `    <Judet>${xmlEscape(sagaCountyCode(customer.county))}</Judet>`,
         `    <Localitate>${xmlEscape(customer.city || "")}</Localitate>`,
         `    <Adresa>${xmlEscape(customer.address || "")}</Adresa>`,
         `    <Cont_banca/>`,
@@ -1525,7 +1588,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
           `    <Cod_fiscal>${xmlEscape(customer.cif || "")}</Cod_fiscal>`,
           `    <Reg_com>${xmlEscape(customer.regNo || "")}</Reg_com>`,
           `    <Tara>${xmlEscape(sagaCountryCode(customer.country))}</Tara>`,
-          `    <Judet>${xmlEscape(customer.county || "")}</Judet>`,
+          `    <Judet>${xmlEscape(sagaCountyCode(customer.county))}</Judet>`,
           `    <Localitate>${xmlEscape(customer.city || "")}</Localitate>`,
           `    <Adresa>${xmlEscape(customer.address || "")}</Adresa>`,
           `    <Cont_banca/>`,
@@ -1576,6 +1639,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       DENUMIRE: supplier.name || "",
       COD_FISCAL: supplier.cif || "",
       TARA: sagaCountryCode(supplier.country),
+      JUDET: sagaCountyCode(supplier.county),
       LOCALITATE: supplier.city || "",
       ADRESA: supplier.address || "",
       CONT_BANCA: "",
@@ -1595,6 +1659,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         `    <Denumire>${xmlEscape(supplier.name || "")}</Denumire>`,
         `    <Cod_fiscal>${xmlEscape(supplier.cif || "")}</Cod_fiscal>`,
         `    <Tara>${xmlEscape(sagaCountryCode(supplier.country))}</Tara>`,
+        `    <Judet>${xmlEscape(sagaCountyCode(supplier.county))}</Judet>`,
         `    <Localitate>${xmlEscape(supplier.city || "")}</Localitate>`,
         `    <Adresa>${xmlEscape(supplier.address || "")}</Adresa>`,
         `    <Cont_banca/>`,
@@ -1622,6 +1687,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
           `    <Denumire>${xmlEscape(supplier.name || "")}</Denumire>`,
           `    <Cod_fiscal>${xmlEscape(supplier.cif || "")}</Cod_fiscal>`,
           `    <Tara>${xmlEscape(sagaCountryCode(supplier.country))}</Tara>`,
+          `    <Judet>${xmlEscape(sagaCountyCode(supplier.county))}</Judet>`,
           `    <Localitate>${xmlEscape(supplier.city || "")}</Localitate>`,
           `    <Adresa>${xmlEscape(supplier.address || "")}</Adresa>`,
           `    <Cont_banca/>`,
@@ -1660,6 +1726,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       },
       include: {
         location: true,
+        customer: true,
         items: {
           include: {
             product: {
@@ -1683,7 +1750,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       DENUMIRE_C: invoice.customerName || "",
       COD_FISCAL: Number(String(invoice.customerCif || "").replace(/\D/g, "") || 0),
       REGISTRU_C: invoice.customerRegNo || "",
-      JUDET: "",
+      JUDET: sagaCountyCode(invoice.customer?.county),
       ADRESA: invoice.customerAddress || "",
       TARA: "RO",
       MONEDA: invoice.currency || "RON",
@@ -1754,9 +1821,9 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
             name: invoice.customerName,
             cif: invoice.customerCif,
             regCom: invoice.customerRegNo || "",
-            country: "RO",
-            city: "",
-            county: "",
+            country: sagaCountryCode(invoice.customer?.country),
+            city: invoice.customer?.city || "",
+            county: invoice.customer?.county || "",
             address: invoice.customerAddress,
             bank: "",
             iban: "",
