@@ -135,6 +135,11 @@ function unitAmount(total: unknown, qty: unknown) {
   return numericTotal / quantity
 }
 
+function toFiniteNumber(value: unknown) {
+  const number = Number(value || 0)
+  return Number.isFinite(number) ? number : 0
+}
+
 function sagaNumber(value: unknown, digits = 2) {
   const fixed = decimal(value, digits)
   return fixed.replace(/\.?0+$/, "") || "0"
@@ -262,6 +267,7 @@ function mapProductClassToDefaultCode(productClass?: string | null) {
     case "ALTE_MATERIALE":
       return "MATERII"
     case "AMBALAJE":
+    case "AMBALAJ_SGR":
       return "AMBALAJE"
     case "PRODUS_FIN":
     case "SEMIFABRICATE":
@@ -498,6 +504,91 @@ function sagaInvoiceLineTypeFromProduct(product: any) {
     default:
       return "Nedefinit"
   }
+}
+
+function sgrUnitValue(product: any) {
+  if (!product?.isSgr) return 0
+  const value = toFiniteNumber(product?.sgrValue)
+  return value > 0 ? value : 0.5
+}
+
+function sgrArticleCode(product: any, fallbackCode?: unknown) {
+  const base = product?.accountingItemCode || product?.sku || fallbackCode || product?.name || "SGR"
+  return `SGR_${slugCode(String(base), "ART").slice(0, 16)}`
+}
+
+function sgrArticleName(product: any, fallbackName?: unknown) {
+  return `SGR ${String(product?.name || fallbackName || "ambalaj").trim()}`.trim()
+}
+
+function sgrProductShape(product: any, fallbackCode?: unknown, fallbackName?: unknown) {
+  return {
+    ...(product || {}),
+    id: `${product?.id || fallbackCode || "sgr"}:sgr`,
+    sku: sgrArticleCode(product, fallbackCode),
+    accountingItemCode: sgrArticleCode(product, fallbackCode),
+    name: sgrArticleName(product, fallbackName),
+    class: "AMBALAJ_SGR",
+    isSgr: false,
+    sgrValue: 0,
+    price: sgrUnitValue(product),
+    vatRate: { rate: 0, fiscalCode: "O", name: "TVA 0%" },
+    uom: product?.uom || { code: "BUC", name: "Bucata" },
+    barcodes: [],
+  }
+}
+
+function buildSalesInvoiceSgrLine(invoice: any, line: any, index: number, stockTypes: any[], config: any) {
+  const sgrTotal = toFiniteNumber(line.sgrTotalRon || line.sgrTotalFc)
+  const qty = toFiniteNumber(line.qty)
+  const unit = toFiniteNumber(line.sgrUnitFc || line.product?.sgrValue || (qty ? sgrTotal / qty : 0))
+  if (!line.product?.isSgr || qty <= 0 || unit <= 0 || sgrTotal <= 0) return null
+  const product = sgrProductShape(line.product, line.productCode, line.productName)
+  const stockType = pickStockType(product, stockTypes, config)
+
+  return {
+    row: {
+      TIP: "Ambalaje SGR",
+      GESTIUNE: invoice.location?.code || invoice.location?.name || "",
+      COD: product.accountingItemCode,
+      COD_BARE: "",
+      DENUMIRE: product.name,
+      UM: line.uomCode || product.uom?.code || "BUC",
+      P_TVA: 0,
+      CANTITATE: qty,
+      PRET: unit,
+      VALOARE: unit,
+      TOTAL: unit,
+      TEXT_SUPL: "SGR",
+      CONT: stockType?.salesAccount || config.salesAccount,
+      ACTIVITATE: "",
+    },
+    xml: buildSagaFacturaLine({
+      index,
+      type: "Ambalaje SGR",
+      management: invoice.location?.code || invoice.location?.name || "",
+      activity: "",
+      description: product.name,
+      clientCode: product.accountingItemCode,
+      guid: product.id,
+      barcode: "",
+      uom: line.uomCode || product.uom?.code || "BUC",
+      qty: decimal(qty, 3),
+      price: decimal(unit),
+      value: decimal(sgrTotal),
+      vatRate: "0",
+      vatValue: "0.00",
+      account: stockType?.salesAccount || config.salesAccount,
+      deductionType: "",
+    }),
+  }
+}
+
+function receiptSgrValues(line: any, receipt: any) {
+  const qty = toFiniteNumber(line.stockQty || line.qty)
+  const unit = sgrUnitValue(line.product)
+  const valueRon = qty * unit * toFiniteNumber(receipt?.fxRate || 1)
+  return { qty, unit, valueRon }
 }
 
 function sagaArticleTypeFromProduct(product: any) {
@@ -1443,7 +1534,13 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     })
 
     sheetName = "Articole"
-    spreadsheetRows = products.map((product) => {
+    const articleProducts = products.flatMap((product) => {
+      const rows = [product]
+      if (product.isSgr && sgrUnitValue(product) > 0) rows.push(sgrProductShape(product))
+      return rows
+    })
+
+    spreadsheetRows = articleProducts.map((product) => {
       const articleCode =
         config.articleCodeSource === "SKU"
           ? product.sku
@@ -1488,7 +1585,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       ].join("\n")
     }
 
-    xmlFiles = products.map((product) => ({
+    xmlFiles = articleProducts.map((product) => ({
       fileName: `ART_${slugCode(product.accountingItemCode || product.sku || product.name, "ART")}_${compactDateToken(dateTo || new Date())}.xml`,
       content: [`<?xml version="1.0" encoding="utf-8"?>`, `<Articole>`, buildArticleXmlLine(product), `</Articole>`].join("\n"),
     }))
@@ -1496,7 +1593,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
       `<Articole>`,
-      ...products.map((product) => buildArticleXmlLine(product)),
+      ...articleProducts.map((product) => buildArticleXmlLine(product)),
       `</Articole>`,
     ].join("\n")
   } else if (kind === "customers") {
@@ -1757,15 +1854,15 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       NUMAR_FACT: invoice.docNo || "",
       DATA: formatDate(invoice.docDate),
       TVA: Number(invoice.totalVatRon || 0),
-      VALOARE_NE: Number(invoice.totalNetRon || 0),
-      VALOARE_BR: Number(invoice.totalGrossRon || 0),
+      VALOARE_NE: Number(invoice.totalNetRon || 0) + Number(invoice.totalSgrRon || 0),
+      VALOARE_BR: Number(invoice.totalWithSgrRon || invoice.totalGrossRon || 0),
       DISCOUNT: 0,
     }))
 
     const invoiceDetailRows = invoices.flatMap((invoice) =>
-      invoice.items.map((line) => {
+      invoice.items.flatMap((line, lineIndex) => {
         const stockType = pickStockType(line.product, stockTypes, config)
-        return {
+        const productRow = {
           TIP: sagaInvoiceLineTypeFromProduct(line.product),
           GESTIUNE: invoice.location?.code || invoice.location?.name || "",
           COD: String(line.productCode || line.product?.accountingItemCode || line.product?.sku || "").trim(),
@@ -1781,6 +1878,8 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
           CONT: stockType?.salesAccount || config.salesAccount,
           ACTIVITATE: "",
         }
+        const sgrLine = buildSalesInvoiceSgrLine(invoice, line, lineIndex + 1, stockTypes, config)
+        return sgrLine ? [productRow, sgrLine.row] : [productRow]
       })
     )
 
@@ -1846,10 +1945,10 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         }),
         `      <Detalii>`,
         `        <Continut>`,
-        ...invoice.items.map((line: any, index: number) => {
+        ...invoice.items.flatMap((line: any, index: number) => {
           const stockType = pickStockType(line.product, stockTypes, config)
-          return buildSagaFacturaLine({
-            index: index + 1,
+          const productLine = buildSagaFacturaLine({
+            index: index * 2 + 1,
             type: sagaInvoiceLineTypeFromProduct(line.product),
             management: invoice.location?.code || invoice.location?.name || "",
             activity: "",
@@ -1866,6 +1965,8 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
             account: stockType?.salesAccount || config.salesAccount,
             deductionType: "",
           })
+          const sgrLine = buildSalesInvoiceSgrLine(invoice, line, index * 2 + 2, stockTypes, config)
+          return sgrLine ? [productLine, sgrLine.xml] : [productLine]
         }),
         `        </Continut>`,
         `      </Detalii>`,
@@ -1930,46 +2031,73 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     exportedFileDoc = receipts[receipts.length - 1] || null
 
     sheetName = "Facturi intrare"
+    const receiptSgrTotalRon = (receipt: any) =>
+      receipt.items.reduce((sum: number, line: any) => sum + receiptSgrValues(line, receipt).valueRon, 0)
+
     spreadsheetRows = spreadsheetSheets([
       {
         name: "IntrariDetalii",
         rows: receipts.flatMap((receipt) =>
-          receipt.items.map((line) => ({
-            den_tip: sagaInvoiceLineTypeFromProduct(line.product),
-            den_gest: receipt.location?.code || receipt.location?.name || "",
-            denumire: line.product?.name || "",
-            cod: line.product?.accountingItemCode || line.product?.sku || "",
-            um: line.product?.uom?.code || "BUC",
-            tva_art: Number(line.vatRateValue || 0),
-            cantitate: Number(line.stockQty || line.qty || 0),
-            pret_unitar: Number(line.unitCostNetRon || 0),
-            valoare: unitAmount(line.lineNetRon, line.stockQty || line.qty),
-            transp_lei: 0,
-            total: unitAmount(line.lineGrossRon, line.stockQty || line.qty),
-            tva_ded: unitAmount(line.lineVatRon, line.stockQty || line.qty),
-            tip_ded: "N50",
-            cont: pickStockType(line.product, stockTypes, config)?.inventoryAccount || config.inventoryAccount,
-            pret_vanz: Number(line.product?.price || 0),
-            adaos: 0,
-            adaos_proc: 0,
-            text_supl: "",
-            categorie: "",
-            ID_U: "",
-            ID_INTRARE: "",
-            GESTIUNE: receipt.location?.code || receipt.location?.name || "",
-            PTVA_VANZ: 0,
-            IS_FACTURAT: 0,
-            DISCOUNT: 0,
-            ID_BC: 0,
-            plan: "",
-            SECTOR: "",
-            SURSA: "",
-            CAPITOL: "",
-            ARTICOL: "",
-            LOT: "",
-            COD_TAXA: "",
-            ID_SGR: 0,
-          }))
+          receipt.items.flatMap((line) => {
+            const productRow = {
+              den_tip: sagaInvoiceLineTypeFromProduct(line.product),
+              den_gest: receipt.location?.code || receipt.location?.name || "",
+              denumire: line.product?.name || "",
+              cod: line.product?.accountingItemCode || line.product?.sku || "",
+              um: line.product?.uom?.code || "BUC",
+              tva_art: Number(line.vatRateValue || 0),
+              cantitate: Number(line.stockQty || line.qty || 0),
+              pret_unitar: Number(line.unitCostNetRon || 0),
+              valoare: unitAmount(line.lineNetRon, line.stockQty || line.qty),
+              transp_lei: 0,
+              total: unitAmount(line.lineGrossRon, line.stockQty || line.qty),
+              tva_ded: unitAmount(line.lineVatRon, line.stockQty || line.qty),
+              tip_ded: "N50",
+              cont: pickStockType(line.product, stockTypes, config)?.inventoryAccount || config.inventoryAccount,
+              pret_vanz: Number(line.product?.price || 0),
+              adaos: 0,
+              adaos_proc: 0,
+              text_supl: "",
+              categorie: "",
+              ID_U: "",
+              ID_INTRARE: "",
+              GESTIUNE: receipt.location?.code || receipt.location?.name || "",
+              PTVA_VANZ: 0,
+              IS_FACTURAT: 0,
+              DISCOUNT: 0,
+              ID_BC: 0,
+              plan: "",
+              SECTOR: "",
+              SURSA: "",
+              CAPITOL: "",
+              ARTICOL: "",
+              LOT: "",
+              COD_TAXA: "",
+              ID_SGR: 0,
+            }
+            const sgr = receiptSgrValues(line, receipt)
+            if (!line.product?.isSgr || sgr.qty <= 0 || sgr.unit <= 0) return [productRow]
+            const sgrProduct = sgrProductShape(line.product)
+            const sgrStockType = pickStockType(sgrProduct, stockTypes, config)
+            return [
+              productRow,
+              {
+                ...productRow,
+                den_tip: "Ambalaje SGR",
+                denumire: sgrProduct.name,
+                cod: sgrProduct.accountingItemCode,
+                tva_art: 0,
+                pret_unitar: sgr.unit,
+                valoare: sgr.unit,
+                total: sgr.unit,
+                tva_ded: 0,
+                cont: sgrStockType?.inventoryAccount || config.inventoryAccount,
+                pret_vanz: sgr.unit,
+                text_supl: "SGR",
+                ID_SGR: 1,
+              },
+            ]
+          })
         ),
       },
       {
@@ -1983,11 +2111,11 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
           tvai: 0,
           data: excelSerialDate(receipt.docDate),
           scadent: receipt.docDate ? excelSerialDate(receipt.docDate) : "",
-          baza_tva: Number(receipt.totalNetRon || 0),
+          baza_tva: Number(receipt.totalNetRon || 0) + receiptSgrTotalRon(receipt),
           transp_lei: 0,
           tva: Number(receipt.totalVatRon || 0),
-          total: Number(receipt.totalGrossRon || 0),
-          neachitat: Number(receipt.totalGrossRon || 0),
+          total: Number(receipt.totalGrossRon || 0) + receiptSgrTotalRon(receipt),
+          neachitat: Number(receipt.totalGrossRon || 0) + receiptSgrTotalRon(receipt),
           data_doc: "",
           inf_suplm: "",
           den_agent: "",
@@ -1997,10 +2125,31 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     ])
 
     const buildReceiptXml = (receipt: any) => {
+      const receiptLinesForExport = receipt.items.flatMap((line: any) => {
+        const sgr = receiptSgrValues(line, receipt)
+        if (!line.product?.isSgr || sgr.qty <= 0 || sgr.unit <= 0) return [line]
+        const product = sgrProductShape(line.product)
+        return [
+          line,
+          {
+            ...line,
+            id: `${line.id}:sgr`,
+            product,
+            productId: product.id,
+            vatRateValue: 0,
+            stockQty: sgr.qty,
+            qty: sgr.qty,
+            unitCostNetRon: sgr.unit,
+            lineNetRon: sgr.valueRon,
+            lineVatRon: 0,
+            lineGrossRon: sgr.valueRon,
+          },
+        ]
+      })
       const groupedLines =
         valueType === "GLOBAL_VALORIC"
           ? aggregateByKey(
-              receipt.items,
+              receiptLinesForExport,
               (line) => `${line.vatRateValue || 0}|${line.product?.accountingItemCode || line.product?.sku || line.productId}`,
               (line) => ({
                 code: line.product?.accountingItemCode || line.product?.sku || slugCode(line.product?.name || "ART", "ART"),
@@ -2020,7 +2169,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
                 target.expenseAccount = stockType?.expenseAccount || config.expenseAccount
               }
             )
-          : receipt.items
+          : receiptLinesForExport
 
       return [
         `  <Factura>`,
