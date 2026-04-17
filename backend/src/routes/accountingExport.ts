@@ -481,6 +481,12 @@ function sagaInvoiceStockTypeName(stockType: any) {
   return "Marfuri"
 }
 
+function isSagaSgrArticle(product: any) {
+  const code = String(product?.accountingItemCode || product?.sku || product?.code || product?.id || "").trim().toUpperCase()
+  const name = String(product?.name || "").trim().toUpperCase()
+  return product?.class === "AMBALAJ_SGR" || code === "SGR" || name === "SGR"
+}
+
 function sagaProductTypeFromClass(classValue: unknown) {
   switch (String(classValue || "").toUpperCase()) {
     case "MARFA":
@@ -514,10 +520,12 @@ function sagaProductTypeFromClass(classValue: unknown) {
 }
 
 function sagaInvoiceLineTypeFromProduct(product: any) {
+  if (isSagaSgrArticle(product)) return "Ambalaje SGR"
   return sagaProductTypeFromClass(product?.class)
 }
 
 function sagaPurchaseReceiptLineType(product: any, _stockTypes: any[], _config: any) {
+  if (isSagaSgrArticle(product)) return "Ambalaje SGR"
   return sagaProductTypeFromClass(product?.class)
 }
 
@@ -608,6 +616,7 @@ function receiptSgrValues(line: any, receipt: any) {
 }
 
 function sagaArticleTypeFromProduct(product: any) {
+  if (isSagaSgrArticle(product)) return "Ambalaje SGR"
   return sagaProductTypeFromClass(product?.class)
 }
 
