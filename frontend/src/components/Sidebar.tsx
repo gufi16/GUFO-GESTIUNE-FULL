@@ -101,14 +101,24 @@ function BrandBlock({ mobile = false }: { mobile?: boolean }) {
       )}
     >
       <div className="flex flex-col items-center justify-center text-center">
-        <img
-          src="/gufo-lockup.svg?v=20260417-4"
-          alt="Gufo"
-          className={clsx(
-            "shrink-0 object-contain drop-shadow-[0_8px_16px_rgba(30,157,176,0.14)]",
-            mobile ? "h-12 w-[138px]" : "h-14 w-[176px]"
-          )}
-        />
+        <div className={clsx("flex items-center justify-center", mobile ? "gap-2" : "gap-2.5")}>
+          <img
+            src="/gufo-mark.svg?v=20260417-5"
+            alt="Gufo"
+            className={clsx(
+              "shrink-0 object-contain drop-shadow-[0_8px_16px_rgba(30,157,176,0.14)]",
+              mobile ? "h-12 w-12" : "h-14 w-14"
+            )}
+          />
+          <span
+            className={clsx(
+              "font-black tracking-[-0.05em] text-[#17324D]",
+              mobile ? "text-[2rem]" : "text-[2.25rem]"
+            )}
+          >
+            ufo
+          </span>
+        </div>
         <div
           className={clsx(
             "mt-3 max-w-[220px] font-medium leading-5 text-slate-500",
