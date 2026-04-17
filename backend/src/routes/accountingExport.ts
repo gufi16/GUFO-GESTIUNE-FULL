@@ -484,7 +484,7 @@ function sagaInvoiceStockTypeName(stockType: any) {
 function isSagaSgrArticle(product: any) {
   const code = String(product?.accountingItemCode || product?.sku || product?.code || product?.id || "").trim().toUpperCase()
   const name = String(product?.name || "").trim().toUpperCase()
-  return product?.class === "AMBALAJ_SGR" || code === "SGR" || name === "SGR"
+  return product?.class === "AMBALAJ_SGR" || code === "SGR" || code.startsWith("SGR_") || name === "SGR"
 }
 
 function sagaProductTypeFromClass(classValue: unknown) {
@@ -536,7 +536,8 @@ function sgrUnitValue(product: any) {
 }
 
 function sgrArticleCode(product: any, fallbackCode?: unknown) {
-  return "SGR"
+  const base = product?.accountingItemCode || product?.sku || fallbackCode || product?.name || "SGR"
+  return `SGR_${slugCode(String(base), "ART").slice(0, 16)}`
 }
 
 function sgrArticleName(product: any, fallbackName?: unknown) {
@@ -546,7 +547,7 @@ function sgrArticleName(product: any, fallbackName?: unknown) {
 function sgrProductShape(product: any, fallbackCode?: unknown, fallbackName?: unknown) {
   return {
     ...(product || {}),
-    id: "SGR",
+    id: `${product?.id || fallbackCode || "sgr"}:sgr`,
     sku: sgrArticleCode(product, fallbackCode),
     accountingItemCode: sgrArticleCode(product, fallbackCode),
     name: sgrArticleName(product, fallbackName),
