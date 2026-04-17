@@ -2286,35 +2286,14 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       ].join("\n")
     }
 
-    const receiptArticles = (receipt: any) => {
-      const map = new Map<string, any>()
-      receipt.items.forEach((line: any) => {
-        if (line.product) {
-          map.set(sagaArticleCodeForProduct(line.product, config), line.product)
-          const sgr = receiptSgrValues(line, receipt)
-          if (line.product?.isSgr && sgr.qty > 0 && sgr.unit > 0) {
-            const sgrProduct = sgrProductShape(line.product)
-            map.set(sagaArticleCodeForProduct(sgrProduct, config), sgrProduct)
-          }
-        }
-      })
-      return Array.from(map.values())
-    }
-
-    xmlFiles = receipts.flatMap((receipt) => {
+    xmlFiles = receipts.map((receipt) => {
       const supplierCode = String(receipt.supplier?.cif || receipt.supplierCode || receipt.supplier?.code || "FURNIZOR").replace(/[^A-Za-z0-9]/g, "")
       const docNumber = extractSagaNumber(receipt.spvInvoiceNo || receipt.docNo || "NIR")
       const docDate = compactDateToken(receipt.docDate || dateTo || new Date())
-      return [
-        {
-          fileName: `ART_${supplierCode || "FURNIZOR"}_${docNumber || "NIR"}_${docDate}.xml`,
-          content: buildSagaArticlesXml(receiptArticles(receipt), config),
-        },
-        {
-          fileName: `F_${supplierCode || "FURNIZOR"}_${docNumber || "NIR"}_${docDate}.xml`,
-          content: [`<?xml version="1.0" encoding="utf-8"?>`, `<Facturi>`, buildReceiptXml(receipt), `</Facturi>`].join("\n"),
-        },
-      ]
+      return {
+        fileName: `F_${supplierCode || "FURNIZOR"}_${docNumber || "NIR"}_${docDate}.xml`,
+        content: [`<?xml version="1.0" encoding="utf-8"?>`, `<Facturi>`, buildReceiptXml(receipt), `</Facturi>`].join("\n"),
+      }
     })
 
     xml = [
