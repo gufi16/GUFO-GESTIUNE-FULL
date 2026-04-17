@@ -2327,7 +2327,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       const docNumber = extractSagaNumber(receipt.spvInvoiceNo || receipt.docNo || "NIR")
       const docDate = compactDateToken(receipt.docDate || dateTo || new Date())
       return {
-        fileName: `NIR_COMPLET_${supplierCode || "FURNIZOR"}_${docNumber || "NIR"}_${docDate}.xml`,
+        fileName: `F_${supplierCode || "FURNIZOR"}_${docNumber || "NIR"}_${docDate}.xml`,
         content: buildCompleteReceiptXml(receipt),
       }
     })
