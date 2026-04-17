@@ -315,7 +315,7 @@ function buildSgrLine(product: any, qty: number) {
     type: "SGR",
     productId: product?.id || null,
     productName: product?.name || "",
-    label: `SGR ${product?.name || ""}`.trim(),
+    label: "SGR",
     qty,
     unitPrice,
     vatRate: 0,
@@ -375,7 +375,7 @@ function mapCatalogProduct(req: Request, product: any, isVatPayer: boolean) {
       : null,
     categoryId: product.categoryId || null,
     departmentId: product.departmentId || product.category?.departmentId || null,
-    sgrLabel: product.isSgr ? `SGR ${product.name}` : null,
+    sgrLabel: product.isSgr ? "SGR" : null,
     barcodes: Array.isArray(product.barcodes)
       ? product.barcodes.map((barcode: any) => barcode.barcode)
       : [],

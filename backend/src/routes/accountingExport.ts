@@ -469,10 +469,16 @@ function buildVfpXmlSections(sections: Array<{ name: string; rows: Record<string
 
 function sagaInvoiceStockTypeName(stockType: any) {
   const code = String(stockType?.code || "").toUpperCase()
+  const name = String(stockType?.name || "").trim().toUpperCase()
   if (code === "MARFA") return "Marfuri"
   if (code === "MATERII") return "Materii prime"
   if (code === "PRODUSE") return "Produse finite"
-  return stockType?.name || "Marfuri"
+  if (code === "AMBALAJE") return "Ambalaje"
+  if (name === "MARFA" || name === "MARFURI") return "Marfuri"
+  if (name.includes("MATERII")) return "Materii prime"
+  if (name.includes("PRODUSE")) return "Produse finite"
+  if (name.includes("AMBALAJE")) return "Ambalaje"
+  return "Marfuri"
 }
 
 function sagaInvoiceLineTypeFromProduct(product: any) {
@@ -532,7 +538,7 @@ function sgrArticleCode(product: any, fallbackCode?: unknown) {
 }
 
 function sgrArticleName(product: any, fallbackName?: unknown) {
-  return `SGR ${String(product?.name || fallbackName || "ambalaj").trim()}`.trim()
+  return "SGR"
 }
 
 function sgrProductShape(product: any, fallbackCode?: unknown, fallbackName?: unknown) {

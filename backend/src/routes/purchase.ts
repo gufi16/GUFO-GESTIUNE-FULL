@@ -37,7 +37,7 @@ function buildReceiptSgrLine(item: any) {
     type: "SGR",
     sourceItemId: item?.id || null,
     productId: item?.productId || null,
-    label: `SGR ${product?.name || ""}`.trim(),
+    label: "SGR",
     qty,
     unitPrice: sgrUnit,
     vatRate: 0,

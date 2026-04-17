@@ -196,7 +196,7 @@ export default function NirPrintPage() {
         builtRows.push({
           no: 0,
           type: "SGR",
-          productName: `SGR ${textOrDash(item.product?.name)}`,
+          productName: "SGR",
           qty,
           uom: item.uom?.code || item.product?.purchaseUom?.code || item.product?.uom?.code || "-",
           unitCostNetFc: sgrUnit,

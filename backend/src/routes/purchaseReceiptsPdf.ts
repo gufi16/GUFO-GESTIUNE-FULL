@@ -316,7 +316,7 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
       rows.push({
         no: String(runningNo++),
         type: "SGR",
-        productName: `SGR ${productName}`,
+        productName: "SGR",
         uom: uomCode,
         qty: fmt(qty, 3),
         unitPrice: fmt(sgrUnit),
