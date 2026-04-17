@@ -1935,7 +1935,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         name: "IntrariDetalii",
         rows: receipts.flatMap((receipt) =>
           receipt.items.map((line) => ({
-            den_tip: "Nedefinit",
+            den_tip: sagaInvoiceLineTypeFromProduct(line.product),
             den_gest: receipt.location?.code || receipt.location?.name || "",
             denumire: line.product?.name || "",
             cod: line.product?.accountingItemCode || line.product?.sku || "",
@@ -2005,6 +2005,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
               (line) => ({
                 code: line.product?.accountingItemCode || line.product?.sku || slugCode(line.product?.name || "ART", "ART"),
                 name: line.product?.name || "",
+                type: sagaInvoiceLineTypeFromProduct(line.product),
                 vatRateValue: Number(line.vatRateValue || 0),
                 valueRon: 0,
                 vatRon: 0,
@@ -2072,6 +2073,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
           if (valueType === "GLOBAL_VALORIC") {
             return buildSagaFacturaLine({
               index: index + 1,
+              type: line.type || "Marfuri",
               management: receipt.location?.code || receipt.location?.name || "",
               description: line.name,
               supplierCode: line.code,
@@ -2088,6 +2090,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
           const stockType = pickStockType(line.product, stockTypes, config)
           return buildSagaFacturaLine({
             index: index + 1,
+            type: sagaInvoiceLineTypeFromProduct(line.product),
             management: receipt.location?.code || receipt.location?.name || "",
             activity: "",
             description: line.product?.name || "",
