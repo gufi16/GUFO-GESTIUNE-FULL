@@ -102,20 +102,20 @@ function BrandBlock({ mobile = false }: { mobile?: boolean }) {
     >
       <div className="flex flex-col items-center justify-center text-center">
         <img
-          src="/gufo-logo.png"
+          src="/gufo-lockup.svg?v=20260417-3"
           alt="Gufo"
           className={clsx(
-            "shrink-0 object-contain drop-shadow-[0_8px_16px_rgba(30,157,176,0.18)]",
-            mobile ? "h-14 w-14" : "h-16 w-16"
+            "shrink-0 object-contain drop-shadow-[0_8px_16px_rgba(30,157,176,0.14)]",
+            mobile ? "h-12 w-[132px]" : "h-14 w-[168px]"
           )}
         />
         <div
           className={clsx(
-            "mt-3 max-w-[180px] font-medium leading-5 text-slate-500",
+            "mt-3 max-w-[220px] font-medium leading-5 text-slate-500",
             mobile ? "text-[11px]" : "text-xs"
           )}
         >
-          Totul sub control, simplu si clar.
+          A system behind every sound decision
         </div>
       </div>
     </div>

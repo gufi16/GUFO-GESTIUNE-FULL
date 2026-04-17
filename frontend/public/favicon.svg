@@ -1,3 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1600" viewBox="0 0 1600 1600">
-  <image href="/gufo-logo.png?v=20260417-2" width="1600" height="1600" preserveAspectRatio="xMidYMid meet" />
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="gufoCore" x1="126" y1="92" x2="390" y2="428" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1E9DB0"/>
+      <stop offset="1" stop-color="#34C1C3"/>
+    </linearGradient>
+    <linearGradient id="gufoSweep" x1="118" y1="116" x2="314" y2="404" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#178EA1"/>
+      <stop offset="1" stop-color="#26AEB7"/>
+    </linearGradient>
+  </defs>
+  <path d="M394.857 109.714C352.214 69.973 294.604 48 228.571 48C108.612 48 26 135.296 26 256C26 376.704 108.612 464 228.571 464C275.857 464 321.653 451.86 362.939 427.837V305.143H262.857V369.143H301.878V390.006C282.49 398.439 257.633 402.286 231.837 402.286C150.204 402.286 94.571 343.294 94.571 256C94.571 168.706 150.204 109.714 231.837 109.714C282.735 109.714 323.178 127.91 353.551 163.694L394.857 109.714Z" fill="url(#gufoCore)"/>
+  <path d="M134.857 238.857C134.857 180.331 170.768 129.803 224.101 103.232C165.424 104.965 122.286 148.588 122.286 210.857V317.714C122.286 373.171 149.744 420.784 196.864 446.04C157.482 410.273 134.857 357.706 134.857 297.143V238.857Z" fill="url(#gufoSweep)"/>
+  <rect x="84" y="189" width="38" height="38" rx="4" fill="#1E9DB0"/>
+  <rect x="166" y="89" width="46" height="46" rx="4" fill="#1E9DB0"/>
+  <rect x="225" y="132" width="58" height="58" rx="4" fill="#1E9DB0"/>
+  <rect x="285" y="91" width="44" height="44" rx="4" fill="#1E9DB0"/>
+  <rect x="127" y="284" width="54" height="54" rx="4" fill="#1E9DB0"/>
+  <rect x="100" y="338" width="31" height="31" rx="4" fill="#1E9DB0"/>
+  <rect x="194" y="311" width="56" height="56" rx="4" fill="#1E9DB0"/>
+  <rect x="225" y="372" width="24" height="24" rx="3" fill="#1E9DB0"/>
 </svg>
