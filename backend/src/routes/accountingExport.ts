@@ -2251,7 +2251,6 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
               account: line.stockAccount,
               activity: "",
               deductionType: "",
-              sagaAliases: true,
             })
           }
 
@@ -2276,7 +2275,6 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
             account: stockType?.inventoryAccount || config.inventoryAccount,
             deductionType: "",
             priceSale: line.product?.price ? decimal(line.product.price) : "",
-            sagaAliases: true,
           })
         }),
         `        </Continut>`,
