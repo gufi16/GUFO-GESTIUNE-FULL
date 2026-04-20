@@ -524,6 +524,7 @@ const PosLicenseValidateSchema = z.object({
 
 router.post("/api/v1/pos/validate", async (req: Request, res: Response) => {
   try {
+    console.log("POS VALIDATE PUBLIC HIT", req.body);
     const parsed = PosLicenseValidateSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({
