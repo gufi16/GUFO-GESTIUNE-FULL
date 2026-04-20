@@ -45,6 +45,24 @@ function isSyntheticSgrSaleItem(item: any) {
   return vatRate === 0 && Math.abs(unitPrice - sgrValue) < 0.0001
 }
 
+function productUnitCost(product: any) {
+  const recipe = product?.recipe
+  const recipeItems = Array.isArray(recipe?.items) ? recipe.items : []
+
+  if (recipe?.status === "ACTIVE" && recipe?.isActive !== false && recipeItems.length > 0) {
+    const yieldQty = Math.max(toNumber(recipe?.yieldQty || 1), 0.000001)
+    return recipeItems.reduce((sum: number, item: any) => {
+      const qty = toNumber(item?.qty)
+      const lossPercent = toNumber(item?.lossPercent)
+      const ingredientCost = toNumber(item?.ingredient?.costPrice || 0)
+
+      return sum + ((qty / yieldQty) * (1 + lossPercent / 100) * ingredientCost)
+    }, 0)
+  }
+
+  return toNumber(product?.costPrice || 0)
+}
+
 function formatDayLabel(date: Date) {
   const day = `${date.getDate()}`.padStart(2, "0")
   const month = `${date.getMonth() + 1}`.padStart(2, "0")
@@ -125,6 +143,15 @@ router.get("/api/v1/reports/advanced", requireAuth, async (req: AuthedRequest, r
                 product: {
                   include: {
                     uom: true,
+                    recipe: {
+                      include: {
+                        items: {
+                          include: {
+                            ingredient: true,
+                          },
+                        },
+                      },
+                    },
                   },
                 },
               },
@@ -316,7 +343,7 @@ router.get("/api/v1/reports/advanced", requireAuth, async (req: AuthedRequest, r
         const vatRate = toNumber(item.vatRate)
         const unitPriceNet = getNetUnitPrice(unitPriceGross, vatRate)
         const lineRevenueNet = qty * unitPriceNet
-        const lineCost = qty * toNumber(item.product?.costPrice || 0)
+        const lineCost = qty * productUnitCost(item.product)
         const lineProfit = lineRevenueNet - lineCost
 
         estimatedProfit += lineProfit

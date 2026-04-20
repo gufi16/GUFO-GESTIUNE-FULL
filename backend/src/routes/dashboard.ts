@@ -109,12 +109,29 @@ router.get("/api/v1/dashboard", requireAuth, async (req: AuthedRequest, res: Res
           SUM(
             (
               (COALESCE(si."unitPrice", 0) / NULLIF(1 + (COALESCE(si."vatRate", 0) / 100.0), 0))
-              - COALESCE(p."costPrice", 0)
+              - COALESCE(rc."recipeCost", p."costPrice", 0)
             ) * COALESCE(si.qty, 0)
           ) as profit
         FROM "SaleItem" si
         JOIN "Product" p ON p.id = si."productId"
         JOIN "Sale" s ON s.id = si."saleId"
+        LEFT JOIN (
+          SELECT
+            r."productId",
+            SUM(
+              (COALESCE(ri.qty, 0) / NULLIF(COALESCE(r."yieldQty", 1), 0))
+              * (1 + (COALESCE(ri."lossPercent", 0) / 100.0))
+              * COALESCE(ingredient."costPrice", 0)
+            ) as "recipeCost"
+          FROM "Recipe" r
+          JOIN "RecipeItem" ri ON ri."recipeId" = r.id
+          JOIN "Product" ingredient ON ingredient.id = ri."ingredientId"
+          WHERE r."tenantId" = ${tenantId}
+            AND r."companyId" = ${companyId}
+            AND r.status = 'ACTIVE'
+            AND COALESCE(r."isActive", true) = true
+          GROUP BY r."productId"
+        ) rc ON rc."productId" = p.id
         WHERE s."tenantId" = ${tenantId}
           AND s."companyId" = ${companyId}
           ${locationId ? Prisma.sql`AND s."locationId" = ${locationId}` : Prisma.empty}
