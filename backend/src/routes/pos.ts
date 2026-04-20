@@ -1197,8 +1197,14 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
     .filter((line) => line.type === "SGR")
     .reduce((sum, line) => sum + toNumber(line.total), 0);
 
-  const totalWithoutSgr = toNumber(payload.total);
-  const totalWithSgr = totalWithoutSgr + totalSgr;
+  const totalProductLines = receiptLines
+    .filter((line) => line.type === "PRODUCT")
+    .reduce((sum, line) => sum + toNumber(line.total), 0);
+  const payloadTotal = toNumber(payload.total);
+  const expectedTotalWithSgr = totalProductLines + totalSgr;
+  const payloadLooksWithoutSgr = Math.abs(payloadTotal - totalProductLines) < 0.01;
+  const totalWithSgr = payloadLooksWithoutSgr ? expectedTotalWithSgr : payloadTotal;
+  const totalWithoutSgr = Math.max(0, totalWithSgr - totalSgr);
 
   const normalizedPaymentType = payload.paymentType ?? "CASH";
   const normalizedCashAmount =
