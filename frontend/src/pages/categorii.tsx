@@ -44,6 +44,7 @@ export default function CategoriiPage() {
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
   const [editingId, setEditingId] = useState("")
+  const [previewImageFailed, setPreviewImageFailed] = useState(false)
 
   const stats = useMemo(
     () => ({
@@ -93,6 +94,7 @@ export default function CategoriiPage() {
     setEditingId("")
     setError("")
     setMessage("")
+    setPreviewImageFailed(false)
   }
 
   async function uploadImage(file: File) {
@@ -125,6 +127,7 @@ export default function CategoriiPage() {
       }
 
       setImageUrl(data.imageUrl || "")
+      setPreviewImageFailed(false)
       setMessage("Imaginea categoriei a fost încărcată.")
     } catch {
       setError("Nu am putut încărca imaginea.")
@@ -198,6 +201,7 @@ export default function CategoriiPage() {
     setIsVisibleInPos(item.isVisibleInPos !== false)
     setError("")
     setMessage("")
+    setPreviewImageFailed(false)
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
@@ -310,7 +314,14 @@ export default function CategoriiPage() {
                 </label>
 
                 {imageUrl.trim() ? (
-                  <button type="button" className={documentButtonDangerClass} onClick={() => setImageUrl("")}>
+                  <button
+                    type="button"
+                    className={documentButtonDangerClass}
+                    onClick={() => {
+                      setImageUrl("")
+                      setPreviewImageFailed(false)
+                    }}
+                  >
                     Șterge poza
                   </button>
                 ) : null}
@@ -324,14 +335,13 @@ export default function CategoriiPage() {
 
           <div className="rounded-[24px] border border-slate-200 bg-white p-4">
             <div className="mb-3 text-sm font-semibold text-slate-900">Preview categorie</div>
-            {imageUrl.trim() ? (
+            {imageUrl.trim() && !previewImageFailed ? (
               <img
+                key={imageUrl}
                 src={imageUrl}
                 alt="Preview categorie"
                 className="h-36 w-36 rounded-2xl border border-slate-200 object-cover"
-                onError={(e) => {
-                  ;(e.currentTarget as HTMLImageElement).style.display = "none"
-                }}
+                onError={() => setPreviewImageFailed(true)}
               />
             ) : (
               <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
