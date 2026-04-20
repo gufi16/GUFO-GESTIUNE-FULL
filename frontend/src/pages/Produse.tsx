@@ -198,6 +198,7 @@ export default function ProdusePage() {
   const [showRecipeModal, setShowRecipeModal] = useState(false)
   const [editingItem, setEditingItem] = useState<Product | null>(null)
   const [recipeProduct, setRecipeProduct] = useState<Product | null>(null)
+  const [previewImageFailed, setPreviewImageFailed] = useState(false)
   const [page, setPage] = useState(1)
   const [classFilter, setClassFilter] = useState<string>("ALL")
   const [nextSku, setNextSku] = useState("")
@@ -340,6 +341,7 @@ function getDefaultVat(list = vatRates) {
     })
     setError("")
     setMessage("")
+    setPreviewImageFailed(false)
     setShowModal(true)
   }
 
@@ -364,6 +366,7 @@ function getDefaultVat(list = vatRates) {
     })
     setError("")
     setMessage("")
+    setPreviewImageFailed(false)
     setShowModal(true)
   }
 
@@ -372,6 +375,7 @@ function getDefaultVat(list = vatRates) {
     setSaving(false)
     setUploading(false)
     setEditingItem(null)
+    setPreviewImageFailed(false)
   }
 
   async function uploadImage(file: File) {
@@ -404,6 +408,7 @@ function getDefaultVat(list = vatRates) {
       }
 
       setForm((prev) => ({ ...prev, imageUrl: normalizeHostedImageUrl(data.imageUrl || "") }))
+      setPreviewImageFailed(false)
     } catch {
       setError("Nu am putut incarca imaginea.")
     } finally {
@@ -1296,27 +1301,31 @@ function getDefaultVat(list = vatRates) {
                       <button
                         type="button"
                         style={btnDangerSoft}
-                        onClick={() => setForm((prev) => ({ ...prev, imageUrl: "" }))}
+                        onClick={() => {
+                          setForm((prev) => ({ ...prev, imageUrl: "" }))
+                          setPreviewImageFailed(false)
+                        }}
                       >
                         Sterge
                       </button>
                     ) : null}
                   </div>
 
-                  {form.imageUrl.trim() ? (
+                  {form.imageUrl.trim() && !previewImageFailed ? (
                     <div style={imagePreviewWrapCompact}>
                       <img
+                        key={form.imageUrl}
                         src={form.imageUrl}
                         alt="Preview produs"
                         style={imagePreviewLarge}
-                        onError={(e) => {
-                          ;(e.currentTarget as HTMLImageElement).style.display = "none"
-                        }}
+                        onError={() => setPreviewImageFailed(true)}
                       />
                     </div>
                   ) : (
                     <div style={hintBox}>
-                      Produsul nu are inca poza. Se lucreaza doar cu upload, fara camp de image URL.
+                      {form.imageUrl.trim()
+                        ? "Poza produsului nu a putut fi incarcata in preview."
+                        : "Produsul nu are inca poza. Se lucreaza doar cu upload, fara camp de image URL."}
                     </div>
                   )}
                 </SectionCard>
