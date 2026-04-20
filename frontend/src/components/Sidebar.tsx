@@ -4,11 +4,13 @@ import {
   BarChart3,
   BookOpen,
   Building2,
+  CalendarCheck,
   ChevronLeft,
   FilePlus2,
   FileSpreadsheet,
   FileText,
   LayoutDashboard,
+  Receipt,
   Settings,
   Warehouse,
 } from "lucide-react"
@@ -42,6 +44,13 @@ const sections: SidebarSection[] = [
       { to: "/documente", label: "Documente", icon: FileText, module: "documents" },
       { to: "/rapoarte", label: "Rapoarte", icon: BarChart3, module: "reports" },
       { to: "/rapoarte/export-contabilitate", label: "Export contabilitate", icon: FileSpreadsheet, module: "reports" },
+    ],
+  },
+  {
+    title: "Financiar",
+    items: [
+      { to: "/financiar/vanzari-bon", label: "Vanzari / Bon", icon: Receipt },
+      { to: "/financiar/inchideri-zilnice", label: "Inchideri zilnice", icon: CalendarCheck },
     ],
   },
   {

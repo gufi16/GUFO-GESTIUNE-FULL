@@ -41,6 +41,8 @@ import IstoricActiuniPage from "./pages/IstoricActiuni"
 import Productie from "./pages/Productie"
 import Rapoarte from "./pages/Rapoarte"
 import ExportContabilitatePage from "./pages/ExportContabilitate"
+import FinanceReceipts from "./pages/FinanceReceipts"
+import FinanceClosures from "./pages/FinanceClosures"
 import ControlPanelDashboard from "./pages/control/ControlPanelDashboard"
 import ControlPanelClients from "./pages/control/ControlPanelClients"
 import ControlPanelClientDetails from "./pages/control/ControlPanelClientDetails"
@@ -138,6 +140,8 @@ export default function App() {
         <Route path="/documente/facturi-primite-spv" element={<RequireModule code="documents"><FacturiPrimiteSPVPage /></RequireModule>} />
         <Route path="/rapoarte" element={<RequireModule code="reports"><Rapoarte /></RequireModule>} />
         <Route path="/rapoarte/export-contabilitate" element={<RequireModule code="reports"><ExportContabilitatePage /></RequireModule>} />
+        <Route path="/financiar/vanzari-bon" element={<FinanceReceipts />} />
+        <Route path="/financiar/inchideri-zilnice" element={<FinanceClosures />} />
 
         <Route path="/nomenclator" element={<RequireModule code="nomenclature"><Nomenclator /></RequireModule>} />
         <Route path="/nomenclator/produse" element={<RequireModule code="nomenclature"><Produse /></RequireModule>} />
