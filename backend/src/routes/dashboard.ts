@@ -120,6 +120,11 @@ router.get("/api/v1/dashboard", requireAuth, async (req: AuthedRequest, res: Res
           ${locationId ? Prisma.sql`AND s."locationId" = ${locationId}` : Prisma.empty}
           ${terminalId ? Prisma.sql`AND s."terminalId" = ${terminalId}` : Prisma.empty}
           AND s."soldAt" BETWEEN ${dateFrom} AND ${dateTo}
+          AND NOT (
+            COALESCE(p."isSgr", false) = true
+            AND COALESCE(si."vatRate", 0) = 0
+            AND COALESCE(si."unitPrice", 0) = COALESCE(p."sgrValue", 0)
+          )
         GROUP BY p.name
         ORDER BY qty DESC
         LIMIT 5

@@ -34,6 +34,17 @@ function getNetUnitPrice(unitPrice: number, vatRate: number) {
   return unitPrice / (1 + vatRate / 100)
 }
 
+function isSyntheticSgrSaleItem(item: any) {
+  const product = item?.product
+  if (!product?.isSgr) return false
+
+  const unitPrice = toNumber(item?.unitPrice)
+  const vatRate = toNumber(item?.vatRate)
+  const sgrValue = toNumber(product?.sgrValue || 0.5)
+
+  return vatRate === 0 && Math.abs(unitPrice - sgrValue) < 0.0001
+}
+
 function formatDayLabel(date: Date) {
   const day = `${date.getDate()}`.padStart(2, "0")
   const month = `${date.getMonth() + 1}`.padStart(2, "0")
@@ -297,6 +308,8 @@ router.get("/api/v1/reports/advanced", requireAuth, async (req: AuthedRequest, r
       salesTrendMap[trendKey].sales += saleTotal
 
       for (const item of sale.items) {
+        if (isSyntheticSgrSaleItem(item)) continue
+
         const key = item.productId
         const qty = toNumber(item.qty)
         const unitPriceGross = toNumber(item.unitPrice)
