@@ -27,6 +27,14 @@ function numberValue(value: any) {
   return Number(value || 0)
 }
 
+function normalizeText(value: unknown) {
+  return typeof value === "string" ? value.trim() : ""
+}
+
+function dateToken(date: Date) {
+  return date.toISOString().slice(0, 10).replace(/-/g, "")
+}
+
 router.get("/api/v1/finance/pos-receipts", requireAuth, async (req: AuthedRequest, res) => {
   try {
     const tenantId = req.auth?.tenantId
@@ -188,6 +196,161 @@ router.get("/api/v1/finance/daily-closures", requireAuth, async (req: AuthedRequ
   } catch (error) {
     console.error("FINANCE DAILY CLOSURES ERROR", error)
     res.status(500).json({ ok: false, error: "Nu am putut incarca inchiderile zilnice." })
+  }
+})
+
+router.post("/api/v1/finance/daily-closures/generate-from-sales", requireAuth, async (req: AuthedRequest, res) => {
+  try {
+    const tenantId = req.auth?.tenantId
+    if (!tenantId) return res.status(401).json({ ok: false, error: "Missing tenant" })
+
+    const company = await requireRequestCompany(req)
+    const now = new Date()
+    const dateFrom = asDate(req.body?.dateFrom, dayStart(now))
+    const dateTo = asDate(req.body?.dateTo, dayEnd(now))
+    const locationId = normalizeText(req.body?.locationId)
+    const terminalId = normalizeText(req.body?.terminalId)
+
+    const sales = await prisma.sale.findMany({
+      where: {
+        tenantId,
+        companyId: company.id,
+        soldAt: { gte: dateFrom, lte: dateTo },
+        ...(locationId ? { locationId } : {}),
+        ...(terminalId ? { terminalId } : {}),
+      },
+      include: {
+        location: { select: { id: true, name: true, code: true } },
+        terminal: { select: { id: true, label: true, deviceId: true } },
+      },
+      orderBy: [{ soldAt: "asc" }, { createdAt: "asc" }],
+      take: 1000,
+    })
+
+    if (!sales.length) {
+      return res.status(400).json({ ok: false, error: "Nu exista vanzari POS in intervalul selectat." })
+    }
+
+    const totals = sales.reduce(
+      (acc, sale) => {
+        const total = numberValue(sale.total)
+        const cash = numberValue(sale.cashAmount)
+        const card = numberValue(sale.cardAmount)
+        acc.total += total
+
+        if (sale.paymentType === "CASH") {
+          acc.cash += cash > 0 ? cash : total
+        } else if (sale.paymentType === "CARD") {
+          acc.card += card > 0 ? card : total
+        } else {
+          acc.cash += cash
+          acc.card += card
+          const other = total - cash - card
+          if (other > 0) acc.other += other
+        }
+
+        return acc
+      },
+      { total: 0, cash: 0, card: 0, other: 0 }
+    )
+
+    const firstSale = sales[0]
+    const sameLocation = sales.every((sale) => sale.locationId === firstSale.locationId)
+    const sameTerminal = sales.every((sale) => (sale.terminalId || "") === (firstSale.terminalId || ""))
+    const locationName = sameLocation
+      ? firstSale.location?.name || firstSale.location?.code || null
+      : "Toate locatiile"
+    const terminalLabel = sameTerminal
+      ? firstSale.terminal?.label || firstSale.terminal?.deviceId || null
+      : "Toate terminalele"
+    const deviceId = sameTerminal ? firstSale.terminal?.deviceId || null : null
+    const reportNo = `ERP-${dateToken(dateFrom)}${dateToken(dateFrom) === dateToken(dateTo) ? "" : `-${dateToken(dateTo)}`}${locationId ? `-${locationId.slice(-6)}` : ""}${terminalId ? `-${terminalId.slice(-6)}` : ""}`
+
+    const reportLines = [
+      "Raport Z generat automat din vanzarile POS sincronizate in ERP",
+      `Interval: ${dateFrom.toISOString()} -> ${dateTo.toISOString()}`,
+      `Firma: ${company.name}`,
+      `Locatie: ${locationName || "-"}`,
+      `Terminal: ${terminalLabel || "-"}`,
+      `Bonuri: ${sales.length}`,
+      `Total: ${totals.total.toFixed(2)} RON`,
+      `Cash: ${totals.cash.toFixed(2)} RON`,
+      `Card: ${totals.card.toFixed(2)} RON`,
+      `Alte metode: ${totals.other.toFixed(2)} RON`,
+      "",
+      "Bonuri incluse:",
+      ...sales.map((sale) => {
+        const receiptNo = sale.receiptNo || sale.clientSaleId || sale.id
+        const locationLabel = sale.location?.name || sale.location?.code || "-"
+        const terminal = sale.terminal?.label || sale.terminal?.deviceId || "-"
+        return `${sale.soldAt.toISOString()} | ${receiptNo} | ${numberValue(sale.total).toFixed(2)} RON | ${sale.paymentType} | ${locationLabel} | ${terminal}`
+      }),
+    ]
+
+    const existing = await prisma.posDailyClosure.findFirst({
+      where: {
+        tenantId,
+        companyId: company.id,
+        locationId: locationId || null,
+        terminalId: terminalId || null,
+        reportType: "Z",
+        reportNo,
+      },
+      orderBy: { createdAt: "desc" },
+    })
+
+    const payloadJson = {
+      source: "erp-sales-rebuild",
+      dateFrom: dateFrom.toISOString(),
+      dateTo: dateTo.toISOString(),
+      salesCount: sales.length,
+      receiptIds: sales.map((sale) => sale.id),
+    }
+
+    const data = {
+      tenantId,
+      companyId: company.id,
+      locationId: locationId || (sameLocation ? firstSale.locationId : null),
+      terminalId: terminalId || (sameTerminal ? firstSale.terminalId || null : null),
+      deviceId,
+      locationName,
+      terminalLabel,
+      reportType: "Z",
+      reportNo,
+      closedAt: dateTo,
+      total: totals.total,
+      cashTotal: totals.cash,
+      cardTotal: totals.card,
+      otherTotal: totals.other,
+      reportText: reportLines.join("\n"),
+      payloadJson,
+    }
+
+    const item = existing
+      ? await prisma.posDailyClosure.update({
+          where: { id: existing.id },
+          data,
+        })
+      : await prisma.posDailyClosure.create({
+          data,
+        })
+
+    res.json({
+      ok: true,
+      created: !existing,
+      item: {
+        id: item.id,
+        reportNo: item.reportNo,
+        total: numberValue(item.total),
+        cashTotal: numberValue(item.cashTotal),
+        cardTotal: numberValue(item.cardTotal),
+        otherTotal: numberValue(item.otherTotal),
+        closedAt: item.closedAt,
+      },
+    })
+  } catch (error) {
+    console.error("FINANCE DAILY CLOSURE GENERATE ERROR", error)
+    res.status(500).json({ ok: false, error: "Nu am putut genera inchiderea zilnica din vanzarile POS." })
   }
 })
 

@@ -47,7 +47,9 @@ export default function PosClosuresView() {
   const [items, setItems] = useState<DailyClosure[]>([])
   const [totals, setTotals] = useState({ total: 0, cash: 0, card: 0, other: 0, count: 0 })
   const [loading, setLoading] = useState(false)
+  const [generating, setGenerating] = useState(false)
   const [error, setError] = useState("")
+  const [success, setSuccess] = useState("")
 
   async function loadClosures() {
     setLoading(true)
@@ -71,6 +73,32 @@ export default function PosClosuresView() {
       setError(err instanceof Error ? err.message : "Nu am putut incarca inchiderile zilnice.")
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function generateFromSales() {
+    setGenerating(true)
+    setError("")
+    setSuccess("")
+    try {
+      const res = await fetch(`${API}/api/v1/finance/daily-closures/generate-from-sales`, {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({
+          dateFrom: startIso(dateFrom),
+          dateTo: endIso(dateTo),
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data?.ok === false) {
+        throw new Error(data?.error || "Nu am putut genera inchiderea zilnica.")
+      }
+      setSuccess(data?.created ? "Inchiderea zilnica a fost generata din vanzarile POS." : "Inchiderea zilnica a fost actualizata din vanzarile POS.")
+      await loadClosures()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Nu am putut genera inchiderea zilnica.")
+    } finally {
+      setGenerating(false)
     }
   }
 
@@ -114,6 +142,14 @@ export default function PosClosuresView() {
           >
             Cauta
           </button>
+          <button
+            type="button"
+            onClick={() => void generateFromSales()}
+            disabled={generating}
+            className="rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-slate-950 shadow-sm transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {generating ? "Se genereaza..." : "Genereaza din vanzari"}
+          </button>
         </div>
       </div>
 
@@ -137,6 +173,7 @@ export default function PosClosuresView() {
       </div>
 
       {error ? <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
+      {success ? <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</div> : null}
 
       <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200">
         {loading ? (
