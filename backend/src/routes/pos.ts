@@ -274,14 +274,14 @@ function normalizeText(value: unknown) {
 function buildPublicBaseUrl(req: Request) {
   const configured = normalizeText(process.env.PUBLIC_BASE_URL);
   if (configured) {
-    return configured.replace(/\/+$/, "");
+    return configured.replace(/\/+$/, "").replace(/^http:\/\//i, "https://");
   }
 
   const host = req.get("host") || "";
   const forwardedProto = normalizeText(req.headers["x-forwarded-proto"]);
   const protocol = forwardedProto || req.protocol || "http";
 
-  return `${protocol}://${host}`.replace(/\/+$/, "");
+  return `${protocol}://${host}`.replace(/\/+$/, "").replace(/^http:\/\//i, "https://");
 }
 
 function resolveImageUrl(req: Request, rawUrl: unknown) {
@@ -289,21 +289,23 @@ function resolveImageUrl(req: Request, rawUrl: unknown) {
   if (!value) return null;
 
   const baseUrl = buildPublicBaseUrl(req);
+  const apiBaseUrl = baseUrl.replace("://test.gufo.ink", "://api.gufo.ink");
 
-  const localhostPattern = /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?/i;
-  if (localhostPattern.test(value)) {
-    return value.replace(localhostPattern, baseUrl);
+  const internalHostPattern =
+    /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|api\.gufo\.ink)(:\d+)?/i;
+  if (internalHostPattern.test(value)) {
+    return value.replace(internalHostPattern, apiBaseUrl).replace(/^http:\/\//i, "https://");
   }
 
   if (/^https?:\/\//i.test(value)) {
-    return value;
+    return value.replace(/^http:\/\//i, "https://");
   }
 
   if (value.startsWith("/")) {
-    return `${baseUrl}${value}`;
+    return `${apiBaseUrl}${value}`.replace(/^http:\/\//i, "https://");
   }
 
-  return `${baseUrl}/${value}`;
+  return `${apiBaseUrl}/${value}`.replace(/^http:\/\//i, "https://");
 }
 
 function buildSgrLine(product: any, qty: number) {
