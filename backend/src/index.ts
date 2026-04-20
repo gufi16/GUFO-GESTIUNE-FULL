@@ -20,7 +20,7 @@ import { hasSmtpConfig, sendMail } from "./lib/mailer"
 
 import productsRouter from "./routes/products"
 import metaRouter from "./routes/meta"
-import posRouter, { buildCatalogPayload, handlePosSale, registerPairedPosSession, resolvePosAuthContext } from "./routes/pos"
+import posRouter, { buildCatalogPayload, handlePosDailyClosure, handlePosSale, registerPairedPosSession, resolvePosAuthContext } from "./routes/pos"
 import stockRouter from "./routes/stock"
 import purchaseRouter from "./routes/purchase"
 import companyRouter, { handleAnafOauthCallback } from "./routes/company"
@@ -1219,6 +1219,11 @@ app.post("/api/v1/pos/sales", async (req, res) => {
 app.post("/api/v1/pos/receipts", async (req, res) => {
   console.log("🔥 INDEX POS RECEIPTS HIT", req.body)
   return handlePosSale(req as any, res)
+})
+
+app.post("/api/v1/pos/daily-closures", async (req, res) => {
+  console.log("INDEX POS DAILY CLOSURE HIT", req.body)
+  return handlePosDailyClosure(req as any, res)
 })
 
 app.use(productsRouter)

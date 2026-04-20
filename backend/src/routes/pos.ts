@@ -897,9 +897,7 @@ router.post(
   }
 );
 
-router.post(
-  "/api/v1/pos/daily-closures",
-  async (req: PosAuthRequest, res: Response) => {
+export async function handlePosDailyClosure(req: PosAuthRequest, res: Response) {
     try {
       const parsed = PosDailyClosureSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -1005,8 +1003,9 @@ router.post(
       console.error("POS DAILY CLOSURE ERROR", error);
       return res.status(500).json({ ok: false, error: "Nu am putut salva inchiderea zilnica." });
     }
-  }
-);
+}
+
+router.post("/api/v1/pos/daily-closures", handlePosDailyClosure);
 
 /* ======================================================
    3) POS CONFIG
