@@ -21,6 +21,7 @@ const actions = [
     helper: "Integrare POS și documente",
     icon: Receipt,
     path: "",
+    action: "receipts",
     tone: "amber",
   },
   {
@@ -32,7 +33,7 @@ const actions = [
   },
 ] as const
 
-export default function QuickActions() {
+export default function QuickActions({ onOpenReceipts }: { onOpenReceipts?: () => void }) {
   const navigate = useNavigate()
 
   return (
@@ -44,6 +45,10 @@ export default function QuickActions() {
             key={action.label}
             type="button"
             onClick={() => {
+              if ("action" in action && action.action === "receipts") {
+                onOpenReceipts?.()
+                return
+              }
               if (action.path) navigate(action.path)
             }}
             className="rounded-[26px] border border-slate-200 bg-white p-5 text-left shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-md"

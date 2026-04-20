@@ -870,6 +870,34 @@ model SaleItem {
   @@index([productId])
 }
 
+model PosDailyClosure {
+  id            String   @id @default(cuid())
+  tenantId      String
+  companyId     String?
+  locationId    String?
+  terminalId    String?
+  deviceId      String?
+  locationName  String?
+  terminalLabel String?
+  reportType    String   @default("Z")
+  reportNo      String?
+  closedAt      DateTime @default(now())
+  total         Decimal  @default(0) @db.Decimal(12, 2)
+  cashTotal     Decimal  @default(0) @db.Decimal(12, 2)
+  cardTotal     Decimal  @default(0) @db.Decimal(12, 2)
+  otherTotal    Decimal  @default(0) @db.Decimal(12, 2)
+  reportText    String?
+  payloadJson   Json?
+  createdAt     DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, companyId])
+  @@index([companyId])
+  @@index([locationId])
+  @@index([terminalId])
+  @@index([closedAt])
+}
+
 model StockBalance {
     id         String @id @default(cuid())
     tenantId   String

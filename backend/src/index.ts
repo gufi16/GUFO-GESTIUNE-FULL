@@ -45,6 +45,7 @@ import spvClassicRouter from "./routes/spvClassic"
 import usersRouter from "./routes/users"
 import auditRouter from "./routes/audit"
 import gufoAiRouter from "./routes/gufoAi"
+import financeRouter from "./routes/finance"
 
 dotenv.config()
 
@@ -1243,6 +1244,7 @@ app.use(inventoryRouter)
 app.use("/api/v1/inventory-docs", inventoryDocsPdf)
 app.use(reportsRouter)
 app.use(accountingExportRouter)
+app.use(financeRouter)
 app.use(adminRouter)
 app.use(marketplaceRouter)
 app.use(salesInvoicesRouter)

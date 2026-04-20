@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "react-router-dom"
 import PageHeader from "../components/PageHeader"
 import QuickActions from "../components/QuickActions"
+import PosReceiptsView from "../components/PosReceiptsView"
 import { API_BASE as API, getToken, authHeaders } from "../lib/api"
 import { getActiveLocationId, subscribeToActiveLocation } from "../lib/location"
 import { getActiveTerminalId, subscribeToActiveTerminal } from "../lib/terminal"
@@ -368,6 +369,7 @@ export default function Dashboard() {
   const [salesSeries, setSalesSeries] = useState<SalesPoint[]>([])
   const [dashboardLoading, setDashboardLoading] = useState(true)
   const [dashboardError, setDashboardError] = useState("")
+  const [receiptsOpen, setReceiptsOpen] = useState(false)
 
   const [salesTotal, setSalesTotal] = useState(0)
   const [receiptsCount, setReceiptsCount] = useState(0)
@@ -666,7 +668,28 @@ export default function Dashboard() {
         </SectionCard>
       </div>
 
-      <QuickActions />
+      <QuickActions onOpenReceipts={() => setReceiptsOpen(true)} />
+
+      {receiptsOpen ? (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
+          <div className="max-h-[90vh] w-full max-w-6xl overflow-auto rounded-[30px] bg-white p-5 shadow-2xl">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <div className="text-xl font-bold text-slate-900">Vanzari / Bon</div>
+                <div className="mt-1 text-sm text-slate-500">Bonuri emise in Android POS.</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReceiptsOpen(false)}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+              >
+                Inchide
+              </button>
+            </div>
+            <PosReceiptsView compact />
+          </div>
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-3 2xl:grid-cols-[minmax(300px,0.9fr)_minmax(0,1.1fr)]">
         <SectionCard

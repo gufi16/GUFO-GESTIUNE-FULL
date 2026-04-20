@@ -271,6 +271,12 @@ function normalizeText(value: unknown) {
   return String(value ?? "").trim();
 }
 
+function startOfDay(value: Date) {
+  const date = new Date(value);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
 function buildPublicBaseUrl(req: Request) {
   const configured = normalizeText(process.env.PUBLIC_BASE_URL);
   if (configured) {
@@ -522,6 +528,18 @@ const PairSchema = z.object({
 const PosLicenseValidateSchema = z.object({
   licenseKey: z.string().min(3).optional(),
   license_key: z.string().min(3).optional(),
+});
+
+const PosDailyClosureSchema = z.object({
+  reportType: z.string().optional().default("Z"),
+  reportNo: z.string().optional().nullable(),
+  closedAt: z.string().optional().nullable(),
+  total: z.number().optional().default(0),
+  cashTotal: z.number().optional().default(0),
+  cardTotal: z.number().optional().default(0),
+  otherTotal: z.number().optional().default(0),
+  reportText: z.string().optional().nullable(),
+  payload: z.any().optional(),
 });
 
 router.post("/api/v1/pos/validate", async (req: Request, res: Response) => {
@@ -824,6 +842,102 @@ router.post(
         locationId: terminal.locationId,
       },
     });
+  }
+);
+
+router.post(
+  "/api/v1/pos/daily-closures",
+  requirePosAuth,
+  async (req: PosAuthRequest, res: Response) => {
+    try {
+      const parsed = PosDailyClosureSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ ok: false, error: parsed.error.flatten() });
+      }
+
+      const auth = await resolvePosAuthContext(req);
+      if (!auth?.tenantId || !auth.terminalId) {
+        return res.status(401).json({ ok: false, error: "POS neautentificat" });
+      }
+
+      const terminal = await prisma.terminal.findFirst({
+        where: { id: auth.terminalId, tenantId: auth.tenantId },
+        include: { location: true },
+      });
+
+      if (!terminal) {
+        return res.status(404).json({ ok: false, error: "Terminal POS inexistent" });
+      }
+
+      const data = parsed.data;
+      const parsedClosedAt = data.closedAt ? new Date(data.closedAt) : new Date();
+      const closedAt = Number.isNaN(parsedClosedAt.getTime()) ? new Date() : parsedClosedAt;
+      let total = toNumber(data.total);
+      let cashTotal = toNumber(data.cashTotal);
+      let cardTotal = toNumber(data.cardTotal);
+      let otherTotal = toNumber(data.otherTotal);
+
+      if (total === 0 && cashTotal === 0 && cardTotal === 0 && otherTotal === 0) {
+        const previousClosure = await prisma.posDailyClosure.findFirst({
+          where: {
+            tenantId: auth.tenantId,
+            companyId: terminal.companyId || null,
+            terminalId: terminal.id,
+            reportType: "Z",
+            closedAt: { lt: closedAt },
+          },
+          orderBy: { closedAt: "desc" },
+        });
+
+        const sales = await prisma.sale.findMany({
+          where: {
+            tenantId: auth.tenantId,
+            companyId: terminal.companyId || null,
+            terminalId: terminal.id,
+            soldAt: {
+              gt: previousClosure?.closedAt || startOfDay(closedAt),
+              lte: closedAt,
+            },
+          },
+          select: {
+            total: true,
+            cashAmount: true,
+            cardAmount: true,
+          },
+        });
+
+        total = sales.reduce((sum, sale) => sum + toNumber(sale.total), 0);
+        cashTotal = sales.reduce((sum, sale) => sum + toNumber(sale.cashAmount), 0);
+        cardTotal = sales.reduce((sum, sale) => sum + toNumber(sale.cardAmount), 0);
+        otherTotal = Math.max(0, total - cashTotal - cardTotal);
+      }
+
+      const item = await prisma.posDailyClosure.create({
+        data: {
+          tenantId: auth.tenantId,
+          companyId: terminal.companyId || null,
+          locationId: terminal.locationId || null,
+          terminalId: terminal.id,
+          deviceId: terminal.deviceId,
+          locationName: terminal.location?.name || null,
+          terminalLabel: terminal.label || null,
+          reportType: normalizeText(data.reportType || "Z").toUpperCase() || "Z",
+          reportNo: data.reportNo ? normalizeText(data.reportNo) : null,
+          closedAt,
+          total: new Prisma.Decimal(total),
+          cashTotal: new Prisma.Decimal(cashTotal),
+          cardTotal: new Prisma.Decimal(cardTotal),
+          otherTotal: new Prisma.Decimal(otherTotal),
+          reportText: data.reportText ? String(data.reportText).slice(0, 12000) : null,
+          payloadJson: data.payload ?? req.body,
+        },
+      });
+
+      return res.json({ ok: true, item });
+    } catch (error) {
+      console.error("POS DAILY CLOSURE ERROR", error);
+      return res.status(500).json({ ok: false, error: "Nu am putut salva inchiderea zilnica." });
+    }
   }
 );
 
