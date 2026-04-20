@@ -69,6 +69,15 @@ export default function PosReceiptsView({ compact = false }: Props) {
   const [totals, setTotals] = useState({ total: 0, cash: 0, card: 0, count: 0 })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [page, setPage] = useState(1)
+
+  const pageSize = compact ? 6 : 10
+
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize))
+  const pagedItems = useMemo(() => {
+    const start = (page - 1) * pageSize
+    return items.slice(start, start + pageSize)
+  }, [items, page, pageSize])
 
   async function loadReceipts() {
     setLoading(true)
@@ -88,6 +97,7 @@ export default function PosReceiptsView({ compact = false }: Props) {
       }
       setItems(Array.isArray(data.items) ? data.items : [])
       setTotals(data.totals || { total: 0, cash: 0, card: 0, count: 0 })
+      setPage(1)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Nu am putut incarca bonurile POS.")
     } finally {
@@ -166,7 +176,8 @@ export default function PosReceiptsView({ compact = false }: Props) {
           <div className="p-5 text-sm text-slate-500">Nu exista bonuri POS in intervalul selectat.</div>
         ) : (
           <div className="divide-y divide-slate-200">
-            {items.map((item) => (
+            <div className={compact ? "max-h-[55vh] overflow-y-auto" : "max-h-[70vh] overflow-y-auto"}>
+            {pagedItems.map((item) => (
               <details key={item.id} className="group bg-white">
                 <summary className="grid cursor-pointer grid-cols-1 gap-2 px-4 py-3 text-sm transition hover:bg-slate-50 md:grid-cols-[1fr_1fr_1fr_auto] md:items-center">
                   <div>
@@ -212,6 +223,32 @@ export default function PosReceiptsView({ compact = false }: Props) {
                 </div>
               </details>
             ))}
+            </div>
+
+            <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-sm text-slate-500">
+                Pagina {page} din {totalPages} · afisate {pagedItems.length} din {items.length} bonuri
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  disabled={page <= 1}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Inapoi
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                  disabled={page >= totalPages}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Urmator
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
