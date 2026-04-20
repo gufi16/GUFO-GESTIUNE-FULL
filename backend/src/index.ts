@@ -899,6 +899,126 @@ const DirectPosPairSchema = z.object({
   terminal_label: z.string().optional(),
 })
 
+const DirectPosValidateSchema = z.object({
+  licenseKey: z.string().optional(),
+  license_key: z.string().optional(),
+})
+
+app.post("/api/v1/pos/validate", async (req, res) => {
+  console.log("🔥 INDEX POS VALIDATE HIT", req.body)
+
+  try {
+    const parsed = DirectPosValidateSchema.safeParse(req.body)
+    if (!parsed.success) {
+      return res.status(400).json({
+        ok: false,
+        allowed: false,
+        error: parsed.error.flatten(),
+      })
+    }
+
+    const licenseKey = normalizeText(parsed.data.licenseKey ?? parsed.data.license_key)
+
+    if (!licenseKey || licenseKey.length < 3) {
+      return res.status(400).json({
+        ok: false,
+        allowed: false,
+        error: "Licenta POS este invalida",
+      })
+    }
+
+    const terminal = await prisma.terminal.findFirst({
+      where: {
+        deviceId: licenseKey,
+      },
+      include: {
+        location: true,
+        tenant: {
+          include: {
+            licenses: {
+              orderBy: { createdAt: "desc" },
+              take: 1,
+            },
+          },
+        },
+      },
+    })
+
+    if (!terminal) {
+      return res.status(404).json({
+        ok: false,
+        allowed: false,
+        error: "Licenta invalida",
+      })
+    }
+
+    const license = terminal.tenant.licenses[0]
+
+    if (!license) {
+      return res.status(404).json({
+        ok: false,
+        allowed: false,
+        error: "Licenta ERP inexistenta",
+      })
+    }
+
+    if (license.isSuspended) {
+      return res.status(403).json({
+        ok: false,
+        allowed: false,
+        error: "Licenta este suspendata",
+      })
+    }
+
+    if (license.expiresAt <= new Date()) {
+      return res.status(403).json({
+        ok: false,
+        allowed: false,
+        error: "Licenta este expirata",
+      })
+    }
+
+    if (!license.modPos) {
+      return res.status(403).json({
+        ok: false,
+        allowed: false,
+        error: "POS nu este activ",
+      })
+    }
+
+    const terminalsCount = await prisma.terminal.count({
+      where: { tenantId: terminal.tenantId },
+    })
+
+    const withinLimit = terminalsCount <= license.limitTerminals
+
+    return res.json({
+      ok: true,
+      allowed: withinLimit,
+      tenantId: terminal.tenantId,
+      terminal: {
+        id: terminal.id,
+        deviceId: terminal.deviceId,
+        label: terminal.label,
+        locationId: terminal.locationId,
+        locationName: terminal.location?.name || null,
+      },
+      license: {
+        expiresAt: license.expiresAt,
+        posEnabled: license.modPos,
+        licenseKey,
+      },
+    })
+  } catch (error) {
+    console.error("INDEX POS VALIDATE ERROR:", error)
+    return res.status(500).json({
+      ok: false,
+      allowed: false,
+      error: "Eroare interna la validarea POS",
+    })
+  }
+})
+
 app.post("/api/v1/pos/pair", async (req, res) => {
   console.log("🔥 INDEX POS PAIR HIT", req.body)
 
