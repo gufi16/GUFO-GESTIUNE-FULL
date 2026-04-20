@@ -539,8 +539,60 @@ const PosDailyClosureSchema = z.object({
   cardTotal: z.number().optional().default(0),
   otherTotal: z.number().optional().default(0),
   reportText: z.string().optional().nullable(),
+  licenseKey: z.string().optional().nullable(),
+  deviceId: z.string().optional().nullable(),
+  locationId: z.string().optional().nullable(),
   payload: z.any().optional(),
 });
+
+async function resolveDailyClosureAuth(req: PosAuthRequest, body: z.infer<typeof PosDailyClosureSchema>) {
+  const auth = await resolvePosAuthContext(req);
+  if (auth?.tenantId && auth.terminalId) {
+    return auth;
+  }
+
+  const licenseKey = normalizeText(body.licenseKey);
+  const deviceId = normalizeText(body.deviceId);
+  if (!licenseKey && !deviceId) {
+    return null;
+  }
+
+  const terminal = await prisma.terminal.findFirst({
+    where: {
+      OR: [
+        ...(licenseKey ? [{ deviceId: licenseKey }] : []),
+        ...(deviceId ? [{ deviceId }] : []),
+      ],
+    },
+    include: {
+      tenant: {
+        include: {
+          licenses: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
+        },
+      },
+    },
+  });
+
+  const license = terminal?.tenant.licenses[0];
+  if (
+    !terminal ||
+    !license ||
+    license.isSuspended ||
+    license.expiresAt <= new Date() ||
+    !license.modPos
+  ) {
+    return null;
+  }
+
+  return {
+    tenantId: terminal.tenantId,
+    terminalId: terminal.id,
+    deviceId: terminal.deviceId,
+  };
+}
 
 router.post("/api/v1/pos/validate", async (req: Request, res: Response) => {
   try {
@@ -847,7 +899,6 @@ router.post(
 
 router.post(
   "/api/v1/pos/daily-closures",
-  requirePosAuth,
   async (req: PosAuthRequest, res: Response) => {
     try {
       const parsed = PosDailyClosureSchema.safeParse(req.body);
@@ -855,8 +906,15 @@ router.post(
         return res.status(400).json({ ok: false, error: parsed.error.flatten() });
       }
 
-      const auth = await resolvePosAuthContext(req);
+      const auth = await resolveDailyClosureAuth(req, parsed.data);
       if (!auth?.tenantId || !auth.terminalId) {
+        console.warn("POS DAILY CLOSURE AUTH FAILED", {
+          hasAuthorization: Boolean(normalizeText(req.headers.authorization)),
+          hasXPosToken: Boolean(normalizeText(req.headers["x-pos-token"])),
+          hasToken: Boolean(normalizeText(req.headers["token"])),
+          licenseKey: normalizeText(parsed.data.licenseKey),
+          deviceId: normalizeText(parsed.data.deviceId),
+        });
         return res.status(401).json({ ok: false, error: "POS neautentificat" });
       }
 
@@ -871,6 +929,7 @@ router.post(
 
       const data = parsed.data;
       const resolvedCompanyId = terminal.companyId || terminal.location?.companyId || null;
+      const resolvedLocationId = terminal.locationId || normalizeText(data.locationId) || null;
       const parsedClosedAt = data.closedAt ? new Date(data.closedAt) : new Date();
       const closedAt = Number.isNaN(parsedClosedAt.getTime()) ? new Date() : parsedClosedAt;
       let total = toNumber(data.total);
@@ -917,7 +976,7 @@ router.post(
         data: {
           tenantId: auth.tenantId,
           companyId: resolvedCompanyId,
-          locationId: terminal.locationId || null,
+          locationId: resolvedLocationId,
           terminalId: terminal.id,
           deviceId: terminal.deviceId,
           locationName: terminal.location?.name || null,
@@ -934,6 +993,13 @@ router.post(
         },
       });
 
+      console.log("POS DAILY CLOSURE SAVED", {
+        id: item.id,
+        tenantId: auth.tenantId,
+        terminalId: terminal.id,
+        locationId: resolvedLocationId,
+        reportType: item.reportType,
+      });
       return res.json({ ok: true, item });
     } catch (error) {
       console.error("POS DAILY CLOSURE ERROR", error);
