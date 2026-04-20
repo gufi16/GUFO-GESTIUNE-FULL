@@ -129,12 +129,25 @@ router.get("/api/v1/finance/daily-closures", requireAuth, async (req: AuthedRequ
     const dateTo = asDate(req.query.dateTo, dayEnd(now))
     const locationId = typeof req.query.locationId === "string" ? req.query.locationId.trim() : ""
     const terminalId = typeof req.query.terminalId === "string" ? req.query.terminalId.trim() : ""
+    const companyLocations = await prisma.location.findMany({
+      where: {
+        tenantId,
+        companyId: company.id,
+      },
+      select: { id: true },
+    })
+    const companyLocationIds = companyLocations.map((item) => item.id)
 
     const items = await prisma.posDailyClosure.findMany({
       where: {
         tenantId,
-        companyId: company.id,
         closedAt: { gte: dateFrom, lte: dateTo },
+        OR: [
+          { companyId: company.id },
+          ...(companyLocationIds.length
+            ? [{ companyId: null, locationId: { in: companyLocationIds } }]
+            : []),
+        ],
         ...(locationId ? { locationId } : {}),
         ...(terminalId ? { terminalId } : {}),
       },

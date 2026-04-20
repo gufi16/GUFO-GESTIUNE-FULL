@@ -870,6 +870,7 @@ router.post(
       }
 
       const data = parsed.data;
+      const resolvedCompanyId = terminal.companyId || terminal.location?.companyId || null;
       const parsedClosedAt = data.closedAt ? new Date(data.closedAt) : new Date();
       const closedAt = Number.isNaN(parsedClosedAt.getTime()) ? new Date() : parsedClosedAt;
       let total = toNumber(data.total);
@@ -881,7 +882,7 @@ router.post(
         const previousClosure = await prisma.posDailyClosure.findFirst({
           where: {
             tenantId: auth.tenantId,
-            companyId: terminal.companyId || null,
+            companyId: resolvedCompanyId,
             terminalId: terminal.id,
             reportType: "Z",
             closedAt: { lt: closedAt },
@@ -892,7 +893,7 @@ router.post(
         const sales = await prisma.sale.findMany({
           where: {
             tenantId: auth.tenantId,
-            companyId: terminal.companyId || null,
+            companyId: resolvedCompanyId,
             terminalId: terminal.id,
             soldAt: {
               gt: previousClosure?.closedAt || startOfDay(closedAt),
@@ -915,7 +916,7 @@ router.post(
       const item = await prisma.posDailyClosure.create({
         data: {
           tenantId: auth.tenantId,
-          companyId: terminal.companyId || null,
+          companyId: resolvedCompanyId,
           locationId: terminal.locationId || null,
           terminalId: terminal.id,
           deviceId: terminal.deviceId,
