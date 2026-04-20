@@ -934,8 +934,9 @@ export async function handlePosDailyClosure(req: PosAuthRequest, res: Response) 
       let cashTotal = toNumber(data.cashTotal);
       let cardTotal = toNumber(data.cardTotal);
       let otherTotal = toNumber(data.otherTotal);
+      const clientProvidedTotals = Boolean((data.payload as any)?.clientTotals);
 
-      if (total === 0 && cashTotal === 0 && cardTotal === 0 && otherTotal === 0) {
+      if (!clientProvidedTotals && total === 0 && cashTotal === 0 && cardTotal === 0 && otherTotal === 0) {
         const previousClosure = await prisma.posDailyClosure.findFirst({
           where: {
             tenantId: auth.tenantId,
