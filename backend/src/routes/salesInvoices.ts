@@ -162,7 +162,7 @@ async function replaceInvoiceItems(
     const lineGrossFc = lineNetFc + lineVatFc
     const sgrUnitFc = product.isSgr ? toNumber(product.sgrValue) : 0
     const sgrTotalFc = qty * sgrUnitFc
-    const vatCategoryCode = vat > 0 ? "S" : "O"
+    const vatCategoryCode = vat > 0 ? "S" : "Z"
 
     await prisma.salesInvoiceItem.create({
       data: {
