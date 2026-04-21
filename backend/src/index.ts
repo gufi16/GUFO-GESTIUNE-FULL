@@ -82,7 +82,7 @@ function isAllowedOrigin(origin?: string) {
   if (!hostname) return false
 
   if (/^(localhost|127\.0\.0\.1)$/i.test(hostname)) return true
-  if (hostname === "app.gufo.ink" || hostname === "api.gufo.ink") return true
+  if (hostname === "app.gufo.ink" || hostname === "test.gufo.ink" || hostname === "api.gufo.ink") return true
   if (hostname.endsWith(".gufo.ink")) return true
 
   return false
@@ -161,7 +161,7 @@ function getOriginHostname(req: express.Request) {
 function getTenantSubdomainFromHostname(hostname: string) {
   if (!hostname) return null
   if (/^(localhost|127\.0\.0\.1)$/i.test(hostname)) return null
-  if (hostname === "gufo.ink" || hostname === "app.gufo.ink" || hostname === "api.gufo.ink") return null
+  if (hostname === "gufo.ink" || hostname === "app.gufo.ink" || hostname === "test.gufo.ink" || hostname === "api.gufo.ink") return null
   if (!hostname.endsWith(".gufo.ink")) return null
 
   const parts = hostname.split(".")
@@ -455,7 +455,7 @@ app.get("/api/v1/public/domain-allow", async (req, res) => {
     return res.status(400).send("missing domain")
   }
 
-  if (domain === "app.gufo.ink" || domain === "api.gufo.ink") {
+  if (domain === "app.gufo.ink" || domain === "test.gufo.ink" || domain === "api.gufo.ink") {
     return res.status(200).send("ok")
   }
 
