@@ -187,7 +187,7 @@ export default function PosClosuresView() {
                 <summary className="grid cursor-pointer grid-cols-1 gap-2 px-4 py-3 text-sm transition hover:bg-slate-50 md:grid-cols-[1fr_1fr_1fr_auto] md:items-center">
                   <div>
                     <div className="font-semibold text-slate-900">
-                      Raport {item.reportType || "Z"} {item.reportNo ? `#${item.reportNo}` : ""}
+                      Inchidere zilnica {item.reportType || "Z"}
                     </div>
                     <div className="text-xs text-slate-500">{formatDateTime(item.closedAt)}</div>
                   </div>
@@ -200,15 +200,9 @@ export default function PosClosuresView() {
                   <div className="text-right text-base font-bold text-slate-900">{formatMoneyRo(item.total)}</div>
                 </summary>
 
-                {item.reportText ? (
-                  <pre className="max-h-80 overflow-auto whitespace-pre-wrap border-t border-slate-100 bg-slate-950 p-4 text-xs leading-5 text-slate-100">
-                    {item.reportText}
-                  </pre>
-                ) : (
-                  <div className="border-t border-slate-100 bg-slate-50 p-4 text-sm text-slate-500">
-                    Raportul Z a fost salvat fara text detaliat de la casa.
-                  </div>
-                )}
+                <div className="border-t border-slate-100 bg-slate-50 p-4 text-sm text-slate-500">
+                  Raportul fiscal a fost salvat din Android POS.
+                </div>
               </details>
             ))}
           </div>

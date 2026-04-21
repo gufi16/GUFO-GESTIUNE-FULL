@@ -31,6 +31,13 @@ function normalizeText(value: unknown) {
   return typeof value === "string" ? value.trim() : ""
 }
 
+function isSyntheticSgrLine(line: any) {
+  if (!line?.product?.isSgr) return false
+  const unitPrice = numberValue(line?.unitPrice)
+  const sgrValue = numberValue(line?.product?.sgrValue || 0.5)
+  return line?.vatRate === 0 && Math.abs(unitPrice - sgrValue) < 0.0001
+}
+
 function dateToken(date: Date) {
   return date.toISOString().slice(0, 10).replace(/-/g, "")
 }
@@ -93,17 +100,18 @@ router.get("/api/v1/finance/pos-receipts", requireAuth, async (req: AuthedReques
       lines: sale.items.map((line) => {
         const qty = numberValue(line.qty)
         const unitPrice = numberValue(line.unitPrice)
+        const sgrLine = isSyntheticSgrLine(line)
         return {
           id: line.id,
           productId: line.productId,
-          sku: line.product?.sku || "",
-          name: line.product?.name || "Produs",
+          sku: sgrLine ? "SGR" : line.product?.sku || "",
+          name: sgrLine ? "SGR" : line.product?.name || "Produs",
           uom: line.product?.uom?.code || line.product?.uom?.name || "",
           qty,
           unitPrice,
           vatRate: line.vatRate,
           total: qty * unitPrice,
-          isSgr: Boolean(line.product?.isSgr),
+          isSgr: sgrLine,
         }
       }),
     }))
