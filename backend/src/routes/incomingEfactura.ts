@@ -359,6 +359,27 @@ function isIncomingEfacturaMessage(entry: any) {
   return details.includes("cif_beneficiar")
 }
 
+function mapIncomingSyncError(error: any, company?: {
+  efacturaCertFilename?: string | null
+  efacturaCertPasswordEnc?: string | null
+}) {
+  const raw = String(error?.message || "").trim()
+  const hasServerCertificate = Boolean(company?.efacturaCertFilename && company?.efacturaCertPasswordEnc)
+
+  if (/handshake failure|sslv3 alert handshake failure|EPROTO|tls/i.test(raw)) {
+    if (!hasServerCertificate) {
+      return "Conexiunea cu ANAF a fost respinsa la nivel TLS. Pentru sincronizarea directa SPV trebuie incarcat pe server certificatul firmei (.p12/.pfx) si parola lui, apoi refacut testul."
+    }
+    return "Conexiunea TLS cu ANAF a fost respinsa. Verifica certificatul incarcat pe server, parola lui si serialul folosit pentru autorizarea OAuth."
+  }
+
+  if (/Command failed:\s*curl/i.test(raw)) {
+    return "ANAF a respins cererea de sincronizare. Verifica tokenul ANAF si certificatul server configurat pentru aceasta firma."
+  }
+
+  return raw || "Nu am putut sincroniza facturile primite direct din ANAF."
+}
+
 async function repairIncomingInvoiceIfNeeded(tenantId: string, companyId: string, entry: any) {
   if (!entry?.xmlText || !isMalformedIncomingInvoice(entry)) return entry
   try {
@@ -934,7 +955,7 @@ router.post("/api/v1/efactura/incoming/sync", async (req: AuthedRequest, res) =>
   } catch (error: any) {
     return res.status(400).json({
       ok: false,
-      error: error?.message || "Nu am putut sincroniza facturile primite direct din ANAF.",
+      error: mapIncomingSyncError(error, company),
     })
   }
 })
