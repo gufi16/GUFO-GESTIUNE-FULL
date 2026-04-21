@@ -720,7 +720,7 @@ export default function SetariEFacturaPage() {
       <PageHeader
         badge="configurare"
         title="Setari e-Factura"
-        subtitle="Pastrezi aici ce conteaza pentru lucru direct din ERP: activare, mediul ANAF, token OAuth si certificatul server al firmei."
+        subtitle="Pastrezi aici ce conteaza pentru lucru direct din ERP: activare, mediul ANAF si tokenul OAuth ANAF."
       />
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
@@ -735,11 +735,6 @@ export default function SetariEFacturaPage() {
       {!form.efacturaPlatformConfigured ? (
         <InlineNotice>
           Aplicatia ANAF se configureaza centralizat in <strong>Control Panel</strong>. Dupa ce este setata acolo, aici ramane doar configurarea firmei si generarea tokenului.
-        </InlineNotice>
-      ) : null}
-      {!certState.hasFile ? (
-        <InlineNotice>
-          Sincronizarea directa SPV foloseste fluxul <strong>OAuth ANAF</strong>. Certificatul server ramane optional, doar ca fallback tehnic daca ANAF cere mTLS in anumite scenarii.
         </InlineNotice>
       ) : null}
       {isDebugMode && localCertificateWarning ? <InlineNotice tone="error">{localCertificateWarning}</InlineNotice> : null}
@@ -791,63 +786,6 @@ export default function SetariEFacturaPage() {
             </div>
             <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
               Expira: <span className="font-semibold text-slate-900">{oauthStatus.expiresAt ? new Date(oauthStatus.expiresAt).toLocaleString("ro-RO") : "-"}</span>
-            </div>
-          </div>
-        </DocumentSection>
-
-        <DocumentSection
-          title="Certificat server ANAF"
-          description="Optional, ca fallback tehnic. Fluxul normal foloseste OAuth ANAF, fara agent local permanent."
-          actions={
-            <div className="flex gap-2">
-              <button type="button" onClick={uploadCertificate} className={documentButtonPrimaryClass} disabled={certBusy || loading}>
-                {certBusy ? "Se incarca..." : "Incarca certificat"}
-              </button>
-              {certState.hasFile ? (
-                <button type="button" onClick={removeCertificate} className={documentButtonSecondaryClass} disabled={certBusy || loading}>
-                  Sterge certificat
-                </button>
-              ) : null}
-            </div>
-          }
-        >
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-            <DocumentField label="Serial certificat">
-              <input
-                value={form.efacturaCertSerial}
-                onChange={(e) => updateField("efacturaCertSerial", e.target.value)}
-                className={documentInputClass}
-                placeholder="Ex: 20:11:04:20:94:04..."
-              />
-            </DocumentField>
-            <DocumentField label="Fisier certificat (.p12 / .pfx)">
-              <input
-                type="file"
-                accept=".p12,.pfx,application/x-pkcs12"
-                onChange={(e) => setCertFile(e.target.files?.[0] || null)}
-                className={documentInputClass}
-              />
-            </DocumentField>
-            <DocumentField label="Parola certificat">
-              <input
-                type="password"
-                value={certPassword}
-                onChange={(e) => setCertPassword(e.target.value)}
-                className={documentInputClass}
-                placeholder={certState.passwordConfigured ? "Parola este deja salvata pe server" : "Introdu parola certificatului"}
-              />
-            </DocumentField>
-          </div>
-
-          <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-3">
-            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-              Status certificat: <span className="font-semibold text-slate-900">{certState.hasFile ? "Incarcat" : "Lipsa"}</span>
-            </div>
-            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-              Fisier: <span className="font-semibold text-slate-900">{certState.filename || "-"}</span>
-            </div>
-            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-              Incarcat la: <span className="font-semibold text-slate-900">{certState.uploadedAt ? new Date(certState.uploadedAt).toLocaleString("ro-RO") : "-"}</span>
             </div>
           </div>
         </DocumentSection>
