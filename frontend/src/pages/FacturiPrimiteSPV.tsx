@@ -307,14 +307,20 @@ export default function FacturiPrimiteSPVPage() {
     setLoading(true)
     setError("")
     try {
-      const res = await fetch(`${API_BASE}/api/v1/efactura/incoming`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const res = await fetch(`${API_BASE}/api/v1/efactura/incoming?_=${Date.now()}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+        },
+        cache: "no-store",
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data?.ok) {
         throw new Error(data?.error || "Nu am putut incarca facturile primite din SPV.")
       }
       setItems(Array.isArray(data.items) ? data.items : [])
+      setImportedInvoicesPage(1)
     } catch (err: any) {
       setError(err?.message || "Nu am putut incarca facturile primite din SPV.")
     } finally {
