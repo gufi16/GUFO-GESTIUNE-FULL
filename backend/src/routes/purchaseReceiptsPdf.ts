@@ -159,10 +159,10 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
   const contentWidth = pageWidth - margin * 2
   const dark = '#111111'
 
-  let y = margin + 6
-  doc.font(fonts.bold).fontSize(14).fillColor(dark).text(pdfText(company?.name), margin, y)
-  y += 16
-  doc.font(fonts.regular).fontSize(8.5)
+  let y = margin + 4
+  doc.font(fonts.bold).fontSize(13).fillColor(dark).text(pdfText(company?.name), margin, y)
+  y += 15
+  doc.font(fonts.regular).fontSize(8.2)
   const companyLines = [
     `CUI: ${pdfText(company?.cui)}`,
     `Nr. ord. reg. com: ${pdfText(company?.regNo)}`,
@@ -174,64 +174,66 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
   ]
   for (const line of companyLines) {
     doc.text(line, margin, y)
-    y += 13
+    y += 11
   }
 
   y += 4
   doc.moveTo(margin, y).lineTo(pageWidth - margin, y).strokeColor(dark).lineWidth(1).stroke()
-  y += 36
+  y += 24
 
-  doc.font(fonts.bold).fontSize(18).fillColor(dark).text('NOTA DE RECEPTIE SI CONSTATARE DE DIFERENTE', margin, y)
-  y += 40
+  doc.font(fonts.bold).fontSize(17).fillColor(dark).text('NOTA DE RECEPTIE SI CONSTATARE DE DIFERENTE', margin, y)
+  y += 24
 
   const intro = `Subsemnatii, membrii ai comisiei de receptie, am procedat la receptionarea valorilor materiale furnizate de ${supplier}, cod fiscal ${pdfText(receipt.supplier?.cif || receipt.supplierCode)}, cu documentul ${pdfText(receipt.docNo)} din data de ${pdfDate(receipt.docDate)}, constatandu-se urmatoarele:`
-  doc.font(fonts.regular).fontSize(9.5).text(intro, margin, y, { width: contentWidth, align: 'left' })
-  y += 52
+  doc.font(fonts.regular).fontSize(9).text(intro, margin, y, { width: contentWidth, align: 'left' })
+  y += 34
 
   const isRon = receipt.currency === 'RON'
   const columns = isRon
     ? [
-        { label: 'Produs', width: 180, align: 'left' },
-        { label: 'Cant. doc.\n intrare', width: 104, align: 'center' },
-        { label: 'Cant.', width: 104, align: 'center' },
-        { label: 'UM', width: 52, align: 'center' },
-        { label: 'Pret achizitie\nRON, fara TVA', width: 104, align: 'center' },
-        { label: 'Pret inreg. RON,\nfara TVA', width: 104, align: 'center' },
-        { label: 'TVA unitar, RON', width: 104, align: 'center' },
-        { label: 'TVA total, RON', width: 104, align: 'center' },
-        { label: 'Pret cu TVA,\nRON', width: 104, align: 'center' },
-        { label: 'Valoare BON\nfara TVA', width: 104, align: 'center' },
-        { label: 'Valoare\ninregistrare,\nRON cu TVA', width: 104, align: 'center' },
+        { label: 'Produs', width: 170, align: 'left' },
+        { label: 'Cant. doc.\nintrare', width: 68, align: 'center' },
+        { label: 'Cant.', width: 60, align: 'center' },
+        { label: 'UM', width: 38, align: 'center' },
+        { label: 'Pret achizitie\nRON fara TVA', width: 72, align: 'center' },
+        { label: 'Pret inreg.\nRON fara TVA', width: 72, align: 'center' },
+        { label: 'TVA unitar\nRON', width: 72, align: 'center' },
+        { label: 'TVA total\nRON', width: 72, align: 'center' },
+        { label: 'Valoare\nfara TVA', width: 82, align: 'center' },
+        { label: 'Valoare inreg.\nRON cu TVA', width: 83, align: 'center' },
       ]
     : [
-        { label: 'Produs', width: 180, align: 'left' },
-        { label: 'Cant. doc.\n intrare', width: 90, align: 'center' },
-        { label: 'Cant.', width: 90, align: 'center' },
-        { label: 'UM', width: 44, align: 'center' },
-        { label: `Pret ${receipt.currency}\nfara TVA`, width: 86, align: 'center' },
-        { label: `TVA ${receipt.currency}`, width: 86, align: 'center' },
-        { label: `Pret cu TVA\n${receipt.currency}`, width: 86, align: 'center' },
-        { label: `Valoare\n${receipt.currency}`, width: 90, align: 'center' },
-        { label: 'Valoare RON', width: 90, align: 'center' },
+        { label: 'Produs', width: 210, align: 'left' },
+        { label: 'Cant. doc.\nintrare', width: 72, align: 'center' },
+        { label: 'Cant.', width: 64, align: 'center' },
+        { label: 'UM', width: 42, align: 'center' },
+        { label: `Pret ${receipt.currency}\nfara TVA`, width: 90, align: 'center' },
+        { label: `TVA ${receipt.currency}`, width: 82, align: 'center' },
+        { label: `Pret cu TVA\n${receipt.currency}`, width: 90, align: 'center' },
+        { label: `Valoare\n${receipt.currency}`, width: 92, align: 'center' },
+        { label: 'Valoare RON', width: 95, align: 'center' },
       ]
 
-  const rowHeight = 52
+  const headerHeight = 42
   let x = margin
   columns.forEach((col) => {
-    doc.rect(x, y, col.width, rowHeight).stroke(dark)
-    doc.font(fonts.bold).fontSize(8).fillColor(dark).text(col.label, x + 4, y + 14, { width: col.width - 8, align: col.align || 'center' })
+    doc.rect(x, y, col.width, headerHeight).stroke(dark)
+    doc.font(fonts.bold).fontSize(7.6).fillColor(dark).text(col.label, x + 3, y + 10, { width: col.width - 6, align: col.align || 'center' })
     x += col.width
   })
-  y += rowHeight
+  y += headerHeight
 
   receipt.items.forEach((item) => {
     const qty = pdfNum(item.qty)
     const unitNet = pdfNum(item.unitCostNetFc)
     const unitVat = qty > 0 ? pdfNum(item.lineVatFc) / qty : 0
     const unitGross = qty > 0 ? pdfNum(item.lineGrossFc) / qty : 0
+    const productName = pdfText(item.product?.name)
+    const productHeight = doc.heightOfString(productName, { width: columns[0].width - 8, align: 'left' })
+    const rowHeight = Math.max(28, productHeight + 10)
     const row = isRon
       ? [
-          pdfText(item.product?.name),
+          productName,
           pdfFmt(qty, 0),
           pdfFmt(qty, 0),
           pdfText(item.uom?.code || item.product?.purchaseUom?.code || item.product?.uom?.code || 'Buc'),
@@ -239,7 +241,6 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
           pdfFmt(unitNet, 2),
           pdfFmt(unitVat, 2),
           pdfFmt(item.lineVatFc, 2),
-          pdfFmt(unitGross, 2),
           pdfFmt(item.lineNetFc, 2),
           pdfFmt(item.lineGrossRon || item.lineGrossFc, 2),
         ]
@@ -259,7 +260,7 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
     row.forEach((cell, index) => {
       const col = columns[index]
       doc.rect(xx, y, col.width, rowHeight).stroke(dark)
-      doc.font(fonts.regular).fontSize(8.5).fillColor(dark).text(cell, xx + 4, y + 12, {
+      doc.font(fonts.regular).fontSize(8.2).fillColor(dark).text(cell, xx + 4, y + 7, {
         width: col.width - 8,
         align: index === 0 ? 'left' : 'center',
       })
@@ -268,12 +269,10 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
     y += rowHeight
   })
 
-  let totalLabelX = margin
-  for (let i = 0; i < columns.length - 3; i++) totalLabelX += columns[i].width
   const totalLabelW = columns.slice(0, columns.length - 3).reduce((s, c) => s + c.width, 0)
   const lastThree = columns.slice(-3)
   doc.rect(margin, y, totalLabelW, 30).stroke(dark)
-  doc.font(fonts.bold).fontSize(9).text('Total, RON', margin + totalLabelW - 90, y + 10, { width: 80, align: 'right' })
+  doc.font(fonts.bold).fontSize(9).text(`Total${isRon ? ', RON' : ''}`, margin + totalLabelW - 90, y + 10, { width: 80, align: 'right' })
   let tx = margin + totalLabelW
   const totalValues = isRon
     ? [pdfFmt(receipt.totalVatFc, 2), pdfFmt(receipt.totalNetFc, 2), pdfFmt(receipt.totalGrossRon || receipt.totalGrossFc, 2)]

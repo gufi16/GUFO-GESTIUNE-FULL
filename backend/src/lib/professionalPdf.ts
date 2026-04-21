@@ -46,8 +46,17 @@ export function registerPdfFonts(doc: PDFKit.PDFDocument): Fonts {
 }
 
 export function pdfText(value: any) {
-  const t = String(value ?? "").trim()
-  return t || "-"
+  const raw = String(value ?? "").trim()
+  if (!raw) return "-"
+
+  const repaired = raw
+    .replace(/�/g, "")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, " ")
+    .replace(/\s+/g, " ")
+    .normalize("NFKC")
+    .trim()
+
+  return repaired || "-"
 }
 
 export function pdfNum(value: any) {
@@ -254,7 +263,7 @@ export function drawSignatureRow(doc: PDFKit.PDFDocument, fonts: Fonts, options:
       width: cardW - 24,
       align: "center",
     })
-    doc.font(fonts.regular).fontSize(8).fillColor("#64748B").text("Semn?tur? ?i nume", x + 12, options.y + 34, {
+    doc.font(fonts.regular).fontSize(8).fillColor("#64748B").text("Semnatura si nume", x + 12, options.y + 34, {
       width: cardW - 24,
       align: "center",
     })
