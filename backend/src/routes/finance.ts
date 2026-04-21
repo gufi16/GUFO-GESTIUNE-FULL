@@ -31,6 +31,13 @@ function normalizeText(value: unknown) {
   return typeof value === "string" ? value.trim() : ""
 }
 
+function normalizeFiscalReceiptNo(value: unknown) {
+  const text = normalizeText(value)
+  if (!text) return null
+  const uuidLike = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+  return uuidLike.test(text) ? null : text
+}
+
 function isSyntheticSgrLine(line: any) {
   if (!line?.product?.isSgr) return false
   const unitPrice = numberValue(line?.unitPrice)
@@ -87,7 +94,7 @@ router.get("/api/v1/finance/pos-receipts", requireAuth, async (req: AuthedReques
 
     const items = sales.map((sale) => ({
       id: sale.id,
-      receiptNo: sale.receiptNo || sale.clientSaleId || sale.id,
+      receiptNo: normalizeFiscalReceiptNo(sale.receiptNo),
       clientSaleId: sale.clientSaleId,
       soldAt: sale.soldAt,
       total: numberValue(sale.total),

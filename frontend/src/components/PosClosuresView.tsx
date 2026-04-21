@@ -40,6 +40,17 @@ function formatDateTime(value: string) {
   }).format(new Date(value))
 }
 
+function visibleFiscalReportNo(value: string | null | undefined) {
+  const text = (value || "").trim()
+  if (!text) return null
+  return /^\d{1,20}$/.test(text) ? text : null
+}
+
+function closureTitle(item: DailyClosure) {
+  const reportNo = visibleFiscalReportNo(item.reportNo)
+  return reportNo ? `Raport ${item.reportType || "Z"} #${reportNo}` : `Raport ${item.reportType || "Z"}`
+}
+
 export default function PosClosuresView() {
   const today = useMemo(() => toInputDate(new Date()), [])
   const [dateFrom, setDateFrom] = useState(today)
@@ -187,7 +198,7 @@ export default function PosClosuresView() {
                 <summary className="grid cursor-pointer grid-cols-1 gap-2 px-4 py-3 text-sm transition hover:bg-slate-50 md:grid-cols-[1fr_1fr_1fr_auto] md:items-center">
                   <div>
                     <div className="font-semibold text-slate-900">
-                      Inchidere zilnica {item.reportType || "Z"}
+                      {closureTitle(item)}
                     </div>
                     <div className="text-xs text-slate-500">{formatDateTime(item.closedAt)}</div>
                   </div>

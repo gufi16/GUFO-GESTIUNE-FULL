@@ -16,7 +16,7 @@ type PosReceiptLine = {
 
 type PosReceipt = {
   id: string
-  receiptNo: string
+  receiptNo?: string | null
   soldAt: string
   total: number
   paymentType: string
@@ -59,6 +59,17 @@ function paymentLabel(item: PosReceipt) {
   if (item.paymentType === "MIXED") return `Mixt: cash ${formatMoneyRo(item.cashAmount)} / card ${formatMoneyRo(item.cardAmount)}`
   if (item.paymentType === "CARD") return `Card ${formatMoneyRo(item.cardAmount || item.total)}`
   return `Cash ${formatMoneyRo(item.cashAmount || item.total)}`
+}
+
+function visibleFiscalReceiptNo(value: string | null | undefined) {
+  const text = (value || "").trim()
+  if (!text) return null
+  return /^\d{1,20}$/.test(text) ? text : null
+}
+
+function receiptTitle(item: PosReceipt) {
+  const receiptNo = visibleFiscalReceiptNo(item.receiptNo)
+  return receiptNo ? `Bon fiscal #${receiptNo}` : "Bon fiscal"
 }
 
 export default function PosReceiptsView({ compact = false }: Props) {
@@ -181,7 +192,7 @@ export default function PosReceiptsView({ compact = false }: Props) {
               <details key={item.id} className="group bg-white">
                 <summary className="grid cursor-pointer grid-cols-1 gap-2 px-4 py-3 text-sm transition hover:bg-slate-50 md:grid-cols-[1fr_1fr_1fr_auto] md:items-center">
                   <div>
-                    <div className="font-semibold text-slate-900">{item.receiptNo}</div>
+                    <div className="font-semibold text-slate-900">{receiptTitle(item)}</div>
                     <div className="text-xs text-slate-500">{formatDateTime(item.soldAt)}</div>
                   </div>
                   <div className="text-slate-600">
