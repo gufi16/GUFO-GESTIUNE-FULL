@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { Building2, FileOutput, Plus, UserRound, X } from "lucide-react"
+import { ArrowUpToLine, Building2, FileOutput, Plus, ReceiptText, RefreshCw, Send, UserRound, X } from "lucide-react"
 import PageHeader from "../components/PageHeader"
 import {
   DocumentField,
@@ -86,6 +86,11 @@ function isCustomerReadyForEfactura(customer: {
       String(customer.county || "").trim() &&
       String(customer.country || "").trim(),
   )
+}
+
+function extractDownloadId(value: string) {
+  const match = String(value || "").match(/id_descarcare="([^"]+)"/i)
+  return match?.[1] || ""
 }
 
 export default function FacturaPage() {
@@ -403,8 +408,31 @@ export default function FacturaPage() {
       setMessage(data?.message || "Factura a fost transmisa la ANAF.")
     } catch (e: any) {
       setError(e?.message || "Nu am putut trimite factura la ANAF.")
+      throw e
     } finally {
       setEfacturaBusy(false)
+    }
+  }
+
+  async function sendToSpv() {
+    if (!invoiceId || !token) return
+    if (status !== "ISSUED") {
+      setError("Emite factura inainte sa o trimiti in SPV.")
+      return
+    }
+
+    try {
+      if (!["PREPARED", "READY_TO_SEND", "SENT", "ACCEPTED"].includes(efacturaStatus)) {
+        await prepareEfactura()
+      }
+      if (!["SENT", "ACCEPTED"].includes(efacturaStatus)) {
+        await sendEfacturaToAnaf()
+      }
+      if (!["ACCEPTED", "REJECTED"].includes(efacturaStatus)) {
+        await checkEfacturaStatus()
+      }
+    } catch {
+      // Errors are already surfaced by the called steps.
     }
   }
 
@@ -635,6 +663,9 @@ export default function FacturaPage() {
     county: selectedCustomer?.county || "",
     country: selectedCustomer?.country || "RO",
   })
+  const efacturaPrepared = ["PREPARED", "READY_TO_SEND", "SENT", "ACCEPTED"].includes(efacturaStatus)
+  const efacturaCanSend = status === "ISSUED" && customerReadyForEfactura
+  const efacturaDownloadId = extractDownloadId(efacturaInfo)
 
   return (
     <div className="space-y-3">
@@ -651,51 +682,80 @@ export default function FacturaPage() {
         {efacturaEnabled ? <DocumentMetric title="e-Factura" value={<DocumentStatusPill status={efacturaStatus} />} tone="slate" /> : null}
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {invoiceId ? (
-          <button type="button" onClick={printInvoicePdf} className={documentButtonSecondaryClass}>
-            <FileOutput size={16} className="mr-2" />
-            PDF
-          </button>
-        ) : null}
-        {invoiceId && efacturaEnabled ? (
-          <button type="button" onClick={prepareEfactura} className={documentButtonSecondaryClass} disabled={efacturaBusy || saving || loadingMeta || loadingInvoice}>
-            <FileOutput size={16} className="mr-2" />
-            {efacturaBusy ? "Pregatire..." : "Pregateste e-Factura"}
-          </button>
-        ) : null}
-        {invoiceId && efacturaEnabled ? (
-          <button type="button" onClick={downloadEfacturaXml} className={documentButtonSecondaryClass} disabled={efacturaStatus !== "PREPARED" && efacturaStatus !== "READY_TO_SEND"}>
-            <FileOutput size={16} className="mr-2" />
-            XML
-          </button>
-        ) : null}
-        {invoiceId && efacturaEnabled ? (
-          <button type="button" onClick={sendEfacturaToAnaf} className={documentButtonSecondaryClass} disabled={efacturaBusy || status !== "ISSUED" || (efacturaStatus !== "PREPARED" && efacturaStatus !== "READY_TO_SEND" && efacturaStatus !== "ERROR" && efacturaStatus !== "REJECTED")}>
-            <FileOutput size={16} className="mr-2" />
-            {efacturaBusy ? "Trimitere..." : "Trimite ANAF"}
-          </button>
-        ) : null}
-        {invoiceId && efacturaEnabled ? (
-          <button type="button" onClick={checkEfacturaStatus} className={documentButtonSecondaryClass} disabled={efacturaBusy || !efacturaUploadIndex}>
-            <FileOutput size={16} className="mr-2" />
-            Verifica stare
-          </button>
-        ) : null}
-        {invoiceId && efacturaEnabled ? (
-          <button type="button" onClick={downloadEfacturaReceipt} className={documentButtonSecondaryClass} disabled={efacturaBusy || !efacturaUploadIndex}>
-            <FileOutput size={16} className="mr-2" />
-            Recipisa
-          </button>
-        ) : null}
-        <button type="button" onClick={() => saveInvoice(false)} className={documentButtonSecondaryClass} disabled={saving || loadingMeta || loadingInvoice}>
-          {saving ? "Se salveaza..." : "Salveaza draft"}
-        </button>
-        <button type="button" onClick={() => saveInvoice(true)} className={documentButtonPrimaryClass} disabled={saving || loadingMeta || loadingInvoice}>
-          {saving ? "Se salveaza..." : "Emite factura"}
-        </button>
-      </div>
+      <div className="rounded-[22px] border border-slate-200 bg-white px-4 py-4 shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap gap-2">
+            {invoiceId ? (
+              <button type="button" onClick={printInvoicePdf} className={documentButtonSecondaryClass}>
+                <FileOutput size={16} className="mr-2" />
+                PDF
+              </button>
+            ) : null}
+            <button type="button" onClick={() => saveInvoice(false)} className={documentButtonSecondaryClass} disabled={saving || loadingMeta || loadingInvoice}>
+              {saving ? "Se salveaza..." : "Salveaza draft"}
+            </button>
+            <button type="button" onClick={() => saveInvoice(true)} className={documentButtonPrimaryClass} disabled={saving || loadingMeta || loadingInvoice}>
+              {saving ? "Se salveaza..." : "Emite factura"}
+            </button>
+            {invoiceId && efacturaEnabled ? (
+              <button
+                type="button"
+                onClick={sendToSpv}
+                className={documentButtonPrimaryClass}
+                disabled={efacturaBusy || saving || loadingMeta || loadingInvoice || !efacturaCanSend}
+              >
+                <Send size={16} className="mr-2" />
+                {efacturaBusy ? "Se trimite..." : "Trimite in SPV"}
+              </button>
+            ) : null}
+          </div>
 
+          {invoiceId && efacturaEnabled ? (
+            <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-2 xl:max-w-[760px] xl:grid-cols-4">
+              <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3 py-2">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Status SPV</div>
+                <div className="mt-1 flex items-center gap-2 text-sm font-semibold text-slate-900"><DocumentStatusPill status={efacturaStatus} /></div>
+              </div>
+              <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3 py-2">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">ID incarcare</div>
+                <div className="mt-1 text-sm font-semibold text-slate-900">{efacturaUploadIndex || "-"}</div>
+              </div>
+              <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3 py-2">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">ID descarcare</div>
+                <div className="mt-1 text-sm font-semibold text-slate-900">{efacturaDownloadId || "-"}</div>
+              </div>
+              <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3 py-2">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">XML local</div>
+                <div className="mt-1 text-sm font-semibold text-slate-900">{efacturaPrepared ? "Pregatit" : "Nepregatit"}</div>
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        {invoiceId && efacturaEnabled ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+            <button type="button" onClick={prepareEfactura} className={documentButtonSecondaryClass} disabled={efacturaBusy || saving || loadingMeta || loadingInvoice}>
+              <FileOutput size={16} className="mr-2" />
+              Pregateste XML
+            </button>
+            <button type="button" onClick={downloadEfacturaXml} className={documentButtonSecondaryClass} disabled={!efacturaPrepared}>
+              <ArrowUpToLine size={16} className="mr-2" />
+              XML
+            </button>
+            <button type="button" onClick={checkEfacturaStatus} className={documentButtonSecondaryClass} disabled={efacturaBusy || !efacturaUploadIndex}>
+              <RefreshCw size={16} className="mr-2" />
+              Verifica stare
+            </button>
+            <button type="button" onClick={downloadEfacturaReceipt} className={documentButtonSecondaryClass} disabled={efacturaBusy || !efacturaUploadIndex}>
+              <ReceiptText size={16} className="mr-2" />
+              Recipisa
+            </button>
+            {!customerReadyForEfactura ? (
+              <span className="text-xs font-medium text-amber-700">Completeaza adresa, orasul, judetul si tara clientului inainte de trimiterea SPV.</span>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
       {loadingMeta ? <InlineNotice>Se incarca nomenclatoarele pentru factura.</InlineNotice> : null}
       {loadingInvoice ? <InlineNotice>Se incarca factura selectata.</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
@@ -703,17 +763,8 @@ export default function FacturaPage() {
       {efacturaEnabled && efacturaInfo ? <InlineNotice>{efacturaInfo}</InlineNotice> : null}
 
       {invoiceId && efacturaEnabled ? (
-        <DocumentSection
-          title="e-Factura"
-        >
-          <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
-            <DocumentMetric title="Status e-Factura" value={<DocumentStatusPill status={efacturaStatus} />} tone="slate" />
-            <DocumentMetric title="Factura emisa" value={status === "ISSUED" ? "Da" : "Nu"} tone="blue" />
-            <DocumentMetric title="XML local" value={efacturaStatus === "PREPARED" || efacturaStatus === "READY_TO_SEND" || efacturaStatus === "SENT" || efacturaStatus === "ACCEPTED" ? "Pregatit" : "Nepregatit"} tone="emerald" />
-            <DocumentMetric title="ID incarcare" value={efacturaUploadIndex || "-"} tone="slate" />
-          </div>
-
-          <div className="mt-3 grid grid-cols-1 gap-2.5 md:grid-cols-2">
+        <DocumentSection title="Detalii SPV">
+          <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
             <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
               Trimis la ANAF: <span className="font-semibold text-slate-900">{efacturaSentAt ? new Date(efacturaSentAt).toLocaleString("ro-RO") : "-"}</span>
             </div>
