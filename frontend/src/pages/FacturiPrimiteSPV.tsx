@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { Navigate, useNavigate } from "react-router-dom"
-import { ArrowRight, ChevronDown, ChevronUp, Download, FileCode2, FileText, X } from "lucide-react"
+import { ArrowRight, ChevronDown, ChevronUp, ClipboardList, Download, Factory, FileCode2, FileText, PackageSearch, Repeat2, X } from "lucide-react"
 import PageHeader from "../components/PageHeader"
 import { DocumentMetric, InlineNotice, documentButtonPrimaryClass, documentButtonSecondaryClass, documentInputClass } from "../components/DocumentUi"
 import { API_BASE, getToken } from "../lib/api"
@@ -971,6 +971,64 @@ export default function FacturiPrimiteSPVPage() {
         title="Facturi primite SPV"
         subtitle="Sincronizezi facturile furnizorilor din SPV si deschizi receptia direct din ele."
       />
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => navigate("/documente?tab=consumption")}
+          className="inline-flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-semibold text-slate-700 transition hover:bg-slate-50"
+        >
+          <Repeat2 size={15} />
+          Bonuri de consum
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate("/documente?tab=production")}
+          className="inline-flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-semibold text-slate-700 transition hover:bg-slate-50"
+        >
+          <Factory size={15} />
+          Productie
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate("/documente?tab=invoice")}
+          className="inline-flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-semibold text-slate-700 transition hover:bg-slate-50"
+        >
+          <FileText size={15} />
+          Facturi
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate("/documente?tab=inventory")}
+          className="inline-flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-semibold text-slate-700 transition hover:bg-slate-50"
+        >
+          <ClipboardList size={15} />
+          Inventare
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate("/documente?tab=receipt")}
+          className="inline-flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-semibold text-slate-700 transition hover:bg-slate-50"
+        >
+          <PackageSearch size={15} />
+          Note de receptie
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate("/documente?tab=minutes")}
+          className="inline-flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-semibold text-slate-700 transition hover:bg-slate-50"
+        >
+          <FileText size={15} />
+          Procese verbale
+        </button>
+        <button
+          type="button"
+          className="inline-flex items-center gap-1.5 rounded-[14px] bg-slate-900 px-3 py-1.5 text-[13px] font-semibold text-white transition"
+        >
+          <FileText size={15} />
+          Facturi primite SPV
+        </button>
+      </div>
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
         <DocumentMetric title="Facturi primite" value={String(filteredItems.length)} tone="blue" />
