@@ -152,7 +152,7 @@ function normalizeAnafMessage(message: string) {
     return text
   }
   if (/handshake failure|sslv3 alert handshake failure|EPROTO|tls/i.test(text)) {
-    return "ANAF a respins conexiunea TLS. Incarca certificatul firmei (.p12/.pfx) pe server si parola lui, apoi retesteaza sincronizarea."
+    return "ANAF a respins conexiunea TLS. Verifica endpointul ANAF folosit de backend si reincearca sincronizarea."
   }
   return text
 }
@@ -739,8 +739,7 @@ export default function SetariEFacturaPage() {
       ) : null}
       {!certState.hasFile ? (
         <InlineNotice>
-          Pentru <strong>sincronizare directa SPV fara agent Windows</strong>, firma trebuie sa aiba incarcat pe server certificatul ANAF
-          <strong> .p12/.pfx</strong> si parola lui.
+          Sincronizarea directa SPV foloseste fluxul <strong>OAuth ANAF</strong>. Certificatul server ramane optional, doar ca fallback tehnic daca ANAF cere mTLS in anumite scenarii.
         </InlineNotice>
       ) : null}
       {isDebugMode && localCertificateWarning ? <InlineNotice tone="error">{localCertificateWarning}</InlineNotice> : null}
@@ -798,7 +797,7 @@ export default function SetariEFacturaPage() {
 
         <DocumentSection
           title="Certificat server ANAF"
-          description="Acest certificat se foloseste pentru apelurile directe ERP -> ANAF, fara agent local permanent."
+          description="Optional, ca fallback tehnic. Fluxul normal foloseste OAuth ANAF, fara agent local permanent."
           actions={
             <div className="flex gap-2">
               <button type="button" onClick={uploadCertificate} className={documentButtonPrimaryClass} disabled={certBusy || loading}>
