@@ -9,6 +9,7 @@ import { getNextNumberPreview, reserveNextNumber } from "../lib/numbering"
 import { assertSufficientStock, decrementStockBalanceStrict } from "../lib/stock"
 import { resolveTenantCompany } from "../lib/companyResolver"
 import { requireRequestCompanyId } from "../lib/companyScope"
+import { drawDocumentHero, drawInfoCards, drawSimpleTable, drawSignatureRow, drawTotalsBox, ensurePdfPage, pdfDate, pdfFmt, pdfText, registerPdfFonts } from "../lib/professionalPdf"
 
 const router = Router()
 
@@ -478,9 +479,7 @@ router.get("/api/v1/minutes-docs/:id/pdf", async (req: AuthedRequest, res) => {
       items: {
         include: {
           product: {
-            include: {
-              uom: true,
-            },
+            include: { uom: true },
           },
         },
       },
@@ -493,206 +492,123 @@ router.get("/api/v1/minutes-docs/:id/pdf", async (req: AuthedRequest, res) => {
 
   const company = await resolveTenantCompany(prisma, tenantId, req.auth?.activeCompanyId)
   const filename = `${safeFilePart(docData.docNo)}.pdf`
-
   res.setHeader("Content-Type", "application/pdf")
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`)
 
-  const doc = new PDFDocument({ size: "A4", margin: 28 })
-  const fonts = registerFonts(doc)
+  const doc = new PDFDocument({ size: "A4", margin: 36 })
+  const fonts = registerPdfFonts(doc)
   doc.pipe(res)
-  const pageWidth = doc.page.width
-  const pageHeight = doc.page.height
-  const margin = 28
-  const contentWidth = pageWidth - margin * 2
-  const leftWidth = 240
-  const rightWidth = contentWidth - leftWidth - 12
-  const rowHeight = 24
+  const margin = 36
 
-  const tableColumns =
-    docData.type === "DETERIORATION"
-      ? [34, 202, 54, 66, 76, 96]
-      : [34, 202, 54, 72, 72, 96]
-  const tableHeaders =
-    docData.type === "DETERIORATION"
-      ? ["#", "Produs", "UM", "Cant.", "Val. unit.", "Valoare"]
-      : ["#", "Produs", "UM", "Pret vechi", "Pret nou", "Impact"]
-
-  const tableRows = docData.items.map((item, index) =>
-    docData.type === "DETERIORATION"
-      ? [
-          String(index + 1),
-          item.product.name,
-          item.product.uom?.code || "-",
-          fmtQty(item.qty),
-          fmtMoney(item.unitValue),
-          fmtMoney(item.lineValue),
-        ]
-      : [
-          String(index + 1),
-          item.product.name,
-          item.product.uom?.code || "-",
-          fmtMoney(item.oldPrice),
-          fmtMoney(item.newPrice),
-          fmtMoney(item.lineValue),
-        ]
-  )
-
-  function drawPageHeader() {
-    let y = margin
-    drawBox(doc, margin, y, leftWidth, 112)
-    doc.font(fonts.bold).fontSize(12).fillColor("#0F172A").text(company?.name || "Companie", margin + 10, y + 10, {
-      width: leftWidth - 20,
-    })
-    doc.font(fonts.regular).fontSize(9)
-    const companyLines = [
-      `CUI: ${company?.cui || "-"}`,
-      `Reg. com.: ${company?.regNo || "-"}`,
-      `Adresa: ${company?.address || "-"}`,
-      `Localitate: ${company?.city || "-"}  Judet: ${company?.county || "-"}`,
-      `Cod postal: ${company?.postalCode || "-"}  Tara: ${company?.country || "RO"}`,
-      `Email: ${company?.contactEmail || company?.email || "-"}`,
-      `Telefon: ${company?.phone || "-"}`,
-    ]
-    let lineY = y + 30
-    for (const line of companyLines) {
-      doc.text(line, margin + 10, lineY, { width: leftWidth - 20 })
-      lineY += 11
-    }
-
-    const rightX = margin + leftWidth + 12
-    drawBox(doc, rightX, y, rightWidth, 54, "#F8FAFC")
-    doc.font(fonts.bold).fontSize(15).fillColor("#111827").text(docTypeLabel(docData.type), rightX + 10, y + 18, {
-      width: rightWidth - 20,
-      align: "center",
-    })
-    drawBox(doc, rightX, y + 62, rightWidth, 50)
-    doc.font(fonts.regular).fontSize(9).fillColor("#1F2937")
-    doc.text(
-      "Document intern pentru evidenta operationala a stocului si a modificarilor comerciale, emis in cadrul gestiunii curente.",
-      rightX + 10,
-      y + 76,
-      { width: rightWidth - 20, align: "justify" }
-    )
-  }
-
-  function drawMeta() {
-    const y = margin + 124
-    const cols = [92, 156, 92, 156]
-    const rows = [
-      ["Nr. document", docData.docNo, "Data", new Date(docData.docDate).toLocaleDateString("ro-RO")],
-      ["Locatie", docData.location.name, "Status", docData.status],
-      ["Motiv", reasonLabel(docData.reasonCode), "Cantitate totala", fmtQty(docData.totalQty)],
-      ["Valoare totala", `${fmtMoney(docData.totalValue)} RON`, "Tip", docTypeShortLabel(docData.type)],
-    ]
-    let rowY = y
-    for (const row of rows) {
-      let x = margin
-      row.forEach((value, index) => {
-        drawCell(doc, x, rowY, cols[index], 24, value || "-", fonts, {
-          bold: index % 2 === 0,
-          fillColor: index % 2 === 0 ? "#F8FAFC" : null,
-          fontSize: 8.7,
-        })
-        x += cols[index]
-      })
-      rowY += 24
-    }
-
-    let currentY = rowY + 8
-
-    if (docData.note) {
-      drawCell(doc, margin, currentY, contentWidth, 34, `Observatii: ${docData.note}`, fonts, {
-        fontSize: 8.7,
-      })
-      currentY += 42
-    }
-
-    if (docData.type === "DETERIORATION") {
-      drawCell(doc, margin, currentY, contentWidth, 30, `Constatare: ${findingLabel(docData.findingCode, docData.reasonCode)}`, fonts, {
-        fontSize: 8.7,
-      })
-      currentY += 30
-    }
-
-    return currentY + 14
-  }
-
-  function ensurePage(y: number, needed: number) {
-    if (y + needed <= pageHeight - margin - 120) return y
-    doc.addPage({ size: "A4", margin })
-    drawPageHeader()
-    return margin + 124
-  }
-
-  drawPageHeader()
-  let y = drawMeta()
-  y = ensurePage(y, rowHeight + 12)
-
-  doc.font(fonts.bold).fontSize(10).fillColor("#111827").text("Pozitii document", margin, y - 18)
-
-  let headerX = margin
-  tableHeaders.forEach((header, index) => {
-    drawCell(doc, headerX, y, tableColumns[index], rowHeight, header, fonts, {
-      bold: true,
-      align: index === 1 ? "left" : "center",
-      fillColor: "#F8FAFC",
-      fontSize: 8.4,
-    })
-    headerX += tableColumns[index]
+  const drawHeader = () => drawDocumentHero(doc, fonts, {
+    title: docTypeLabel(docData.type),
+    subtitle: 'Document intern de gestiune',
+    companyName: company?.name || '-',
+    companyLines: [
+      `CUI: ${pdfText(company?.cui)}`,
+      `Reg. com.: ${pdfText(company?.regNo)}`,
+      `Adres?: ${pdfText(company?.address)}`,
+      `Localitate: ${pdfText(company?.city)} / ${pdfText(company?.county)}`,
+      `Email: ${pdfText(company?.contactEmail || company?.email)}`,
+    ],
+    rightPairs: [
+      { label: 'Num?r', value: pdfText(docData.docNo) },
+      { label: 'Data', value: pdfDate(docData.docDate) },
+      { label: 'Status', value: pdfText(docData.status) },
+    ],
+    margin,
   })
-  y += rowHeight
 
-  for (const row of tableRows) {
-    y = ensurePage(y, rowHeight)
-    let x = margin
-    row.forEach((value, index) => {
-      drawCell(doc, x, y, tableColumns[index], rowHeight, value, fonts, {
-        align: index === 1 ? "left" : index === 0 || index === 2 ? "center" : "right",
-        fontSize: 8.4,
-      })
-      x += tableColumns[index]
-    })
-    y += rowHeight
-  }
+  let y = drawHeader()
+  y = drawInfoCards(doc, fonts, {
+    margin,
+    y,
+    cards: [
+      {
+        title: 'Detalii document',
+        pairs: [
+          { label: 'Loca?ie', value: pdfText(docData.location.name) },
+          { label: 'Motiv', value: reasonLabel(docData.reasonCode) },
+          { label: 'Tip', value: docTypeShortLabel(docData.type) },
+          { label: 'Cantitate total?', value: pdfFmt(docData.totalQty, 3) },
+        ],
+      },
+      {
+        title: 'Observa?ii',
+        pairs: [
+          { label: 'Valoare total?', value: `${pdfFmt(docData.totalValue)} RON` },
+          { label: 'Constatare', value: docData.type === 'DETERIORATION' ? findingLabel(docData.findingCode, docData.reasonCode) : 'Actualizare pre?uri comerciale' },
+          { label: 'Not?', value: pdfText(docData.note) },
+        ],
+      },
+    ],
+    height: 132,
+  }) + 18
 
+  y = ensurePdfPage(doc, y, 40, margin, drawHeader)
+  doc.font(fonts.bold).fontSize(10).fillColor('#0F172A').text('Pozi?ii document', margin, y)
   y += 14
-  const totalsX = margin + contentWidth - 220
-  drawBox(doc, totalsX, y, 220, 62, "#FCFCFD")
-  doc.font(fonts.regular).fontSize(9).fillColor("#111827")
-  doc.text("Total cantitate", totalsX + 10, y + 10, { width: 110 })
-  doc.text(fmtQty(docData.totalQty), totalsX + 120, y + 10, { width: 90, align: "right" })
-  doc.text("Total valoare", totalsX + 10, y + 28, { width: 110 })
-  doc.font(fonts.bold).text(`${fmtMoney(docData.totalValue)} RON`, totalsX + 120, y + 28, {
-    width: 90,
-    align: "right",
+
+  const columns = docData.type === 'DETERIORATION'
+    ? [
+        { label: '#', width: 28, align: 'center' },
+        { label: 'Produs', width: 240, align: 'left' },
+        { label: 'UM', width: 48, align: 'center' },
+        { label: 'Cant.', width: 60, align: 'right' },
+        { label: 'Val. unit.', width: 70, align: 'right' },
+        { label: 'Valoare', width: 70, align: 'right' },
+      ]
+    : [
+        { label: '#', width: 28, align: 'center' },
+        { label: 'Produs', width: 226, align: 'left' },
+        { label: 'UM', width: 46, align: 'center' },
+        { label: 'Pre? vechi', width: 72, align: 'right' },
+        { label: 'Pre? nou', width: 72, align: 'right' },
+        { label: 'Impact', width: 72, align: 'right' },
+      ]
+
+  const rows = docData.items.map((item, index) => docData.type === 'DETERIORATION'
+    ? [
+        String(index + 1),
+        item.product.name,
+        item.product.uom?.code || '-',
+        pdfFmt(item.qty, 3),
+        pdfFmt(item.unitValue),
+        pdfFmt(item.lineValue),
+      ]
+    : [
+        String(index + 1),
+        item.product.name,
+        item.product.uom?.code || '-',
+        pdfFmt(item.oldPrice),
+        pdfFmt(item.newPrice),
+        pdfFmt(item.lineValue),
+      ])
+
+  y = drawSimpleTable(doc, fonts, {
+    margin,
+    y,
+    columns,
+    rows,
+    rowHeight: 24,
+    drawHeader,
+  }) + 18
+
+  drawTotalsBox(doc, fonts, {
+    x: doc.page.width - margin - 220,
+    y,
+    width: 220,
+    lines: [
+      { label: 'Total cantitate', value: pdfFmt(docData.totalQty, 3) },
+      { label: 'Total valoare', value: `${pdfFmt(docData.totalValue)} RON` },
+    ],
   })
 
-  y += 92
-  y = ensurePage(y, docData.type === "DETERIORATION" ? 130 : 80)
-
-  if (docData.type === "DETERIORATION") {
-    const signWidth = 170
-    const signGap = 18
-    const signX2 = pageWidth - margin - signWidth
-    const signX1 = signX2 - signGap - signWidth
-    drawBox(doc, signX1, y, signWidth, 54)
-    drawBox(doc, signX2, y, signWidth, 54)
-    doc.font(fonts.bold).fontSize(9).text("Gestionar", signX1 + 10, y + 10, { width: signWidth - 20, align: "center" })
-    doc.text("Aprobat", signX2 + 10, y + 10, { width: signWidth - 20, align: "center" })
-    doc.font(fonts.regular).fontSize(8).text("Semnatura gestionar", signX1 + 10, y + 28, { width: signWidth - 20, align: "center" })
-    doc.text("Semnatura / aprobare", signX2 + 10, y + 28, { width: signWidth - 20, align: "center" })
-  } else {
-    const signWidth = 170
-    const signGap = 18
-    const signX2 = pageWidth - margin - signWidth
-    const signX1 = signX2 - signGap - signWidth
-    drawBox(doc, signX1, y, signWidth, 54)
-    drawBox(doc, signX2, y, signWidth, 54)
-    doc.font(fonts.bold).fontSize(9).text("Intocmit", signX1 + 10, y + 10, { width: signWidth - 20, align: "center" })
-    doc.text("Aprobat", signX2 + 10, y + 10, { width: signWidth - 20, align: "center" })
-    doc.font(fonts.regular).fontSize(8).text("Nume, semnatura", signX1 + 10, y + 28, { width: signWidth - 20, align: "center" })
-    doc.text("Nume, semnatura", signX2 + 10, y + 28, { width: signWidth - 20, align: "center" })
-  }
+  drawSignatureRow(doc, fonts, {
+    margin,
+    y: y + 76,
+    labels: docData.type === 'DETERIORATION' ? ['Gestionar', 'Aprobat'] : ['?ntocmit', 'Aprobat'],
+  })
 
   doc.end()
 })

@@ -8,6 +8,7 @@ import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { assertSufficientStock, decrementStockBalanceStrict, incrementStockBalance } from "../lib/stock"
 import { reserveNextNumber } from "../lib/numbering"
 import { resolveTenantCompany } from "../lib/companyResolver"
+import { drawDocumentHero, drawInfoCards, drawSimpleTable, drawSignatureRow, drawTotalsBox, ensurePdfPage, pdfDate, pdfFmt, pdfText, registerPdfFonts } from "../lib/professionalPdf"
 import { requireRequestCompanyId } from "../lib/companyScope"
 
 const router = Router()
@@ -458,166 +459,116 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
       items: {
         include: {
           product: { include: { uom: true } },
-          uom: true
+          uom: true,
         },
-        orderBy: { createdAt: "asc" }
-      }
-    }
+        orderBy: { createdAt: "asc" },
+      },
+    },
   })
 
   if (!docData) {
-    return res.status(404).json({ ok: false, error: "Documentul nu a fost găsit." })
+    return res.status(404).json({ ok: false, error: "Documentul nu a fost gasit." })
   }
 
   const company = await resolveTenantCompany(prisma, tenantId, req.auth?.activeCompanyId)
-
   const filename = `TRANSFER_${safeFilePart(docData.docNo)}_${safeFilePart(docData.fromLocation.name)}_${safeFilePart(docData.toLocation.name)}.pdf`
-
   res.setHeader("Content-Type", "application/pdf")
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`)
 
-  const doc = new PDFDocument({
-    size: "A4",
-    margin: 36
-  })
-
-  const fonts = registerFonts(doc)
+  const doc = new PDFDocument({ size: "A4", margin: 36 })
+  const fonts = registerPdfFonts(doc)
   doc.pipe(res)
+  const margin = 36
 
-  const width = doc.page.width - 72
-  let y = 30
-
-  doc.font(fonts.bold).fontSize(16).text("NOTĂ DE TRANSFER", 36, y, { width, align: "center" })
-  y += 20
-  doc.font(fonts.regular).fontSize(11).text("/ TRANSFER ÎNTRE GESTIUNI", 36, y, { width, align: "center" })
-  y += 26
-  doc.moveTo(36, y).lineTo(559, y).stroke()
-  y += 18
-
-  doc.font(fonts.bold).fontSize(11).text("Firma:", 36, y)
-  doc.font(fonts.regular).text(text(company?.name), 110, y)
-  y += 16
-  doc.font(fonts.bold).text("CUI:", 36, y)
-  doc.font(fonts.regular).text(text(company?.cui), 110, y)
-  y += 16
-  doc.font(fonts.bold).text("Nr. Reg. Com.:", 36, y)
-  doc.font(fonts.regular).text(text(company?.regNo), 110, y)
-  y += 16
-  doc.font(fonts.bold).text("Sediu:", 36, y)
-  doc.font(fonts.regular).text(text(company?.address), 110, y, { width: 450 })
-  y += 28
-
-  doc.font(fonts.bold).text("Nr. document:", 36, y)
-  doc.font(fonts.regular).text(docData.docNo, 140, y)
-  y += 16
-  doc.font(fonts.bold).text("Data:", 36, y)
-  doc.font(fonts.regular).text(fmtDate(docData.docDate), 140, y)
-  y += 16
-  doc.font(fonts.bold).text("Ora:", 36, y)
-  doc.font(fonts.regular).text(new Date(docData.createdAt).toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" }), 140, y)
-  y += 24
-
-  doc.font(fonts.bold).text("Gestiune predătoare:", 36, y)
-  doc.font(fonts.regular).text(docData.fromLocation.name, 180, y)
-  y += 16
-  doc.font(fonts.bold).text("Gestiune primitoare:", 36, y)
-  doc.font(fonts.regular).text(docData.toLocation.name, 180, y)
-  y += 16
-  doc.font(fonts.bold).text("Motiv transfer:", 36, y)
-  doc.font(fonts.regular).text(text(docData.reason), 180, y)
-  y += 16
-  doc.font(fonts.bold).text("Observații:", 36, y)
-  doc.font(fonts.regular).text(text(docData.note), 180, y, { width: 350 })
-  y += 24
-
-  doc.moveTo(36, y).lineTo(559, y).stroke()
-  y += 10
-
-  const cols = [24, 68, 180, 40, 52, 62, 72]
-  const headers = ["Nr.", "Cod produs", "Denumire produs", "UM", "Cant.", "Preț", "Valoare"]
-  let x = 36
-
-  doc.font(fonts.bold).fontSize(10)
-  headers.forEach((h, i) => {
-    doc.text(h, x + 2, y, { width: cols[i] - 4, align: i === 2 ? "left" : "center" })
-    x += cols[i]
+  const drawHeader = () => drawDocumentHero(doc, fonts, {
+    title: 'Not? de transfer',
+    subtitle: 'Transfer ?ntre gestiuni',
+    companyName: company?.name || '-',
+    companyLines: [
+      `CUI: ${pdfText(company?.cui)}`,
+      `Reg. com.: ${pdfText(company?.regNo)}`,
+      `Adres?: ${pdfText(company?.address)}`,
+      `Email: ${pdfText(company?.email || company?.contactEmail)}`,
+      `Telefon: ${pdfText(company?.phone)}`,
+    ],
+    rightPairs: [
+      { label: 'Num?r', value: pdfText(docData.docNo) },
+      { label: 'Data', value: pdfDate(docData.docDate) },
+      { label: 'Ora', value: new Date(docData.createdAt).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' }) },
+    ],
+    margin,
   })
-  y += 14
-  doc.moveTo(36, y).lineTo(559, y).stroke()
-  y += 6
 
-  doc.font(fonts.regular).fontSize(10)
-  docData.items.forEach((item, index) => {
-    let xx = 36
-    const row = [
+  let y = drawHeader()
+  y = drawInfoCards(doc, fonts, {
+    margin,
+    y,
+    cards: [
+      {
+        title: 'Transfer',
+        pairs: [
+          { label: 'Din gestiune', value: pdfText(docData.fromLocation.name) },
+          { label: '?n gestiune', value: pdfText(docData.toLocation.name) },
+          { label: 'Motiv', value: pdfText(docData.reason) },
+          { label: 'Observa?ii', value: pdfText(docData.note) },
+        ],
+      },
+      {
+        title: 'Transport ?i predare',
+        pairs: [
+          { label: 'Delegat', value: pdfText(docData.delegateName) },
+          { label: 'CI / BI', value: pdfText(docData.delegateCi) },
+          { label: 'Mijloc transport', value: pdfText(docData.vehicle) },
+          { label: 'Nr. auto', value: pdfText(docData.vehicleNo) },
+        ],
+      },
+    ],
+  }) + 18
+
+  y = ensurePdfPage(doc, y, 40, margin, drawHeader)
+  doc.font(fonts.bold).fontSize(10).fillColor('#0F172A').text('Produse transferate', margin, y)
+  y += 14
+
+  y = drawSimpleTable(doc, fonts, {
+    margin,
+    y,
+    columns: [
+      { label: '#', width: 28, align: 'center' },
+      { label: 'Cod produs', width: 76, align: 'left' },
+      { label: 'Produs', width: 210, align: 'left' },
+      { label: 'UM', width: 44, align: 'center' },
+      { label: 'Cant.', width: 58, align: 'right' },
+      { label: 'Pre?', width: 62, align: 'right' },
+      { label: 'Valoare', width: 69, align: 'right' },
+    ],
+    rows: docData.items.map((item, index) => ([
       String(index + 1),
-      text(item.product?.sku),
-      text(item.product?.name),
-      text(item.uom?.code || item.product?.uom?.code),
-      fmt(item.qty),
-      fmt(item.unitPrice),
-      fmt(item.lineValue)
-    ]
+      pdfText(item.product?.sku),
+      pdfText(item.product?.name),
+      pdfText(item.uom?.code || item.product?.uom?.code),
+      pdfFmt(item.qty),
+      pdfFmt(item.unitPrice),
+      pdfFmt(item.lineValue),
+    ])),
+    rowHeight: 24,
+    drawHeader,
+  }) + 18
 
-    row.forEach((cell, i) => {
-      doc.text(cell, xx + 2, y, {
-        width: cols[i] - 4,
-        align: i === 2 ? "left" : "center"
-      })
-      xx += cols[i]
-    })
-
-    y += 16
+  drawTotalsBox(doc, fonts, {
+    x: doc.page.width - margin - 220,
+    y,
+    width: 220,
+    lines: [
+      { label: 'Total cantit??i', value: pdfFmt(docData.totalQty) },
+      { label: 'Total valoare', value: `${pdfFmt(docData.totalValue)} lei` },
+    ],
   })
 
-  doc.moveTo(36, y).lineTo(559, y).stroke()
-  y += 14
-
-  doc.font(fonts.bold).text("Total cantități:", 350, y, { width: 120, align: "right" })
-  doc.font(fonts.regular).text(fmt(docData.totalQty), 480, y, { width: 79, align: "right" })
-  y += 16
-  doc.font(fonts.bold).text("Total valoare:", 350, y, { width: 120, align: "right" })
-  doc.font(fonts.regular).text(`${fmt(docData.totalValue)} lei`, 480, y, { width: 79, align: "right" })
-  y += 24
-
-  doc.moveTo(36, y).lineTo(559, y).stroke()
-  y += 18
-
-  doc.font(fonts.bold).text("Delegat / Transportator:", 36, y)
-  doc.font(fonts.regular).text(text(docData.delegateName), 200, y)
-  y += 16
-  doc.font(fonts.bold).text("CI / BI:", 36, y)
-  doc.font(fonts.regular).text(text(docData.delegateCi), 200, y)
-  y += 16
-  doc.font(fonts.bold).text("Mijloc transport:", 36, y)
-  doc.font(fonts.regular).text(text(docData.vehicle), 200, y)
-  y += 16
-  doc.font(fonts.bold).text("Nr. auto:", 36, y)
-  doc.font(fonts.regular).text(text(docData.vehicleNo), 200, y)
-  y += 26
-
-  doc.font(fonts.bold).text("Am predat,", 36, y)
-  doc.font(fonts.bold).text("Am primit,", 330, y)
-  y += 42
-  doc.text("____________________", 36, y)
-  doc.text("____________________", 330, y)
-  y += 16
-  doc.font(fonts.regular).text(text(docData.senderName), 36, y)
-  doc.text(text(docData.receiverName), 330, y)
-  y += 32
-
-  doc.font(fonts.bold).text("Gestionar predător,", 36, y)
-  doc.font(fonts.bold).text("Gestionar primitor,", 330, y)
-  y += 42
-  doc.text("____________________", 36, y)
-  doc.text("____________________", 330, y)
-  y += 32
-
-  doc.font(fonts.bold).text("Avizat,", 36, y)
-  y += 36
-  doc.text("____________________", 36, y)
-  y += 16
-  doc.font(fonts.regular).text(text(docData.approvedBy), 36, y)
+  drawSignatureRow(doc, fonts, {
+    margin,
+    y: y + 76,
+    labels: ['Am predat', 'Am primit', 'Avizat'],
+  })
 
   doc.end()
 })

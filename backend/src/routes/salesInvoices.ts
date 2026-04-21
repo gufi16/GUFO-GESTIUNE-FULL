@@ -9,6 +9,7 @@ import { generateInvoiceEFacturaXml, validateInvoiceForEFactura } from "../lib/e
 import { requireTenantModule } from "../lib/tenantModules"
 import { readAnafHeader } from "../lib/anafHttp"
 import { resolveTenantCompany } from "../lib/companyResolver"
+import { drawDocumentHero, drawInfoCards, drawSimpleTable, drawSignatureRow, drawTotalsBox, ensurePdfPage, pdfDate, pdfFmt, pdfNum, pdfText, registerPdfFonts } from "../lib/professionalPdf"
 import { buildCompanyScopedTenantWhere, requireRequestCompanyId } from "../lib/companyScope"
 import {
   anafCheckUploadStatus,
@@ -517,7 +518,6 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
     return res.status(401).json({ ok: false, error: "Tenant invalid." })
   }
   const companyId = await requireRequestCompanyId(req)
-
   const id = req.params.id
 
   const invoice = await prisma.salesInvoice.findFirst({
@@ -543,7 +543,6 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
   }
 
   const company = await resolveTenantCompany(prisma, tenantId, req.auth?.activeCompanyId)
-
   const filename = `Factura_${safeFilePart(invoice.docNo)}_${safeFilePart(invoice.customerName)}.pdf`
   res.setHeader("Content-Type", "application/pdf")
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`)
@@ -558,117 +557,135 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
     },
   })
 
-  const fonts = registerFonts(doc)
+  const fonts = registerPdfFonts(doc)
   doc.pipe(res)
+  const margin = 36
 
-  const pageWidth = doc.page.width
-  const contentWidth = pageWidth - 72
-
-  doc.font(fonts.bold).fontSize(20).text("FACTURA", 36, 34, { width: contentWidth, align: "right" })
-  doc.font(fonts.regular).fontSize(10).text(`Nr. ${invoice.docNo}`, 36, 60, { width: contentWidth, align: "right" })
-  doc.font(fonts.regular).fontSize(10).text(`Data: ${new Date(invoice.docDate).toLocaleDateString("ro-RO")}`, 36, 76, { width: contentWidth, align: "right" })
-
-  doc.font(fonts.bold).fontSize(12).text(company?.name || "-", 36, 36)
-  doc.font(fonts.regular).fontSize(10)
-  doc.text(`CUI: ${company?.cui || "-"}`, 36, 56)
-  doc.text(`Reg. com.: ${company?.regNo || "-"}`, 36, 72)
-  doc.text(`Adresa: ${company?.address || "-"}`, 36, 88, { width: 240 })
-  doc.text(`Email: ${company?.email || "-"}`, 36, 118)
-  doc.text(`Telefon: ${company?.phone || "-"}`, 36, 134)
-
-  doc.roundedRect(36, 170, 255, 104, 14).stroke("#cbd5e1")
-  doc.font(fonts.bold).fontSize(11).text("Client", 50, 184)
-  doc.font(fonts.regular).fontSize(10)
-  doc.text(invoice.customerName || "-", 50, 204)
-  doc.text(`Cod: ${invoice.customerCode || "-"}`, 50, 220)
-  doc.text(`CIF: ${invoice.customerCif || "-"}`, 50, 236)
-  doc.text(`Reg. com.: ${invoice.customerRegNo || "-"}`, 50, 252)
-
-  doc.roundedRect(308, 170, 219, 104, 14).stroke("#cbd5e1")
-  doc.font(fonts.bold).fontSize(11).text("Detalii factura", 322, 184)
-  doc.font(fonts.regular).fontSize(10)
-  doc.text(`Locatie: ${invoice.location?.name || "-"}`, 322, 204, { width: 188 })
-  doc.text(`Scadenta: ${invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString("ro-RO") : "-"}`, 322, 220, { width: 188 })
-  doc.text(`Moneda: ${invoice.currency}`, 322, 236)
-  doc.text(`Curs: ${toNumber(invoice.fxRate).toFixed(4)}`, 322, 252)
-
-  const colX = [36, 72, 260, 314, 368, 422, 476]
-  const colW = [36, 188, 54, 54, 54, 54, 51]
-  const startY = 296
-
-  ;["#", "Produs", "Cant.", "Pret", "Disc.", "TVA", "Total"].forEach((label, index) => {
-    doc.roundedRect(colX[index], startY, colW[index], 24, 6).fillAndStroke("#f8fafc", "#cbd5e1")
-    doc.font(fonts.bold).fontSize(9).fillColor("#0f172a").text(label, colX[index] + 6, startY + 7, {
-      width: colW[index] - 12,
-      align: index === 1 ? "left" : "center",
-    })
+  const drawHeader = () => drawDocumentHero(doc, fonts, {
+    title: "Factur? fiscal?",
+    subtitle: "Document comercial emis din ERP",
+    companyName: company?.name || "-",
+    companyLines: [
+      `CUI: ${pdfText(company?.cui)}`,
+      `Reg. com.: ${pdfText(company?.regNo)}`,
+      `Adres?: ${pdfText(company?.address)}`,
+      `Email: ${pdfText(company?.email || company?.contactEmail)}`,
+      `Telefon: ${pdfText(company?.phone)}`,
+    ],
+    rightPairs: [
+      { label: 'Num?r', value: pdfText(invoice.docNo) },
+      { label: 'Data', value: pdfDate(invoice.docDate) },
+      { label: 'Scaden??', value: pdfDate(invoice.dueDate) },
+    ],
+    margin,
   })
 
-  let rowY = startY + 28
-  invoice.items.forEach((item, index) => {
-    const rowHeight = 24
-    ;[
-      String(index + 1),
-      item.product?.name || "-",
-      toNumber(item.qty).toFixed(2),
-      `${toNumber(item.unitPriceFc).toFixed(2)} ${invoice.currency}`,
-      `${toNumber(item.discountPercent).toFixed(0)}%`,
-      `${toNumber(item.vatRateValue).toFixed(0)}%`,
-      `${toNumber(item.lineGrossFc).toFixed(2)} ${invoice.currency}`,
-    ].forEach((value, cellIndex) => {
-      doc.rect(colX[cellIndex], rowY, colW[cellIndex], rowHeight).stroke("#e2e8f0")
-      doc.font(fonts.regular).fontSize(9).fillColor("#111827").text(value, colX[cellIndex] + 6, rowY + 7, {
-        width: colW[cellIndex] - 12,
-        align: cellIndex === 1 ? "left" : "center",
-      })
-    })
-    rowY += rowHeight
-
-    if (toNumber(item.sgrTotalFc) > 0) {
-      doc.rect(colX[1], rowY, colW[1] + colW[2] + colW[3] + colW[4] + colW[5], rowHeight).stroke("#e2e8f0")
-      doc.rect(colX[0], rowY, colW[0], rowHeight).stroke("#e2e8f0")
-      doc.rect(colX[6], rowY, colW[6], rowHeight).stroke("#e2e8f0")
-      doc.font(fonts.regular).fontSize(9).fillColor("#475569").text("SGR automat", colX[1] + 6, rowY + 7, {
-        width: colW[1] + colW[2] + colW[3] + colW[4] + colW[5] - 12,
-        align: "left",
-      })
-      doc.text(`${toNumber(item.sgrTotalFc).toFixed(2)} ${invoice.currency}`, colX[6] + 6, rowY + 7, {
-        width: colW[6] - 12,
-        align: "center",
-      })
-      rowY += rowHeight
-    }
-
-    if (toNumber(item.discountAmountFc) > 0) {
-      doc.rect(colX[1], rowY, colW[1] + colW[2] + colW[3] + colW[4] + colW[5], rowHeight).stroke("#e2e8f0")
-      doc.rect(colX[0], rowY, colW[0], rowHeight).stroke("#e2e8f0")
-      doc.rect(colX[6], rowY, colW[6], rowHeight).stroke("#e2e8f0")
-      doc.font(fonts.regular).fontSize(9).fillColor("#475569").text(`Discount ${toNumber(item.discountPercent).toFixed(0)}%`, colX[1] + 6, rowY + 7, {
-        width: colW[1] + colW[2] + colW[3] + colW[4] + colW[5] - 12,
-        align: "left",
-      })
-      doc.text(`-${toNumber(item.discountAmountFc).toFixed(2)} ${invoice.currency}`, colX[6] + 6, rowY + 7, {
-        width: colW[6] - 12,
-        align: "center",
-      })
-      rowY += rowHeight
-    }
-  })
-
-  const totalsY = rowY + 18
-  doc.roundedRect(330, totalsY, 197, 136, 14).stroke("#cbd5e1")
-  doc.font(fonts.regular).fontSize(10).fillColor("#111827")
-  doc.text(`Total fara TVA: ${toNumber(invoice.totalNetFc).toFixed(2)} ${invoice.currency}`, 344, totalsY + 16)
-  doc.text(`Total discount: ${toNumber(invoice.totalDiscountFc).toFixed(2)} ${invoice.currency}`, 344, totalsY + 36)
-  doc.text(`Total TVA: ${toNumber(invoice.totalVatFc).toFixed(2)} ${invoice.currency}`, 344, totalsY + 56)
-  doc.text(`Total produse: ${toNumber(invoice.totalGrossFc).toFixed(2)} ${invoice.currency}`, 344, totalsY + 76)
-  doc.text(`Total SGR: ${toNumber(invoice.totalSgrFc).toFixed(2)} ${invoice.currency}`, 344, totalsY + 96)
-  doc.font(fonts.bold).text(`Total factura: ${toNumber(invoice.totalWithSgrFc || invoice.totalGrossFc).toFixed(2)} ${invoice.currency}`, 344, totalsY + 116)
+  let y = drawHeader()
+  y = drawInfoCards(doc, fonts, {
+    margin,
+    y,
+    cards: [
+      {
+        title: 'Client',
+        pairs: [
+          { label: 'Denumire', value: pdfText(invoice.customerName) },
+          { label: 'Cod', value: pdfText(invoice.customerCode) },
+          { label: 'CIF', value: pdfText(invoice.customerCif) },
+          { label: 'Reg. com.', value: pdfText(invoice.customerRegNo) },
+        ],
+      },
+      {
+        title: 'Detalii factur?',
+        pairs: [
+          { label: 'Loca?ie', value: pdfText(invoice.location?.name) },
+          { label: 'Moned?', value: pdfText(invoice.currency) },
+          { label: 'Curs', value: pdfFmt(invoice.fxRate, 4) },
+          { label: 'Status', value: pdfText(invoice.status) },
+        ],
+      },
+    ],
+  }) + 18
 
   if (invoice.note) {
-    doc.font(fonts.bold).fontSize(10).fillColor("#111827").text("Observatii", 36, totalsY + 8)
-    doc.font(fonts.regular).fontSize(9).text(invoice.note, 36, totalsY + 24, { width: 260 })
+    doc.font(fonts.bold).fontSize(10).fillColor('#0F172A').text('Observa?ii', margin, y)
+    y += 14
+    const boxHeight = 44
+    doc.roundedRect(margin, y, doc.page.width - margin * 2, boxHeight, 12).fillAndStroke('#FFFFFF', '#D7DEEA')
+    doc.font(fonts.regular).fontSize(9).fillColor('#334155').text(invoice.note, margin + 12, y + 10, {
+      width: doc.page.width - margin * 2 - 24,
+    })
+    y += boxHeight + 18
   }
+
+  y = ensurePdfPage(doc, y, 40, margin, drawHeader)
+  doc.font(fonts.bold).fontSize(10).fillColor('#0F172A').text('Produse ?i pre?uri', margin, y)
+  y += 14
+
+  const columns = [
+    { label: '#', width: 28, align: 'center' },
+    { label: 'Produs', width: 210, align: 'left' },
+    { label: 'Cant.', width: 50, align: 'center' },
+    { label: 'Pre?', width: 72, align: 'right' },
+    { label: 'Discount', width: 58, align: 'center' },
+    { label: 'TVA', width: 46, align: 'center' },
+    { label: 'Total', width: 64, align: 'right' },
+  ]
+
+  const rows = []
+  invoice.items.forEach((item, index) => {
+    rows.push([
+      String(index + 1),
+      pdfText(item.product?.name),
+      pdfFmt(item.qty, 2),
+      `${pdfFmt(item.unitPriceFc)} ${invoice.currency}`,
+      `${pdfFmt(item.discountPercent, 0)}%`,
+      `${pdfFmt(item.vatRateValue, 0)}%`,
+      `${pdfFmt(item.lineGrossFc)} ${invoice.currency}`,
+    ])
+    if (pdfNum(item.sgrTotalFc) > 0) {
+      rows.push([
+        '',
+        'SGR automat',
+        '',
+        '',
+        '',
+        '',
+        `${pdfFmt(item.sgrTotalFc)} ${invoice.currency}`,
+      ])
+    }
+  })
+
+  y = drawSimpleTable(doc, fonts, {
+    margin,
+    y,
+    columns,
+    rows,
+    rowHeight: 24,
+    drawHeader,
+  }) + 18
+
+  const totalsLines = [
+    { label: 'Total f?r? TVA', value: `${pdfFmt(invoice.totalNetFc)} ${invoice.currency}` },
+    { label: 'Total discount', value: `${pdfFmt(invoice.totalDiscountFc)} ${invoice.currency}` },
+    { label: 'Total TVA', value: `${pdfFmt(invoice.totalVatFc)} ${invoice.currency}` },
+    { label: 'Total SGR', value: `${pdfFmt(invoice.totalSgrFc)} ${invoice.currency}` },
+    { label: 'Total factur?', value: `${pdfFmt(invoice.totalWithSgrFc || invoice.totalGrossFc)} ${invoice.currency}` },
+  ]
+
+  y = ensurePdfPage(doc, y, 150, margin, drawHeader)
+  drawTotalsBox(doc, fonts, {
+    x: doc.page.width - margin - 220,
+    y,
+    width: 220,
+    lines: totalsLines,
+    highlightLast: true,
+  })
+
+  drawSignatureRow(doc, fonts, {
+    margin,
+    y: y + 112,
+    labels: ['?ntocmit', 'Client'],
+  })
 
   doc.end()
 })
