@@ -87,10 +87,12 @@ async function recalcInvoice(invoiceId: string) {
   })
 
   const totalNetFc = items.reduce((sum, item) => sum + toNumber(item.lineNetFc), 0)
+  const totalDiscountFc = items.reduce((sum, item) => sum + toNumber(item.discountAmountFc), 0)
   const totalVatFc = items.reduce((sum, item) => sum + toNumber(item.lineVatFc), 0)
   const totalGrossFc = items.reduce((sum, item) => sum + toNumber(item.lineGrossFc), 0)
   const totalSgrFc = items.reduce((sum, item) => sum + toNumber(item.sgrTotalFc), 0)
   const totalNetRon = items.reduce((sum, item) => sum + toNumber(item.lineNetRon), 0)
+  const totalDiscountRon = items.reduce((sum, item) => sum + toNumber(item.discountAmountRon), 0)
   const totalVatRon = items.reduce((sum, item) => sum + toNumber(item.lineVatRon), 0)
   const totalGrossRon = items.reduce((sum, item) => sum + toNumber(item.lineGrossRon), 0)
   const totalSgrRon = items.reduce((sum, item) => sum + toNumber(item.sgrTotalRon), 0)
@@ -99,11 +101,13 @@ async function recalcInvoice(invoiceId: string) {
     where: { id: invoiceId },
     data: {
       totalNetFc,
+      totalDiscountFc,
       totalVatFc,
       totalGrossFc,
       totalSgrFc,
       totalWithSgrFc: totalGrossFc + totalSgrFc,
       totalNetRon,
+      totalDiscountRon,
       totalVatRon,
       totalGrossRon,
       totalSgrRon,
@@ -128,6 +132,7 @@ async function replaceInvoiceItems(
     const qty = toNumber(raw.qty)
     const unitPriceFc = toNumber(raw.unitPriceFc)
     const vatRateValue = toNumber(raw.vatRateValue)
+    const discountPercent = Math.min(100, Math.max(0, toNumber(raw.discountPercent)))
 
     if (!productId) throw new Error("Fiecare linie trebuie sa aiba produs.")
     if (qty <= 0) throw new Error("Cantitatea trebuie sa fie mai mare decat 0.")
@@ -150,7 +155,9 @@ async function replaceInvoiceItems(
     }
 
     const vat = vatRateValue || toNumber(product.vatRate?.rate)
-    const lineNetFc = qty * unitPriceFc
+    const lineBaseFc = qty * unitPriceFc
+    const discountAmountFc = (lineBaseFc * discountPercent) / 100
+    const lineNetFc = lineBaseFc - discountAmountFc
     const lineVatFc = (lineNetFc * vat) / 100
     const lineGrossFc = lineNetFc + lineVatFc
     const sgrUnitFc = product.isSgr ? toNumber(product.sgrValue) : 0
@@ -168,11 +175,14 @@ async function replaceInvoiceItems(
         qty,
         unitPriceFc,
         vatRateValue: vat,
+        discountPercent,
+        discountAmountFc,
         lineNetFc,
         lineVatFc,
         lineGrossFc,
         sgrUnitFc,
         sgrTotalFc,
+        discountAmountRon: discountAmountFc * fxRate,
         lineNetRon: lineNetFc * fxRate,
         lineVatRon: lineVatFc * fxRate,
         lineGrossRon: lineGrossFc * fxRate,
@@ -582,11 +592,11 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
   doc.text(`Moneda: ${invoice.currency}`, 322, 236)
   doc.text(`Curs: ${toNumber(invoice.fxRate).toFixed(4)}`, 322, 252)
 
-  const colX = [36, 72, 274, 332, 390, 458]
-  const colW = [36, 202, 58, 58, 68, 69]
+  const colX = [36, 72, 260, 314, 368, 422, 476]
+  const colW = [36, 188, 54, 54, 54, 54, 51]
   const startY = 296
 
-  ;["#", "Produs", "Cant.", "Pret", "TVA", "Total"].forEach((label, index) => {
+  ;["#", "Produs", "Cant.", "Pret", "Disc.", "TVA", "Total"].forEach((label, index) => {
     doc.roundedRect(colX[index], startY, colW[index], 24, 6).fillAndStroke("#f8fafc", "#cbd5e1")
     doc.font(fonts.bold).fontSize(9).fillColor("#0f172a").text(label, colX[index] + 6, startY + 7, {
       width: colW[index] - 12,
@@ -602,6 +612,7 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
       item.product?.name || "-",
       toNumber(item.qty).toFixed(2),
       `${toNumber(item.unitPriceFc).toFixed(2)} ${invoice.currency}`,
+      `${toNumber(item.discountPercent).toFixed(0)}%`,
       `${toNumber(item.vatRateValue).toFixed(0)}%`,
       `${toNumber(item.lineGrossFc).toFixed(2)} ${invoice.currency}`,
     ].forEach((value, cellIndex) => {
@@ -614,15 +625,30 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
     rowY += rowHeight
 
     if (toNumber(item.sgrTotalFc) > 0) {
-      doc.rect(colX[1], rowY, colW[1] + colW[2] + colW[3] + colW[4], rowHeight).stroke("#e2e8f0")
+      doc.rect(colX[1], rowY, colW[1] + colW[2] + colW[3] + colW[4] + colW[5], rowHeight).stroke("#e2e8f0")
       doc.rect(colX[0], rowY, colW[0], rowHeight).stroke("#e2e8f0")
-      doc.rect(colX[5], rowY, colW[5], rowHeight).stroke("#e2e8f0")
+      doc.rect(colX[6], rowY, colW[6], rowHeight).stroke("#e2e8f0")
       doc.font(fonts.regular).fontSize(9).fillColor("#475569").text("SGR automat", colX[1] + 6, rowY + 7, {
-        width: colW[1] + colW[2] + colW[3] + colW[4] - 12,
+        width: colW[1] + colW[2] + colW[3] + colW[4] + colW[5] - 12,
         align: "left",
       })
-      doc.text(`${toNumber(item.sgrTotalFc).toFixed(2)} ${invoice.currency}`, colX[5] + 6, rowY + 7, {
-        width: colW[5] - 12,
+      doc.text(`${toNumber(item.sgrTotalFc).toFixed(2)} ${invoice.currency}`, colX[6] + 6, rowY + 7, {
+        width: colW[6] - 12,
+        align: "center",
+      })
+      rowY += rowHeight
+    }
+
+    if (toNumber(item.discountAmountFc) > 0) {
+      doc.rect(colX[1], rowY, colW[1] + colW[2] + colW[3] + colW[4] + colW[5], rowHeight).stroke("#e2e8f0")
+      doc.rect(colX[0], rowY, colW[0], rowHeight).stroke("#e2e8f0")
+      doc.rect(colX[6], rowY, colW[6], rowHeight).stroke("#e2e8f0")
+      doc.font(fonts.regular).fontSize(9).fillColor("#475569").text(`Discount ${toNumber(item.discountPercent).toFixed(0)}%`, colX[1] + 6, rowY + 7, {
+        width: colW[1] + colW[2] + colW[3] + colW[4] + colW[5] - 12,
+        align: "left",
+      })
+      doc.text(`-${toNumber(item.discountAmountFc).toFixed(2)} ${invoice.currency}`, colX[6] + 6, rowY + 7, {
+        width: colW[6] - 12,
         align: "center",
       })
       rowY += rowHeight
@@ -630,13 +656,14 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
   })
 
   const totalsY = rowY + 18
-  doc.roundedRect(330, totalsY, 197, 116, 14).stroke("#cbd5e1")
+  doc.roundedRect(330, totalsY, 197, 136, 14).stroke("#cbd5e1")
   doc.font(fonts.regular).fontSize(10).fillColor("#111827")
   doc.text(`Total fara TVA: ${toNumber(invoice.totalNetFc).toFixed(2)} ${invoice.currency}`, 344, totalsY + 16)
-  doc.text(`Total TVA: ${toNumber(invoice.totalVatFc).toFixed(2)} ${invoice.currency}`, 344, totalsY + 36)
-  doc.text(`Total produse: ${toNumber(invoice.totalGrossFc).toFixed(2)} ${invoice.currency}`, 344, totalsY + 56)
-  doc.text(`Total SGR: ${toNumber(invoice.totalSgrFc).toFixed(2)} ${invoice.currency}`, 344, totalsY + 76)
-  doc.font(fonts.bold).text(`Total factura: ${toNumber(invoice.totalWithSgrFc || invoice.totalGrossFc).toFixed(2)} ${invoice.currency}`, 344, totalsY + 96)
+  doc.text(`Total discount: ${toNumber(invoice.totalDiscountFc).toFixed(2)} ${invoice.currency}`, 344, totalsY + 36)
+  doc.text(`Total TVA: ${toNumber(invoice.totalVatFc).toFixed(2)} ${invoice.currency}`, 344, totalsY + 56)
+  doc.text(`Total produse: ${toNumber(invoice.totalGrossFc).toFixed(2)} ${invoice.currency}`, 344, totalsY + 76)
+  doc.text(`Total SGR: ${toNumber(invoice.totalSgrFc).toFixed(2)} ${invoice.currency}`, 344, totalsY + 96)
+  doc.font(fonts.bold).text(`Total factura: ${toNumber(invoice.totalWithSgrFc || invoice.totalGrossFc).toFixed(2)} ${invoice.currency}`, 344, totalsY + 116)
 
   if (invoice.note) {
     doc.font(fonts.bold).fontSize(10).fillColor("#111827").text("Observatii", 36, totalsY + 8)

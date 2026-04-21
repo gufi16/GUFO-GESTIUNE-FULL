@@ -36,6 +36,12 @@ function normalizeVatCategory(line: any) {
   return toNumber(line?.vatRateValue) > 0 ? "S" : "O"
 }
 
+function effectiveUnitPrice(line: any) {
+  const qty = toNumber(line?.qty)
+  if (qty <= 0) return toNumber(line?.unitPriceFc)
+  return toNumber(line?.lineNetFc) / qty
+}
+
 export function validateInvoiceForEFactura(invoice: any, company: any) {
   const issues: EFacturaValidationIssue[] = []
   const supplierCity = company?.city || company?.efacturaSellerCity
@@ -139,7 +145,7 @@ export function generateInvoiceEFacturaXml(invoice: any, company: any) {
         "</cac:ClassifiedTaxCategory>",
         "</cac:Item>",
         "<cac:Price>",
-        `<cbc:PriceAmount currencyID="${xmlEscape(currency)}">${decimal(line?.unitPriceFc)}</cbc:PriceAmount>`,
+        `<cbc:PriceAmount currencyID="${xmlEscape(currency)}">${decimal(effectiveUnitPrice(line))}</cbc:PriceAmount>`,
         "</cac:Price>",
         "</cac:InvoiceLine>",
       ].join(""),

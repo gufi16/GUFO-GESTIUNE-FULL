@@ -44,6 +44,7 @@ type InvoiceLine = {
   qty: string
   unitPriceFc: string
   vatRateValue: string
+  discountPercent: string
 }
 
 function rawToken() {
@@ -64,7 +65,7 @@ function getInvoiceIdFromUrl() {
 }
 
 function makeLine(): InvoiceLine {
-  return { id: crypto.randomUUID(), productId: "", search: "", qty: "1", unitPriceFc: "0", vatRateValue: "19" }
+  return { id: crypto.randomUUID(), productId: "", search: "", qty: "1", unitPriceFc: "0", vatRateValue: "19", discountPercent: "0" }
 }
 
 function emptyQuickCustomer(name = "") {
@@ -243,6 +244,7 @@ export default function FacturaPage() {
             qty: String(item.qty ?? 1),
             unitPriceFc: String(item.unitPriceFc ?? 0),
             vatRateValue: String(item.vatRateValue ?? item.product?.vatRate?.rate ?? 19),
+            discountPercent: String(item.discountPercent ?? 0),
           }))
         : []
       setLines(nextLines.length ? nextLines : [makeLine()])
@@ -522,7 +524,10 @@ export default function FacturaPage() {
       const qty = Math.max(0, toNumber(line.qty))
       const unitPriceFc = Math.max(0, toNumber(line.unitPriceFc))
       const vatRateValue = Math.max(0, toNumber(line.vatRateValue))
-      const lineNetFc = qty * unitPriceFc
+      const discountPercent = Math.min(100, Math.max(0, toNumber(line.discountPercent)))
+      const lineBaseFc = qty * unitPriceFc
+      const discountAmountFc = (lineBaseFc * discountPercent) / 100
+      const lineNetFc = lineBaseFc - discountAmountFc
       const lineVatFc = (lineNetFc * vatRateValue) / 100
       const lineGrossFc = lineNetFc + lineVatFc
       const sgrUnitFc = product?.isSgr ? toNumber(product?.sgrValue) : 0
@@ -532,11 +537,15 @@ export default function FacturaPage() {
         qty,
         unitPriceFc,
         vatRateValue,
+        discountPercent,
+        lineBaseFc,
+        discountAmountFc,
         lineNetFc,
         lineVatFc,
         lineGrossFc,
         sgrUnitFc,
         sgrTotalFc,
+        discountAmountRon: discountAmountFc * fxRate,
         lineNetRon: lineNetFc * fxRate,
         lineVatRon: lineVatFc * fxRate,
         lineGrossRon: lineGrossFc * fxRate,
@@ -549,17 +558,19 @@ export default function FacturaPage() {
     () =>
       computedLines.reduce(
         (acc, line) => {
+          acc.discountFc += line.discountAmountFc
           acc.netFc += line.lineNetFc
           acc.vatFc += line.lineVatFc
           acc.grossFc += line.lineGrossFc
           acc.sgrFc += line.sgrTotalFc
+          acc.discountRon += line.discountAmountRon
           acc.netRon += line.lineNetRon
           acc.vatRon += line.lineVatRon
           acc.grossRon += line.lineGrossRon
           acc.sgrRon += line.sgrTotalRon
           return acc
         },
-        { netFc: 0, vatFc: 0, grossFc: 0, sgrFc: 0, netRon: 0, vatRon: 0, grossRon: 0, sgrRon: 0 }
+        { discountFc: 0, netFc: 0, vatFc: 0, grossFc: 0, sgrFc: 0, discountRon: 0, netRon: 0, vatRon: 0, grossRon: 0, sgrRon: 0 }
       ),
     [computedLines]
   )
@@ -572,7 +583,13 @@ export default function FacturaPage() {
 
     const payloadLines = computedLines
       .filter((line) => line.productId && line.qty > 0)
-      .map((line) => ({ productId: line.productId, qty: line.qty, unitPriceFc: line.unitPriceFc, vatRateValue: line.vatRateValue }))
+      .map((line) => ({
+        productId: line.productId,
+        qty: line.qty,
+        unitPriceFc: line.unitPriceFc,
+        vatRateValue: line.vatRateValue,
+        discountPercent: line.discountPercent,
+      }))
 
     if (!payloadLines.length) return setError("Factura trebuie sa aiba cel putin o pozitie.")
 
@@ -854,7 +871,7 @@ export default function FacturaPage() {
 
       <DocumentSection
         title="Linii factura"
-        description="Pastrez acelasi flux simplu: cauti produsul, alegi rapid si completezi doar cantitatea, pretul si TVA-ul."
+        description="Pastrez acelasi flux simplu: cauti produsul, alegi rapid si completezi cantitatea, pretul, discountul si TVA-ul."
         actions={
           <button type="button" onClick={addLine} className={documentButtonPrimaryClass}>
             <Plus size={16} className="mr-2" />
@@ -877,7 +894,7 @@ export default function FacturaPage() {
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-7">
                   <DocumentField label="Produs">
                     <input value={line.search} onChange={(e) => setLineValue(line.id, { search: e.target.value, productId: "" })} placeholder="Scrie produsul sau SKU..." className={documentInputClass} />
                     {product ? <div className="pt-1 text-[11px] font-semibold text-teal-700">{product.sku ? `${product.name} (${product.sku})` : product.name}</div> : null}
@@ -891,6 +908,13 @@ export default function FacturaPage() {
                     <input value={line.unitPriceFc} onChange={(e) => setLineValue(line.id, { unitPriceFc: e.target.value })} className={documentInputClass} />
                   </DocumentField>
 
+                  <DocumentField label="Discount %">
+                    <input value={String(line.discountPercent)} onChange={(e) => setLineValue(line.id, { discountPercent: e.target.value })} className={documentInputClass} />
+                    <div className="pt-1 text-[11px] text-slate-500">
+                      {line.discountAmountFc > 0 ? `-${formatMoneyRo(line.discountAmountFc, header.currency)}` : "Fara discount"}
+                    </div>
+                  </DocumentField>
+
                   <DocumentField label="TVA %">
                     <input value={line.vatRateValue} onChange={(e) => setLineValue(line.id, { vatRateValue: e.target.value })} className={documentInputClass} />
                   </DocumentField>
@@ -898,7 +922,7 @@ export default function FacturaPage() {
                   <DocumentField label="Total linie">
                       <input value={formatMoneyRo(line.lineGrossFc + line.sgrTotalFc, header.currency)} readOnly className={documentInputClass} style={readonlyInputStyle} />
                       <div className="pt-1 text-[11px] text-slate-500">
-                        {line.sgrTotalFc > 0 ? `Include SGR ${formatMoneyRo(line.sgrTotalFc, header.currency)}` : product?.uom?.code || ""}
+                        {[line.discountAmountFc > 0 ? `Discount ${formatMoneyRo(line.discountAmountFc, header.currency)}` : "", line.sgrTotalFc > 0 ? `Include SGR ${formatMoneyRo(line.sgrTotalFc, header.currency)}` : product?.uom?.code || ""].filter(Boolean).join(" • ")}
                       </div>
                   </DocumentField>
 
@@ -928,8 +952,9 @@ export default function FacturaPage() {
         </div>
       </DocumentSection>
 
-      <DocumentSection title="Totaluri" description="Vezi imediat netul, TVA-ul, SGR-ul si totalul final al documentului.">
-        <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-5">
+      <DocumentSection title="Totaluri" description="Vezi imediat discountul, netul, TVA-ul, SGR-ul si totalul final al documentului.">
+        <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-6">
+          <DocumentMetric title={`Discount ${header.currency}`} value={formatMoneyRo(totals.discountFc, header.currency)} tone="amber" />
           <DocumentMetric title={`Net ${header.currency}`} value={formatMoneyRo(totals.netFc, header.currency)} tone="slate" />
           <DocumentMetric title={`TVA ${header.currency}`} value={formatMoneyRo(totals.vatFc, header.currency)} tone="blue" />
           <DocumentMetric title={`SGR ${header.currency}`} value={formatMoneyRo(totals.sgrFc, header.currency)} tone="slate" />
