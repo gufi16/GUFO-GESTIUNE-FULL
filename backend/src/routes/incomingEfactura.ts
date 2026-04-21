@@ -6,6 +6,7 @@ import { Router } from "express"
 import PDFDocument from "pdfkit"
 import { promisify } from "util"
 import { prisma } from "../lib/prisma"
+import { anafDownloadById, anafListMessages } from "../lib/anafClient"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { requireTenantModule } from "../lib/tenantModules"
 import { reserveNextNumber } from "../lib/numbering"
@@ -348,6 +349,14 @@ function isMalformedIncomingInvoice(entry: any) {
     Number(entry?.totalGross || 0) <= 0 ||
     itemsCount === 0
   )
+}
+
+function isIncomingEfacturaMessage(entry: any) {
+  const tip = String(entry?.tip || "").trim().toUpperCase()
+  const details = String(entry?.detalii || "").trim().toLowerCase()
+  if (tip.includes("PRIMITA")) return true
+  if (tip === "RECIPISA") return false
+  return details.includes("cif_beneficiar")
 }
 
 async function repairIncomingInvoiceIfNeeded(tenantId: string, companyId: string, entry: any) {
@@ -806,6 +815,128 @@ router.get("/api/v1/efactura/incoming/bridge-config", async (req: AuthedRequest,
       baseUrl: getEfacturaBaseUrl(company?.efacturaEnvironment),
     },
   })
+})
+
+router.post("/api/v1/efactura/incoming/sync", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
+  const moduleCheck = await requireTenantModule(tenantId, "efactura")
+  if (!moduleCheck.enabled) {
+    return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
+  }
+
+  const company = await resolveTenantCompany(prisma, tenantId, companyId, {
+    select: {
+      id: true,
+      tenantId: true,
+      cui: true,
+      efacturaEnvironment: true,
+      efacturaOauthAccessToken: true,
+      efacturaOauthLastError: true,
+      efacturaCertSerial: true,
+      efacturaCertFilename: true,
+      efacturaCertPasswordEnc: true,
+    },
+  })
+
+  if (!company) {
+    return res.status(404).json({ ok: false, error: "Compania activa nu a fost gasita." })
+  }
+
+  const requestedDays = Number(req.body?.days || 30)
+  const days = Math.max(1, Math.min(365, Number.isFinite(requestedDays) ? requestedDays : 30))
+
+  try {
+    const listResult = await anafListMessages(company, { days })
+    const rawMessages = Array.isArray(listResult.items) ? listResult.items : []
+    const invoiceMessages = rawMessages.filter((entry: any) => isIncomingEfacturaMessage(entry))
+    const downloadIds = invoiceMessages
+      .map((entry: any) => extractDownloadId(entry, JSON.stringify(entry || {})) || readStringField(entry, ["id", "downloadId"]))
+      .map((entry: any) => String(entry || "").trim())
+      .filter(Boolean)
+
+    const existingInvoices = downloadIds.length
+      ? await prisma.incomingEInvoice.findMany({
+          where: {
+            tenantId,
+            companyId,
+            spvDownloadId: { in: downloadIds },
+          },
+          select: {
+            id: true,
+            spvDownloadId: true,
+          },
+        })
+      : []
+
+    const existingDownloadIds = new Set(
+      existingInvoices.map((entry) => String(entry.spvDownloadId || "").trim()).filter(Boolean)
+    )
+
+    let imported = 0
+    let skipped = 0
+    let downloaded = 0
+    const errors: string[] = []
+
+    for (const message of invoiceMessages) {
+      const downloadId =
+        extractDownloadId(message, JSON.stringify(message || {})) ||
+        readStringField(message, ["id", "downloadId"])
+
+      if (!downloadId) {
+        skipped += 1
+        if (errors.length < 3) {
+          errors.push("Un mesaj ANAF nu are ID de descarcare.")
+        }
+        continue
+      }
+
+      if (existingDownloadIds.has(String(downloadId).trim())) {
+        skipped += 1
+        continue
+      }
+
+      try {
+        const downloadResult = await anafDownloadById(company, String(downloadId))
+        downloaded += 1
+        const extracted = extractXmlFromAnafDownload(downloadResult.response.buffer)
+        const parsedInvoice = parseIncomingEInvoiceXml(extracted.xmlText)
+        const item = await upsertIncomingInvoice(tenantId, companyId, message, extracted.xmlText, parsedInvoice)
+        await ensureIncomingInvoicePdfSaved(item)
+        imported += 1
+      } catch (error: any) {
+        skipped += 1
+        if (errors.length < 3) {
+          errors.push(
+            `Mesaj ${String(downloadId)}: ${error?.message || "Nu am putut importa factura din ANAF."}`
+          )
+        }
+      }
+    }
+
+    return res.json({
+      ok: true,
+      message:
+        imported > 0
+          ? `Sincronizare e-Factura finalizata. Facturi importate: ${imported}.`
+          : `Sincronizare e-Factura finalizata fara facturi noi pentru import.`,
+      stats: {
+        days,
+        totalMessages: rawMessages.length,
+        invoiceMessages: invoiceMessages.length,
+        downloaded,
+        imported,
+        skipped,
+        errors,
+      },
+      summary: listResult.summary,
+    })
+  } catch (error: any) {
+    return res.status(400).json({
+      ok: false,
+      error: error?.message || "Nu am putut sincroniza facturile primite direct din ANAF.",
+    })
+  }
 })
 
 router.get("/api/v1/efactura/incoming/:id", async (req: AuthedRequest, res) => {

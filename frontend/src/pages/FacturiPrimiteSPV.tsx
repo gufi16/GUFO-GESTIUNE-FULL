@@ -575,6 +575,54 @@ export default function FacturiPrimiteSPVPage() {
     }
   }
 
+  async function syncItemsDirectAnaf() {
+    if (!token) return
+    setSyncing(true)
+    setError("")
+    setMessage("")
+    setBridgeMessages([])
+    setBridgeMessagesPage(1)
+    try {
+      const requestedDays = getDaysNeededForMonth(selectedMonth)
+      const res = await fetch(`${API_BASE}/api/v1/efactura/incoming/sync`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ days: requestedDays }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.message || data?.error || "Nu am putut sincroniza facturile primite direct din ANAF.")
+      }
+
+      const stats = data?.stats || {}
+      setSpvTestResult({
+        ok: true,
+        title: "Sincronizare e-Factura ANAF finalizata",
+        tone: "success",
+        lines: [
+          "Ruta folosita: ERP -> ANAF OAuth -> listaMesajeFactura + descarcare",
+          `Luna selectata: ${selectedMonth}`,
+          `Zile interogate: ${requestedDays}`,
+          `Mesaje totale: ${stats.totalMessages ?? 0}`,
+          `Mesaje factura: ${stats.invoiceMessages ?? 0}`,
+          `Facturi descarcate: ${stats.downloaded ?? 0}`,
+          `Facturi importate: ${stats.imported ?? 0}`,
+          `Mesaje sarite: ${stats.skipped ?? 0}`,
+          ...(Array.isArray(stats.errors) && stats.errors.length ? [`Prima eroare: ${stats.errors[0]}`] : []),
+        ],
+      })
+      setMessage(data?.message || "Sincronizarea e-Factura a fost finalizata.")
+      await loadItems()
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut sincroniza facturile primite direct din ANAF.")
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   async function testClassicListMessages() {
     if (!token) return
     setTestingClassic(true)
@@ -929,7 +977,7 @@ export default function FacturiPrimiteSPVPage() {
       </div>
 
       {isDebugMode ? (
-        <InlineNotice>Pagina foloseste bridge-ul local Windows pentru a citi facturile primite din e-Factura.</InlineNotice>
+        <InlineNotice>Pagina poate afisa debug vechi, dar sincronizarea normala merge acum direct din ERP spre ANAF.</InlineNotice>
       ) : null}
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
@@ -1026,9 +1074,9 @@ export default function FacturiPrimiteSPVPage() {
             ) : null}
             <button
               type="button"
-              onClick={() => void syncItems()}
+              onClick={() => void syncItemsDirectAnaf()}
               className={documentButtonPrimaryClass}
-              disabled={syncing || (!bridgeToken.trim() && (spvStatus ? !spvStatus.implemented && !isDebugMode : false))}
+              disabled={syncing}
             >
               {syncing ? "Sincronizare..." : "Sincronizeaza SPV"}
             </button>

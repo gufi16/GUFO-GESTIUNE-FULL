@@ -714,14 +714,13 @@ export default function SetariEFacturaPage() {
       <PageHeader
         badge="configurare"
         title="Setari e-Factura"
-        subtitle="Pastrezi aici doar ce conteaza: activare, conectarea ANAF si starea aplicatiei locale Gufo e-Factura."
+        subtitle="Pastrezi aici doar ce conteaza: activare, mediul ANAF si conectarea SPV prin OAuth, direct din ERP."
       />
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
         <DocumentMetric title="Flux e-Factura" value={form.efacturaEnabled ? "Activat" : "Oprit"} tone="amber" />
         <DocumentMetric title="Mediu" value={form.efacturaEnvironment === "prod" ? "Productie" : "Test"} tone="blue" />
         <DocumentMetric title="Token ANAF" value={oauthStatus.connected ? "Activ" : "Neactiv"} tone={oauthStatus.connected ? "emerald" : "slate"} />
-        <DocumentMetric title="Agent local" value={localAgentConnected ? "Conectat" : "Neconectat"} tone={localAgentConnected ? "emerald" : "slate"} />
       </div>
 
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
@@ -732,8 +731,8 @@ export default function SetariEFacturaPage() {
           Aplicatia ANAF se configureaza centralizat in <strong>Control Panel</strong>. Dupa ce este setata acolo, aici ramane doar configurarea firmei si generarea tokenului.
         </InlineNotice>
       ) : null}
-      {localCertificateWarning ? <InlineNotice tone="error">{localCertificateWarning}</InlineNotice> : null}
-      {localAgentConnected && localCertificate?.detected && !localCertificateWarning ? (
+      {isDebugMode && localCertificateWarning ? <InlineNotice tone="error">{localCertificateWarning}</InlineNotice> : null}
+      {isDebugMode && localAgentConnected && localCertificate?.detected && !localCertificateWarning ? (
         <InlineNotice tone="success">Agentul local este conectat si certificatul este pregatit pentru SPV.</InlineNotice>
       ) : null}
 
@@ -785,76 +784,79 @@ export default function SetariEFacturaPage() {
           </div>
         </DocumentSection>
 
-        <DocumentSection
-          title="Gufo e-Factura local"
-          actions={
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={downloadAgentInstaller}
-                className={documentButtonSecondaryClass}
-                disabled={!agentDownloadInfo?.available}
-              >
-                Descarca agent
-              </button>
-              <button type="button" onClick={generateAgentPairingCode} className={documentButtonSecondaryClass} disabled={agentPairingBusy}>
-                {agentPairingBusy ? "Generez..." : "Genereaza cod"}
-              </button>
-              {agentPairing?.code ? (
-                <button type="button" onClick={copyPairingCode} className={documentButtonSecondaryClass}>
-                  Copiaza cod
+        {isDebugMode ? (
+          <DocumentSection
+            title="Gufo e-Factura local"
+            description="Sectiune tehnica pastrata doar pentru fallback si debugging."
+            actions={
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={downloadAgentInstaller}
+                  className={documentButtonSecondaryClass}
+                  disabled={!agentDownloadInfo?.available}
+                >
+                  Descarca agent
                 </button>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => void loadLocalAgentStatus()}
-                className={documentButtonSecondaryClass}
-                disabled={localAgentLoading}
-              >
-                {localAgentLoading ? "Detectare..." : "Actualizeaza"}
-              </button>
-              <button type="button" onClick={() => setActiveModal("agent")} className={documentButtonPrimaryClass}>
-                Detalii agent
-              </button>
-            </div>
-          }
-        >
-          <div className="space-y-2 text-sm text-slate-600">
-            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
-              Agent: <span className="font-semibold text-slate-900">{localAgentConnected ? "Conectat" : "Neconectat"}</span>
-            </div>
-            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
-              Pairing: <span className="font-semibold text-slate-900">{agentPairing?.code ? "Cod generat" : "Genereaza cod"}</span>
-            </div>
-            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
-              Certificat: <span className="font-semibold text-slate-900">{localCertificate?.configuredSerial || "-"}</span>
-            </div>
-            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
-              Expira: <span className="font-semibold text-slate-900">{localCertificateExpiryText}</span>
-            </div>
-          </div>
-          {agentDownloadLoading ? <div className="mt-2 text-xs text-slate-500">Verific installerul Gufo e-Factura...</div> : null}
-          {agentDownloadInfo?.available ? (
-            <div className="mt-2 text-xs text-slate-500">
-              Installer disponibil{agentDownloadInfo?.updatedAt ? `, actualizat la ${agentInstallerUpdatedAt}` : ""}.
-            </div>
-          ) : agentDownloadInfo?.error ? (
-            <div className="mt-2 text-xs text-amber-700">{agentDownloadInfo.error}</div>
-          ) : null}
-          {agentPairing?.code ? (
-            <div className="mt-2 rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-600">
-              <div>
-                Cod pairing pregatit pentru <span className="font-semibold text-slate-900">{agentPairing.companyName || form.companyName || "firma curenta"}</span>.
+                <button type="button" onClick={generateAgentPairingCode} className={documentButtonSecondaryClass} disabled={agentPairingBusy}>
+                  {agentPairingBusy ? "Generez..." : "Genereaza cod"}
+                </button>
+                {agentPairing?.code ? (
+                  <button type="button" onClick={copyPairingCode} className={documentButtonSecondaryClass}>
+                    Copiaza cod
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => void loadLocalAgentStatus()}
+                  className={documentButtonSecondaryClass}
+                  disabled={localAgentLoading}
+                >
+                  {localAgentLoading ? "Detectare..." : "Actualizeaza"}
+                </button>
+                <button type="button" onClick={() => setActiveModal("agent")} className={documentButtonPrimaryClass}>
+                  Detalii agent
+                </button>
               </div>
-              <div className="mt-1">
-                Expira: <span className="font-semibold text-slate-900">{agentPairing.expiresAt ? new Date(agentPairing.expiresAt).toLocaleString("ro-RO") : "-"}</span>
+            }
+          >
+            <div className="space-y-2 text-sm text-slate-600">
+              <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
+                Agent: <span className="font-semibold text-slate-900">{localAgentConnected ? "Conectat" : "Neconectat"}</span>
               </div>
-              <div className="mt-1">
-                In agent clientul lipeste codul si verifica serialul certificatului.
+              <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
+                Pairing: <span className="font-semibold text-slate-900">{agentPairing?.code ? "Cod generat" : "Genereaza cod"}</span>
+              </div>
+              <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
+                Certificat: <span className="font-semibold text-slate-900">{localCertificate?.configuredSerial || "-"}</span>
+              </div>
+              <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
+                Expira: <span className="font-semibold text-slate-900">{localCertificateExpiryText}</span>
               </div>
             </div>
-          ) : null}
-        </DocumentSection>
+            {agentDownloadLoading ? <div className="mt-2 text-xs text-slate-500">Verific installerul Gufo e-Factura...</div> : null}
+            {agentDownloadInfo?.available ? (
+              <div className="mt-2 text-xs text-slate-500">
+                Installer disponibil{agentDownloadInfo?.updatedAt ? `, actualizat la ${agentInstallerUpdatedAt}` : ""}.
+              </div>
+            ) : agentDownloadInfo?.error ? (
+              <div className="mt-2 text-xs text-amber-700">{agentDownloadInfo.error}</div>
+            ) : null}
+            {agentPairing?.code ? (
+              <div className="mt-2 rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-600">
+                <div>
+                  Cod pairing pregatit pentru <span className="font-semibold text-slate-900">{agentPairing.companyName || form.companyName || "firma curenta"}</span>.
+                </div>
+                <div className="mt-1">
+                  Expira: <span className="font-semibold text-slate-900">{agentPairing.expiresAt ? new Date(agentPairing.expiresAt).toLocaleString("ro-RO") : "-"}</span>
+                </div>
+                <div className="mt-1">
+                  In agent clientul lipeste codul si verifica serialul certificatului.
+                </div>
+              </div>
+            ) : null}
+          </DocumentSection>
+        ) : null}
       </div>
 
       {isDebugMode ? (
@@ -959,15 +961,6 @@ export default function SetariEFacturaPage() {
                     <option value="prod">Productie</option>
                   </select>
                 </DocumentField>
-
-                <DocumentField label="Serial certificat salvat in ERP">
-                  <input
-                    value={form.efacturaCertSerial}
-                    onChange={(e) => updateField("efacturaCertSerial", e.target.value)}
-                    className={documentInputClass}
-                    placeholder="Ex: 201104209404..."
-                  />
-                </DocumentField>
               </div>
 
               <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600">
@@ -979,6 +972,9 @@ export default function SetariEFacturaPage() {
                 </div>
                 <div className="mt-1">
                   Emitent: <span className="font-semibold text-slate-900">{[form.companyCity, form.companyCounty].filter(Boolean).join(", ") || "-"}</span>
+                </div>
+                <div className="mt-1">
+                  Conectare SPV: <span className="font-semibold text-slate-900">prin OAuth ANAF, fara agent local in fluxul normal</span>
                 </div>
               </div>
 
