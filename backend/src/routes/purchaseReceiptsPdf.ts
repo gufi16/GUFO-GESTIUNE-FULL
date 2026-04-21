@@ -125,11 +125,14 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
       items: {
         include: {
           product: {
-            include: { uom: true, purchaseUom: true }
+            include: {
+              uom: true,
+              purchaseUom: true
+            }
           },
           uom: true
         },
-        orderBy: { createdAt: "asc" }
+        orderBy: { createdAt: 'asc' }
       },
       supplier: true,
       location: true
@@ -137,168 +140,152 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
   })
 
   if (!receipt) {
-    return res.status(404).json({ ok: false, error: "Documentul nu a fost gasit." })
+    return res.status(404).json({ ok: false, error: 'Documentul nu a fost gasit.' })
   }
 
-  const purchaseReceipt = receipt
   const company = await resolveTenantCompany(prisma, tenantId, companyId)
-  const supplier = purchaseReceipt.supplier?.name || receipt.supplierName || "Furnizor"
-  const filename = `NIR_${safeFilePart(purchaseReceipt.docNo)}_${safeFilePart(supplier)}.pdf`
+  const supplier = receipt.supplier?.name || receipt.supplierName || 'Furnizor'
+  const filename = `NIR_${safeFilePart(receipt.docNo)}_${safeFilePart(supplier)}.pdf`
 
-  res.setHeader("Content-Type", "application/pdf")
-  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`)
+  res.setHeader('Content-Type', 'application/pdf')
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
 
-  const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 28 })
+  const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 26 })
   const fonts = registerPdfFonts(doc)
   doc.pipe(res)
-  const margin = 28
-  const isRon = purchaseReceipt.currency === 'RON'
 
-  const drawHeader = () => drawDocumentHero(doc, fonts, {
-    title: 'Not? de recep?ie',
-    subtitle: 'NIR / intrare marf?',
-    companyName: company?.name || '-',
-    companyLines: [
-      `CUI: ${pdfText(company?.cui)}`,
-      `Reg. com.: ${pdfText(company?.regNo)}`,
-      `Adres?: ${pdfText(company?.address)}`,
-      `Email: ${pdfText(company?.contactEmail || company?.email)}`,
-      `Telefon: ${pdfText(company?.phone)}`,
-    ],
-    rightPairs: [
-      { label: 'Document', value: pdfText(purchaseReceipt.docNo) },
-      { label: 'Data', value: pdfDate(purchaseReceipt.docDate) },
-      { label: 'Moned?', value: pdfText(purchaseReceipt.currency) },
-    ],
-    margin,
-  })
+  const margin = 26
+  const pageWidth = doc.page.width
+  const contentWidth = pageWidth - margin * 2
+  const dark = '#111111'
 
-  let y = drawHeader()
-  y = drawInfoCards(doc, fonts, {
-    margin,
-    y,
-    cards: [
-      {
-        title: 'Furnizor',
-        pairs: [
-          { label: 'Denumire', value: pdfText(supplier) },
-          { label: 'Cod furnizor', value: pdfText(purchaseReceipt.supplier?.code || purchaseReceipt.supplierCode) },
-          { label: 'Loca?ie', value: pdfText(purchaseReceipt.location?.name) },
-          { label: 'Status', value: pdfText(purchaseReceipt.status) },
-        ],
-      },
-      {
-        title: 'Surs? ?i trasabilitate',
-        pairs: [
-          { label: 'Curs', value: isRon ? '1,0000' : pdfFmt(purchaseReceipt.fxRate, 4) },
-          { label: 'Tip surs?', value: (purchaseReceipt.sourceIncomingEInvoiceId || purchaseReceipt.spvDownloadId || purchaseReceipt.spvUploadIndex || purchaseReceipt.spvInvoiceNo) ? 'RO e-Factura' : 'Intern' },
-          { label: 'ID desc?rcare', value: pdfText(purchaseReceipt.spvDownloadId) },
-          { label: 'Index ?nc?rcare', value: pdfText(purchaseReceipt.spvUploadIndex) },
-        ],
-      },
-    ],
-    height: 128,
-  }) + 18
+  let y = margin + 6
+  doc.font(fonts.bold).fontSize(14).fillColor(dark).text(pdfText(company?.name), margin, y)
+  y += 16
+  doc.font(fonts.regular).fontSize(8.5)
+  const companyLines = [
+    `CUI: ${pdfText(company?.cui)}`,
+    `Nr. ord. reg. com: ${pdfText(company?.regNo)}`,
+    `Sediu: ${pdfText(company?.address)}`,
+    `Judetul ${pdfText(company?.county)}`,
+    `Capital social: ${pdfText(company?.shareCapital)}`,
+    `IBAN: ${pdfText(company?.iban)}`,
+    `Banca: ${pdfText(company?.bank)}`,
+  ]
+  for (const line of companyLines) {
+    doc.text(line, margin, y)
+    y += 13
+  }
 
-  y = ensurePdfPage(doc, y, 40, margin, drawHeader)
-  doc.font(fonts.bold).fontSize(10).fillColor('#0F172A').text('Produse recep?ionate', margin, y)
-  y += 14
+  y += 4
+  doc.moveTo(margin, y).lineTo(pageWidth - margin, y).strokeColor(dark).lineWidth(1).stroke()
+  y += 36
 
+  doc.font(fonts.bold).fontSize(18).fillColor(dark).text('NOTA DE RECEPTIE SI CONSTATARE DE DIFERENTE', margin, y)
+  y += 40
+
+  const intro = `Subsemnatii, membrii ai comisiei de receptie, am procedat la receptionarea valorilor materiale furnizate de ${supplier}, cod fiscal ${pdfText(receipt.supplier?.cif || receipt.supplierCode)}, cu documentul ${pdfText(receipt.docNo)} din data de ${pdfDate(receipt.docDate)}, constatandu-se urmatoarele:`
+  doc.font(fonts.regular).fontSize(9.5).text(intro, margin, y, { width: contentWidth, align: 'left' })
+  y += 52
+
+  const isRon = receipt.currency === 'RON'
   const columns = isRon
     ? [
-        { label: '#', width: 28, align: 'center' },
-        { label: 'Produs', width: 250, align: 'left' },
-        { label: 'UM', width: 40, align: 'center' },
-        { label: 'Cant.', width: 58, align: 'right' },
-        { label: 'Pre? unitar', width: 72, align: 'right' },
-        { label: 'TVA', width: 46, align: 'center' },
-        { label: 'F?r? TVA', width: 82, align: 'right' },
-        { label: 'TVA', width: 62, align: 'right' },
-        { label: 'Cu TVA', width: 82, align: 'right' },
+        { label: 'Produs', width: 180, align: 'left' },
+        { label: 'Cant. doc.\n intrare', width: 104, align: 'center' },
+        { label: 'Cant.', width: 104, align: 'center' },
+        { label: 'UM', width: 52, align: 'center' },
+        { label: 'Pret achizitie\nRON, fara TVA', width: 104, align: 'center' },
+        { label: 'Pret inreg. RON,\nfara TVA', width: 104, align: 'center' },
+        { label: 'TVA unitar, RON', width: 104, align: 'center' },
+        { label: 'TVA total, RON', width: 104, align: 'center' },
+        { label: 'Pret cu TVA,\nRON', width: 104, align: 'center' },
+        { label: 'Valoare BON\nfara TVA', width: 104, align: 'center' },
+        { label: 'Valoare\ninregistrare,\nRON cu TVA', width: 104, align: 'center' },
       ]
     : [
-        { label: '#', width: 28, align: 'center' },
-        { label: 'Produs', width: 228, align: 'left' },
-        { label: 'UM', width: 38, align: 'center' },
-        { label: 'Cant.', width: 54, align: 'right' },
-        { label: 'Pre?', width: 62, align: 'right' },
-        { label: 'TVA', width: 42, align: 'center' },
-        { label: `${purchaseReceipt.currency} f?r? TVA`, width: 78, align: 'right' },
-        { label: `${purchaseReceipt.currency} TVA`, width: 72, align: 'right' },
-        { label: `${purchaseReceipt.currency} cu TVA`, width: 78, align: 'right' },
-        { label: 'RON', width: 68, align: 'right' },
+        { label: 'Produs', width: 180, align: 'left' },
+        { label: 'Cant. doc.\n intrare', width: 90, align: 'center' },
+        { label: 'Cant.', width: 90, align: 'center' },
+        { label: 'UM', width: 44, align: 'center' },
+        { label: `Pret ${receipt.currency}\nfara TVA`, width: 86, align: 'center' },
+        { label: `TVA ${receipt.currency}`, width: 86, align: 'center' },
+        { label: `Pret cu TVA\n${receipt.currency}`, width: 86, align: 'center' },
+        { label: `Valoare\n${receipt.currency}`, width: 90, align: 'center' },
+        { label: 'Valoare RON', width: 90, align: 'center' },
       ]
 
-  const rows = []
-  let runningNo = 1
+  const rowHeight = 52
+  let x = margin
+  columns.forEach((col) => {
+    doc.rect(x, y, col.width, rowHeight).stroke(dark)
+    doc.font(fonts.bold).fontSize(8).fillColor(dark).text(col.label, x + 4, y + 14, { width: col.width - 8, align: col.align || 'center' })
+    x += col.width
+  })
+  y += rowHeight
+
   receipt.items.forEach((item) => {
-    rows.push(isRon ? [
-      String(runningNo++),
-      pdfText(item.product?.name),
-      pdfText(item.uom?.code || item.product?.purchaseUom?.code || item.product?.uom?.code),
-      pdfFmt(item.qty, 3),
-      pdfFmt(item.unitCostNetFc),
-      pdfFmt(item.vatRateValue, 0),
-      pdfFmt(item.lineNetFc),
-      pdfFmt(item.lineVatFc),
-      pdfFmt(item.lineGrossFc),
-    ] : [
-      String(runningNo++),
-      pdfText(item.product?.name),
-      pdfText(item.uom?.code || item.product?.purchaseUom?.code || item.product?.uom?.code),
-      pdfFmt(item.qty, 3),
-      pdfFmt(item.unitCostNetFc),
-      pdfFmt(item.vatRateValue, 0),
-      pdfFmt(item.lineNetFc),
-      pdfFmt(item.lineVatFc),
-      pdfFmt(item.lineGrossFc),
-      pdfFmt(item.lineGrossRon),
-    ])
+    const qty = pdfNum(item.qty)
+    const unitNet = pdfNum(item.unitCostNetFc)
+    const unitVat = qty > 0 ? pdfNum(item.lineVatFc) / qty : 0
+    const unitGross = qty > 0 ? pdfNum(item.lineGrossFc) / qty : 0
+    const row = isRon
+      ? [
+          pdfText(item.product?.name),
+          pdfFmt(qty, 0),
+          pdfFmt(qty, 0),
+          pdfText(item.uom?.code || item.product?.purchaseUom?.code || item.product?.uom?.code || 'Buc'),
+          pdfFmt(unitNet, 2),
+          pdfFmt(unitNet, 2),
+          pdfFmt(unitVat, 2),
+          pdfFmt(item.lineVatFc, 2),
+          pdfFmt(unitGross, 2),
+          pdfFmt(item.lineNetFc, 2),
+          pdfFmt(item.lineGrossRon || item.lineGrossFc, 2),
+        ]
+      : [
+          pdfText(item.product?.name),
+          pdfFmt(qty, 0),
+          pdfFmt(qty, 0),
+          pdfText(item.uom?.code || item.product?.purchaseUom?.code || item.product?.uom?.code || 'Buc'),
+          pdfFmt(unitNet, 2),
+          pdfFmt(item.lineVatFc, 2),
+          pdfFmt(unitGross, 2),
+          pdfFmt(item.lineGrossFc, 2),
+          pdfFmt(item.lineGrossRon, 2),
+        ]
 
-    const isSgr = Boolean(item.product?.isSgr)
-    const sgrUnit = isSgr ? pdfNum(item.product?.sgrValue || 0.5) : 0
-    const sgrNetFc = pdfNum(item.qty) * sgrUnit
-    if (isSgr && sgrNetFc > 0) {
-      rows.push(isRon ? [
-        String(runningNo++), 'SGR', '', pdfFmt(item.qty, 3), pdfFmt(sgrUnit), '0', pdfFmt(sgrNetFc), '0,00', pdfFmt(sgrNetFc)
-      ] : [
-        String(runningNo++), 'SGR', '', pdfFmt(item.qty, 3), pdfFmt(sgrUnit), '0', pdfFmt(sgrNetFc), '0,00', pdfFmt(sgrNetFc), pdfFmt(sgrNetFc * pdfNum(purchaseReceipt.fxRate || 1))
-      ])
-    }
+    let xx = margin
+    row.forEach((cell, index) => {
+      const col = columns[index]
+      doc.rect(xx, y, col.width, rowHeight).stroke(dark)
+      doc.font(fonts.regular).fontSize(8.5).fillColor(dark).text(cell, xx + 4, y + 12, {
+        width: col.width - 8,
+        align: index === 0 ? 'left' : 'center',
+      })
+      xx += col.width
+    })
+    y += rowHeight
   })
 
-  y = drawSimpleTable(doc, fonts, {
-    margin,
-    y,
-    columns,
-    rows,
-    rowHeight: 24,
-    drawHeader,
-  }) + 18
-
-  const totalSgrFc = rows.filter((row) => row[1] === 'SGR').reduce((sum, row) => sum + pdfNum(isRon ? row[8] : row[8]), 0)
-  const totalWithSgrFc = pdfNum(receipt.totalGrossFc) + totalSgrFc
-  const totalWithSgrRon = pdfNum(receipt.totalGrossRon) + (isRon ? totalSgrFc : rows.filter((row) => row[1] === 'SGR').reduce((sum, row) => sum + pdfNum(row[9]), 0))
-
-  drawTotalsBox(doc, fonts, {
-    x: doc.page.width - margin - 240,
-    y,
-    width: 240,
-    lines: [
-      { label: 'Total f?r? TVA', value: `${pdfFmt(receipt.totalNetFc)} ${purchaseReceipt.currency}` },
-      { label: 'Total TVA', value: `${pdfFmt(receipt.totalVatFc)} ${purchaseReceipt.currency}` },
-      { label: 'Total SGR', value: `${pdfFmt(totalSgrFc)} ${purchaseReceipt.currency}` },
-      { label: 'Total recep?ie', value: `${pdfFmt(totalWithSgrFc)} ${purchaseReceipt.currency}` },
-      ...(isRon ? [] : [{ label: 'Total ?n RON', value: `${pdfFmt(totalWithSgrRon)} RON` }]),
-    ],
-    highlightLast: true,
+  let totalLabelX = margin
+  for (let i = 0; i < columns.length - 3; i++) totalLabelX += columns[i].width
+  const totalLabelW = columns.slice(0, columns.length - 3).reduce((s, c) => s + c.width, 0)
+  const lastThree = columns.slice(-3)
+  doc.rect(margin, y, totalLabelW, 30).stroke(dark)
+  doc.font(fonts.bold).fontSize(9).text('Total, RON', margin + totalLabelW - 90, y + 10, { width: 80, align: 'right' })
+  let tx = margin + totalLabelW
+  const totalValues = isRon
+    ? [pdfFmt(receipt.totalVatFc, 2), pdfFmt(receipt.totalNetFc, 2), pdfFmt(receipt.totalGrossRon || receipt.totalGrossFc, 2)]
+    : [pdfFmt(receipt.totalVatFc, 2), pdfFmt(receipt.totalGrossFc, 2), pdfFmt(receipt.totalGrossRon, 2)]
+  totalValues.forEach((value, index) => {
+    doc.rect(tx, y, lastThree[index].width, 30).stroke(dark)
+    doc.font(fonts.bold).fontSize(9).text(value, tx + 4, y + 10, { width: lastThree[index].width - 8, align: 'center' })
+    tx += lastThree[index].width
   })
+  y += 64
 
-  drawSignatureRow(doc, fonts, {
-    margin,
-    y: y + 112,
-    labels: ['Recep?ionat', 'Verificat', 'Aprobat'],
-  })
+  doc.font(fonts.regular).fontSize(10).text('Gestionar,', pageWidth - margin - 100, y)
 
   doc.end()
 })
