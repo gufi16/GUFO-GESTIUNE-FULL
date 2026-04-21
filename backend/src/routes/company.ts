@@ -184,6 +184,7 @@ function mapCompanyResponse(company: any, oauthConfig: any) {
 
   return {
     ...company,
+    efacturaEnvironment: oauthConfig.environment || company?.efacturaEnvironment || "test",
     efacturaPlatformConfigured: oauthConfig.platformConfigured,
     efacturaUsesPlatformConfig: oauthConfig.usesPlatformConfig,
     efacturaCertHasFile: hasStoredCertificate,
@@ -217,10 +218,11 @@ async function updateRequestCompany(
   )
 }
 
-async function getEffectiveAnafOauthConfig(tenantId: string) {
+async function getEffectiveAnafOauthConfig(tenantId: string, activeCompanyId: string | null = null) {
   const [company, platform] = await Promise.all([
-    resolveTenantCompany(prisma, tenantId, null, {
+    resolveTenantCompany(prisma, tenantId, activeCompanyId, {
       select: {
+        efacturaEnvironment: true,
         efacturaOauthClientId: true,
         efacturaOauthClientSecret: true,
         efacturaOauthRedirectUri: true,
@@ -229,6 +231,7 @@ async function getEffectiveAnafOauthConfig(tenantId: string) {
     prisma.platformConfig.findUnique({
       where: { key: "global" },
       select: {
+        efacturaEnvironment: true,
         efacturaOauthClientId: true,
         efacturaOauthClientSecret: true,
         efacturaOauthRedirectUri: true,
@@ -236,38 +239,31 @@ async function getEffectiveAnafOauthConfig(tenantId: string) {
     }),
   ])
 
-  return {
-    clientId:
-      company?.efacturaOauthClientId &&
+  const usesCompanyConfig = Boolean(
+    company?.efacturaOauthClientId &&
       company?.efacturaOauthClientSecret &&
       company?.efacturaOauthRedirectUri
+  )
+
+  return {
+    clientId: usesCompanyConfig
         ? company.efacturaOauthClientId
         : platform?.efacturaOauthClientId || "",
-    clientSecret:
-      company?.efacturaOauthClientId &&
-      company?.efacturaOauthClientSecret &&
-      company?.efacturaOauthRedirectUri
+    clientSecret: usesCompanyConfig
         ? company.efacturaOauthClientSecret
         : platform?.efacturaOauthClientSecret || "",
-    redirectUri:
-      company?.efacturaOauthClientId &&
-      company?.efacturaOauthClientSecret &&
-      company?.efacturaOauthRedirectUri
+    redirectUri: usesCompanyConfig
         ? company.efacturaOauthRedirectUri
         : platform?.efacturaOauthRedirectUri || "",
+    environment: usesCompanyConfig
+      ? String(company?.efacturaEnvironment || "test").trim() || "test"
+      : String(platform?.efacturaEnvironment || company?.efacturaEnvironment || "test").trim() || "test",
     platformConfigured: Boolean(
       platform?.efacturaOauthClientId &&
         platform?.efacturaOauthClientSecret &&
         platform?.efacturaOauthRedirectUri,
     ),
-    usesPlatformConfig: Boolean(
-      !company?.efacturaOauthClientId &&
-        !company?.efacturaOauthClientSecret &&
-        !company?.efacturaOauthRedirectUri &&
-        platform?.efacturaOauthClientId &&
-        platform?.efacturaOauthClientSecret &&
-        platform?.efacturaOauthRedirectUri,
-    ),
+    usesPlatformConfig: Boolean(!usesCompanyConfig && platform?.efacturaOauthClientId && platform?.efacturaOauthClientSecret && platform?.efacturaOauthRedirectUri),
   }
 }
 
@@ -567,7 +563,7 @@ router.get("/api/v1/company", async (req: AuthedRequest, res) => {
   try {
     const [company, oauthConfig] = await Promise.all([
       getRequestCompany(req),
-      getEffectiveAnafOauthConfig(tenantId),
+      getEffectiveAnafOauthConfig(tenantId, getActiveCompanyId(req)),
     ])
 
     return res.json({
@@ -780,7 +776,7 @@ router.post("/api/v1/company", async (req: AuthedRequest, res) => {
 
     return res.json({
       ok: true,
-      company: mapCompanyResponse(company, await getEffectiveAnafOauthConfig(tenantId))
+      company: mapCompanyResponse(company, await getEffectiveAnafOauthConfig(tenantId, getActiveCompanyId(req)))
     })
   } catch (e: any) {
     return res.status(500).json({
@@ -842,7 +838,7 @@ router.post(
 
       return res.json({
         ok: true,
-        company: mapCompanyResponse(company, await getEffectiveAnafOauthConfig(tenantId)),
+        company: mapCompanyResponse(company, await getEffectiveAnafOauthConfig(tenantId, getActiveCompanyId(req))),
       })
     } catch (error: any) {
       if (req.file?.path && fs.existsSync(req.file.path)) {
@@ -875,7 +871,7 @@ router.delete("/api/v1/company/efactura/certificate", requireAuth, async (req: A
 
     return res.json({
       ok: true,
-      company: mapCompanyResponse(updated, await getEffectiveAnafOauthConfig(tenantId)),
+      company: mapCompanyResponse(updated, await getEffectiveAnafOauthConfig(tenantId, getActiveCompanyId(req))),
     })
   } catch (error: any) {
     return res.status(400).json({
@@ -897,7 +893,7 @@ router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, re
     })
   }
 
-  const oauthConfig = await getEffectiveAnafOauthConfig(tenantId)
+  const oauthConfig = await getEffectiveAnafOauthConfig(tenantId, getActiveCompanyId(req))
 
   if (!oauthConfig.clientId || !oauthConfig.redirectUri) {
     return res.status(400).json({

@@ -17,6 +17,9 @@ const COMPANY_ANAF_SELECT = {
   tenantId: true,
   cui: true,
   efacturaEnvironment: true,
+  efacturaOauthClientId: true,
+  efacturaOauthClientSecret: true,
+  efacturaOauthRedirectUri: true,
   efacturaOauthAccessToken: true,
   efacturaOauthLastError: true,
   efacturaCertSerial: true,
@@ -25,9 +28,30 @@ const COMPANY_ANAF_SELECT = {
 }
 
 export async function loadAnafCompanyContext(tenantId: string, activeCompanyId?: string | null) {
-  return resolveTenantCompany(prisma, tenantId, activeCompanyId, {
+  const company = await resolveTenantCompany(prisma, tenantId, activeCompanyId, {
     select: COMPANY_ANAF_SELECT,
   })
+
+  if (!company) return company
+
+  const platform = await prisma.platformConfig.findUnique({
+    where: { key: "global" },
+    select: { efacturaEnvironment: true },
+  })
+
+  const usesOwnOauthConfig = Boolean(
+    company?.efacturaOauthClientId &&
+      company?.efacturaOauthClientSecret &&
+      company?.efacturaOauthRedirectUri
+  )
+
+  return {
+    ...company,
+    efacturaUsesPlatformConfig: !usesOwnOauthConfig,
+    efacturaEnvironment: usesOwnOauthConfig
+      ? String(company?.efacturaEnvironment || "test").trim() || "test"
+      : String(platform?.efacturaEnvironment || company?.efacturaEnvironment || "test").trim() || "test",
+  }
 }
 
 function decodeJwtPayload(token: string) {

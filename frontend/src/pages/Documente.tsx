@@ -420,11 +420,11 @@ export default function Documente() {
   const efacturaEnabled = hasModule("efactura")
 
   const today = new Date()
-  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
+  const yearStart = new Date(today.getFullYear(), 0, 1)
 
   const [activeTab, setActiveTab] = useState<ActiveTab>(initialTab)
   const [dateFrom, setDateFrom] = useState(
-    `${monthStart.getFullYear()}-${`${monthStart.getMonth() + 1}`.padStart(2, "0")}-${`${monthStart.getDate()}`.padStart(2, "0")}`
+    `${yearStart.getFullYear()}-${`${yearStart.getMonth() + 1}`.padStart(2, "0")}-${`${yearStart.getDate()}`.padStart(2, "0")}`
   )
   const [dateTo, setDateTo] = useState(
     `${today.getFullYear()}-${`${today.getMonth() + 1}`.padStart(2, "0")}-${`${today.getDate()}`.padStart(2, "0")}`

@@ -6,7 +6,7 @@ import { Router } from "express"
 import PDFDocument from "pdfkit"
 import { promisify } from "util"
 import { prisma } from "../lib/prisma"
-import { anafDownloadById, anafListMessages } from "../lib/anafClient"
+import { anafDownloadById, anafListMessages, loadAnafCompanyContext } from "../lib/anafClient"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { requireTenantModule } from "../lib/tenantModules"
 import { reserveNextNumber } from "../lib/numbering"
@@ -805,14 +805,7 @@ router.get("/api/v1/efactura/incoming/bridge-config", async (req: AuthedRequest,
     return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
   }
 
-  const company = await resolveTenantCompany(prisma, tenantId, req.auth?.activeCompanyId, {
-    select: {
-      cui: true,
-      efacturaEnvironment: true,
-      efacturaOauthAccessToken: true,
-      efacturaOauthAccessTokenExpiresAt: true,
-    },
-  })
+  const company = await loadAnafCompanyContext(tenantId, req.auth?.activeCompanyId)
 
   const cif = normalizeCompanyCui(company?.cui)
   if (!cif) {
@@ -828,7 +821,7 @@ router.get("/api/v1/efactura/incoming/bridge-config", async (req: AuthedRequest,
       cif,
       environment: String(company?.efacturaEnvironment || "test").toLowerCase() === "prod" ? "prod" : "test",
       accessToken: String(company.efacturaOauthAccessToken),
-      expiresAt: company.efacturaOauthAccessTokenExpiresAt,
+      expiresAt: company?.efacturaOauthAccessTokenExpiresAt,
       baseUrl: getEfacturaBaseUrl(company?.efacturaEnvironment),
     },
   })
@@ -842,19 +835,7 @@ router.post("/api/v1/efactura/incoming/sync", async (req: AuthedRequest, res) =>
     return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
   }
 
-  const company = await resolveTenantCompany(prisma, tenantId, companyId, {
-    select: {
-      id: true,
-      tenantId: true,
-      cui: true,
-      efacturaEnvironment: true,
-      efacturaOauthAccessToken: true,
-      efacturaOauthLastError: true,
-      efacturaCertSerial: true,
-      efacturaCertFilename: true,
-      efacturaCertPasswordEnc: true,
-    },
-  })
+  const company = await loadAnafCompanyContext(tenantId, companyId)
 
   if (!company) {
     return res.status(404).json({ ok: false, error: "Compania activa nu a fost gasita." })
