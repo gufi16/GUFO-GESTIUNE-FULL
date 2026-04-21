@@ -36,6 +36,20 @@ function shouldRetryWithCurl(error: unknown) {
   return /EPROTO|handshake failure|tls alert/i.test(message)
 }
 
+function withLegacyTlsProfile(args: string[]) {
+  return [
+    ...args,
+    "-4",
+    "--http1.1",
+    "--tlsv1.2",
+    "--tls-max",
+    "1.2",
+    "--ciphers",
+    "DEFAULT@SECLEVEL=1",
+    "--no-alpn",
+  ]
+}
+
 function parseCurlHeaders(rawText: string) {
   const blocks = rawText
     .split(/\r?\n\r?\n/)
@@ -80,18 +94,10 @@ async function anafCurlRequest(url: string, options: AnafRequestOptions = {}): P
   const requestBodyPath = path.join(tempDir, "request.bin")
 
   try {
-    const args = [
+    const baseArgs = [
       "--silent",
       "--show-error",
       "--location",
-      "-4",
-      "--http1.1",
-      "--tlsv1.2",
-      "--tls-max",
-      "1.2",
-      "--ciphers",
-      "DEFAULT@SECLEVEL=1",
-      "--no-alpn",
       "--max-time",
       String(Math.max(1, Math.ceil(timeoutMs / 1000))),
       "--dump-header",
@@ -102,26 +108,42 @@ async function anafCurlRequest(url: string, options: AnafRequestOptions = {}): P
       options.method || "GET",
     ]
 
-    for (const [name, value] of Object.entries(options.headers || {})) {
-      args.push("-H", `${name}: ${value}`)
+    const finalizeArgs = (inputArgs: string[]) => {
+      const args = [...inputArgs]
+
+      for (const [name, value] of Object.entries(options.headers || {})) {
+        args.push("-H", `${name}: ${value}`)
+      }
+
+      return args
     }
 
     if (options.pfx) {
       const certPath = path.join(tempDir, "client-cert.p12")
       await fs.writeFile(certPath, options.pfx)
-      args.push("--cert-type", "P12")
-      args.push("--cert", certPath)
-      args.push("--pass", `pass:${options.passphrase || ""}`)
+      baseArgs.push("--cert-type", "P12")
+      baseArgs.push("--cert", certPath)
+      baseArgs.push("--pass", `pass:${options.passphrase || ""}`)
     }
 
     if (options.body) {
       const bodyBuffer = Buffer.isBuffer(options.body) ? options.body : Buffer.from(options.body)
       await fs.writeFile(requestBodyPath, bodyBuffer)
-      args.push("--data-binary", `@${requestBodyPath}`)
+      baseArgs.push("--data-binary", `@${requestBodyPath}`)
     }
 
-    args.push(url)
-    await execCurl(args)
+    const modernArgs = finalizeArgs([...baseArgs, url])
+
+    try {
+      await execCurl(modernArgs)
+    } catch (firstError) {
+      const legacyArgs = finalizeArgs(withLegacyTlsProfile([...baseArgs, url]))
+      try {
+        await execCurl(legacyArgs)
+      } catch {
+        throw firstError
+      }
+    }
 
     const [rawHeaders, bodyBuffer] = await Promise.all([
       fs.readFile(headersPath, "utf8"),
@@ -158,8 +180,6 @@ function anafNodeRequest(url: string, options: AnafRequestOptions = {}) {
         family: 4,
         servername: parsed.hostname,
         minVersion: "TLSv1.2",
-        maxVersion: "TLSv1.2",
-        ciphers: "DEFAULT@SECLEVEL=1",
         secureOptions: crypto.constants.SSL_OP_LEGACY_SERVER_CONNECT,
         pfx: options.pfx,
         passphrase: options.passphrase,
