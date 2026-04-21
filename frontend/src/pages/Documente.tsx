@@ -356,7 +356,7 @@ function statusClass(status: string) {
 function inventoryStatusText(status?: string) {
   if (status === "FINALIZED") return "Finalizat"
   if (status === "CANCELLED") return "Anulat"
-  return "?n lucru"
+  return "În lucru"
 }
 
 function diffClass(value: number) {
@@ -1256,12 +1256,12 @@ export default function Documente() {
           {
       title: "Pozitii consum",
             value: String(filteredConsumptionDocs.reduce((sum, doc) => sum + doc.itemsCount, 0)),
-            hint: "Ingrediente consumate ?n documentele filtrate",
+            hint: "Ingrediente consumate în documentele filtrate",
             icon: Repeat2,
             tone: "slate",
           },
           {
-            title: "Cantitate total?",
+            title: "Cantitate totală",
             value: formatNumber(filteredConsumptionDocs.reduce((sum, doc) => sum + doc.totalQty, 0)),
       hint: "Total cantitati consumate",
             icon: FileCheck2,
@@ -1285,7 +1285,7 @@ export default function Documente() {
               tone: "slate",
             },
             {
-              title: "Cantitate total?",
+              title: "Cantitate totală",
               value: formatNumber(filteredProductionDocs.reduce((sum, doc) => sum + doc.totalQty, 0)),
       hint: "Total cantitati produse",
               icon: FileCheck2,
@@ -1297,7 +1297,7 @@ export default function Documente() {
               {
                 title: "Facturi",
                 value: String(filteredInvoiceDocs.length),
-                hint: "Facturi comerciale create ?n ERP",
+                hint: "Facturi comerciale create în ERP",
                 icon: FilePlus2,
                 tone: "blue",
               },
@@ -1379,7 +1379,7 @@ export default function Documente() {
             {
               title: "Documente inventar",
               value: String(filteredInventoryDocs.length),
-              hint: "Inventare create ?n intervalul selectat",
+              hint: "Inventare create în intervalul selectat",
               icon: ClipboardList,
               tone: "blue",
             },
@@ -1391,7 +1391,7 @@ export default function Documente() {
               tone: "slate",
             },
             {
-              title: "Diferen?? total?",
+              title: "Diferență totală",
               value: formatNumber(filteredInventoryDocs.reduce((sum, doc) => sum + doc.totalDifferenceQty, 0), 3),
       hint: "Diferenta totala dintre scriptic si numarat",
               icon: FileCheck2,
@@ -2069,7 +2069,7 @@ export default function Documente() {
                   <th className="px-3 py-2.5 text-left font-medium">Data</th>
                   <th className="px-3 py-2.5 text-left font-medium">Locatie</th>
                   <th className="px-3 py-2.5 text-left font-medium">Pozitii</th>
-                  <th className="px-3 py-2.5 text-left font-medium">Diferen??</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Diferență</th>
                   <th className="px-3 py-2.5 text-left font-medium">Status</th>
                   <th className="px-3 py-2.5 text-right font-medium">Actiune</th>
                 </tr>
@@ -2166,7 +2166,7 @@ export default function Documente() {
                   className="inline-flex items-center gap-1.5 rounded-[14px] border border-[#E8E3DA] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#17324D] hover:bg-[#FCFBF8]"
                 >
                   <X size={16} />
-                  ?nchide
+                  Închide
                 </button>
               </div>
             </div>
@@ -2194,7 +2194,7 @@ export default function Documente() {
                   </div>
 
                   <div className="rounded-[16px] border border-slate-200 bg-slate-50 p-3">
-                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Cantitate total?</div>
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Cantitate totală</div>
                     <div className="mt-2 text-base font-semibold text-slate-900">{formatNumber(selectedConsumptionDoc.totalQty)}</div>
                   </div>
                 </div>
@@ -2217,7 +2217,7 @@ export default function Documente() {
                         <div className="mt-2 text-slate-700">{formatRon(selectedConsumptionDoc.sale.total)}</div>
                       </div>
                       <div>
-                        <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Plat?</div>
+                        <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Plată</div>
                         <div className="mt-2 text-slate-700">{selectedConsumptionDoc.sale.paymentType}</div>
                       </div>
                       <div>
@@ -2240,7 +2240,7 @@ export default function Documente() {
                           <th className="px-3 py-2.5 text-left font-medium">Produs finit</th>
                           <th className="px-3 py-2.5 text-left font-medium">Ingredient</th>
                           <th className="px-3 py-2.5 text-left font-medium">Cantitate</th>
-                          <th className="px-3 py-2.5 text-left font-medium">Not?</th>
+                          <th className="px-3 py-2.5 text-left font-medium">Notă</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -2271,7 +2271,7 @@ export default function Documente() {
                           <tr>
                             <th className="px-3 py-2.5 text-left font-medium">Produs</th>
                             <th className="px-3 py-2.5 text-left font-medium">Cantitate</th>
-                            <th className="px-3 py-2.5 text-left font-medium">Pre?</th>
+                            <th className="px-3 py-2.5 text-left font-medium">Preț</th>
                             <th className="px-3 py-2.5 text-left font-medium">TVA</th>
                           </tr>
                         </thead>
@@ -2327,7 +2327,7 @@ export default function Documente() {
                   className="inline-flex items-center gap-1.5 rounded-[14px] border border-[#E8E3DA] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#17324D] hover:bg-[#FCFBF8]"
                 >
                   <X size={16} />
-                  ?nchide
+                  Închide
                 </button>
               </div>
             </div>
@@ -2355,7 +2355,7 @@ export default function Documente() {
                   </div>
 
                   <div className="rounded-[16px] border border-slate-200 bg-slate-50 p-3">
-                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Cantitate total?</div>
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Cantitate totală</div>
                     <div className="mt-2 text-base font-semibold text-slate-900">{formatNumber(selectedProductionDoc.totalQty)}</div>
                   </div>
                 </div>
@@ -2441,7 +2441,7 @@ export default function Documente() {
                   className="inline-flex items-center gap-1.5 rounded-[14px] border border-[#E8E3DA] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#17324D] hover:bg-[#FCFBF8]"
                 >
                   <X size={16} />
-                  ?nchide
+                  Închide
                 </button>
               </div>
             </div>
@@ -2497,7 +2497,7 @@ export default function Documente() {
                   </div>
 
                   <div className="rounded-[16px] border border-slate-200 bg-white p-3 shadow-sm">
-                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Diferen?? total?</div>
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Diferență totală</div>
                     <div className={`mt-2 text-lg font-semibold ${diffClass(selectedInventoryDoc.summary.totalDifferenceQty)}`}>
                       {formatNumber(selectedInventoryDoc.summary.totalDifferenceQty, 3)}
                     </div>
@@ -2516,7 +2516,7 @@ export default function Documente() {
                           <th className="px-3 py-2.5 text-left font-medium">UM</th>
                           <th className="px-3 py-2.5 text-left font-medium">Scriptic</th>
                     <th className="px-3 py-2.5 text-left font-medium">Numarat</th>
-                          <th className="px-3 py-2.5 text-left font-medium">Diferen??</th>
+                          <th className="px-3 py-2.5 text-left font-medium">Diferență</th>
                         </tr>
                       </thead>
                       <tbody>
