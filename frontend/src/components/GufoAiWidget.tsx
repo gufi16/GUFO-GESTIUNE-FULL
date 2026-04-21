@@ -18,6 +18,19 @@ type GufoAiResponse = {
   }
 }
 
+type WidgetPosition = {
+  x: number
+  y: number
+}
+
+const POSITION_STORAGE_KEY = "gufo-ai-widget-position"
+const FAB_WIDTH = 176
+const FAB_HEIGHT = 64
+const FAB_MARGIN = 20
+const CHAT_GAP = 20
+const CHAT_WIDTH = 420
+const CHAT_HEIGHT = 680
+
 function routeLabel(pathname: string) {
   if (pathname.startsWith("/dashboard")) return "Panou principal"
   if (pathname.startsWith("/nomenclator/produse")) return "Produse"
@@ -58,8 +71,50 @@ export default function GufoAiWidget() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [suggestions, setSuggestions] = useState<string[]>(defaultSuggestions(location.pathname))
   const scrollRef = useRef<HTMLDivElement | null>(null)
+  const dragOffsetRef = useRef<{ x: number; y: number } | null>(null)
+  const draggedRef = useRef(false)
+  const [position, setPosition] = useState<WidgetPosition>(() => {
+    if (typeof window === "undefined") {
+      return { x: 0, y: 0 }
+    }
+
+    const saved = window.localStorage.getItem(POSITION_STORAGE_KEY)
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved) as WidgetPosition
+        if (Number.isFinite(parsed?.x) && Number.isFinite(parsed?.y)) {
+          return parsed
+        }
+      } catch {
+        // ignore invalid stored position
+      }
+    }
+
+    return {
+      x: window.innerWidth - FAB_WIDTH - FAB_MARGIN,
+      y: window.innerHeight - FAB_HEIGHT - FAB_MARGIN,
+    }
+  })
 
   const pageLabel = useMemo(() => routeLabel(location.pathname), [location.pathname])
+  const chatPosition = useMemo(() => {
+    if (typeof window === "undefined") {
+      return { left: FAB_MARGIN, top: FAB_MARGIN }
+    }
+
+    const desiredLeft = position.x + FAB_WIDTH - CHAT_WIDTH
+    const maxLeft = Math.max(FAB_MARGIN, window.innerWidth - CHAT_WIDTH - FAB_MARGIN)
+    const left = Math.max(FAB_MARGIN, Math.min(desiredLeft, maxLeft))
+
+    const preferredTop = position.y - CHAT_HEIGHT - CHAT_GAP
+    const maxTop = Math.max(FAB_MARGIN, window.innerHeight - CHAT_HEIGHT - FAB_MARGIN)
+    const top =
+      preferredTop >= FAB_MARGIN
+        ? Math.min(preferredTop, maxTop)
+        : Math.max(FAB_MARGIN, Math.min(position.y + FAB_HEIGHT + CHAT_GAP, maxTop))
+
+    return { left, top }
+  }, [position])
 
   useEffect(() => {
     setSuggestions(defaultSuggestions(location.pathname))
@@ -81,6 +136,65 @@ export default function GufoAiWidget() {
     if (!scrollRef.current) return
     scrollRef.current.scrollTop = scrollRef.current.scrollHeight
   }, [messages, open, loading])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    window.localStorage.setItem(POSITION_STORAGE_KEY, JSON.stringify(position))
+  }, [position])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    function clampPosition(next: WidgetPosition) {
+      const maxX = Math.max(FAB_MARGIN, window.innerWidth - FAB_WIDTH - FAB_MARGIN)
+      const maxY = Math.max(FAB_MARGIN, window.innerHeight - FAB_HEIGHT - FAB_MARGIN)
+      return {
+        x: Math.max(FAB_MARGIN, Math.min(next.x, maxX)),
+        y: Math.max(FAB_MARGIN, Math.min(next.y, maxY)),
+      }
+    }
+
+    function handlePointerMove(event: PointerEvent) {
+      if (!dragOffsetRef.current) return
+      draggedRef.current = true
+      setPosition(
+        clampPosition({
+          x: event.clientX - dragOffsetRef.current.x,
+          y: event.clientY - dragOffsetRef.current.y,
+        })
+      )
+    }
+
+    function handlePointerUp() {
+      dragOffsetRef.current = null
+      window.setTimeout(() => {
+        draggedRef.current = false
+      }, 0)
+    }
+
+    function handleResize() {
+      setPosition((prev) => clampPosition(prev))
+    }
+
+    window.addEventListener("pointermove", handlePointerMove)
+    window.addEventListener("pointerup", handlePointerUp)
+    window.addEventListener("resize", handleResize)
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove)
+      window.removeEventListener("pointerup", handlePointerUp)
+      window.removeEventListener("resize", handleResize)
+    }
+  }, [])
+
+  function startDrag(event: React.PointerEvent<HTMLButtonElement>) {
+    const rect = event.currentTarget.getBoundingClientRect()
+    dragOffsetRef.current = {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    }
+    draggedRef.current = false
+  }
 
   async function submitQuestion(text: string) {
     const question = text.trim()
@@ -142,8 +256,18 @@ export default function GufoAiWidget() {
     <>
       <button
         type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        className="fixed bottom-5 right-5 z-50 inline-flex h-16 items-center gap-3 rounded-full border border-[#17324D] bg-[#17324D] px-4 text-white shadow-[0_18px_45px_rgba(23,50,77,0.28)] transition hover:-translate-y-0.5 hover:bg-[#0F2740]"
+        onPointerDown={startDrag}
+        onClick={() => {
+          if (draggedRef.current) return
+          setOpen((prev) => !prev)
+        }}
+        className="fixed z-50 inline-flex h-16 items-center gap-3 rounded-full border border-[#17324D] bg-[#17324D] px-4 text-white shadow-[0_18px_45px_rgba(23,50,77,0.28)] transition hover:-translate-y-0.5 hover:bg-[#0F2740]"
+        style={{
+          left: `${position.x}px`,
+          top: `${position.y}px`,
+          touchAction: "none",
+          cursor: "grab",
+        }}
       >
         <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/12">
           <Bot size={20} />
@@ -152,7 +276,13 @@ export default function GufoAiWidget() {
       </button>
 
       {open ? (
-        <div className="fixed bottom-24 right-5 z-50 flex h-[min(78vh,680px)] w-[min(92vw,420px)] flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_22px_60px_rgba(15,23,42,0.2)]">
+        <div
+          className="fixed z-50 flex h-[min(78vh,680px)] w-[min(92vw,420px)] flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_22px_60px_rgba(15,23,42,0.2)]"
+          style={{
+            left: `${chatPosition.left}px`,
+            top: `${chatPosition.top}px`,
+          }}
+        >
           <div className="border-b border-slate-200 bg-[#17324D] px-5 py-4 text-white">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
