@@ -1458,7 +1458,6 @@ export async function handlePosReceiptInvoice(req: PosAuthRequest, res: Response
       let totalNetFc = 0;
       let totalVatFc = 0;
       let totalGrossFc = 0;
-      let totalSgrFc = 0;
 
       for (const line of realLines) {
         const qty = toNumber(line.qty);
@@ -1475,7 +1474,6 @@ export async function handlePosReceiptInvoice(req: PosAuthRequest, res: Response
         totalNetFc += lineNetFc;
         totalVatFc += lineVatFc;
         totalGrossFc += lineGrossFc;
-        totalSgrFc += sgrTotalFc;
 
         await tx.salesInvoiceItem.create({
           data: {
@@ -1493,15 +1491,46 @@ export async function handlePosReceiptInvoice(req: PosAuthRequest, res: Response
             lineNetFc,
             lineVatFc,
             lineGrossFc,
-            sgrUnitFc,
-            sgrTotalFc,
+            sgrUnitFc: 0,
+            sgrTotalFc: 0,
             discountAmountRon: 0,
             lineNetRon: lineNetFc,
             lineVatRon: lineVatFc,
             lineGrossRon: lineGrossFc,
-            sgrTotalRon: sgrTotalFc,
+            sgrTotalRon: 0,
           },
         });
+
+        if (sgrUnitFc > 0 && sgrTotalFc > 0) {
+          totalNetFc += sgrTotalFc;
+          totalGrossFc += sgrTotalFc;
+
+          await tx.salesInvoiceItem.create({
+            data: {
+              invoiceId: invoice.id,
+              productId: line.productId,
+              productName: "SGR",
+              productCode: "SGR",
+              uomCode: normalizeText(line.product?.uom?.code || line.product?.uom?.name) || "BUC",
+              vatCategoryCode: "Z",
+              qty,
+              unitPriceFc: sgrUnitFc,
+              vatRateValue: 0,
+              discountPercent: 0,
+              discountAmountFc: 0,
+              lineNetFc: sgrTotalFc,
+              lineVatFc: 0,
+              lineGrossFc: sgrTotalFc,
+              sgrUnitFc: 0,
+              sgrTotalFc: 0,
+              discountAmountRon: 0,
+              lineNetRon: sgrTotalFc,
+              lineVatRon: 0,
+              lineGrossRon: sgrTotalFc,
+              sgrTotalRon: 0,
+            },
+          });
+        }
       }
 
       const updated = await tx.salesInvoice.update({
@@ -1511,14 +1540,14 @@ export async function handlePosReceiptInvoice(req: PosAuthRequest, res: Response
           totalDiscountFc: 0,
           totalVatFc,
           totalGrossFc,
-          totalSgrFc,
-          totalWithSgrFc: totalGrossFc + totalSgrFc,
+          totalSgrFc: 0,
+          totalWithSgrFc: totalGrossFc,
           totalNetRon: totalNetFc,
           totalDiscountRon: 0,
           totalVatRon: totalVatFc,
           totalGrossRon: totalGrossFc,
-          totalSgrRon: totalSgrFc,
-          totalWithSgrRon: totalGrossFc + totalSgrFc,
+          totalSgrRon: 0,
+          totalWithSgrRon: totalGrossFc,
         },
       });
 
