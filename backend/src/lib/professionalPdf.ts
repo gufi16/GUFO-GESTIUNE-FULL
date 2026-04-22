@@ -49,9 +49,10 @@ export function pdfText(value: any) {
   const raw = String(value ?? "").trim()
   if (!raw) return "-"
 
-  const suspiciousScore = (text: string) => (text.match(/[ÃÂÄÅÈËÊÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßâ€œâ€â€žâ€“â€”â€¢�]/g) || []).length
+  const mojibakePattern = /(Ã.|â€|â€“|â€”|â€¢|ï¿½|ÅŸ|Å£|Äƒ|Ä‚|Ã¢|Ã®|Ãș|Ãţ|È™|È›)/
+  const suspiciousScore = (text: string) => (text.match(new RegExp(mojibakePattern.source, "g")) || []).length
   const tryRepair = (text: string) => {
-    if (!/[ÃÂÄÅÈËÊÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßâ�]/.test(text)) return text
+    if (!mojibakePattern.test(text)) return text
     try {
       const candidate = Buffer.from(text, "latin1").toString("utf8")
       if (candidate && suspiciousScore(candidate) < suspiciousScore(text)) {
