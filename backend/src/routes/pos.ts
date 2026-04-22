@@ -1394,6 +1394,7 @@ export async function handlePosReceiptInvoice(req: PosAuthRequest, res: Response
   }
 
   const realLines = sale.items.filter((line) => !isSyntheticSgrSaleLine(line));
+  const sgrLines = sale.items.filter((line) => isSyntheticSgrSaleLine(line));
   if (!realLines.length) {
     return res.status(400).json({ ok: false, error: "Bonul nu are linii valide pentru facturare." });
   }
@@ -1467,8 +1468,6 @@ export async function handlePosReceiptInvoice(req: PosAuthRequest, res: Response
         const lineNetFc = qty * unitPriceNet;
         const lineVatFc = lineNetFc * vatRate / 100;
         const lineGrossFc = lineNetFc + lineVatFc;
-        const sgrUnitFc = line.product?.isSgr ? toNumber(line.product?.sgrValue || 0.5) : 0;
-        const sgrTotalFc = qty * sgrUnitFc;
         const vatCategoryCode = vatRate > 0 ? "S" : "Z";
 
         totalNetFc += lineNetFc;
@@ -1500,37 +1499,43 @@ export async function handlePosReceiptInvoice(req: PosAuthRequest, res: Response
             sgrTotalRon: 0,
           },
         });
+      }
 
-        if (sgrUnitFc > 0 && sgrTotalFc > 0) {
-          totalNetFc += sgrTotalFc;
-          totalGrossFc += sgrTotalFc;
+      for (const line of sgrLines) {
+        const qty = toNumber(line.qty);
+        const unitPriceFc = toNumber(line.unitPrice);
+        const lineNetFc = qty * unitPriceFc;
 
-          await tx.salesInvoiceItem.create({
-            data: {
-              invoiceId: invoice.id,
-              productId: line.productId,
-              productName: "SGR",
-              productCode: "SGR",
-              uomCode: normalizeText(line.product?.uom?.code || line.product?.uom?.name) || "BUC",
-              vatCategoryCode: "Z",
-              qty,
-              unitPriceFc: sgrUnitFc,
-              vatRateValue: 0,
-              discountPercent: 0,
-              discountAmountFc: 0,
-              lineNetFc: sgrTotalFc,
-              lineVatFc: 0,
-              lineGrossFc: sgrTotalFc,
-              sgrUnitFc: 0,
-              sgrTotalFc: 0,
-              discountAmountRon: 0,
-              lineNetRon: sgrTotalFc,
-              lineVatRon: 0,
-              lineGrossRon: sgrTotalFc,
-              sgrTotalRon: 0,
-            },
-          });
-        }
+        if (qty <= 0 || unitPriceFc <= 0 || lineNetFc <= 0) continue;
+
+        totalNetFc += lineNetFc;
+        totalGrossFc += lineNetFc;
+
+        await tx.salesInvoiceItem.create({
+          data: {
+            invoiceId: invoice.id,
+            productId: line.productId,
+            productName: "SGR",
+            productCode: "SGR",
+            uomCode: normalizeText(line.product?.uom?.code || line.product?.uom?.name) || "BUC",
+            vatCategoryCode: "Z",
+            qty,
+            unitPriceFc,
+            vatRateValue: 0,
+            discountPercent: 0,
+            discountAmountFc: 0,
+            lineNetFc,
+            lineVatFc: 0,
+            lineGrossFc: lineNetFc,
+            sgrUnitFc: 0,
+            sgrTotalFc: 0,
+            discountAmountRon: 0,
+            lineNetRon: lineNetFc,
+            lineVatRon: 0,
+            lineGrossRon: lineNetFc,
+            sgrTotalRon: 0,
+          },
+        });
       }
 
       const updated = await tx.salesInvoice.update({
