@@ -6,6 +6,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { decrementStockBalanceStrict } from "../lib/stock";
 import { getPrimaryTenantCompany } from "../lib/companyResolver";
+import { reserveNextNumber } from "../lib/numbering";
 
 console.log("POS ROUTES FILE LOADED");
 
@@ -277,6 +278,18 @@ function startOfDay(value: Date) {
   return date;
 }
 
+function endOfDay(value: Date) {
+  const date = new Date(value);
+  date.setHours(23, 59, 59, 999);
+  return date;
+}
+
+function asDate(value: unknown, fallback: Date) {
+  if (typeof value !== "string" || !value.trim()) return fallback;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? fallback : date;
+}
+
 function buildPublicBaseUrl(req: Request) {
   const configured = normalizeText(process.env.PUBLIC_BASE_URL);
   if (configured) {
@@ -330,6 +343,24 @@ function buildSgrLine(product: any, qty: number) {
     total,
     isSgr,
   };
+}
+
+function isSyntheticSgrSaleLine(line: any) {
+  if (!line?.product?.isSgr) return false;
+  const unitPrice = toNumber(line?.unitPrice);
+  const sgrValue = toNumber(line?.product?.sgrValue || 0.5);
+  return toNumber(line?.vatRate) === 0 && Math.abs(unitPrice - sgrValue) < 0.0001;
+}
+
+function buildInvoiceFromSaleNote(sale: any, userNote?: string) {
+  const parts = [
+    normalizeText(userNote),
+    `Factura emisa dupa bon fiscal ${normalizeText(sale?.receiptNo) || sale?.id || "-"}`,
+    sale?.soldAt ? `Data bon: ${new Date(sale.soldAt).toISOString()}` : "",
+    `[POS-SALE:${sale?.id || ""}]`,
+    sale?.clientSaleId ? `[POS-CLIENT-SALE:${sale.clientSaleId}]` : "",
+  ].filter(Boolean);
+  return parts.join("\n");
 }
 
 function mapCatalogProduct(req: Request, product: any, isVatPayer: boolean) {
@@ -1220,6 +1251,342 @@ const PosSaleSchema = z.object({
   ),
 });
 
+const PosInvoiceFromSaleSchema = z.object({
+  customerId: z.string().trim().optional(),
+  customerName: z.string().trim().min(1, "Numele clientului este obligatoriu."),
+  customerCif: z.string().trim().optional(),
+  customerRegNo: z.string().trim().optional(),
+  customerAddress: z.string().trim().optional(),
+  customerEmail: z.string().trim().optional(),
+  customerPhone: z.string().trim().optional(),
+  note: z.string().trim().optional(),
+  dueDate: z.string().trim().optional(),
+});
+
+router.post("/api/v1/pos/receipts/:saleId/invoice", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
+  const parsed = PosInvoiceFromSaleSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    return res.status(400).json({ ok: false, error: parsed.error.flatten() });
+  }
+
+  const auth = await resolvePosAuthContext(req);
+  if (!auth?.tenantId) {
+    return res.status(401).json({ ok: false, error: "POS neautentificat." });
+  }
+
+  req.auth = auth;
+
+  const tenantId = auth.tenantId;
+  const saleId = normalizeText(req.params.saleId);
+  if (!saleId) {
+    return res.status(400).json({ ok: false, error: "Bonul selectat este invalid." });
+  }
+
+  const company = await getPrimaryTenantCompany(tenantId, {
+    select: {
+      id: true,
+    },
+  });
+
+  const sale = await prisma.sale.findFirst({
+    where: {
+      id: saleId,
+      tenantId,
+      ...(company?.id
+        ? {
+            OR: [{ companyId: company.id }, { companyId: null }],
+          }
+        : {}),
+    },
+    include: {
+      items: {
+        include: {
+          product: {
+            include: {
+              uom: true,
+              vatRate: true,
+            },
+          },
+        },
+        orderBy: { id: "asc" },
+      },
+      location: true,
+    },
+  });
+
+  if (!sale) {
+    return res.status(404).json({ ok: false, error: "Bonul nu a fost gasit in ERP." });
+  }
+
+  const duplicateMarker = `[POS-SALE:${sale.id}]`;
+  const existingInvoice = await prisma.salesInvoice.findFirst({
+    where: {
+      tenantId,
+      companyId: sale.companyId || company?.id || null,
+      note: {
+        contains: duplicateMarker,
+      },
+    },
+    select: {
+      id: true,
+      docNo: true,
+      status: true,
+    },
+  });
+
+  if (existingInvoice) {
+    return res.json({
+      ok: true,
+      duplicated: true,
+      invoiceId: existingInvoice.id,
+      docNo: existingInvoice.docNo,
+      status: existingInvoice.status,
+    });
+  }
+
+  const realLines = sale.items.filter((line) => !isSyntheticSgrSaleLine(line));
+  if (!realLines.length) {
+    return res.status(400).json({ ok: false, error: "Bonul nu are linii valide pentru facturare." });
+  }
+
+  const payload = parsed.data;
+  const normalizedCompanyId = sale.companyId || company?.id || null;
+  const normalizedCustomerId = normalizeText(payload.customerId);
+  const normalizedCustomerCif = normalizeText(payload.customerCif);
+
+  let customer: any = null;
+  if (normalizedCustomerId) {
+    customer = await prisma.customer.findFirst({
+      where: {
+        id: normalizedCustomerId,
+        tenantId,
+        companyId: normalizedCompanyId,
+      },
+    });
+  } else if (normalizedCustomerCif) {
+    customer = await prisma.customer.findFirst({
+      where: {
+        tenantId,
+        companyId: normalizedCompanyId,
+        cif: normalizedCustomerCif,
+      },
+    });
+  }
+
+  const customerName = normalizeText(customer?.name || payload.customerName);
+  if (!customerName) {
+    return res.status(400).json({ ok: false, error: "Numele clientului este obligatoriu." });
+  }
+
+  try {
+    const created = await prisma.$transaction(async (tx) => {
+      const docNo = await reserveNextNumber(tx, tenantId, "invoice");
+      const note = buildInvoiceFromSaleNote(sale, payload.note);
+
+      const invoice = await tx.salesInvoice.create({
+        data: {
+          tenantId,
+          companyId: normalizedCompanyId,
+          locationId: sale.locationId,
+          customerId: customer?.id || null,
+          docNo,
+          docDate: sale.soldAt,
+          dueDate: payload.dueDate ? new Date(payload.dueDate) : sale.soldAt,
+          customerName,
+          customerCode: customer?.code || null,
+          customerCif: normalizeText(customer?.cif || payload.customerCif) || null,
+          customerRegNo: normalizeText(customer?.regNo || payload.customerRegNo) || null,
+          customerAddress: normalizeText(customer?.address || payload.customerAddress) || null,
+          customerEmail: normalizeText(customer?.email || payload.customerEmail) || null,
+          customerPhone: normalizeText(customer?.phone || payload.customerPhone) || null,
+          currency: "RON",
+          fxRate: 1,
+          note,
+          status: "ISSUED",
+        },
+      });
+
+      let totalNetFc = 0;
+      let totalVatFc = 0;
+      let totalGrossFc = 0;
+      let totalSgrFc = 0;
+
+      for (const line of realLines) {
+        const qty = toNumber(line.qty);
+        const unitPriceGross = toNumber(line.unitPrice);
+        const vatRate = toNumber(line.vatRate);
+        const unitPriceNet = vatRate > 0 ? unitPriceGross / (1 + vatRate / 100) : unitPriceGross;
+        const lineNetFc = qty * unitPriceNet;
+        const lineVatFc = lineNetFc * vatRate / 100;
+        const lineGrossFc = lineNetFc + lineVatFc;
+        const sgrUnitFc = line.product?.isSgr ? toNumber(line.product?.sgrValue || 0.5) : 0;
+        const sgrTotalFc = qty * sgrUnitFc;
+        const vatCategoryCode = vatRate > 0 ? "S" : "Z";
+
+        totalNetFc += lineNetFc;
+        totalVatFc += lineVatFc;
+        totalGrossFc += lineGrossFc;
+        totalSgrFc += sgrTotalFc;
+
+        await tx.salesInvoiceItem.create({
+          data: {
+            invoiceId: invoice.id,
+            productId: line.productId,
+            productName: line.product?.name || "Produs",
+            productCode: normalizeText(line.product?.sku) || null,
+            uomCode: normalizeText(line.product?.uom?.code || line.product?.uom?.name) || null,
+            vatCategoryCode,
+            qty,
+            unitPriceFc: unitPriceNet,
+            vatRateValue: vatRate,
+            discountPercent: 0,
+            discountAmountFc: 0,
+            lineNetFc,
+            lineVatFc,
+            lineGrossFc,
+            sgrUnitFc,
+            sgrTotalFc,
+            discountAmountRon: 0,
+            lineNetRon: lineNetFc,
+            lineVatRon: lineVatFc,
+            lineGrossRon: lineGrossFc,
+            sgrTotalRon: sgrTotalFc,
+          },
+        });
+      }
+
+      const updated = await tx.salesInvoice.update({
+        where: { id: invoice.id },
+        data: {
+          totalNetFc,
+          totalDiscountFc: 0,
+          totalVatFc,
+          totalGrossFc,
+          totalSgrFc,
+          totalWithSgrFc: totalGrossFc + totalSgrFc,
+          totalNetRon: totalNetFc,
+          totalDiscountRon: 0,
+          totalVatRon: totalVatFc,
+          totalGrossRon: totalGrossFc,
+          totalSgrRon: totalSgrFc,
+          totalWithSgrRon: totalGrossFc + totalSgrFc,
+        },
+      });
+
+      return updated;
+    });
+
+    return res.status(201).json({
+      ok: true,
+      invoiceId: created.id,
+      docNo: created.docNo,
+      total: Number(created.totalWithSgrRon || 0),
+      duplicated: false,
+    });
+  } catch (error) {
+    return res.status(400).json({
+      ok: false,
+      error: error instanceof Error ? error.message : "Nu am putut emite factura din bon.",
+    });
+  }
+});
+
+router.get("/api/v1/pos/receipts", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
+  const auth = await resolvePosAuthContext(req);
+  if (!auth?.tenantId) {
+    return res.status(401).json({ ok: false, error: "POS neautentificat." });
+  }
+
+  req.auth = auth;
+  const tenantId = auth.tenantId;
+  const company = await getPrimaryTenantCompany(tenantId, {
+    select: { id: true },
+  });
+
+  try {
+    const now = new Date();
+    const dateFrom = asDate(req.query.dateFrom, startOfDay(now));
+    const dateTo = asDate(req.query.dateTo, endOfDay(now));
+
+    const sales = await prisma.sale.findMany({
+      where: {
+        tenantId,
+        companyId: company?.id || null,
+        soldAt: { gte: dateFrom, lte: dateTo },
+      },
+      include: {
+        location: { select: { id: true, name: true, code: true } },
+        terminal: { select: { id: true, label: true, deviceId: true } },
+        items: {
+          include: {
+            product: {
+              select: {
+                id: true,
+                sku: true,
+                name: true,
+                isSgr: true,
+                sgrValue: true,
+                uom: { select: { code: true, name: true } },
+              },
+            },
+          },
+          orderBy: { id: "asc" },
+        },
+      },
+      orderBy: [{ soldAt: "desc" }, { createdAt: "desc" }],
+      take: 500,
+    });
+
+    const items = sales.map((sale) => ({
+      id: sale.id,
+      receiptNo: sale.receiptNo,
+      clientSaleId: sale.clientSaleId,
+      soldAt: sale.soldAt,
+      total: toNumber(sale.total),
+      paymentType: sale.paymentType,
+      cashAmount: toNumber(sale.cashAmount),
+      cardAmount: toNumber(sale.cardAmount),
+      operatorName: sale.operatorName,
+      location: sale.location,
+      terminal: sale.terminal,
+      lines: sale.items
+        .filter((line) => !isSyntheticSgrSaleLine(line))
+        .map((line) => {
+          const qty = toNumber(line.qty);
+          const unitPrice = toNumber(line.unitPrice);
+          return {
+            id: line.id,
+            productId: line.productId,
+            sku: line.product?.sku || "",
+            name: line.product?.name || "Produs",
+            uom: line.product?.uom?.code || line.product?.uom?.name || "",
+            qty,
+            unitPrice,
+            vatRate: line.vatRate,
+            total: qty * unitPrice,
+            isSgr: false,
+          };
+        }),
+    }));
+
+    const totals = items.reduce(
+      (acc, sale) => {
+        acc.total += sale.total;
+        acc.cash += sale.cashAmount;
+        acc.card += sale.cardAmount;
+        acc.count += 1;
+        return acc;
+      },
+      { total: 0, cash: 0, card: 0, count: 0 }
+    );
+
+    return res.json({ ok: true, items, totals });
+  } catch (error) {
+    console.error("POS RECEIPTS LIST ERROR", error);
+    return res.status(500).json({ ok: false, error: "Nu am putut incarca bonurile POS." });
+  }
+});
+
 export async function handlePosSale(req: PosAuthRequest, res: Response) {
   console.log("POS SALE HIT", {
     path: req.path,
@@ -1633,3 +2000,4 @@ router.post("/api/v1/pos/sales", handlePosSale);
 router.post("/api/v1/pos/receipts", handlePosSale);
 
 export default router;
+
