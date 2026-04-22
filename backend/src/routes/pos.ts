@@ -1534,7 +1534,7 @@ router.get("/api/v1/pos/receipts", requirePosAuth, async (req: PosAuthRequest, r
         },
       },
       orderBy: [{ soldAt: "desc" }, { createdAt: "desc" }],
-      take: 500,
+      take: 100,
     });
 
     const items = sales.map((sale) => ({
