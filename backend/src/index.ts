@@ -20,7 +20,7 @@ import { hasSmtpConfig, sendMail } from "./lib/mailer"
 
 import productsRouter from "./routes/products"
 import metaRouter from "./routes/meta"
-import posRouter, { buildCatalogPayload, handlePosDailyClosure, handlePosReceiptInvoice, handlePosReceiptsList, handlePosSale, registerPairedPosSession, resolvePosAuthContext } from "./routes/pos"
+import posRouter, { buildCatalogPayload, handlePosCustomersSearch, handlePosDailyClosure, handlePosReceiptInvoice, handlePosReceiptsList, handlePosSale, registerPairedPosSession, resolvePosAuthContext } from "./routes/pos"
 import stockRouter from "./routes/stock"
 import purchaseRouter from "./routes/purchase"
 import companyRouter, { handleAnafOauthCallback } from "./routes/company"
@@ -1224,6 +1224,11 @@ app.post("/api/v1/pos/receipts", async (req, res) => {
 app.get("/api/v1/pos/receipts", async (req, res) => {
   console.log("🔥 INDEX POS RECEIPTS LIST HIT", req.query)
   return handlePosReceiptsList(req as any, res)
+})
+
+app.get("/api/v1/pos/customers", async (req, res) => {
+  console.log("🔥 INDEX POS CUSTOMERS HIT", req.query)
+  return handlePosCustomersSearch(req as any, res)
 })
 
 app.post("/api/v1/pos/receipts/:saleId/invoice", async (req, res) => {

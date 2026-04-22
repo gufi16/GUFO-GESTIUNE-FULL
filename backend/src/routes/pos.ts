@@ -1263,6 +1263,55 @@ const PosInvoiceFromSaleSchema = z.object({
   dueDate: z.string().trim().optional(),
 });
 
+export async function handlePosCustomersSearch(req: PosAuthRequest, res: Response) {
+  const auth = await resolvePosAuthContext(req);
+  if (!auth?.tenantId) {
+    return res.status(401).json({ ok: false, error: "POS neautentificat." });
+  }
+
+  req.auth = auth;
+  const tenantId = auth.tenantId;
+  const company = await getPrimaryTenantCompany(tenantId, {
+    select: { id: true },
+  });
+  const q = normalizeText(req.query.q);
+
+  const customers = await prisma.customer.findMany({
+    where: {
+      tenantId,
+      companyId: company?.id || null,
+      ...(q
+        ? {
+            OR: [
+              { name: { contains: q, mode: "insensitive" } },
+              { code: { contains: q, mode: "insensitive" } },
+              { cif: { contains: q, mode: "insensitive" } },
+              { phone: { contains: q, mode: "insensitive" } },
+              { email: { contains: q, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+    },
+    orderBy: [{ name: "asc" }],
+    take: q ? 20 : 30,
+    select: {
+      id: true,
+      name: true,
+      code: true,
+      cif: true,
+      regNo: true,
+      address: true,
+      phone: true,
+      email: true,
+    },
+  });
+
+  return res.json({
+    ok: true,
+    customers,
+  });
+}
+
 export async function handlePosReceiptInvoice(req: PosAuthRequest, res: Response) {
   const parsed = PosInvoiceFromSaleSchema.safeParse(req.body || {});
   if (!parsed.success) {
@@ -1590,6 +1639,10 @@ export async function handlePosReceiptsList(req: PosAuthRequest, res: Response) 
     return res.status(500).json({ ok: false, error: "Nu am putut incarca bonurile POS." });
   }
 }
+
+router.get("/api/v1/pos/customers", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
+  return handlePosCustomersSearch(req, res);
+});
 
 router.get("/api/v1/pos/receipts", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
   return handlePosReceiptsList(req, res);
