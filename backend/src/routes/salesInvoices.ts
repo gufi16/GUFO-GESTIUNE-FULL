@@ -636,10 +636,10 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
   y += 8
 
   invoice.items.forEach((item, index) => {
-    const productTitle = pdfText(item.product?.name)
+    const productTitle = pdfText(item.productName || item.product?.name)
     const subline = [
-      item.product?.serialNo ? `Serie: ${pdfText(item.product.serialNo)}` : null,
-      item.product?.ncCode ? `Cod NC: ${pdfText(item.product.ncCode)}` : null,
+      item.productName === "SGR" ? null : item.product?.serialNo ? `Serie: ${pdfText(item.product.serialNo)}` : null,
+      item.productName === "SGR" ? null : item.product?.ncCode ? `Cod NC: ${pdfText(item.product.ncCode)}` : null,
     ].filter(Boolean).join('   ')
     const titleHeight = doc.heightOfString(productTitle, { width: cols[1] - 8 })
     const subHeight = subline ? doc.heightOfString(subline, { width: cols[1] - 8 }) + 3 : 0
@@ -655,7 +655,7 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
     }
     xx += cols[1]
 
-    doc.font(fonts.regular).fontSize(9).fillColor(dark).text(pdfText(item.product?.uom?.code || item.uomCode || 'BUC').toUpperCase(), xx + 2, y, { width: cols[2] - 4, align: 'center' })
+    doc.font(fonts.regular).fontSize(9).fillColor(dark).text(pdfText(item.uomCode || item.product?.uom?.code || 'BUC').toUpperCase(), xx + 2, y, { width: cols[2] - 4, align: 'center' })
     xx += cols[2]
     doc.text(pdfFmt(item.qty, 0), xx + 2, y, { width: cols[3] - 4, align: 'right' })
     xx += cols[3]

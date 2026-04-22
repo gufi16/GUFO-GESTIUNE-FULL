@@ -245,7 +245,7 @@ export default function FacturaPage() {
         ? invoice.items.map((item: any) => ({
             id: item.id || crypto.randomUUID(),
             productId: item.productId || "",
-            search: item.product?.name || "",
+            search: item.productName || item.product?.name || "",
             qty: String(item.qty ?? 1),
             unitPriceFc: String(item.unitPriceFc ?? 0),
             vatRateValue: String(item.vatRateValue ?? item.product?.vatRate?.rate ?? 19),
@@ -933,6 +933,7 @@ export default function FacturaPage() {
         <div className="space-y-3">
           {computedLines.map((line, index) => {
             const product = products.find((item) => item.id === line.productId)
+            const lineLabel = String(line.search || product?.name || "").trim()
             const suggestions = !line.productId ? productMatches(line.search) : []
 
             return (
@@ -948,7 +949,7 @@ export default function FacturaPage() {
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-7">
                   <DocumentField label="Produs">
                     <input value={line.search} onChange={(e) => setLineValue(line.id, { search: e.target.value, productId: "" })} placeholder="Scrie produsul sau SKU..." className={documentInputClass} />
-                    {product ? <div className="pt-1 text-[11px] font-semibold text-teal-700">{product.sku ? `${product.name} (${product.sku})` : product.name}</div> : null}
+                    {lineLabel ? <div className="pt-1 text-[11px] font-semibold text-teal-700">{product?.sku && lineLabel === product.name ? `${lineLabel} (${product.sku})` : lineLabel}</div> : null}
                   </DocumentField>
 
                   <DocumentField label="Cantitate">
