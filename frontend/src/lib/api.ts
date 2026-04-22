@@ -1,3 +1,5 @@
+import { repairDeepStrings, repairText } from "./textRepair"
+
 const envApiBase = (import.meta as any)?.env?.VITE_API_URL?.replace(/\/+$/, "")
 const hostname = typeof window !== "undefined" ? window.location.hostname || "" : ""
 const isLocalHost = /^(localhost|127\.0\.0\.1)$/i.test(hostname)
@@ -82,14 +84,16 @@ export async function api<T = any>(path: string, options: ApiOptions = {}): Prom
 
   const contentType = response.headers.get("content-type") || ""
   const isJson = contentType.includes("application/json")
-  const payload = isJson ? await response.json().catch(() => ({})) : await response.text()
+  const payload = isJson
+    ? repairDeepStrings(await response.json().catch(() => ({})))
+    : repairText(await response.text())
 
   if (!response.ok) {
     if (isJson && payload && typeof payload === "object") {
-      throw new Error((payload as any).error || "Request failed")
+      throw new Error(repairText((payload as any).error || "Request failed"))
     }
 
-    throw new Error(typeof payload === "string" ? payload : "Request failed")
+    throw new Error(typeof payload === "string" ? repairText(payload) : "Request failed")
   }
 
   return payload as T

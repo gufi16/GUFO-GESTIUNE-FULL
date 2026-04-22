@@ -1,6 +1,7 @@
 // @ts-nocheck
 import fs from "fs"
 import PDFDocument from "pdfkit"
+import { repairText } from "./textRepair"
 
 type Fonts = {
   regular: string
@@ -46,25 +47,10 @@ export function registerPdfFonts(doc: PDFKit.PDFDocument): Fonts {
 }
 
 export function pdfText(value: any) {
-  const raw = String(value ?? "").trim()
+  const raw = repairText(value).trim()
   if (!raw) return "-"
 
-  const mojibakePattern = /(Ã.|â€|â€“|â€”|â€¢|ï¿½|ÅŸ|Å£|Äƒ|Ä‚|Ã¢|Ã®|Ãș|Ãţ|È™|È›)/
-  const suspiciousScore = (text: string) => (text.match(new RegExp(mojibakePattern.source, "g")) || []).length
-  const tryRepair = (text: string) => {
-    if (!mojibakePattern.test(text)) return text
-    try {
-      const candidate = Buffer.from(text, "latin1").toString("utf8")
-      if (candidate && suspiciousScore(candidate) < suspiciousScore(text)) {
-        return candidate
-      }
-    } catch {
-      return text
-    }
-    return text
-  }
-
-  const repaired = tryRepair(raw)
+  const repaired = raw
     .replace(/�/g, "")
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, " ")
     .replace(/\s+/g, " ")

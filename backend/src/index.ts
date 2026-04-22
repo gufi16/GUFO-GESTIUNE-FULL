@@ -17,6 +17,7 @@ import { hashSecret, signAccessToken, verifySecret } from "./lib/auth"
 import { writeAuditLogFromRequest, writeExplicitAuditLog } from "./lib/audit"
 import { requireAuth, AuthedRequest } from "./middleware/requireAuth"
 import { hasSmtpConfig, sendMail } from "./lib/mailer"
+import { repairDeepStrings } from "./lib/textRepair"
 
 import productsRouter from "./routes/products"
 import metaRouter from "./routes/meta"
@@ -110,6 +111,11 @@ app.use(express.json({ limit: "10mb" }))
 app.use(cookieParser())
 app.use(morgan("dev"))
 app.use("/uploads", express.static(uploadsDir))
+app.use((req, res, next) => {
+  const originalJson = res.json.bind(res)
+  res.json = ((body: any) => originalJson(repairDeepStrings(body))) as typeof res.json
+  next()
+})
 app.use((req, res, next) => {
   res.on("finish", () => {
     void writeAuditLogFromRequest(req as AuthedRequest, res).catch((error) => {
