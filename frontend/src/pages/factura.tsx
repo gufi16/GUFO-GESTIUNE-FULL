@@ -340,7 +340,7 @@ export default function FacturaPage() {
       return
     }
 
-    await downloadPdfFile(res, `eFactura-${header.docNo || "draft"}.xml`)
+    await downloadPdfFile(res, `Factura-${header.docNo || "draft"}.pdf`)
   }
 
   async function prepareEfactura() {
@@ -383,7 +383,7 @@ export default function FacturaPage() {
       return
     }
 
-    await openPdfInNewTab(res)
+    await downloadPdfFile(res, `eFactura-${header.docNo || "draft"}.xml`)
   }
 
   async function sendEfacturaToAnaf() {

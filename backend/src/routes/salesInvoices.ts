@@ -55,6 +55,17 @@ function safeFilePart(value: string) {
     .replace(/^[-_.]+|[-_.]+$/g, "")
 }
 
+function sanitizeInvoicePdfNote(value: any) {
+  return String(value || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !line.startsWith("[POS-"))
+    .filter((line) => !/^Factura emisa dupa bon fiscal/i.test(line))
+    .filter((line) => !/^Data bon:/i.test(line))
+    .join("\n")
+}
+
 function registerFonts(doc: PDFKit.PDFDocument) {
   const regularCandidates = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -563,14 +574,13 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
   const margin = 34
   const pageWidth = doc.page.width
   const contentWidth = pageWidth - margin * 2
-  const green = '#2e7d32'
   const dark = '#151515'
   const muted = '#667085'
   const line = '#c8d0d8'
-  const lightGreen = '#e4f2dc'
+  const panel = '#f8fafc'
 
   const drawFieldBlock = (title: string, lines: string[], x: number, top: number, width: number) => {
-    doc.font(fonts.bold).fontSize(11).fillColor(green).text(title, x, top, { width })
+    doc.font(fonts.bold).fontSize(11).fillColor(dark).text(title, x, top, { width })
     let yy = top + 18
     lines.filter(Boolean).forEach((entry) => {
       const h = doc.heightOfString(entry, { width, align: 'left' })
@@ -581,17 +591,17 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
   }
 
   let y = margin
-  doc.font(fonts.bold).fontSize(28).fillColor(green).text('FACTURA', margin, y, { width: contentWidth })
+  doc.font(fonts.bold).fontSize(28).fillColor(dark).text('FACTURA', margin, y, { width: contentWidth })
   y += 36
 
   doc.save()
-  doc.rect(0, y, pageWidth, 30).fill(green)
+  doc.roundedRect(margin, y, contentWidth, 34, 10).fillAndStroke(panel, line)
   doc.restore()
-  doc.font(fonts.bold).fontSize(9.5).fillColor('#ffffff').text(`Seria / Numar: ${pdfText(invoice.docNo)}`, margin, y + 9)
-  doc.font(fonts.regular).fontSize(9.5).text(`Data: ${pdfDate(invoice.docDate)}`, margin + 170, y + 9)
-  doc.text(`Scadenta: ${pdfDate(invoice.dueDate || invoice.docDate)}`, margin + 300, y + 9)
-  doc.text(`Moneda: ${pdfText(invoice.currency || 'RON')}`, pageWidth - margin - 120, y + 9, { width: 120, align: 'right' })
-  y += 46
+  doc.font(fonts.bold).fontSize(9.5).fillColor(dark).text(`Seria / Numar: ${pdfText(invoice.docNo)}`, margin + 12, y + 10)
+  doc.font(fonts.regular).fontSize(9.5).text(`Data: ${pdfDate(invoice.docDate)}`, margin + 188, y + 10)
+  doc.text(`Scadenta: ${pdfDate(invoice.dueDate || invoice.docDate)}`, margin + 332, y + 10)
+  doc.text(`Moneda: ${pdfText(invoice.currency || 'RON')}`, pageWidth - margin - 132, y + 10, { width: 120, align: 'right' })
+  y += 50
 
   const colGap = 24
   const blockWidth = (contentWidth - colGap) / 2
@@ -632,7 +642,7 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
     x += cols[index]
   })
   y += 16
-  doc.moveTo(margin, y).lineTo(pageWidth - margin, y).strokeColor(green).lineWidth(1.1).stroke()
+  doc.moveTo(margin, y).lineTo(pageWidth - margin, y).strokeColor(line).lineWidth(1.1).stroke()
   y += 8
 
   invoice.items.forEach((item, index) => {
@@ -673,40 +683,23 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
   const totalsBoxW = 214
   const totalsX = pageWidth - margin - totalsBoxW
   const noteW = contentWidth - totalsBoxW - 16
+  const observations = sanitizeInvoicePdfNote(invoice.note)
 
-  if (invoice.efacturaUploadIndex) {
-    doc.font(fonts.regular).fontSize(8.8).fillColor(dark).text(`Index incarcare SPV: ${pdfText(invoice.efacturaUploadIndex)} din ${pdfDate(invoice.efacturaSentAt || invoice.updatedAt)}.`, margin, y + 2, { width: noteW })
+  if (observations) {
+    doc.font(fonts.bold).fontSize(9.5).fillColor(dark).text('Observatii', margin, y + 2, { width: noteW })
+    doc.font(fonts.regular).fontSize(9).fillColor(dark).text(pdfText(observations), margin, y + 18, { width: noteW })
   }
-  doc.text(`Plata: ${pdfText(invoice.paymentMethod || 'OP')}`, margin, y + 18, { width: noteW })
-  doc.text(`Intocmit de: ${pdfText(invoice.operatorName || company?.name)}`, margin, y + 34, { width: noteW })
 
   doc.save()
-  doc.rect(totalsX, y, totalsBoxW, 80).fill('#f7f9f6').stroke(lightGreen)
+  doc.roundedRect(totalsX, y, totalsBoxW, 80, 10).fillAndStroke('#ffffff', line)
   doc.restore()
   doc.font(fonts.regular).fontSize(9.5).fillColor(dark).text('Total fara TVA', totalsX + 12, y + 12, { width: 110 })
   doc.text(pdfFmt(invoice.totalNetFc), totalsX + 120, y + 12, { width: 82, align: 'right' })
   doc.text('TVA', totalsX + 12, y + 30, { width: 110 })
   doc.text(pdfFmt(invoice.totalVatFc), totalsX + 120, y + 30, { width: 82, align: 'right' })
   doc.font(fonts.bold).fontSize(10.5).text('Total factura', totalsX + 12, y + 52, { width: 110 })
-  doc.font(fonts.bold).fontSize(15).fillColor(green).text(pdfFmt(invoice.totalWithSgrFc || invoice.totalGrossFc), totalsX + 120, y + 48, { width: 82, align: 'right' })
+  doc.font(fonts.bold).fontSize(15).fillColor(dark).text(pdfFmt(invoice.totalWithSgrFc || invoice.totalGrossFc), totalsX + 120, y + 48, { width: 82, align: 'right' })
   y += 106
-
-  doc.moveTo(margin, y).lineTo(pageWidth - margin, y).strokeColor(green).lineWidth(1).stroke()
-  y += 12
-
-  doc.font(fonts.bold).fontSize(9.5).fillColor(dark).text(pdfText(company?.name), margin, y)
-  y += 14
-  const footer = [
-    `Capital social: ${pdfText(company?.shareCapital)}   Telefon: ${pdfText(company?.phone)}   Email: ${pdfText(company?.email || company?.contactEmail)}`,
-    `Banca: ${pdfText(company?.bank)}   IBAN: ${pdfText(company?.iban)}`,
-    'Factura este valabila fara semnatura si stampila, conform art. 319 alin. 29 din Legea 227/2015.',
-  ]
-  doc.font(fonts.regular).fontSize(8.2).fillColor(dark)
-  footer.forEach((lineText) => {
-    doc.text(lineText, margin, y, { width: contentWidth - 120 })
-    y += 12
-  })
-  doc.font(fonts.regular).fontSize(8.2).fillColor(muted).text('Generat din Gufo ERP', pageWidth - margin - 120, y - 12, { width: 120, align: 'right' })
 
   doc.end()
 })

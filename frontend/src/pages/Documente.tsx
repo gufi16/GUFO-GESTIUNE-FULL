@@ -622,6 +622,13 @@ export default function Documente() {
         })
       }
 
+      items = [...items].sort((a: SalesInvoiceListItem, b: SalesInvoiceListItem) => {
+        const aTime = new Date(a.docDate || 0).getTime()
+        const bTime = new Date(b.docDate || 0).getTime()
+        if (aTime !== bTime) return bTime - aTime
+        return String(b.docNo || "").localeCompare(String(a.docNo || ""), "ro", { numeric: true, sensitivity: "base" })
+      })
+
       setInvoiceDocs(items)
     } catch (err) {
       console.error("LOAD SALES INVOICES ERROR", err)
