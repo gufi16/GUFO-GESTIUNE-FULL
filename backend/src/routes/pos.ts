@@ -1263,7 +1263,7 @@ const PosInvoiceFromSaleSchema = z.object({
   dueDate: z.string().trim().optional(),
 });
 
-router.post("/api/v1/pos/receipts/:saleId/invoice", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
+export async function handlePosReceiptInvoice(req: PosAuthRequest, res: Response) {
   const parsed = PosInvoiceFromSaleSchema.safeParse(req.body || {});
   if (!parsed.success) {
     return res.status(400).json({ ok: false, error: parsed.error.flatten() });
@@ -1489,9 +1489,13 @@ router.post("/api/v1/pos/receipts/:saleId/invoice", requirePosAuth, async (req: 
       error: error instanceof Error ? error.message : "Nu am putut emite factura din bon.",
     });
   }
+}
+
+router.post("/api/v1/pos/receipts/:saleId/invoice", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
+  return handlePosReceiptInvoice(req, res);
 });
 
-router.get("/api/v1/pos/receipts", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
+export async function handlePosReceiptsList(req: PosAuthRequest, res: Response) {
   const auth = await resolvePosAuthContext(req);
   if (!auth?.tenantId) {
     return res.status(401).json({ ok: false, error: "POS neautentificat." });
@@ -1585,6 +1589,10 @@ router.get("/api/v1/pos/receipts", requirePosAuth, async (req: PosAuthRequest, r
     console.error("POS RECEIPTS LIST ERROR", error);
     return res.status(500).json({ ok: false, error: "Nu am putut incarca bonurile POS." });
   }
+}
+
+router.get("/api/v1/pos/receipts", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
+  return handlePosReceiptsList(req, res);
 });
 
 export async function handlePosSale(req: PosAuthRequest, res: Response) {
