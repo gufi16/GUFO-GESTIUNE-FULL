@@ -481,18 +481,18 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
   const margin = 36
 
   const drawHeader = () => drawDocumentHero(doc, fonts, {
-    title: 'Not? de transfer',
-    subtitle: 'Transfer ?ntre gestiuni',
+    title: 'Notă de transfer',
+    subtitle: 'Transfer între gestiuni',
     companyName: company?.name || '-',
     companyLines: [
       `CUI: ${pdfText(company?.cui)}`,
       `Reg. com.: ${pdfText(company?.regNo)}`,
-      `Adres?: ${pdfText(company?.address)}`,
+      `Adresă: ${pdfText(company?.address)}`,
       `Email: ${pdfText(company?.email || company?.contactEmail)}`,
       `Telefon: ${pdfText(company?.phone)}`,
     ],
     rightPairs: [
-      { label: 'Num?r', value: pdfText(docData.docNo) },
+      { label: 'Număr', value: pdfText(docData.docNo) },
       { label: 'Data', value: pdfDate(docData.docDate) },
       { label: 'Ora', value: new Date(docData.createdAt).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' }) },
     ],
@@ -508,13 +508,13 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
         title: 'Transfer',
         pairs: [
           { label: 'Din gestiune', value: pdfText(docData.fromLocation.name) },
-          { label: '?n gestiune', value: pdfText(docData.toLocation.name) },
+          { label: 'În gestiune', value: pdfText(docData.toLocation.name) },
           { label: 'Motiv', value: pdfText(docData.reason) },
-          { label: 'Observa?ii', value: pdfText(docData.note) },
+          { label: 'Observații', value: pdfText(docData.note) },
         ],
       },
       {
-        title: 'Transport ?i predare',
+        title: 'Transport și predare',
         pairs: [
           { label: 'Delegat', value: pdfText(docData.delegateName) },
           { label: 'CI / BI', value: pdfText(docData.delegateCi) },
@@ -538,7 +538,7 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
       { label: 'Produs', width: 210, align: 'left' },
       { label: 'UM', width: 44, align: 'center' },
       { label: 'Cant.', width: 58, align: 'right' },
-      { label: 'Pre?', width: 62, align: 'right' },
+      { label: 'Preț', width: 62, align: 'right' },
       { label: 'Valoare', width: 69, align: 'right' },
     ],
     rows: docData.items.map((item, index) => ([
@@ -559,7 +559,7 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
     y,
     width: 220,
     lines: [
-      { label: 'Total cantit??i', value: pdfFmt(docData.totalQty) },
+      { label: 'Total cantități', value: pdfFmt(docData.totalQty) },
       { label: 'Total valoare', value: `${pdfFmt(docData.totalValue)} lei` },
     ],
   })

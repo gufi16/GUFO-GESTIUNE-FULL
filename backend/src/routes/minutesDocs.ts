@@ -71,7 +71,7 @@ function reasonLabel(code?: string | null) {
   if (code === "EXPIRED") return "Expirat"
   if (code === "DAMAGE") return "Deteriorat"
   if (code === "LOSS") return "Pierdere"
-  if (code === "PRICE_UPDATE") return "Schimbare pret"
+  if (code === "PRICE_UPDATE") return "Schimbare preț"
   return "Alt motiv"
 }
 
@@ -86,11 +86,11 @@ function findingLabel(code?: string | null, reasonCode?: string | null) {
 }
 
 function docTypeLabel(type: MinutesDocType) {
-  return type === "PRICE_CHANGE" ? "PROCES VERBAL DE SCHIMBARE PRET" : "PROCES VERBAL DE DETERIORARE"
+  return type === "PRICE_CHANGE" ? "PROCES VERBAL DE SCHIMBARE PREȚ" : "PROCES VERBAL DE DETERIORARE"
 }
 
 function docTypeShortLabel(type: MinutesDocType) {
-  return type === "PRICE_CHANGE" ? "Schimbare pret" : "Deteriorare"
+  return type === "PRICE_CHANGE" ? "Schimbare preț" : "Deteriorare"
 }
 
 function fmtQty(value: any) {
@@ -252,7 +252,7 @@ async function reserveUniqueMinutesDocNo(
     }
   }
 
-  throw new Error("Nu pot genera urmatorul numar de document. Verifica seriile si numerotarea.")
+  throw new Error("Nu pot genera următorul număr de document. Verifică seriile și numerotarea.")
 }
 
 async function assertManualDocNoAvailable(tenantId: string, docNo: string, currentId?: string | null) {
@@ -266,7 +266,7 @@ async function assertManualDocNoAvailable(tenantId: string, docNo: string, curre
   })
 
   if (existing) {
-    throw new Error("Numarul documentului exista deja.")
+    throw new Error("Numărul documentului există deja.")
   }
 }
 
@@ -360,7 +360,7 @@ router.post("/api/v1/minutes-docs/full", async (req: AuthedRequest, res) => {
     const finalDocNo = shouldConsumeAutoNumber ? autoDocNo : rawDocNo
 
     if (!finalDocNo) {
-      return res.status(400).json({ ok: false, error: "Completeaza numarul documentului." })
+    return res.status(400).json({ ok: false, error: "Completează numărul documentului." })
     }
 
     if (!shouldConsumeAutoNumber) {
@@ -420,7 +420,7 @@ router.post("/api/v1/minutes-docs/full", async (req: AuthedRequest, res) => {
 
       if (!productId) throw new Error("Fiecare linie trebuie sa aiba produs.")
       if (type === "DETERIORATION" && qty <= 0) throw new Error("Cantitatea trebuie sa fie mai mare decat 0.")
-      if (type === "PRICE_CHANGE" && newPrice == null) throw new Error("Completeaza pretul nou.")
+    if (type === "PRICE_CHANGE" && newPrice == null) throw new Error("Completează prețul nou.")
 
       await prisma.minutesDocItem.create({
         data: {
@@ -507,12 +507,12 @@ router.get("/api/v1/minutes-docs/:id/pdf", async (req: AuthedRequest, res) => {
     companyLines: [
       `CUI: ${pdfText(company?.cui)}`,
       `Reg. com.: ${pdfText(company?.regNo)}`,
-      `Adres?: ${pdfText(company?.address)}`,
+      `Adresă: ${pdfText(company?.address)}`,
       `Localitate: ${pdfText(company?.city)} / ${pdfText(company?.county)}`,
       `Email: ${pdfText(company?.contactEmail || company?.email)}`,
     ],
     rightPairs: [
-      { label: 'Num?r', value: pdfText(docData.docNo) },
+      { label: 'Număr', value: pdfText(docData.docNo) },
       { label: 'Data', value: pdfDate(docData.docDate) },
       { label: 'Status', value: pdfText(docData.status) },
     ],
@@ -527,18 +527,18 @@ router.get("/api/v1/minutes-docs/:id/pdf", async (req: AuthedRequest, res) => {
       {
         title: 'Detalii document',
         pairs: [
-          { label: 'Loca?ie', value: pdfText(docData.location.name) },
+          { label: 'Locație', value: pdfText(docData.location.name) },
           { label: 'Motiv', value: reasonLabel(docData.reasonCode) },
           { label: 'Tip', value: docTypeShortLabel(docData.type) },
-          { label: 'Cantitate total?', value: pdfFmt(docData.totalQty, 3) },
+          { label: 'Cantitate totală', value: pdfFmt(docData.totalQty, 3) },
         ],
       },
       {
-        title: 'Observa?ii',
+        title: 'Observații',
         pairs: [
-          { label: 'Valoare total?', value: `${pdfFmt(docData.totalValue)} RON` },
-          { label: 'Constatare', value: docData.type === 'DETERIORATION' ? findingLabel(docData.findingCode, docData.reasonCode) : 'Actualizare pre?uri comerciale' },
-          { label: 'Not?', value: pdfText(docData.note) },
+          { label: 'Valoare totală', value: `${pdfFmt(docData.totalValue)} RON` },
+          { label: 'Constatare', value: docData.type === 'DETERIORATION' ? findingLabel(docData.findingCode, docData.reasonCode) : 'Actualizare prețuri comerciale' },
+          { label: 'Notă', value: pdfText(docData.note) },
         ],
       },
     ],
@@ -546,7 +546,7 @@ router.get("/api/v1/minutes-docs/:id/pdf", async (req: AuthedRequest, res) => {
   }) + 18
 
   y = ensurePdfPage(doc, y, 40, margin, drawHeader)
-  doc.font(fonts.bold).fontSize(10).fillColor('#0F172A').text('Pozi?ii document', margin, y)
+  doc.font(fonts.bold).fontSize(10).fillColor('#0F172A').text('Poziții document', margin, y)
   y += 14
 
   const columns = docData.type === 'DETERIORATION'
@@ -562,8 +562,8 @@ router.get("/api/v1/minutes-docs/:id/pdf", async (req: AuthedRequest, res) => {
         { label: '#', width: 28, align: 'center' },
         { label: 'Produs', width: 226, align: 'left' },
         { label: 'UM', width: 46, align: 'center' },
-        { label: 'Pre? vechi', width: 72, align: 'right' },
-        { label: 'Pre? nou', width: 72, align: 'right' },
+        { label: 'Preț vechi', width: 72, align: 'right' },
+        { label: 'Preț nou', width: 72, align: 'right' },
         { label: 'Impact', width: 72, align: 'right' },
       ]
 
