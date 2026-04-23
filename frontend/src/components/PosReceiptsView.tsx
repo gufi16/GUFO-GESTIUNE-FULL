@@ -61,15 +61,8 @@ function paymentLabel(item: PosReceipt) {
   return `Cash ${formatMoneyRo(item.cashAmount || item.total)}`
 }
 
-function visibleFiscalReceiptNo(value: string | null | undefined) {
-  const text = (value || "").trim()
-  if (!text) return null
-  return /^\d{1,20}$/.test(text) ? text : null
-}
-
 function receiptTitle(item: PosReceipt) {
-  const receiptNo = visibleFiscalReceiptNo(item.receiptNo)
-  return receiptNo ? `Bon fiscal #${receiptNo}` : "Bon fiscal"
+  return "Bon fiscal"
 }
 
 export default function PosReceiptsView({ compact = false }: Props) {

@@ -22,7 +22,7 @@ function createConsumptionDocNo() {
 
 /* ======================================================
    POST /api/v1/consumption-docs
-   Creează manual bon de consum și scade stocul
+   Creeaza manual bon de consum si scade stocul
 ====================================================== */
 
 router.post("/api/v1/consumption-docs", requireAuth, async (req: AuthedRequest, res) => {
@@ -35,11 +35,11 @@ router.post("/api/v1/consumption-docs", requireAuth, async (req: AuthedRequest, 
     const itemsRaw = Array.isArray(req.body?.items) ? req.body.items : [];
 
     if (!locationId) {
-      return res.status(400).json({ ok: false, error: "Selectează locația pentru bonul de consum." });
+      return res.status(400).json({ ok: false, error: "Selecteaza locatia pentru bonul de consum." });
     }
 
     if (!itemsRaw.length) {
-      return res.status(400).json({ ok: false, error: "Adaugă cel puțin un produs în bonul de consum." });
+      return res.status(400).json({ ok: false, error: "Adauga cel putin un produs in bonul de consum." });
     }
 
     const normalizedItems = itemsRaw
@@ -51,7 +51,7 @@ router.post("/api/v1/consumption-docs", requireAuth, async (req: AuthedRequest, 
       .filter((item: any) => item.ingredientId && Number.isFinite(item.qty) && item.qty > 0);
 
     if (!normalizedItems.length) {
-      return res.status(400).json({ ok: false, error: "Cantitățile din bonul de consum sunt invalide." });
+      return res.status(400).json({ ok: false, error: "Cantitatile din bonul de consum sunt invalide." });
     }
 
     const location = await prisma.location.findFirst({
@@ -64,7 +64,7 @@ router.post("/api/v1/consumption-docs", requireAuth, async (req: AuthedRequest, 
     });
 
     if (!location) {
-      return res.status(404).json({ ok: false, error: "Locația selectată nu există." });
+      return res.status(404).json({ ok: false, error: "Locatia selectata nu exista." });
     }
 
     const productIds = normalizedItems.map((item: any) => item.ingredientId);
@@ -86,7 +86,7 @@ router.post("/api/v1/consumption-docs", requireAuth, async (req: AuthedRequest, 
     const productMap = new Map(products.map((product: any) => [product.id, product]));
     const missingProductId = normalizedItems.find((item: any) => !productMap.has(item.ingredientId))?.ingredientId;
     if (missingProductId) {
-      return res.status(400).json({ ok: false, error: "Unul dintre produsele selectate nu mai există în nomenclator." });
+      return res.status(400).json({ ok: false, error: "Unul dintre produsele selectate nu mai exista in nomenclator." });
     }
 
     const result = await prisma.$transaction(async (tx) => {
@@ -163,7 +163,7 @@ router.post("/api/v1/consumption-docs", requireAuth, async (req: AuthedRequest, 
 
 /* ======================================================
    GET /api/v1/consumption-docs
-   Listă bonuri de consum
+   Lista bonuri de consum
 ====================================================== */
 
 router.get("/api/v1/consumption-docs", requireAuth, async (req: AuthedRequest, res) => {
@@ -297,7 +297,7 @@ router.get("/api/v1/consumption-docs", requireAuth, async (req: AuthedRequest, r
     console.error("CONSUMPTION DOCS LIST ERROR:", error);
     return res.status(500).json({
       ok: false,
-      error: "Nu am putut încărca bonurile de consum.",
+      error: "Nu am putut incarca bonurile de consum.",
     });
   }
 });
@@ -377,7 +377,7 @@ router.get("/api/v1/consumption-docs/:id", requireAuth, async (req: AuthedReques
     if (!doc) {
       return res.status(404).json({
         ok: false,
-        error: "Bonul de consum nu există.",
+        error: "Bonul de consum nu exista.",
       });
     }
 
@@ -434,7 +434,7 @@ router.get("/api/v1/consumption-docs/:id", requireAuth, async (req: AuthedReques
     console.error("CONSUMPTION DOC DETAIL ERROR:", error);
     return res.status(500).json({
       ok: false,
-      error: "Nu am putut încărca bonul de consum.",
+      error: "Nu am putut incarca bonul de consum.",
     });
   }
 });

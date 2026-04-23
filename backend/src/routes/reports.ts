@@ -312,7 +312,7 @@ router.get("/api/v1/reports/advanced", requireAuth, async (req: AuthedRequest, r
         salesByLocationMap[locKey] = {
           locationId: sale.locationId || null,
           id: sale.locationId || null,
-          name: sale.location?.name || "Fără locație",
+          name: sale.location?.name || "Fara locatie",
           sales: 0,
           total: 0,
           profit: 0,
@@ -452,12 +452,12 @@ router.get("/api/v1/reports/advanced", requireAuth, async (req: AuthedRequest, r
           docId: doc.id,
           docNo: doc.docNo,
           docDate: doc.docDate,
-          location: doc.location?.name || "Fără locație",
+          location: doc.location?.name || "Fara locatie",
           product: item.product?.name || "Produs",
           stock: diff,
           qty: diff,
           um: item.product?.uom?.code || "buc",
-          status: "diferență",
+          status: "diferenta",
           scriptic: toNumber(item.systemQty),
           numarat: toNumber(item.countedQty),
           diferenta: diff,
@@ -480,7 +480,7 @@ router.get("/api/v1/reports/advanced", requireAuth, async (req: AuthedRequest, r
             qty: 0,
             um: item.ingredient?.uom?.code || "buc",
             uomCode: item.ingredient?.uom?.code || "buc",
-            uomName: item.ingredient?.uom?.name || "Bucată",
+            uomName: item.ingredient?.uom?.name || "Bucata",
           }
         }
 
@@ -501,13 +501,13 @@ router.get("/api/v1/reports/advanced", requireAuth, async (req: AuthedRequest, r
         productId: row.productId,
         name: row.product?.name || "Produs",
         product: row.product?.name || "Produs",
-        location: row.location?.name || "Fără locație",
+        location: row.location?.name || "Fara locatie",
         stock: toNumber(row.qty),
         qty: toNumber(row.qty),
         quantity: toNumber(row.qty),
         um: row.product?.uom?.code || "buc",
         uom: row.product?.uom?.code || "buc",
-        status: toNumber(row.qty) <= 0 ? "critic" : "scăzut",
+        status: toNumber(row.qty) <= 0 ? "critic" : "scazut",
         reason: toNumber(row.qty) <= 0 ? "stoc negativ sau zero" : "stoc critic",
       }))
 
@@ -517,14 +517,14 @@ router.get("/api/v1/reports/advanced", requireAuth, async (req: AuthedRequest, r
         productId: row.productId,
         name: row.product?.name || "Produs",
         product: row.product?.name || "Produs",
-        location: row.location?.name || "Fără locație",
+        location: row.location?.name || "Fara locatie",
         stock: toNumber(row.qty),
         qty: toNumber(row.qty),
         quantity: toNumber(row.qty),
         um: row.product?.uom?.code || "buc",
         uom: row.product?.uom?.code || "buc",
-        status: "fără cost",
-        reason: "produs cu stoc dar fără cost",
+        status: "fara cost",
+        reason: "produs cu stoc dar fara cost",
       }))
 
     const stockAlerts = [...lowStockAlerts, ...noCostAlerts, ...inventoryDiffItems]
@@ -547,7 +547,7 @@ router.get("/api/v1/reports/advanced", requireAuth, async (req: AuthedRequest, r
       date: move.createdAt,
       type: move.type,
       product: move.product?.name || "Produs",
-      location: move.location?.name || "Fără locație",
+      location: move.location?.name || "Fara locatie",
       qty: toNumber(move.qty),
       um: move.product?.uom?.code || "buc",
       refType: move.refType || null,
@@ -555,7 +555,7 @@ router.get("/api/v1/reports/advanced", requireAuth, async (req: AuthedRequest, r
     }))
 
     const productClassLabels: Record<string, string> = {
-      MARFA: "Marfă",
+      MARFA: "Marfa",
       PRODUS_FIN: "Produse finite",
       MATERIE_PRIMA: "Materii prime",
       AMBALAJE: "Ambalaje",

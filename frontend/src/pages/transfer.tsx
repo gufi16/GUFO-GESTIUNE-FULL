@@ -384,7 +384,7 @@ export default function TransferPage() {
 
   async function exportPdf() {
     if (!transferId) {
-      setError("Salveaza documentul înainte de export.")
+      setError("Salveaza documentul inainte de export.")
       return
     }
 
@@ -419,7 +419,7 @@ export default function TransferPage() {
       <div className="flex flex-wrap gap-2">
         <a href="/transfer" className={documentButtonSecondaryClass}>
           <ArrowLeft size={16} className="mr-2" />
-          Înapoi la lista
+          Inapoi la lista
         </a>
         <button type="button" className={documentButtonSecondaryClass} onClick={exportPdf} disabled={!transferId || loadingDoc}>
           <FileOutput size={16} className="mr-2" />

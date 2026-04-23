@@ -1369,13 +1369,13 @@ router.post("/api/v1/admin/clients/:id/locations", requireAuth, requireOwner, as
 
   const license = tenant.licenses[0]
   if (!license) {
-    return res.status(404).json({ ok: false, error: "Licență ERP inexistentă" })
+    return res.status(404).json({ ok: false, error: "Licenta ERP inexistenta" })
   }
 
   if (tenant.locations.length >= license.limitLocations) {
     return res.status(400).json({
       ok: false,
-      error: `Clientul a atins limita de locații (${license.limitLocations})`,
+      error: `Clientul a atins limita de locatii (${license.limitLocations})`,
     })
   }
 
@@ -1435,7 +1435,7 @@ router.post("/api/v1/admin/clients/:id/locations", requireAuth, requireOwner, as
   } catch (error: any) {
     return res.status(500).json({
       ok: false,
-      error: error?.message || "Nu am putut crea locația",
+      error: error?.message || "Nu am putut crea locatia",
     })
   }
 })
@@ -1478,16 +1478,16 @@ router.post("/api/v1/admin/locations/:id/devices", requireAuth, requireOwner, as
   })
 
   if (!location) {
-    return res.status(404).json({ ok: false, error: "Locație inexistentă" })
+    return res.status(404).json({ ok: false, error: "Locatie inexistenta" })
   }
 
   const license = location.tenant.licenses[0]
   if (!license) {
-    return res.status(404).json({ ok: false, error: "Licență ERP inexistentă" })
+    return res.status(404).json({ ok: false, error: "Licenta ERP inexistenta" })
   }
 
   if (!license.modPos) {
-    return res.status(400).json({ ok: false, error: "POS nu este activ pe licența clientului" })
+    return res.status(400).json({ ok: false, error: "POS nu este activ pe licenta clientului" })
   }
 
   if (location.tenant.terminals.length >= license.limitTerminals) {
@@ -1578,7 +1578,7 @@ router.patch("/api/v1/admin/clients/:id/license", requireAuth, requireOwner, asy
 
   const license = tenant.licenses[0]
   if (!license) {
-    return res.status(404).json({ ok: false, error: "Licență inexistentă" })
+    return res.status(404).json({ ok: false, error: "Licenta inexistenta" })
   }
 
   const data = parsed.data
@@ -1723,7 +1723,7 @@ router.get("/api/v1/license/validate", requireAuth, async (req: AuthedRequest, r
   })
 
   if (!license) {
-    return res.status(404).json({ ok: false, valid: false, error: "Licență inexistentă" })
+    return res.status(404).json({ ok: false, valid: false, error: "Licenta inexistenta" })
   }
 
   const activeModules = await prisma.tenantModule.findMany({
@@ -1789,7 +1789,7 @@ router.post("/api/v1/pos/validate", async (req, res) => {
     return res.status(404).json({
       ok: false,
       allowed: false,
-      error: "Licență invalidă",
+      error: "Licenta invalida",
     })
   }
 
@@ -1799,7 +1799,7 @@ router.post("/api/v1/pos/validate", async (req, res) => {
     return res.status(404).json({
       ok: false,
       allowed: false,
-      error: "Licență ERP inexistentă",
+      error: "Licenta ERP inexistenta",
     })
   }
 
@@ -1807,7 +1807,7 @@ router.post("/api/v1/pos/validate", async (req, res) => {
     return res.status(403).json({
       ok: false,
       allowed: false,
-      error: "Licența este suspendată",
+      error: "Licenta este suspendata",
     })
   }
 
@@ -1815,7 +1815,7 @@ router.post("/api/v1/pos/validate", async (req, res) => {
     return res.status(403).json({
       ok: false,
       allowed: false,
-      error: "Licența este expirată",
+      error: "Licenta este expirata",
     })
   }
 

@@ -19,7 +19,7 @@ function toPositiveInt(value: any, fallback: number) {
   return intValue > 0 ? intValue : fallback
 }
 
-// stoc global: sumă pe toate locațiile
+// stoc global: suma pe toate locatiile
 router.get("/api/v1/stock/global", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
   const companyId = await requireRequestCompanyId(req)
@@ -79,7 +79,7 @@ router.get("/api/v1/stock/global", async (req: AuthedRequest, res) => {
   res.json({ ok: true, items })
 })
 
-// stoc pe locații
+// stoc pe locatii
 router.get("/api/v1/stock/by-location", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
   const companyId = await requireRequestCompanyId(req)
@@ -130,7 +130,7 @@ router.get("/api/v1/stock/by-location", async (req: AuthedRequest, res) => {
   res.json({ ok: true, items })
 })
 
-// mișcări de stoc cu filtru dată + paginare
+// miscari de stoc cu filtru data + paginare
 router.get("/api/v1/stock/moves", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
   const companyId = await requireRequestCompanyId(req)
@@ -216,7 +216,7 @@ router.get("/api/v1/stock/moves", async (req: AuthedRequest, res) => {
   })
 })
 
-// transfer stoc între locații
+// transfer stoc intre locatii
 router.post("/api/v1/stock/transfer", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
   const companyId = await requireRequestCompanyId(req)
@@ -240,11 +240,11 @@ router.post("/api/v1/stock/transfer", async (req: AuthedRequest, res) => {
   }
 
   if (fromLocationId === toLocationId) {
-    return res.status(400).json({ ok: false, error: "Locația sursă și destinația trebuie să fie diferite." })
+    return res.status(400).json({ ok: false, error: "Locatia sursa si destinatia trebuie sa fie diferite." })
   }
 
   if (qty <= 0) {
-    return res.status(400).json({ ok: false, error: "Cantitatea trebuie să fie mai mare decât 0." })
+    return res.status(400).json({ ok: false, error: "Cantitatea trebuie sa fie mai mare decat 0." })
   }
 
   const [fromLocation, toLocation, product] = await Promise.all([
@@ -261,15 +261,15 @@ router.post("/api/v1/stock/transfer", async (req: AuthedRequest, res) => {
   ])
 
   if (!fromLocation) {
-    return res.status(404).json({ ok: false, error: "Locația sursă nu există." })
+    return res.status(404).json({ ok: false, error: "Locatia sursa nu exista." })
   }
 
   if (!toLocation) {
-    return res.status(404).json({ ok: false, error: "Locația destinație nu există." })
+    return res.status(404).json({ ok: false, error: "Locatia destinatie nu exista." })
   }
 
   if (!product) {
-    return res.status(404).json({ ok: false, error: "Produsul nu există." })
+    return res.status(404).json({ ok: false, error: "Produsul nu exista." })
   }
 
   try {
@@ -289,7 +289,7 @@ router.post("/api/v1/stock/transfer", async (req: AuthedRequest, res) => {
 
       if (availableQty < qty) {
         throw new Error(
-          `Stoc insuficient în locația sursă. Disponibil: ${availableQty.toFixed(2)} ${product.uom?.code || ""}`.trim()
+          `Stoc insuficient in locatia sursa. Disponibil: ${availableQty.toFixed(2)} ${product.uom?.code || ""}`.trim()
         )
       }
 
@@ -346,7 +346,7 @@ router.post("/api/v1/stock/transfer", async (req: AuthedRequest, res) => {
           refId: transferRefId,
           note:
             note ||
-            `Transfer către ${toLocation.name}`
+            `Transfer catre ${toLocation.name}`
         }
       })
 

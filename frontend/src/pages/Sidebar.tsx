@@ -41,13 +41,13 @@ const sections: SidebarSection[] = [
     items: [{ to: "/dashboard", label: "Dashboard", icon: LayoutDashboard }],
   },
   {
-    title: "Operațiuni",
+    title: "Operatiuni",
     collapsible: true,
     icon: FilePlus2,
     items: [
-      { to: "/inregistrare-document", label: "Înregistrare documente", icon: FilePlus2 },
-      { label: "Factură", icon: ScrollText, disabled: true, badge: "în curând" },
-      { to: "/inregistrare-document/nir/new", label: "Notă de recepție", icon: Receipt },
+      { to: "/inregistrare-document", label: "Inregistrare documente", icon: FilePlus2 },
+      { label: "Factura", icon: ScrollText, disabled: true, badge: "in curand" },
+      { to: "/inregistrare-document/nir/new", label: "Nota de receptie", icon: Receipt },
       { to: "/gestiune/inventare", label: "Inventar", icon: ClipboardList },
     ],
   },
@@ -57,8 +57,8 @@ const sections: SidebarSection[] = [
     icon: Warehouse,
     items: [
       { to: "/gestiune/stoc", label: "Stoc", icon: Warehouse },
-      { to: "/transfer", label: "Transfer între gestiuni", icon: ArrowLeftRight },
-      { to: "/gestiune/productie", label: "Producție", icon: Factory },
+      { to: "/transfer", label: "Transfer intre gestiuni", icon: ArrowLeftRight },
+      { to: "/gestiune/productie", label: "Productie", icon: Factory },
       { to: "/documente", label: "Documente", icon: FileText },
       { to: "/rapoarte", label: "Rapoarte", icon: BarChart3 },
       { to: "/rapoarte/export-contabilitate", label: "Export contabilitate", icon: FileSpreadsheet },
@@ -70,7 +70,7 @@ const sections: SidebarSection[] = [
   },
   {
     title: "Configurare",
-    items: [{ to: "/setari", label: "Setări", icon: Settings }],
+    items: [{ to: "/setari", label: "Setari", icon: Settings }],
   },
 ]
 
@@ -211,9 +211,9 @@ export default function Sidebar() {
         <div className="flex h-full w-full flex-col overflow-hidden">
           <div className="border-b border-slate-200/80 px-5 pb-4 pt-5">
             <div className="rounded-[28px] border border-slate-200/80 bg-gradient-to-br from-slate-50 to-white p-4 shadow-sm">
-              <div className="flex items-start gap-3">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/80">
-                  <img src="/gufo-logo.png?v=20260417-2" alt="Gufo" className="h-10 w-10 object-contain" />
+              <div className="flex flex-col items-center text-center">
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/80">
+                  <img src="/gufo-logo.png?v=20260417-2" alt="Gufo" className="h-12 w-12 object-contain" />
                 </div>
 
                 <div className="min-w-0 flex-1">
@@ -222,7 +222,7 @@ export default function Sidebar() {
                   </div>
 
                   <div className="mt-1 text-xs leading-5 text-slate-500">
-                    gestiune modernă pentru retail, horeca și depozit
+                    gestiune moderna pentru retail, horeca si depozit
                   </div>
 
                   <div className="mt-3 flex items-center gap-2">

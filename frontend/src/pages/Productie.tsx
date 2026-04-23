@@ -191,7 +191,7 @@ export default function ProductiePage() {
     }
 
     if (!qty || Number(qty) <= 0) {
-      setError("Cantitatea trebuie sa fie mai mare decât 0.")
+      setError("Cantitatea trebuie sa fie mai mare decat 0.")
       return
     }
 

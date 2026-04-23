@@ -573,7 +573,7 @@ router.get("/api/v1/company", async (req: AuthedRequest, res) => {
   } catch (e: any) {
     return res.status(500).json({
       ok: false,
-      error: e?.message || "Eroare la încărcarea firmei"
+      error: e?.message || "Eroare la incarcarea firmei"
     })
   }
 })
@@ -1295,7 +1295,7 @@ router.get("/api/v1/company/pos-sync-config", async (req: AuthedRequest, res) =>
   } catch (e: any) {
     return res.status(500).json({
       ok: false,
-      error: e?.message || "Eroare la încărcarea setărilor POS"
+      error: e?.message || "Eroare la incarcarea setarilor POS"
     })
   }
 })
@@ -1327,7 +1327,7 @@ router.post("/api/v1/company/pos-sync-config", async (req: AuthedRequest, res) =
   } catch (e: any) {
     return res.status(500).json({
       ok: false,
-      error: e?.message || "Eroare la salvarea setărilor POS"
+      error: e?.message || "Eroare la salvarea setarilor POS"
     })
   }
 })

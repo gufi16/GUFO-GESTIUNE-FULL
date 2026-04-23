@@ -63,10 +63,10 @@ export default function DataTable<T>({
   columns,
   rows,
   rowKey,
-  searchPlaceholder = "Caută în tabel...",
+  searchPlaceholder = "Cauta in tabel...",
   pageSizeOptions = [10, 25, 50],
   initialPageSize = 10,
-  emptyText = "Nu există date."
+  emptyText = "Nu exista date."
 }: DataTableProps<T>) {
   const [query, setQuery] = useState("")
   const [pageSize, setPageSize] = useState(initialPageSize)
@@ -152,7 +152,7 @@ export default function DataTable<T>({
           >
             {pageSizeOptions.map((size) => (
               <option key={size} value={size}>
-                {size} / pagină
+                {size} / pagina
               </option>
             ))}
           </select>
@@ -224,7 +224,7 @@ export default function DataTable<T>({
                 disabled={currentPage === 1}
                 className="rounded-[10px] border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-[#17324D] disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Înapoi
+                Inapoi
               </button>
 
               <button
@@ -233,7 +233,7 @@ export default function DataTable<T>({
                 disabled={currentPage === totalPages}
                 className="rounded-[10px] border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-[#17324D] disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Înainte
+                Inainte
               </button>
             </div>
           </div>

@@ -80,7 +80,7 @@ export default function CategoriiPage() {
       setList(Array.isArray(categoriesData.items) ? categoriesData.items : [])
       setDeps(Array.isArray(depsData.items) ? depsData.items : [])
     } catch {
-      setError("Nu pot încărca categoriile.")
+      setError("Nu pot incarca categoriile.")
     } finally {
       setLoading(false)
     }
@@ -99,7 +99,7 @@ export default function CategoriiPage() {
 
   async function uploadImage(file: File) {
     if (!token) {
-      setError("Nu există token de autentificare. Fă login din nou.")
+      setError("Nu exista token de autentificare. Fa login din nou.")
       return
     }
 
@@ -122,15 +122,15 @@ export default function CategoriiPage() {
       const data = await res.json().catch(() => ({}))
 
       if (!res.ok || !data.ok) {
-        setError(data.error || "Nu am putut încărca imaginea.")
+        setError(data.error || "Nu am putut incarca imaginea.")
         return
       }
 
       setImageUrl(data.imageUrl || "")
       setPreviewImageFailed(false)
-      setMessage("Imaginea categoriei a fost încărcată.")
+      setMessage("Imaginea categoriei a fost incarcata.")
     } catch {
-      setError("Nu am putut încărca imaginea.")
+      setError("Nu am putut incarca imaginea.")
     } finally {
       setUploading(false)
     }
@@ -138,17 +138,17 @@ export default function CategoriiPage() {
 
   async function save() {
     if (!token) {
-      setError("Nu există token de autentificare. Fă login din nou.")
+      setError("Nu exista token de autentificare. Fa login din nou.")
       return
     }
 
     if (!name.trim()) {
-      setError("Completează numele categoriei.")
+      setError("Completeaza numele categoriei.")
       return
     }
 
     if (!departmentId) {
-      setError("Selectează departamentul.")
+      setError("Selecteaza departamentul.")
       return
     }
 
@@ -183,7 +183,7 @@ export default function CategoriiPage() {
         return
       }
 
-      setMessage(isEdit ? "Categoria a fost actualizată." : "Categoria a fost adăugată.")
+      setMessage(isEdit ? "Categoria a fost actualizata." : "Categoria a fost adaugata.")
       resetForm()
       await load()
     } catch {
@@ -206,7 +206,7 @@ export default function CategoriiPage() {
   }
 
   async function remove(id: string) {
-    if (!window.confirm("Ștergi categoria?")) return
+    if (!window.confirm("Stergi categoria?")) return
 
     setError("")
     setMessage("")
@@ -220,7 +220,7 @@ export default function CategoriiPage() {
       const data = await res.json().catch(() => ({}))
 
       if (!res.ok || !data.ok) {
-        setError(data.error || "Nu am putut șterge categoria.")
+        setError(data.error || "Nu am putut sterge categoria.")
         return
       }
 
@@ -228,10 +228,10 @@ export default function CategoriiPage() {
         resetForm()
       }
 
-      setMessage("Categoria a fost ștearsă.")
+      setMessage("Categoria a fost stearsa.")
       await load()
     } catch {
-      setError("Nu am putut șterge categoria.")
+      setError("Nu am putut sterge categoria.")
     }
   }
 
@@ -240,7 +240,7 @@ export default function CategoriiPage() {
       <PageHeader
         badge="nomenclator"
         title="Categorii produse"
-        subtitle="Categorii organizate pe departamente, cu imagine și vizibilitate pentru Android POS."
+        subtitle="Categorii organizate pe departamente, cu imagine si vizibilitate pentru Android POS."
       />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
@@ -254,17 +254,17 @@ export default function CategoriiPage() {
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
 
       <DocumentSection
-        title={editingId ? "Edit categorie" : "Adaugă categorie"}
-        description="Salvezi categoria, apoi poți încărca poza și o vezi imediat în preview."
+        title={editingId ? "Edit categorie" : "Adauga categorie"}
+        description="Salvezi categoria, apoi poti incarca poza si o vezi imediat in preview."
         actions={
           <>
             {editingId ? (
               <button type="button" onClick={resetForm} className={documentButtonSecondaryClass}>
-                Renunță
+                Renunta
               </button>
             ) : null}
             <button type="button" onClick={save} className={documentButtonPrimaryClass} disabled={saving || uploading}>
-              {saving ? "Se salvează..." : editingId ? "Salvează" : "Adaugă"}
+              {saving ? "Se salveaza..." : editingId ? "Salveaza" : "Adauga"}
             </button>
           </>
         }
@@ -288,7 +288,7 @@ export default function CategoriiPage() {
           <DocumentField label="Vizibilitate POS">
             <label className="flex h-12 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-700">
               <input type="checkbox" checked={isVisibleInPos} onChange={(e) => setIsVisibleInPos(e.target.checked)} />
-              <span>Vizibilă în POS</span>
+              <span>Vizibila in POS</span>
             </label>
           </DocumentField>
         </div>
@@ -310,7 +310,7 @@ export default function CategoriiPage() {
                     }}
                   />
                   <ImagePlus size={16} className="mr-2" />
-                  {uploading ? "Se încarcă..." : "Încarcă poză categorie"}
+                  {uploading ? "Se incarca..." : "Incarca poza categorie"}
                 </label>
 
                 {imageUrl.trim() ? (
@@ -322,13 +322,13 @@ export default function CategoriiPage() {
                       setPreviewImageFailed(false)
                     }}
                   >
-                    Șterge poza
+                    Sterge poza
                   </button>
                 ) : null}
               </div>
             ) : (
               <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-4 text-sm text-slate-500">
-                Salvează mai întâi categoria, apoi intră pe edit ca să încarci poza.
+                Salveaza mai intai categoria, apoi intra pe edit ca sa incarci poza.
               </div>
             )}
           </div>
@@ -345,28 +345,28 @@ export default function CategoriiPage() {
               />
             ) : (
               <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
-                Categoria nu are încă poză.
+                Categoria nu are inca poza.
               </div>
             )}
           </div>
         </div>
       </DocumentSection>
 
-      <DocumentSection title="Categorii existente" description="Le vezi pe toate, cu departamentul, vizibilitatea în POS și imaginea asociată.">
+      <DocumentSection title="Categorii existente" description="Le vezi pe toate, cu departamentul, vizibilitatea in POS si imaginea asociata.">
         {loading ? (
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-            Se încarcă...
+            Se incarca...
           </div>
         ) : (
           <div className="overflow-hidden rounded-[24px] border border-slate-200">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-slate-500">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium">Poză</th>
+                  <th className="px-4 py-3 text-left font-medium">Poza</th>
                   <th className="px-4 py-3 text-left font-medium">Categorie</th>
                   <th className="px-4 py-3 text-left font-medium">Departament</th>
-                  <th className="px-4 py-3 text-left font-medium">Vizibilă POS</th>
-                  <th className="px-4 py-3 text-right font-medium">Acțiuni</th>
+                  <th className="px-4 py-3 text-left font-medium">Vizibila POS</th>
+                  <th className="px-4 py-3 text-right font-medium">Actiuni</th>
                 </tr>
               </thead>
               <tbody>
@@ -409,7 +409,7 @@ export default function CategoriiPage() {
                           Edit
                         </button>
                         <button type="button" onClick={() => remove(category.id)} className={documentButtonDangerClass}>
-                          Șterge
+                          Sterge
                         </button>
                       </div>
                     </td>

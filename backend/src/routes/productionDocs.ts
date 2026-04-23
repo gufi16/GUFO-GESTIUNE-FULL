@@ -296,7 +296,7 @@ router.get("/api/v1/production-docs", async (req: AuthedRequest, res) => {
   } catch (e: any) {
     return res.status(500).json({
       ok: false,
-      error: e?.message || "Nu am putut încărca documentele de producție.",
+      error: e?.message || "Nu am putut incarca documentele de productie.",
     })
   }
 })
@@ -344,7 +344,7 @@ router.get("/api/v1/production-docs/:id", async (req: AuthedRequest, res) => {
     if (!doc) {
       return res.status(404).json({
         ok: false,
-        error: "Documentul de producție nu există.",
+        error: "Documentul de productie nu exista.",
       })
     }
 
@@ -394,7 +394,7 @@ router.get("/api/v1/production-docs/:id", async (req: AuthedRequest, res) => {
   } catch (e: any) {
     return res.status(500).json({
       ok: false,
-      error: e?.message || "Nu am putut încărca documentul de producție.",
+      error: e?.message || "Nu am putut incarca documentul de productie.",
     })
   }
 })
@@ -442,7 +442,7 @@ router.get("/api/v1/production-docs/:id/pdf", async (req: AuthedRequest, res) =>
     if (!docData) {
       return res.status(404).json({
         ok: false,
-        error: "Documentul de producție nu există.",
+        error: "Documentul de productie nu exista.",
       })
     }
 
@@ -645,7 +645,7 @@ router.get("/api/v1/production-docs/:id/pdf", async (req: AuthedRequest, res) =>
   } catch (e: any) {
     return res.status(500).json({
       ok: false,
-      error: e?.message || "Nu am putut genera PDF-ul documentului de producție.",
+      error: e?.message || "Nu am putut genera PDF-ul documentului de productie.",
     })
   }
 })

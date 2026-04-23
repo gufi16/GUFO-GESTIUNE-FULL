@@ -111,13 +111,13 @@ export default function NirPrintPage() {
 
   async function loadData() {
     if (!receiptId) {
-      setError("Lipsește id-ul documentului.")
+      setError("Lipseste id-ul documentului.")
       setLoading(false)
       return
     }
 
     if (!token) {
-      setError("Nu există token de autentificare. Fă login din nou.")
+      setError("Nu exista token de autentificare. Fa login din nou.")
       setLoading(false)
       return
     }
@@ -139,13 +139,13 @@ export default function NirPrintPage() {
       const companyData = await companyRes.json().catch(() => ({}))
 
       if (receiptRes.status === 401 || companyRes.status === 401) {
-        setError("Token expirat sau invalid. Fă login din nou.")
+        setError("Token expirat sau invalid. Fa login din nou.")
         setLoading(false)
         return
       }
 
       if (!receiptData.ok || !receiptData.receipt) {
-        setError(receiptData.error || "Nu pot încărca documentul NIR.")
+        setError(receiptData.error || "Nu pot incarca documentul NIR.")
         setLoading(false)
         return
       }
@@ -153,7 +153,7 @@ export default function NirPrintPage() {
       setReceipt(receiptData.receipt)
       setCompany(companyData?.company || null)
     } catch {
-      setError("Nu pot încărca documentul pentru print.")
+      setError("Nu pot incarca documentul pentru print.")
     } finally {
       setLoading(false)
     }
@@ -367,16 +367,16 @@ export default function NirPrintPage() {
       <div className="print-root" style={{ padding: 20, background: "#fff", minHeight: "100vh" }}>
         <div className="no-print" style={{ marginBottom: 18, display: "flex", gap: 10, flexWrap: "wrap" }}>
           <button onClick={printAgain} style={btnPrimary} disabled={loading || !!error || !receipt}>
-            {mode === "pdf" ? "Export PDF" : "Printează"}
+            {mode === "pdf" ? "Export PDF" : "Printeaza"}
           </button>
 
           <button onClick={() => window.close()} style={btnSecondary}>
-            Închide
+            Inchide
           </button>
         </div>
 
         {loading ? (
-          <div style={infoBox}>Se încarcă documentul pentru {mode === "pdf" ? "export PDF" : "print"}...</div>
+          <div style={infoBox}>Se incarca documentul pentru {mode === "pdf" ? "export PDF" : "print"}...</div>
         ) : error ? (
           <div style={errorBox}>{error}</div>
         ) : (
@@ -387,7 +387,7 @@ export default function NirPrintPage() {
                   <div style={companyNameStyle}>{textOrDash(company?.name)}</div>
                   <div><b>CUI:</b> {textOrDash(company?.cui)}</div>
                   <div><b>Nr. Reg. Com.:</b> {textOrDash(company?.regNo)}</div>
-                  <div><b>Adresă:</b> {textOrDash(company?.address)}</div>
+                  <div><b>Adresa:</b> {textOrDash(company?.address)}</div>
                   <div><b>Banca:</b> {textOrDash(company?.bank)}</div>
                   <div><b>IBAN:</b> {textOrDash(company?.iban)}</div>
                   <div><b>Email:</b> {textOrDash(company?.email)}</div>
@@ -397,7 +397,7 @@ export default function NirPrintPage() {
                 <div>
                   <div style={docTitle}>NOTA DE RECEPTIE SI CONSTATARE DE DIFERENTE</div>
                   <div style={docIntro}>
-                    Subsemnații, membrii comisiei de recepție, am procedat la recepționarea valorilor materiale furnizate de <b>{supplierName}</b>, constatându-se următoarele:
+                    Subsemnatii, membrii comisiei de receptie, am procedat la receptionarea valorilor materiale furnizate de <b>{supplierName}</b>, constatandu-se urmatoarele:
                   </div>
                 </div>
               </div>
@@ -414,9 +414,9 @@ export default function NirPrintPage() {
                       <td style={metaValue}>{textOrDash(receipt?.docNo)}</td>
                     </tr>
                     <tr>
-                      <td style={metaLabel}>Locație</td>
+                      <td style={metaLabel}>Locatie</td>
                       <td style={metaValue}>{receipt?.location?.name || "-"}</td>
-                      <td style={metaLabel}>Monedă</td>
+                      <td style={metaLabel}>Moneda</td>
                       <td style={metaValue}>{currency}</td>
                       <td style={metaLabel}>Data document</td>
                       <td style={metaValue}>{formatDate(receipt?.docDate)}</td>
@@ -440,9 +440,9 @@ export default function NirPrintPage() {
                       <th style={{ ...thLeft, width: "28%" }}>Denumirea produselor</th>
                       <th style={{ ...th, width: 62 }}>UM</th>
                       <th style={{ ...th, width: 74 }}>Cant.</th>
-                      <th style={{ ...th, width: 86 }}>Preț unitar</th>
+                      <th style={{ ...th, width: 86 }}>Pret unitar</th>
                       <th style={{ ...th, width: 60 }}>TVA %</th>
-                      <th style={{ ...th, width: 98 }}>Valoare fără TVA</th>
+                      <th style={{ ...th, width: 98 }}>Valoare fara TVA</th>
                       <th style={{ ...th, width: 92 }}>TVA</th>
                       <th style={{ ...th, width: 108 }}>Valoare cu TVA</th>
                       {!isRon && <th style={{ ...th, width: 104 }}>Valoare RON</th>}
@@ -470,7 +470,7 @@ export default function NirPrintPage() {
                     {!rows.length && (
                       <tr>
                         <td style={tdEmpty} colSpan={isRon ? 9 : 10}>
-                          Nu există poziții în document.
+                          Nu exista pozitii in document.
                         </td>
                       </tr>
                     )}
@@ -481,7 +481,7 @@ export default function NirPrintPage() {
               <div style={totalsWrap} className="totals-block">
                 <div style={totalsBox}>
                   <div style={totalsRow}>
-                    <span>Total fără TVA {currency}</span>
+                    <span>Total fara TVA {currency}</span>
                     <b>{formatNumber(receipt?.totalNetFc)}</b>
                   </div>
                   <div style={totalsRow}>
@@ -501,7 +501,7 @@ export default function NirPrintPage() {
                     <>
                       <div style={totalsDivider}></div>
                       <div style={totalsRow}>
-                        <span>Total fără TVA RON</span>
+                        <span>Total fara TVA RON</span>
                         <b>{formatNumber(receipt?.totalNetRon)}</b>
                       </div>
                       <div style={totalsRow}>

@@ -12,9 +12,9 @@ const router = Router()
 
 
 const DEFAULT_UOMS = [
-  { code: "buc", name: "Bucată" },
+  { code: "buc", name: "Bucata" },
   { code: "set", name: "Set" },
-  { code: "portie", name: "Porție" },
+  { code: "portie", name: "Portie" },
   { code: "kg", name: "Kilogram" },
   { code: "g", name: "Gram" },
   { code: "l", name: "Litru" },
@@ -22,11 +22,11 @@ const DEFAULT_UOMS = [
   { code: "bax", name: "Bax" },
   { code: "cutie", name: "Cutie" },
   { code: "sac", name: "Sac" },
-  { code: "lada", name: "Ladă" },
+  { code: "lada", name: "Lada" },
   { code: "pachet", name: "Pachet" },
   { code: "bidon", name: "Bidon" },
-  { code: "sticla", name: "Sticlă" },
-  { code: "doza", name: "Doză" }
+  { code: "sticla", name: "Sticla" },
+  { code: "doza", name: "Doza" }
 ] as const
 
 function buildCompanyScope(companyId: string) {
@@ -125,7 +125,7 @@ const upload = multer({
   fileFilter: (_req, file, cb) => {
     const ok = /^image\/(jpeg|jpg|png|webp|gif)$/i.test(file.mimetype)
     if (!ok) {
-      cb(new Error("Sunt permise doar fișiere imagine: jpg, png, webp, gif."))
+      cb(new Error("Sunt permise doar fisiere imagine: jpg, png, webp, gif."))
       return
     }
     cb(null, true)
@@ -219,14 +219,14 @@ router.post("/api/v1/meta/locations", async (req: AuthedRequest, res) => {
   if (!name) {
     return res.status(400).json({
       ok: false,
-      error: "Numele locației este obligatoriu."
+      error: "Numele locatiei este obligatoriu."
     })
   }
 
   if (!code) {
     return res.status(400).json({
       ok: false,
-      error: "Codul locației este obligatoriu."
+      error: "Codul locatiei este obligatoriu."
     })
   }
 
@@ -244,7 +244,7 @@ router.post("/api/v1/meta/locations", async (req: AuthedRequest, res) => {
     if (existing) {
       return res.status(400).json({
         ok: false,
-        error: "Există deja o locație cu acest nume sau cod."
+        error: "Exista deja o locatie cu acest nume sau cod."
       })
     }
 
@@ -262,7 +262,7 @@ router.post("/api/v1/meta/locations", async (req: AuthedRequest, res) => {
   } catch {
     res.status(400).json({
       ok: false,
-      error: "Nu am putut salva locația."
+      error: "Nu am putut salva locatia."
     })
   }
 })
@@ -279,14 +279,14 @@ router.put("/api/v1/meta/locations/:id", async (req: AuthedRequest, res) => {
   if (!name) {
     return res.status(400).json({
       ok: false,
-      error: "Numele locației este obligatoriu."
+      error: "Numele locatiei este obligatoriu."
     })
   }
 
   if (!code) {
     return res.status(400).json({
       ok: false,
-      error: "Codul locației este obligatoriu."
+      error: "Codul locatiei este obligatoriu."
     })
   }
 
@@ -302,7 +302,7 @@ router.put("/api/v1/meta/locations/:id", async (req: AuthedRequest, res) => {
     if (!current) {
       return res.status(404).json({
         ok: false,
-        error: "Locația nu există."
+        error: "Locatia nu exista."
       })
     }
 
@@ -318,7 +318,7 @@ router.put("/api/v1/meta/locations/:id", async (req: AuthedRequest, res) => {
     if (duplicate) {
       return res.status(400).json({
         ok: false,
-        error: "Există deja o locație cu acest nume sau cod."
+        error: "Exista deja o locatie cu acest nume sau cod."
       })
     }
 
@@ -335,7 +335,7 @@ router.put("/api/v1/meta/locations/:id", async (req: AuthedRequest, res) => {
   } catch {
     res.status(400).json({
       ok: false,
-      error: "Nu am putut actualiza locația."
+      error: "Nu am putut actualiza locatia."
     })
   }
 })
@@ -357,7 +357,7 @@ router.delete("/api/v1/meta/locations/:id", async (req: AuthedRequest, res) => {
     if (!current) {
       return res.status(404).json({
         ok: false,
-        error: "Locația nu există."
+        error: "Locatia nu exista."
       })
     }
 
@@ -369,7 +369,7 @@ router.delete("/api/v1/meta/locations/:id", async (req: AuthedRequest, res) => {
   } catch {
     res.status(400).json({
       ok: false,
-      error: "Locația este utilizată și nu poate fi ștearsă."
+      error: "Locatia este utilizata si nu poate fi stearsa."
     })
   }
 })
@@ -488,7 +488,7 @@ router.put("/api/v1/meta/suppliers/:id", async (req: AuthedRequest, res) => {
     if (!current) {
       return res.status(404).json({
         ok: false,
-        error: "Furnizorul nu există."
+        error: "Furnizorul nu exista."
       })
     }
 
@@ -539,7 +539,7 @@ router.delete("/api/v1/meta/suppliers/:id", async (req: AuthedRequest, res) => {
     if (!current) {
       return res.status(404).json({
         ok: false,
-        error: "Furnizorul nu există."
+        error: "Furnizorul nu exista."
       })
     }
 
@@ -551,7 +551,7 @@ router.delete("/api/v1/meta/suppliers/:id", async (req: AuthedRequest, res) => {
   } catch {
     res.status(400).json({
       ok: false,
-      error: "Furnizorul este utilizat și nu poate fi șters."
+      error: "Furnizorul este utilizat si nu poate fi sters."
     })
   }
 })
@@ -587,7 +587,7 @@ router.post("/api/v1/meta/uom", async (req: AuthedRequest, res) => {
   if (!code || !name) {
     return res.status(400).json({
       ok: false,
-      error: "Codul și denumirea sunt obligatorii."
+      error: "Codul si denumirea sunt obligatorii."
     })
   }
 
@@ -603,7 +603,7 @@ router.post("/api/v1/meta/uom", async (req: AuthedRequest, res) => {
     if (existing) {
       return res.status(400).json({
         ok: false,
-        error: "Această unitate există deja."
+        error: "Aceasta unitate exista deja."
       })
     }
 
@@ -638,7 +638,7 @@ router.put("/api/v1/meta/uom/:id", async (req: AuthedRequest, res) => {
   if (!code || !name) {
     return res.status(400).json({
       ok: false,
-      error: "Codul și denumirea sunt obligatorii."
+      error: "Codul si denumirea sunt obligatorii."
     })
   }
 
@@ -654,7 +654,7 @@ router.put("/api/v1/meta/uom/:id", async (req: AuthedRequest, res) => {
     if (!current) {
       return res.status(404).json({
         ok: false,
-        error: "Unitatea nu există."
+        error: "Unitatea nu exista."
       })
     }
 
@@ -670,7 +670,7 @@ router.put("/api/v1/meta/uom/:id", async (req: AuthedRequest, res) => {
     if (duplicate) {
       return res.status(400).json({
         ok: false,
-        error: "Există deja o unitate cu acest cod."
+        error: "Exista deja o unitate cu acest cod."
       })
     }
 
@@ -709,7 +709,7 @@ router.delete("/api/v1/meta/uom/:id", async (req: AuthedRequest, res) => {
     if (!current) {
       return res.status(404).json({
         ok: false,
-        error: "Unitatea nu există."
+        error: "Unitatea nu exista."
       })
     }
 
@@ -721,7 +721,7 @@ router.delete("/api/v1/meta/uom/:id", async (req: AuthedRequest, res) => {
   } catch {
     res.status(400).json({
       ok: false,
-      error: "Unitatea este utilizată și nu poate fi ștearsă."
+      error: "Unitatea este utilizata si nu poate fi stearsa."
     })
   }
 })
@@ -764,14 +764,14 @@ router.post("/api/v1/meta/vat", async (req: AuthedRequest, res) => {
   if (!Number.isFinite(rate)) {
     return res.status(400).json({
       ok: false,
-      error: "Cota TVA trebuie să fie numerică."
+      error: "Cota TVA trebuie sa fie numerica."
     })
   }
 
   if (req.body?.fiscalCode && !fiscalCode) {
     return res.status(400).json({
       ok: false,
-      error: "Codul fiscal trebuie să fie una dintre valorile A, B, C, D, E, F sau G."
+      error: "Codul fiscal trebuie sa fie una dintre valorile A, B, C, D, E, F sau G."
     })
   }
 
@@ -789,7 +789,7 @@ router.post("/api/v1/meta/vat", async (req: AuthedRequest, res) => {
     if (existing) {
       return res.status(400).json({
         ok: false,
-        error: "Această cotă TVA există deja."
+        error: "Aceasta cota TVA exista deja."
       })
     }
 
@@ -805,7 +805,7 @@ router.post("/api/v1/meta/vat", async (req: AuthedRequest, res) => {
       if (duplicateFiscalCode) {
         return res.status(400).json({
           ok: false,
-          error: `Codul fiscal ${fiscalCode} este deja folosit pe altă cotă TVA.`
+          error: `Codul fiscal ${fiscalCode} este deja folosit pe alta cota TVA.`
         })
       }
     }
@@ -843,14 +843,14 @@ router.put("/api/v1/meta/vat/:id", async (req: AuthedRequest, res) => {
   if (!Number.isFinite(rate)) {
     return res.status(400).json({
       ok: false,
-      error: "Cota TVA trebuie să fie numerică."
+      error: "Cota TVA trebuie sa fie numerica."
     })
   }
 
   if (req.body?.fiscalCode && !fiscalCode) {
     return res.status(400).json({
       ok: false,
-      error: "Codul fiscal trebuie să fie una dintre valorile A, B, C, D, E, F sau G."
+      error: "Codul fiscal trebuie sa fie una dintre valorile A, B, C, D, E, F sau G."
     })
   }
 
@@ -866,7 +866,7 @@ router.put("/api/v1/meta/vat/:id", async (req: AuthedRequest, res) => {
     if (!current) {
       return res.status(404).json({
         ok: false,
-        error: "Cota TVA nu există."
+        error: "Cota TVA nu exista."
       })
     }
 
@@ -884,7 +884,7 @@ router.put("/api/v1/meta/vat/:id", async (req: AuthedRequest, res) => {
     if (duplicate) {
       return res.status(400).json({
         ok: false,
-        error: "Această cotă TVA există deja."
+        error: "Aceasta cota TVA exista deja."
       })
     }
 
@@ -901,7 +901,7 @@ router.put("/api/v1/meta/vat/:id", async (req: AuthedRequest, res) => {
       if (duplicateFiscalCode) {
         return res.status(400).json({
           ok: false,
-          error: `Codul fiscal ${fiscalCode} este deja folosit pe altă cotă TVA.`
+          error: `Codul fiscal ${fiscalCode} este deja folosit pe alta cota TVA.`
         })
       }
     }
@@ -943,7 +943,7 @@ router.delete("/api/v1/meta/vat/:id", async (req: AuthedRequest, res) => {
     if (!current) {
       return res.status(404).json({
         ok: false,
-        error: "Cota TVA nu există."
+        error: "Cota TVA nu exista."
       })
     }
 
@@ -955,7 +955,7 @@ router.delete("/api/v1/meta/vat/:id", async (req: AuthedRequest, res) => {
   } catch {
     res.status(400).json({
       ok: false,
-      error: "Cota TVA este utilizată și nu poate fi ștearsă."
+      error: "Cota TVA este utilizata si nu poate fi stearsa."
     })
   }
 })
@@ -999,7 +999,7 @@ router.post("/api/v1/meta/departments", async (req: AuthedRequest, res) => {
     if (existing) {
       return res.status(400).json({
         ok: false,
-        error: "Departamentul există deja."
+        error: "Departamentul exista deja."
       })
     }
 
@@ -1047,7 +1047,7 @@ router.put("/api/v1/meta/departments/:id", async (req: AuthedRequest, res) => {
     if (!current) {
       return res.status(404).json({
         ok: false,
-        error: "Departamentul nu există."
+        error: "Departamentul nu exista."
       })
     }
 
@@ -1063,7 +1063,7 @@ router.put("/api/v1/meta/departments/:id", async (req: AuthedRequest, res) => {
     if (duplicate) {
       return res.status(400).json({
         ok: false,
-        error: "Există deja un departament cu acest nume."
+        error: "Exista deja un departament cu acest nume."
       })
     }
 
@@ -1098,7 +1098,7 @@ router.delete("/api/v1/meta/departments/:id", async (req: AuthedRequest, res) =>
     if (!current) {
       return res.status(404).json({
         ok: false,
-        error: "Departamentul nu există."
+        error: "Departamentul nu exista."
       })
     }
 
@@ -1110,7 +1110,7 @@ router.delete("/api/v1/meta/departments/:id", async (req: AuthedRequest, res) =>
   } catch {
     res.status(400).json({
       ok: false,
-      error: "Departamentul este folosit și nu poate fi șters."
+      error: "Departamentul este folosit si nu poate fi sters."
     })
   }
 })
@@ -1167,7 +1167,7 @@ router.post("/api/v1/meta/categories", async (req: AuthedRequest, res) => {
       if (!dep) {
         return res.status(404).json({
           ok: false,
-          error: "Departamentul selectat nu există."
+          error: "Departamentul selectat nu exista."
         })
       }
     }
@@ -1227,7 +1227,7 @@ router.put("/api/v1/meta/categories/:id", async (req: AuthedRequest, res) => {
     if (!current) {
       return res.status(404).json({
         ok: false,
-        error: "Categoria nu există."
+        error: "Categoria nu exista."
       })
     }
 
@@ -1243,7 +1243,7 @@ router.put("/api/v1/meta/categories/:id", async (req: AuthedRequest, res) => {
       if (!dep) {
         return res.status(404).json({
           ok: false,
-          error: "Departamentul selectat nu există."
+          error: "Departamentul selectat nu exista."
         })
       }
     }
@@ -1288,7 +1288,7 @@ router.delete("/api/v1/meta/categories/:id", async (req: AuthedRequest, res) => 
     if (!current) {
       return res.status(404).json({
         ok: false,
-        error: "Categoria nu există."
+        error: "Categoria nu exista."
       })
     }
 
@@ -1300,7 +1300,7 @@ router.delete("/api/v1/meta/categories/:id", async (req: AuthedRequest, res) => 
   } catch {
     res.status(400).json({
       ok: false,
-      error: "Categoria este utilizată și nu poate fi ștearsă."
+      error: "Categoria este utilizata si nu poate fi stearsa."
     })
   }
 })

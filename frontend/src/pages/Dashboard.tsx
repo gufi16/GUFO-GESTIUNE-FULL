@@ -737,7 +737,7 @@ export default function Dashboard() {
         </SectionCard>
 
         <SectionCard
-          title="Activitate recentă"
+          title="Activitate recenta"
           action={
             <div className="rounded-full bg-[#FFF1D6] px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-[#B66A00]">
               {lastUpdatedLabel}
@@ -746,10 +746,10 @@ export default function Dashboard() {
         >
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
             {dashboardLoading ? (
-              <div className="text-sm text-slate-500">Se încarcă activitatea recentă...</div>
+              <div className="text-sm text-slate-500">Se incarca activitatea recenta...</div>
             ) : recentActivity.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-                Nu există încă activitate recentă pentru locația selectată.
+                Nu exista inca activitate recenta pentru locatia selectata.
               </div>
             ) : (
               recentActivity.map((item, index) => {

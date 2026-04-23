@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+﻿import { useEffect, useMemo, useState } from "react"
 import {
   BarChart3,
   Building2,
@@ -161,7 +161,7 @@ function normalizeTopProducts(data: any[]): TopProductRow[] {
 
 function normalizeRawConsumption(data: any[]): RawConsumptionRow[] {
   return (Array.isArray(data) ? data : []).map((item: any) => ({
-    name: pickName(item, ["name", "product", "material"], "Materie primă"),
+    name: pickName(item, ["name", "product", "material"], "Materie prima"),
     qty: toNumber(item.qty || item.quantity || item.consumedQty),
     um: pickName(item, ["um", "uom", "unit"], "buc"),
   }))
@@ -174,7 +174,7 @@ function normalizeStockAlerts(data: any[]): StockAlertRow[] {
       name: pickName(item, ["name", "product"], "Produs"),
       stock,
       um: pickName(item, ["um", "uom", "unit"], "buc"),
-      status: String(item.status || (stock <= 5 ? "critic" : "scăzut")).toLowerCase(),
+      status: String(item.status || (stock <= 5 ? "critic" : "scazut")).toLowerCase(),
     }
   })
 }
@@ -187,7 +187,7 @@ function normalizePieData(data: any[]): PieRow[] {
 }
 
 function numeSerieRaport(key: string) {
-  if (key === "sales") return "Vânzări"
+  if (key === "sales") return "Vanzari"
   if (key === "profit") return "Profit"
   if (key === "qty") return "Cantitate"
   if (key === "stock") return "Stoc"
@@ -364,7 +364,7 @@ export default function RapoartePage() {
 
       const normalized = items.map((item: any) => ({
         id: String(item.id || item.locationId || ""),
-        name: String(item.name || item.label || "Locație"),
+        name: String(item.name || item.label || "Locatie"),
       }))
 
       setLocations(normalized)
@@ -396,7 +396,7 @@ export default function RapoartePage() {
       const json = await res.json().catch(() => ({}))
 
       if (!res.ok) {
-        setError(json?.error || "Nu am putut încărca rapoartele.")
+        setError(json?.error || "Nu am putut incarca rapoartele.")
         setData(null)
         return
       }
@@ -404,7 +404,7 @@ export default function RapoartePage() {
       setData(json)
     } catch (e) {
       console.error("reports error", e)
-      setError("Nu am putut încărca rapoartele.")
+      setError("Nu am putut incarca rapoartele.")
       setData(null)
     } finally {
       setLoading(false)
@@ -428,11 +428,11 @@ export default function RapoartePage() {
 
   const locationLabel =
     selectedLocationId === "ALL"
-      ? "toate locațiile"
-      : locations.find((l) => l.id === selectedLocationId)?.name || "locația selectată"
+      ? "toate locatiile"
+      : locations.find((l) => l.id === selectedLocationId)?.name || "locatia selectata"
 
   const criticeCount = stockAlerts.filter((x) => x.status.includes("critic")).length
-  const faraCostCount = stockAlerts.filter((x) => x.status.includes("fără cost")).length
+  const faraCostCount = stockAlerts.filter((x) => x.status.includes("fara cost")).length
   const diferenteCount = stockAlerts.filter((x) => x.status.includes("diferen")).length
 
   const filterActions = (
@@ -450,7 +450,7 @@ export default function RapoartePage() {
       </div>
       <div>
         <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-          Până la
+          Pana la
         </label>
         <input
           type="date"
@@ -475,9 +475,9 @@ export default function RapoartePage() {
   if (loading) {
     return (
       <div className="w-full space-y-3">
-        <PageHeader badge="raportare" title="Rapoarte" subtitle="Se încarcă rapoartele..." />
+        <PageHeader badge="raportare" title="Rapoarte" subtitle="Se incarca rapoartele..." />
         <div className="rounded-[20px] border border-slate-200 bg-white p-5 text-sm text-slate-500 shadow-sm">
-          Se încarcă rapoartele...
+          Se incarca rapoartele...
         </div>
       </div>
     )
@@ -488,7 +488,7 @@ export default function RapoartePage() {
       <PageHeader
         badge="raportare"
         title="Rapoarte"
-        subtitle="Taburi curate, indicatori clari și secțiuni aerisite, pe date live."
+        subtitle="Taburi curate, indicatori clari si sectiuni aerisite, pe date live."
       />
 
       {error ? (
@@ -502,9 +502,9 @@ export default function RapoartePage() {
           <div className="flex flex-wrap gap-2">
             {[
               { key: "CEO", label: "Tablou executiv", icon: ChartNoAxesCombined },
-              { key: "SALES", label: "Vânzări și profit", icon: CircleDollarSign },
+              { key: "SALES", label: "Vanzari si profit", icon: CircleDollarSign },
               { key: "PRODUCTS", label: "Produse", icon: ShoppingBag },
-              { key: "OPERATIONS", label: "Operațional", icon: Layers3 },
+              { key: "OPERATIONS", label: "Operational", icon: Layers3 },
             ].map((item) => {
               const active = tab === item.key
               const Icon = item.icon
@@ -532,14 +532,14 @@ export default function RapoartePage() {
       {tab === "CEO" ? (
         <>
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-4">
-            <KPI title="Vânzări totale" value={money(totals.sales)} subtitle={locationLabel} icon={CircleDollarSign} />
+            <KPI title="Vanzari totale" value={money(totals.sales)} subtitle={locationLabel} icon={CircleDollarSign} />
             <KPI title="Profit estimat" value={money(totals.profit)} subtitle="calculat din costuri" icon={BarChart3} />
-            <KPI title="Marjă medie" value={`${totals.margin.toFixed(1)}%`} subtitle="profit raportat la vânzări" icon={ChartNoAxesCombined} />
-            <KPI title="Locații active" value={String(totals.activeLocations)} subtitle="cu vânzări în interval" icon={Building2} />
+            <KPI title="Marja medie" value={`${totals.margin.toFixed(1)}%`} subtitle="profit raportat la vanzari" icon={ChartNoAxesCombined} />
+            <KPI title="Locatii active" value={String(totals.activeLocations)} subtitle="cu vanzari in interval" icon={Building2} />
           </div>
 
           <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[minmax(0,1.3fr)_minmax(360px,0.7fr)]">
-            <SectionCard title="Performanță pe locații" subtitle="Vânzări și profit pe locațiile tale" actions={filterActions}>
+            <SectionCard title="Performanta pe locatii" subtitle="Vanzari si profit pe locatiile tale" actions={filterActions}>
               {salesByLocation.length ? (
                 <div className="h-[320px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
@@ -548,7 +548,7 @@ export default function RapoartePage() {
                       <XAxis dataKey="name" tickLine={false} axisLine={false} />
                       <YAxis tickLine={false} axisLine={false} width={80} />
                       <Tooltip content={<TooltipGraficBani />} />
-                      <Bar dataKey="sales" radius={[8, 8, 0, 0]} barSize={24} name="Vânzări">
+                      <Bar dataKey="sales" radius={[8, 8, 0, 0]} barSize={24} name="Vanzari">
                         {salesByLocation.map((_, index) => (
                           <Cell key={`sales-${index}`} fill={BAR_COLORS[index % BAR_COLORS.length]} />
                         ))}
@@ -558,11 +558,11 @@ export default function RapoartePage() {
                   </ResponsiveContainer>
                 </div>
               ) : (
-                <EmptyState text="Nu există date pentru locații în intervalul selectat." />
+                <EmptyState text="Nu exista date pentru locatii in intervalul selectat." />
               )}
             </SectionCard>
 
-            <SectionCard title="Structură nomenclator" subtitle="Distribuția categoriilor de produse">
+            <SectionCard title="Structura nomenclator" subtitle="Distributia categoriilor de produse">
               {pieData.length ? (
                 <>
                   <div className="h-[320px] w-full">
@@ -591,7 +591,7 @@ export default function RapoartePage() {
                   </div>
                 </>
               ) : (
-                <EmptyState text="Nu există structură de produse disponibilă pentru afișare." />
+                <EmptyState text="Nu exista structura de produse disponibila pentru afisare." />
               )}
             </SectionCard>
           </div>
@@ -600,7 +600,7 @@ export default function RapoartePage() {
 
       {tab === "SALES" ? (
         <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)]">
-          <SectionCard title="Evoluție vânzări și profit" subtitle="Trend pe intervalul selectat" actions={filterActions}>
+          <SectionCard title="Evolutie vanzari si profit" subtitle="Trend pe intervalul selectat" actions={filterActions}>
             {monthlyTrend.length ? (
               <div className="h-[320px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
@@ -609,17 +609,17 @@ export default function RapoartePage() {
                     <XAxis dataKey="name" tickLine={false} axisLine={false} />
                     <YAxis tickLine={false} axisLine={false} width={80} />
                     <Tooltip content={<TooltipGraficBani />} />
-                    <Bar dataKey="sales" radius={[8, 8, 0, 0]} barSize={22} fill="#2563eb" name="Vânzări" />
+                    <Bar dataKey="sales" radius={[8, 8, 0, 0]} barSize={22} fill="#2563eb" name="Vanzari" />
                     <Bar dataKey="profit" radius={[8, 8, 0, 0]} barSize={22} fill="#14b8a6" name="Profit" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             ) : (
-              <EmptyState text="Nu există evoluție de vânzări pentru intervalul selectat." />
+              <EmptyState text="Nu exista evolutie de vanzari pentru intervalul selectat." />
             )}
           </SectionCard>
 
-          <SectionCard title="Performanță pe locații" subtitle="Marjă și rezultate pe fiecare locație">
+          <SectionCard title="Performanta pe locatii" subtitle="Marja si rezultate pe fiecare locatie">
             {salesByLocation.length ? (
               <div className="space-y-3">
                 {salesByLocation.map((item) => (
@@ -630,7 +630,7 @@ export default function RapoartePage() {
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
                       <div>
-                        <div className="text-slate-500">Vânzări</div>
+                        <div className="text-slate-500">Vanzari</div>
                         <div className="mt-1 font-semibold text-slate-900">{money(item.sales)}</div>
                       </div>
                       <div>
@@ -642,7 +642,7 @@ export default function RapoartePage() {
                 ))}
               </div>
             ) : (
-              <EmptyState text="Nu există locații cu date în intervalul ales." />
+              <EmptyState text="Nu exista locatii cu date in intervalul ales." />
             )}
           </SectionCard>
         </div>
@@ -650,14 +650,14 @@ export default function RapoartePage() {
 
       {tab === "PRODUCTS" ? (
         <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <SectionCard title="Top produse" subtitle="Vânzări și profit pe produs" actions={filterActions}>
+          <SectionCard title="Top produse" subtitle="Vanzari si profit pe produs" actions={filterActions}>
             {topProducts.length ? (
               <div className="space-y-3">
                 {topProducts.map((product) => (
                   <div key={product.name} className="grid grid-cols-[minmax(180px,1.5fr)_100px_130px_130px] items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                     <div className="min-w-0">
                       <div className="truncate text-sm font-semibold text-slate-900">{product.name}</div>
-                      <div className="mt-1 text-xs text-slate-500">{product.qty} bucăți</div>
+                      <div className="mt-1 text-xs text-slate-500">{product.qty} bucati</div>
                     </div>
                     <div className="text-sm text-slate-700">{product.qty}</div>
                     <div className="text-sm text-slate-700">{money(product.sales)}</div>
@@ -666,11 +666,11 @@ export default function RapoartePage() {
                 ))}
               </div>
             ) : (
-              <EmptyState text="Nu există produse de afișat pentru intervalul selectat." />
+              <EmptyState text="Nu exista produse de afisat pentru intervalul selectat." />
             )}
           </SectionCard>
 
-          <SectionCard title="Consum materii prime" subtitle="Cantitățile consumate în interval" actions={filterActions}>
+          <SectionCard title="Consum materii prime" subtitle="Cantitatile consumate in interval" actions={filterActions}>
             {rawConsumption.length ? (
               <>
                 <div className="h-[320px] w-full">
@@ -694,7 +694,7 @@ export default function RapoartePage() {
                     <div key={item.name} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                       <div className="min-w-0">
                         <div className="truncate text-sm font-semibold text-slate-900">{item.name}</div>
-                        <div className="mt-1 text-xs text-slate-500">consum total în interval</div>
+                        <div className="mt-1 text-xs text-slate-500">consum total in interval</div>
                       </div>
                       <div className="text-sm font-semibold text-slate-900">
                         {item.qty} {item.um}
@@ -704,7 +704,7 @@ export default function RapoartePage() {
                 </div>
               </>
             ) : (
-              <EmptyState text="Nu există consum de materii prime în intervalul selectat." />
+              <EmptyState text="Nu exista consum de materii prime in intervalul selectat." />
             )}
           </SectionCard>
         </div>
@@ -712,12 +712,12 @@ export default function RapoartePage() {
 
       {tab === "OPERATIONS" ? (
         <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-          <SectionCard title="Alerte operaționale" subtitle="Zone care cer atenție în fluxul zilnic" actions={filterActions}>
+          <SectionCard title="Alerte operationale" subtitle="Zone care cer atentie in fluxul zilnic" actions={filterActions}>
             <div className="space-y-3">
               {[
                 { label: "Produse cu stoc critic", value: String(criticeCount), icon: TriangleAlert },
-                { label: "Produse fără cost setat", value: String(faraCostCount), icon: PackageSearch },
-                { label: "Diferențe de inventar", value: String(diferenteCount), icon: Layers3 },
+                { label: "Produse fara cost setat", value: String(faraCostCount), icon: PackageSearch },
+                { label: "Diferente de inventar", value: String(diferenteCount), icon: Layers3 },
               ].map((item) => {
                 const Icon = item.icon
                 return (
@@ -735,7 +735,7 @@ export default function RapoartePage() {
             </div>
           </SectionCard>
 
-          <SectionCard title="Situație stocuri" subtitle="Vizualizare rapidă pentru produsele semnalate" actions={filterActions}>
+          <SectionCard title="Situatie stocuri" subtitle="Vizualizare rapida pentru produsele semnalate" actions={filterActions}>
             {stockAlerts.length ? (
               <>
                 <div className="h-[320px] w-full">
@@ -753,7 +753,7 @@ export default function RapoartePage() {
                 <div className="mt-4 max-h-[420px] space-y-3 overflow-y-auto pr-1">
                   {stockAlerts.map((item) => {
                     const isCritic = item.status.includes("critic")
-                    const isNoCost = item.status.includes("fără cost")
+                    const isNoCost = item.status.includes("fara cost")
                     const isDiff = item.status.includes("diferen")
 
                     return (
@@ -761,7 +761,7 @@ export default function RapoartePage() {
                         <div className="min-w-0">
                           <div className="truncate text-sm font-semibold text-slate-900">{item.name}</div>
                           <div className="mt-1 text-xs text-slate-500">
-                            stoc rămas: {item.stock} {item.um}
+                            stoc ramas: {item.stock} {item.um}
                           </div>
                         </div>
                         <span
@@ -784,7 +784,7 @@ export default function RapoartePage() {
                 </div>
               </>
             ) : (
-              <EmptyState text="Nu există alerte operaționale în intervalul selectat." />
+              <EmptyState text="Nu exista alerte operationale in intervalul selectat." />
             )}
           </SectionCard>
         </div>
@@ -792,4 +792,5 @@ export default function RapoartePage() {
     </div>
   )
 }
+
 

@@ -147,7 +147,7 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
     if (!docData) {
       return res.status(404).json({
         ok: false,
-        error: "Documentul de inventar nu a fost găsit."
+        error: "Documentul de inventar nu a fost gasit."
       })
     }
 

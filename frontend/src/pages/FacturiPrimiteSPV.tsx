@@ -433,7 +433,7 @@ export default function FacturiPrimiteSPVPage() {
             title: "Bridge local e-Factura conectat cu succes",
             tone: "success",
             lines: [
-              "Rută testată: bridge local -> sincronizare SPVWS2",
+              "Ruta testata: bridge local -> sincronizare SPVWS2",
               `Bridge URL: ${trimmedBridgeUrl}`,
               `Luna selectata: ${selectedMonth}`,
               `Mediu ANAF: ${bridgeConfig.environment}`,
@@ -535,7 +535,7 @@ export default function FacturiPrimiteSPVPage() {
           title: imported > 0 ? "Sincronizare e-Factura prin bridge finalizata" : "Sincronizare e-Factura fara facturi noi",
           tone: imported > 0 ? "success" : "error",
           lines: [
-            "Rută testată: bridge local -> listaMesaje + descarcare + import Gufo",
+            "Ruta testata: bridge local -> listaMesaje + descarcare + import Gufo",
             `Bridge URL: ${trimmedBridgeUrl}`,
             `Luna selectata: ${selectedMonth}`,
             `Mediu ANAF: ${bridgeConfig.environment}`,
@@ -544,7 +544,7 @@ export default function FacturiPrimiteSPVPage() {
             `Facturi gasite: ${invoiceMessages.length}`,
             `Facturi noi de importat: ${newInvoiceMessages.length}`,
             `Facturi importate: ${imported}`,
-            `Mesaje sărite/eroare: ${skipped}`,
+            `Mesaje sarite/eroare: ${skipped}`,
             `Ultima factura importata: ${lastImportedInvoiceNo}`,
             ...(importErrors.length ? [`Prima eroare: ${importErrors[0]}`] : []),
           ],
@@ -677,7 +677,7 @@ export default function FacturiPrimiteSPVPage() {
 
         if (!bridgeData?.ok || !bridgeData?.response?.ok) {
           const lines = [
-            `Rută testată: bridge local -> listaMesaje SPVWS2`,
+            `Ruta testata: bridge local -> listaMesaje SPVWS2`,
             `Bridge URL: ${trimmedBridgeUrl}`,
             `Luna selectata: ${selectedMonth}`,
             `Final URL: ${bridgeData?.response?.finalUrl || "-"}`,
@@ -702,11 +702,11 @@ export default function FacturiPrimiteSPVPage() {
           title: "Bridge local e-Factura conectat cu succes",
           tone: "success",
           lines: [
-            "Rută testată: bridge local -> listaMesaje SPVWS2",
+            "Ruta testata: bridge local -> listaMesaje SPVWS2",
             `Bridge URL: ${trimmedBridgeUrl}`,
             `Luna selectata: ${selectedMonth}`,
             `HTTP status SPV: ${bridgeData?.response?.status ?? "-"}`,
-            `Mesaje găsite: ${messages.length}`,
+            `Mesaje gasite: ${messages.length}`,
             `Primul tip mesaj: ${firstMessage?.tip || "-"}`,
             `Primul ID mesaj: ${firstMessage?.id || "-"}`,
             `Serial certificat: ${bridgeData?.certificate?.serialNumber || "-"}`,
@@ -734,28 +734,28 @@ export default function FacturiPrimiteSPVPage() {
       const summary = data?.summary || {}
       const diagnostics = data?.diagnostics || {}
       const lines = [
-        `Rută testată: listaMesaje SPVWS2`,
+        `Ruta testata: listaMesaje SPVWS2`,
         `CUI: ${diagnostics?.cui || "-"}`,
-        `Fișier certificat pe server: ${diagnostics?.hasCertificateFile ? "Da" : "Nu"}`,
-        `Parolă certificat: ${diagnostics?.hasCertificatePassword ? "Da" : "Nu"}`,
+        `Fisier certificat pe server: ${diagnostics?.hasCertificateFile ? "Da" : "Nu"}`,
+        `Parola certificat: ${diagnostics?.hasCertificatePassword ? "Da" : "Nu"}`,
         `HTTP status: ${data?.response?.status ?? "-"}`,
       ]
       if (summary?.error) {
         setSpvTestResult({
           ok: false,
-          title: "Test SPVWS2 cu răspuns de eroare",
+          title: "Test SPVWS2 cu raspuns de eroare",
           tone: "error",
-          lines: [...lines, `Răspuns SPV: ${summary.error}`],
+          lines: [...lines, `Raspuns SPV: ${summary.error}`],
         })
         setMessage(`SPVWS2 a raspuns: ${summary.error}`)
       } else {
         setSpvTestResult({
           ok: true,
-          title: "Test SPVWS2 reușit",
+          title: "Test SPVWS2 reusit",
           tone: "success",
           lines: [
             ...lines,
-            `Mesaje găsite: ${summary?.messageCount ?? 0}`,
+            `Mesaje gasite: ${summary?.messageCount ?? 0}`,
             `Primul tip mesaj: ${summary?.firstMessageType || "-"}`,
             `Primul ID mesaj: ${summary?.firstMessageId || "-"}`,
           ],
@@ -772,10 +772,10 @@ export default function FacturiPrimiteSPVPage() {
         title: "Test SPVWS2 blocat",
         tone: "error",
         lines: [
-          "Rută testată: listaMesaje SPVWS2",
+          "Ruta testata: listaMesaje SPVWS2",
           `CUI: ${spvStatus?.diagnostics?.cui || "-"}`,
-          `Fișier certificat pe server: ${spvStatus?.diagnostics?.hasCertificateFile ? "Da" : "Nu"}`,
-          `Parolă certificat: ${spvStatus?.diagnostics?.hasCertificatePassword ? "Da" : "Nu"}`,
+          `Fisier certificat pe server: ${spvStatus?.diagnostics?.hasCertificateFile ? "Da" : "Nu"}`,
+          `Parola certificat: ${spvStatus?.diagnostics?.hasCertificatePassword ? "Da" : "Nu"}`,
           missingServerCert
             ? "Blocaj curent: serverul nu are un certificat client utilizabil pentru SPVWS2."
             : `Blocaj curent: ${err?.message || "Nu am putut testa listaMesaje din SPV clasic."}`,

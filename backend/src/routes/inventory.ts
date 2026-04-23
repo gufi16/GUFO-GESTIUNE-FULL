@@ -59,11 +59,11 @@ async function validateInventoryPayload(
   items: Array<{ productId: string; countedQty: number }>
 ): Promise<InventoryValidationError | InventoryValidationSuccess> {
   if (!locationId) {
-    return { ok: false, status: 400, error: "Locația este obligatorie." }
+    return { ok: false, status: 400, error: "Locatia este obligatorie." }
   }
 
   if (!items.length) {
-    return { ok: false, status: 400, error: "Adaugă cel puțin un produs în inventar." }
+    return { ok: false, status: 400, error: "Adauga cel putin un produs in inventar." }
   }
 
   const location = await prisma.location.findFirst({
@@ -75,16 +75,16 @@ async function validateInventoryPayload(
   })
 
   if (!location) {
-    return { ok: false, status: 404, error: "Locația nu există." }
+    return { ok: false, status: 404, error: "Locatia nu exista." }
   }
 
   for (const row of items) {
     if (!row.productId) {
-      return { ok: false, status: 400, error: "Există produse fără ID în document." }
+      return { ok: false, status: 400, error: "Exista produse fara ID in document." }
     }
 
     if (row.countedQty < 0) {
-      return { ok: false, status: 400, error: "Cantitatea numărată nu poate fi negativă." }
+      return { ok: false, status: 400, error: "Cantitatea numarata nu poate fi negativa." }
     }
   }
 
@@ -94,7 +94,7 @@ async function validateInventoryPayload(
     return {
       ok: false,
       status: 400,
-      error: "Nu poți adăuga același produs de mai multe ori în același inventar."
+      error: "Nu poti adauga acelasi produs de mai multe ori in acelasi inventar."
     }
   }
 
@@ -117,7 +117,7 @@ async function validateInventoryPayload(
     return {
       ok: false,
       status: 400,
-      error: "Unul sau mai multe produse nu există."
+      error: "Unul sau mai multe produse nu exista."
     }
   }
 
@@ -357,7 +357,7 @@ router.get("/api/v1/inventory-docs", async (req: AuthedRequest, res) => {
     console.error("INVENTORY DOCS LIST ERROR:", error)
     return res.status(500).json({
       ok: false,
-      error: "Nu am putut încărca documentele de inventar."
+      error: "Nu am putut incarca documentele de inventar."
     })
   }
 })
@@ -373,7 +373,7 @@ router.get("/api/v1/inventory-docs/:id", async (req: AuthedRequest, res) => {
     if (!item) {
       return res.status(404).json({
         ok: false,
-        error: "Documentul de inventar nu există."
+        error: "Documentul de inventar nu exista."
       })
     }
 
@@ -385,7 +385,7 @@ router.get("/api/v1/inventory-docs/:id", async (req: AuthedRequest, res) => {
     console.error("INVENTORY DOC DETAILS ERROR:", error)
     return res.status(500).json({
       ok: false,
-      error: "Nu am putut încărca documentul de inventar."
+      error: "Nu am putut incarca documentul de inventar."
     })
   }
 })
@@ -476,14 +476,14 @@ router.put("/api/v1/inventory-docs/:id", async (req: AuthedRequest, res) => {
     if (!existingDoc) {
       return res.status(404).json({
         ok: false,
-        error: "Documentul de inventar nu există."
+        error: "Documentul de inventar nu exista."
       })
     }
 
     if (existingDoc.status !== "DRAFT") {
       return res.status(400).json({
         ok: false,
-        error: "Doar inventarele în lucru pot fi modificate."
+        error: "Doar inventarele in lucru pot fi modificate."
       })
     }
 
@@ -570,7 +570,7 @@ router.post("/api/v1/inventory-docs/:id/finalize", async (req: AuthedRequest, re
     if (!doc) {
       return res.status(404).json({
         ok: false,
-        error: "Documentul de inventar nu există."
+        error: "Documentul de inventar nu exista."
       })
     }
 
@@ -672,14 +672,14 @@ router.post("/api/v1/inventory-docs/:id/cancel", async (req: AuthedRequest, res)
     if (!doc) {
       return res.status(404).json({
         ok: false,
-        error: "Inventarul nu există."
+        error: "Inventarul nu exista."
       })
     }
 
     if (doc.status !== "DRAFT") {
       return res.status(400).json({
         ok: false,
-        error: "Doar inventarele în lucru pot fi anulate."
+        error: "Doar inventarele in lucru pot fi anulate."
       })
     }
 

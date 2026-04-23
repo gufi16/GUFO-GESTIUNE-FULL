@@ -235,7 +235,7 @@ export default function BonConsumNou() {
 
   async function saveDoc() {
     if (!locationId) {
-      setError("Selectează locația.")
+      setError("Selecteaza locatia.")
       return
     }
 
@@ -245,7 +245,7 @@ export default function BonConsumNou() {
     }))
 
     if (!lines.length) {
-      setError("Adaugă cel puțin un produs în bonul de consum.")
+      setError("Adauga cel putin un produs in bonul de consum.")
       return
     }
 
@@ -288,34 +288,34 @@ export default function BonConsumNou() {
       .slice(0, 10)
   }, [products, query])
 
-  const selectedLocationName = locations.find((location) => location.id === locationId)?.name || "Locația selectată"
+  const selectedLocationName = locations.find((location) => location.id === locationId)?.name || "Locatia selectata"
   const totalProducts = items.length
   const totalQty = items.reduce((sum, item) => sum + item.qty, 0)
   const lowStockItems = items.filter((item) => item.qty > item.stock).length
 
   return (
     <div className="w-full space-y-4">
-      <PageHeader badge="document" title="Bon de consum" subtitle="Consum manual rapid, fără rețetar." />
+      <PageHeader badge="document" title="Bon de consum" subtitle="Consum manual rapid, fara retetar." />
 
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-        <DocumentMetric title="Poziții" value={totalProducts} tone="slate" />
+        <DocumentMetric title="Pozitii" value={totalProducts} tone="slate" />
         <DocumentMetric title="Cantitate" value={totalQty.toLocaleString("ro-RO")} tone="blue" />
         <DocumentMetric title="Peste stoc" value={lowStockItems} tone="amber" />
       </div>
 
       <div className="grid grid-cols-1 items-start gap-3 2xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-3">
-          <DocumentSection title="Adaugă produse">
+          <DocumentSection title="Adauga produse">
             <div className="relative">
               <Search size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 ref={searchInputRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder={loadingProducts ? "Se încarcă produsele..." : "Caută după nume, cod sau cod de bare"}
+                placeholder={loadingProducts ? "Se incarca produsele..." : "Cauta dupa nume, cod sau cod de bare"}
                 className={`${documentInputClass} pl-11`}
               />
             </div>
@@ -323,7 +323,7 @@ export default function BonConsumNou() {
             {query ? (
               <div className="mt-2 max-h-[180px] overflow-y-auto rounded-[14px] border border-slate-200 bg-slate-50 p-2">
                 {loadingProducts ? (
-                  <div className="px-3 py-6 text-center text-sm text-slate-500">Se încarcă produsele...</div>
+                  <div className="px-3 py-6 text-center text-sm text-slate-500">Se incarca produsele...</div>
                 ) : filteredProducts.length ? (
                   <div className="space-y-2">
                     {filteredProducts.map((product) => {
@@ -338,28 +338,28 @@ export default function BonConsumNou() {
                           <div className="min-w-0">
                             <div className="truncate text-sm font-semibold text-slate-900">{product.name}</div>
                             <div className="mt-0.5 text-xs text-slate-500">
-                              {product.code || product.sku || product.barcode || "fără cod"} · stoc {realStock} {pickUnit(product)}
+                              {product.code || product.sku || product.barcode || "fara cod"} · stoc {realStock} {pickUnit(product)}
                             </div>
                           </div>
                           <span className="ml-3 inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700">
-                            adaugă
+                            adauga
                           </span>
                         </button>
                       )
                     })}
                   </div>
                 ) : (
-                  <div className="px-3 py-6 text-center text-sm text-slate-500">Nu am găsit produse pentru căutarea ta.</div>
+                  <div className="px-3 py-6 text-center text-sm text-slate-500">Nu am gasit produse pentru cautarea ta.</div>
                 )}
               </div>
             ) : (
               <div className="mt-2 rounded-[14px] border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
-                Începe să scrii și produsele apar aici, fără să împingă pagina în jos.
+                Incepe sa scrii si produsele apar aici, fara sa impinga pagina in jos.
               </div>
             )}
           </DocumentSection>
 
-          <DocumentSection title="Poziții bon de consum">
+          <DocumentSection title="Pozitii bon de consum">
             <div className="max-h-[460px] overflow-y-auto pr-1">
               {items.length ? (
                 <div className="space-y-2">
@@ -368,7 +368,7 @@ export default function BonConsumNou() {
                     <div>Stoc</div>
                     <div>Cantitate</div>
                     <div>UM</div>
-                    <div>Acțiune</div>
+                    <div>Actiune</div>
                   </div>
 
                   {items.map((item) => (
@@ -376,7 +376,7 @@ export default function BonConsumNou() {
                       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.8fr)_110px_130px_110px_110px] lg:items-center">
                         <div className="min-w-0">
                           <div className="truncate text-sm font-semibold text-slate-900">{item.name}</div>
-                          <div className="mt-0.5 text-xs text-slate-500">{item.code || "fără cod"}</div>
+                          <div className="mt-0.5 text-xs text-slate-500">{item.code || "fara cod"}</div>
                         </div>
 
                         <div className="rounded-[12px] bg-white px-3 py-2.5 text-sm font-semibold text-slate-900">
@@ -406,7 +406,7 @@ export default function BonConsumNou() {
                         <div>
                           <button type="button" onClick={() => removeItem(item.productId)} className={documentButtonDangerClass}>
                             <Trash2 size={16} className="mr-2" />
-                            Șterge
+                            Sterge
                           </button>
                         </div>
                       </div>
@@ -415,8 +415,8 @@ export default function BonConsumNou() {
                 </div>
               ) : (
                 <div className="rounded-[14px] border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center">
-                  <div className="text-sm font-semibold text-slate-700">Nu ai produse în document</div>
-                  <div className="mt-1 text-sm text-slate-500">Caută un produs sus și apasă direct pe el pentru adăugare.</div>
+                  <div className="text-sm font-semibold text-slate-700">Nu ai produse in document</div>
+                  <div className="mt-1 text-sm text-slate-500">Cauta un produs sus si apasa direct pe el pentru adaugare.</div>
                 </div>
               )}
             </div>
@@ -425,7 +425,7 @@ export default function BonConsumNou() {
 
         <DocumentSection title="Detalii document">
           <div className="space-y-3">
-            <DocumentField label="Locație">
+            <DocumentField label="Locatie">
               <select value={locationId} onChange={(e) => setLocation(e.target.value)} className={documentInputClass}>
                 {locations.map((location) => (
                   <option key={location.id} value={location.id}>{location.name}</option>
@@ -433,27 +433,27 @@ export default function BonConsumNou() {
               </select>
             </DocumentField>
 
-            <DocumentField label="Observații">
+            <DocumentField label="Observatii">
               <textarea
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 rows={4}
-                placeholder="Poți nota explicații pentru consumul manual."
+                placeholder="Poti nota explicatii pentru consumul manual."
                 className={documentTextareaClass}
               />
             </DocumentField>
 
             <InlineNotice>
-              Locație activă: <span className="font-semibold">{selectedLocationName}</span>
+              Locatie activa: <span className="font-semibold">{selectedLocationName}</span>
             </InlineNotice>
 
             <div className="flex flex-col gap-2">
               <button type="button" onClick={saveDoc} disabled={saving} className={documentButtonPrimaryClass}>
                 <Check size={16} className="mr-2" />
-                {saving ? "Se salvează..." : "Salvează bonul de consum"}
+                {saving ? "Se salveaza..." : "Salveaza bonul de consum"}
               </button>
               <button type="button" onClick={() => navigate("/inregistrare-document")} className={documentButtonSecondaryClass}>
-                Înapoi la documente
+                Inapoi la documente
               </button>
             </div>
           </div>

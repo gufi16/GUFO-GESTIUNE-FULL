@@ -1,31 +1,48 @@
-const MOJIBAKE_PATTERN = /(Ã.|â€|â€“|â€”|â€¢|ï¿½|ÅŸ|Å£|Äƒ|Ä‚|Ã¢|Ã®|Ãș|Ãţ|È™|È›)/
+const MOJIBAKE_PATTERN = /(Ãƒ.|Ã¢â‚¬|Ã¢â‚¬â€œ|Ã¢â‚¬â€|Ã¢â‚¬Â¢|Ã¯Â¿Â½|Ã…Å¸|Ã…Â£|Ã„Æ’|Ã„â€š|ÃƒÂ¢|ÃƒÂ®|ÃƒÈ™|ÃƒÅ£|Ãˆâ„¢|Ãˆâ€º)/
 
 const MANUAL_REPLACEMENTS: Array<[RegExp, string]> = [
-  [/È™/g, "ș"],
-  [/È˜/g, "Ș"],
-  [/È›/g, "ț"],
-  [/Èš/g, "Ț"],
-  [/Äƒ/g, "ă"],
-  [/Ä‚/g, "Ă"],
-  [/Ã¢/g, "â"],
-  [/Ã‚/g, "Â"],
-  [/Ã®/g, "î"],
-  [/ÃŽ/g, "Î"],
-  [/Ãș/g, "ș"],
-  [/ÃȘ/g, "Ș"],
-  [/Ãţ/g, "ț"],
-  [/ÃŢ/g, "Ț"],
-  [/ÅŸ/g, "ș"],
-  [/Åž/g, "Ș"],
-  [/Å£/g, "ț"],
-  [/Å¢/g, "Ț"],
-  [/â€“/g, "–"],
-  [/â€”/g, "—"],
-  [/â€¢/g, "•"],
-  [/â€ž/g, "„"],
-  [/â€œ/g, "“"],
-  [/â€/g, "”"],
-  [/Â /g, " "],
+  [/Ãˆâ„¢/g, "s"],
+  [/ÃˆËœ/g, "S"],
+  [/Ãˆâ€º/g, "t"],
+  [/ÃˆÅ¡/g, "T"],
+  [/Ã„Æ’/g, "a"],
+  [/Ã„â€š/g, "A"],
+  [/ÃƒÂ¢/g, "a"],
+  [/Ãƒâ€š/g, "A"],
+  [/ÃƒÂ®/g, "i"],
+  [/ÃƒÅ½/g, "I"],
+  [/ÃƒÈ™/g, "s"],
+  [/ÃƒÈ˜/g, "S"],
+  [/ÃƒÅ£/g, "t"],
+  [/ÃƒÅ¢/g, "T"],
+  [/Ã…Å¸/g, "s"],
+  [/Ã…Å¾/g, "S"],
+  [/Ã…Â£/g, "t"],
+  [/Ã…Â¢/g, "T"],
+  [/Ã¢â‚¬â€œ/g, "-"],
+  [/Ã¢â‚¬â€/g, "-"],
+  [/Ã¢â‚¬Â¢/g, "-"],
+  [/Ã¢â‚¬Å¾/g, '"'],
+  [/Ã¢â‚¬Å“/g, '"'],
+  [/Ã¢â‚¬Â/g, '"'],
+  [/Ã‚ /g, " "],
+]
+
+const ASCII_REPLACEMENTS: Array<[RegExp, string]> = [
+  [/ă/g, "a"],
+  [/Ă/g, "A"],
+  [/â/g, "a"],
+  [/Â/g, "A"],
+  [/î/g, "i"],
+  [/Î/g, "I"],
+  [/ș/g, "s"],
+  [/Ș/g, "S"],
+  [/ş/g, "s"],
+  [/Ş/g, "S"],
+  [/ț/g, "t"],
+  [/Ț/g, "T"],
+  [/ţ/g, "t"],
+  [/Ţ/g, "T"],
 ]
 
 function suspiciousScore(text: string) {
@@ -34,6 +51,10 @@ function suspiciousScore(text: string) {
 
 function applyManualReplacements(text: string) {
   return MANUAL_REPLACEMENTS.reduce((current, [pattern, replacement]) => current.replace(pattern, replacement), text)
+}
+
+function toAsciiRomanian(text: string) {
+  return ASCII_REPLACEMENTS.reduce((current, [pattern, replacement]) => current.replace(pattern, replacement), text)
 }
 
 export function repairText(value: unknown) {
@@ -54,7 +75,7 @@ export function repairText(value: unknown) {
     }
   }
 
-  return repaired
+  return toAsciiRomanian(repaired)
 }
 
 export function repairDeepStrings<T>(value: T): T {

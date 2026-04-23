@@ -54,7 +54,7 @@ export default function UomPage() {
       const data = await res.json().catch(() => ({}))
       setList(data.items || [])
     } catch {
-      setError("Nu am putut încărca unitățile de măsură.")
+      setError("Nu am putut incarca unitatile de masura.")
       setList([])
     } finally {
       setLoading(false)
@@ -63,7 +63,7 @@ export default function UomPage() {
 
   async function add() {
     if (!code.trim() || !name.trim()) {
-      setError("Completează codul și denumirea.")
+      setError("Completeaza codul si denumirea.")
       return
     }
 
@@ -90,7 +90,7 @@ export default function UomPage() {
 
     setCode("")
     setName("")
-    setMessage("Unitatea de măsură a fost adăugată.")
+    setMessage("Unitatea de masura a fost adaugata.")
     load()
   }
 
@@ -111,12 +111,12 @@ export default function UomPage() {
       }),
     })
 
-    setMessage(item.isActive ? "Unitatea a fost dezactivată." : "Unitatea a fost activată.")
+    setMessage(item.isActive ? "Unitatea a fost dezactivata." : "Unitatea a fost activata.")
     load()
   }
 
   async function remove(id: string) {
-    if (!confirm("Ștergi unitatea?")) return
+    if (!confirm("Stergi unitatea?")) return
 
     setError("")
     setMessage("")
@@ -126,7 +126,7 @@ export default function UomPage() {
       headers: { Authorization: `Bearer ${token}` },
     })
 
-    setMessage("Unitatea a fost ștearsă.")
+    setMessage("Unitatea a fost stearsa.")
     load()
   }
 
@@ -134,8 +134,8 @@ export default function UomPage() {
     <div className="space-y-3">
       <PageHeader
         badge="nomenclator"
-        title="Unități de măsură"
-        subtitle="Unități utilizate în produse și documente. Lista standard rămâne ușor de administrat și clară vizual."
+        title="Unitati de masura"
+        subtitle="Unitati utilizate in produse si documente. Lista standard ramane usor de administrat si clara vizual."
       />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -157,28 +157,28 @@ export default function UomPage() {
           />
 
           <input
-            placeholder="Denumire (ex: Bucată)"
+            placeholder="Denumire (ex: Bucata)"
             value={name}
             onChange={(e) => setName(e.target.value)}
             className={`${documentInputClass} flex-1`}
           />
 
           <button onClick={add} disabled={saving} className={documentButtonPrimaryClass}>
-            {saving ? "Se salvează..." : "Adaugă"}
+            {saving ? "Se salveaza..." : "Adauga"}
           </button>
         </div>
 
         {loading ? (
-          <div className="text-sm text-slate-500">Se încarcă...</div>
+          <div className="text-sm text-slate-500">Se incarca...</div>
         ) : (
           <DataTable
-            title="Lista unităților"
-            subtitle="Caută, sortează și administrează unitățile de măsură din sistem."
+            title="Lista unitatilor"
+            subtitle="Cauta, sorteaza si administreaza unitatile de masura din sistem."
             rows={list}
             rowKey={(row) => row.id}
-            searchPlaceholder="Caută după cod sau denumire..."
+            searchPlaceholder="Cauta dupa cod sau denumire..."
             initialPageSize={10}
-            emptyText="Nu există unități de măsură."
+            emptyText="Nu exista unitati de masura."
             columns={[
               { key: "code", label: "Cod" },
               { key: "name", label: "Denumire" },
@@ -191,11 +191,11 @@ export default function UomPage() {
                 render: (u) => (
                   <div className="flex justify-end gap-2">
                     <button onClick={() => toggle(u)} className={documentButtonSecondaryClass}>
-                      {u.isActive ? "Dezactivează" : "Activează"}
+                      {u.isActive ? "Dezactiveaza" : "Activeaza"}
                     </button>
 
                     <button onClick={() => remove(u.id)} className={documentButtonDangerClass}>
-                      Șterge
+                      Sterge
                     </button>
                   </div>
                 ),

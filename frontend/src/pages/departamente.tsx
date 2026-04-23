@@ -54,7 +54,7 @@ export default function DepartamentePage() {
       const data = await res.json().catch(() => ({}))
       setList(data.items || [])
     } catch {
-      setError("Nu am putut încărca departamentele.")
+      setError("Nu am putut incarca departamentele.")
       setList([])
     } finally {
       setLoading(false)
@@ -63,7 +63,7 @@ export default function DepartamentePage() {
 
   async function add() {
     if (!name.trim()) {
-      setError("Completează numele departamentului.")
+      setError("Completeaza numele departamentului.")
       return
     }
 
@@ -82,7 +82,7 @@ export default function DepartamentePage() {
       })
 
       setName("")
-      setSuccess("Departamentul a fost adăugat.")
+      setSuccess("Departamentul a fost adaugat.")
       load()
     } catch {
       setError("Nu am putut salva departamentul.")
@@ -112,7 +112,7 @@ export default function DepartamentePage() {
   }
 
   async function remove(id: string) {
-    if (!confirm("Ștergi departamentul?")) return
+    if (!confirm("Stergi departamentul?")) return
 
     setError("")
     setSuccess("")
@@ -122,13 +122,13 @@ export default function DepartamentePage() {
       headers: { Authorization: `Bearer ${token}` },
     })
 
-    setSuccess("Departamentul a fost șters.")
+    setSuccess("Departamentul a fost sters.")
     load()
   }
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Departamente" subtitle="Organizare produse pe departamente, într-un ecran mai clar și mai rapid de folosit." />
+      <PageHeader title="Departamente" subtitle="Organizare produse pe departamente, intr-un ecran mai clar si mai rapid de folosit." />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <DocumentMetric title="Departamente" value={stats.total} tone="slate" />
@@ -140,15 +140,15 @@ export default function DepartamentePage() {
       {success ? <InlineNotice tone="success">{success}</InlineNotice> : null}
 
       <DocumentSection
-        title="Adaugă departament"
-        description="Introduci numele și îl trimiți direct în nomenclator, fără pași inutili."
+        title="Adauga departament"
+        description="Introduci numele si il trimiti direct in nomenclator, fara pasi inutili."
         actions={
           <>
             <button type="button" onClick={load} className={documentButtonSecondaryClass}>
               Reincarca
             </button>
             <button type="button" onClick={add} className={documentButtonPrimaryClass} disabled={saving}>
-              {saving ? "Se salvează..." : "Adaugă"}
+              {saving ? "Se salveaza..." : "Adauga"}
             </button>
           </>
         }
@@ -158,10 +158,10 @@ export default function DepartamentePage() {
         </DocumentField>
       </DocumentSection>
 
-      <DocumentSection title="Listă departamente" description="Vezi rapid statusul și poți activa, dezactiva sau șterge direct din listă.">
+      <DocumentSection title="Lista departamente" description="Vezi rapid statusul si poti activa, dezactiva sau sterge direct din lista.">
         {loading ? (
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-            Se încarcă...
+            Se incarca...
           </div>
         ) : (
           <div className="overflow-hidden rounded-[24px] border border-slate-200">
@@ -170,7 +170,7 @@ export default function DepartamentePage() {
                 <tr>
                   <th className="px-4 py-3 text-left font-medium">Departament</th>
                   <th className="px-4 py-3 text-left font-medium">Status</th>
-                  <th className="px-4 py-3 text-right font-medium">Acțiuni</th>
+                  <th className="px-4 py-3 text-right font-medium">Actiuni</th>
                 </tr>
               </thead>
               <tbody>
@@ -191,10 +191,10 @@ export default function DepartamentePage() {
                     <td className="px-4 py-4">
                       <div className="flex justify-end gap-2">
                         <button type="button" onClick={() => toggle(department)} className={documentButtonSecondaryClass}>
-                          {department.isActive ? "Dezactivează" : "Activează"}
+                          {department.isActive ? "Dezactiveaza" : "Activeaza"}
                         </button>
                         <button type="button" onClick={() => remove(department.id)} className={documentButtonDangerClass}>
-                          Șterge
+                          Sterge
                         </button>
                       </div>
                     </td>

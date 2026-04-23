@@ -160,7 +160,7 @@ router.get("/api/v1/transfers/:id", async (req: AuthedRequest, res) => {
   })
 
   if (!doc) {
-    return res.status(404).json({ ok: false, error: "Documentul nu a fost găsit." })
+    return res.status(404).json({ ok: false, error: "Documentul nu a fost gasit." })
   }
 
   res.json({ ok: true, doc })
@@ -177,15 +177,15 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
   const docDate = String(header?.docDate || "").trim()
 
   if (!fromLocationId) {
-    return res.status(400).json({ ok: false, error: "Locația predătoare este obligatorie." })
+    return res.status(400).json({ ok: false, error: "Locatia predatoare este obligatorie." })
   }
 
   if (!toLocationId) {
-    return res.status(400).json({ ok: false, error: "Locația primitoare este obligatorie." })
+    return res.status(400).json({ ok: false, error: "Locatia primitoare este obligatorie." })
   }
 
   if (fromLocationId === toLocationId) {
-    return res.status(400).json({ ok: false, error: "Locațiile trebuie să fie diferite." })
+    return res.status(400).json({ ok: false, error: "Locatiile trebuie sa fie diferite." })
   }
 
   if (!docDate) {
@@ -193,7 +193,7 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
   }
 
   if (!Array.isArray(items) || items.length === 0) {
-    return res.status(400).json({ ok: false, error: "Documentul trebuie să aibă cel puțin o linie." })
+    return res.status(400).json({ ok: false, error: "Documentul trebuie sa aiba cel putin o linie." })
   }
 
   const [fromLocation, toLocation] = await Promise.all([
@@ -202,11 +202,11 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
   ])
 
   if (!fromLocation) {
-    return res.status(404).json({ ok: false, error: "Locația predătoare nu există." })
+    return res.status(404).json({ ok: false, error: "Locatia predatoare nu exista." })
   }
 
   if (!toLocation) {
-    return res.status(404).json({ ok: false, error: "Locația primitoare nu există." })
+    return res.status(404).json({ ok: false, error: "Locatia primitoare nu exista." })
   }
 
   try {
@@ -223,7 +223,7 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
       })
 
       if (duplicate) {
-        return res.status(400).json({ ok: false, error: "Există deja un transfer cu acest număr." })
+        return res.status(400).json({ ok: false, error: "Exista deja un transfer cu acest numar." })
       }
 
       const created = await prisma.transferDoc.create({
@@ -254,7 +254,7 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
       })
 
       if (!existing) {
-        return res.status(404).json({ ok: false, error: "Transferul nu a fost găsit." })
+        return res.status(404).json({ ok: false, error: "Transferul nu a fost gasit." })
       }
 
       if (existing.status !== "DRAFT") {
@@ -271,7 +271,7 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
       })
 
       if (duplicate) {
-        return res.status(400).json({ ok: false, error: "Există deja un transfer cu acest număr." })
+        return res.status(400).json({ ok: false, error: "Exista deja un transfer cu acest numar." })
       }
 
       await prisma.transferDoc.update({
@@ -304,11 +304,11 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
       const unitPrice = toNumber(raw.unitPrice || 0)
 
       if (!productId) {
-        throw new Error("Fiecare linie trebuie să aibă produs.")
+        throw new Error("Fiecare linie trebuie sa aiba produs.")
       }
 
       if (qty <= 0) {
-        throw new Error("Cantitatea trebuie să fie mai mare decât 0.")
+        throw new Error("Cantitatea trebuie sa fie mai mare decat 0.")
       }
 
       const product = await prisma.product.findFirst({
@@ -320,7 +320,7 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
       })
 
       if (!product) {
-        throw new Error("Produs inexistent în una dintre linii.")
+        throw new Error("Produs inexistent in una dintre linii.")
       }
 
       await assertSufficientStock(prisma, {
@@ -356,7 +356,7 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
           include: { items: true }
         })
 
-        if (!doc) throw new Error("Transferul nu a fost găsit.")
+        if (!doc) throw new Error("Transferul nu a fost gasit.")
         if (doc.status !== "DRAFT") throw new Error("Doar documentele DRAFT pot fi postate.")
 
         for (const item of doc.items) {
@@ -395,7 +395,7 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
               qty: new Prisma.Decimal(qty),
               refType: "TRANSFER",
               refId: doc.id,
-              note: `Nota transfer ${doc.docNo} către ${toLocation.name}`
+              note: `Nota transfer ${doc.docNo} catre ${toLocation.name}`
             }
           })
 
@@ -481,18 +481,18 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
   const margin = 36
 
   const drawHeader = () => drawDocumentHero(doc, fonts, {
-    title: 'Notă de transfer',
-    subtitle: 'Transfer între gestiuni',
+    title: 'Nota de transfer',
+    subtitle: 'Transfer intre gestiuni',
     companyName: company?.name || '-',
     companyLines: [
       `CUI: ${pdfText(company?.cui)}`,
       `Reg. com.: ${pdfText(company?.regNo)}`,
-      `Adresă: ${pdfText(company?.address)}`,
+      `Adresa: ${pdfText(company?.address)}`,
       `Email: ${pdfText(company?.email || company?.contactEmail)}`,
       `Telefon: ${pdfText(company?.phone)}`,
     ],
     rightPairs: [
-      { label: 'Număr', value: pdfText(docData.docNo) },
+      { label: 'Numar', value: pdfText(docData.docNo) },
       { label: 'Data', value: pdfDate(docData.docDate) },
       { label: 'Ora', value: new Date(docData.createdAt).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' }) },
     ],
@@ -508,13 +508,13 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
         title: 'Transfer',
         pairs: [
           { label: 'Din gestiune', value: pdfText(docData.fromLocation.name) },
-          { label: 'În gestiune', value: pdfText(docData.toLocation.name) },
+          { label: 'In gestiune', value: pdfText(docData.toLocation.name) },
           { label: 'Motiv', value: pdfText(docData.reason) },
-          { label: 'Observații', value: pdfText(docData.note) },
+          { label: 'Observatii', value: pdfText(docData.note) },
         ],
       },
       {
-        title: 'Transport și predare',
+        title: 'Transport si predare',
         pairs: [
           { label: 'Delegat', value: pdfText(docData.delegateName) },
           { label: 'CI / BI', value: pdfText(docData.delegateCi) },
@@ -538,7 +538,7 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
       { label: 'Produs', width: 210, align: 'left' },
       { label: 'UM', width: 44, align: 'center' },
       { label: 'Cant.', width: 58, align: 'right' },
-      { label: 'Preț', width: 62, align: 'right' },
+      { label: 'Pret', width: 62, align: 'right' },
       { label: 'Valoare', width: 69, align: 'right' },
     ],
     rows: docData.items.map((item, index) => ([
@@ -559,7 +559,7 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
     y,
     width: 220,
     lines: [
-      { label: 'Total cantități', value: pdfFmt(docData.totalQty) },
+      { label: 'Total cantitati', value: pdfFmt(docData.totalQty) },
       { label: 'Total valoare', value: `${pdfFmt(docData.totalValue)} lei` },
     ],
   })

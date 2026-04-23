@@ -164,7 +164,7 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
     })
 
     if (!docData) {
-      return res.status(404).json({ ok: false, error: "Bonul de consum nu a fost găsit." })
+      return res.status(404).json({ ok: false, error: "Bonul de consum nu a fost gasit." })
     }
 
     const consumptionDoc = docData

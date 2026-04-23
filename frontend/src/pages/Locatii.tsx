@@ -156,7 +156,7 @@ export default function LocatiiPage() {
 
       <DocumentSection
         title="Adauga locatie"
-        description="Completezi rapid datele esentiale, iar lista de dedesubt se actualizează imediat."
+        description="Completezi rapid datele esentiale, iar lista de dedesubt se actualizeaza imediat."
         actions={
           <>
             <button type="button" onClick={loadLocations} className={documentButtonSecondaryClass}>

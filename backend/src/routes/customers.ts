@@ -80,7 +80,7 @@ router.get("/api/v1/customers/:id", async (req: AuthedRequest, res) => {
   })
 
   if (!customer) {
-    return res.status(404).json({ ok: false, error: "Clientul nu a fost găsit." })
+    return res.status(404).json({ ok: false, error: "Clientul nu a fost gasit." })
   }
 
   return res.json({
@@ -160,7 +160,7 @@ router.put("/api/v1/customers/:id", async (req: AuthedRequest, res) => {
   })
 
   if (!current) {
-    return res.status(404).json({ ok: false, error: "Clientul nu a fost găsit." })
+    return res.status(404).json({ ok: false, error: "Clientul nu a fost gasit." })
   }
 
   const name = String(req.body?.name || "").trim()

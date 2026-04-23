@@ -1,12 +1,12 @@
-import { AlertTriangle, Boxes, FileText, ShoppingCart, Store, Wallet } from "lucide-react"
+﻿import { AlertTriangle, Boxes, FileText, ShoppingCart, Store, Wallet } from "lucide-react"
 
 const cards = [
-  { title: "Vânzări azi", value: "12.480 RON", hint: "+12% față de ieri", icon: ShoppingCart, tone: "blue" },
-  { title: "Stoc critic", value: "18 produse", hint: "Necesită reaprovizionare", icon: AlertTriangle, tone: "amber" },
-  { title: "Documente recente", value: "7", hint: "Recepții, transferuri, inventare", icon: FileText, tone: "slate" },
-  { title: "Produse active", value: "1.284", hint: "În toate locațiile", icon: Boxes, tone: "blue-soft" },
-  { title: "Locații online", value: "4 / 4", hint: "Sincronizare activă", icon: Store, tone: "slate" },
-  { title: "Marjă estimată", value: "32%", hint: "Pe baza documentelor curente", icon: Wallet, tone: "amber-soft" },
+  { title: "Vanzari azi", value: "12.480 RON", hint: "+12% fata de ieri", icon: ShoppingCart, tone: "blue" },
+  { title: "Stoc critic", value: "18 produse", hint: "Necesita reaprovizionare", icon: AlertTriangle, tone: "amber" },
+  { title: "Documente recente", value: "7", hint: "Receptii, transferuri, inventare", icon: FileText, tone: "slate" },
+  { title: "Produse active", value: "1.284", hint: "In toate locatiile", icon: Boxes, tone: "blue-soft" },
+  { title: "Locatii online", value: "4 / 4", hint: "Sincronizare activa", icon: Store, tone: "slate" },
+  { title: "Marja estimata", value: "32%", hint: "Pe baza documentelor curente", icon: Wallet, tone: "amber-soft" },
 ] as const
 
 export default function PlaceholderGrid() {
@@ -44,3 +44,4 @@ export default function PlaceholderGrid() {
     </div>
   )
 }
+

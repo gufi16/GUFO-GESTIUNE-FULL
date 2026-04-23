@@ -3,30 +3,30 @@ import { useNavigate } from "react-router-dom"
 
 const actions = [
   {
-    label: "Recepție marfă",
-    helper: "Adaugă rapid un NIR nou",
+    label: "Receptie marfa",
+    helper: "Adauga rapid un NIR nou",
     icon: Plus,
     path: "/inregistrare-document/nir/new",
     tone: "blue",
   },
   {
-    label: "Transfer între locații",
-    helper: "Mută stoc între gestiuni",
+    label: "Transfer intre locatii",
+    helper: "Muta stoc intre gestiuni",
     icon: ArrowLeftRight,
     path: "/transfer/new",
     tone: "slate",
   },
   {
-    label: "Vânzare / Bon",
-    helper: "Integrare POS și documente",
+    label: "Vanzare / Bon",
+    helper: "Integrare POS si documente",
     icon: Receipt,
     path: "",
     action: "receipts",
     tone: "amber",
   },
   {
-    label: "Caută produs",
-    helper: "Intră direct în nomenclator",
+    label: "Cauta produs",
+    helper: "Intra direct in nomenclator",
     icon: PackageSearch,
     path: "/nomenclator/produse",
     tone: "slate",

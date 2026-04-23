@@ -1828,7 +1828,7 @@ export default function NirPage() {
                               }
                               onClick={() => removeLine(line.id)}
                             >
-                              âœ•
+                              aœ•
                             </button>
                           )}
                         </div>

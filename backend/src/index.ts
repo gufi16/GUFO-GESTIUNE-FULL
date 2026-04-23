@@ -894,7 +894,7 @@ app.post("/api/v1/license/activate", async (req, res) => {
 })
 
 /* ======================================================
-   DIRECT POS PAIR — prioritar, fără conflicte de router
+   DIRECT POS PAIR — prioritar, fara conflicte de router
 ====================================================== */
 
 const DirectPosPairSchema = z.object({
@@ -1044,7 +1044,7 @@ app.post("/api/v1/pos/pair", async (req, res) => {
     if (!licenseKey || licenseKey.length < 3) {
       return res.status(400).json({
         ok: false,
-        error: "License key lipsă sau invalid",
+        error: "License key lipsa sau invalid",
       })
     }
 
@@ -1068,7 +1068,7 @@ app.post("/api/v1/pos/pair", async (req, res) => {
     if (!terminal) {
       return res.status(404).json({
         ok: false,
-        error: "Licență invalidă",
+        error: "Licenta invalida",
       })
     }
 
@@ -1077,21 +1077,21 @@ app.post("/api/v1/pos/pair", async (req, res) => {
     if (!license) {
       return res.status(404).json({
         ok: false,
-        error: "Licență ERP inexistentă",
+        error: "Licenta ERP inexistenta",
       })
     }
 
     if (license.isSuspended) {
       return res.status(403).json({
         ok: false,
-        error: "Licența este suspendată",
+        error: "Licenta este suspendata",
       })
     }
 
     if (license.expiresAt <= new Date()) {
       return res.status(403).json({
         ok: false,
-        error: "Licența este expirată",
+        error: "Licenta este expirata",
       })
     }
 
@@ -1155,7 +1155,7 @@ app.post("/api/v1/pos/pair", async (req, res) => {
     console.error("INDEX POS PAIR ERROR:", error)
     return res.status(500).json({
       ok: false,
-      error: "Eroare internă la conectarea POS",
+      error: "Eroare interna la conectarea POS",
     })
   }
 })
@@ -1168,7 +1168,7 @@ app.get("/api/v1/pos/config", async (req, res) => {
     if (!auth?.tenantId) {
       return res.status(401).json({
         ok: false,
-        error: "POS neautentificat. Fă pair din nou.",
+        error: "POS neautentificat. Fa pair din nou.",
       })
     }
 
@@ -1189,7 +1189,7 @@ app.get("/api/v1/pos/config", async (req, res) => {
     console.error("INDEX POS CONFIG ERROR:", error)
     return res.status(500).json({
       ok: false,
-      error: "Eroare la încărcarea configurării POS",
+      error: "Eroare la incarcarea configurarii POS",
     })
   }
 })
@@ -1202,7 +1202,7 @@ app.get("/api/v1/pos/catalog", async (req, res) => {
     if (!auth?.tenantId) {
       return res.status(401).json({
         ok: false,
-        error: "POS neautentificat. Fă pair din nou.",
+        error: "POS neautentificat. Fa pair din nou.",
       })
     }
 
@@ -1212,7 +1212,7 @@ app.get("/api/v1/pos/catalog", async (req, res) => {
     console.error("INDEX POS CATALOG ERROR:", error)
     return res.status(500).json({
       ok: false,
-      error: "Eroare la încărcarea catalogului POS",
+      error: "Eroare la incarcarea catalogului POS",
     })
   }
 })

@@ -146,19 +146,19 @@ async function createOrReplaceReceiptItems(
     const vatRateValue = toNumber(raw.vatRateValue)
 
     if (!productId) {
-      throw new Error("Fiecare linie trebuie să aibă produs.")
+      throw new Error("Fiecare linie trebuie sa aiba produs.")
     }
 
     if (qty <= 0) {
-      throw new Error("Cantitatea trebuie să fie mai mare decât 0.")
+      throw new Error("Cantitatea trebuie sa fie mai mare decat 0.")
     }
 
     if (conversionFactor <= 0) {
-      throw new Error("Factorul de conversie trebuie să fie mai mare decât 0.")
+      throw new Error("Factorul de conversie trebuie sa fie mai mare decat 0.")
     }
 
     if (unitCostNetFc < 0) {
-      throw new Error("Prețul fără TVA trebuie să fie >= 0.")
+      throw new Error("Pretul fara TVA trebuie sa fie >= 0.")
     }
 
     const product = await prisma.product.findFirst({
@@ -175,14 +175,14 @@ async function createOrReplaceReceiptItems(
     })
 
     if (!product) {
-      throw new Error("Produs inexistent în una dintre linii.")
+      throw new Error("Produs inexistent in una dintre linii.")
     }
 
     const usedUomId = raw.uomId || product.purchaseUomId || product.uomId
     const allowedUomIds = [product.uomId, product.purchaseUomId].filter(Boolean)
 
     if (!allowedUomIds.includes(usedUomId)) {
-      throw new Error("UM selectată nu este validă pentru produsul ales.")
+      throw new Error("UM selectata nu este valida pentru produsul ales.")
     }
 
     const uom = await prisma.uom.findFirst({
@@ -193,7 +193,7 @@ async function createOrReplaceReceiptItems(
     })
 
     if (!uom) {
-      throw new Error("UM inexistentă în una dintre linii.")
+      throw new Error("UM inexistenta in una dintre linii.")
     }
 
     const defaultFactor = usedUomId === product.uomId ? 1 : Math.max(0.000001, toNumber(product.purchaseFactor || 1))
@@ -260,7 +260,7 @@ async function postReceiptToStock(tenantId: string, companyId: string, receiptId
     }
 
     if (!receipt.items.length) {
-      throw new Error("Documentul nu are poziții.")
+      throw new Error("Documentul nu are pozitii.")
     }
 
     for (const item of receipt.items) {
@@ -445,7 +445,7 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({
         ok: false,
-        error: "Documentul trebuie să aibă cel puțin o poziție."
+        error: "Documentul trebuie sa aiba cel putin o pozitie."
       })
     }
 
@@ -505,7 +505,7 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
       if (duplicate) {
         return res.status(400).json({
           ok: false,
-          error: "Există deja un document cu acest număr."
+          error: "Exista deja un document cu acest numar."
         })
       }
 
@@ -549,7 +549,7 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
       if (existing.status !== "DRAFT") {
         return res.status(400).json({
           ok: false,
-          error: "Documentul POSTED este read-only și nu mai poate fi modificat."
+          error: "Documentul POSTED este read-only si nu mai poate fi modificat."
         })
       }
 
@@ -565,7 +565,7 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
       if (duplicate) {
         return res.status(400).json({
           ok: false,
-          error: "Există deja un document cu acest număr."
+          error: "Exista deja un document cu acest numar."
         })
       }
 

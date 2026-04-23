@@ -759,7 +759,7 @@ export default function Inventare() {
                 onClick={resetEditor}
                 className={documentButtonSecondaryClass}
               >
-                Închide
+                Inchide
               </button>
             </div>
           </div>
@@ -777,7 +777,7 @@ export default function Inventare() {
                 disabled={docStatus !== "DRAFT"}
                 className={`${documentInputClass} disabled:bg-slate-100`}
               >
-                <option value="">Selectează locația</option>
+                <option value="">Selecteaza locatia</option>
                 {locations.map((loc) => (
                   <option key={loc.id} value={loc.id}>
                     {loc.name}
@@ -788,22 +788,22 @@ export default function Inventare() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-slate-700">Observații</label>
+              <label className="text-sm font-medium text-slate-700">Observatii</label>
               <input
                 value={editorNote}
                 onChange={(e) => setEditorNote(e.target.value)}
                 disabled={docStatus !== "DRAFT"}
                 className={`${documentInputClass} disabled:bg-slate-100`}
-                placeholder="Observații document"
+                placeholder="Observatii document"
               />
             </div>
           </div>
 
           {docStatus === "DRAFT" ? (
             <div className="rounded-[16px] border border-slate-200 p-3">
-              <div className="text-sm font-semibold">Adaugă produs</div>
+              <div className="text-sm font-semibold">Adauga produs</div>
               <div className="text-xs text-slate-500 mt-1">
-                Scrie minim 3 litere din nume sau SKU. Produsul apare imediat sub câmp.
+                Scrie minim 3 litere din nume sau SKU. Produsul apare imediat sub camp.
               </div>
 
               <div className="mt-3 relative">
@@ -811,15 +811,15 @@ export default function Inventare() {
                   value={search}
                   onChange={(e) => searchProducts(e.target.value)}
                   className="w-full px-3 py-3 rounded-xl border border-slate-300"
-                  placeholder="Caută produs..."
+                  placeholder="Cauta produs..."
                 />
 
                 {(search.trim().length >= 3 || searchLoading) ? (
                   <div className="mt-2 rounded-2xl border border-slate-200 bg-white overflow-hidden">
                     {searchLoading ? (
-                      <div className="px-4 py-3 text-sm text-slate-500">Se caută...</div>
+                      <div className="px-4 py-3 text-sm text-slate-500">Se cauta...</div>
                     ) : searchResults.length === 0 ? (
-                      <div className="px-4 py-3 text-sm text-slate-500">Nu am găsit produse.</div>
+                      <div className="px-4 py-3 text-sm text-slate-500">Nu am gasit produse.</div>
                     ) : (
                       searchResults.map((product) => (
                         <button
@@ -851,7 +851,7 @@ export default function Inventare() {
 
             {editorItems.length === 0 ? (
               <div className="px-4 py-6 text-sm text-slate-500">
-                Nu ai adăugat încă produse în inventar.
+                Nu ai adaugat inca produse in inventar.
               </div>
             ) : (
               <div className="divide-y divide-slate-100">
@@ -878,7 +878,7 @@ export default function Inventare() {
                       </div>
 
                       <div>
-                        <div className="text-xs text-slate-500">Numărat</div>
+                        <div className="text-xs text-slate-500">Numarat</div>
                         <input
                           type="number"
                           min="0"
@@ -893,7 +893,7 @@ export default function Inventare() {
                       </div>
 
                       <div>
-                        <div className="text-xs text-slate-500">Diferență</div>
+                        <div className="text-xs text-slate-500">Diferenta</div>
                         <div className={`text-sm mt-1 ${diffClass(differenceQty)}`}>
                           {differenceQty}
                         </div>
@@ -905,7 +905,7 @@ export default function Inventare() {
                             onClick={() => removeDraftItem(item.localId)}
                             className="w-full rounded-[14px] border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700"
                           >
-                            Șterge
+                            Sterge
                           </button>
                         ) : (
                           <div className="text-xs text-slate-400">Blocat</div>
@@ -925,12 +925,12 @@ export default function Inventare() {
             </div>
 
             <div className="rounded-[16px] border border-slate-200 p-3">
-              <div className="text-xs text-slate-500">Total numărat</div>
+              <div className="text-xs text-slate-500">Total numarat</div>
               <div className="text-lg font-semibold mt-1">{totals.totalCountedQty}</div>
             </div>
 
             <div className="rounded-[16px] border border-slate-200 p-3">
-              <div className="text-xs text-slate-500">Diferență totală</div>
+              <div className="text-xs text-slate-500">Diferenta totala</div>
               <div className={`text-lg font-semibold mt-1 ${diffClass(totals.totalDifferenceQty)}`}>
                 {totals.totalDifferenceQty}
               </div>
@@ -951,7 +951,7 @@ export default function Inventare() {
                   disabled={savingDraft}
                   className={documentButtonSecondaryClass}
                 >
-                  {savingDraft ? "Se salvează..." : "Salvează draft"}
+                  {savingDraft ? "Se salveaza..." : "Salveaza draft"}
                 </button>
 
                 {editingId ? (
@@ -969,7 +969,7 @@ export default function Inventare() {
                       disabled={cancellingId === editingId}
                       className="inline-flex h-9 items-center justify-center rounded-[14px] border border-red-300 bg-red-50 px-3 text-[13px] font-medium text-red-700 disabled:opacity-60"
                     >
-                      {cancellingId === editingId ? "Se anulează..." : "Anulează"}
+                      {cancellingId === editingId ? "Se anuleaza..." : "Anuleaza"}
                     </button>
                   </>
                 ) : null}
@@ -979,7 +979,7 @@ export default function Inventare() {
                   disabled={finalizing}
                   className="inline-flex h-9 items-center justify-center rounded-[14px] bg-emerald-600 px-3 text-[13px] font-medium text-white disabled:opacity-60"
                 >
-                  {finalizing ? "Se finalizează..." : "Finalizează"}
+                  {finalizing ? "Se finalizeaza..." : "Finalizeaza"}
                 </button>
               </>
             ) : editingId ? (
@@ -999,10 +999,10 @@ export default function Inventare() {
         <div className="text-lg font-semibold">Documente inventar</div>
 
         {loadingInit ? (
-          <div className="mt-4 text-sm text-slate-500">Se încarcă pagina...</div>
+          <div className="mt-4 text-sm text-slate-500">Se incarca pagina...</div>
         ) : docs.length === 0 ? (
           <div className="mt-4 rounded-xl border border-dashed border-slate-300 p-4 text-slate-500">
-            Nu există documente de inventar.
+            Nu exista documente de inventar.
           </div>
         ) : (
           <div className="mt-4 overflow-x-auto rounded-[16px] border border-slate-200">
@@ -1014,8 +1014,8 @@ export default function Inventare() {
                   <th className="text-left p-3 border-b border-slate-200">Data</th>
                   <th className="text-left p-3 border-b border-slate-200">Locatie</th>
                   <th className="text-left p-3 border-b border-slate-200">Articole</th>
-                  <th className="text-left p-3 border-b border-slate-200">Diferență</th>
-                  <th className="text-left p-3 border-b border-slate-200">Acțiuni</th>
+                  <th className="text-left p-3 border-b border-slate-200">Diferenta</th>
+                  <th className="text-left p-3 border-b border-slate-200">Actiuni</th>
                 </tr>
               </thead>
               <tbody>
@@ -1054,7 +1054,7 @@ export default function Inventare() {
                           onClick={() => openEditDraft(doc.id)}
                           className="inline-flex h-9 items-center justify-center rounded-[14px] border border-slate-300 bg-white px-3 text-[13px] font-medium"
                         >
-                          {doc.status === "DRAFT" ? "Editează" : "Deschide"}
+                          {doc.status === "DRAFT" ? "Editeaza" : "Deschide"}
                         </button>
 
                         <button
@@ -1071,7 +1071,7 @@ export default function Inventare() {
                               onClick={() => quickFinalizeFromList(doc.id)}
                               className="inline-flex h-9 items-center justify-center rounded-[14px] bg-emerald-600 px-3 text-[13px] font-medium text-white"
                             >
-                              Finalizează
+                              Finalizeaza
                             </button>
 
                             <button
@@ -1079,7 +1079,7 @@ export default function Inventare() {
                               disabled={cancellingId === doc.id}
                               className="inline-flex h-9 items-center justify-center rounded-[14px] border border-red-300 bg-red-50 px-3 text-[13px] font-medium text-red-700 disabled:opacity-60"
                             >
-                              {cancellingId === doc.id ? "Se anulează..." : "Anulează"}
+                              {cancellingId === doc.id ? "Se anuleaza..." : "Anuleaza"}
                             </button>
                           </>
                         ) : null}

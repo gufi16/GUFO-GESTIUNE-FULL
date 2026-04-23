@@ -173,9 +173,9 @@ async function main() {
   }
 
   const defaultUoms = [
-    { code: "buc", name: "Bucată" },
+    { code: "buc", name: "Bucata" },
     { code: "set", name: "Set" },
-    { code: "portie", name: "Porție" },
+    { code: "portie", name: "Portie" },
     { code: "kg", name: "Kilogram" },
     { code: "g", name: "Gram" },
     { code: "l", name: "Litru" },
@@ -183,11 +183,11 @@ async function main() {
     { code: "bax", name: "Bax" },
     { code: "cutie", name: "Cutie" },
     { code: "sac", name: "Sac" },
-    { code: "lada", name: "Ladă" },
+    { code: "lada", name: "Lada" },
     { code: "pachet", name: "Pachet" },
     { code: "bidon", name: "Bidon" },
-    { code: "sticla", name: "Sticlă" },
-    { code: "doza", name: "Doză" }
+    { code: "sticla", name: "Sticla" },
+    { code: "doza", name: "Doza" }
   ]
 
   const existingUoms = await prisma.uom.findMany({
@@ -229,7 +229,7 @@ async function main() {
     orderBy: { createdAt: "desc" }
   })
 
-  let printedLicenseKey = "(licență existentă păstrată)"
+  let printedLicenseKey = "(licenta existenta pastrata)"
   if (!activeLicense) {
     const licenseKey = makeLicenseKey("PSH")
     const keyHash = bcrypt.hashSync(licenseKey, 10)

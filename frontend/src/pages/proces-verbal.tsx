@@ -117,7 +117,7 @@ export default function ProcesVerbalPage() {
         }))
       }
     } catch (e: any) {
-      setError(e?.message || "Nu pot încarca datele documentului.")
+      setError(e?.message || "Nu pot incarca datele documentului.")
     }
   }
 
@@ -151,7 +151,7 @@ export default function ProcesVerbalPage() {
           : [makeLine()]
       )
     } catch (e: any) {
-      setError(e?.message || "Nu pot încarca documentul.")
+      setError(e?.message || "Nu pot incarca documentul.")
     } finally {
       setLoading(false)
     }
@@ -247,7 +247,7 @@ export default function ProcesVerbalPage() {
     <div className="w-full space-y-4">
       <PageHeader badge="document" title={pageTitle} />
 
-      {loading ? <InlineNotice>Se încarca documentul...</InlineNotice> : null}
+      {loading ? <InlineNotice>Se incarca documentul...</InlineNotice> : null}
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
 
@@ -260,7 +260,7 @@ export default function ProcesVerbalPage() {
 
       <div className="flex flex-wrap gap-2">
         <button type="button" onClick={() => navigate("/inregistrare-document")} className={documentButtonSecondaryClass}>
-          Înapoi
+          Inapoi
         </button>
         {id ? (
           <button type="button" onClick={openPdf} className={documentButtonSecondaryClass}>
@@ -484,7 +484,7 @@ export default function ProcesVerbalPage() {
                     <option value="DAMAGE_PARTIAL">Deteriorare partiala</option>
                     <option value="DAMAGE_TOTAL">Deteriorare totala</option>
                     <option value="EXPIRED_FOUND">Produs expirat</option>
-                    <option value="LOSS_FOUND">Lipsa în gestiune</option>
+                    <option value="LOSS_FOUND">Lipsa in gestiune</option>
                   </select>
                 </DocumentField>
               ) : null}

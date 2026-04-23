@@ -387,7 +387,7 @@ function mapCatalogProduct(req: Request, product: any, isVatPayer: boolean) {
         : null
       : {
           id: product.vatRate?.id ?? null,
-          name: product.vatRate?.name ?? "Fără TVA",
+          name: product.vatRate?.name ?? "Fara TVA",
           rate: 0,
           fiscalCode: null,
         },
@@ -756,7 +756,7 @@ router.post("/api/v1/pos/pair", async (req: Request, res: Response) => {
     if (!licenseKey || licenseKey.length < 3) {
       return res.status(400).json({
         ok: false,
-        error: "License key lipsă sau invalid",
+        error: "License key lipsa sau invalid",
       });
     }
 
@@ -780,7 +780,7 @@ router.post("/api/v1/pos/pair", async (req: Request, res: Response) => {
     if (!terminal) {
       return res.status(404).json({
         ok: false,
-        error: "Licență invalidă",
+        error: "Licenta invalida",
       });
     }
 
@@ -789,21 +789,21 @@ router.post("/api/v1/pos/pair", async (req: Request, res: Response) => {
     if (!license) {
       return res.status(404).json({
         ok: false,
-        error: "Licență ERP inexistentă",
+        error: "Licenta ERP inexistenta",
       });
     }
 
     if (license.isSuspended) {
       return res.status(403).json({
         ok: false,
-        error: "Licența este suspendată",
+        error: "Licenta este suspendata",
       });
     }
 
     if (license.expiresAt <= new Date()) {
       return res.status(403).json({
         ok: false,
-        error: "Licența este expirată",
+        error: "Licenta este expirata",
       });
     }
 
@@ -870,7 +870,7 @@ router.post("/api/v1/pos/pair", async (req: Request, res: Response) => {
     console.error("PAIR ERROR:", error);
     return res.status(500).json({
       ok: false,
-      error: "Eroare internă la conectarea POS",
+      error: "Eroare interna la conectarea POS",
     });
   }
 });
@@ -910,7 +910,7 @@ router.post(
     });
 
     if (!loc) {
-      return res.status(404).json({ ok: false, error: "Locația nu există" });
+      return res.status(404).json({ ok: false, error: "Locatia nu exista" });
     }
 
     const terminal = await prisma.terminal.update({
@@ -1049,7 +1049,7 @@ router.get("/api/v1/pos/config", async (req: PosAuthRequest, res: Response) => {
     if (!auth?.tenantId) {
       return res.status(401).json({
         ok: false,
-        error: "POS neautentificat. Fă pair din nou.",
+        error: "POS neautentificat. Fa pair din nou.",
       });
     }
 
@@ -1072,7 +1072,7 @@ router.get("/api/v1/pos/config", async (req: PosAuthRequest, res: Response) => {
     console.error("POS CONFIG ERROR:", error);
     return res.status(500).json({
       ok: false,
-      error: "Eroare la încărcarea configurării POS",
+      error: "Eroare la incarcarea configurarii POS",
     });
   }
 });
@@ -1086,7 +1086,7 @@ router.get("/api/v1/pos/catalog", async (req: PosAuthRequest, res: Response) => 
   if (!auth?.tenantId) {
     return res.status(401).json({
       ok: false,
-      error: "POS neautentificat. Fă pair din nou.",
+      error: "POS neautentificat. Fa pair din nou.",
     });
   }
 
@@ -1112,7 +1112,7 @@ router.get("/api/v1/pos/marketplace/ready-for-fiscal", async (req: PosAuthReques
   if (!auth?.tenantId) {
     return res.status(401).json({
       ok: false,
-      error: "POS neautentificat. Fă pair din nou.",
+      error: "POS neautentificat. Fa pair din nou.",
     });
   }
 
@@ -1152,7 +1152,7 @@ router.post("/api/v1/pos/marketplace/:externalOrderId/load-cart", async (req: Po
   if (!auth?.tenantId) {
     return res.status(401).json({
       ok: false,
-      error: "POS neautentificat. Fă pair din nou.",
+      error: "POS neautentificat. Fa pair din nou.",
     });
   }
 
@@ -1702,7 +1702,7 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
   if (!auth?.tenantId || !auth?.terminalId) {
     return res.status(401).json({
       ok: false,
-      error: "POS neautentificat. Fă pair din nou.",
+      error: "POS neautentificat. Fa pair din nou.",
     });
   }
 
@@ -1718,7 +1718,7 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
   if (!terminal || !terminal.locationId) {
     return res.status(400).json({
       ok: false,
-      error: "Terminal fără locație selectată",
+      error: "Terminal fara locatie selectata",
     });
   }
 
@@ -1788,7 +1788,7 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
   for (const line of payload.lines) {
     const product = productMap.get(line.productId);
     if (!product) {
-      return res.status(404).json({ ok: false, error: "Produs inexistent în vânzare." });
+      return res.status(404).json({ ok: false, error: "Produs inexistent in vanzare." });
     }
   }
 
@@ -1938,7 +1938,7 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
               saleId: sale.id,
               docNo: createConsumptionDocNo(),
               docDate: payload.soldAt ? new Date(payload.soldAt) : new Date(),
-              note: `Generat automat din vânzare POS ${payload.receiptNo || sale.id}`,
+              note: `Generat automat din vanzare POS ${payload.receiptNo || sale.id}`,
             },
           });
 
@@ -1984,7 +1984,7 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
               qty: ingredientQty,
               refType: "CONSUMPTION",
               refId: consumptionDocId,
-              note: `Consum automat rețetar pentru ${product.name}`,
+              note: `Consum automat retetar pentru ${product.name}`,
             },
           });
 
@@ -2011,7 +2011,7 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
             refType: "SALE",
             refId: sale.id,
             note: product.productionMode === "MANUAL"
-              ? `Vânzare POS produs cu producție manuală: ${product.name}`
+              ? `Vanzare POS produs cu productie manuala: ${product.name}`
               : undefined,
           },
         });

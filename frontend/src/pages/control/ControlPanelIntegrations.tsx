@@ -48,7 +48,7 @@ export default function ControlPanelIntegrations() {
       })
       setConfigured(Boolean(data?.item?.configured))
     } catch (err: any) {
-      setError(err?.message || "Nu am putut încărca integrarea ANAF.")
+      setError(err?.message || "Nu am putut incarca integrarea ANAF.")
     } finally {
       setLoading(false)
     }
@@ -68,9 +68,9 @@ export default function ControlPanelIntegrations() {
         body: JSON.stringify(form),
       })
       setConfigured(Boolean(data?.item?.configured))
-      setMessage("Setările au fost salvate.")
+      setMessage("Setarile au fost salvate.")
     } catch (err: any) {
-      setError(err?.message || "Nu am putut salva setările.")
+      setError(err?.message || "Nu am putut salva setarile.")
     } finally {
       setSaving(false)
     }
@@ -87,7 +87,7 @@ export default function ControlPanelIntegrations() {
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
               <PlugZap size={14} />
-              Integrări
+              Integrari
             </div>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">ANAF e-Factura</h1>
           </div>
@@ -97,7 +97,7 @@ export default function ControlPanelIntegrations() {
               Status: <span className="font-semibold text-slate-950">{configured ? "Configurat" : "Neconfigurat"}</span>
             </div>
             <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-              Mediu: <span className="font-semibold text-slate-950">{form.efacturaEnvironment === "prod" ? "Producție" : "Test"}</span>
+              Mediu: <span className="font-semibold text-slate-950">{form.efacturaEnvironment === "prod" ? "Productie" : "Test"}</span>
             </div>
           </div>
         </div>
@@ -120,7 +120,7 @@ export default function ControlPanelIntegrations() {
               disabled={loading || saving}
               className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700"
             >
-              Reîncarcă
+              Reincarca
             </button>
             <button
               type="button"
@@ -128,7 +128,7 @@ export default function ControlPanelIntegrations() {
               disabled={loading || saving}
               className="rounded-2xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
             >
-              {saving ? "Se salvează..." : "Salvează"}
+              {saving ? "Se salveaza..." : "Salveaza"}
             </button>
           </div>
         </div>
@@ -172,7 +172,7 @@ export default function ControlPanelIntegrations() {
               className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-700 outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
             >
               <option value="test">Test</option>
-              <option value="prod">Producție</option>
+              <option value="prod">Productie</option>
             </select>
           </label>
         </div>

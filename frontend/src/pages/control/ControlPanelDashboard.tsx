@@ -103,7 +103,7 @@ export default function ControlPanelDashboard() {
         setItems(Array.isArray(data?.items) ? data.items : [])
       } catch (err: any) {
         if (!mounted) return
-        setError(err?.message || "Nu am putut încărca dashboardul.")
+        setError(err?.message || "Nu am putut incarca dashboardul.")
       } finally {
         if (mounted) setLoading(false)
       }
@@ -144,9 +144,9 @@ export default function ControlPanelDashboard() {
   )
 
   const cards = [
-    { label: "Clienți activi", value: metrics.active, icon: Building2 },
-    { label: "Suspendați", value: metrics.suspended, icon: AlertTriangle },
-    { label: "Locații", value: metrics.locations, icon: Store },
+    { label: "Clienti activi", value: metrics.active, icon: Building2 },
+    { label: "Suspendati", value: metrics.suspended, icon: AlertTriangle },
+    { label: "Locatii", value: metrics.locations, icon: Store },
     { label: "POS", value: metrics.terminals, icon: ShieldCheck },
   ]
 
@@ -181,14 +181,14 @@ export default function ControlPanelDashboard() {
         <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Clienți recenți</div>
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Clienti recenti</div>
               <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Ultimele conturi</h2>
             </div>
             <Link
               to="/control-panel/clienti"
               className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
             >
-              Clienți
+              Clienti
               <ArrowRight size={16} />
             </Link>
           </div>
@@ -196,7 +196,7 @@ export default function ControlPanelDashboard() {
           <div className="mt-5 space-y-3">
             {recentClients.length === 0 && !loading ? (
               <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-                Nu există clienți.
+                Nu exista clienti.
               </div>
             ) : null}
 
@@ -221,7 +221,7 @@ export default function ControlPanelDashboard() {
                       <div className="mt-1 font-semibold text-slate-900">{item.usersCount}</div>
                     </div>
                     <div className="rounded-2xl bg-white px-3 py-2">
-                      <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Locații</div>
+                      <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Locatii</div>
                       <div className="mt-1 font-semibold text-slate-900">{item.locationsCount}</div>
                     </div>
                     <div className="rounded-2xl bg-white px-3 py-2">
@@ -237,13 +237,13 @@ export default function ControlPanelDashboard() {
 
         <div className="space-y-4">
           <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Licențe</div>
-            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Expirări</h2>
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Licente</div>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Expirari</h2>
 
             <div className="mt-5 space-y-3">
               {expiringClients.length === 0 && !loading ? (
                 <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-                  Nu există expirări apropiate.
+                  Nu exista expirari apropiate.
                 </div>
               ) : null}
 
