@@ -272,6 +272,58 @@ function normalizeText(value: unknown) {
   return String(value ?? "").trim();
 }
 
+function normalizeOptionalText(value: unknown) {
+  const text = normalizeText(value);
+  return text || null;
+}
+
+function extractAnafCompanyPayload(entry: any) {
+  const general = entry?.date_generale || {};
+  const headquarters = entry?.adresa_sediu_social || {};
+  const registration = entry?.inregistrare_RTVAI || entry?.inregistrare_scop_Tva || {};
+
+  const county =
+    headquarters?.sdenumire_Judet ||
+    general?.judet ||
+    general?.denumire_Judet ||
+    "";
+  const city =
+    headquarters?.sdenumire_Localitate ||
+    general?.localitate ||
+    general?.denumire_Localitate ||
+    "";
+  const postalCode =
+    headquarters?.scod_Postal ||
+    general?.codPostal ||
+    general?.cod_postal ||
+    "";
+  const address =
+    headquarters?.sdenumire_Strada && headquarters?.snumar_Strada
+      ? `${headquarters.sdenumire_Strada} ${headquarters.snumar_Strada}`.trim()
+      : headquarters?.sdenumire_Strada ||
+        general?.adresa_domiciliu_fiscal ||
+        general?.adresa ||
+        general?.adresa_completa ||
+        "";
+
+  return {
+    name: String(general?.denumire || "").trim(),
+    cui: String(general?.cui || "").trim(),
+    regNo: String(general?.nrRegCom || general?.nr_reg_com || "").trim(),
+    address: String(address || "").trim(),
+    city: String(city || "").trim(),
+    county: String(county || "").trim(),
+    postalCode: String(postalCode || "").trim(),
+    country: "RO",
+    isVatPayer:
+      registration?.scpTVA !== undefined
+        ? Boolean(registration.scpTVA)
+        : general?.scpTVA !== undefined
+          ? Boolean(general.scpTVA)
+          : true,
+  };
+}
+
 function startOfDay(value: Date) {
   const date = new Date(value);
   date.setHours(0, 0, 0, 0);
@@ -1328,6 +1380,58 @@ export async function handlePosCustomersSearch(req: PosAuthRequest, res: Respons
   });
 }
 
+export async function handlePosCompanyLookupByCui(req: PosAuthRequest, res: Response) {
+  const auth = await resolvePosAuthContext(req);
+  if (!auth?.tenantId) {
+    return res.status(401).json({ ok: false, error: "POS neautentificat." });
+  }
+
+  req.auth = auth;
+
+  const cuiRaw = normalizeText(req.query.cui).replace(/^RO/i, "");
+  if (!/^\d{2,12}$/.test(cuiRaw)) {
+    return res.status(400).json({ ok: false, error: "Introdu un CUI valid." });
+  }
+
+  try {
+    const response = await fetch("https://webservicesp.anaf.ro/api/PlatitorTvaRest/v9/tva", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify([
+        {
+          cui: Number(cuiRaw),
+          data: new Date().toISOString().slice(0, 10),
+        },
+      ]),
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    const found = Array.isArray(payload?.found) ? payload.found : [];
+    const item = found[0];
+
+    if (!response.ok || !item) {
+      return res.status(404).json({
+        ok: false,
+        error: payload?.message || "Nu am gasit firma dupa CUI.",
+      });
+    }
+
+    return res.json({
+      ok: true,
+      company: extractAnafCompanyPayload(item),
+      raw: item,
+    });
+  } catch (error: any) {
+    return res.status(502).json({
+      ok: false,
+      error: error?.message || "Nu am putut interoga serviciul ANAF pentru CUI.",
+    });
+  }
+}
+
 export async function handlePosReceiptInvoice(req: PosAuthRequest, res: Response) {
   const parsed = PosInvoiceFromSaleSchema.safeParse(req.body || {});
   if (!parsed.success) {
@@ -2116,6 +2220,10 @@ export async function handlePosBackofficeReceiptCreate(req: PosAuthRequest, res:
 
 router.get("/api/v1/pos/customers", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
   return handlePosCustomersSearch(req, res);
+});
+
+router.get("/api/v1/pos/cui-lookup", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
+  return handlePosCompanyLookupByCui(req, res);
 });
 
 router.get("/api/v1/pos/backoffice/sales-summary", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
