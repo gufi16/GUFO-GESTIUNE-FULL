@@ -2,11 +2,12 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import jwt from "jsonwebtoken";
-import { Prisma } from "@prisma/client";
+import { Prisma, UserRole } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { decrementStockBalanceStrict } from "../lib/stock";
 import { getPrimaryTenantCompany } from "../lib/companyResolver";
 import { reserveNextNumber } from "../lib/numbering";
+import { verifySecret } from "../lib/auth";
 
 console.log("POS ROUTES FILE LOADED");
 
@@ -1331,6 +1332,89 @@ const PosInvoiceFromSaleSchema = z.object({
   dueDate: z.string().trim().optional(),
 });
 
+const PosOperatorLoginSchema = z.object({
+  userId: z.string().trim().min(1, "Operatorul este obligatoriu."),
+  pin: z.string().trim().min(4, "PIN-ul trebuie sa aiba cel putin 4 caractere.").max(8, "PIN-ul poate avea maximum 8 caractere."),
+});
+
+const POS_OPERATOR_ROLES = [UserRole.OWNER, UserRole.ADMIN, UserRole.MANAGER, UserRole.CASHIER];
+
+export async function handlePosOperatorsList(req: PosAuthRequest, res: Response) {
+  const auth = await resolvePosAuthContext(req);
+  if (!auth?.tenantId) {
+    return res.status(401).json({ ok: false, error: "POS neautentificat." });
+  }
+
+  const operators = await prisma.user.findMany({
+    where: {
+      tenantId: auth.tenantId,
+      isActive: true,
+      role: { in: POS_OPERATOR_ROLES },
+      NOT: { posPinHash: null },
+    },
+    orderBy: [{ role: "asc" }, { name: "asc" }],
+    select: {
+      id: true,
+      name: true,
+      role: true,
+    },
+  });
+
+  return res.json({
+    ok: true,
+    items: operators.map((operator) => ({
+      id: operator.id,
+      name: operator.name,
+      role: operator.role,
+    })),
+  });
+}
+
+export async function handlePosOperatorLogin(req: PosAuthRequest, res: Response) {
+  const auth = await resolvePosAuthContext(req);
+  if (!auth?.tenantId) {
+    return res.status(401).json({ ok: false, error: "POS neautentificat." });
+  }
+
+  const parsed = PosOperatorLoginSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    return res.status(400).json({ ok: false, error: parsed.error.flatten() });
+  }
+
+  const operator = await prisma.user.findFirst({
+    where: {
+      id: parsed.data.userId,
+      tenantId: auth.tenantId,
+      isActive: true,
+      role: { in: POS_OPERATOR_ROLES },
+    },
+    select: {
+      id: true,
+      name: true,
+      role: true,
+      posPinHash: true,
+    },
+  });
+
+  if (!operator || !operator.posPinHash) {
+    return res.status(404).json({ ok: false, error: "Operatorul nu este disponibil pentru POS." });
+  }
+
+  const isValidPin = await verifySecret(parsed.data.pin, operator.posPinHash);
+  if (!isValidPin) {
+    return res.status(401).json({ ok: false, error: "PIN invalid." });
+  }
+
+  return res.json({
+    ok: true,
+    operator: {
+      id: operator.id,
+      name: operator.name,
+      role: operator.role,
+    },
+  });
+}
+
 export async function handlePosCustomersSearch(req: PosAuthRequest, res: Response) {
   const auth = await resolvePosAuthContext(req);
   if (!auth?.tenantId) {
@@ -2240,6 +2324,14 @@ router.get("/api/v1/pos/backoffice/products", requirePosAuth, async (req: PosAut
 
 router.post("/api/v1/pos/backoffice/receipts", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
   return handlePosBackofficeReceiptCreate(req, res);
+});
+
+router.get("/api/v1/pos/operators", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
+  return handlePosOperatorsList(req, res);
+});
+
+router.post("/api/v1/pos/operators/login", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
+  return handlePosOperatorLogin(req, res);
 });
 
 router.get("/api/v1/pos/receipts", requirePosAuth, async (req: PosAuthRequest, res: Response) => {

@@ -36,6 +36,7 @@ const CreateUserSchema = z.object({
   name: z.string().min(2),
   role: z.nativeEnum(UserRole),
   password: z.string().min(6).optional(),
+  posPin: z.string().trim().min(4).max(8).optional(),
   companyIds: z.array(z.string()).optional(),
 })
 
@@ -45,6 +46,10 @@ const ToggleUserSchema = z.object({
 
 const UpdateUserCompaniesSchema = z.object({
   companyIds: z.array(z.string()).default([]),
+})
+
+const SetPosPinSchema = z.object({
+  posPin: z.union([z.string().trim().min(4).max(8), z.literal(""), z.null()]).optional(),
 })
 
 async function listTenantCompanies(tenantId: string) {
@@ -90,6 +95,7 @@ router.get("/api/v1/users", requireAuth, async (req: AuthedRequest, res) => {
         name: true,
         role: true,
         isActive: true,
+        posPinHash: true,
         createdAt: true,
         updatedAt: true,
         companyAccesses: {
@@ -115,6 +121,7 @@ router.get("/api/v1/users", requireAuth, async (req: AuthedRequest, res) => {
     availableCompanies,
     items: users.map((user) => ({
       ...user,
+      hasPosPin: Boolean(user.posPinHash),
       companies: user.companyAccesses.map((entry) => entry.company),
     })),
   })
@@ -163,6 +170,7 @@ router.post("/api/v1/users", requireAuth, async (req: AuthedRequest, res) => {
       role: requestedRole,
       isActive: true,
       passwordHash: await hashSecret(rawPassword),
+      posPinHash: parsed.data.posPin?.trim() ? await hashSecret(parsed.data.posPin.trim()) : null,
     },
     select: {
       id: true,
@@ -170,6 +178,7 @@ router.post("/api/v1/users", requireAuth, async (req: AuthedRequest, res) => {
       name: true,
       role: true,
       isActive: true,
+      posPinHash: true,
       createdAt: true,
     },
   })
@@ -182,12 +191,58 @@ router.post("/api/v1/users", requireAuth, async (req: AuthedRequest, res) => {
     ok: true,
     item: {
       ...created,
+      hasPosPin: Boolean(created.posPinHash),
       companies:
         requestedRole === UserRole.OWNER || requestedRole === UserRole.ADMIN
           ? availableCompanies
           : availableCompanies.filter((company) => requestedCompanyIds.includes(company.id)),
     },
     temporaryPassword: rawPassword,
+  })
+})
+
+router.post("/api/v1/users/:id/pos-pin", requireAuth, async (req: AuthedRequest, res) => {
+  if (!ensureTenantAdmin(req, res)) return
+
+  const parsed = SetPosPinSchema.safeParse(req.body || {})
+  if (!parsed.success) {
+    return res.status(400).json({ ok: false, error: parsed.error.flatten() })
+  }
+
+  const tenantId = req.auth!.tenantId!
+  const actorRole = req.auth!.role as UserRole
+  const user = await prisma.user.findFirst({
+    where: { id: req.params.id, tenantId },
+    select: {
+      id: true,
+      role: true,
+      name: true,
+      email: true,
+    },
+  })
+
+  if (!user) {
+    return res.status(404).json({ ok: false, error: "Utilizatorul nu exista" })
+  }
+
+  if (actorRole !== UserRole.OWNER && (user.role === UserRole.OWNER || user.role === UserRole.ADMIN)) {
+    return res.status(403).json({ ok: false, error: "Doar owner-ul poate modifica PIN-ul POS pentru acest utilizator" })
+  }
+
+  const rawPin = typeof parsed.data.posPin === "string" ? parsed.data.posPin.trim() : ""
+  const posPinHash = rawPin ? await hashSecret(rawPin) : null
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { posPinHash },
+  })
+
+  return res.json({
+    ok: true,
+    item: {
+      id: user.id,
+      hasPosPin: Boolean(posPinHash),
+    },
   })
 })
 

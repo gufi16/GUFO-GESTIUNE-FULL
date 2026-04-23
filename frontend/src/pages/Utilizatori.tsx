@@ -18,6 +18,7 @@ type UserItem = {
   name: string
   role: string
   isActive: boolean
+  hasPosPin?: boolean
   createdAt: string
   companies?: CompanyItem[]
 }
@@ -59,6 +60,7 @@ export default function Utilizatori() {
     email: "",
     role: "CASHIER",
     password: "",
+    posPin: "",
     companyIds: [] as string[],
   })
   const [editingCompaniesFor, setEditingCompaniesFor] = useState<string | null>(null)
@@ -123,6 +125,7 @@ export default function Utilizatori() {
         email: "",
         role: "CASHIER",
         password: "",
+        posPin: "",
         companyIds: [],
       })
     } catch (err: any) {
@@ -190,6 +193,33 @@ export default function Utilizatori() {
       setMessage("Parola utilizatorului a fost resetata.")
     } catch (err: any) {
       setError(err?.message || "Nu am putut reseta parola.")
+    }
+  }
+
+  async function configurePosPin(user: UserItem) {
+    const value = window.prompt(
+      user.hasPosPin
+        ? "Introdu PIN nou pentru POS sau lasa gol pentru stergere."
+        : "Introdu PIN-ul POS pentru acest utilizator.",
+      ""
+    )
+    if (value === null) return
+
+    setError("")
+    setMessage("")
+    try {
+      const data = await api<{ ok: boolean; item?: { id: string; hasPosPin?: boolean } }>(`/api/v1/users/${user.id}/pos-pin`, {
+        method: "POST",
+        body: JSON.stringify({ posPin: value.trim() }),
+      })
+      setItems((current) =>
+        current.map((item) =>
+          item.id === user.id ? { ...item, hasPosPin: Boolean(data.item?.hasPosPin) } : item
+        )
+      )
+      setMessage(value.trim() ? "PIN-ul POS a fost salvat." : "PIN-ul POS a fost sters.")
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut salva PIN-ul POS.")
     }
   }
 
@@ -268,6 +298,18 @@ export default function Utilizatori() {
             </div>
 
             <div>
+              <label className="mb-1 block text-xs font-medium text-slate-700">PIN POS</label>
+              <input
+                type="password"
+                className={documentInputClass}
+                value={form.posPin}
+                onChange={(e) => setForm((current) => ({ ...current, posPin: e.target.value }))}
+                placeholder="Ex: 1234"
+              />
+              <div className="mt-1 text-xs text-slate-500">Pentru login rapid in Android POS pe baza numelui si PIN-ului.</div>
+            </div>
+
+            <div>
               <label className="mb-1 block text-xs font-medium text-slate-700">Acces firme</label>
               {form.role === "ADMIN" ? (
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600">
@@ -329,6 +371,7 @@ export default function Utilizatori() {
                   <th className="px-3 py-2">Utilizator</th>
                   <th className="px-3 py-2">Rol</th>
                   <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">PIN POS</th>
                   <th className="px-3 py-2">Firme</th>
                   <th className="px-3 py-2">Creat</th>
                   <th className="px-3 py-2 text-right">Actiuni</th>
@@ -345,6 +388,15 @@ export default function Utilizatori() {
                     <td className="px-3 py-3">
                       <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${item.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
                         {item.isActive ? "Activ" : "Inactiv"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3">
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                          item.hasPosPin ? "bg-blue-50 text-blue-700" : "bg-amber-50 text-amber-700"
+                        }`}
+                      >
+                        {item.hasPosPin ? "Setat" : "Lipsa"}
                       </span>
                     </td>
                     <td className="px-3 py-3">
@@ -410,6 +462,10 @@ export default function Utilizatori() {
                     <td className="px-3 py-3">{new Date(item.createdAt).toLocaleDateString("ro-RO")}</td>
                     <td className="px-3 py-3">
                       <div className="flex justify-end gap-2">
+                        <button className={documentButtonSecondaryClass} onClick={() => configurePosPin(item)} type="button">
+                          <KeyRound size={16} className="mr-2" />
+                          {item.hasPosPin ? "Schimba PIN POS" : "Seteaza PIN POS"}
+                        </button>
                         <button className={documentButtonSecondaryClass} onClick={() => resetPassword(item)} type="button">
                           <KeyRound size={16} className="mr-2" />
                           Reseteaza parola
@@ -428,7 +484,7 @@ export default function Utilizatori() {
                 ))}
                 {!items.length ? (
                   <tr>
-                    <td colSpan={6} className="px-3 py-6 text-center text-sm text-slate-500">
+                    <td colSpan={7} className="px-3 py-6 text-center text-sm text-slate-500">
                       Nu exista utilizatori definiti.
                     </td>
                   </tr>

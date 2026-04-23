@@ -395,6 +395,7 @@ model User {
   email        String
   name         String
   passwordHash String
+  posPinHash   String?
   role         UserRole @default(ADMIN)
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())

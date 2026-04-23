@@ -21,7 +21,7 @@ import { repairDeepStrings } from "./lib/textRepair"
 
 import productsRouter from "./routes/products"
 import metaRouter from "./routes/meta"
-import posRouter, { buildCatalogPayload, handlePosBackofficeProductsSearch, handlePosBackofficeReceiptCreate, handlePosBackofficeSalesSummary, handlePosBackofficeSuppliersSearch, handlePosCustomersSearch, handlePosDailyClosure, handlePosReceiptInvoice, handlePosReceiptsList, handlePosSale, registerPairedPosSession, resolvePosAuthContext } from "./routes/pos"
+import posRouter, { buildCatalogPayload, handlePosBackofficeProductsSearch, handlePosBackofficeReceiptCreate, handlePosBackofficeSalesSummary, handlePosBackofficeSuppliersSearch, handlePosCustomersSearch, handlePosDailyClosure, handlePosOperatorLogin, handlePosOperatorsList, handlePosReceiptInvoice, handlePosReceiptsList, handlePosSale, registerPairedPosSession, resolvePosAuthContext } from "./routes/pos"
 import stockRouter from "./routes/stock"
 import purchaseRouter from "./routes/purchase"
 import companyRouter, { handleAnafOauthCallback } from "./routes/company"
@@ -1235,6 +1235,18 @@ app.get("/api/v1/pos/receipts", async (req, res) => {
 app.get("/api/v1/pos/customers", async (req, res) => {
   console.log("🔥 INDEX POS CUSTOMERS HIT", req.query)
   return handlePosCustomersSearch(req as any, res)
+})
+
+app.get("/api/v1/pos/operators", async (req, res) => {
+  console.log("🔥 INDEX POS OPERATORS HIT", req.query)
+  return handlePosOperatorsList(req as any, res)
+})
+
+app.post("/api/v1/pos/operators/login", async (req, res) => {
+  console.log("🔥 INDEX POS OPERATOR LOGIN HIT", {
+    userId: req.body?.userId || null,
+  })
+  return handlePosOperatorLogin(req as any, res)
 })
 
 app.get("/api/v1/pos/backoffice/sales-summary", async (req, res) => {
