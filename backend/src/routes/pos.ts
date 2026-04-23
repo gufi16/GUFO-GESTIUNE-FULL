@@ -576,6 +576,22 @@ const PosDailyClosureSchema = z.object({
   payload: z.any().optional(),
 });
 
+const PosBackofficeReceiptSchema = z.object({
+  supplierId: z.string().optional().nullable(),
+  supplierName: z.string().optional().nullable(),
+  supplierCode: z.string().optional().nullable(),
+  note: z.string().optional().nullable(),
+  postNow: z.boolean().optional().default(true),
+  items: z.array(
+    z.object({
+      productId: z.string().min(1),
+      qty: z.number().positive(),
+      unitCostNetFc: z.number().min(0),
+      vatRateValue: z.number().min(0).max(100).optional(),
+    })
+  ).min(1),
+});
+
 async function resolveDailyClosureAuth(req: PosAuthRequest, body: z.infer<typeof PosDailyClosureSchema>) {
   const auth = await resolvePosAuthContext(req);
   if (auth?.tenantId && auth.terminalId) {
@@ -1794,12 +1810,328 @@ export async function handlePosBackofficeSalesSummary(req: PosAuthRequest, res: 
   }
 }
 
+export async function handlePosBackofficeSuppliersSearch(req: PosAuthRequest, res: Response) {
+  const auth = await resolvePosAuthContext(req);
+  if (!auth?.tenantId) {
+    return res.status(401).json({ ok: false, error: "POS neautentificat." });
+  }
+
+  req.auth = auth;
+  const tenantId = auth.tenantId;
+  const company = await getPrimaryTenantCompany(tenantId, {
+    select: { id: true },
+  });
+
+  try {
+    const q = normalizeText(req.query.q).slice(0, 60);
+    const suppliers = await prisma.supplier.findMany({
+      where: {
+        tenantId,
+        companyId: company?.id || null,
+        ...(q
+          ? {
+              OR: [
+                { name: { contains: q, mode: "insensitive" } },
+                { code: { contains: q, mode: "insensitive" } },
+                { cif: { contains: q, mode: "insensitive" } },
+              ],
+            }
+          : {}),
+      },
+      orderBy: [{ name: "asc" }],
+      take: 15,
+    });
+
+    return res.json({
+      ok: true,
+      suppliers: suppliers.map((supplier) => ({
+        id: supplier.id,
+        name: supplier.name,
+        code: supplier.code || null,
+        cif: supplier.cif || null,
+        address: supplier.address || null,
+        phone: supplier.phone || null,
+        email: supplier.email || null,
+      })),
+    });
+  } catch (error) {
+    console.error("POS BACKOFFICE SUPPLIERS ERROR", error);
+    return res.status(500).json({ ok: false, error: "Nu am putut cauta furnizorii." });
+  }
+}
+
+export async function handlePosBackofficeProductsSearch(req: PosAuthRequest, res: Response) {
+  const auth = await resolvePosAuthContext(req);
+  if (!auth?.tenantId) {
+    return res.status(401).json({ ok: false, error: "POS neautentificat." });
+  }
+
+  req.auth = auth;
+  const tenantId = auth.tenantId;
+  const company = await getPrimaryTenantCompany(tenantId, {
+    select: { id: true },
+  });
+
+  try {
+    const q = normalizeText(req.query.q).slice(0, 60);
+    const products = await prisma.product.findMany({
+      where: {
+        tenantId,
+        companyId: company?.id || null,
+        isActive: true,
+        ...(q
+          ? {
+              OR: [
+                { name: { contains: q, mode: "insensitive" } },
+                { sku: { contains: q, mode: "insensitive" } },
+                { barcodes: { some: { barcode: { contains: q, mode: "insensitive" } } } },
+              ],
+            }
+          : {}),
+      },
+      include: {
+        vatRate: true,
+        uom: true,
+        purchaseUom: true,
+      },
+      orderBy: [{ name: "asc" }],
+      take: 20,
+    });
+
+    return res.json({
+      ok: true,
+      products: products.map((product) => ({
+        id: product.id,
+        name: product.name,
+        sku: product.sku || null,
+        vatRateValue: toNumber(product.vatRate?.rate),
+        defaultCost: toNumber(product.costPrice),
+        uomCode: product.purchaseUom?.code || product.uom?.code || "",
+      })),
+    });
+  } catch (error) {
+    console.error("POS BACKOFFICE PRODUCTS ERROR", error);
+    return res.status(500).json({ ok: false, error: "Nu am putut cauta produsele." });
+  }
+}
+
+export async function handlePosBackofficeReceiptCreate(req: PosAuthRequest, res: Response) {
+  const auth = await resolvePosAuthContext(req);
+  if (!auth?.tenantId || !auth?.terminalId) {
+    return res.status(401).json({ ok: false, error: "POS neautentificat." });
+  }
+
+  req.auth = auth;
+  const parsed = PosBackofficeReceiptSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    return res.status(400).json({ ok: false, error: parsed.error.flatten() });
+  }
+
+  const tenantId = auth.tenantId;
+  const terminalId = auth.terminalId;
+  const payload = parsed.data;
+  const company = await getPrimaryTenantCompany(tenantId, {
+    select: { id: true },
+  });
+
+  try {
+    const terminal = await prisma.terminal.findUnique({
+      where: { id: terminalId },
+      select: { id: true, locationId: true },
+    });
+
+    if (!terminal?.locationId) {
+      return res.status(400).json({ ok: false, error: "Terminal fara locatie selectata." });
+    }
+
+    let supplier: any = null;
+    if (normalizeText(payload.supplierId)) {
+      supplier = await prisma.supplier.findFirst({
+        where: {
+          id: normalizeText(payload.supplierId),
+          tenantId,
+          companyId: company?.id || null,
+        },
+      });
+      if (!supplier) {
+        return res.status(404).json({ ok: false, error: "Furnizorul nu a fost gasit." });
+      }
+    }
+
+    const productIds = payload.items.map((item) => normalizeText(item.productId));
+    const dbProducts = await prisma.product.findMany({
+      where: {
+        id: { in: productIds },
+        tenantId,
+        companyId: company?.id || null,
+      },
+      include: {
+        vatRate: true,
+        uom: true,
+        purchaseUom: true,
+      },
+    });
+
+    const productMap = new Map(dbProducts.map((product) => [product.id, product]));
+
+    for (const item of payload.items) {
+      if (!productMap.get(normalizeText(item.productId))) {
+        return res.status(404).json({ ok: false, error: "Un produs din receptie nu a fost gasit." });
+      }
+    }
+
+    const created = await prisma.$transaction(async (tx) => {
+      const docNo = await reserveNextNumber(tx, tenantId, "purchaseReceipt");
+      const receipt = await tx.purchaseReceipt.create({
+        data: {
+          tenantId,
+          companyId: company?.id || null,
+          locationId: terminal.locationId!,
+          supplierId: supplier?.id || null,
+          supplierName: supplier?.name || normalizeText(payload.supplierName) || null,
+          supplierCode: supplier?.code || normalizeText(payload.supplierCode) || null,
+          docNo,
+          docDate: new Date(),
+          currency: "RON",
+          fxRate: 1,
+          note: normalizeText(payload.note) || null,
+          status: payload.postNow ? "POSTED" : "DRAFT",
+        },
+      });
+
+      let totalNetFc = 0;
+      let totalVatFc = 0;
+      let totalGrossFc = 0;
+
+      for (const rawItem of payload.items) {
+        const product = productMap.get(normalizeText(rawItem.productId))!;
+        const qty = toNumber(rawItem.qty);
+        const unitCostNetFc = toNumber(rawItem.unitCostNetFc);
+        const vatRateValue =
+          rawItem.vatRateValue !== undefined ? toNumber(rawItem.vatRateValue) : toNumber(product.vatRate?.rate);
+        const conversionFactor = product.purchaseUomId && product.purchaseUomId !== product.uomId
+          ? Math.max(0.000001, toNumber(product.purchaseFactor || 1))
+          : 1;
+        const stockQty = qty * conversionFactor;
+        const lineNetFc = qty * unitCostNetFc;
+        const lineVatFc = (lineNetFc * vatRateValue) / 100;
+        const lineGrossFc = lineNetFc + lineVatFc;
+
+        totalNetFc += lineNetFc;
+        totalVatFc += lineVatFc;
+        totalGrossFc += lineGrossFc;
+
+        await tx.purchaseReceiptItem.create({
+          data: {
+            receiptId: receipt.id,
+            productId: product.id,
+            uomId: product.purchaseUomId || product.uomId,
+            qty,
+            conversionFactor,
+            stockQty,
+            unitCostNetFc,
+            unitCostNetRon: unitCostNetFc,
+            lineNetFc,
+            lineVatFc,
+            lineGrossFc,
+            lineNetRon: lineNetFc,
+            lineVatRon: lineVatFc,
+            lineGrossRon: lineGrossFc,
+            vatRateId: product.vatRateId,
+            vatRateValue,
+          },
+        });
+
+        if (payload.postNow) {
+          await tx.stockBalance.upsert({
+            where: {
+              tenantId_companyId_locationId_productId: {
+                tenantId,
+                companyId: company?.id || null,
+                locationId: terminal.locationId!,
+                productId: product.id,
+              },
+            },
+            update: {
+              qty: { increment: stockQty },
+            },
+            create: {
+              tenantId,
+              companyId: company?.id || null,
+              locationId: terminal.locationId!,
+              productId: product.id,
+              qty: stockQty,
+            },
+          });
+
+          await tx.stockMove.create({
+            data: {
+              tenantId,
+              companyId: company?.id || null,
+              locationId: terminal.locationId!,
+              productId: product.id,
+              type: "IN",
+              qty: stockQty,
+              refType: "PURCHASE",
+              refId: receipt.id,
+              note: `NIR ${docNo}`,
+            },
+          });
+
+          await tx.product.update({
+            where: { id: product.id },
+            data: { costPrice: unitCostNetFc },
+          });
+        }
+      }
+
+      return tx.purchaseReceipt.update({
+        where: { id: receipt.id },
+        data: {
+          totalNetFc,
+          totalVatFc,
+          totalGrossFc,
+          totalNetRon: totalNetFc,
+          totalVatRon: totalVatFc,
+          totalGrossRon: totalGrossFc,
+        },
+      });
+    });
+
+    return res.status(201).json({
+      ok: true,
+      receiptId: created.id,
+      docNo: created.docNo,
+      status: created.status,
+      total: Number(created.totalGrossRon || 0),
+    });
+  } catch (error) {
+    console.error("POS BACKOFFICE RECEIPT CREATE ERROR", error);
+    return res.status(400).json({
+      ok: false,
+      error: error instanceof Error ? error.message : "Nu am putut salva receptia din POS.",
+    });
+  }
+}
+
 router.get("/api/v1/pos/customers", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
   return handlePosCustomersSearch(req, res);
 });
 
 router.get("/api/v1/pos/backoffice/sales-summary", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
   return handlePosBackofficeSalesSummary(req, res);
+});
+
+router.get("/api/v1/pos/backoffice/suppliers", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
+  return handlePosBackofficeSuppliersSearch(req, res);
+});
+
+router.get("/api/v1/pos/backoffice/products", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
+  return handlePosBackofficeProductsSearch(req, res);
+});
+
+router.post("/api/v1/pos/backoffice/receipts", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
+  return handlePosBackofficeReceiptCreate(req, res);
 });
 
 router.get("/api/v1/pos/receipts", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
