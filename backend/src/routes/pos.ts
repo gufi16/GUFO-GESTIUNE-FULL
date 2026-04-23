@@ -1333,7 +1333,7 @@ const PosInvoiceFromSaleSchema = z.object({
 });
 
 const PosOperatorLoginSchema = z.object({
-  userId: z.string().trim().min(1, "Operatorul este obligatoriu."),
+  name: z.string().trim().min(1, "Operatorul este obligatoriu."),
   pin: z.string().trim().min(4, "PIN-ul trebuie sa aiba cel putin 4 caractere.").max(8, "PIN-ul poate avea maximum 8 caractere."),
 });
 
@@ -1381,12 +1381,17 @@ export async function handlePosOperatorLogin(req: PosAuthRequest, res: Response)
     return res.status(400).json({ ok: false, error: parsed.error.flatten() });
   }
 
-  const operator = await prisma.user.findFirst({
+  const normalizedName = parsed.data.name.trim();
+
+  const operators = await prisma.user.findMany({
     where: {
-      id: parsed.data.userId,
       tenantId: auth.tenantId,
       isActive: true,
       role: { in: POS_OPERATOR_ROLES },
+      name: {
+        equals: normalizedName,
+        mode: "insensitive",
+      },
     },
     select: {
       id: true,
@@ -1394,7 +1399,10 @@ export async function handlePosOperatorLogin(req: PosAuthRequest, res: Response)
       role: true,
       posPinHash: true,
     },
+    orderBy: [{ role: "asc" }, { createdAt: "desc" }],
   });
+
+  const operator = operators.find((item) => Boolean(item.posPinHash)) || null;
 
   if (!operator || !operator.posPinHash) {
     return res.status(404).json({ ok: false, error: "Operatorul nu este disponibil pentru POS." });

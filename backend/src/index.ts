@@ -1244,7 +1244,7 @@ app.get("/api/v1/pos/operators", async (req, res) => {
 
 app.post("/api/v1/pos/operators/login", async (req, res) => {
   console.log("🔥 INDEX POS OPERATOR LOGIN HIT", {
-    userId: req.body?.userId || null,
+    name: req.body?.name || null,
   })
   return handlePosOperatorLogin(req as any, res)
 })
