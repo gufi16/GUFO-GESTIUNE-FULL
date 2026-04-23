@@ -1674,8 +1674,132 @@ export async function handlePosReceiptsList(req: PosAuthRequest, res: Response) 
   }
 }
 
+export async function handlePosBackofficeSalesSummary(req: PosAuthRequest, res: Response) {
+  const auth = await resolvePosAuthContext(req);
+  if (!auth?.tenantId) {
+    return res.status(401).json({ ok: false, error: "POS neautentificat." });
+  }
+
+  req.auth = auth;
+  const tenantId = auth.tenantId;
+  const terminalId = auth.terminalId || null;
+
+  const company = await getPrimaryTenantCompany(tenantId, {
+    select: { id: true },
+  });
+
+  try {
+    const now = new Date();
+    const dateFrom = asDate(req.query.dateFrom, startOfDay(now));
+    const dateTo = asDate(req.query.dateTo, endOfDay(now));
+
+    const saleWhere: any = {
+      tenantId,
+      companyId: company?.id || null,
+      soldAt: { gte: dateFrom, lte: dateTo },
+    };
+
+    if (terminalId) {
+      saleWhere.terminalId = terminalId;
+    }
+
+    const [salesAgg, cashAgg, cardAgg, topProductsRows, recentSales] = await Promise.all([
+      prisma.sale.aggregate({
+        where: saleWhere,
+        _sum: { total: true },
+        _count: { id: true },
+      }),
+      prisma.sale.aggregate({
+        where: saleWhere,
+        _sum: { cashAmount: true },
+      }),
+      prisma.sale.aggregate({
+        where: saleWhere,
+        _sum: { cardAmount: true },
+      }),
+      prisma.$queryRaw<Array<{ name: string; qty: number; total: number }>>(Prisma.sql`
+        SELECT
+          p.name,
+          SUM(si.qty) as qty,
+          SUM(si.qty * si."unitPrice") as total
+        FROM "SaleItem" si
+        JOIN "Product" p ON p.id = si."productId"
+        JOIN "Sale" s ON s.id = si."saleId"
+        WHERE s."tenantId" = ${tenantId}
+          AND s."companyId" = ${company?.id || null}
+          ${terminalId ? Prisma.sql`AND s."terminalId" = ${terminalId}` : Prisma.empty}
+          AND s."soldAt" BETWEEN ${dateFrom} AND ${dateTo}
+          AND NOT (
+            COALESCE(p."isSgr", false) = true
+            AND COALESCE(si."vatRate", 0) = 0
+            AND COALESCE(si."unitPrice", 0) = COALESCE(p."sgrValue", 0)
+          )
+        GROUP BY p.name
+        ORDER BY total DESC, qty DESC
+        LIMIT 5
+      `),
+      prisma.sale.findMany({
+        where: saleWhere,
+        select: {
+          id: true,
+          receiptNo: true,
+          total: true,
+          soldAt: true,
+          paymentType: true,
+          location: { select: { name: true } },
+        },
+        orderBy: [{ soldAt: "desc" }, { createdAt: "desc" }],
+        take: 8,
+      }),
+    ]);
+
+    const totalSales = Number(salesAgg._sum.total || 0);
+    const receipts = Number(salesAgg._count.id || 0);
+    const cash = Number(cashAgg._sum.cashAmount || 0);
+    const card = Number(cardAgg._sum.cardAmount || 0);
+    const avgReceipt = receipts > 0 ? totalSales / receipts : 0;
+
+    return res.json({
+      ok: true,
+      totals: {
+        sales: totalSales,
+        receipts,
+        cash,
+        card,
+        avgReceipt,
+      },
+      topProducts: Array.isArray(topProductsRows)
+        ? topProductsRows.map((item) => ({
+            name: item.name || "Produs",
+            qty: Number(item.qty || 0),
+            total: Number(item.total || 0),
+          }))
+        : [],
+      recentSales: recentSales.map((item) => ({
+        id: item.id,
+        receiptNo: item.receiptNo,
+        soldAt: item.soldAt,
+        total: Number(item.total || 0),
+        paymentType: item.paymentType || "",
+        locationName: item.location?.name || null,
+      })),
+      interval: {
+        dateFrom: dateFrom.toISOString(),
+        dateTo: dateTo.toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error("POS BACKOFFICE SUMMARY ERROR", error);
+    return res.status(500).json({ ok: false, error: "Nu am putut incarca sumarul de vanzari POS." });
+  }
+}
+
 router.get("/api/v1/pos/customers", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
   return handlePosCustomersSearch(req, res);
+});
+
+router.get("/api/v1/pos/backoffice/sales-summary", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
+  return handlePosBackofficeSalesSummary(req, res);
 });
 
 router.get("/api/v1/pos/receipts", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
