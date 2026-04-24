@@ -407,17 +407,6 @@ function isIncomingEfacturaMessage(entry: any) {
   return Boolean(downloadId) && (raw.includes("id_descarcare") || raw.includes("download") || raw.includes("cif_beneficiar"))
 }
 
-function isInvoiceReceivedByCompany(parsedInvoice: any, company: any) {
-  const companyCui = normalizeCompanyCui(company?.cui)
-  const customerCif = normalizeCompanyCui(parsedInvoice?.customerCif)
-  const supplierCif = normalizeCompanyCui(parsedInvoice?.supplierCif)
-
-  if (!companyCui) return true
-  if (customerCif) return customerCif === companyCui
-  if (supplierCif) return supplierCif !== companyCui
-  return true
-}
-
 function mapIncomingSyncError(error: any, company?: {
   efacturaCertFilename?: string | null
   efacturaCertPasswordEnc?: string | null
@@ -837,8 +826,6 @@ router.get("/api/v1/efactura/incoming", async (req: AuthedRequest, res) => {
     return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
   }
 
-  const company = await loadAnafCompanyContext(tenantId, companyId)
-
   const items = await prisma.incomingEInvoice.findMany({
     where: { tenantId, companyId },
     include: {
@@ -855,11 +842,7 @@ router.get("/api/v1/efactura/incoming", async (req: AuthedRequest, res) => {
   })
 
   const repairedItems = await Promise.all(items.map((entry) => repairIncomingInvoiceIfNeeded(tenantId, companyId, entry)))
-  const filteredItems = repairedItems.filter((entry) => {
-    const parsedInvoice = entry?.xmlText ? parseIncomingEInvoiceXml(String(entry.xmlText)) : null
-    return isInvoiceReceivedByCompany(parsedInvoice, company)
-  })
-  const serializedItems = filteredItems.map((entry) => serializeIncomingInvoice(entry))
+  const serializedItems = repairedItems.map((entry) => serializeIncomingInvoice(entry))
 
   return res.json({ ok: true, items: serializedItems })
 })
@@ -965,10 +948,6 @@ router.post("/api/v1/efactura/incoming/sync", async (req: AuthedRequest, res) =>
         downloaded += 1
         const extracted = extractXmlFromAnafDownload(downloadResult.response.buffer)
         const parsedInvoice = parseIncomingEInvoiceXml(extracted.xmlText)
-        if (!isInvoiceReceivedByCompany(parsedInvoice, company)) {
-          skipped += 1
-          continue
-        }
         const item = await upsertIncomingInvoice(tenantId, companyId, message, extracted.xmlText, parsedInvoice)
         await ensureIncomingInvoicePdfSaved(item)
         imported += 1
@@ -1126,13 +1105,6 @@ router.post("/api/v1/efactura/incoming/import-from-spv-bridge", async (req: Auth
     const buffer = Buffer.from(downloadBase64, "base64")
     const extracted = extractXmlFromAnafDownload(buffer)
     const parsedInvoice = parseIncomingEInvoiceXml(extracted.xmlText)
-    const company = await loadAnafCompanyContext(tenantId, companyId)
-    if (!isInvoiceReceivedByCompany(parsedInvoice, company)) {
-      return res.status(400).json({
-        ok: false,
-        error: "Documentul SPV selectat este emis de firma ta si nu trebuie importat la Facturi primite.",
-      })
-    }
     const item = await upsertIncomingInvoice(tenantId, companyId, rawMessage, extracted.xmlText, parsedInvoice)
     await ensureIncomingInvoicePdfSaved(item)
     return res.json({
