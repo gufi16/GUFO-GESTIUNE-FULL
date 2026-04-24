@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { Navigate, useNavigate } from "react-router-dom"
-import { ArrowRight, ChevronDown, ChevronUp, ClipboardList, Download, Factory, FileCode2, FileText, PackageSearch, Repeat2, X } from "lucide-react"
+import { ArrowRight, ChevronDown, ChevronUp, Download, FileCode2, FileText, X } from "lucide-react"
 import PageHeader from "../components/PageHeader"
 import { DocumentMetric, InlineNotice, documentButtonPrimaryClass, documentButtonSecondaryClass, documentInputClass } from "../components/DocumentUi"
 import { API_BASE, getToken } from "../lib/api"
@@ -117,7 +117,6 @@ function getCurrentMonthValue() {
 
 function parseSpvMessageDate(value?: string | null) {
   const raw = String(value || "").trim()
-  if (!raw) return null
   const match = raw.match(/^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}):(\d{2}):(\d{2}))?$/)
   if (match) {
     const [, dd, mm, yyyy, hh = "00", mi = "00", ss = "00"] = match
@@ -126,14 +125,10 @@ function parseSpvMessageDate(value?: string | null) {
   }
 
   const compactMatch = raw.match(/^(\d{4})(\d{2})(\d{2})(?:[T\s]?(\d{2})(\d{2})(\d{2})?)?$/)
-  if (compactMatch) {
-    const [, yyyy, mm, dd, hh = "00", mi = "00", ss = "00"] = compactMatch
-    const date = new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss))
-    if (!Number.isNaN(date.getTime())) return date
-  }
-
-  const genericDate = new Date(raw)
-  return Number.isNaN(genericDate.getTime()) ? null : genericDate
+  if (!compactMatch) return null
+  const [, yyyy, mm, dd, hh = "00", mi = "00", ss = "00"] = compactMatch
+  const date = new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss))
+  return Number.isNaN(date.getTime()) ? null : date
 }
 
 function getMonthKey(date: Date) {
@@ -169,15 +164,6 @@ function filterMessagesForMonth(messages: any[], monthValue: string) {
   })
 }
 
-function collectBridgeMessageItems(payload: any) {
-  if (Array.isArray(payload)) return payload
-  const keys = ["mesaje", "messages", "lista", "items", "facturi", "messageList"]
-  for (const key of keys) {
-    if (Array.isArray(payload?.[key])) return payload[key]
-  }
-  return []
-}
-
 function getDaysNeededForMonth(monthValue: string) {
   if (!monthValue) return 30
   const [yearRaw, monthRaw] = monthValue.split("-")
@@ -194,12 +180,9 @@ function getDaysNeededForMonth(monthValue: string) {
 function isIncomingEfacturaMessage(entry: any) {
   const tip = String(entry?.tip || "").trim().toUpperCase()
   const details = String(entry?.detalii || "").trim().toLowerCase()
-  const downloadId = String(entry?.id_descarcare || entry?.downloadId || entry?.id || "").trim()
-  const raw = JSON.stringify(entry || {}).toLowerCase()
-  if (tip.includes("RECIPISA")) return false
   if (tip.includes("PRIMITA")) return true
-  if (details.includes("cif_beneficiar")) return true
-  return Boolean(downloadId) && (raw.includes("id_descarcare") || raw.includes("download") || raw.includes("cif_beneficiar"))
+  if (tip === "RECIPISA") return false
+  return details.includes("cif_beneficiar")
 }
 
 function escapeHtml(value: string) {
@@ -353,37 +336,243 @@ export default function FacturiPrimiteSPVPage() {
     setBridgeMessages([])
     setBridgeMessagesPage(1)
     try {
-      const requestedDays = getDaysNeededForMonth(selectedMonth)
-      const res = await fetch(`${API_BASE}/api/v1/efactura/incoming/sync`, {
+      const localAgent = await getLocalAgentConnection()
+      if (localAgent?.bridgeToken) {
+        const trimmedBridgeUrl = localAgent.bridgeUrl
+        const requestedDays = getDaysNeededForMonth(selectedMonth)
+        const bridgeConfig = await loadBridgeConfig()
+        const existingDownloadIds = new Set(
+          items
+            .map((entry) => String(entry.spvDownloadId || "").trim())
+            .filter(Boolean)
+        )
+        const bridgeHeaders = {
+          Authorization: `Bearer ${localAgent.bridgeToken}`,
+          "Content-Type": "application/json",
+        }
+        let listData: any = null
+        let payload: any = {}
+        let downloadsById = new Map<string, any>()
+
+        const syncBatchRes = await fetch(`${trimmedBridgeUrl}/api/v1/efactura/sync-batch`, {
+          method: "POST",
+          headers: bridgeHeaders,
+          body: JSON.stringify({
+            days: requestedDays,
+            accessToken: bridgeConfig.accessToken,
+            cif: bridgeConfig.cif,
+            environment: bridgeConfig.environment,
+            existingIds: Array.from(existingDownloadIds),
+          }),
+        })
+        const syncBatchData = await syncBatchRes.json().catch(() => ({}))
+        const shouldFallbackToLegacyBridge =
+          !syncBatchRes.ok &&
+          (syncBatchRes.status === 404 ||
+            String(syncBatchData?.error || "")
+              .trim()
+              .toLowerCase()
+              .includes("ruta necunoscuta"))
+
+        if (!shouldFallbackToLegacyBridge) {
+          if (!syncBatchRes.ok || !syncBatchData?.ok || !syncBatchData?.response?.list?.ok) {
+            throw new Error(syncBatchData?.response?.list?.error || syncBatchData?.error || "Bridge-ul local nu a putut sincroniza e-Factura.")
+          }
+          listData = syncBatchData
+          payload = (() => {
+            const rawContent = String(listData?.response?.list?.content || "").trim()
+            if (!rawContent) return {}
+            try {
+              return JSON.parse(rawContent)
+            } catch {
+              return {}
+            }
+          })()
+          downloadsById = new Map<string, any>(
+            (Array.isArray(listData?.response?.items) ? listData.response.items : []).map((entry: any) => [
+              String(entry?.id || "").trim(),
+              entry,
+            ])
+          )
+        } else {
+          const listRes = await fetch(`${trimmedBridgeUrl}/api/v1/efactura/list-messages`, {
+            method: "POST",
+            headers: bridgeHeaders,
+            body: JSON.stringify({
+              days: requestedDays,
+              accessToken: bridgeConfig.accessToken,
+              cif: bridgeConfig.cif,
+              environment: bridgeConfig.environment,
+            }),
+          })
+          listData = await listRes.json().catch(() => ({}))
+          if (!listRes.ok || !listData?.ok || !listData?.response?.ok) {
+            throw new Error(listData?.response?.error || listData?.error || "Bridge-ul local nu a putut lista mesajele e-Factura.")
+          }
+          payload = listData?.response?.parsedContent || {}
+        }
+
+        const messages = filterMessagesForMonth(Array.isArray(payload?.mesaje) ? payload.mesaje : [], selectedMonth)
+        setBridgeMessages(
+          messages.map((entry: any) => ({
+            id: String(entry?.id || ""),
+            tip: entry?.tip || null,
+            cif: entry?.cif || null,
+            data_creare: entry?.data_creare || null,
+            detalii: entry?.detalii || null,
+          }))
+        )
+
+        const invoiceMessages = messages.filter((entry: any) => isIncomingEfacturaMessage(entry))
+        const newInvoiceMessages = invoiceMessages.filter((entry: any) => !existingDownloadIds.has(String(entry?.id || "").trim()))
+
+        if (!invoiceMessages.length) {
+          setMessage(`Bridge local conectat, dar in e-Factura nu exista facturi de importat pentru ${selectedMonth}.`)
+          setSpvTestResult({
+            ok: true,
+            title: "Bridge local e-Factura conectat cu succes",
+            tone: "success",
+            lines: [
+              "Rută testată: bridge local -> sincronizare SPVWS2",
+              `Bridge URL: ${trimmedBridgeUrl}`,
+              `Luna selectata: ${selectedMonth}`,
+              `Mediu ANAF: ${bridgeConfig.environment}`,
+              `CUI: ${bridgeConfig.cif}`,
+              `Mesaje totale: ${messages.length}`,
+              "Facturi importabile: 0",
+            ],
+          })
+          await loadItems()
+          return
+        }
+
+        if (!newInvoiceMessages.length) {
+          setMessage(`Facturile pentru ${selectedMonth} sunt deja sincronizate in Gufo.`)
+          setSpvTestResult({
+            ok: true,
+            title: "Facturile din e-Factura sunt deja in Gufo",
+            tone: "success",
+            lines: [
+              "Ruta testata: bridge local -> listaMesaje + verificare duplicat",
+              `Bridge URL: ${trimmedBridgeUrl}`,
+              `Luna selectata: ${selectedMonth}`,
+              `Mediu ANAF: ${bridgeConfig.environment}`,
+              `CUI: ${bridgeConfig.cif}`,
+              `Mesaje totale: ${messages.length}`,
+              `Facturi gasite: ${invoiceMessages.length}`,
+              "Facturi noi de importat: 0",
+            ],
+          })
+          await loadItems()
+          return
+        }
+
+        let imported = 0
+        let skipped = 0
+        let lastImportedInvoiceNo = "-"
+        const importErrors: string[] = []
+
+        if (shouldFallbackToLegacyBridge) {
+          const downloadIds = newInvoiceMessages
+            .map((message: any) => String(message?.id || "").trim())
+            .filter(Boolean)
+
+          const batchDownloadRes = await fetch(`${trimmedBridgeUrl}/api/v1/efactura/download-many`, {
+            method: "POST",
+            headers: bridgeHeaders,
+            body: JSON.stringify({
+              ids: downloadIds,
+              accessToken: bridgeConfig.accessToken,
+              environment: bridgeConfig.environment,
+            }),
+          })
+          const batchDownloadData = await batchDownloadRes.json().catch(() => ({}))
+          if (!batchDownloadRes.ok || !batchDownloadData?.ok || !batchDownloadData?.response?.items) {
+            throw new Error(batchDownloadData?.error || "Bridge-ul local nu a putut descarca lotul de facturi e-Factura.")
+          }
+          downloadsById = new Map<string, any>(
+            (Array.isArray(batchDownloadData.response.items) ? batchDownloadData.response.items : []).map((entry: any) => [
+              String(entry?.id || "").trim(),
+              entry,
+            ])
+          )
+        }
+
+        for (const message of newInvoiceMessages) {
+          const messageId = String(message?.id || "").trim()
+          const downloadData = downloadsById.get(messageId)
+          if (!messageId || !downloadData?.ok || !downloadData?.base64Content) {
+            skipped += 1
+            continue
+          }
+
+          const importRes = await fetch(`${API_BASE}/api/v1/efactura/incoming/import-from-spv-bridge`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              message,
+              downloadBase64: downloadData.base64Content,
+            }),
+          })
+          const importData = await importRes.json().catch(() => ({}))
+          if (!importRes.ok || !importData?.ok) {
+            skipped += 1
+            if (importErrors.length < 3) {
+              importErrors.push(importData?.error || `Importul a esuat pentru mesajul ${messageId}.`)
+            }
+            continue
+          }
+
+          imported += 1
+          lastImportedInvoiceNo = importData?.invoiceNo || importData?.spvDownloadId || lastImportedInvoiceNo
+        }
+
+        setSpvTestResult({
+          ok: imported > 0,
+          title: imported > 0 ? "Sincronizare e-Factura prin bridge finalizata" : "Sincronizare e-Factura fara facturi noi",
+          tone: imported > 0 ? "success" : "error",
+          lines: [
+            "Rută testată: bridge local -> listaMesaje + descarcare + import Gufo",
+            `Bridge URL: ${trimmedBridgeUrl}`,
+            `Luna selectata: ${selectedMonth}`,
+            `Mediu ANAF: ${bridgeConfig.environment}`,
+            `CUI: ${bridgeConfig.cif}`,
+            `Mesaje totale: ${messages.length}`,
+            `Facturi gasite: ${invoiceMessages.length}`,
+            `Facturi noi de importat: ${newInvoiceMessages.length}`,
+            `Facturi importate: ${imported}`,
+            `Mesaje sărite/eroare: ${skipped}`,
+            `Ultima factura importata: ${lastImportedInvoiceNo}`,
+            ...(importErrors.length ? [`Prima eroare: ${importErrors[0]}`] : []),
+          ],
+        })
+
+        if (imported > 0) {
+          setMessage(`Sincronizare e-Factura finalizata prin bridge local pentru ${selectedMonth}. Facturi importate: ${imported}.`)
+        } else {
+          setError(importErrors[0] || `Bridge-ul a raspuns, dar nu am importat nicio factura noua din e-Factura pentru ${selectedMonth}.`)
+        }
+
+        await loadItems()
+        return
+      }
+
+      const res = await fetch(`${API_BASE}/api/v1/spv-classic/sync`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ days: requestedDays }),
+        body: JSON.stringify({ days: 30 }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data?.ok) {
-        throw new Error(data?.message || data?.error || "Nu am putut sincroniza facturile primite direct din ANAF.")
+        throw new Error(data?.message || data?.error || "Nu am putut sincroniza facturile primite din SPV.")
       }
-      const stats = data?.stats || {}
-      setSpvTestResult({
-        ok: true,
-        title: "Sincronizare e-Factura ANAF finalizata",
-        tone: "success",
-        lines: [
-          "Ruta folosita: ERP -> ANAF OAuth -> listaMesajeFactura + descarcare",
-          `Luna selectata: ${selectedMonth}`,
-          `Zile interogate: ${requestedDays}`,
-          `Mesaje totale: ${stats.totalMessages ?? 0}`,
-          `Mesaje factura: ${stats.invoiceMessages ?? 0}`,
-          `Facturi descarcate: ${stats.downloaded ?? 0}`,
-          `Facturi importate: ${stats.imported ?? 0}`,
-          `Mesaje sarite: ${stats.skipped ?? 0}`,
-          ...(Array.isArray(stats.errors) && stats.errors.length ? [`Prima eroare: ${stats.errors[0]}`] : []),
-        ],
-      })
-      setMessage(data?.message || "Sincronizarea e-Factura a fost finalizata.")
+      setMessage(data?.message || "Sincronizarea SPV a fost finalizata.")
       await loadItems()
     } catch (err: any) {
       setError(err?.message || "Nu am putut sincroniza facturile primite din SPV.")
@@ -440,23 +629,6 @@ export default function FacturiPrimiteSPVPage() {
     }
   }
 
-  async function syncItemsDirectAnafFallback(monthValue: string) {
-    const requestedDays = getDaysNeededForMonth(monthValue)
-    const res = await fetch(`${API_BASE}/api/v1/efactura/incoming/sync`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ days: requestedDays }),
-    })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok || !data?.ok) {
-      throw new Error(data?.message || data?.error || "Nu am putut sincroniza facturile primite direct din ANAF.")
-    }
-    return data
-  }
-
   async function testClassicListMessages() {
     if (!token) return
     setTestingClassic(true)
@@ -491,7 +663,7 @@ export default function FacturiPrimiteSPVPage() {
 
         const trace = Array.isArray(bridgeData?.response?.trace) ? bridgeData.response.trace : []
         const parsedContent = bridgeData?.response?.parsedContent || {}
-        const messages = filterMessagesForMonth(collectBridgeMessageItems(parsedContent), selectedMonth)
+        const messages = filterMessagesForMonth(Array.isArray(parsedContent?.mesaje) ? parsedContent.mesaje : [], selectedMonth)
         const firstMessage = messages[0] || null
         setBridgeMessages(
           messages.map((entry: any) => ({
@@ -505,7 +677,7 @@ export default function FacturiPrimiteSPVPage() {
 
         if (!bridgeData?.ok || !bridgeData?.response?.ok) {
           const lines = [
-            `Ruta testata: bridge local -> listaMesaje SPVWS2`,
+            `Rută testată: bridge local -> listaMesaje SPVWS2`,
             `Bridge URL: ${trimmedBridgeUrl}`,
             `Luna selectata: ${selectedMonth}`,
             `Final URL: ${bridgeData?.response?.finalUrl || "-"}`,
@@ -530,11 +702,11 @@ export default function FacturiPrimiteSPVPage() {
           title: "Bridge local e-Factura conectat cu succes",
           tone: "success",
           lines: [
-            "Ruta testata: bridge local -> listaMesaje SPVWS2",
+            "Rută testată: bridge local -> listaMesaje SPVWS2",
             `Bridge URL: ${trimmedBridgeUrl}`,
             `Luna selectata: ${selectedMonth}`,
             `HTTP status SPV: ${bridgeData?.response?.status ?? "-"}`,
-            `Mesaje gasite: ${messages.length}`,
+            `Mesaje găsite: ${messages.length}`,
             `Primul tip mesaj: ${firstMessage?.tip || "-"}`,
             `Primul ID mesaj: ${firstMessage?.id || "-"}`,
             `Serial certificat: ${bridgeData?.certificate?.serialNumber || "-"}`,
@@ -562,28 +734,28 @@ export default function FacturiPrimiteSPVPage() {
       const summary = data?.summary || {}
       const diagnostics = data?.diagnostics || {}
       const lines = [
-        `Ruta testata: listaMesaje SPVWS2`,
+        `Rută testată: listaMesaje SPVWS2`,
         `CUI: ${diagnostics?.cui || "-"}`,
-        `Fisier certificat pe server: ${diagnostics?.hasCertificateFile ? "Da" : "Nu"}`,
-        `Parola certificat: ${diagnostics?.hasCertificatePassword ? "Da" : "Nu"}`,
+        `Fișier certificat pe server: ${diagnostics?.hasCertificateFile ? "Da" : "Nu"}`,
+        `Parolă certificat: ${diagnostics?.hasCertificatePassword ? "Da" : "Nu"}`,
         `HTTP status: ${data?.response?.status ?? "-"}`,
       ]
       if (summary?.error) {
         setSpvTestResult({
           ok: false,
-          title: "Test SPVWS2 cu raspuns de eroare",
+          title: "Test SPVWS2 cu răspuns de eroare",
           tone: "error",
-          lines: [...lines, `Raspuns SPV: ${summary.error}`],
+          lines: [...lines, `Răspuns SPV: ${summary.error}`],
         })
         setMessage(`SPVWS2 a raspuns: ${summary.error}`)
       } else {
         setSpvTestResult({
           ok: true,
-          title: "Test SPVWS2 reusit",
+          title: "Test SPVWS2 reușit",
           tone: "success",
           lines: [
             ...lines,
-            `Mesaje gasite: ${summary?.messageCount ?? 0}`,
+            `Mesaje găsite: ${summary?.messageCount ?? 0}`,
             `Primul tip mesaj: ${summary?.firstMessageType || "-"}`,
             `Primul ID mesaj: ${summary?.firstMessageId || "-"}`,
           ],
@@ -600,10 +772,10 @@ export default function FacturiPrimiteSPVPage() {
         title: "Test SPVWS2 blocat",
         tone: "error",
         lines: [
-          "Ruta testata: listaMesaje SPVWS2",
+          "Rută testată: listaMesaje SPVWS2",
           `CUI: ${spvStatus?.diagnostics?.cui || "-"}`,
-          `Fisier certificat pe server: ${spvStatus?.diagnostics?.hasCertificateFile ? "Da" : "Nu"}`,
-          `Parola certificat: ${spvStatus?.diagnostics?.hasCertificatePassword ? "Da" : "Nu"}`,
+          `Fișier certificat pe server: ${spvStatus?.diagnostics?.hasCertificateFile ? "Da" : "Nu"}`,
+          `Parolă certificat: ${spvStatus?.diagnostics?.hasCertificatePassword ? "Da" : "Nu"}`,
           missingServerCert
             ? "Blocaj curent: serverul nu are un certificat client utilizabil pentru SPVWS2."
             : `Blocaj curent: ${err?.message || "Nu am putut testa listaMesaje din SPV clasic."}`,
@@ -799,64 +971,6 @@ export default function FacturiPrimiteSPVPage() {
         title="Facturi primite SPV"
         subtitle="Sincronizezi facturile furnizorilor din SPV si deschizi receptia direct din ele."
       />
-
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => navigate("/documente?tab=consumption")}
-          className="inline-flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-semibold text-slate-700 transition hover:bg-slate-50"
-        >
-          <Repeat2 size={15} />
-          Bonuri de consum
-        </button>
-        <button
-          type="button"
-          onClick={() => navigate("/documente?tab=production")}
-          className="inline-flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-semibold text-slate-700 transition hover:bg-slate-50"
-        >
-          <Factory size={15} />
-          Productie
-        </button>
-        <button
-          type="button"
-          onClick={() => navigate("/documente?tab=invoice")}
-          className="inline-flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-semibold text-slate-700 transition hover:bg-slate-50"
-        >
-          <FileText size={15} />
-          Facturi
-        </button>
-        <button
-          type="button"
-          onClick={() => navigate("/documente?tab=inventory")}
-          className="inline-flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-semibold text-slate-700 transition hover:bg-slate-50"
-        >
-          <ClipboardList size={15} />
-          Inventare
-        </button>
-        <button
-          type="button"
-          onClick={() => navigate("/documente?tab=receipt")}
-          className="inline-flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-semibold text-slate-700 transition hover:bg-slate-50"
-        >
-          <PackageSearch size={15} />
-          Note de receptie
-        </button>
-        <button
-          type="button"
-          onClick={() => navigate("/documente?tab=minutes")}
-          className="inline-flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-semibold text-slate-700 transition hover:bg-slate-50"
-        >
-          <FileText size={15} />
-          Procese verbale
-        </button>
-        <button
-          type="button"
-          className="inline-flex items-center gap-1.5 rounded-[14px] bg-slate-900 px-3 py-1.5 text-[13px] font-semibold text-white transition"
-        >
-          <FileText size={15} />
-          Facturi primite SPV
-        </button>
-      </div>
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
         <DocumentMetric title="Facturi primite" value={String(filteredItems.length)} tone="blue" />
