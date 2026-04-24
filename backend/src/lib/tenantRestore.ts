@@ -147,17 +147,123 @@ export async function restoreTenantBackupFromFile(tenantId: string, filePath: st
     pickFields(item, ["id", "tenantId", "productId", "barcode", "createdAt"]),
   )
 
+  const stockBalances = asArray(payload.stockBalances).map((item) => normalizeRecord(item))
+  const stockMoves = asArray(payload.stockMoves).map((item) => normalizeRecord(item))
+
+  const recipes = asArray(payload.recipes).map((item) => normalizeRecord(item))
+  const recipeItems = asArray(payload.recipes).flatMap((item) => asArray(item?.items).map((entry) => normalizeRecord(entry)))
+
+  const incomingEInvoices = asArray(payload.incomingEInvoices).map((item) => {
+    const next = normalizeRecord(item)
+    delete next.linkedReceiptId
+    return next
+  })
+  const incomingEInvoiceItems = asArray(payload.incomingEInvoices).flatMap((item) =>
+    asArray(item?.items).map((entry) => normalizeRecord(entry)),
+  )
+
+  const purchaseReceipts = asArray(payload.purchaseReceipts).map((item) => normalizeRecord(item))
+  const purchaseReceiptItems = asArray(payload.purchaseReceipts).flatMap((item) =>
+    asArray(item?.items).map((entry) => normalizeRecord(entry)),
+  )
+
+  const transferDocs = asArray(payload.transferDocs).map((item) => normalizeRecord(item))
+  const transferDocItems = asArray(payload.transferDocs).flatMap((item) =>
+    asArray(item?.items).map((entry) => normalizeRecord(entry)),
+  )
+
+  const inventoryDocs = asArray(payload.inventoryDocs).map((item) => normalizeRecord(item))
+  const inventoryDocItems = asArray(payload.inventoryDocs).flatMap((item) =>
+    asArray(item?.items).map((entry) => normalizeRecord(entry)),
+  )
+
+  const minutesDocs = asArray(payload.minutesDocs).map((item) => normalizeRecord(item))
+  const minutesDocItems = asArray(payload.minutesDocs).flatMap((item) =>
+    asArray(item?.items).map((entry) => normalizeRecord(entry)),
+  )
+
+  const productionDocs = asArray(payload.productionDocs).map((item) => normalizeRecord(item))
+  const productionDocItems = asArray(payload.productionDocs).flatMap((item) =>
+    asArray(item?.items).map((entry) => normalizeRecord(entry)),
+  )
+
+  const sales = asArray(payload.sales).map((item) => normalizeRecord(item))
+  const saleItems = asArray(payload.sales).flatMap((item) =>
+    asArray(item?.items).map((entry) => normalizeRecord(entry)),
+  )
+
+  const consumptionDocs = asArray(payload.consumptionDocs).map((item) => normalizeRecord(item))
+  const consumptionDocItems = asArray(payload.consumptionDocs).flatMap((item) =>
+    asArray(item?.items).map((entry) => normalizeRecord(entry)),
+  )
+
+  const externalOrders = asArray(payload.externalOrders).map((item) => normalizeRecord(item))
+  const externalOrderItems = asArray(payload.externalOrders).flatMap((item) =>
+    asArray(item?.items).map((entry) => normalizeRecord(entry)),
+  )
+  const externalOrderStatusHistory = asArray(payload.externalOrders).flatMap((item) =>
+    asArray(item?.statusHistory).map((entry) => normalizeRecord(entry)),
+  )
+
+  const saleDrafts = asArray(payload.saleDrafts).map((item) => normalizeRecord(item))
+
+  const kitchenTickets = asArray(payload.kitchenTickets).map((item) => normalizeRecord(item))
+  const kitchenTicketItems = asArray(payload.kitchenTickets).flatMap((item) =>
+    asArray(item?.items).map((entry) => normalizeRecord(entry)),
+  )
+
+  const marketplaceMappings = asArray(payload.marketplaceMappings).map((item) => normalizeRecord(item))
+
+  const salesInvoices = asArray(payload.salesInvoices).map((item) => normalizeRecord(item))
+  const salesInvoiceItems = asArray(payload.salesInvoices).flatMap((item) =>
+    asArray(item?.items).map((entry) => normalizeRecord(entry)),
+  )
+  const efacturaLogs = asArray(payload.salesInvoices).flatMap((item) =>
+    asArray(item?.efacturaLogs).map((entry) => normalizeRecord(entry)),
+  )
+
   await prisma.userCompanyAccess.deleteMany({
     where: { user: { tenantId } },
   })
+  await prisma.passwordResetToken.deleteMany({ where: { tenantId } })
+  await prisma.eFacturaLog.deleteMany({ where: { tenantId } })
+  await prisma.salesInvoiceItem.deleteMany({ where: { invoice: { tenantId } } })
+  await prisma.salesInvoice.deleteMany({ where: { tenantId } })
+  await prisma.incomingEInvoiceItem.deleteMany({ where: { invoice: { tenantId } } })
+  await prisma.purchaseReceiptItem.deleteMany({ where: { receipt: { tenantId } } })
+  await prisma.transferDocItem.deleteMany({ where: { transfer: { tenantId } } })
+  await prisma.inventoryDocItem.deleteMany({ where: { inventoryDoc: { tenantId } } })
+  await prisma.minutesDocItem.deleteMany({ where: { minutesDoc: { tenantId } } })
+  await prisma.productionDocItem.deleteMany({ where: { productionDoc: { tenantId } } })
+  await prisma.consumptionDocItem.deleteMany({ where: { consumptionDoc: { tenantId } } })
+  await prisma.saleItem.deleteMany({ where: { sale: { tenantId } } })
+  await prisma.recipeItem.deleteMany({ where: { recipe: { tenantId } } })
+  await prisma.kitchenTicketItem.deleteMany({ where: { kitchenTicket: { tenantId } } })
+  await prisma.externalOrderStatusHistory.deleteMany({ where: { tenantId } })
+  await prisma.externalOrderItem.deleteMany({ where: { externalOrder: { tenantId } } })
   await prisma.productBarcode.deleteMany({ where: { tenantId } })
+  await prisma.marketplaceProductMapping.deleteMany({ where: { tenantId } })
+  await prisma.stockMove.deleteMany({ where: { tenantId } })
+  await prisma.stockBalance.deleteMany({ where: { tenantId } })
+  await prisma.saleDraft.deleteMany({ where: { tenantId } })
+  await prisma.kitchenTicket.deleteMany({ where: { tenantId } })
+  await prisma.consumptionDoc.deleteMany({ where: { tenantId } })
+  await prisma.productionDoc.deleteMany({ where: { tenantId } })
+  await prisma.minutesDoc.deleteMany({ where: { tenantId } })
+  await prisma.inventoryDoc.deleteMany({ where: { tenantId } })
+  await prisma.transferDoc.deleteMany({ where: { tenantId } })
+  await prisma.purchaseReceipt.deleteMany({ where: { tenantId } })
+  await prisma.incomingEInvoice.deleteMany({ where: { tenantId } })
+  await prisma.sale.deleteMany({ where: { tenantId } })
+  await prisma.recipe.deleteMany({ where: { tenantId } })
+  await prisma.externalOrder.deleteMany({ where: { tenantId } })
   await prisma.externalIntegration.deleteMany({ where: { tenantId } })
   await prisma.tenantModule.deleteMany({ where: { tenantId } })
-  await prisma.product.deleteMany({ where: { tenantId } })
   await prisma.customer.deleteMany({ where: { tenantId } })
   await prisma.supplier.deleteMany({ where: { tenantId } })
   await prisma.accountingExportConfig.deleteMany({ where: { tenantId } })
   await prisma.accountingStockType.deleteMany({ where: { tenantId } })
+  await prisma.product.deleteMany({ where: { tenantId } })
   await prisma.category.deleteMany({ where: { tenantId } })
   await prisma.department.deleteMany({ where: { tenantId } })
   await prisma.uom.deleteMany({ where: { tenantId } })
@@ -184,6 +290,37 @@ export async function restoreTenantBackupFromFile(tenantId: string, filePath: st
   await createManyIfAny(prisma.externalIntegration, externalIntegrations)
   await createManyIfAny(prisma.product, products)
   await createManyIfAny(prisma.productBarcode, productBarcodes)
+  await createManyIfAny(prisma.recipe, recipes)
+  await createManyIfAny(prisma.recipeItem, recipeItems)
+  await createManyIfAny(prisma.incomingEInvoice, incomingEInvoices)
+  await createManyIfAny(prisma.incomingEInvoiceItem, incomingEInvoiceItems)
+  await createManyIfAny(prisma.purchaseReceipt, purchaseReceipts)
+  await createManyIfAny(prisma.purchaseReceiptItem, purchaseReceiptItems)
+  await createManyIfAny(prisma.transferDoc, transferDocs)
+  await createManyIfAny(prisma.transferDocItem, transferDocItems)
+  await createManyIfAny(prisma.inventoryDoc, inventoryDocs)
+  await createManyIfAny(prisma.inventoryDocItem, inventoryDocItems)
+  await createManyIfAny(prisma.minutesDoc, minutesDocs)
+  await createManyIfAny(prisma.minutesDocItem, minutesDocItems)
+  await createManyIfAny(prisma.productionDoc, productionDocs)
+  await createManyIfAny(prisma.productionDocItem, productionDocItems)
+  await createManyIfAny(prisma.externalOrder, externalOrders)
+  await createManyIfAny(prisma.externalOrderItem, externalOrderItems)
+  await createManyIfAny(prisma.externalOrderStatusHistory, externalOrderStatusHistory)
+  await createManyIfAny(prisma.sale, sales)
+  await createManyIfAny(prisma.saleItem, saleItems)
+  await createManyIfAny(prisma.consumptionDoc, consumptionDocs)
+  await createManyIfAny(prisma.consumptionDocItem, consumptionDocItems)
+  await createManyIfAny(prisma.saleDraft, saleDrafts)
+  await createManyIfAny(prisma.kitchenTicket, kitchenTickets)
+  await createManyIfAny(prisma.kitchenTicketItem, kitchenTicketItems)
+  await createManyIfAny(prisma.marketplaceProductMapping, marketplaceMappings)
+  await createManyIfAny(prisma.salesInvoice, salesInvoices)
+  await createManyIfAny(prisma.salesInvoiceItem, salesInvoiceItems)
+  await createManyIfAny(prisma.eFacturaLog, efacturaLogs)
+  await createManyIfAny(prisma.stockBalance, stockBalances)
+  await createManyIfAny(prisma.stockMove, stockMoves)
+  await createManyIfAny(prisma.userCompanyAccess, userCompanyAccesses)
 
   return {
     companies: companies.length,
@@ -202,5 +339,21 @@ export async function restoreTenantBackupFromFile(tenantId: string, filePath: st
     externalIntegrations: externalIntegrations.length,
     products: products.length,
     productBarcodes: productBarcodes.length,
+    stockBalances: stockBalances.length,
+    stockMoves: stockMoves.length,
+    recipes: recipes.length,
+    incomingEInvoices: incomingEInvoices.length,
+    purchaseReceipts: purchaseReceipts.length,
+    transferDocs: transferDocs.length,
+    inventoryDocs: inventoryDocs.length,
+    minutesDocs: minutesDocs.length,
+    productionDocs: productionDocs.length,
+    sales: sales.length,
+    consumptionDocs: consumptionDocs.length,
+    externalOrders: externalOrders.length,
+    saleDrafts: saleDrafts.length,
+    kitchenTickets: kitchenTickets.length,
+    marketplaceMappings: marketplaceMappings.length,
+    salesInvoices: salesInvoices.length,
   }
 }
