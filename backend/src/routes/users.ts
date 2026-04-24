@@ -40,6 +40,15 @@ const CreateUserSchema = z.object({
   companyIds: z.array(z.string()).optional(),
 })
 
+const UpdateUserSchema = z.object({
+  email: z.string().email(),
+  name: z.string().min(2),
+  role: z.nativeEnum(UserRole),
+  password: z.string().trim().optional(),
+  posPin: z.union([z.string().trim().min(4).max(8), z.literal(""), z.null()]).optional(),
+  companyIds: z.array(z.string()).optional(),
+})
+
 const ToggleUserSchema = z.object({
   isActive: z.boolean(),
 })
@@ -82,6 +91,30 @@ async function syncUserCompanyAccess(userId: string, companyIds: string[]) {
   })
 }
 
+const userListSelect = {
+  id: true,
+  email: true,
+  name: true,
+  role: true,
+  isActive: true,
+  posPinHash: true,
+  createdAt: true,
+  updatedAt: true,
+  companyAccesses: {
+    select: {
+      company: {
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          cui: true,
+          isDefault: true,
+        },
+      },
+    },
+  },
+} as const
+
 router.get("/api/v1/users", requireAuth, async (req: AuthedRequest, res) => {
   if (!ensureTenantAdmin(req, res)) return
 
@@ -89,29 +122,7 @@ router.get("/api/v1/users", requireAuth, async (req: AuthedRequest, res) => {
     prisma.user.findMany({
       where: { tenantId: req.auth!.tenantId! },
       orderBy: [{ role: "asc" }, { name: "asc" }],
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        isActive: true,
-        posPinHash: true,
-        createdAt: true,
-        updatedAt: true,
-        companyAccesses: {
-          select: {
-            company: {
-              select: {
-                id: true,
-                name: true,
-                code: true,
-                cui: true,
-                isDefault: true,
-              },
-            },
-          },
-        },
-      },
+      select: userListSelect,
     }),
     listTenantCompanies(req.auth!.tenantId!),
   ])
@@ -124,6 +135,103 @@ router.get("/api/v1/users", requireAuth, async (req: AuthedRequest, res) => {
       hasPosPin: Boolean(user.posPinHash),
       companies: user.companyAccesses.map((entry) => entry.company),
     })),
+  })
+})
+
+router.patch("/api/v1/users/:id", requireAuth, async (req: AuthedRequest, res) => {
+  if (!ensureTenantAdmin(req, res)) return
+
+  const parsed = UpdateUserSchema.safeParse(req.body || {})
+  if (!parsed.success) {
+    return res.status(400).json({ ok: false, error: parsed.error.flatten() })
+  }
+
+  const tenantId = req.auth!.tenantId!
+  const actorRole = req.auth!.role as UserRole
+  const requestedRole = parsed.data.role
+  const availableCompanies = await listTenantCompanies(tenantId)
+  const requestedCompanyIds = Array.from(new Set((parsed.data.companyIds || []).map((value) => String(value))))
+
+  const user = await prisma.user.findFirst({
+    where: { id: req.params.id, tenantId },
+    select: { id: true, role: true, email: true },
+  })
+
+  if (!user) {
+    return res.status(404).json({ ok: false, error: "Utilizatorul nu exista" })
+  }
+
+  if (actorRole !== UserRole.OWNER && (user.role === UserRole.OWNER || user.role === UserRole.ADMIN)) {
+    return res.status(403).json({ ok: false, error: "Doar owner-ul poate modifica un admin sau owner" })
+  }
+
+  if (actorRole !== UserRole.OWNER && (requestedRole === UserRole.OWNER || requestedRole === UserRole.ADMIN)) {
+    return res.status(403).json({ ok: false, error: "Doar owner-ul poate seta rol de admin sau owner" })
+  }
+
+  const invalidCompanyIds = requestedCompanyIds.filter((companyId) => !availableCompanies.some((company) => company.id === companyId))
+  if (invalidCompanyIds.length) {
+    return res.status(400).json({ ok: false, error: "Una sau mai multe firme selectate nu exista." })
+  }
+
+  const normalizedEmail = parsed.data.email.trim().toLowerCase()
+  const existing = await prisma.user.findFirst({
+    where: {
+      tenantId,
+      email: normalizedEmail,
+      NOT: { id: user.id },
+    },
+    select: { id: true },
+  })
+
+  if (existing) {
+    return res.status(409).json({ ok: false, error: "Exista deja un utilizator cu acest email" })
+  }
+
+  const updateData: any = {
+    email: normalizedEmail,
+    name: parsed.data.name.trim(),
+    role: requestedRole,
+  }
+
+  const rawPassword = parsed.data.password?.trim() || ""
+  if (rawPassword) {
+    if (rawPassword.length < 6) {
+      return res.status(400).json({ ok: false, error: "Parola trebuie sa aiba minimum 6 caractere." })
+    }
+    updateData.passwordHash = await hashSecret(rawPassword)
+  }
+
+  if (parsed.data.posPin !== undefined) {
+    const rawPin = typeof parsed.data.posPin === "string" ? parsed.data.posPin.trim() : ""
+    updateData.posPinHash = rawPin ? await hashSecret(rawPin) : null
+  }
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: updateData,
+  })
+
+  if (requestedRole === UserRole.OWNER || requestedRole === UserRole.ADMIN) {
+    await syncUserCompanyAccess(user.id, [])
+  } else {
+    await syncUserCompanyAccess(user.id, requestedCompanyIds)
+  }
+
+  const updated = await prisma.user.findFirst({
+    where: { id: user.id, tenantId },
+    select: userListSelect,
+  })
+
+  return res.json({
+    ok: true,
+    item: updated
+      ? {
+          ...updated,
+          hasPosPin: Boolean(updated.posPinHash),
+          companies: updated.companyAccesses.map((entry) => entry.company),
+        }
+      : null,
   })
 })
 
