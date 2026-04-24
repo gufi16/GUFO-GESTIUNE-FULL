@@ -16,10 +16,10 @@ const DEFAULT_HOST = "127.0.0.1"
 const DEFAULT_ERP_URL = String(process.env.GUFO_DEFAULT_ERP_URL || "https://app.gufo.ink").trim()
 const SPV_LIST_MESSAGES_URL = "https://webserviced.anaf.ro/SPVWS2/rest/listaMesaje"
 const SPV_DOWNLOAD_MESSAGE_URL = "https://webserviced.anaf.ro/SPVWS2/rest/descarcare"
-const EFACTURA_LIST_MESSAGES_PROD_URL = "https://webserviceapl.anaf.ro/prod/FCTEL/rest/listaMesajeFactura"
-const EFACTURA_LIST_MESSAGES_TEST_URL = "https://webserviceapl.anaf.ro/test/FCTEL/rest/listaMesajeFactura"
-const EFACTURA_DOWNLOAD_PROD_URL = "https://webserviceapl.anaf.ro/prod/FCTEL/rest/descarcare"
-const EFACTURA_DOWNLOAD_TEST_URL = "https://webserviceapl.anaf.ro/test/FCTEL/rest/descarcare"
+const EFACTURA_LIST_MESSAGES_PROD_URL = "https://api.anaf.ro/prod/FCTEL/rest/listaMesajeFactura"
+const EFACTURA_LIST_MESSAGES_TEST_URL = "https://api.anaf.ro/test/FCTEL/rest/listaMesajeFactura"
+const EFACTURA_DOWNLOAD_PROD_URL = "https://api.anaf.ro/prod/FCTEL/rest/descarcare"
+const EFACTURA_DOWNLOAD_TEST_URL = "https://api.anaf.ro/test/FCTEL/rest/descarcare"
 const POWERSHELL_TIMEOUT_MS = 90000
 const CONFIG_DIR = resolveConfigDir()
 const CONFIG_PATH = path.join(CONFIG_DIR, "agent-config.json")
@@ -1277,6 +1277,15 @@ function getEfacturaListUrl(environment, cui, days) {
   return getEfacturaListMessagesUrl(environment, days, cui)
 }
 
+function collectEfacturaMessages(payload) {
+  if (Array.isArray(payload)) return payload
+  const keys = ["mesaje", "messages", "lista", "items", "facturi", "messageList"]
+  for (const key of keys) {
+    if (Array.isArray(payload?.[key])) return payload[key]
+  }
+  return []
+}
+
 function getEfacturaDownloadUrl(environment, id) {
   const normalizedEnvironment = String(environment || "prod").trim().toLowerCase() === "test" ? "test" : "prod"
   const baseUrl = normalizedEnvironment === "test" ? EFACTURA_DOWNLOAD_TEST_URL : EFACTURA_DOWNLOAD_PROD_URL
@@ -1381,13 +1390,7 @@ async function listIncomingEfacturaMessages(serial, accessToken, environment, ci
     url,
   })
   const parsed = parseResponseContent(response?.result?.content)
-  const messages = Array.isArray(parsed?.mesaje)
-    ? parsed.mesaje
-    : Array.isArray(parsed?.facturi)
-      ? parsed.facturi
-      : Array.isArray(parsed)
-        ? parsed
-        : []
+  const messages = collectEfacturaMessages(parsed)
   console.log(
     `[gufo-spv-bridge] listIncomingEfacturaMessages finish ok=${Boolean(response?.result?.ok)} status=${response?.result?.status ?? "null"}`
   )
@@ -1753,8 +1756,20 @@ if ($listResult.ok -and $listResult.content) {
   } catch {}
 
   $messages = @()
-  if ($listPayload -and $listPayload.mesaje) {
-    $messages = @($listPayload.mesaje)
+  if ($listPayload) {
+    if ($listPayload.mesaje) {
+      $messages = @($listPayload.mesaje)
+    } elseif ($listPayload.messages) {
+      $messages = @($listPayload.messages)
+    } elseif ($listPayload.lista) {
+      $messages = @($listPayload.lista)
+    } elseif ($listPayload.items) {
+      $messages = @($listPayload.items)
+    } elseif ($listPayload.facturi) {
+      $messages = @($listPayload.facturi)
+    } elseif ($listPayload.messageList) {
+      $messages = @($listPayload.messageList)
+    }
   }
 
   foreach ($message in $messages) {
@@ -1764,9 +1779,10 @@ if ($listResult.ok -and $listResult.content) {
     }
     $tip = ([string]$message.tip).Trim().ToUpper()
     $detalii = ([string]$message.detalii).Trim().ToLower()
+    $rawMessage = $message | ConvertTo-Json -Compress -Depth 12
     $isIncomingInvoice =
-      $tip.Contains('PRIMITA') -or
-      (($tip -ne 'RECIPISA') -and $detalii.Contains('cif_beneficiar'))
+      ($tip.Contains('PRIMITA')) -or
+      (($tip -notlike '*RECIPISA*') -and ($detalii.Contains('cif_beneficiar') -or $rawMessage.ToLower().Contains('id_descarcare') -or $rawMessage.ToLower().Contains('download')))
     if (-not $isIncomingInvoice) {
       continue
     }

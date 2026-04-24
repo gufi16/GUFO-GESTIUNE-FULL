@@ -169,6 +169,15 @@ function filterMessagesForMonth(messages: any[], monthValue: string) {
   })
 }
 
+function collectBridgeMessageItems(payload: any) {
+  if (Array.isArray(payload)) return payload
+  const keys = ["mesaje", "messages", "lista", "items", "facturi", "messageList"]
+  for (const key of keys) {
+    if (Array.isArray(payload?.[key])) return payload[key]
+  }
+  return []
+}
+
 function getDaysNeededForMonth(monthValue: string) {
   if (!monthValue) return 30
   const [yearRaw, monthRaw] = monthValue.split("-")
@@ -420,7 +429,7 @@ export default function FacturiPrimiteSPVPage() {
           payload = listData?.response?.parsedContent || {}
         }
 
-        const messages = filterMessagesForMonth(Array.isArray(payload?.mesaje) ? payload.mesaje : [], selectedMonth)
+        const messages = filterMessagesForMonth(collectBridgeMessageItems(payload), selectedMonth)
         setBridgeMessages(
           messages.map((entry: any) => ({
             id: String(entry?.id || ""),
@@ -435,19 +444,25 @@ export default function FacturiPrimiteSPVPage() {
         const newInvoiceMessages = invoiceMessages.filter((entry: any) => !existingDownloadIds.has(String(entry?.id || "").trim()))
 
         if (!invoiceMessages.length) {
-          setMessage(`Bridge local conectat, dar in e-Factura nu exista facturi de importat pentru ${selectedMonth}.`)
+          const fallbackData = await syncItemsDirectAnafFallback(selectedMonth)
+          const stats = fallbackData?.stats || {}
+          setMessage(
+            fallbackData?.message ||
+              `Bridge-ul local nu a returnat facturi pentru ${selectedMonth}, asa ca am facut sincronizarea direct cu ANAF.`
+          )
           setSpvTestResult({
             ok: true,
-            title: "Bridge local e-Factura conectat cu succes",
+            title: "Sincronizare facuta direct cu ANAF",
             tone: "success",
             lines: [
-              "Ruta testata: bridge local -> sincronizare SPVWS2",
+              "Bridge local a raspuns fara facturi, fallback pe ERP -> ANAF OAuth.",
               `Bridge URL: ${trimmedBridgeUrl}`,
               `Luna selectata: ${selectedMonth}`,
               `Mediu ANAF: ${bridgeConfig.environment}`,
               `CUI: ${bridgeConfig.cif}`,
-              `Mesaje totale: ${messages.length}`,
-              "Facturi importabile: 0",
+              `Mesaje totale ANAF: ${stats.totalMessages ?? 0}`,
+              `Mesaje factura ANAF: ${stats.invoiceMessages ?? 0}`,
+              `Facturi importate: ${stats.imported ?? 0}`,
             ],
           })
           await loadItems()
@@ -637,6 +652,23 @@ export default function FacturiPrimiteSPVPage() {
     }
   }
 
+  async function syncItemsDirectAnafFallback(monthValue: string) {
+    const requestedDays = getDaysNeededForMonth(monthValue)
+    const res = await fetch(`${API_BASE}/api/v1/efactura/incoming/sync`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ days: requestedDays }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data?.ok) {
+      throw new Error(data?.message || data?.error || "Nu am putut sincroniza facturile primite direct din ANAF.")
+    }
+    return data
+  }
+
   async function testClassicListMessages() {
     if (!token) return
     setTestingClassic(true)
@@ -671,7 +703,7 @@ export default function FacturiPrimiteSPVPage() {
 
         const trace = Array.isArray(bridgeData?.response?.trace) ? bridgeData.response.trace : []
         const parsedContent = bridgeData?.response?.parsedContent || {}
-        const messages = filterMessagesForMonth(Array.isArray(parsedContent?.mesaje) ? parsedContent.mesaje : [], selectedMonth)
+        const messages = filterMessagesForMonth(collectBridgeMessageItems(parsedContent), selectedMonth)
         const firstMessage = messages[0] || null
         setBridgeMessages(
           messages.map((entry: any) => ({
