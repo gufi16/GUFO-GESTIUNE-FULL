@@ -1561,6 +1561,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
   let spreadsheetRows: Record<string, unknown>[] = []
   let exportedFileDoc: any = null
   let xmlFiles: Array<{ fileName: string; content: string }> = []
+  let splitSpreadsheetFiles: Array<{ fileName: string; sheetName: string; rows: Record<string, unknown>[] }> = []
 
   if (kind === "products") {
     const products = await prisma.product.findMany({
@@ -1620,6 +1621,28 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       fileName: `ART_${slugCode(product.accountingItemCode || product.sku || product.name, "ART")}_${compactDateToken(dateTo || new Date())}.xml`,
       content: buildSagaArticlesXml([product], config),
     }))
+    splitSpreadsheetFiles = articleProducts.map((product) => {
+      const articleCode = sagaArticleCodeForProduct(product, config)
+      return {
+        fileName: `ART_${slugCode(product.accountingItemCode || product.sku || product.name, "ART")}_${compactDateToken(dateTo || new Date())}`,
+        sheetName: "Articole",
+        rows: [
+          {
+            COD: String(articleCode || "").trim(),
+            DENUMIRE: product.name,
+            UM: product.uom?.code || "BUC",
+            TIP: sagaArticleTypeFromProduct(product),
+            P_TVA: Number(product.vatRate?.rate ?? 0),
+            PRET: Number(product.price || 0),
+            PRET_CUTVA: Number(product.price || 0) * (1 + Number(product.vatRate?.rate ?? 0) / 100),
+            COD_BARE: product.barcodes?.[0]?.barcode || "",
+            COD_NC: "",
+            COD_CPV: "",
+            TEXT_SUPL: "",
+          },
+        ],
+      }
+    })
 
     xml = buildSagaArticlesXml(articleProducts, config)
   } else if (kind === "customers") {
@@ -1698,6 +1721,29 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     xmlFiles = customers.map((customer) => ({
       fileName: `CLI_${slugCode(customerCode(customer) || customer.name, "CLIENT")}_${compactDateToken(dateTo || new Date())}.xml`,
       content: buildCustomerXml(customer),
+    }))
+    splitSpreadsheetFiles = customers.map((customer) => ({
+      fileName: `CLI_${slugCode(customerCode(customer) || customer.name, "CLIENT")}_${compactDateToken(dateTo || new Date())}`,
+      sheetName: "Clienti",
+      rows: [
+        {
+          COD: customerCode(customer),
+          DENUMIRE: customer.name || "",
+          COD_FISCAL: customer.cif || "",
+          REG_COM: customer.regNo || "",
+          TARA: sagaCountryCode(customer.country),
+          JUDET: sagaCountyCode(customer.county),
+          LOCALITATE: customer.city || "",
+          ADRESA: customer.address || "",
+          CONT_BANCA: "",
+          BANCA: "",
+          TEL: customer.phone || "",
+          EMAIL: customer.email || "",
+          DISCOUNT: 0,
+          INFORMATII: "",
+          GUID_COD: customer.id,
+        },
+      ],
     }))
 
     xml = [
@@ -1798,6 +1844,27 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     xmlFiles = suppliers.map((supplier) => ({
       fileName: `FUR_${slugCode(supplierCode(supplier) || supplier.name, "FURNIZOR")}_${compactDateToken(dateTo || new Date())}.xml`,
       content: buildSupplierXml(supplier),
+    }))
+    splitSpreadsheetFiles = suppliers.map((supplier) => ({
+      fileName: `FUR_${slugCode(supplierCode(supplier) || supplier.name, "FURNIZOR")}_${compactDateToken(dateTo || new Date())}`,
+      sheetName: "Furnizori",
+      rows: [
+        {
+          COD: supplierCode(supplier),
+          DENUMIRE: supplier.name || "",
+          COD_FISCAL: supplier.cif || "",
+          TARA: sagaCountryCode(supplier.country),
+          JUDET: sagaCountyCode(supplier.county),
+          LOCALITATE: supplier.city || "",
+          ADRESA: supplier.address || "",
+          CONT_BANCA: "",
+          BANCA: "",
+          TEL: supplier.phone || "",
+          EMAIL: supplier.email || "",
+          INFORMATII: "",
+          GUID_COD: supplier.id,
+        },
+      ],
     }))
 
     xml = [
@@ -2006,6 +2073,55 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       fileName: downloadName("sales-invoices", dateFrom, dateTo, { company, firstDoc: invoice }),
       content: [`<?xml version="1.0" encoding="utf-8"?>`, `<Facturi>`, buildInvoiceXml(invoice), `</Facturi>`].join("\n"),
     }))
+    splitSpreadsheetFiles = invoices.map((invoice) => {
+      const invoiceHeaderRow = {
+        DENUMIRE_C: invoice.customerName || "",
+        COD_FISCAL: Number(String(invoice.customerCif || "").replace(/\D/g, "") || 0),
+        REGISTRU_C: invoice.customerRegNo || "",
+        JUDET: sagaCountyCode(invoice.customer?.county),
+        ADRESA: invoice.customerAddress || "",
+        TARA: "RO",
+        MONEDA: invoice.currency || "RON",
+        NUMAR_FACT: invoice.docNo || "",
+        DATA: formatDate(invoice.docDate),
+        TVA: Number(invoice.totalVatRon || 0),
+        VALOARE_NE: Number(invoice.totalNetRon || 0) + Number(invoice.totalSgrRon || 0),
+        VALOARE_BR: Number(invoice.totalWithSgrRon || invoice.totalGrossRon || 0),
+        DISCOUNT: 0,
+      }
+      const invoiceDetailRowsForFile = invoice.items.flatMap((line, lineIndex) => {
+        const stockType = pickStockType(line.product, stockTypes, config)
+        const productRow = {
+          TIP: sagaInvoiceLineTypeFromProduct(line.product),
+          GESTIUNE: invoice.location?.code || invoice.location?.name || "",
+          COD: String(line.productCode || line.product?.accountingItemCode || line.product?.sku || "").trim(),
+          COD_BARE: line.product?.barcodes?.[0]?.barcode || "",
+          DENUMIRE: line.productName || line.product?.name || "",
+          UM: line.uomCode || "BUC",
+          P_TVA: Number(line.vatRateValue || 0),
+          CANTITATE: Number(line.qty || 0),
+          PRET: Number(line.unitPriceFc || 0),
+          VALOARE: unitAmount(line.lineNetRon, line.qty),
+          TOTAL: unitAmount(line.lineGrossRon, line.qty),
+          TEXT_SUPL: "",
+          CONT: stockType?.salesAccount || config.salesAccount,
+          ACTIVITATE: "",
+        }
+        const sgrLine = buildSalesInvoiceSgrLine(invoice, line, lineIndex + 1, stockTypes, config)
+        return sgrLine ? [productRow, sgrLine.row] : [productRow]
+      })
+      return {
+        fileName: replaceFileExtension(downloadName("sales-invoices", dateFrom, dateTo, { company, firstDoc: invoice }), ""),
+        sheetName: "Facturi iesire",
+        rows:
+          fileFormat === "dbf"
+            ? invoiceDetailRowsForFile
+            : spreadsheetSheets([
+                { name: "ContinutFactura", rows: invoiceDetailRowsForFile },
+                { name: "Facturi", rows: [invoiceHeaderRow] },
+              ]),
+      }
+    })
 
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
@@ -2309,6 +2425,107 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         content: [`<?xml version="1.0" encoding="utf-8"?>`, `<Facturi>`, buildReceiptXml(receipt), `</Facturi>`].join("\n"),
       }
     })
+    splitSpreadsheetFiles = receipts.map((receipt) => {
+      const receiptSgrForFile = receipt.items.reduce((sum: number, line: any) => sum + receiptSgrValues(line, receipt).valueRon, 0)
+      const detailsRows = receipt.items.flatMap((line) => {
+        const lineType = sagaPurchaseReceiptLineType(line.product, stockTypes, config)
+        const lineManagement = receipt.location?.code || receipt.location?.name || ""
+        const productRow = {
+          den_tip: lineType,
+          gestiune: lineManagement,
+          den_gest: lineManagement,
+          GESTIUNE: lineManagement,
+          denumire: line.product?.name || "",
+          cod: sagaArticleCodeForProduct(line.product, config),
+          um: line.product?.uom?.code || "BUC",
+          tva_art: Number(line.vatRateValue || 0),
+          cantitate: Number(line.stockQty || line.qty || 0),
+          pret_unitar: Number(line.unitCostNetRon || 0),
+          valoare: unitAmount(line.lineNetRon, line.stockQty || line.qty),
+          transp_lei: 0,
+          total: unitAmount(line.lineGrossRon, line.stockQty || line.qty),
+          tva_ded: unitAmount(line.lineVatRon, line.stockQty || line.qty),
+          tip_ded: "N50",
+          cont: pickStockType(line.product, stockTypes, config)?.inventoryAccount || config.inventoryAccount,
+          pret_vanz: Number(line.product?.price || 0),
+          adaos: 0,
+          adaos_proc: 0,
+          text_supl: "",
+          categorie: "",
+          ID_U: "",
+          ID_INTRARE: "",
+          PTVA_VANZ: 0,
+          IS_FACTURAT: 0,
+          DISCOUNT: 0,
+          ID_BC: 0,
+          plan: "",
+          SECTOR: "",
+          SURSA: "",
+          CAPITOL: "",
+          ARTICOL: "",
+          LOT: "",
+          COD_TAXA: "",
+          ID_SGR: 0,
+        }
+        const sgr = receiptSgrValues(line, receipt)
+        if (!line.product?.isSgr || sgr.qty <= 0 || sgr.unit <= 0) return [productRow]
+        const sgrProduct = sgrProductShape(line.product)
+        const sgrStockType = pickStockType(sgrProduct, stockTypes, config)
+        return [
+          productRow,
+          {
+            ...productRow,
+            den_tip: "Ambalaje SGR",
+            denumire: sgrProduct.name,
+            cod: sgrProduct.accountingItemCode,
+            tva_art: 0,
+            pret_unitar: sgr.unit,
+            valoare: sgr.unit,
+            total: sgr.unit,
+            tva_ded: 0,
+            cont: sgrStockType?.inventoryAccount || config.inventoryAccount,
+            pret_vanz: sgr.unit,
+            text_supl: "SGR",
+            ID_SGR: 1,
+          },
+        ]
+      })
+      const headerRows = [
+        {
+          tip: "R",
+          nr_nir: extractSagaNumber(receipt.docNo || ""),
+          nr_intrare: extractSagaNumber(receipt.spvInvoiceNo || receipt.docNo || ""),
+          cod: receipt.supplierCode || receipt.supplier?.code || "",
+          denumire: receipt.supplierName || receipt.supplier?.name || "",
+          tvai: 0,
+          data: excelSerialDate(receipt.docDate),
+          scadent: receipt.docDate ? excelSerialDate(receipt.docDate) : "",
+          baza_tva: Number(receipt.totalNetRon || 0) + receiptSgrForFile,
+          transp_lei: 0,
+          tva: Number(receipt.totalVatRon || 0),
+          total: Number(receipt.totalGrossRon || 0) + receiptSgrForFile,
+          neachitat: Number(receipt.totalGrossRon || 0) + receiptSgrForFile,
+          data_doc: "",
+          inf_suplm: "",
+          den_agent: "",
+          id_solicit: "",
+        },
+      ]
+      const supplierCode = String(receipt.supplier?.cif || receipt.supplierCode || receipt.supplier?.code || "FURNIZOR").replace(/[^A-Za-z0-9]/g, "")
+      const docNumber = extractSagaNumber(receipt.spvInvoiceNo || receipt.docNo || "NIR")
+      const docDate = compactDateToken(receipt.docDate || dateTo || new Date())
+      return {
+        fileName: `F_${supplierCode || "FURNIZOR"}_${docNumber || "NIR"}_${docDate}`,
+        sheetName: "Facturi intrare",
+        rows:
+          fileFormat === "dbf"
+            ? detailsRows
+            : spreadsheetSheets([
+                { name: "IntrariDetalii", rows: detailsRows },
+                { name: "Intrari", rows: headerRows },
+              ]),
+      }
+    })
 
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
@@ -2425,6 +2642,27 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       `  </BonuriConsum>`,
       `</SAGA>`,
     ].join("\n")
+    splitSpreadsheetFiles = documents.map((document) => ({
+      fileName: `BC_${extractSagaNumber(document.docNo || "DOC")}_${compactDateToken(document.docDate || dateTo || new Date())}`,
+      sheetName: "Bonuri consum",
+      rows: document.items.map((line) => {
+        const unitCost = latestCostMap.get(line.ingredientId) ?? Number(line.ingredient?.costPrice || 0)
+        return {
+          NR: document.docNo,
+          DATA: formatDate(document.docDate),
+          GESTIUNE: managementValue(config, document.location),
+          DEN_GEST: document.location?.name || document.location?.code || "",
+          EXPLICATIE: line.note || document.note || "",
+          COD: String(line.ingredient.accountingItemCode || line.ingredient.sku || slugCode(line.ingredient.name, "ART")),
+          COD_BARE: "",
+          DENUMIRE: line.ingredient.name,
+          UM: line.ingredient.uom?.code || "BUC",
+          CANTITATE: Number(line.qty || 0),
+          PRET: unitCost,
+          VALOARE: Number(line.qty || 0) * unitCost,
+        }
+      }),
+    }))
   } else if (kind === "production-docs") {
     const documents = await prisma.productionDoc.findMany({
       where: {
@@ -2552,6 +2790,36 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       `  </Productie>`,
       `</SAGA>`,
     ].join("\n")
+    splitSpreadsheetFiles = documents.map((document) => ({
+      fileName: `PROD_${extractSagaNumber(document.docNo || "DOC")}_${compactDateToken(document.docDate || dateTo || new Date())}`,
+      sheetName: "Productie",
+      rows: document.items.map((line) => {
+        const stockType = pickStockType(line.product, stockTypes, config)
+        const unitCost = latestCostMap.get(line.productId) ?? Number(line.product.costPrice || 0)
+        return {
+          Cod: line.product.accountingItemCode || line.product.sku || slugCode(line.product.name, "ART"),
+          Denumire: line.product.name,
+          UM: line.product.uom?.code || "BUC",
+          Cantitate: Number(line.qty || 0),
+          "Pret unitar": unitCost,
+          Valoare: unitCost,
+          Gestiune: managementValue(config, document.location),
+          Data: formatDate(document.docDate),
+          "Nr. doc": document.docNo,
+          Explicatie: document.note || "Nota de productie",
+          TVA: Number(line.product.vatRate?.rate ?? 0),
+          "Cont stoc": stockType?.inventoryAccount || config.inventoryAccount,
+          "Cont cheltuiala": stockType?.expenseAccount || config.expenseAccount,
+          "Cont venit": stockType?.salesAccount || config.salesAccount,
+          Document: document.docNo,
+          Articol: line.product.name,
+          Pret: unitCost,
+          ContStoc: stockType?.inventoryAccount || config.inventoryAccount,
+          ContCheltuiala: stockType?.expenseAccount || config.expenseAccount,
+          ContVenit: stockType?.salesAccount || config.salesAccount,
+        }
+      }),
+    }))
   } else {
     return res.status(400).json({ ok: false, error: "Tip de export contabil necunoscut." })
   }
@@ -2563,6 +2831,21 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     xmlFiles.forEach((file) => {
       zip.addFile(file.fileName, Buffer.from(file.content, "utf8"))
     })
+    const zipBuffer = zip.toBuffer()
+    res.setHeader("Content-Type", "application/zip")
+    res.setHeader("Content-Disposition", `attachment; filename="${zipDownloadName(kind, dateFrom, dateTo)}"`)
+    return res.status(200).send(zipBuffer)
+  }
+
+  if ((fileFormat === "xlsx" || fileFormat === "csv" || fileFormat === "dbf") && splitFiles && splitSpreadsheetFiles.length > 0) {
+    const zip = new AdmZip()
+    for (const file of splitSpreadsheetFiles) {
+      const buffer =
+        fileFormat === "dbf"
+          ? await buildDbfBuffer(file.rows)
+          : await buildSpreadsheetBuffer(file.sheetName, file.rows, fileFormat)
+      zip.addFile(`${file.fileName}.${fileFormat}`, buffer)
+    }
     const zipBuffer = zip.toBuffer()
     res.setHeader("Content-Type", "application/zip")
     res.setHeader("Content-Disposition", `attachment; filename="${zipDownloadName(kind, dateFrom, dateTo)}"`)

@@ -128,6 +128,7 @@ export default function ExportContabilitatePage() {
   const [selectedLocationId, setSelectedLocationId] = useState(getActiveLocationId())
   const [partnerSearch, setPartnerSearch] = useState("")
   const [showConfig, setShowConfig] = useState(false)
+  const [showStockTypes, setShowStockTypes] = useState(false)
   const [showMappings, setShowMappings] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewLoading, setPreviewLoading] = useState(false)
@@ -240,8 +241,7 @@ export default function ExportContabilitatePage() {
   const needsPartnerFilter = ["customers", "suppliers", "sales-invoices", "purchase-receipts"].includes(selectedKind)
   const supportsGlobalValueType = ["sales-invoices", "purchase-receipts"].includes(selectedKind)
   const supportsSplitFiles =
-    selectedFileFormat === "xml" &&
-    ["products", "customers", "suppliers", "sales-invoices", "purchase-receipts", "production-docs"].includes(selectedKind)
+    ["products", "customers", "suppliers", "sales-invoices", "purchase-receipts", "consumption-docs", "production-docs"].includes(selectedKind)
   const needsValueType = selectedKindCategory === "documents"
   const contextualPartnerLabel = selectedKindMeta?.partnerLabel || "Client / partener"
 
@@ -473,7 +473,7 @@ export default function ExportContabilitatePage() {
               <span>
                 <span className="block text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Separare fisiere</span>
                 <span className="mt-1 block text-sm text-slate-700">
-                  {supportsSplitFiles ? "Un XML separat in ZIP" : "Disponibil pentru XML articole, clienti, furnizori, facturi, NIR si productie"}
+                  {supportsSplitFiles ? "Genereaza cate un fisier separat in ZIP pentru formatul ales" : "Disponibil pentru articole, parteneri si documente operationale"}
                 </span>
               </span>
             </label>
@@ -577,11 +577,19 @@ export default function ExportContabilitatePage() {
               {downloadingKind === selectedKind ? "Se genereaza..." : "Genereaza"}
             </button>
           </div>
+
+          {selectedKind ? (
+            <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600">
+              <span className="rounded-full bg-white px-3 py-1 font-medium text-slate-700">Document: {selectedKindMeta?.label || selectedKind}</span>
+              <span className="rounded-full bg-white px-3 py-1 font-medium text-slate-700">Format: {selectedFileFormat.toUpperCase()}</span>
+              <span className="rounded-full bg-white px-3 py-1 font-medium text-slate-700">Perioada: {dateFrom} - {dateTo}</span>
+              {supportsSplitFiles && splitFiles ? <span className="rounded-full bg-[#17324D] px-3 py-1 font-medium text-white">Fisiere separate</span> : null}
+            </div>
+          ) : null}
         </div>
       </section>
 
-      <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-        <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
           <button
             type="button"
             onClick={() => setShowConfig((value) => !value)}
@@ -669,42 +677,24 @@ export default function ExportContabilitatePage() {
           ) : (
             <div className="mt-3 text-sm text-slate-500">Configurarea avansata este ascunsa.</div>
           )}
-        </section>
-
-        <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Documente disponibile</div>
-            <div className="mt-1 text-sm font-semibold text-[#17324D]">Lista scurta pentru export</div>
-          </div>
-
-          <div className="mt-4 space-y-2">
-            {exportKinds.map((item) => (
-              <div
-                key={item.code}
-                className={[
-                  "flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left transition",
-                  selectedKind === item.code ? "border-[#17324D] bg-slate-100" : "border-slate-200 bg-slate-50",
-                ].join(" ")}
-              >
-                <div>
-                  <div className="font-semibold text-slate-900">{item.label}</div>
-                  {item.description ? <div className="mt-1 text-xs text-slate-500">{item.description}</div> : null}
-                </div>
-                <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                  {selectedKind === item.code ? "selectat" : "disponibil"}
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
+      </section>
 
       <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+        <button
+          type="button"
+          onClick={() => setShowStockTypes((value) => !value)}
+          className="flex w-full items-center justify-between gap-3 text-left"
+        >
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Tipuri de stoc</div>
             <div className="mt-1 text-sm font-semibold text-[#17324D]">Baza pentru maparea contabila a produselor</div>
           </div>
+          <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
+            {showStockTypes ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </span>
+        </button>
 
+        {showStockTypes ? (
           <div className="mt-4 overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead className="text-xs uppercase text-slate-400">
@@ -739,7 +729,10 @@ export default function ExportContabilitatePage() {
               </tbody>
             </table>
           </div>
-        </section>
+        ) : (
+          <div className="mt-3 text-sm text-slate-500">Tipurile de stoc sunt ascunse momentan, ca pagina sa ramana mai compacta.</div>
+        )}
+      </section>
 
       <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
         <button
