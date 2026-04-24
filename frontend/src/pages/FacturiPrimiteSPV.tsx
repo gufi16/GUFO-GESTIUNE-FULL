@@ -353,249 +353,37 @@ export default function FacturiPrimiteSPVPage() {
     setBridgeMessages([])
     setBridgeMessagesPage(1)
     try {
-      const localAgent = await getLocalAgentConnection()
-      if (localAgent?.bridgeToken) {
-        const trimmedBridgeUrl = localAgent.bridgeUrl
-        const requestedDays = getDaysNeededForMonth(selectedMonth)
-        const bridgeConfig = await loadBridgeConfig()
-        const existingDownloadIds = new Set(
-          items
-            .map((entry) => String(entry.spvDownloadId || "").trim())
-            .filter(Boolean)
-        )
-        const bridgeHeaders = {
-          Authorization: `Bearer ${localAgent.bridgeToken}`,
-          "Content-Type": "application/json",
-        }
-        let listData: any = null
-        let payload: any = {}
-        let downloadsById = new Map<string, any>()
-
-        const syncBatchRes = await fetch(`${trimmedBridgeUrl}/api/v1/efactura/sync-batch`, {
-          method: "POST",
-          headers: bridgeHeaders,
-          body: JSON.stringify({
-            days: requestedDays,
-            accessToken: bridgeConfig.accessToken,
-            cif: bridgeConfig.cif,
-            environment: bridgeConfig.environment,
-            existingIds: Array.from(existingDownloadIds),
-          }),
-        })
-        const syncBatchData = await syncBatchRes.json().catch(() => ({}))
-        const shouldFallbackToLegacyBridge =
-          !syncBatchRes.ok &&
-          (syncBatchRes.status === 404 ||
-            String(syncBatchData?.error || "")
-              .trim()
-              .toLowerCase()
-              .includes("ruta necunoscuta"))
-
-        if (!shouldFallbackToLegacyBridge) {
-          if (!syncBatchRes.ok || !syncBatchData?.ok || !syncBatchData?.response?.list?.ok) {
-            throw new Error(syncBatchData?.response?.list?.error || syncBatchData?.error || "Bridge-ul local nu a putut sincroniza e-Factura.")
-          }
-          listData = syncBatchData
-          payload = (() => {
-            const rawContent = String(listData?.response?.list?.content || "").trim()
-            if (!rawContent) return {}
-            try {
-              return JSON.parse(rawContent)
-            } catch {
-              return {}
-            }
-          })()
-          downloadsById = new Map<string, any>(
-            (Array.isArray(listData?.response?.items) ? listData.response.items : []).map((entry: any) => [
-              String(entry?.id || "").trim(),
-              entry,
-            ])
-          )
-        } else {
-          const listRes = await fetch(`${trimmedBridgeUrl}/api/v1/efactura/list-messages`, {
-            method: "POST",
-            headers: bridgeHeaders,
-            body: JSON.stringify({
-              days: requestedDays,
-              accessToken: bridgeConfig.accessToken,
-              cif: bridgeConfig.cif,
-              environment: bridgeConfig.environment,
-            }),
-          })
-          listData = await listRes.json().catch(() => ({}))
-          if (!listRes.ok || !listData?.ok || !listData?.response?.ok) {
-            throw new Error(listData?.response?.error || listData?.error || "Bridge-ul local nu a putut lista mesajele e-Factura.")
-          }
-          payload = listData?.response?.parsedContent || {}
-        }
-
-        const messages = filterMessagesForMonth(collectBridgeMessageItems(payload), selectedMonth)
-        setBridgeMessages(
-          messages.map((entry: any) => ({
-            id: String(entry?.id || ""),
-            tip: entry?.tip || null,
-            cif: entry?.cif || null,
-            data_creare: entry?.data_creare || null,
-            detalii: entry?.detalii || null,
-          }))
-        )
-
-        const invoiceMessages = messages.filter((entry: any) => isIncomingEfacturaMessage(entry))
-        const newInvoiceMessages = invoiceMessages.filter((entry: any) => !existingDownloadIds.has(String(entry?.id || "").trim()))
-
-        if (!invoiceMessages.length) {
-          const fallbackData = await syncItemsDirectAnafFallback(selectedMonth)
-          const stats = fallbackData?.stats || {}
-          setMessage(
-            fallbackData?.message ||
-              `Bridge-ul local nu a returnat facturi pentru ${selectedMonth}, asa ca am facut sincronizarea direct cu ANAF.`
-          )
-          setSpvTestResult({
-            ok: true,
-            title: "Sincronizare facuta direct cu ANAF",
-            tone: "success",
-            lines: [
-              "Bridge local a raspuns fara facturi, fallback pe ERP -> ANAF OAuth.",
-              `Bridge URL: ${trimmedBridgeUrl}`,
-              `Luna selectata: ${selectedMonth}`,
-              `Mediu ANAF: ${bridgeConfig.environment}`,
-              `CUI: ${bridgeConfig.cif}`,
-              `Mesaje totale ANAF: ${stats.totalMessages ?? 0}`,
-              `Mesaje factura ANAF: ${stats.invoiceMessages ?? 0}`,
-              `Facturi importate: ${stats.imported ?? 0}`,
-            ],
-          })
-          await loadItems()
-          return
-        }
-
-        if (!newInvoiceMessages.length) {
-          setMessage(`Facturile pentru ${selectedMonth} sunt deja sincronizate in Gufo.`)
-          setSpvTestResult({
-            ok: true,
-            title: "Facturile din e-Factura sunt deja in Gufo",
-            tone: "success",
-            lines: [
-              "Ruta testata: bridge local -> listaMesaje + verificare duplicat",
-              `Bridge URL: ${trimmedBridgeUrl}`,
-              `Luna selectata: ${selectedMonth}`,
-              `Mediu ANAF: ${bridgeConfig.environment}`,
-              `CUI: ${bridgeConfig.cif}`,
-              `Mesaje totale: ${messages.length}`,
-              `Facturi gasite: ${invoiceMessages.length}`,
-              "Facturi noi de importat: 0",
-            ],
-          })
-          await loadItems()
-          return
-        }
-
-        let imported = 0
-        let skipped = 0
-        let lastImportedInvoiceNo = "-"
-        const importErrors: string[] = []
-
-        if (shouldFallbackToLegacyBridge) {
-          const downloadIds = newInvoiceMessages
-            .map((message: any) => String(message?.id || "").trim())
-            .filter(Boolean)
-
-          const batchDownloadRes = await fetch(`${trimmedBridgeUrl}/api/v1/efactura/download-many`, {
-            method: "POST",
-            headers: bridgeHeaders,
-            body: JSON.stringify({
-              ids: downloadIds,
-              accessToken: bridgeConfig.accessToken,
-              environment: bridgeConfig.environment,
-            }),
-          })
-          const batchDownloadData = await batchDownloadRes.json().catch(() => ({}))
-          if (!batchDownloadRes.ok || !batchDownloadData?.ok || !batchDownloadData?.response?.items) {
-            throw new Error(batchDownloadData?.error || "Bridge-ul local nu a putut descarca lotul de facturi e-Factura.")
-          }
-          downloadsById = new Map<string, any>(
-            (Array.isArray(batchDownloadData.response.items) ? batchDownloadData.response.items : []).map((entry: any) => [
-              String(entry?.id || "").trim(),
-              entry,
-            ])
-          )
-        }
-
-        for (const message of newInvoiceMessages) {
-          const messageId = String(message?.id || "").trim()
-          const downloadData = downloadsById.get(messageId)
-          if (!messageId || !downloadData?.ok || !downloadData?.base64Content) {
-            skipped += 1
-            continue
-          }
-
-          const importRes = await fetch(`${API_BASE}/api/v1/efactura/incoming/import-from-spv-bridge`, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              message,
-              downloadBase64: downloadData.base64Content,
-            }),
-          })
-          const importData = await importRes.json().catch(() => ({}))
-          if (!importRes.ok || !importData?.ok) {
-            skipped += 1
-            if (importErrors.length < 3) {
-              importErrors.push(importData?.error || `Importul a esuat pentru mesajul ${messageId}.`)
-            }
-            continue
-          }
-
-          imported += 1
-          lastImportedInvoiceNo = importData?.invoiceNo || importData?.spvDownloadId || lastImportedInvoiceNo
-        }
-
-        setSpvTestResult({
-          ok: imported > 0,
-          title: imported > 0 ? "Sincronizare e-Factura prin bridge finalizata" : "Sincronizare e-Factura fara facturi noi",
-          tone: imported > 0 ? "success" : "error",
-          lines: [
-            "Ruta testata: bridge local -> listaMesaje + descarcare + import Gufo",
-            `Bridge URL: ${trimmedBridgeUrl}`,
-            `Luna selectata: ${selectedMonth}`,
-            `Mediu ANAF: ${bridgeConfig.environment}`,
-            `CUI: ${bridgeConfig.cif}`,
-            `Mesaje totale: ${messages.length}`,
-            `Facturi gasite: ${invoiceMessages.length}`,
-            `Facturi noi de importat: ${newInvoiceMessages.length}`,
-            `Facturi importate: ${imported}`,
-            `Mesaje sarite/eroare: ${skipped}`,
-            `Ultima factura importata: ${lastImportedInvoiceNo}`,
-            ...(importErrors.length ? [`Prima eroare: ${importErrors[0]}`] : []),
-          ],
-        })
-
-        if (imported > 0) {
-          setMessage(`Sincronizare e-Factura finalizata prin bridge local pentru ${selectedMonth}. Facturi importate: ${imported}.`)
-        } else {
-          setError(importErrors[0] || `Bridge-ul a raspuns, dar nu am importat nicio factura noua din e-Factura pentru ${selectedMonth}.`)
-        }
-
-        await loadItems()
-        return
-      }
-
-      const res = await fetch(`${API_BASE}/api/v1/spv-classic/sync`, {
+      const requestedDays = getDaysNeededForMonth(selectedMonth)
+      const res = await fetch(`${API_BASE}/api/v1/efactura/incoming/sync`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ days: 30 }),
+        body: JSON.stringify({ days: requestedDays }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data?.ok) {
-        throw new Error(data?.message || data?.error || "Nu am putut sincroniza facturile primite din SPV.")
+        throw new Error(data?.message || data?.error || "Nu am putut sincroniza facturile primite direct din ANAF.")
       }
-      setMessage(data?.message || "Sincronizarea SPV a fost finalizata.")
+      const stats = data?.stats || {}
+      setSpvTestResult({
+        ok: true,
+        title: "Sincronizare e-Factura ANAF finalizata",
+        tone: "success",
+        lines: [
+          "Ruta folosita: ERP -> ANAF OAuth -> listaMesajeFactura + descarcare",
+          `Luna selectata: ${selectedMonth}`,
+          `Zile interogate: ${requestedDays}`,
+          `Mesaje totale: ${stats.totalMessages ?? 0}`,
+          `Mesaje factura: ${stats.invoiceMessages ?? 0}`,
+          `Facturi descarcate: ${stats.downloaded ?? 0}`,
+          `Facturi importate: ${stats.imported ?? 0}`,
+          `Mesaje sarite: ${stats.skipped ?? 0}`,
+          ...(Array.isArray(stats.errors) && stats.errors.length ? [`Prima eroare: ${stats.errors[0]}`] : []),
+        ],
+      })
+      setMessage(data?.message || "Sincronizarea e-Factura a fost finalizata.")
       await loadItems()
     } catch (err: any) {
       setError(err?.message || "Nu am putut sincroniza facturile primite din SPV.")
