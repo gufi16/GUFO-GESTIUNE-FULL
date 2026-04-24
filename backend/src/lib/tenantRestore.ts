@@ -1,0 +1,206 @@
+// @ts-nocheck
+import fs from "fs"
+import AdmZip from "adm-zip"
+import { prisma } from "./prisma"
+
+function toDateIfPossible(value: any) {
+  if (typeof value !== "string") return value
+  if (!/^\d{4}-\d{2}-\d{2}T/.test(value) && !/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date
+}
+
+function normalizeRecord(record: any) {
+  if (!record || typeof record !== "object" || Array.isArray(record)) return record
+  const normalized: Record<string, any> = {}
+  for (const [key, value] of Object.entries(record)) {
+    if (Array.isArray(value)) continue
+    if (value && typeof value === "object" && !(value instanceof Date)) continue
+    normalized[key] = toDateIfPossible(value)
+  }
+  return normalized
+}
+
+function asArray(value: any) {
+  return Array.isArray(value) ? value : []
+}
+
+function pickFields(record: any, fields: string[]) {
+  const normalized = normalizeRecord(record)
+  const next: Record<string, any> = {}
+  for (const field of fields) {
+    if (Object.prototype.hasOwnProperty.call(normalized, field)) {
+      next[field] = normalized[field]
+    }
+  }
+  return next
+}
+
+function readTenantPayloadFromZip(filePath: string) {
+  if (!fs.existsSync(filePath)) {
+    throw new Error("Fisierul backup nu mai exista pe server.")
+  }
+  const zip = new AdmZip(filePath)
+  const entry = zip.getEntry("data/tenant.json")
+  if (!entry) {
+    throw new Error("Backup-ul nu contine data/tenant.json.")
+  }
+  return JSON.parse(zip.readAsText(entry))
+}
+
+async function createManyIfAny(model: any, data: any[]) {
+  if (!Array.isArray(data) || !data.length) return
+  await model.createMany({ data })
+}
+
+export async function restoreTenantBackupFromFile(tenantId: string, filePath: string) {
+  const payload = readTenantPayloadFromZip(filePath)
+
+  if (String(payload?.tenantId || "") !== String(tenantId)) {
+    throw new Error("Backup-ul nu apartine acestui client.")
+  }
+
+  const companies = asArray(payload.companies).map((item) =>
+    pickFields(item, [
+      "id", "tenantId", "name", "code", "isDefault", "cui", "regNo", "address", "city", "county", "country",
+      "postalCode", "bank", "iban", "email", "phone", "contactEmail", "isVatPayer", "posSyncInterval",
+      "efacturaEnabled", "efacturaEnvironment", "efacturaSellerCountryCode", "efacturaSellerCity",
+      "efacturaSellerCounty", "efacturaSellerPostalCode", "efacturaContactEmail", "efacturaCertSerial",
+      "efacturaCertPasswordEnc", "efacturaCertFilename", "efacturaCertUploadedAt", "efacturaOauthClientId",
+      "efacturaOauthClientSecret", "efacturaOauthRedirectUri", "efacturaOauthAccessToken", "efacturaOauthRefreshToken",
+      "efacturaOauthAccessTokenExpiresAt", "efacturaOauthRefreshTokenExpiresAt", "efacturaOauthConnectedAt",
+      "efacturaOauthLastError", "invoiceSeries", "purchaseSeries", "transferSeries", "inventorySeries",
+      "productionSeries", "deteriorationSeries", "priceChangeSeries", "customerCodePrefix", "supplierCodePrefix",
+      "createdAt", "updatedAt",
+    ]),
+  )
+
+  const users = asArray(payload.users).map((item) =>
+    pickFields(item, ["id", "tenantId", "email", "name", "passwordHash", "posPinHash", "role", "isActive", "createdAt", "updatedAt"]),
+  )
+
+  const userCompanyAccesses = asArray(payload.users).flatMap((item) =>
+    asArray(item?.companyAccesses).map((entry) => ({
+      userId: item.id,
+      companyId: entry.companyId,
+      createdAt: toDateIfPossible(entry.createdAt),
+    })),
+  )
+
+  const locations = asArray(payload.locations).map((item) =>
+    pickFields(item, ["id", "tenantId", "companyId", "name", "code", "isActive", "createdAt", "updatedAt"]),
+  )
+
+  const terminals = asArray(payload.terminals).map((item) =>
+    pickFields(item, ["id", "tenantId", "companyId", "locationId", "deviceId", "label", "isLockedToLocation", "createdAt", "updatedAt"]),
+  )
+
+  const vatRates = asArray(payload.vatRates).map((item) =>
+    pickFields(item, ["id", "tenantId", "companyId", "name", "rate", "fiscalCode", "isActive", "createdAt"]),
+  )
+
+  const uoms = asArray(payload.uoms).map((item) =>
+    pickFields(item, ["id", "tenantId", "companyId", "code", "name", "isActive", "createdAt"]),
+  )
+
+  const departments = asArray(payload.departments).map((item) =>
+    pickFields(item, ["id", "tenantId", "companyId", "name", "isActive", "createdAt"]),
+  )
+
+  const categories = asArray(payload.categories).map((item) =>
+    pickFields(item, ["id", "tenantId", "companyId", "departmentId", "name", "imageUrl", "isActive", "isVisibleInPos", "createdAt"]),
+  )
+
+  const accountingStockTypes = asArray(payload.accountingStockTypes).map((item) =>
+    pickFields(item, ["id", "tenantId", "companyId", "code", "name", "inventoryAccount", "expenseAccount", "salesAccount", "analyticMode", "isDefault", "createdAt", "updatedAt"]),
+  )
+
+  const accountingExportConfigs = asArray(payload.accountingExportConfigs).map((item) =>
+    pickFields(item, ["id", "tenantId", "companyId", "exportTarget", "articleCodeSource", "managementAnalytic", "customerAccount", "supplierAccount", "salesAccount", "expenseAccount", "inventoryAccount", "vatCollectedAccount", "vatDeductibleAccount", "cashAccount", "cardAccount", "defaultStockTypeId", "createdAt", "updatedAt"]),
+  )
+
+  const suppliers = asArray(payload.suppliers).map((item) =>
+    pickFields(item, ["id", "tenantId", "companyId", "name", "code", "cif", "regCom", "address", "city", "county", "country", "postalCode", "phone", "email", "vatPayer", "isActive", "createdAt", "updatedAt"]),
+  )
+
+  const customers = asArray(payload.customers).map((item) =>
+    pickFields(item, ["id", "tenantId", "companyId", "name", "code", "cif", "regNo", "address", "city", "county", "country", "postalCode", "phone", "email", "vatPayer", "isActive", "createdAt", "updatedAt"]),
+  )
+
+  const tenantModules = asArray(payload.tenantModules).map((item) =>
+    pickFields(item, ["id", "tenantId", "moduleId", "enabled", "limitValue", "source", "createdAt", "updatedAt"]),
+  )
+
+  const externalIntegrations = asArray(payload.externalIntegrations).map((item) =>
+    pickFields(item, ["id", "tenantId", "locationId", "platform", "status", "authType", "accessToken", "refreshToken", "tokenExpiresAt", "merchantId", "storeId", "webhookSecret", "settingsJson", "createdAt", "updatedAt"]),
+  )
+
+  const products = asArray(payload.products).map((item) =>
+    pickFields(item, [
+      "id", "tenantId", "companyId", "sku", "name", "imageUrl", "class", "vatRateId", "uomId", "purchaseUomId",
+      "purchaseFactor", "departmentId", "categoryId", "accountingStockTypeId", "accountingItemCode", "price",
+      "costPrice", "isActive", "isVisibleInPos", "isSgr", "sgrValue", "productionMode", "createdAt", "updatedAt",
+    ]),
+  )
+
+  const productBarcodes = asArray(payload.productBarcodes).map((item) =>
+    pickFields(item, ["id", "tenantId", "productId", "barcode", "createdAt"]),
+  )
+
+  await prisma.userCompanyAccess.deleteMany({
+    where: { user: { tenantId } },
+  })
+  await prisma.productBarcode.deleteMany({ where: { tenantId } })
+  await prisma.externalIntegration.deleteMany({ where: { tenantId } })
+  await prisma.tenantModule.deleteMany({ where: { tenantId } })
+  await prisma.product.deleteMany({ where: { tenantId } })
+  await prisma.customer.deleteMany({ where: { tenantId } })
+  await prisma.supplier.deleteMany({ where: { tenantId } })
+  await prisma.accountingExportConfig.deleteMany({ where: { tenantId } })
+  await prisma.accountingStockType.deleteMany({ where: { tenantId } })
+  await prisma.category.deleteMany({ where: { tenantId } })
+  await prisma.department.deleteMany({ where: { tenantId } })
+  await prisma.uom.deleteMany({ where: { tenantId } })
+  await prisma.vatRate.deleteMany({ where: { tenantId } })
+  await prisma.terminal.deleteMany({ where: { tenantId } })
+  await prisma.location.deleteMany({ where: { tenantId } })
+  await prisma.user.deleteMany({ where: { tenantId } })
+  await prisma.company.deleteMany({ where: { tenantId } })
+
+  await createManyIfAny(prisma.company, companies)
+  await createManyIfAny(prisma.user, users)
+  await createManyIfAny(prisma.userCompanyAccess, userCompanyAccesses)
+  await createManyIfAny(prisma.location, locations)
+  await createManyIfAny(prisma.terminal, terminals)
+  await createManyIfAny(prisma.vatRate, vatRates)
+  await createManyIfAny(prisma.uom, uoms)
+  await createManyIfAny(prisma.department, departments)
+  await createManyIfAny(prisma.category, categories)
+  await createManyIfAny(prisma.accountingStockType, accountingStockTypes)
+  await createManyIfAny(prisma.accountingExportConfig, accountingExportConfigs)
+  await createManyIfAny(prisma.supplier, suppliers)
+  await createManyIfAny(prisma.customer, customers)
+  await createManyIfAny(prisma.tenantModule, tenantModules)
+  await createManyIfAny(prisma.externalIntegration, externalIntegrations)
+  await createManyIfAny(prisma.product, products)
+  await createManyIfAny(prisma.productBarcode, productBarcodes)
+
+  return {
+    companies: companies.length,
+    users: users.length,
+    locations: locations.length,
+    terminals: terminals.length,
+    vatRates: vatRates.length,
+    uoms: uoms.length,
+    departments: departments.length,
+    categories: categories.length,
+    accountingStockTypes: accountingStockTypes.length,
+    accountingExportConfigs: accountingExportConfigs.length,
+    suppliers: suppliers.length,
+    customers: customers.length,
+    tenantModules: tenantModules.length,
+    externalIntegrations: externalIntegrations.length,
+    products: products.length,
+    productBarcodes: productBarcodes.length,
+  }
+}

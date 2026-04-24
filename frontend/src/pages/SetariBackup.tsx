@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Archive, Download, RefreshCcw, Trash2 } from "lucide-react"
+import { Archive, Download, RefreshCcw, RotateCcw, Trash2 } from "lucide-react"
 import PageHeader from "../components/PageHeader"
 import { api } from "../lib/api"
 import { DocumentMetric, InlineNotice, documentButtonPrimaryClass, documentButtonSecondaryClass, documentInputClass } from "../components/DocumentUi"
@@ -32,6 +32,7 @@ export default function SetariBackupPage() {
   const [creating, setCreating] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
+  const [restoringId, setRestoringId] = useState<string | null>(null)
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
   const [label, setLabel] = useState("")
@@ -113,6 +114,27 @@ export default function SetariBackupPage() {
     }
   }
 
+  async function handleRestore(item: BackupItem) {
+    if (!window.confirm(`Restaurezi backup-ul ${item.fileName} direct din server? Datele curente de configurare, nomenclator si utilizatori vor fi suprascrise.`)) {
+      return
+    }
+
+    try {
+      setRestoringId(item.id)
+      setError("")
+      setMessage("")
+      const data = await api<{ message?: string }>(`/api/v1/settings/backups/${item.id}/restore`, {
+        method: "POST",
+      })
+      setMessage(data?.message || "Backup-ul a fost restaurat.")
+      await load()
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut restaura backup-ul.")
+    } finally {
+      setRestoringId(null)
+    }
+  }
+
   return (
     <div className="space-y-3">
       <PageHeader
@@ -135,7 +157,7 @@ export default function SetariBackupPage() {
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Creeaza backup nou</div>
             <div className="mt-1 text-sm font-semibold text-[#17324D]">Salvezi un snapshot complet al clientului curent.</div>
-            <div className="mt-2 text-sm text-slate-500">Include baza de date a clientului si fisierele relevante din ERP. Restore-ul controlat il legam in pasul urmator.</div>
+            <div className="mt-2 text-sm text-slate-500">Include baza de date a clientului si fisierele relevante din ERP. Restaurarea se face direct din backup-urile salvate pe server.</div>
           </div>
 
           <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
@@ -197,6 +219,15 @@ export default function SetariBackupPage() {
                       >
                         <Download size={15} />
                         {downloadingId === item.id ? "Se descarca..." : "Descarca"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRestore(item)}
+                        disabled={restoringId === item.id}
+                        className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <RotateCcw size={15} />
+                        {restoringId === item.id ? "Se restaureaza..." : "Restore"}
                       </button>
                       <button
                         type="button"

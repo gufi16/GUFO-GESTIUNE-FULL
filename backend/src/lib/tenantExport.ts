@@ -49,7 +49,11 @@ export async function buildTenantExportZip(tenantId: string) {
     where: { id: tenantId },
     include: {
       companies: true,
-      users: true,
+      users: {
+        include: {
+          companyAccesses: true,
+        },
+      },
       licenses: true,
       locations: true,
       terminals: true,
@@ -166,6 +170,14 @@ export async function buildTenantExportZip(tenantId: string) {
     where: { tenantId },
   })
 
+  const accountingStockTypes = await prisma.accountingStockType.findMany({
+    where: { tenantId },
+  })
+
+  const accountingExportConfigs = await prisma.accountingExportConfig.findMany({
+    where: { tenantId },
+  })
+
   const payload = {
     exportedAt: new Date().toISOString(),
     tenantId,
@@ -196,6 +208,8 @@ export async function buildTenantExportZip(tenantId: string) {
     subscriptions: tenant.subscriptions,
     invoices: tenant.invoices,
     tenantModules: tenant.tenantModules,
+    accountingStockTypes,
+    accountingExportConfigs,
     auditLogs: tenant.auditLogs,
     externalIntegrations,
     externalOrders,
