@@ -397,9 +397,14 @@ function serializeIncomingInvoice(entry: any) {
 function isIncomingEfacturaMessage(entry: any) {
   const tip = String(entry?.tip || "").trim().toUpperCase()
   const details = String(entry?.detalii || "").trim().toLowerCase()
+  const downloadId = String(
+    extractDownloadId(entry, JSON.stringify(entry || {})) || readStringField(entry, ["id", "downloadId"])
+  ).trim()
+  const raw = JSON.stringify(entry || {}).toLowerCase()
+  if (tip.includes("RECIPISA")) return false
   if (tip.includes("PRIMITA")) return true
-  if (tip === "RECIPISA") return false
-  return details.includes("cif_beneficiar")
+  if (details.includes("cif_beneficiar")) return true
+  return Boolean(downloadId) && (raw.includes("id_descarcare") || raw.includes("download") || raw.includes("cif_beneficiar"))
 }
 
 function isInvoiceReceivedByCompany(parsedInvoice: any, company: any) {
