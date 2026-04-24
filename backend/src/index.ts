@@ -47,6 +47,7 @@ import usersRouter from "./routes/users"
 import auditRouter from "./routes/audit"
 import gufoAiRouter from "./routes/gufoAi"
 import financeRouter from "./routes/finance"
+import backupsRouter from "./routes/backups"
 
 dotenv.config()
 
@@ -1306,6 +1307,7 @@ app.use("/api/v1/inventory-docs", inventoryDocsPdf)
 app.use(reportsRouter)
 app.use(accountingExportRouter)
 app.use(financeRouter)
+app.use(backupsRouter)
 app.use(adminRouter)
 app.use(marketplaceRouter)
 app.use(salesInvoicesRouter)

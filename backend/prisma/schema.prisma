@@ -236,6 +236,7 @@ model Tenant {
   auditLogs     AuditLog[]
   accountingExportConfigs AccountingExportConfig[]
   accountingStockTypes    AccountingStockType[]
+  backups               TenantBackup[]
 }
 
 model PlatformConfig {
@@ -1854,4 +1855,22 @@ model AuditLog {
   @@index([action])
   @@index([entityType])
   @@index([createdAt])
+}
+
+model TenantBackup {
+  id              String   @id @default(cuid())
+  tenantId        String
+  companyId       String?
+  createdByUserId String?
+  label           String?
+  fileName        String
+  filePath        String
+  fileSizeBytes   Int      @default(0)
+  tableCounts     Json?
+  createdAt       DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([companyId])
 }

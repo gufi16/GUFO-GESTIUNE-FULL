@@ -5,6 +5,7 @@ import AdmZip from "adm-zip"
 import { prisma } from "./prisma"
 
 const uploadsDir = path.join(process.cwd(), "uploads")
+const backupsDir = path.join(uploadsDir, "tenant-backups")
 
 function sanitizeSegment(value: string) {
   return String(value || "")
@@ -47,7 +48,7 @@ export async function buildTenantExportZip(tenantId: string) {
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
     include: {
-      company: true,
+      companies: true,
       users: true,
       licenses: true,
       locations: true,
@@ -169,7 +170,7 @@ export async function buildTenantExportZip(tenantId: string) {
     exportedAt: new Date().toISOString(),
     tenantId,
     tenantName: tenant.name,
-    company: tenant.company,
+    companies: tenant.companies,
     users: tenant.users,
     licenses: tenant.licenses,
     locations: tenant.locations,
@@ -256,4 +257,21 @@ export async function buildTenantExportZip(tenantId: string) {
       .toISOString()
       .slice(0, 10)}.zip`,
   }
+}
+
+export function ensureTenantBackupDir(tenantId: string) {
+  const dir = path.join(backupsDir, sanitizeSegment(tenantId) || tenantId)
+  fs.mkdirSync(dir, { recursive: true })
+  return dir
+}
+
+export function buildTenantBackupStats(payload: any) {
+  const stats: Record<string, number> = {}
+  if (!payload || typeof payload !== "object") return stats
+  for (const [key, value] of Object.entries(payload)) {
+    if (Array.isArray(value)) {
+      stats[key] = value.length
+    }
+  }
+  return stats
 }
