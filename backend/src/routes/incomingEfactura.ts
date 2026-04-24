@@ -117,6 +117,10 @@ function toDateOrNull(value: any) {
 }
 
 function toNumber(value: any) {
+  if (value && typeof value === "object" && typeof value.toString === "function") {
+    const parsedFromString = Number(String(value))
+    if (Number.isFinite(parsedFromString)) return parsedFromString
+  }
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : 0
 }
@@ -343,12 +347,51 @@ async function upsertIncomingInvoice(
 
 function isMalformedIncomingInvoice(entry: any) {
   const itemsCount = Array.isArray(entry?.items) ? entry.items.length : 0
+  const totalGross = Number(entry?.totalGross)
+  const totalNet = Number(entry?.totalNet)
+  const totalVat = Number(entry?.totalVat)
+  const hasBrokenItemNumbers = Array.isArray(entry?.items)
+    ? entry.items.some(
+        (line: any) =>
+          !Number.isFinite(Number(line?.qty)) ||
+          !Number.isFinite(Number(line?.unitPrice)) ||
+          !Number.isFinite(Number(line?.vatRate)) ||
+          !Number.isFinite(Number(line?.lineNet)) ||
+          !Number.isFinite(Number(line?.lineVat)) ||
+          !Number.isFinite(Number(line?.lineGross))
+      )
+    : false
   return (
     !String(entry?.invoiceNo || "").trim() ||
     !String(entry?.supplierName || "").trim() ||
-    Number(entry?.totalGross || 0) <= 0 ||
-    itemsCount === 0
+    !Number.isFinite(totalGross) ||
+    !Number.isFinite(totalNet) ||
+    !Number.isFinite(totalVat) ||
+    totalGross <= 0 ||
+    itemsCount === 0 ||
+    hasBrokenItemNumbers
   )
+}
+
+function serializeIncomingInvoice(entry: any) {
+  if (!entry || typeof entry !== "object") return entry
+  return {
+    ...entry,
+    totalNet: toNumber(entry.totalNet),
+    totalVat: toNumber(entry.totalVat),
+    totalGross: toNumber(entry.totalGross),
+    items: Array.isArray(entry.items)
+      ? entry.items.map((line: any) => ({
+          ...line,
+          qty: toNumber(line?.qty),
+          unitPrice: toNumber(line?.unitPrice),
+          vatRate: toNumber(line?.vatRate),
+          lineNet: toNumber(line?.lineNet),
+          lineVat: toNumber(line?.lineVat),
+          lineGross: toNumber(line?.lineGross),
+        }))
+      : [],
+  }
 }
 
 function isIncomingEfacturaMessage(entry: any) {
@@ -811,8 +854,9 @@ router.get("/api/v1/efactura/incoming", async (req: AuthedRequest, res) => {
     const parsedInvoice = entry?.xmlText ? parseIncomingEInvoiceXml(String(entry.xmlText)) : null
     return isInvoiceReceivedByCompany(parsedInvoice, company)
   })
+  const serializedItems = filteredItems.map((entry) => serializeIncomingInvoice(entry))
 
-  return res.json({ ok: true, items: filteredItems })
+  return res.json({ ok: true, items: serializedItems })
 })
 
 router.get("/api/v1/efactura/incoming/bridge-config", async (req: AuthedRequest, res) => {
@@ -992,7 +1036,7 @@ router.get("/api/v1/efactura/incoming/:id", async (req: AuthedRequest, res) => {
 
   const repaired = await repairIncomingInvoiceIfNeeded(tenantId, companyId, item)
 
-  return res.json({ ok: true, item: repaired })
+  return res.json({ ok: true, item: serializeIncomingInvoice(repaired) })
 })
 
 router.get("/api/v1/efactura/incoming/:id/pdf", async (req: AuthedRequest, res) => {
@@ -1088,7 +1132,7 @@ router.post("/api/v1/efactura/incoming/import-from-spv-bridge", async (req: Auth
     await ensureIncomingInvoicePdfSaved(item)
     return res.json({
       ok: true,
-      item,
+      item: serializeIncomingInvoice(item),
       invoiceNo: parsedInvoice.invoiceNo || null,
       supplierName: parsedInvoice.supplierName || null,
       spvDownloadId: item?.spvDownloadId || extractDownloadId(rawMessage, JSON.stringify(rawMessage || {})) || null,
