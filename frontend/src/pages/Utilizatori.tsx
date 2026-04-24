@@ -76,6 +76,7 @@ export default function Utilizatori() {
   const [modalOpen, setModalOpen] = useState(false)
   const [editingUserId, setEditingUserId] = useState<string | null>(null)
   const [form, setForm] = useState<UserFormState>(emptyForm)
+  const [modalVersion, setModalVersion] = useState(0)
   const [editingCompaniesFor, setEditingCompaniesFor] = useState<string | null>(null)
   const [companySelection, setCompanySelection] = useState<string[]>([])
 
@@ -111,6 +112,7 @@ export default function Utilizatori() {
   function openCreateModal() {
     setEditingUserId(null)
     setForm(emptyForm())
+    setModalVersion((current) => current + 1)
     setCredentials(null)
     setError("")
     setMessage("")
@@ -127,6 +129,7 @@ export default function Utilizatori() {
       posPin: "",
       companyIds: (user.companies || []).map((company) => company.id),
     })
+    setModalVersion((current) => current + 1)
     setCredentials(null)
     setError("")
     setMessage("")
@@ -474,11 +477,13 @@ export default function Utilizatori() {
               </button>
             </div>
 
-            <form className="space-y-4" onSubmit={handleSubmit}>
+            <form key={modalVersion} className="space-y-4" onSubmit={handleSubmit} autoComplete="off">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-xs font-medium text-slate-700">Nume</label>
                   <input
+                    name={editingUserId ? "edit-user-name" : "create-user-name"}
+                    autoComplete="off"
                     className={documentInputClass}
                     value={form.name}
                     onChange={(e) => setForm((current) => ({ ...current, name: e.target.value }))}
@@ -489,6 +494,8 @@ export default function Utilizatori() {
                 <div>
                   <label className="mb-1 block text-xs font-medium text-slate-700">Email</label>
                   <input
+                    name={editingUserId ? "edit-user-email" : "create-user-email"}
+                    autoComplete="off"
                     className={documentInputClass}
                     value={form.email}
                     onChange={(e) => setForm((current) => ({ ...current, email: e.target.value }))}
@@ -523,6 +530,8 @@ export default function Utilizatori() {
                   </label>
                   <input
                     type="password"
+                    name={editingUserId ? "edit-user-password" : "create-user-password"}
+                    autoComplete="new-password"
                     className={documentInputClass}
                     value={form.password}
                     onChange={(e) => setForm((current) => ({ ...current, password: e.target.value }))}
@@ -535,6 +544,8 @@ export default function Utilizatori() {
                 <label className="mb-1 block text-xs font-medium text-slate-700">PIN POS</label>
                 <input
                   type="password"
+                  name={editingUserId ? "edit-user-pos-pin" : "create-user-pos-pin"}
+                  autoComplete="new-password"
                   className={documentInputClass}
                   value={form.posPin}
                   onChange={(e) => setForm((current) => ({ ...current, posPin: e.target.value }))}
