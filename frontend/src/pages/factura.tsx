@@ -111,6 +111,9 @@ function shortEfacturaMessage(status: string) {
   return ""
 }
 
+const invoiceLineInputClass =
+  "h-10 w-full rounded-[12px] border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-[#17324D] focus:ring-2 focus:ring-[#17324D]/10"
+
 export default function FacturaPage() {
   const efacturaEnabled = hasModule("efactura")
   const token = rawToken()
@@ -949,15 +952,23 @@ export default function FacturaPage() {
           </button>
         }
       >
-        <div className="space-y-2.5">
+        <div className="space-y-2">
+          <div className="hidden xl:grid xl:grid-cols-[minmax(260px,2.2fr)_100px_130px_110px_90px_150px_140px_96px] xl:gap-2 xl:px-1">
+            {["Produs", "Cant.", `Pret ${header.currency}`, "Disc. %", "TVA %", "Total", "Net", "Actiuni"].map((label) => (
+              <div key={label} className="px-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                {label}
+              </div>
+            ))}
+          </div>
+
           {computedLines.map((line, index) => {
             const product = products.find((item) => item.id === line.productId)
             const lineLabel = String(line.search || product?.name || "").trim()
             const suggestions = !line.productId ? productMatches(line.search) : []
 
             return (
-              <div key={line.id} className="rounded-[16px] border border-slate-200 bg-slate-50/70 p-2.5">
-                <div className="mb-2 flex items-center justify-between gap-2">
+              <div key={line.id} className="rounded-[14px] border border-slate-200 bg-white p-2.5">
+                <div className="mb-2 flex items-center justify-between gap-2 xl:hidden">
                   <div className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-600">Pozitia {index + 1}</div>
                   <button type="button" onClick={() => removeLine(line.id)} className={documentButtonDangerClass}>
                     <X size={15} className="mr-1" />
@@ -965,41 +976,54 @@ export default function FacturaPage() {
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-7">
-                  <DocumentField label="Produs">
-                    <input value={line.search} onChange={(e) => setLineValue(line.id, { search: e.target.value, productId: "" })} placeholder="Scrie produsul sau SKU..." className={documentInputClass} />
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-[minmax(260px,2.2fr)_100px_130px_110px_90px_150px_140px_96px] xl:items-start">
+                  <div>
+                    <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 xl:hidden">Produs</div>
+                    <input value={line.search} onChange={(e) => setLineValue(line.id, { search: e.target.value, productId: "" })} placeholder="Scrie produsul sau SKU..." className={invoiceLineInputClass} />
                     {lineLabel ? <div className="pt-1 text-[11px] font-semibold text-teal-700">{product?.sku && lineLabel === product.name ? `${lineLabel} (${product.sku})` : lineLabel}</div> : null}
-                  </DocumentField>
+                  </div>
 
-                  <DocumentField label="Cantitate">
-                    <input value={line.qty} onChange={(e) => setLineValue(line.id, { qty: e.target.value })} className={documentInputClass} />
-                  </DocumentField>
+                  <div>
+                    <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 xl:hidden">Cantitate</div>
+                    <input value={line.qty} onChange={(e) => setLineValue(line.id, { qty: e.target.value })} className={invoiceLineInputClass} />
+                  </div>
 
-                  <DocumentField label={`Pret ${header.currency}`}>
-                    <input value={line.unitPriceFc} onChange={(e) => setLineValue(line.id, { unitPriceFc: e.target.value })} className={documentInputClass} />
-                  </DocumentField>
+                  <div>
+                    <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 xl:hidden">{`Pret ${header.currency}`}</div>
+                    <input value={line.unitPriceFc} onChange={(e) => setLineValue(line.id, { unitPriceFc: e.target.value })} className={invoiceLineInputClass} />
+                  </div>
 
-                  <DocumentField label="Discount %">
-                    <input value={String(line.discountPercent)} onChange={(e) => setLineValue(line.id, { discountPercent: e.target.value })} className={documentInputClass} />
+                  <div>
+                    <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 xl:hidden">Discount %</div>
+                    <input value={String(line.discountPercent)} onChange={(e) => setLineValue(line.id, { discountPercent: e.target.value })} className={invoiceLineInputClass} />
                     <div className="pt-1 text-[11px] text-slate-500">
                       {line.discountAmountFc > 0 ? `-${formatMoneyRo(line.discountAmountFc, header.currency)}` : "Fara discount"}
                     </div>
-                  </DocumentField>
+                  </div>
 
-                  <DocumentField label="TVA %">
-                    <input value={line.vatRateValue} onChange={(e) => setLineValue(line.id, { vatRateValue: e.target.value })} className={documentInputClass} />
-                  </DocumentField>
+                  <div>
+                    <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 xl:hidden">TVA %</div>
+                    <input value={line.vatRateValue} onChange={(e) => setLineValue(line.id, { vatRateValue: e.target.value })} className={invoiceLineInputClass} />
+                  </div>
 
-                  <DocumentField label="Total linie">
-                      <input value={formatMoneyRo(line.lineGrossFc + line.sgrTotalFc, header.currency)} readOnly className={documentInputClass} style={readonlyInputStyle} />
-                      <div className="pt-1 text-[11px] text-slate-500">
-                        {[line.discountAmountFc > 0 ? `Discount ${formatMoneyRo(line.discountAmountFc, header.currency)}` : "", line.sgrTotalFc > 0 ? `Include SGR ${formatMoneyRo(line.sgrTotalFc, header.currency)}` : formatUomOption(product?.uom)].filter(Boolean).join(" - ")}
-                      </div>
-                  </DocumentField>
+                  <div>
+                    <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 xl:hidden">Total linie</div>
+                    <input value={formatMoneyRo(line.lineGrossFc + line.sgrTotalFc, header.currency)} readOnly className={invoiceLineInputClass} style={readonlyInputStyle} />
+                    <div className="pt-1 text-[11px] text-slate-500">
+                      {[line.discountAmountFc > 0 ? `Discount ${formatMoneyRo(line.discountAmountFc, header.currency)}` : "", line.sgrTotalFc > 0 ? `Include SGR ${formatMoneyRo(line.sgrTotalFc, header.currency)}` : formatUomOption(product?.uom)].filter(Boolean).join(" - ")}
+                    </div>
+                  </div>
 
-                  <DocumentField label="Net">
-                      <input value={formatMoneyRo(line.lineNetFc, header.currency)} readOnly className={documentInputClass} style={readonlyInputStyle} />
-                  </DocumentField>
+                  <div>
+                    <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 xl:hidden">Net</div>
+                    <input value={formatMoneyRo(line.lineNetFc, header.currency)} readOnly className={invoiceLineInputClass} style={readonlyInputStyle} />
+                  </div>
+
+                  <div className="flex items-start justify-end xl:pt-0.5">
+                    <button type="button" onClick={() => removeLine(line.id)} className="hidden xl:inline-flex items-center justify-center rounded-[12px] border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100">
+                      <X size={15} />
+                    </button>
+                  </div>
                 </div>
 
                 {!line.productId && suggestions.length ? (
@@ -1021,13 +1045,11 @@ export default function FacturaPage() {
             )
           })}
 
-          <div className="sticky bottom-3 z-10 flex justify-end pt-1">
-            <div className="rounded-[16px] border border-slate-200 bg-white/95 p-1.5 shadow-sm backdrop-blur">
-              <button type="button" onClick={addLine} className={documentButtonPrimaryClass}>
-                <Plus size={16} className="mr-2" />
-                Adauga linie
-              </button>
-            </div>
+          <div className="flex justify-center border-t border-dashed border-slate-200 pt-3">
+            <button type="button" onClick={addLine} className={documentButtonPrimaryClass}>
+              <Plus size={16} className="mr-2" />
+              Adauga linie
+            </button>
           </div>
         </div>
       </DocumentSection>
