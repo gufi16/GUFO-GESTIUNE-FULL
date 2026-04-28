@@ -273,7 +273,15 @@ export default function ProdusePage() {
         return
       }
 
-      const nextProducts = Array.isArray(productsData.items) ? productsData.items : []
+      const nextProducts = Array.isArray(productsData.items)
+        ? productsData.items.map((item: any) => ({
+            ...item,
+            price: toNumberSafe(item?.price),
+            costPrice: toNumberSafe(item?.costPrice),
+            purchaseFactor: toNumberSafe(item?.purchaseFactor || 1),
+            sgrValue: toNumberSafe(item?.sgrValue || 0),
+          }))
+        : []
 
       setItems(nextProducts)
       setProductOptions(nextProducts)
