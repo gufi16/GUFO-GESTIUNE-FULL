@@ -47,7 +47,66 @@ function buildReceiptSgrLine(item: any) {
   }
 }
 
+function serializeReceipt(receipt: any) {
+  if (!receipt) return receipt
+
+  const serializeProduct = (product: any) => {
+    if (!product) return product
+    return {
+      ...product,
+      price: toNumber(product.price),
+      costPrice: toNumber(product.costPrice),
+      purchaseFactor: toNumber(product.purchaseFactor || 1),
+      sgrValue: toNumber(product.sgrValue),
+      vatRate: product.vatRate
+        ? {
+            ...product.vatRate,
+            rate: toNumber(product.vatRate.rate)
+          }
+        : product.vatRate
+    }
+  }
+
+  const items = Array.isArray(receipt.items)
+    ? receipt.items.map((item: any) => ({
+        ...item,
+        qty: toNumber(item.qty),
+        conversionFactor: toNumber(item.conversionFactor || 1),
+        stockQty: toNumber(item.stockQty),
+        unitCostNetFc: toNumber(item.unitCostNetFc),
+        unitCostNetRon: toNumber(item.unitCostNetRon),
+        lineNetFc: toNumber(item.lineNetFc),
+        lineVatFc: toNumber(item.lineVatFc),
+        lineGrossFc: toNumber(item.lineGrossFc),
+        lineNetRon: toNumber(item.lineNetRon),
+        lineVatRon: toNumber(item.lineVatRon),
+        lineGrossRon: toNumber(item.lineGrossRon),
+        vatRateValue: toNumber(item.vatRateValue),
+        product: serializeProduct(item.product),
+        vatRate: item.vatRate
+          ? {
+              ...item.vatRate,
+              rate: toNumber(item.vatRate.rate)
+            }
+          : item.vatRate
+      }))
+    : receipt.items
+
+  return {
+    ...receipt,
+    fxRate: toNumber(receipt.fxRate || 1),
+    totalNetFc: toNumber(receipt.totalNetFc),
+    totalVatFc: toNumber(receipt.totalVatFc),
+    totalGrossFc: toNumber(receipt.totalGrossFc),
+    totalNetRon: toNumber(receipt.totalNetRon),
+    totalVatRon: toNumber(receipt.totalVatRon),
+    totalGrossRon: toNumber(receipt.totalGrossRon),
+    items
+  }
+}
+
 function enrichReceipt(receipt: any) {
+  receipt = serializeReceipt(receipt)
   if (!receipt) return receipt
 
   const items = Array.isArray(receipt.items)

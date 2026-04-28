@@ -207,10 +207,72 @@ async function replaceInvoiceItems(
 }
 
 function enrichInvoice(invoice: any) {
+  invoice = serializeInvoice(invoice)
   if (!invoice) return invoice
   return {
     ...invoice,
     itemsCount: Array.isArray(invoice.items) ? invoice.items.length : 0,
+  }
+}
+
+function serializeInvoice(invoice: any) {
+  if (!invoice) return invoice
+
+  const serializeProduct = (product: any) => {
+    if (!product) return product
+    return {
+      ...product,
+      price: toNumber(product.price),
+      costPrice: toNumber(product.costPrice),
+      purchaseFactor: toNumber(product.purchaseFactor || 1),
+      sgrValue: toNumber(product.sgrValue),
+      vatRate: product.vatRate
+        ? {
+            ...product.vatRate,
+            rate: toNumber(product.vatRate.rate),
+          }
+        : product.vatRate,
+    }
+  }
+
+  const items = Array.isArray(invoice.items)
+    ? invoice.items.map((item: any) => ({
+        ...item,
+        qty: toNumber(item.qty),
+        unitPriceFc: toNumber(item.unitPriceFc),
+        vatRateValue: toNumber(item.vatRateValue),
+        discountPercent: toNumber(item.discountPercent),
+        discountAmountFc: toNumber(item.discountAmountFc),
+        lineNetFc: toNumber(item.lineNetFc),
+        lineVatFc: toNumber(item.lineVatFc),
+        lineGrossFc: toNumber(item.lineGrossFc),
+        sgrUnitFc: toNumber(item.sgrUnitFc),
+        sgrTotalFc: toNumber(item.sgrTotalFc),
+        discountAmountRon: toNumber(item.discountAmountRon),
+        lineNetRon: toNumber(item.lineNetRon),
+        lineVatRon: toNumber(item.lineVatRon),
+        lineGrossRon: toNumber(item.lineGrossRon),
+        sgrTotalRon: toNumber(item.sgrTotalRon),
+        product: serializeProduct(item.product),
+      }))
+    : invoice.items
+
+  return {
+    ...invoice,
+    fxRate: toNumber(invoice.fxRate || 1),
+    totalNetFc: toNumber(invoice.totalNetFc),
+    totalDiscountFc: toNumber(invoice.totalDiscountFc),
+    totalVatFc: toNumber(invoice.totalVatFc),
+    totalGrossFc: toNumber(invoice.totalGrossFc),
+    totalSgrFc: toNumber(invoice.totalSgrFc),
+    totalWithSgrFc: toNumber(invoice.totalWithSgrFc),
+    totalNetRon: toNumber(invoice.totalNetRon),
+    totalDiscountRon: toNumber(invoice.totalDiscountRon),
+    totalVatRon: toNumber(invoice.totalVatRon),
+    totalGrossRon: toNumber(invoice.totalGrossRon),
+    totalSgrRon: toNumber(invoice.totalSgrRon),
+    totalWithSgrRon: toNumber(invoice.totalWithSgrRon),
+    items,
   }
 }
 
