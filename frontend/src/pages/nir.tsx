@@ -106,6 +106,16 @@ function formatNumber(value: any, digits = 2) {
   return formatNumberRo(value, digits)
 }
 
+function formatUomOption(uom?: { code?: string | null; standardCode?: string | null; name?: string | null } | null) {
+  const shortCode = String(uom?.code || "").trim().toUpperCase()
+  const standardCode = String(uom?.standardCode || "").trim().toUpperCase()
+  const fallbackName = String(uom?.name || "").trim()
+  if (shortCode && standardCode) return `${shortCode}-${standardCode}`
+  if (shortCode) return shortCode
+  if (standardCode) return standardCode
+  return fallbackName || "-"
+}
+
 function focusNextField(e: KeyboardEvent<HTMLInputElement | HTMLSelectElement>) {
   if (e.key !== "Enter") return
   e.preventDefault()
@@ -1885,7 +1895,7 @@ export default function NirPage() {
                                   >
                                     <div style={{ fontWeight: 600 }}>{p.name}</div>
                                     <div style={{ fontSize: 12, color: "#64748b" }}>
-                                      {p.sku || "-"} · Ambalaj {p.purchaseUom?.code || p.uom?.code || "-"} · TVA {p.vatRate?.rate ?? "-"}%
+                                      {p.sku || "-"} - Ambalaj {formatUomOption(p.purchaseUom || p.uom)} - TVA {p.vatRate?.rate ?? "-"}%
                                     </div>
                                   </button>
                                 ))}
@@ -2078,7 +2088,7 @@ export default function NirPage() {
                         >
                           <div style={{ fontWeight: 600 }}>{p.name}</div>
                           <div style={{ fontSize: 12, color: "#64748b" }}>
-                            {p.sku || "-"} · Ambalaj {p.purchaseUom?.code || p.uom?.code || "-"} · TVA {p.vatRate?.rate ?? "-"}%
+                            {p.sku || "-"} - Ambalaj {formatUomOption(p.purchaseUom || p.uom)} - TVA {p.vatRate?.rate ?? "-"}%
                           </div>
                         </button>
                       ))}
@@ -2154,7 +2164,7 @@ export default function NirPage() {
                   <option value="">Selecteaza UM</option>
                   {uoms.map((u: AnyObj) => (
                     <option key={u.id} value={u.id}>
-                      {u.code} - {u.name}
+                      {formatUomOption(u)}
                     </option>
                   ))}
                 </select>
@@ -2174,7 +2184,7 @@ export default function NirPage() {
                   <option value="">Selecteaza ambalaj</option>
                   {uoms.map((u: AnyObj) => (
                     <option key={u.id} value={u.id}>
-                      {u.code} - {u.name}
+                      {formatUomOption(u)}
                     </option>
                   ))}
                 </select>

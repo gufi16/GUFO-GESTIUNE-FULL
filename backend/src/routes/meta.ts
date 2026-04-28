@@ -12,25 +12,30 @@ const router = Router()
 
 
 const DEFAULT_UOMS = [
-  { code: "buc", name: "Bucata" },
-  { code: "set", name: "Set" },
-  { code: "portie", name: "Portie" },
-  { code: "kg", name: "Kilogram" },
-  { code: "g", name: "Gram" },
-  { code: "l", name: "Litru" },
-  { code: "ml", name: "Mililitru" },
-  { code: "bax", name: "Bax" },
-  { code: "cutie", name: "Cutie" },
-  { code: "sac", name: "Sac" },
-  { code: "lada", name: "Lada" },
-  { code: "pachet", name: "Pachet" },
-  { code: "bidon", name: "Bidon" },
-  { code: "sticla", name: "Sticla" },
-  { code: "doza", name: "Doza" }
+  { code: "buc", name: "Bucata", standardCode: "C62" },
+  { code: "set", name: "Set", standardCode: "SET" },
+  { code: "portie", name: "Portie", standardCode: "C62" },
+  { code: "kg", name: "Kilogram", standardCode: "KGM" },
+  { code: "g", name: "Gram", standardCode: "GRM" },
+  { code: "l", name: "Litru", standardCode: "LTR" },
+  { code: "ml", name: "Mililitru", standardCode: "MLT" },
+  { code: "bax", name: "Bax", standardCode: "C62" },
+  { code: "cutie", name: "Cutie", standardCode: "C62" },
+  { code: "sac", name: "Sac", standardCode: "C62" },
+  { code: "lada", name: "Lada", standardCode: "C62" },
+  { code: "pachet", name: "Pachet", standardCode: "C62" },
+  { code: "bidon", name: "Bidon", standardCode: "C62" },
+  { code: "sticla", name: "Sticla", standardCode: "C62" },
+  { code: "doza", name: "Doza", standardCode: "C62" }
 ] as const
 
 function buildCompanyScope(companyId: string) {
   return [{ companyId }, { companyId: null }]
+}
+
+function normalizeStandardUomCode(value: any) {
+  const text = String(value || "").trim().toUpperCase()
+  return text || null
 }
 
 async function buildPreferredCompanyFilter(
@@ -71,12 +76,18 @@ async function ensureDefaultUoms(tenantId: string, companyId: string) {
     const match = byCode.get(def.code)
 
     if (match) {
-      if (match.code !== def.code || match.name !== def.name || !match.isActive) {
+      if (
+        match.code !== def.code ||
+        match.name !== def.name ||
+        match.standardCode !== def.standardCode ||
+        !match.isActive
+      ) {
         await prisma.uom.update({
           where: { id: match.id },
           data: {
             code: def.code,
             name: def.name,
+            standardCode: def.standardCode,
             isActive: true
           }
         })
@@ -90,6 +101,7 @@ async function ensureDefaultUoms(tenantId: string, companyId: string) {
         companyId,
         code: def.code,
         name: def.name,
+        standardCode: def.standardCode,
         isActive: true
       }
     })
@@ -582,6 +594,7 @@ router.post("/api/v1/meta/uom", async (req: AuthedRequest, res) => {
   const companyId = await requireRequestCompanyId(req)
 
   const code = String(req.body?.code || "").trim().toUpperCase()
+  const standardCode = normalizeStandardUomCode(req.body?.standardCode)
   const name = String(req.body?.name || "").trim()
 
   if (!code || !name) {
@@ -613,6 +626,7 @@ router.post("/api/v1/meta/uom", async (req: AuthedRequest, res) => {
         companyId,
         code,
         name,
+        standardCode,
         isActive: true
       }
     })
@@ -632,6 +646,7 @@ router.put("/api/v1/meta/uom/:id", async (req: AuthedRequest, res) => {
   const id = String(req.params.id)
 
   const code = String(req.body?.code || "").trim().toUpperCase()
+  const standardCode = normalizeStandardUomCode(req.body?.standardCode)
   const name = String(req.body?.name || "").trim()
   const isActive = Boolean(req.body?.isActive)
 
@@ -679,6 +694,7 @@ router.put("/api/v1/meta/uom/:id", async (req: AuthedRequest, res) => {
       data: {
         code,
         name,
+        standardCode,
         isActive
       }
     })

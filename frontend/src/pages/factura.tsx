@@ -59,6 +59,16 @@ function formatNumber(value: any, digits = 2) {
   return formatNumberRo(value, digits)
 }
 
+function formatUomOption(uom?: { code?: string | null; standardCode?: string | null; name?: string | null } | null) {
+  const shortCode = String(uom?.code || "").trim().toUpperCase()
+  const standardCode = String(uom?.standardCode || "").trim().toUpperCase()
+  const fallbackName = String(uom?.name || "").trim()
+  if (shortCode && standardCode) return `${shortCode}-${standardCode}`
+  if (shortCode) return shortCode
+  if (standardCode) return standardCode
+  return fallbackName || ""
+}
+
 function getInvoiceIdFromUrl() {
   const params = new URLSearchParams(window.location.search)
   return params.get("id") || ""
@@ -974,7 +984,7 @@ export default function FacturaPage() {
                   <DocumentField label="Total linie">
                       <input value={formatMoneyRo(line.lineGrossFc + line.sgrTotalFc, header.currency)} readOnly className={documentInputClass} style={readonlyInputStyle} />
                       <div className="pt-1 text-[11px] text-slate-500">
-                        {[line.discountAmountFc > 0 ? `Discount ${formatMoneyRo(line.discountAmountFc, header.currency)}` : "", line.sgrTotalFc > 0 ? `Include SGR ${formatMoneyRo(line.sgrTotalFc, header.currency)}` : product?.uom?.code || ""].filter(Boolean).join(" • ")}
+                        {[line.discountAmountFc > 0 ? `Discount ${formatMoneyRo(line.discountAmountFc, header.currency)}` : "", line.sgrTotalFc > 0 ? `Include SGR ${formatMoneyRo(line.sgrTotalFc, header.currency)}` : formatUomOption(product?.uom)].filter(Boolean).join(" - ")}
                       </div>
                   </DocumentField>
 
@@ -993,7 +1003,7 @@ export default function FacturaPage() {
                         className="rounded-[14px] border border-slate-200 bg-white px-3 py-2.5 text-left transition hover:border-slate-300 hover:bg-slate-50"
                       >
                         <div className="font-semibold text-slate-900">{item.name}</div>
-                        <div className="mt-0.5 text-[12px] text-slate-500">{[item.sku, item.uom?.code, `${formatNumber(item.price || 0)} RON`].filter(Boolean).join(" • ")}</div>
+                        <div className="mt-0.5 text-[12px] text-slate-500">{[item.sku, formatUomOption(item.uom), `${formatNumber(item.price || 0)} RON`].filter(Boolean).join(" - ")}</div>
                       </button>
                     ))}
                   </div>

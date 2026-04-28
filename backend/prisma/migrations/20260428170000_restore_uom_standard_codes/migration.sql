@@ -1,0 +1,5 @@
+ALTER TABLE "Uom"
+ADD COLUMN IF NOT EXISTS "standardCode" TEXT;
+
+ALTER TABLE "SalesInvoiceItem"
+ADD COLUMN IF NOT EXISTS "uomStandardCode" TEXT;

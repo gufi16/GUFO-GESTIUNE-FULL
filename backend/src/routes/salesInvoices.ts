@@ -183,6 +183,7 @@ async function replaceInvoiceItems(
         productName: String(product.name || ""),
         productCode: String(product.sku || "").trim() || null,
         uomCode: String(product.uom?.code || "").trim() || null,
+        uomStandardCode: String(product.uom?.standardCode || "").trim() || null,
         vatCategoryCode,
         qty,
         unitPriceFc,

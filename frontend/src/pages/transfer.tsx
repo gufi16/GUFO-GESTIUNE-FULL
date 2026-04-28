@@ -30,7 +30,7 @@ type ProductOption = {
   name: string
   sku?: string
   price?: number
-  uom?: { code?: string } | null
+  uom?: { code?: string; standardCode?: string | null; name?: string | null } | null
 }
 
 type TransferLine = {
@@ -69,6 +69,16 @@ function formatNumber(value: any) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })
+}
+
+function formatUomOption(uom?: { code?: string | null; standardCode?: string | null; name?: string | null } | null) {
+  const shortCode = String(uom?.code || "").trim().toUpperCase()
+  const standardCode = String(uom?.standardCode || "").trim().toUpperCase()
+  const fallbackName = String(uom?.name || "").trim()
+  if (shortCode && standardCode) return `${shortCode}-${standardCode}`
+  if (shortCode) return shortCode
+  if (standardCode) return standardCode
+  return fallbackName || "-"
 }
 
 function parsePositive(value: any) {
@@ -482,7 +492,7 @@ export default function TransferPage() {
                                     >
                                       <div className="font-semibold text-slate-900">{product.name}</div>
                                       <div className="mt-1 text-xs text-slate-500">
-                                        {product.sku || "Fara SKU"} - UM {product.uom?.code || "-"} - Pret {formatNumber(product.price)}
+                                        {product.sku || "Fara SKU"} - UM {formatUomOption(product.uom)} - Pret {formatNumber(product.price)}
                                       </div>
                                     </button>
                                   ))}
