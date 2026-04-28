@@ -421,7 +421,7 @@ export default function ProductiePage() {
           </DocumentSection>
 
           <DocumentSection title="Pozitii productie">
-            <div className="max-h-[460px] overflow-y-auto pr-1">
+            <div>
               {items.length === 0 ? (
                 <div className="rounded-[14px] border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center">
                   <div className="text-sm font-semibold text-slate-700">Nu ai adaugat produse inca</div>
@@ -437,8 +437,8 @@ export default function ProductiePage() {
                   </div>
 
                   {items.map((row, index) => (
-                    <div key={`${row.productId}-${index}`} className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3">
-                      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.8fr)_120px_120px_110px] lg:items-center">
+                    <div key={`${row.productId}-${index}`} className="rounded-[14px] border border-slate-200 bg-white px-3 py-2.5">
+                      <div className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1.8fr)_120px_120px_110px] lg:items-center">
                         <div className="min-w-0">
                           <div className="truncate text-sm font-semibold text-slate-900">{row.name}</div>
                           <div className="mt-0.5 text-xs text-slate-500">{row.sku || "fara cod"}</div>

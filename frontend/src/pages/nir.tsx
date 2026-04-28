@@ -1932,6 +1932,18 @@ export default function NirPage() {
                 )}
               </div>
             </div>
+
+            {!isPosted && !isMobileViewport && (
+              <div style={{ display: "flex", justifyContent: "center", borderTop: "1px dashed #e2e8f0", paddingTop: 12, marginTop: 12 }}>
+                <button
+                  style={btnPrimary}
+                  onClick={() => addLine()}
+                  disabled={loadingMeta}
+                >
+                  + Adauga linie
+                </button>
+              </div>
+            )}
           </Section>
 
           <Section title="Totaluri">
@@ -2550,8 +2562,8 @@ const toolbarSubtitle: CSSProperties = {
 const rowsHeader: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "minmax(260px,2.4fr) 80px 88px 96px 70px 110px 150px 44px",
-  gap: 6,
-  padding: "0 4px 4px",
+  gap: 5,
+  padding: "0 2px 4px",
   color: "#64748b",
   fontSize: 10,
   fontWeight: 800,
@@ -2560,9 +2572,8 @@ const rowsHeader: CSSProperties = {
 }
 
 const linesViewport: CSSProperties = {
-  maxHeight: 400,
-  overflowY: "auto",
-  paddingRight: 4,
+  overflow: "visible",
+  paddingRight: 0,
 }
 
 const linesViewportMobile: CSSProperties = {
@@ -2580,14 +2591,14 @@ const rowsStack: CSSProperties = {
 const rowCard: CSSProperties = {
   border: "1px solid #e2e8f0",
   borderRadius: 12,
-  background: "#fcfcfd",
-  padding: 5,
+  background: "#ffffff",
+  padding: 4,
 }
 
 const rowMain: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "minmax(260px,2.4fr) 80px 88px 96px 70px 110px 150px 44px",
-  gap: 6,
+  gap: 5,
   alignItems: "center",
 }
 
@@ -2601,7 +2612,8 @@ const rowMainMobile: CSSProperties = {
 const rowExtra: CSSProperties = {
   marginTop: 4,
   display: "flex",
-  flexDirection: "column",
+  flexDirection: "row",
+  flexWrap: "wrap",
   gap: 4,
 }
 

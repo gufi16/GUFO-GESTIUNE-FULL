@@ -362,7 +362,7 @@ export default function InventarNou() {
           </DocumentSection>
 
           <DocumentSection title="Pozitii inventar">
-            <div className="max-h-[460px] overflow-y-auto pr-1">
+            <div>
               {items.length ? (
                 <div className="space-y-2">
                   <div className="hidden items-center rounded-[14px] bg-slate-50 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 lg:grid lg:grid-cols-[minmax(0,1.8fr)_110px_130px_110px_110px] lg:gap-3">
@@ -376,8 +376,8 @@ export default function InventarNou() {
                   {items.map((item) => {
                     const diff = item.counted - item.stock
                     return (
-                      <div key={item.productId} className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3">
-                        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.8fr)_110px_130px_110px_110px] lg:items-center">
+                      <div key={item.productId} className="rounded-[14px] border border-slate-200 bg-white px-3 py-2.5">
+                        <div className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1.8fr)_110px_130px_110px_110px] lg:items-center">
                           <div className="min-w-0">
                             <div className="truncate text-sm font-semibold text-slate-900">{item.name}</div>
                             <div className="mt-0.5 text-xs text-slate-500">{item.code || "fara cod"}</div>

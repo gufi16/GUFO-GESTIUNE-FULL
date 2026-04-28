@@ -450,14 +450,14 @@ export default function TransferPage() {
               ) : null}
             </div>
 
-            <div className="max-h-[520px] overflow-y-auto pr-1">
+            <div>
               <div className="space-y-2">
                 {lines.map((line, index) => {
                   const matches = productMatches(line.search)
                   const lineValue = parsePositive(line.qty) * Math.max(0, Number(line.unitPrice || 0))
 
                   return (
-                    <div key={line.id} className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div key={line.id} className="rounded-[14px] border border-slate-200 bg-white px-3 py-2.5">
                       <div className="mb-2 flex items-center justify-between gap-2">
                         <div className="text-sm font-semibold text-slate-800">Pozitia {index + 1}</div>
                         {!isPosted ? (
@@ -468,7 +468,7 @@ export default function TransferPage() {
                         ) : null}
                       </div>
 
-                      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.8fr)_110px_120px_120px_120px] lg:items-start">
+                      <div className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1.8fr)_110px_120px_120px_120px] lg:items-start">
                         <div className="min-w-0">
                           <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Produs</div>
                           <input
@@ -541,6 +541,15 @@ export default function TransferPage() {
                   )
                 })}
               </div>
+
+              {!isPosted ? (
+                <div className="mt-3 flex justify-center border-t border-dashed border-slate-200 pt-3">
+                  <button type="button" className={documentButtonPrimaryClass} onClick={addLine}>
+                    <Plus size={16} className="mr-2" />
+                    Adauga linie
+                  </button>
+                </div>
+              ) : null}
             </div>
           </DocumentSection>
         </div>

@@ -283,7 +283,7 @@ export default function ProcesVerbalPage() {
               ) : null
             }
           >
-            <div className="max-h-[520px] overflow-y-auto pr-1">
+            <div>
               <div className="space-y-2">
                 {lines.map((line) => {
                   const matches =
@@ -297,8 +297,8 @@ export default function ProcesVerbalPage() {
                           .slice(0, 6)
 
                   return (
-                    <div key={line.id} className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3">
-                      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.8fr)_110px_120px_120px_120px_110px] lg:items-start">
+                    <div key={line.id} className="rounded-[14px] border border-slate-200 bg-white px-3 py-2.5">
+                      <div className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1.8fr)_110px_120px_120px_120px_110px] lg:items-start">
                         <div className="min-w-0">
                           <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Produs</div>
                           <input
@@ -402,6 +402,15 @@ export default function ProcesVerbalPage() {
                   )
                 })}
               </div>
+
+              {status !== "POSTED" ? (
+                <div className="mt-3 flex justify-center border-t border-dashed border-slate-200 pt-3">
+                  <button type="button" onClick={() => setLines((prev) => [...prev, makeLine()])} className={documentButtonPrimaryClass}>
+                    <Plus size={16} className="mr-2" />
+                    Adauga linie
+                  </button>
+                </div>
+              ) : null}
             </div>
           </DocumentSection>
         </div>
