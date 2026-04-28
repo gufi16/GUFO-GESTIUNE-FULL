@@ -360,6 +360,7 @@ export function generateInvoiceEFacturaXml(invoice: any, company: any) {
   const supplierLegalId = normalizeLegalId(company?.cui)
   const buyerLegalId = normalizeLegalId(invoice?.customerCif)
   const invoiceTypeCode = String(invoice?.invoiceTypeCode || "380")
+  const endpointSchemeId = "9947"
 
   const taxSubtotals = new Map<string, { taxable: number; tax: number; percent: number }>()
   for (const line of invoice?.items || []) {
@@ -423,6 +424,7 @@ export function generateInvoiceEFacturaXml(invoice: any, company: any) {
     `<cbc:InvoiceTypeCode>${xmlEscape(invoiceTypeCode)}</cbc:InvoiceTypeCode>`,
     `<cbc:DocumentCurrencyCode>${xmlEscape(currency)}</cbc:DocumentCurrencyCode>`,
     "<cac:AccountingSupplierParty><cac:Party>",
+    supplierVatId ? `<cbc:EndpointID schemeID="${endpointSchemeId}">${xmlEscape(supplierVatId)}</cbc:EndpointID>` : "",
     "<cac:PartyIdentification>",
     `<cbc:ID>${xmlEscape(supplierLegalId)}</cbc:ID>`,
     "</cac:PartyIdentification>",
@@ -430,19 +432,20 @@ export function generateInvoiceEFacturaXml(invoice: any, company: any) {
     `<cbc:StreetName>${xmlEscape(company?.address || "")}</cbc:StreetName>`,
     supplierCity ? `<cbc:CityName>${xmlEscape(supplierCity)}</cbc:CityName>` : "",
     supplierPostalCode ? `<cbc:PostalZone>${xmlEscape(supplierPostalCode)}</cbc:PostalZone>` : "",
-    supplierCounty ? `<cbc:CountrySubentity>${xmlEscape(supplierCounty)}</cbc:CountrySubentity>` : "",
+    supplierCounty ? `<cbc:CountrySubentityCode>${xmlEscape(supplierCounty)}</cbc:CountrySubentityCode>` : "",
     `<cac:Country><cbc:IdentificationCode>${xmlEscape(supplierCountry)}</cbc:IdentificationCode></cac:Country>`,
     "</cac:PostalAddress>",
     supplierVatId ? `<cac:PartyTaxScheme><cbc:CompanyID>${xmlEscape(supplierVatId)}</cbc:CompanyID><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme>` : "",
     `<cac:PartyLegalEntity><cbc:RegistrationName>${xmlEscape(company?.name || "")}</cbc:RegistrationName></cac:PartyLegalEntity>`,
     "</cac:Party></cac:AccountingSupplierParty>",
     "<cac:AccountingCustomerParty><cac:Party>",
+    buyerVatId ? `<cbc:EndpointID schemeID="${endpointSchemeId}">${xmlEscape(buyerVatId)}</cbc:EndpointID>` : "",
     buyerLegalId ? `<cac:PartyIdentification><cbc:ID>${xmlEscape(buyerLegalId)}</cbc:ID></cac:PartyIdentification>` : "",
     "<cac:PostalAddress>",
     `<cbc:StreetName>${xmlEscape(invoice?.customerAddress || "")}</cbc:StreetName>`,
     resolveCustomerCity(invoice) ? `<cbc:CityName>${xmlEscape(resolveCustomerCity(invoice))}</cbc:CityName>` : "",
     resolveCustomerPostalCode(invoice) ? `<cbc:PostalZone>${xmlEscape(resolveCustomerPostalCode(invoice))}</cbc:PostalZone>` : "",
-    customerCounty ? `<cbc:CountrySubentity>${xmlEscape(customerCounty)}</cbc:CountrySubentity>` : "",
+    customerCounty ? `<cbc:CountrySubentityCode>${xmlEscape(customerCounty)}</cbc:CountrySubentityCode>` : "",
     `<cac:Country><cbc:IdentificationCode>${xmlEscape(customerCountry)}</cbc:IdentificationCode></cac:Country>`,
     "</cac:PostalAddress>",
     buyerVatId ? `<cac:PartyTaxScheme><cbc:CompanyID>${xmlEscape(buyerVatId)}</cbc:CompanyID><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme>` : "",
