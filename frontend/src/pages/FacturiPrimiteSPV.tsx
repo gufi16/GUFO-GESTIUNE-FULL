@@ -982,9 +982,7 @@ export default function FacturiPrimiteSPVPage() {
         />
       </div>
 
-      {isDebugMode ? (
-        <InlineNotice>Pagina poate afisa debug vechi, dar sincronizarea normala merge acum direct din ERP spre ANAF.</InlineNotice>
-      ) : null}
+      {isDebugMode ? <InlineNotice>Vizualizarea tehnica SPV este activa.</InlineNotice> : null}
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
       {isDebugMode && spvTestResult ? (

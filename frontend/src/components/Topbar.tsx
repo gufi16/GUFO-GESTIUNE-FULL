@@ -53,8 +53,8 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
     },
     {
       id: "support",
-      title: "Notificare interna",
-      description: "Verifica ultimele alerte operationale.",
+      title: "Notificare",
+      description: "Verifica ultimele alerte disponibile.",
     },
   ]
 

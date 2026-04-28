@@ -793,7 +793,7 @@ export default function SetariEFacturaPage() {
         {isDebugMode ? (
           <DocumentSection
             title="Gufo e-Factura local"
-            description="Sectiune tehnica pastrata doar pentru fallback si debugging."
+            description="Sectiune tehnica pentru diagnostic si configurare locala."
             actions={
               <div className="flex gap-2">
                 <button
@@ -869,7 +869,7 @@ export default function SetariEFacturaPage() {
         <>
           <div className="flex justify-end">
             <button type="button" onClick={() => setActiveModal("debug")} className={documentButtonSecondaryClass}>
-              Debug avansat
+              Detalii tehnice
             </button>
           </div>
           <DocumentSection title="Ordinea corecta" description="Flux simplu, clar, fara pasi tehnici inutili in fata utilizatorului.">
@@ -1028,7 +1028,7 @@ export default function SetariEFacturaPage() {
       ) : null}
 
       {activeModal === "debug" && isDebugMode ? (
-        <SettingsModal title="Debug e-Factura" onClose={() => setActiveModal(null)}>
+          <SettingsModal title="Detalii tehnice e-Factura" onClose={() => setActiveModal(null)}>
           <div className="space-y-4">
             <div className="flex justify-end gap-2">
               <button type="button" onClick={loadDiagnostics} className={documentButtonSecondaryClass} disabled={loadingDiagnostics || loading}>

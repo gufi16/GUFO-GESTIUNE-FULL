@@ -622,7 +622,7 @@ export default function TransferPage() {
                 />
               </DocumentField>
 
-              <DocumentField label="Observatii interne">
+              <DocumentField label="Observatii">
                 <textarea
                   value={header.note}
                   onChange={(e) => setHeader((prev) => ({ ...prev, note: e.target.value }))}
