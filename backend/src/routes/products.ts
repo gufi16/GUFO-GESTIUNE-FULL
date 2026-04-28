@@ -296,6 +296,29 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
     isSgr: requestedIsSgr
   })
 
+  console.log("[PRODUCT_CREATE] normalized", {
+    classValue,
+    received: {
+      sku: req.body?.sku,
+      name: req.body?.name,
+      price: req.body?.price,
+      costPrice: req.body?.costPrice,
+      isVisibleInPos: req.body?.isVisibleInPos,
+      isSgr: req.body?.isSgr
+    },
+    parsed: {
+      price,
+      costPrice,
+      requestedVisibleInPos,
+      requestedIsSgr
+    },
+    normalized: {
+      normalizedPrice,
+      isVisibleInPos,
+      isSgr
+    }
+  })
+
   console.log("[PRODUCT_UPDATE] normalized", {
     id,
     classValue,
@@ -476,8 +499,19 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
       }
     })
 
+    console.log("[PRODUCT_CREATE] saved", {
+      id: item.id,
+      sku: item.sku,
+      class: item.class,
+      price: item.price,
+      costPrice: item.costPrice,
+      isVisibleInPos: item.isVisibleInPos,
+      isSgr: item.isSgr
+    })
+
     res.json({ ok: true, item })
   } catch (e: any) {
+    console.error("[PRODUCT_CREATE] error", e)
     res.status(400).json({ ok: false, error: e?.message || "Nu am putut salva produsul." })
   }
 })
@@ -688,7 +722,8 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
         forcedInactiveBecauseMissingRecipe
       }
     })
-  } catch {
+  } catch (e: any) {
+    console.error("[PRODUCT_UPDATE] error", e)
     res.status(400).json({ ok: false, error: "Nu am putut actualiza produsul." })
   }
 })
