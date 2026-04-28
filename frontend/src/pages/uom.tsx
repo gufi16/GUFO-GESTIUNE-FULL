@@ -41,6 +41,8 @@ export default function UomPage() {
   const [code, setCode] = useState("")
   const [name, setName] = useState("")
   const [standardCode, setStandardCode] = useState("")
+  const [standardSearch, setStandardSearch] = useState("")
+  const [standardPickerOpen, setStandardPickerOpen] = useState(false)
   const [editingId, setEditingId] = useState("")
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
@@ -53,6 +55,16 @@ export default function UomPage() {
     }),
     [list]
   )
+
+  const filteredStandardOptions = useMemo(() => {
+    const q = standardSearch.trim().toLowerCase()
+    if (!q) return STANDARD_UOM_OPTIONS
+    return STANDARD_UOM_OPTIONS.filter(
+      (option) =>
+        option.code.toLowerCase().includes(q) ||
+        option.label.toLowerCase().includes(q)
+    )
+  }, [standardSearch])
 
   useEffect(() => {
     load()
@@ -81,6 +93,8 @@ export default function UomPage() {
     setCode("")
     setName("")
     setStandardCode("")
+    setStandardSearch("")
+    setStandardPickerOpen(false)
     setEditingId("")
   }
 
@@ -165,6 +179,8 @@ export default function UomPage() {
     setCode(item.code || "")
     setName(item.name || "")
     setStandardCode(item.standardCode || "")
+    setStandardSearch("")
+    setStandardPickerOpen(false)
     setError("")
     setMessage("")
   }
@@ -195,21 +211,65 @@ export default function UomPage() {
             className={`${documentInputClass} lg:w-40`}
           />
 
-          <div className="lg:w-48">
-            <input
-              list="uom-standard-codes"
-              placeholder="Cod (ex: C62)"
-              value={standardCode}
-              onChange={(e) => setStandardCode(e.target.value.toUpperCase())}
-              className={documentInputClass}
-            />
-            <datalist id="uom-standard-codes">
-              {STANDARD_UOM_OPTIONS.map((option) => (
-                <option key={option.code} value={option.code}>
-                  {option.code} - {option.label}
-                </option>
-              ))}
-            </datalist>
+          <div className="relative lg:w-60">
+            <button
+              type="button"
+              onClick={() => setStandardPickerOpen((prev) => !prev)}
+              className={`${documentInputClass} flex w-full items-center justify-between text-left`}
+            >
+              <span className={standardCode ? "text-slate-900" : "text-slate-400"}>
+                {standardCode
+                  ? `${standardCode} - ${STANDARD_UOM_OPTIONS.find((option) => option.code === standardCode)?.label || "Cod selectat"}`
+                  : "Cod (ex: C62)"}
+              </span>
+              <span className="text-slate-400">▾</span>
+            </button>
+
+            {standardPickerOpen ? (
+              <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-20 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+                <input
+                  placeholder="Cauta cod..."
+                  value={standardSearch}
+                  onChange={(e) => setStandardSearch(e.target.value)}
+                  className={`${documentInputClass} mb-2`}
+                  autoFocus
+                />
+
+                <div className="max-h-64 overflow-y-auto rounded-xl border border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStandardCode("")
+                      setStandardSearch("")
+                      setStandardPickerOpen(false)
+                    }}
+                    className="flex w-full items-center justify-between px-3 py-2 text-left text-sm text-slate-500 hover:bg-slate-50"
+                  >
+                    <span>Fara cod</span>
+                  </button>
+
+                  {filteredStandardOptions.map((option) => (
+                    <button
+                      key={option.code}
+                      type="button"
+                      onClick={() => {
+                        setStandardCode(option.code)
+                        setStandardSearch("")
+                        setStandardPickerOpen(false)
+                      }}
+                      className="flex w-full items-center justify-between px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                    >
+                      <span className="font-medium">{option.code}</span>
+                      <span className="text-slate-500">{option.label}</span>
+                    </button>
+                  ))}
+
+                  {filteredStandardOptions.length === 0 ? (
+                    <div className="px-3 py-2 text-sm text-slate-400">Nu exista potriviri.</div>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
           </div>
 
           <input

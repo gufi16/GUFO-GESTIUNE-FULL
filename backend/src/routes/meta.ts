@@ -35,7 +35,9 @@ function buildCompanyScope(companyId: string) {
 
 function normalizeStandardUomCode(value: any) {
   const text = String(value || "").trim().toUpperCase()
-  return text || null
+  if (!text) return null
+  const match = text.match(/^[A-Z0-9]+/)
+  return match?.[0] || text
 }
 
 async function buildPreferredCompanyFilter(
