@@ -487,6 +487,23 @@ function isSagaSgrArticle(product: any) {
   return product?.class === "AMBALAJ_SGR" || code === "SGR" || code.startsWith("SGR_") || name === "SGR"
 }
 
+function serializeAccountingProduct(product: any) {
+  if (!product) return product
+  return {
+    ...product,
+    price: toFiniteNumber(product.price),
+    costPrice: toFiniteNumber(product.costPrice),
+    purchaseFactor: toFiniteNumber(product.purchaseFactor || 1),
+    sgrValue: toFiniteNumber(product.sgrValue),
+    vatRate: product.vatRate
+      ? {
+          ...product.vatRate,
+          rate: toFiniteNumber(product.vatRate.rate),
+        }
+      : product.vatRate,
+  }
+}
+
 function sagaProductTypeFromClass(classValue: unknown) {
   switch (String(classValue || "").toUpperCase()) {
     case "MARFA":
@@ -1368,7 +1385,7 @@ router.get("/api/v1/reports/accounting/saga/products", requireAuth, async (req: 
     take: 150,
   })
 
-  return res.json({ ok: true, items: products })
+  return res.json({ ok: true, items: products.map(serializeAccountingProduct) })
 })
 
 router.patch("/api/v1/reports/accounting/saga/products/:id", requireAuth, async (req: AuthedRequest, res) => {
@@ -1414,7 +1431,7 @@ router.patch("/api/v1/reports/accounting/saga/products/:id", requireAuth, async 
     },
   })
 
-  return res.json({ ok: true, item: updated })
+  return res.json({ ok: true, item: serializeAccountingProduct(updated) })
 })
 
 router.get("/api/v1/reports/accounting/saga/export-preview", requireAuth, async (req: AuthedRequest, res) => {

@@ -51,6 +51,51 @@ function text(value: any) {
   return t || "-"
 }
 
+function serializeTransferDoc(doc: any) {
+  if (!doc) return doc
+
+  const serializeProduct = (product: any) => {
+    if (!product) return product
+    return {
+      ...product,
+      price: toNumber(product.price),
+      costPrice: toNumber(product.costPrice),
+      purchaseFactor: toNumber(product.purchaseFactor || 1),
+      sgrValue: toNumber(product.sgrValue),
+      vatRate: product.vatRate
+        ? {
+            ...product.vatRate,
+            rate: toNumber(product.vatRate.rate)
+          }
+        : product.vatRate
+    }
+  }
+
+  const items = Array.isArray(doc.items)
+    ? doc.items.map((item: any) => ({
+        ...item,
+        qty: toNumber(item.qty),
+        unitPrice: toNumber(item.unitPrice),
+        lineValue: toNumber(item.lineValue),
+        vatRateValue: toNumber(item.vatRateValue),
+        product: serializeProduct(item.product),
+        vatRate: item.vatRate
+          ? {
+              ...item.vatRate,
+              rate: toNumber(item.vatRate.rate)
+            }
+          : item.vatRate
+      }))
+    : doc.items
+
+  return {
+    ...doc,
+    totalQty: toNumber(doc.totalQty),
+    totalValue: toNumber(doc.totalValue),
+    items
+  }
+}
+
 function registerFonts(doc: PDFKit.PDFDocument) {
   const regularCandidates = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -130,7 +175,7 @@ router.get("/api/v1/transfers", async (req: AuthedRequest, res) => {
     orderBy: [{ docDate: "desc" }, { createdAt: "desc" }]
   })
 
-  res.json({ ok: true, docs })
+  res.json({ ok: true, docs: docs.map(serializeTransferDoc) })
 })
 
 router.get("/api/v1/transfers/:id", async (req: AuthedRequest, res) => {
@@ -163,7 +208,7 @@ router.get("/api/v1/transfers/:id", async (req: AuthedRequest, res) => {
     return res.status(404).json({ ok: false, error: "Documentul nu a fost gasit." })
   }
 
-  res.json({ ok: true, doc })
+  res.json({ ok: true, doc: serializeTransferDoc(doc) })
 })
 
 router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
@@ -437,7 +482,7 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
       }
     })
 
-    res.json({ ok: true, doc })
+    res.json({ ok: true, doc: serializeTransferDoc(doc) })
   } catch (e: any) {
     return res.status(400).json({
       ok: false,
