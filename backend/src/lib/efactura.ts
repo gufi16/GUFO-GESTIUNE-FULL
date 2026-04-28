@@ -254,6 +254,44 @@ function resolveInvoiceLineUomCode(line: any) {
   )
 }
 
+function expandInvoiceLinesForEfactura(invoice: any) {
+  const expanded: any[] = []
+
+  for (const line of Array.isArray(invoice?.items) ? invoice.items : []) {
+    expanded.push(line)
+
+    const sgrTotalFc = toNumber(line?.sgrTotalFc)
+    if (sgrTotalFc <= 0) continue
+
+    const qty = Math.max(toNumber(line?.qty), 1)
+    const sgrUnitFc = toNumber(line?.sgrUnitFc) > 0 ? toNumber(line?.sgrUnitFc) : sgrTotalFc / qty
+
+    expanded.push({
+      ...line,
+      productCode: null,
+      productName: `SGR ${String(line?.productName || "").trim()}`.trim(),
+      qty,
+      unitPriceFc: sgrUnitFc,
+      vatRateValue: 0,
+      vatCategoryCode: "Z",
+      lineNetFc: sgrTotalFc,
+      lineVatFc: 0,
+      lineGrossFc: sgrTotalFc,
+      discountAmountFc: 0,
+      discountPercent: 0,
+      sgrUnitFc: 0,
+      sgrTotalFc: 0,
+      discountAmountRon: 0,
+      lineNetRon: toNumber(line?.sgrTotalRon),
+      lineVatRon: 0,
+      lineGrossRon: toNumber(line?.sgrTotalRon),
+      sgrTotalRon: 0,
+    })
+  }
+
+  return expanded
+}
+
 function isLikelyValidRomanianTaxId(value: unknown) {
   const digits = normalizeLegalId(value)
   return digits.length >= 2 && digits.length <= 10 && !/^0+$/.test(digits)
@@ -361,9 +399,16 @@ export function generateInvoiceEFacturaXml(invoice: any, company: any) {
   const buyerLegalId = normalizeLegalId(invoice?.customerCif)
   const invoiceTypeCode = String(invoice?.invoiceTypeCode || "380")
   const endpointSchemeId = "9947"
+  const expandedLines = expandInvoiceLinesForEfactura(invoice)
+  const legalLineExtensionAmount =
+    toNumber(invoice?.totalNetFc) + toNumber(invoice?.totalSgrFc)
+  const legalTaxExclusiveAmount =
+    toNumber(invoice?.totalNetFc) + toNumber(invoice?.totalSgrFc)
+  const legalTaxInclusiveAmount =
+    legalTaxExclusiveAmount + toNumber(invoice?.totalVatFc)
 
   const taxSubtotals = new Map<string, { taxable: number; tax: number; percent: number }>()
-  for (const line of invoice?.items || []) {
+  for (const line of expandedLines) {
     const percent = toNumber(line?.vatRateValue)
     const key = `${normalizeVatCategory(line)}:${percent}`
     const current = taxSubtotals.get(key) || { taxable: 0, tax: 0, percent }
@@ -389,7 +434,7 @@ export function generateInvoiceEFacturaXml(invoice: any, company: any) {
     })
     .join("")
 
-  const lineXml = (invoice?.items || [])
+  const lineXml = expandedLines
     .map((line: any, index: number) => {
       const category = normalizeVatCategory(line)
       return [
@@ -456,10 +501,10 @@ export function generateInvoiceEFacturaXml(invoice: any, company: any) {
     taxSubtotalXml,
     "</cac:TaxTotal>",
     "<cac:LegalMonetaryTotal>",
-    `<cbc:LineExtensionAmount currencyID="${xmlEscape(currency)}">${decimal(invoice?.totalNetFc)}</cbc:LineExtensionAmount>`,
-    `<cbc:TaxExclusiveAmount currencyID="${xmlEscape(currency)}">${decimal(invoice?.totalNetFc)}</cbc:TaxExclusiveAmount>`,
-    `<cbc:TaxInclusiveAmount currencyID="${xmlEscape(currency)}">${decimal(invoice?.totalWithSgrFc || invoice?.totalGrossFc)}</cbc:TaxInclusiveAmount>`,
-    `<cbc:PayableAmount currencyID="${xmlEscape(currency)}">${decimal(invoice?.totalWithSgrFc || invoice?.totalGrossFc)}</cbc:PayableAmount>`,
+    `<cbc:LineExtensionAmount currencyID="${xmlEscape(currency)}">${decimal(legalLineExtensionAmount)}</cbc:LineExtensionAmount>`,
+    `<cbc:TaxExclusiveAmount currencyID="${xmlEscape(currency)}">${decimal(legalTaxExclusiveAmount)}</cbc:TaxExclusiveAmount>`,
+    `<cbc:TaxInclusiveAmount currencyID="${xmlEscape(currency)}">${decimal(legalTaxInclusiveAmount)}</cbc:TaxInclusiveAmount>`,
+    `<cbc:PayableAmount currencyID="${xmlEscape(currency)}">${decimal(legalTaxInclusiveAmount)}</cbc:PayableAmount>`,
     "</cac:LegalMonetaryTotal>",
     lineXml,
     "</Invoice>",
