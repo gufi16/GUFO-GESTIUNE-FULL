@@ -949,23 +949,23 @@ export default function FacturaPage() {
           </button>
         }
       >
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {computedLines.map((line, index) => {
             const product = products.find((item) => item.id === line.productId)
             const lineLabel = String(line.search || product?.name || "").trim()
             const suggestions = !line.productId ? productMatches(line.search) : []
 
             return (
-              <div key={line.id} className="rounded-[18px] border border-slate-200 bg-slate-50/80 p-3">
-                <div className="mb-2.5 flex items-center justify-between gap-2">
-                  <div className="text-[13px] font-semibold text-slate-700">Pozitia {index + 1}</div>
+              <div key={line.id} className="rounded-[16px] border border-slate-200 bg-slate-50/70 p-2.5">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-600">Pozitia {index + 1}</div>
                   <button type="button" onClick={() => removeLine(line.id)} className={documentButtonDangerClass}>
                     <X size={15} className="mr-1" />
                     Sterge
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-7">
+                <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-7">
                   <DocumentField label="Produs">
                     <input value={line.search} onChange={(e) => setLineValue(line.id, { search: e.target.value, productId: "" })} placeholder="Scrie produsul sau SKU..." className={documentInputClass} />
                     {lineLabel ? <div className="pt-1 text-[11px] font-semibold text-teal-700">{product?.sku && lineLabel === product.name ? `${lineLabel} (${product.sku})` : lineLabel}</div> : null}
@@ -1009,7 +1009,7 @@ export default function FacturaPage() {
                         key={item.id}
                         type="button"
                         onClick={() => chooseProduct(line.id, item)}
-                        className="rounded-[14px] border border-slate-200 bg-white px-3 py-2.5 text-left transition hover:border-slate-300 hover:bg-slate-50"
+                        className="rounded-[12px] border border-slate-200 bg-white px-3 py-2 text-left transition hover:border-slate-300 hover:bg-slate-50"
                       >
                         <div className="font-semibold text-slate-900">{item.name}</div>
                         <div className="mt-0.5 text-[12px] text-slate-500">{[item.sku, formatUomOption(item.uom), `${formatNumber(item.price || 0)} RON`].filter(Boolean).join(" - ")}</div>
@@ -1020,6 +1020,15 @@ export default function FacturaPage() {
               </div>
             )
           })}
+
+          <div className="sticky bottom-3 z-10 flex justify-end pt-1">
+            <div className="rounded-[16px] border border-slate-200 bg-white/95 p-1.5 shadow-sm backdrop-blur">
+              <button type="button" onClick={addLine} className={documentButtonPrimaryClass}>
+                <Plus size={16} className="mr-2" />
+                Adauga linie
+              </button>
+            </div>
+          </div>
         </div>
       </DocumentSection>
 
