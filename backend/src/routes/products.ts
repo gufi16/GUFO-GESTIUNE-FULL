@@ -653,6 +653,42 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
       item: {
         ...item,
         forcedInactiveBecauseMissingRecipe
+      },
+      debug: {
+        received: {
+          name,
+          imageUrl,
+          classValue,
+          vatRateIdRaw,
+          uomId,
+          purchaseUomId: normalizedPurchaseUomId || uomId,
+          purchaseFactor: normalizedPurchaseFactor,
+          categoryId,
+          price,
+          costPrice,
+          isActive: requestedIsActive,
+          isVisibleInPos,
+          isSgr,
+          productionMode
+        },
+        saved: {
+          id: item.id,
+          name: item.name,
+          imageUrl: item.imageUrl,
+          class: item.class,
+          vatRateId: item.vatRateId,
+          uomId: item.uomId,
+          purchaseUomId: item.purchaseUomId,
+          purchaseFactor: item.purchaseFactor,
+          categoryId: item.categoryId,
+          price: item.price,
+          costPrice: item.costPrice,
+          isActive: item.isActive,
+          isVisibleInPos: item.isVisibleInPos,
+          isSgr: item.isSgr,
+          sgrValue: item.sgrValue,
+          productionMode: item.productionMode
+        }
       }
     })
   } catch {
