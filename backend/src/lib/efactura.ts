@@ -159,7 +159,9 @@ function normalizeLegalId(value: unknown) {
 function normalizeUomCode(value: unknown) {
   const text = normalizeTextKey(value)
   if (!text) return "C62"
-  return UOM_CODES[text] || "C62"
+  if (UOM_CODES[text]) return UOM_CODES[text]
+  if (/^[A-Z0-9]{2,4}$/.test(text)) return text
+  return "C62"
 }
 
 function resolveInvoiceLineUomCode(line: any) {
