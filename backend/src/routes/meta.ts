@@ -1220,7 +1220,8 @@ router.put("/api/v1/meta/categories/:id", async (req: AuthedRequest, res) => {
   const id = String(req.params.id)
 
   const name = String(req.body?.name || "").trim()
-  const imageUrl = normalizeImageUrl(req.body?.imageUrl)
+  const hasImageUrlField = Object.prototype.hasOwnProperty.call(req.body || {}, "imageUrl")
+  const requestedImageUrl = normalizeImageUrl(req.body?.imageUrl)
   const departmentIdRaw = String(req.body?.departmentId || "").trim()
   const departmentId = departmentIdRaw || null
   const isActive = Boolean(req.body?.isActive)
@@ -1248,6 +1249,8 @@ router.put("/api/v1/meta/categories/:id", async (req: AuthedRequest, res) => {
         error: "Categoria nu exista."
       })
     }
+
+    const imageUrl = hasImageUrlField ? requestedImageUrl : current.imageUrl
 
     if (departmentId) {
       const dep = await prisma.department.findFirst({

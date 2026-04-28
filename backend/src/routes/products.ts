@@ -526,7 +526,8 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   const isVatPayer = company?.isVatPayer ?? true
 
   const name = String(req.body?.name || "").trim()
-  const imageUrl = normalizeImageUrl(req.body?.imageUrl)
+  const hasImageUrlField = Object.prototype.hasOwnProperty.call(req.body || {}, "imageUrl")
+  const requestedImageUrl = normalizeImageUrl(req.body?.imageUrl)
   const vatRateIdRaw = String(req.body?.vatRateId || "").trim()
   const vatRateId = isVatPayer ? vatRateIdRaw : null
   const uomId = String(req.body?.uomId || "").trim()
@@ -587,6 +588,8 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   if (!current) {
     return res.status(404).json({ ok: false, error: "Produsul nu exista." })
   }
+
+  const imageUrl = hasImageUrlField ? requestedImageUrl : current.imageUrl
 
   productionMode = normalizeProductionMode(
     req.body?.productionMode ?? current.productionMode ?? "AUTO"
