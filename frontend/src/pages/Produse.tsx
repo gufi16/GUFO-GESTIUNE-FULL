@@ -1146,9 +1146,8 @@ function getDefaultVat(list = vatRates) {
 
                         <Field label="Cantitate pe ambalaj">
                           <input
-                            type="number"
-                            min="1"
-                            step="0.001"
+                            type="text"
+                            inputMode="decimal"
                             value={form.purchaseFactor}
                             onChange={(e) =>
                               setForm((prev) => ({ ...prev, purchaseFactor: e.target.value }))
@@ -1199,9 +1198,8 @@ function getDefaultVat(list = vatRates) {
 
                     <Field label="Pret vanzare">
                       <input
-                        type="number"
-                        min="0"
-                        step="0.01"
+                        type="text"
+                        inputMode="decimal"
                         value={form.price}
                         onChange={(e) => setForm((prev) => ({ ...prev, price: e.target.value }))}
                         onBlur={() =>
@@ -1216,9 +1214,8 @@ function getDefaultVat(list = vatRates) {
 
                     <Field label="Cost achizitie / UM">
                       <input
-                        type="number"
-                        min="0"
-                        step="0.01"
+                        type="text"
+                        inputMode="decimal"
                         value={form.costPrice}
                         onChange={(e) => setForm((prev) => ({ ...prev, costPrice: e.target.value }))}
                         onBlur={() =>
