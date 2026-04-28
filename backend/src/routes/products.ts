@@ -319,28 +319,6 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
     }
   })
 
-  console.log("[PRODUCT_UPDATE] normalized", {
-    id,
-    classValue,
-    received: {
-      price: req.body?.price,
-      costPrice: req.body?.costPrice,
-      isVisibleInPos: req.body?.isVisibleInPos,
-      isSgr: req.body?.isSgr
-    },
-    parsed: {
-      price,
-      costPrice,
-      requestedVisibleInPos,
-      requestedIsSgr
-    },
-    normalized: {
-      normalizedPrice,
-      isVisibleInPos,
-      isSgr
-    }
-  })
-
   if (!name) {
     return res.status(400).json({ ok: false, error: "Denumirea produsului este obligatorie." })
   }
