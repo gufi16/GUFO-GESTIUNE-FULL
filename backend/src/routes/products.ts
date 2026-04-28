@@ -481,6 +481,18 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   const companyId = await requireRequestCompanyId(req)
   const id = String(req.params.id)
 
+  const current = await prisma.product.findFirst({
+    where: {
+      id,
+      tenantId,
+      companyId
+    }
+  })
+
+  if (!current) {
+    return res.status(404).json({ ok: false, error: "Produsul nu exista." })
+  }
+
   const company = await resolveTenantCompany(prisma, tenantId, req.auth?.activeCompanyId, {
     select: {
       isVatPayer: true
@@ -489,26 +501,36 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
 
   const isVatPayer = company?.isVatPayer ?? true
 
-  const name = String(req.body?.name || "").trim()
-  const imageUrl = normalizeImageUrl(req.body?.imageUrl)
-  const vatRateIdRaw = String(req.body?.vatRateId || "").trim()
+  const name = String(req.body?.name ?? current.name ?? "").trim()
+  const imageUrl =
+    req.body?.imageUrl === undefined ? current.imageUrl : normalizeImageUrl(req.body?.imageUrl)
+  const vatRateIdRaw = String(req.body?.vatRateId ?? current.vatRateId ?? "").trim()
   const vatRateId = isVatPayer ? vatRateIdRaw : null
-  const uomId = String(req.body?.uomId || "").trim()
-  const purchaseUomIdRaw = String(req.body?.purchaseUomId || "").trim()
+  const uomId = String(req.body?.uomId ?? current.uomId ?? "").trim()
+  const purchaseUomIdRaw = String(req.body?.purchaseUomId ?? current.purchaseUomId ?? "").trim()
   const purchaseUomId = purchaseUomIdRaw || null
-  const purchaseFactor = toNumber(req.body?.purchaseFactor || 1)
-  const price = toNumber(req.body?.price || 0)
-  const costPrice = toNumber(req.body?.costPrice || 0)
-  const categoryIdRaw = String(req.body?.categoryId || "").trim()
+  const purchaseFactor =
+    req.body?.purchaseFactor === undefined || req.body?.purchaseFactor === ""
+      ? toNumber(current.purchaseFactor ?? 1)
+      : toNumber(req.body?.purchaseFactor)
+  const price =
+    req.body?.price === undefined || req.body?.price === ""
+      ? toNumber(current.price ?? 0)
+      : toNumber(req.body?.price)
+  const costPrice =
+    req.body?.costPrice === undefined || req.body?.costPrice === ""
+      ? toNumber(current.costPrice ?? 0)
+      : toNumber(req.body?.costPrice)
+  const categoryIdRaw = String(req.body?.categoryId ?? current.categoryId ?? "").trim()
   const categoryId = categoryIdRaw || null
-  const classValue = String(req.body?.class || "MARFA").trim()
+  const classValue = String(req.body?.class ?? current.class ?? "MARFA").trim()
   const normalizedPurchaseUomId = classValue === "PRODUS_FIN" ? uomId : purchaseUomId
   const normalizedPurchaseFactor = classValue === "PRODUS_FIN" ? 1 : purchaseFactor
-  let productionMode = normalizeProductionMode(req.body?.productionMode || "AUTO")
-  const requestedIsActive = req.body?.isActive === undefined ? true : Boolean(req.body?.isActive)
+  let productionMode = normalizeProductionMode(req.body?.productionMode ?? current.productionMode ?? "AUTO")
+  const requestedIsActive = req.body?.isActive === undefined ? Boolean(current.isActive) : Boolean(req.body?.isActive)
   const requestedVisibleInPos =
-    req.body?.isVisibleInPos === undefined ? true : Boolean(req.body?.isVisibleInPos)
-  const requestedIsSgr = req.body?.isSgr === undefined ? false : Boolean(req.body?.isSgr)
+    req.body?.isVisibleInPos === undefined ? Boolean(current.isVisibleInPos) : Boolean(req.body?.isVisibleInPos)
+  const requestedIsSgr = req.body?.isSgr === undefined ? Boolean(current.isSgr) : Boolean(req.body?.isSgr)
 
   if (!ALL_PRODUCT_CLASSES.includes(classValue)) {
     return res.status(400).json({ ok: false, error: "Clasificare produs invalida." })
@@ -532,18 +554,6 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
 
   if (normalizedPurchaseFactor <= 0) {
     return res.status(400).json({ ok: false, error: "Factorul trebuie sa fie mai mare decat 0." })
-  }
-
-  const current = await prisma.product.findFirst({
-    where: {
-      id,
-      tenantId,
-      companyId
-    }
-  })
-
-  if (!current) {
-    return res.status(404).json({ ok: false, error: "Produsul nu exista." })
   }
 
   const { price: normalizedPrice, isVisibleInPos, isSgr } = preserveProductFlagsOnUpdate(current, classValue, {
