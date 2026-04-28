@@ -111,7 +111,7 @@ function NumberingTable({
               <td className="px-2.5 py-2 align-middle">
                 <div className="font-semibold text-[#17324D]">{row.label}</div>
                 <div className="text-[11px] text-slate-400">
-                  {row.kind === "code" ? "cod automat" : "document intern"}
+                  {row.kind === "code" ? "cod automat" : "document numerotat local"}
                 </div>
               </td>
               <td className="px-2.5 py-2 align-middle">
@@ -282,8 +282,8 @@ export default function SetariNumerotare() {
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
 
       <DocumentSection
-        title="Documente interne"
-        description="Aici raman doar documentele pe care le numerotam noi."
+        title="Documente numerotate local"
+        description="Aici configurezi seriile si numerele pentru documentele generate in aplicatie."
         actions={
           <>
             <button type="button" className={documentButtonSecondaryClass} onClick={load} disabled={loading || saving}>

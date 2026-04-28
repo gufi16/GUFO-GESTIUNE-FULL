@@ -53,7 +53,7 @@ function sourceBadge(row: any) {
   }
 
   return {
-    label: "Intern",
+    label: "Local",
     className: "bg-slate-100 text-slate-700 border border-slate-200",
   }
 }

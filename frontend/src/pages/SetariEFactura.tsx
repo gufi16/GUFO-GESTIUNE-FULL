@@ -522,7 +522,7 @@ export default function SetariEFacturaPage() {
     }
 
     if (!form.efacturaPlatformConfigured) {
-      setError("Aplicatia ANAF nu este configurata inca la nivel de platforma. Un administrator trebuie sa o seteze in Control Panel.")
+      setError("Aplicatia ANAF nu este configurata inca. Contacteaza suportul pentru activare.")
       return
     }
 
