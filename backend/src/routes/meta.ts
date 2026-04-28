@@ -78,10 +78,11 @@ async function ensureDefaultUoms(tenantId: string, companyId: string) {
     const match = byCode.get(def.code)
 
     if (match) {
+      const resolvedStandardCode = String(match.standardCode || "").trim() || def.standardCode
       if (
         match.code !== def.code ||
         match.name !== def.name ||
-        match.standardCode !== def.standardCode ||
+        match.standardCode !== resolvedStandardCode ||
         !match.isActive
       ) {
         await prisma.uom.update({
@@ -89,7 +90,7 @@ async function ensureDefaultUoms(tenantId: string, companyId: string) {
           data: {
             code: def.code,
             name: def.name,
-            standardCode: def.standardCode,
+            standardCode: resolvedStandardCode,
             isActive: true
           }
         })
