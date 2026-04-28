@@ -106,6 +106,24 @@ function toNumber(value: any) {
   return Number.isFinite(n) ? n : 0
 }
 
+function serializeProduct(item: any) {
+  if (!item) return item
+
+  return {
+    ...item,
+    price: toNumber(item.price),
+    costPrice: toNumber(item.costPrice),
+    purchaseFactor: toNumber(item.purchaseFactor || 1),
+    sgrValue: toNumber(item.sgrValue || 0),
+    vatRate: item.vatRate
+      ? {
+          ...item.vatRate,
+          rate: toNumber(item.vatRate.rate),
+        }
+      : item.vatRate,
+  }
+}
+
 function toNullableText(value: any) {
   const text = String(value || "").trim()
   return text || null
@@ -233,7 +251,7 @@ router.get("/api/v1/products", async (req: AuthedRequest, res) => {
     orderBy: { name: "asc" }
   })
 
-  res.json({ ok: true, items })
+  res.json({ ok: true, items: items.map(serializeProduct) })
 })
 
 router.get("/api/v1/products/next-sku", async (req: AuthedRequest, res) => {
@@ -487,7 +505,7 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
       isSgr: item.isSgr
     })
 
-    res.json({ ok: true, item })
+    res.json({ ok: true, item: serializeProduct(item) })
   } catch (e: any) {
     console.error("[PRODUCT_CREATE] error", e)
     res.status(400).json({ ok: false, error: e?.message || "Nu am putut salva produsul." })
@@ -696,7 +714,7 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
     res.json({
       ok: true,
       item: {
-        ...item,
+        ...serializeProduct(item),
         forcedInactiveBecauseMissingRecipe
       }
     })
