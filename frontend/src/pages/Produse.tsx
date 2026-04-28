@@ -422,13 +422,6 @@ function getDefaultVat(list = vatRates) {
       return
     }
 
-    console.log("[PRODUCT_SAVE] start", {
-      editingItemId: editingItem?.id || null,
-      form,
-      isVatPayer,
-      isFinishedProduct,
-    })
-
     if (!form.name.trim()) {
       setError("Completeaza denumirea produsului.")
       return
@@ -439,29 +432,22 @@ function getDefaultVat(list = vatRates) {
       return
     }
 
+    if (!isFinishedProduct && !form.purchaseUomId) {
+      setError("Selecteaza ambalajul.")
+      return
+    }
+
+    if (isVatPayer && !form.vatRateId) {
+      setError("Selecteaza TVA.")
+      return
+    }
+
     const normalizedPurchaseUomId = isFinishedProduct ? form.uomId : form.purchaseUomId || form.uomId
     const normalizedFactor = isFinishedProduct
       ? 1
       : Math.max(0.000001, toNumberSafe(form.purchaseFactor || 1))
     const normalizedPrice = Math.max(0, toNumberSafe(form.price || 0))
     const normalizedCost = Math.max(0, toNumberSafe(form.costPrice || 0))
-    const payload = {
-      sku: !editingItem ? form.sku.trim() || null : undefined,
-      name: form.name.trim(),
-      imageUrl: normalizeHostedImageUrl(form.imageUrl.trim()) || null,
-      class: form.class,
-      uomId: form.uomId,
-      purchaseUomId: normalizedPurchaseUomId,
-      purchaseFactor: normalizedFactor,
-      vatRateId: isVatPayer ? form.vatRateId || null : null,
-      categoryId: form.categoryId || null,
-      price: normalizedPrice,
-      costPrice: normalizedCost,
-      isActive: form.isActive,
-      isVisibleInPos: form.isVisibleInPos,
-      isSgr: form.isSgr,
-      productionMode: form.productionMode
-    }
 
     setSaving(true)
     setError("")
@@ -474,19 +460,32 @@ function getDefaultVat(list = vatRates) {
 
       const method = editingItem ? "PUT" : "POST"
 
-      console.log("[PRODUCT_SAVE] request", { url, method, payload })
-
       const res = await fetch(url, {
         method,
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          sku: !editingItem ? form.sku.trim() || null : undefined,
+          name: form.name.trim(),
+          imageUrl: normalizeHostedImageUrl(form.imageUrl.trim()) || null,
+          class: form.class,
+          uomId: form.uomId,
+          purchaseUomId: normalizedPurchaseUomId,
+          purchaseFactor: normalizedFactor,
+          vatRateId: isVatPayer ? form.vatRateId : null,
+          categoryId: form.categoryId || null,
+          price: normalizedPrice,
+          costPrice: normalizedCost,
+          isActive: form.isActive,
+          isVisibleInPos: form.isVisibleInPos,
+          isSgr: form.isSgr,
+          productionMode: form.productionMode
+        })
       })
 
       const data = await res.json().catch(() => ({}))
-      console.log("[PRODUCT_SAVE] response", { status: res.status, ok: res.ok, data })
 
       if (res.status === 401) {
         setError("Token expirat sau invalid. Fa login din nou.")
@@ -533,9 +532,8 @@ function getDefaultVat(list = vatRates) {
 
         await loadAll()
       }
-    } catch (error: any) {
-      console.error("[PRODUCT_SAVE] fetch_failed", error)
-      setError(error?.message || "Nu am putut salva produsul.")
+    } catch {
+      setError("Nu am putut salva produsul.")
     } finally {
       setSaving(false)
     }
@@ -1341,20 +1339,11 @@ function getDefaultVat(list = vatRates) {
             </div>
 
             <div style={actionsRow}>
-              <button type="button" onClick={closeModal} style={btnSecondary}>
+              <button onClick={closeModal} style={btnSecondary}>
                 Renunta
               </button>
 
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  void saveProduct()
-                }}
-                disabled={saving || uploading}
-                style={btnPrimary}
-              >
+              <button onClick={saveProduct} disabled={saving || uploading} style={btnPrimary}>
                 {saving ? "Se salveaza..." : editingItem ? "Salveaza modificarile" : "Salveaza produs"}
               </button>
             </div>
