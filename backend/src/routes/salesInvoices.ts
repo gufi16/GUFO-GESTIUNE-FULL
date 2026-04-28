@@ -747,10 +747,20 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
   const totalsX = pageWidth - margin - totalsBoxW
   const noteW = contentWidth - totalsBoxW - 16
   const observations = sanitizeInvoicePdfNote(invoice.note)
+  const hasSpvDetails = Boolean(invoice.efacturaSentAt || invoice.efacturaUploadIndex || invoice.efacturaDownloadId)
 
   if (observations) {
     doc.font(fonts.bold).fontSize(9.5).fillColor(dark).text('Observatii', margin, y + 2, { width: noteW })
     doc.font(fonts.regular).fontSize(9).fillColor(dark).text(pdfText(observations), margin, y + 18, { width: noteW })
+  }
+
+  if (hasSpvDetails) {
+    const spvY = observations ? y + 48 : y + 2
+    doc.font(fonts.bold).fontSize(9.5).fillColor(dark).text('Detalii SPV', margin, spvY, { width: noteW })
+    doc.font(fonts.regular).fontSize(9).fillColor(dark)
+    doc.text(`Trimisa in SPV: ${invoice.efacturaSentAt ? new Date(invoice.efacturaSentAt).toLocaleString('ro-RO') : '-'}`, margin, spvY + 16, { width: noteW })
+    doc.text(`ID incarcare: ${pdfText(invoice.efacturaUploadIndex || '-')}`, margin, spvY + 30, { width: noteW })
+    doc.text(`ID descarcare: ${pdfText(invoice.efacturaDownloadId || '-')}`, margin, spvY + 44, { width: noteW })
   }
 
   doc.save()

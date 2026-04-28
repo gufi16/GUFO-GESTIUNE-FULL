@@ -744,8 +744,8 @@ export default function FacturaPage() {
                 <div className="mt-1 text-sm font-semibold text-slate-900">{efacturaDownloadId || "-"}</div>
               </div>
               <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3 py-2">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">XML local</div>
-                <div className="mt-1 text-sm font-semibold text-slate-900">{efacturaPrepared ? "Pregatit" : "Nepregatit"}</div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">XML</div>
+                <div className="mt-1 text-sm font-semibold text-slate-900">{efacturaPrepared ? "Generat" : "Negenerat"}</div>
               </div>
             </div>
           ) : null}
@@ -755,7 +755,7 @@ export default function FacturaPage() {
           <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
             <button type="button" onClick={prepareEfactura} className={documentButtonSecondaryClass} disabled={efacturaBusy || saving || loadingMeta || loadingInvoice}>
               <FileOutput size={16} className="mr-2" />
-              Pregateste XML
+              Genereaza XML
             </button>
             <button type="button" onClick={downloadEfacturaXml} className={documentButtonSecondaryClass} disabled={!efacturaPrepared}>
               <ArrowUpToLine size={16} className="mr-2" />
@@ -785,7 +785,7 @@ export default function FacturaPage() {
         <DocumentSection title="Detalii SPV">
           <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
             <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-              Trimis la ANAF: <span className="font-semibold text-slate-900">{efacturaSentAt ? new Date(efacturaSentAt).toLocaleString("ro-RO") : "-"}</span>
+              Trimis in SPV: <span className="font-semibold text-slate-900">{efacturaSentAt ? new Date(efacturaSentAt).toLocaleString("ro-RO") : "-"}</span>
             </div>
             <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
               Recipisa descarcata: <span className="font-semibold text-slate-900">{efacturaDownloadedAt ? new Date(efacturaDownloadedAt).toLocaleString("ro-RO") : "-"}</span>

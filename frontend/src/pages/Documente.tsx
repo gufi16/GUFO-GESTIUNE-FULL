@@ -373,6 +373,14 @@ function efacturaStatusClass(status?: string) {
   return "bg-[#F8F5EF] text-[#17324D]"
 }
 
+function isInvoiceSpvOverdue(docDate?: string | null, efacturaStatus?: string | null) {
+  if (!docDate || efacturaStatus === "ACCEPTED") return false
+  const parsed = new Date(docDate)
+  if (Number.isNaN(parsed.getTime())) return false
+  const diffMs = Date.now() - parsed.getTime()
+  return diffMs > 5 * 24 * 60 * 60 * 1000
+}
+
 function minutesTypeLabel(type?: string) {
   return type === "PRICE_CHANGE" ? "Schimbare pret" : "Deteriorare"
 }
@@ -1844,7 +1852,14 @@ export default function Documente() {
                   </tr>
                 ) : (
                   filteredInvoiceDocs.map((doc) => (
-                    <tr key={doc.id} className="border-t border-slate-200">
+                    <tr
+                      key={doc.id}
+                      className={
+                        isInvoiceSpvOverdue(doc.docDate, doc.efacturaStatus)
+                          ? "border-t border-red-200 bg-red-50/60"
+                          : "border-t border-slate-200"
+                      }
+                    >
                       <td className="px-3 py-2.5 font-semibold text-slate-900">{doc.docNo}</td>
                       <td className="px-3 py-2.5 text-slate-600">{formatDate(doc.docDate)}</td>
                       <td className="px-3 py-2.5 text-slate-600">{doc.customerName || "-"}</td>
