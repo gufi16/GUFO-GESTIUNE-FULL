@@ -25,8 +25,8 @@ type Product = {
     items?: any[]
   } | null
   vatRate?: { id: string; rate: number; name: string }
-  uom?: { id: string; code: string; name: string; standardCode?: string | null }
-  purchaseUom?: { id: string; code: string; name: string; standardCode?: string | null } | null
+  uom?: { id: string; code: string; name: string }
+  purchaseUom?: { id: string; code: string; name: string } | null
   category?: {
     id: string
     name: string
@@ -41,7 +41,7 @@ type ProductOption = {
   name: string
   sku: string
   class: string
-  uom?: { id: string; code: string; name: string; standardCode?: string | null } | null
+  uom?: { id: string; code: string; name: string } | null
   isActive?: boolean
 }
 
@@ -170,16 +170,6 @@ function normalizeHostedImageUrl(value: any) {
   }
 
   return text
-}
-
-function formatUomOption(uom?: { code?: string | null; standardCode?: string | null; name?: string | null } | null) {
-  const shortCode = String(uom?.code || "").trim().toUpperCase()
-  const standardCode = String(uom?.standardCode || "").trim().toUpperCase()
-  const fallbackName = String(uom?.name || "").trim()
-  if (shortCode && standardCode) return `${shortCode} (${standardCode})`
-  if (shortCode) return shortCode
-  if (standardCode) return standardCode
-  return fallbackName || "-"
 }
 
 export default function ProdusePage() {
@@ -933,8 +923,8 @@ function getDefaultVat(list = vatRates) {
                       <td style={td}>{CLASS_LABEL_MAP[item.class] || item.class}</td>
                       <td style={td}>{item.category?.name || "-"}</td>
                       <td style={td}>{item.category?.department?.name || item.department?.name || "-"}</td>
-                      <td style={td}>{formatUomOption(item.uom)}</td>
-                      <td style={td}>{formatUomOption(item.purchaseUom)}</td>
+                      <td style={td}>{item.uom?.code || "-"}</td>
+                      <td style={td}>{item.purchaseUom?.code || item.purchaseUom?.name || "-"}</td>
                       <td style={td}>{formatFactorRo(item.purchaseFactor || 1)}</td>
                       <td style={td}>
                         {isVatPayer
@@ -1128,7 +1118,7 @@ function getDefaultVat(list = vatRates) {
                           .filter((u) => u.isActive !== false)
                           .map((u) => (
                             <option key={u.id} value={u.id}>
-                              {formatUomOption(u)}
+                              {u.code} - {u.name}
                             </option>
                           ))}
                       </select>
@@ -1148,9 +1138,9 @@ function getDefaultVat(list = vatRates) {
                               .filter((u) => u.isActive !== false)
                               .map((u) => (
                                 <option key={u.id} value={u.id}>
-                                   {formatUomOption(u)}
-                                 </option>
-                               ))}
+                                  {u.code} - {u.name}
+                                </option>
+                              ))}
                           </select>
                         </Field>
 
