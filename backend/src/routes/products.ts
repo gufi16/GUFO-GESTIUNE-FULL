@@ -296,6 +296,28 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
     isSgr: requestedIsSgr
   })
 
+  console.log("[PRODUCT_UPDATE] normalized", {
+    id,
+    classValue,
+    received: {
+      price: req.body?.price,
+      costPrice: req.body?.costPrice,
+      isVisibleInPos: req.body?.isVisibleInPos,
+      isSgr: req.body?.isSgr
+    },
+    parsed: {
+      price,
+      costPrice,
+      requestedVisibleInPos,
+      requestedIsSgr
+    },
+    normalized: {
+      normalizedPrice,
+      isVisibleInPos,
+      isSgr
+    }
+  })
+
   if (!name) {
     return res.status(400).json({ ok: false, error: "Denumirea produsului este obligatorie." })
   }
@@ -650,6 +672,15 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
       }
     })
 
+    console.log("[PRODUCT_UPDATE] saved", {
+      id,
+      class: item.class,
+      price: item.price,
+      costPrice: item.costPrice,
+      isVisibleInPos: item.isVisibleInPos,
+      isSgr: item.isSgr
+    })
+
     res.json({
       ok: true,
       item: {
@@ -939,6 +970,7 @@ router.delete("/api/v1/products/:id", async (req: AuthedRequest, res) => {
 })
 
 export default router
+
 
 
 
