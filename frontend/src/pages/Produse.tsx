@@ -1199,9 +1199,8 @@ function getDefaultVat(list = vatRates) {
 
                     <Field label="Pret vanzare">
                       <input
-                        type="number"
-                        min="0"
-                        step="0.01"
+                        type="text"
+                        inputMode="decimal"
                         value={form.price}
                         onChange={(e) => setForm((prev) => ({ ...prev, price: e.target.value }))}
                         onBlur={() =>
@@ -1216,9 +1215,8 @@ function getDefaultVat(list = vatRates) {
 
                     <Field label="Cost achizitie / UM">
                       <input
-                        type="number"
-                        min="0"
-                        step="0.01"
+                        type="text"
+                        inputMode="decimal"
                         value={form.costPrice}
                         onChange={(e) => setForm((prev) => ({ ...prev, costPrice: e.target.value }))}
                         onBlur={() =>
@@ -1487,9 +1485,8 @@ function getDefaultVat(list = vatRates) {
 
                               <td style={td}>
                                 <input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
+                                  type="text"
+                        inputMode="decimal"
                                   value={line.lossPercent}
                                   onChange={(e) => updateRecipeLine(index, { lossPercent: e.target.value })}
                                   style={input}
@@ -2081,5 +2078,9 @@ const recipeModalCard: CSSProperties = {
   boxShadow: "0 30px 60px rgba(0,0,0,0.18)",
   margin: "8px 0"
 }
+
+
+
+
 
 

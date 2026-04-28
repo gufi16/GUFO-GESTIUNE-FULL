@@ -1,4 +1,4 @@
-﻿// @ts-nocheck
+// @ts-nocheck
 import { Router } from "express"
 import path from "path"
 import fs from "fs"
@@ -60,19 +60,19 @@ const PRODUCT_CLASS_RULES: Record<
     allowSgr: boolean
   }
 > = {
-  MATERIE_PRIMA: { allowPrice: false, allowPos: false, allowSgr: false },
-  SEMIFABRICATE: { allowPrice: false, allowPos: false, allowSgr: false },
+  MATERIE_PRIMA: { allowPrice: true, allowPos: true, allowSgr: true },
+  SEMIFABRICATE: { allowPrice: true, allowPos: true, allowSgr: true },
   PRODUS_FIN: { allowPrice: true, allowPos: true, allowSgr: true },
   MARFA: { allowPrice: true, allowPos: true, allowSgr: true },
-  AMBALAJE: { allowPrice: false, allowPos: false, allowSgr: false },
+  AMBALAJE: { allowPrice: true, allowPos: true, allowSgr: true },
   AMBALAJ_SGR: { allowPrice: true, allowPos: true, allowSgr: true },
-  CONSUMABILE: { allowPrice: false, allowPos: false, allowSgr: false },
-  REZIDUALE: { allowPrice: false, allowPos: false, allowSgr: false },
-  ALTE_MATERIALE: { allowPrice: false, allowPos: false, allowSgr: false },
+  CONSUMABILE: { allowPrice: true, allowPos: true, allowSgr: true },
+  REZIDUALE: { allowPrice: true, allowPos: true, allowSgr: true },
+  ALTE_MATERIALE: { allowPrice: true, allowPos: true, allowSgr: true },
   SERVICIU_VANDUT: { allowPrice: true, allowPos: true, allowSgr: false },
-  DISCOUNT_FINANCIAR_IESIRI: { allowPrice: true, allowPos: false, allowSgr: false },
-  DISCOUNT_COMERCIAL_IESIRI: { allowPrice: true, allowPos: false, allowSgr: false },
-  TAXA_VERDE: { allowPrice: true, allowPos: false, allowSgr: false }
+  DISCOUNT_FINANCIAR_IESIRI: { allowPrice: true, allowPos: true, allowSgr: true },
+  DISCOUNT_COMERCIAL_IESIRI: { allowPrice: true, allowPos: true, allowSgr: true },
+  TAXA_VERDE: { allowPrice: true, allowPos: true, allowSgr: true }
 }
 const ALL_PRODUCT_CLASSES = Object.keys(PRODUCT_CLASS_RULES)
 
@@ -100,7 +100,9 @@ function normalizeProductionMode(value: any) {
 }
 
 function toNumber(value: any) {
-  const n = Number(value)
+  const normalized = String(value ?? "").replace(/\s/g, "").replace(",", ".").trim()
+  if (!normalized) return 0
+  const n = Number(normalized)
   return Number.isFinite(n) ? n : 0
 }
 
@@ -937,6 +939,8 @@ router.delete("/api/v1/products/:id", async (req: AuthedRequest, res) => {
 })
 
 export default router
+
+
 
 
 
