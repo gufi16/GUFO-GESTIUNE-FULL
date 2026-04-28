@@ -94,6 +94,24 @@ function normalizeProductFlags(classValue: string, payload: { price: number; isV
   }
 }
 
+function preserveProductFlagsOnUpdate(
+  current: { price?: number | null; isVisibleInPos?: boolean | null; isSgr?: boolean | null },
+  classValue: string,
+  payload: { price: number; isVisibleInPos: boolean; isSgr: boolean }
+) {
+  const rules = getClassRules(classValue)
+
+  if (!rules) {
+    throw new Error("Clasificare produs invalida.")
+  }
+
+  return {
+    price: rules.allowPrice ? payload.price : Number(current?.price ?? 0),
+    isVisibleInPos: rules.allowPos ? payload.isVisibleInPos : Boolean(current?.isVisibleInPos ?? false),
+    isSgr: rules.allowSgr ? payload.isSgr : Boolean(current?.isSgr ?? false)
+  }
+}
+
 function normalizeProductionMode(value: any) {
   const mode = String(value || "AUTO").trim().toUpperCase()
   return PRODUCTION_MODE_VALUES.includes(mode) ? mode : null
@@ -500,12 +518,6 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
     return res.status(400).json({ ok: false, error: "Mod de productie invalid." })
   }
 
-  const { price: normalizedPrice, isVisibleInPos, isSgr } = normalizeProductFlags(classValue, {
-    price,
-    isVisibleInPos: requestedVisibleInPos,
-    isSgr: requestedIsSgr
-  })
-
   if (!name) {
     return res.status(400).json({ ok: false, error: "Denumirea produsului este obligatorie." })
   }
@@ -533,6 +545,12 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   if (!current) {
     return res.status(404).json({ ok: false, error: "Produsul nu exista." })
   }
+
+  const { price: normalizedPrice, isVisibleInPos, isSgr } = preserveProductFlagsOnUpdate(current, classValue, {
+    price,
+    isVisibleInPos: requestedVisibleInPos,
+    isSgr: requestedIsSgr
+  })
 
   productionMode = normalizeProductionMode(
     req.body?.productionMode ?? current.productionMode ?? "AUTO"
@@ -627,7 +645,7 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
         isActive: forcedInactiveBecauseMissingRecipe ? false : requestedIsActive,
         isVisibleInPos,
         isSgr,
-        sgrValue: isSgr ? 0.5 : 0,
+        sgrValue: isSgr ? (Number(current.sgrValue ?? 0.5) > 0 ? Number(current.sgrValue ?? 0.5) : 0.5) : 0,
         productionMode: productionMode as any
       },
       include: {
