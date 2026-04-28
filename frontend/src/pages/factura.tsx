@@ -103,6 +103,14 @@ function extractDownloadId(value: string) {
   return match?.[1] || ""
 }
 
+function shortEfacturaMessage(status: string) {
+  if (status === "ACCEPTED") return "OK"
+  if (status === "REJECTED") return "NOK"
+  if (status === "SENT") return "Trimis"
+  if (status === "PREPARED" || status === "READY_TO_SEND") return "Pregatit"
+  return ""
+}
+
 export default function FacturaPage() {
   const efacturaEnabled = hasModule("efactura")
   const token = rawToken()
@@ -372,9 +380,9 @@ export default function FacturaPage() {
       }
 
       setEfacturaStatus(data?.invoice?.efacturaStatus || "PREPARED")
-      setEfacturaInfo(data?.invoice?.efacturaErrorText || "XML-ul local a fost generat.")
+      setEfacturaInfo(data?.invoice?.efacturaErrorText || shortEfacturaMessage(data?.invoice?.efacturaStatus || "PREPARED"))
       setEfacturaIssues(Array.isArray(data?.validation?.issues) ? data.validation.issues : [])
-      setMessage("Factura a fost pregatita local pentru e-Factura.")
+      setMessage("XML pregatit.")
     } catch (e: any) {
       setError(e?.message || "Nu am putut pregati e-Factura.")
     } finally {
@@ -412,10 +420,10 @@ export default function FacturaPage() {
       }
 
       setEfacturaStatus(data?.invoice?.efacturaStatus || "SENT")
-      setEfacturaInfo(data?.message || data?.invoice?.efacturaErrorText || "Factura a fost transmisa la ANAF.")
+      setEfacturaInfo(data?.invoice?.efacturaErrorText || shortEfacturaMessage(data?.invoice?.efacturaStatus || "SENT"))
       setEfacturaUploadIndex(data?.invoice?.efacturaUploadIndex || data?.uploadIndex || "")
       setEfacturaSentAt(data?.invoice?.efacturaSentAt || new Date().toISOString())
-      setMessage(data?.message || "Factura a fost transmisa la ANAF.")
+      setMessage(shortEfacturaMessage(data?.invoice?.efacturaStatus || "SENT") || "Trimis")
     } catch (e: any) {
       setError(e?.message || "Nu am putut trimite factura la ANAF.")
       throw e
@@ -461,11 +469,12 @@ export default function FacturaPage() {
       }
 
       setEfacturaStatus(data?.invoice?.efacturaStatus || data?.status || "SENT")
-      setEfacturaInfo(data?.message || data?.invoice?.efacturaErrorText || "Starea facturii a fost actualizata.")
+      const nextStatus = data?.invoice?.efacturaStatus || data?.status || "SENT"
+      setEfacturaInfo(data?.invoice?.efacturaErrorText || shortEfacturaMessage(nextStatus))
       setEfacturaUploadIndex(data?.invoice?.efacturaUploadIndex || efacturaUploadIndex)
       setEfacturaSentAt(data?.invoice?.efacturaSentAt || efacturaSentAt)
       setEfacturaDownloadedAt(data?.invoice?.efacturaDownloadedAt || efacturaDownloadedAt)
-      setMessage(data?.message || "Starea facturii a fost verificata la ANAF.")
+      setMessage(shortEfacturaMessage(nextStatus) || "Status actualizat")
     } catch (e: any) {
       setError(e?.message || "Nu am putut verifica starea la ANAF.")
     } finally {
@@ -494,9 +503,9 @@ export default function FacturaPage() {
         await downloadPdfFile(res, `Recipisa-${header.docNo || "efactura"}`)
       }
       setEfacturaDownloadedAt(new Date().toISOString())
-      setMessage("Recipisa ANAF a fost descarcata.")
+      setMessage("Recipisa descarcata.")
     } catch (e: any) {
-      setError(e?.message || "Nu am putut descarca recipisa ANAF.")
+      setError(e?.message || "Nu am putut descarca recipisa.")
     } finally {
       setEfacturaBusy(false)
     }
@@ -649,7 +658,7 @@ export default function FacturaPage() {
       if (!res.ok || !data?.ok || !data?.invoice) throw new Error(data?.error || "Nu am putut salva factura.")
       const savedId = data.invoice.id
       setStatus(data.invoice.status || (issueNow ? "ISSUED" : "DRAFT"))
-      setMessage(issueNow ? "Factura a fost emisa." : "Factura a fost salvata ca draft.")
+      setMessage(issueNow ? "Factura emisa." : "Draft salvat.")
       if (!invoiceId) {
         window.location.href = `/inregistrare-document/factura/edit?id=${savedId}`
         return
@@ -770,7 +779,7 @@ export default function FacturaPage() {
       {loadingInvoice ? <InlineNotice>Se incarca factura selectata.</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
-      {efacturaEnabled && efacturaInfo ? <InlineNotice>{efacturaInfo}</InlineNotice> : null}
+      {efacturaEnabled && efacturaInfo && efacturaStatus === "REJECTED" ? <InlineNotice>{efacturaInfo}</InlineNotice> : null}
 
       {invoiceId && efacturaEnabled ? (
         <DocumentSection title="Detalii SPV">
