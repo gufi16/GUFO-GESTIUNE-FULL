@@ -140,7 +140,7 @@ export default function SetariBackupPage() {
       <PageHeader
         badge="configurare"
         title="Backup client"
-        subtitle="Snapshot complet pentru clientul curent, gata de descarcare si pastrat pe server."
+        subtitle="Salvezi o copie completa a datelor clientului, pastrata in siguranta pe server."
       />
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
@@ -156,8 +156,8 @@ export default function SetariBackupPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Creeaza backup nou</div>
-            <div className="mt-1 text-sm font-semibold text-[#17324D]">Salvezi un snapshot complet al clientului curent.</div>
-            <div className="mt-2 text-sm text-slate-500">Include baza de date a clientului si fisierele relevante din ERP. Restaurarea se face direct din backup-urile salvate pe server.</div>
+            <div className="mt-1 text-sm font-semibold text-[#17324D]">Salvezi o copie completa a datelor clientului curent.</div>
+            <div className="mt-2 text-sm text-slate-500">Sunt incluse datele importante si fisierele necesare. Restaurarea se face direct din copiile salvate pe server.</div>
           </div>
 
           <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
