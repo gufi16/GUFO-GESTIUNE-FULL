@@ -463,6 +463,13 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   const companyId = await requireRequestCompanyId(req)
   const id = String(req.params.id)
 
+  console.log("[PRODUCT_UPDATE] incoming", JSON.stringify({
+    id,
+    tenantId,
+    companyId,
+    body: req.body || null
+  }))
+
   const company = await resolveTenantCompany(prisma, tenantId, req.auth?.activeCompanyId, {
     select: {
       isVatPayer: true
@@ -531,8 +538,27 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   })
 
   if (!current) {
+    console.log("[PRODUCT_UPDATE] missing_current", JSON.stringify({ id, tenantId, companyId }))
     return res.status(404).json({ ok: false, error: "Produsul nu exista." })
   }
+
+  console.log("[PRODUCT_UPDATE] current", JSON.stringify({
+    id: current.id,
+    name: current.name,
+    class: current.class,
+    price: current.price,
+    costPrice: current.costPrice,
+    vatRateId: current.vatRateId,
+    uomId: current.uomId,
+    purchaseUomId: current.purchaseUomId,
+    categoryId: current.categoryId,
+    imageUrl: current.imageUrl,
+    isActive: current.isActive,
+    isVisibleInPos: current.isVisibleInPos,
+    isSgr: current.isSgr,
+    sgrValue: current.sgrValue,
+    productionMode: current.productionMode
+  }))
 
   productionMode = normalizeProductionMode(
     req.body?.productionMode ?? current.productionMode ?? "AUTO"
@@ -648,6 +674,24 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
       }
     })
 
+    console.log("[PRODUCT_UPDATE] saved", JSON.stringify({
+      id: item.id,
+      name: item.name,
+      class: item.class,
+      price: item.price,
+      costPrice: item.costPrice,
+      vatRateId: item.vatRateId,
+      uomId: item.uomId,
+      purchaseUomId: item.purchaseUomId,
+      categoryId: item.categoryId,
+      imageUrl: item.imageUrl,
+      isActive: item.isActive,
+      isVisibleInPos: item.isVisibleInPos,
+      isSgr: item.isSgr,
+      sgrValue: item.sgrValue,
+      productionMode: item.productionMode
+    }))
+
     res.json({
       ok: true,
       item: {
@@ -691,7 +735,8 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
         }
       }
     })
-  } catch {
+  } catch (e: any) {
+    console.error("[PRODUCT_UPDATE] error", e?.message || e, e?.stack || "")
     res.status(400).json({ ok: false, error: "Nu am putut actualiza produsul." })
   }
 })
