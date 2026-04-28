@@ -88,7 +88,7 @@ function normalizeProductFlags(classValue: string, payload: { price: number; isV
   }
 
   return {
-    price: rules.allowPrice ? payload.price : 0,
+    price: payload.price,
     isVisibleInPos: rules.allowPos ? payload.isVisibleInPos : false,
     isSgr: rules.allowSgr ? payload.isSgr : false
   }
