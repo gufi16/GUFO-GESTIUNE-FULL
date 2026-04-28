@@ -244,6 +244,16 @@ function normalizeUomCode(value: unknown) {
   return UOM_CODES[text] || "C62"
 }
 
+function resolveInvoiceLineUomCode(line: any) {
+  return (
+    line?.uomStandardCode ||
+    line?.product?.uom?.standardCode ||
+    line?.uomCode ||
+    line?.uom ||
+    ""
+  )
+}
+
 function isLikelyValidRomanianTaxId(value: unknown) {
   const digits = normalizeLegalId(value)
   return digits.length >= 2 && digits.length <= 10 && !/^0+$/.test(digits)
@@ -318,8 +328,8 @@ export function validateInvoiceForEFactura(invoice: any, company: any) {
     if (!line?.productName) issues.push({ severity: "error", field: `items.${index}.productName`, message: `Linia ${row} nu are denumirea produsului.` })
     if (toNumber(line?.qty) <= 0) issues.push({ severity: "error", field: `items.${index}.qty`, message: `Linia ${row} are cantitate invalida.` })
     if (toNumber(line?.unitPriceFc) < 0) issues.push({ severity: "error", field: `items.${index}.unitPriceFc`, message: `Linia ${row} are pret invalid.` })
-    if (!line?.uomCode) issues.push({ severity: "warning", field: `items.${index}.uomCode`, message: `Linia ${row} nu are UM completata pe snapshot.` })
-    if (!normalizeUomCode(line?.uomCode || line?.uom)) {
+    if (!resolveInvoiceLineUomCode(line)) issues.push({ severity: "warning", field: `items.${index}.uomCode`, message: `Linia ${row} nu are UM completata pe snapshot.` })
+    if (!normalizeUomCode(resolveInvoiceLineUomCode(line))) {
       issues.push({ severity: "error", field: `items.${index}.uomCode`, message: `Linia ${row} are UM invalida pentru e-Factura.` })
     }
   }
@@ -384,7 +394,7 @@ export function generateInvoiceEFacturaXml(invoice: any, company: any) {
       return [
         "<cac:InvoiceLine>",
         `<cbc:ID>${index + 1}</cbc:ID>`,
-        `<cbc:InvoicedQuantity unitCode="${xmlEscape(normalizeUomCode(line?.uomCode || line?.uom))}">${decimal(line?.qty, 3)}</cbc:InvoicedQuantity>`,
+        `<cbc:InvoicedQuantity unitCode="${xmlEscape(normalizeUomCode(resolveInvoiceLineUomCode(line)))}">${decimal(line?.qty, 3)}</cbc:InvoicedQuantity>`,
         `<cbc:LineExtensionAmount currencyID="${xmlEscape(currency)}">${decimal(line?.lineNetFc)}</cbc:LineExtensionAmount>`,
         "<cac:Item>",
         `<cbc:Name>${xmlEscape(line?.productName || "")}</cbc:Name>`,
