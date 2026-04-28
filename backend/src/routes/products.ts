@@ -100,8 +100,17 @@ function normalizeProductionMode(value: any) {
 }
 
 function toNumber(value: any) {
-  const n = Number(value)
+  const text = String(value ?? "").trim().replace(/\s/g, "").replace(",", ".")
+  const n = Number(text)
   return Number.isFinite(n) ? n : 0
+}
+
+function toOptionalNumber(value: any) {
+  if (value === undefined || value === null) return null
+  const text = String(value).trim().replace(/\s/g, "").replace(",", ".")
+  if (!text) return null
+  const n = Number(text)
+  return Number.isFinite(n) ? n : null
 }
 
 function toNullableText(value: any) {
@@ -265,9 +274,9 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
   const uomId = String(req.body?.uomId || "").trim()
   const purchaseUomIdRaw = String(req.body?.purchaseUomId || "").trim()
   const purchaseUomId = purchaseUomIdRaw || null
-  const purchaseFactor = toNumber(req.body?.purchaseFactor || 1)
-  const price = toNumber(req.body?.price || 0)
-  const costPrice = toNumber(req.body?.costPrice || 0)
+  const purchaseFactor = toOptionalNumber(req.body?.purchaseFactor) ?? 1
+  const price = toOptionalNumber(req.body?.price) ?? 0
+  const costPrice = toOptionalNumber(req.body?.costPrice) ?? 0
   const categoryIdRaw = String(req.body?.categoryId || "").trim()
   const categoryId = categoryIdRaw || null
   const requestedSku = String(req.body?.sku || "").trim()
@@ -478,19 +487,16 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   const uomId = String(req.body?.uomId || "").trim()
   const purchaseUomIdRaw = String(req.body?.purchaseUomId || "").trim()
   const purchaseUomId = purchaseUomIdRaw || null
-  const purchaseFactor = toNumber(req.body?.purchaseFactor || 1)
-  const price = toNumber(req.body?.price || 0)
-  const costPrice = toNumber(req.body?.costPrice || 0)
-  const categoryIdRaw = String(req.body?.categoryId || "").trim()
-  const categoryId = categoryIdRaw || null
+  const purchaseFactorInput = toOptionalNumber(req.body?.purchaseFactor)
+  const priceInput = toOptionalNumber(req.body?.price)
+  const costPriceInput = toOptionalNumber(req.body?.costPrice)
+  const categoryIdRaw = req.body?.categoryId === undefined ? undefined : String(req.body?.categoryId || "").trim()
+  const categoryId = categoryIdRaw === undefined ? undefined : categoryIdRaw || null
   const classValue = String(req.body?.class || "MARFA").trim()
   const normalizedPurchaseUomId = classValue === "PRODUS_FIN" ? uomId : purchaseUomId
-  const normalizedPurchaseFactor = classValue === "PRODUS_FIN" ? 1 : purchaseFactor
+  const normalizedPurchaseFactor = classValue === "PRODUS_FIN" ? 1 : purchaseFactorInput
   let productionMode = normalizeProductionMode(req.body?.productionMode || "AUTO")
   const requestedIsActive = req.body?.isActive === undefined ? true : Boolean(req.body?.isActive)
-  const requestedVisibleInPos =
-    req.body?.isVisibleInPos === undefined ? true : Boolean(req.body?.isVisibleInPos)
-  const requestedIsSgr = req.body?.isSgr === undefined ? false : Boolean(req.body?.isSgr)
 
   if (!ALL_PRODUCT_CLASSES.includes(classValue)) {
     return res.status(400).json({ ok: false, error: "Clasificare produs invalida." })
@@ -499,12 +505,6 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   if (!productionMode) {
     return res.status(400).json({ ok: false, error: "Mod de productie invalid." })
   }
-
-  const { price: normalizedPrice, isVisibleInPos, isSgr } = normalizeProductFlags(classValue, {
-    price,
-    isVisibleInPos: requestedVisibleInPos,
-    isSgr: requestedIsSgr
-  })
 
   if (!name) {
     return res.status(400).json({ ok: false, error: "Denumirea produsului este obligatorie." })
@@ -516,10 +516,6 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
 
   if (!uomId) {
     return res.status(400).json({ ok: false, error: "UM este obligatorie." })
-  }
-
-  if (normalizedPurchaseFactor <= 0) {
-    return res.status(400).json({ ok: false, error: "Factorul trebuie sa fie mai mare decat 0." })
   }
 
   const current = await prisma.product.findFirst({
@@ -537,6 +533,23 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   productionMode = normalizeProductionMode(
     req.body?.productionMode ?? current.productionMode ?? "AUTO"
   )
+
+  const requestedVisibleInPos =
+    req.body?.isVisibleInPos === undefined ? Boolean(current.isVisibleInPos) : Boolean(req.body?.isVisibleInPos)
+  const requestedIsSgr =
+    req.body?.isSgr === undefined ? Boolean(current.isSgr) : Boolean(req.body?.isSgr)
+  const effectivePrice = priceInput ?? Number(current.price || 0)
+  const effectiveCostPrice = costPriceInput ?? Number(current.costPrice || 0)
+  const effectivePurchaseFactor = normalizedPurchaseFactor ?? Number(current.purchaseFactor || 1)
+  const { price: normalizedPrice, isVisibleInPos, isSgr } = normalizeProductFlags(classValue, {
+    price: effectivePrice,
+    isVisibleInPos: requestedVisibleInPos,
+    isSgr: requestedIsSgr
+  })
+
+  if (effectivePurchaseFactor <= 0) {
+    return res.status(400).json({ ok: false, error: "Factorul trebuie sa fie mai mare decat 0." })
+  }
 
   const [vatRate, fallbackVatRate, uom, purchaseUom, category, existingRecipe] = await Promise.all([
     vatRateId
@@ -618,12 +631,12 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
         class: classValue as any,
         vatRateId: vatRate?.id || fallbackVatRate?.id || current.vatRateId,
         uomId,
-        purchaseUomId: normalizedPurchaseUomId || uomId,
-          purchaseFactor: normalizedPurchaseFactor,
-        categoryId,
-        departmentId: category?.departmentId || null,
+        purchaseUomId: normalizedPurchaseUomId || current.purchaseUomId || uomId,
+        purchaseFactor: effectivePurchaseFactor,
+        categoryId: categoryId === undefined ? current.categoryId : categoryId,
+        departmentId: categoryId === undefined ? current.departmentId : (category?.departmentId || null),
         price: normalizedPrice,
-        costPrice,
+        costPrice: effectiveCostPrice,
         isActive: forcedInactiveBecauseMissingRecipe ? false : requestedIsActive,
         isVisibleInPos,
         isSgr,
