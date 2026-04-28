@@ -553,7 +553,6 @@ model Uom {
   companyId String?
   code      String
   name      String
-  standardCode String?
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 
@@ -1432,7 +1431,6 @@ model SalesInvoiceItem {
   productName     String   @default("")
   productCode     String?
   uomCode         String?
-  uomStandardCode String?
   vatCategoryCode String?
   qty             Decimal  @default(0)
   unitPriceFc     Decimal  @default(0)

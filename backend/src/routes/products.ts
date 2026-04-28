@@ -94,24 +94,6 @@ function normalizeProductFlags(classValue: string, payload: { price: number; isV
   }
 }
 
-function preserveProductFlagsOnUpdate(
-  current: { price?: number | null; isVisibleInPos?: boolean | null; isSgr?: boolean | null },
-  classValue: string,
-  payload: { price: number; isVisibleInPos: boolean; isSgr: boolean }
-) {
-  const rules = getClassRules(classValue)
-
-  if (!rules) {
-    throw new Error("Clasificare produs invalida.")
-  }
-
-  return {
-    price: rules.allowPrice ? payload.price : Number(current?.price ?? 0),
-    isVisibleInPos: rules.allowPos ? payload.isVisibleInPos : Boolean(current?.isVisibleInPos ?? false),
-    isSgr: rules.allowSgr ? payload.isSgr : Boolean(current?.isSgr ?? false)
-  }
-}
-
 function normalizeProductionMode(value: any) {
   const mode = String(value || "AUTO").trim().toUpperCase()
   return PRODUCTION_MODE_VALUES.includes(mode) ? mode : null
@@ -481,18 +463,6 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   const companyId = await requireRequestCompanyId(req)
   const id = String(req.params.id)
 
-  const current = await prisma.product.findFirst({
-    where: {
-      id,
-      tenantId,
-      companyId
-    }
-  })
-
-  if (!current) {
-    return res.status(404).json({ ok: false, error: "Produsul nu exista." })
-  }
-
   const company = await resolveTenantCompany(prisma, tenantId, req.auth?.activeCompanyId, {
     select: {
       isVatPayer: true
@@ -501,36 +471,26 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
 
   const isVatPayer = company?.isVatPayer ?? true
 
-  const name = String(req.body?.name ?? current.name ?? "").trim()
-  const imageUrl =
-    req.body?.imageUrl === undefined ? current.imageUrl : normalizeImageUrl(req.body?.imageUrl)
-  const vatRateIdRaw = String(req.body?.vatRateId ?? current.vatRateId ?? "").trim()
+  const name = String(req.body?.name || "").trim()
+  const imageUrl = normalizeImageUrl(req.body?.imageUrl)
+  const vatRateIdRaw = String(req.body?.vatRateId || "").trim()
   const vatRateId = isVatPayer ? vatRateIdRaw : null
-  const uomId = String(req.body?.uomId ?? current.uomId ?? "").trim()
-  const purchaseUomIdRaw = String(req.body?.purchaseUomId ?? current.purchaseUomId ?? "").trim()
+  const uomId = String(req.body?.uomId || "").trim()
+  const purchaseUomIdRaw = String(req.body?.purchaseUomId || "").trim()
   const purchaseUomId = purchaseUomIdRaw || null
-  const purchaseFactor =
-    req.body?.purchaseFactor === undefined || req.body?.purchaseFactor === ""
-      ? toNumber(current.purchaseFactor ?? 1)
-      : toNumber(req.body?.purchaseFactor)
-  const price =
-    req.body?.price === undefined || req.body?.price === ""
-      ? toNumber(current.price ?? 0)
-      : toNumber(req.body?.price)
-  const costPrice =
-    req.body?.costPrice === undefined || req.body?.costPrice === ""
-      ? toNumber(current.costPrice ?? 0)
-      : toNumber(req.body?.costPrice)
-  const categoryIdRaw = String(req.body?.categoryId ?? current.categoryId ?? "").trim()
+  const purchaseFactor = toNumber(req.body?.purchaseFactor || 1)
+  const price = toNumber(req.body?.price || 0)
+  const costPrice = toNumber(req.body?.costPrice || 0)
+  const categoryIdRaw = String(req.body?.categoryId || "").trim()
   const categoryId = categoryIdRaw || null
-  const classValue = String(req.body?.class ?? current.class ?? "MARFA").trim()
+  const classValue = String(req.body?.class || "MARFA").trim()
   const normalizedPurchaseUomId = classValue === "PRODUS_FIN" ? uomId : purchaseUomId
   const normalizedPurchaseFactor = classValue === "PRODUS_FIN" ? 1 : purchaseFactor
-  let productionMode = normalizeProductionMode(req.body?.productionMode ?? current.productionMode ?? "AUTO")
-  const requestedIsActive = req.body?.isActive === undefined ? Boolean(current.isActive) : Boolean(req.body?.isActive)
+  let productionMode = normalizeProductionMode(req.body?.productionMode || "AUTO")
+  const requestedIsActive = req.body?.isActive === undefined ? true : Boolean(req.body?.isActive)
   const requestedVisibleInPos =
-    req.body?.isVisibleInPos === undefined ? Boolean(current.isVisibleInPos) : Boolean(req.body?.isVisibleInPos)
-  const requestedIsSgr = req.body?.isSgr === undefined ? Boolean(current.isSgr) : Boolean(req.body?.isSgr)
+    req.body?.isVisibleInPos === undefined ? true : Boolean(req.body?.isVisibleInPos)
+  const requestedIsSgr = req.body?.isSgr === undefined ? false : Boolean(req.body?.isSgr)
 
   if (!ALL_PRODUCT_CLASSES.includes(classValue)) {
     return res.status(400).json({ ok: false, error: "Clasificare produs invalida." })
@@ -539,6 +499,12 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   if (!productionMode) {
     return res.status(400).json({ ok: false, error: "Mod de productie invalid." })
   }
+
+  const { price: normalizedPrice, isVisibleInPos, isSgr } = normalizeProductFlags(classValue, {
+    price,
+    isVisibleInPos: requestedVisibleInPos,
+    isSgr: requestedIsSgr
+  })
 
   if (!name) {
     return res.status(400).json({ ok: false, error: "Denumirea produsului este obligatorie." })
@@ -556,11 +522,17 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
     return res.status(400).json({ ok: false, error: "Factorul trebuie sa fie mai mare decat 0." })
   }
 
-  const { price: normalizedPrice, isVisibleInPos, isSgr } = preserveProductFlagsOnUpdate(current, classValue, {
-    price,
-    isVisibleInPos: requestedVisibleInPos,
-    isSgr: requestedIsSgr
+  const current = await prisma.product.findFirst({
+    where: {
+      id,
+      tenantId,
+      companyId
+    }
   })
+
+  if (!current) {
+    return res.status(404).json({ ok: false, error: "Produsul nu exista." })
+  }
 
   productionMode = normalizeProductionMode(
     req.body?.productionMode ?? current.productionMode ?? "AUTO"
@@ -655,7 +627,7 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
         isActive: forcedInactiveBecauseMissingRecipe ? false : requestedIsActive,
         isVisibleInPos,
         isSgr,
-        sgrValue: isSgr ? (Number(current.sgrValue ?? 0.5) > 0 ? Number(current.sgrValue ?? 0.5) : 0.5) : 0,
+        sgrValue: isSgr ? 0.5 : 0,
         productionMode: productionMode as any
       },
       include: {
@@ -683,8 +655,8 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
         forcedInactiveBecauseMissingRecipe
       }
     })
-  } catch (e: any) {
-    res.status(400).json({ ok: false, error: e?.message || "Nu am putut actualiza produsul." })
+  } catch {
+    res.status(400).json({ ok: false, error: "Nu am putut actualiza produsul." })
   }
 })
 

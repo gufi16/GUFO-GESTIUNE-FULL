@@ -152,11 +152,6 @@ function normalizeEndpointVatId(value: unknown) {
   return `RO${digits}`
 }
 
-function buildRomanianEndpointId(value: unknown) {
-  const vatId = normalizeEndpointVatId(value)
-  return vatId || ""
-}
-
 function normalizeLegalId(value: unknown) {
   return String(value || "").replace(/^RO/i, "").replace(/\D+/g, "")
 }
@@ -164,13 +159,7 @@ function normalizeLegalId(value: unknown) {
 function normalizeUomCode(value: unknown) {
   const text = normalizeTextKey(value)
   if (!text) return "C62"
-  if (UOM_CODES[text]) return UOM_CODES[text]
-  if (/^[A-Z0-9]{2,4}$/.test(text)) return text
-  return "C62"
-}
-
-function resolveInvoiceLineUomCode(line: any) {
-  return line?.uomStandardCode || line?.product?.uom?.standardCode || line?.uomCode || line?.uom
+  return UOM_CODES[text] || "C62"
 }
 
 function isLikelyValidRomanianTaxId(value: unknown) {
@@ -247,8 +236,8 @@ export function validateInvoiceForEFactura(invoice: any, company: any) {
     if (!line?.productName) issues.push({ severity: "error", field: `items.${index}.productName`, message: `Linia ${row} nu are denumirea produsului.` })
     if (toNumber(line?.qty) <= 0) issues.push({ severity: "error", field: `items.${index}.qty`, message: `Linia ${row} are cantitate invalida.` })
     if (toNumber(line?.unitPriceFc) < 0) issues.push({ severity: "error", field: `items.${index}.unitPriceFc`, message: `Linia ${row} are pret invalid.` })
-    if (!resolveInvoiceLineUomCode(line)) issues.push({ severity: "warning", field: `items.${index}.uomCode`, message: `Linia ${row} nu are UM completata pe snapshot.` })
-    if (!normalizeUomCode(resolveInvoiceLineUomCode(line))) {
+    if (!line?.uomCode) issues.push({ severity: "warning", field: `items.${index}.uomCode`, message: `Linia ${row} nu are UM completata pe snapshot.` })
+    if (!normalizeUomCode(line?.uomCode || line?.uom)) {
       issues.push({ severity: "error", field: `items.${index}.uomCode`, message: `Linia ${row} are UM invalida pentru e-Factura.` })
     }
   }
@@ -276,8 +265,6 @@ export function generateInvoiceEFacturaXml(invoice: any, company: any) {
   const customerCounty = normalizeRomanianCountyCode(resolveCustomerCounty(invoice))
   const supplierVatId = normalizeEndpointVatId(company?.cui)
   const buyerVatId = normalizeEndpointVatId(invoice?.customerCif)
-  const supplierEndpointId = buildRomanianEndpointId(company?.cui)
-  const buyerEndpointId = buildRomanianEndpointId(invoice?.customerCif)
   const supplierLegalId = normalizeLegalId(company?.cui)
   const buyerLegalId = normalizeLegalId(invoice?.customerCif)
   const invoiceTypeCode = String(invoice?.invoiceTypeCode || "380")
@@ -315,7 +302,7 @@ export function generateInvoiceEFacturaXml(invoice: any, company: any) {
       return [
         "<cac:InvoiceLine>",
         `<cbc:ID>${index + 1}</cbc:ID>`,
-        `<cbc:InvoicedQuantity unitCode="${xmlEscape(normalizeUomCode(resolveInvoiceLineUomCode(line)))}">${decimal(line?.qty, 3)}</cbc:InvoicedQuantity>`,
+        `<cbc:InvoicedQuantity unitCode="${xmlEscape(normalizeUomCode(line?.uomCode || line?.uom))}">${decimal(line?.qty, 3)}</cbc:InvoicedQuantity>`,
         `<cbc:LineExtensionAmount currencyID="${xmlEscape(currency)}">${decimal(line?.lineNetFc)}</cbc:LineExtensionAmount>`,
         "<cac:Item>",
         `<cbc:Name>${xmlEscape(line?.productName || "")}</cbc:Name>`,
@@ -344,30 +331,26 @@ export function generateInvoiceEFacturaXml(invoice: any, company: any) {
     `<cbc:InvoiceTypeCode>${xmlEscape(invoiceTypeCode)}</cbc:InvoiceTypeCode>`,
     `<cbc:DocumentCurrencyCode>${xmlEscape(currency)}</cbc:DocumentCurrencyCode>`,
     "<cac:AccountingSupplierParty><cac:Party>",
-    supplierEndpointId ? `<cbc:EndpointID schemeID="9947">${xmlEscape(supplierEndpointId)}</cbc:EndpointID>` : "",
     "<cac:PartyIdentification>",
     `<cbc:ID>${xmlEscape(supplierLegalId)}</cbc:ID>`,
     "</cac:PartyIdentification>",
-    company?.name ? `<cac:PartyName><cbc:Name>${xmlEscape(company.name)}</cbc:Name></cac:PartyName>` : "",
     "<cac:PostalAddress>",
     `<cbc:StreetName>${xmlEscape(company?.address || "")}</cbc:StreetName>`,
     supplierCity ? `<cbc:CityName>${xmlEscape(supplierCity)}</cbc:CityName>` : "",
     supplierPostalCode ? `<cbc:PostalZone>${xmlEscape(supplierPostalCode)}</cbc:PostalZone>` : "",
-    supplierCounty ? `<cbc:CountrySubentityCode>${xmlEscape(supplierCounty)}</cbc:CountrySubentityCode>` : "",
+    supplierCounty ? `<cbc:CountrySubentity>${xmlEscape(supplierCounty)}</cbc:CountrySubentity>` : "",
     `<cac:Country><cbc:IdentificationCode>${xmlEscape(supplierCountry)}</cbc:IdentificationCode></cac:Country>`,
     "</cac:PostalAddress>",
     supplierVatId ? `<cac:PartyTaxScheme><cbc:CompanyID>${xmlEscape(supplierVatId)}</cbc:CompanyID><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme>` : "",
     `<cac:PartyLegalEntity><cbc:RegistrationName>${xmlEscape(company?.name || "")}</cbc:RegistrationName></cac:PartyLegalEntity>`,
     "</cac:Party></cac:AccountingSupplierParty>",
     "<cac:AccountingCustomerParty><cac:Party>",
-    buyerEndpointId ? `<cbc:EndpointID schemeID="9947">${xmlEscape(buyerEndpointId)}</cbc:EndpointID>` : "",
     buyerLegalId ? `<cac:PartyIdentification><cbc:ID>${xmlEscape(buyerLegalId)}</cbc:ID></cac:PartyIdentification>` : "",
-    invoice?.customerName ? `<cac:PartyName><cbc:Name>${xmlEscape(invoice.customerName)}</cbc:Name></cac:PartyName>` : "",
     "<cac:PostalAddress>",
     `<cbc:StreetName>${xmlEscape(invoice?.customerAddress || "")}</cbc:StreetName>`,
     resolveCustomerCity(invoice) ? `<cbc:CityName>${xmlEscape(resolveCustomerCity(invoice))}</cbc:CityName>` : "",
     resolveCustomerPostalCode(invoice) ? `<cbc:PostalZone>${xmlEscape(resolveCustomerPostalCode(invoice))}</cbc:PostalZone>` : "",
-    customerCounty ? `<cbc:CountrySubentityCode>${xmlEscape(customerCounty)}</cbc:CountrySubentityCode>` : "",
+    customerCounty ? `<cbc:CountrySubentity>${xmlEscape(customerCounty)}</cbc:CountrySubentity>` : "",
     `<cac:Country><cbc:IdentificationCode>${xmlEscape(customerCountry)}</cbc:IdentificationCode></cac:Country>`,
     "</cac:PostalAddress>",
     buyerVatId ? `<cac:PartyTaxScheme><cbc:CompanyID>${xmlEscape(buyerVatId)}</cbc:CompanyID><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme>` : "",

@@ -1692,9 +1692,7 @@ export async function handlePosReceiptInvoice(req: PosAuthRequest, res: Response
             productId: line.productId,
             productName: line.product?.name || "Produs",
             productCode: normalizeText(line.product?.sku) || null,
-          uomCode: normalizeText(line.product?.uom?.code || line.product?.uom?.name) || null,
-          uomStandardCode:
-            normalizeText(line.product?.uom?.standardCode || line.product?.uom?.code || line.product?.uom?.name) || null,
+            uomCode: normalizeText(line.product?.uom?.code || line.product?.uom?.name) || null,
             vatCategoryCode,
             qty,
             unitPriceFc: unitPriceNet,
@@ -1731,9 +1729,7 @@ export async function handlePosReceiptInvoice(req: PosAuthRequest, res: Response
             productId: line.productId,
             productName: "SGR",
             productCode: "SGR",
-          uomCode: normalizeText(line.product?.uom?.code || line.product?.uom?.name) || "BUC",
-          uomStandardCode:
-            normalizeText(line.product?.uom?.standardCode || line.product?.uom?.code || line.product?.uom?.name) || "C62",
+            uomCode: normalizeText(line.product?.uom?.code || line.product?.uom?.name) || "BUC",
             vatCategoryCode: "Z",
             qty,
             unitPriceFc,
