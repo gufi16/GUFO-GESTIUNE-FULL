@@ -655,8 +655,8 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
         forcedInactiveBecauseMissingRecipe
       }
     })
-  } catch {
-    res.status(400).json({ ok: false, error: "Nu am putut actualiza produsul." })
+  } catch (e: any) {
+    res.status(400).json({ ok: false, error: e?.message || "Nu am putut actualiza produsul." })
   }
 })
 
