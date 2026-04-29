@@ -11,6 +11,7 @@ type BackupItem = {
   fileSizeBytes: number
   tableCounts?: Record<string, number> | null
   createdAt: string
+  fileExists?: boolean
 }
 
 function fmtBytes(value: number) {
@@ -39,6 +40,7 @@ export default function SetariBackupPage() {
   const [message, setMessage] = useState("")
   const [label, setLabel] = useState("")
   const [items, setItems] = useState<BackupItem[]>([])
+  const latestAvailableBackup = items.find((item) => item.fileExists !== false) || null
 
   async function load() {
     try {
@@ -197,7 +199,7 @@ export default function SetariBackupPage() {
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
         <DocumentMetric title="Backup-uri salvate" value={loading ? "..." : String(items.length)} tone="slate" />
-        <DocumentMetric title="Ultimul backup" value={items[0] ? fmtDate(items[0].createdAt) : "-"} tone="blue" />
+        <DocumentMetric title="Ultimul backup" value={latestAvailableBackup ? fmtDate(latestAvailableBackup.createdAt) : "-"} tone="blue" />
         <DocumentMetric title="Siguranta date" value="Activ" tone="emerald" />
       </div>
 
@@ -226,7 +228,7 @@ export default function SetariBackupPage() {
             <button
               type="button"
               onClick={handleRestoreLatest}
-              disabled={restoringLatest || creating || !items.length}
+              disabled={restoringLatest || creating || !latestAvailableBackup}
               className="inline-flex items-center justify-center rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <RotateCcw size={16} className="mr-2" />
@@ -279,7 +281,12 @@ export default function SetariBackupPage() {
               {items.map((item) => (
                 <tr key={item.id} className="border-t border-slate-200">
                   <td className="px-3 py-3 font-semibold text-slate-900">{item.label || "-"}</td>
-                  <td className="px-3 py-3 text-slate-700">{item.fileName}</td>
+                  <td className="px-3 py-3 text-slate-700">
+                    <div>{item.fileName}</div>
+                    {item.fileExists === false ? (
+                      <div className="mt-1 text-xs font-medium text-rose-600">Fisier lipsa de pe server</div>
+                    ) : null}
+                  </td>
                   <td className="px-3 py-3 text-slate-600">{fmtBytes(item.fileSizeBytes)}</td>
                   <td className="px-3 py-3 text-slate-600">{fmtDate(item.createdAt)}</td>
                   <td className="px-3 py-3 text-slate-600">
@@ -292,7 +299,7 @@ export default function SetariBackupPage() {
                       <button
                         type="button"
                         onClick={() => handleDownload(item)}
-                        disabled={downloadingId === item.id}
+                        disabled={downloadingId === item.id || item.fileExists === false}
                         className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <Download size={15} />
@@ -301,7 +308,7 @@ export default function SetariBackupPage() {
                       <button
                         type="button"
                         onClick={() => handleRestore(item)}
-                        disabled={restoringId === item.id}
+                        disabled={restoringId === item.id || item.fileExists === false}
                         className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <RotateCcw size={15} />

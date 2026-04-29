@@ -107,7 +107,13 @@ router.get("/api/v1/settings/backups", async (req: AuthedRequest, res) => {
     take: 100,
   })
 
-  return res.json({ ok: true, items })
+  return res.json({
+    ok: true,
+    items: items.map((item) => ({
+      ...item,
+      fileExists: fs.existsSync(item.filePath),
+    })),
+  })
 })
 
 router.post("/api/v1/settings/backups", async (req: AuthedRequest, res) => {
@@ -142,13 +148,16 @@ router.post("/api/v1/settings/backups/restore-latest", async (req: AuthedRequest
     return res.status(400).json({ ok: false, error: "Tenant lipsa pentru backup." })
   }
 
-  const latestBackup = await prisma.tenantBackup.findFirst({
+  const backups = await prisma.tenantBackup.findMany({
     where: { tenantId },
     orderBy: { createdAt: "desc" },
+    take: 100,
   })
 
+  const latestBackup = backups.find((item) => fs.existsSync(item.filePath))
+
   if (!latestBackup) {
-    return res.status(404).json({ ok: false, error: "Nu exista backup-uri salvate pentru restore." })
+    return res.status(404).json({ ok: false, error: "Nu exista niciun backup valid pe server pentru restore." })
   }
 
   try {
@@ -302,6 +311,10 @@ router.get("/api/v1/settings/backups/:id/download", async (req: AuthedRequest, r
     return res.status(404).json({ ok: false, error: "Fisierul backup nu mai exista pe server." })
   }
 
+  if (!fs.existsSync(item.filePath)) {
+    return res.status(404).json({ ok: false, error: "Fisierul backup nu mai exista pe server." })
+  }
+
   res.setHeader("Content-Type", "application/zip")
   res.setHeader("Content-Disposition", `attachment; filename="${item.fileName}"`)
   return res.send(fs.readFileSync(item.filePath))
@@ -322,6 +335,10 @@ router.delete("/api/v1/settings/backups/:id", async (req: AuthedRequest, res) =>
 
   if (!item) {
     return res.status(404).json({ ok: false, error: "Backup-ul nu a fost gasit." })
+  }
+
+  if (!fs.existsSync(item.filePath)) {
+    return res.status(404).json({ ok: false, error: "Fisierul backup nu mai exista pe server." })
   }
 
   try {
