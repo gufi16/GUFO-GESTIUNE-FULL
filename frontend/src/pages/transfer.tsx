@@ -41,6 +41,35 @@ type ProductOption = {
   uom?: { code?: string; standardCode?: string | null; name?: string | null } | null
 }
 
+type CompanyLookupResult = {
+  name?: string
+  cui?: string
+  address?: string
+  city?: string
+  county?: string
+  country?: string
+  postalCode?: string
+}
+
+const ETRANSPORT_OPERATION_OPTIONS = [
+  { value: "AIC", label: "AIC - Ach. intracomunitara" },
+  { value: "LIH", label: "LIH - Lohn (UE) - intrare" },
+  { value: "SC", label: "SC - Stoc client - intrare" },
+  { value: "LIC", label: "LIC - Livr. intracomunitara" },
+  { value: "LHE", label: "LHE - Lohn (UE) - iesire" },
+  { value: "SCE", label: "SCE - Stoc client - iesire" },
+  { value: "TTN", label: "TTN - Transp. pe teritoriul national" },
+  { value: "IMP", label: "IMP - Import" },
+  { value: "EXP", label: "EXP - Export" },
+  { value: "ITD", label: "ITD - Intrare pentru depozitare" },
+  { value: "DIE", label: "DIE - Iesire dupa depozitare" },
+] as const
+
+const ETRANSPORT_SCOPE_OPTIONS = [
+  { value: "ADR", label: "ADR - Traseul incepe / se finalizeaza intr-un loc de pe teritoriul national" },
+  { value: "PTF", label: "PTF - Punct rutier de trecere a frontierei" },
+] as const
+
 type TransferLine = {
   id: string
   productId: string
@@ -109,6 +138,7 @@ export default function TransferPage() {
   const [status, setStatus] = useState("DRAFT")
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
+  const [partnerLookupBusy, setPartnerLookupBusy] = useState(false)
 
   const [header, setHeader] = useState({
     fromLocationId: getActiveLocationId(),
@@ -122,6 +152,13 @@ export default function TransferPage() {
     vehicle: "",
     vehicleNo: "",
     trailerNo: "",
+    eTransportOperationType: "TTN",
+    eTransportPartnerCountry: "RO",
+    eTransportPartnerCui: "",
+    eTransportPartnerName: "",
+    eTransportInternalRef: "",
+    eTransportStartScope: "ADR",
+    eTransportEndScope: "ADR",
     senderName: "",
     receiverName: "",
     approvedBy: "",
@@ -169,16 +206,18 @@ export default function TransferPage() {
 
     try {
       const headers = { Authorization: `Bearer ${token}` }
-      const [locRes, prodRes, numberingData] = await Promise.all([
+      const [locRes, prodRes, companyRes, numberingData] = await Promise.all([
         fetch(`${API}/api/v1/meta/locations`, { headers }),
         fetch(`${API}/api/v1/products`, { headers }),
+        fetch(`${API}/api/v1/company`, { headers }),
         getDocumentNumbering().catch(() => null),
       ])
 
       const locData = await locRes.json().catch(() => ({}))
       const prodData = await prodRes.json().catch(() => ({}))
+      const companyData = await companyRes.json().catch(() => ({}))
 
-      if (locRes.status === 401 || prodRes.status === 401) {
+      if (locRes.status === 401 || prodRes.status === 401 || companyRes.status === 401) {
         setError("Sesiunea a expirat. Intra din nou in cont si reincerca.")
         return
       }
@@ -189,6 +228,7 @@ export default function TransferPage() {
       setLocations(nextLocations)
       setProducts(nextProducts)
       setNumbering(numberingData?.previews || null)
+      const activeCompany = companyData?.company || null
 
       if (!transferId) {
         const activeLocationId = getActiveLocationId()
@@ -198,6 +238,8 @@ export default function TransferPage() {
           ...prev,
           fromLocationId: prev.fromLocationId || fallbackFrom,
           docNo: prev.docNo || getPreviewValue(numberingData?.previews, "transfer"),
+          eTransportOrganizer: prev.eTransportOrganizer || String(activeCompany?.name || "").trim(),
+          eTransportPartnerCountry: prev.eTransportPartnerCountry || "RO",
           toLocationId:
             prev.toLocationId && prev.toLocationId !== (prev.fromLocationId || fallbackFrom)
               ? prev.toLocationId
@@ -248,6 +290,13 @@ export default function TransferPage() {
         vehicle: doc.vehicle || "",
         vehicleNo: doc.vehicleNo || "",
         trailerNo: doc.trailerNo || "",
+        eTransportOperationType: doc.eTransportOperationType || "TTN",
+        eTransportPartnerCountry: doc.eTransportPartnerCountry || "RO",
+        eTransportPartnerCui: doc.eTransportPartnerCui || "",
+        eTransportPartnerName: doc.eTransportPartnerName || "",
+        eTransportInternalRef: doc.eTransportInternalRef || "",
+        eTransportStartScope: doc.eTransportStartScope || "ADR",
+        eTransportEndScope: doc.eTransportEndScope || "ADR",
         senderName: doc.senderName || "",
         receiverName: doc.receiverName || "",
         approvedBy: doc.approvedBy || "",
@@ -538,6 +587,39 @@ export default function TransferPage() {
       setError("Nu am putut genera XML-ul RO e-Transport.")
     } finally {
       setETransportBusy(false)
+    }
+  }
+
+  async function lookupPartnerByCui() {
+    const normalizedCui = String(header.eTransportPartnerCui || "").trim().replace(/^RO/i, "")
+    if (!normalizedCui) {
+      setError("Completeaza CUI-ul partenerului.")
+      return
+    }
+
+    setPartnerLookupBusy(true)
+    setError("")
+    try {
+      const res = await fetch(`${API}/api/v1/company/cui-lookup?cui=${encodeURIComponent(normalizedCui)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok || !data?.company) {
+        setError(data?.error || "Nu am gasit partenerul dupa CUI.")
+        return
+      }
+      const company = data.company as CompanyLookupResult
+      setHeader((prev) => ({
+        ...prev,
+        eTransportPartnerCui: normalizedCui,
+        eTransportPartnerName: String(company.name || "").trim() || prev.eTransportPartnerName,
+        eTransportPartnerCountry: String(company.country || "RO").trim() || "RO",
+      }))
+      setMessage("Partenerul a fost completat dupa CUI.")
+    } catch {
+      setError("Nu am putut cauta partenerul dupa CUI.")
+    } finally {
+      setPartnerLookupBusy(false)
     }
   }
 
@@ -849,7 +931,7 @@ export default function TransferPage() {
                 </div>
               </DocumentField>
 
-              <DocumentSection title="RO e-Transport" description="Completam aici baza pentru raportarea transporturilor intre gestiuni.">
+              <DocumentSection title="RO e-Transport" description="Completezi datele de notificare si generezi XML-ul local pentru transport.">
                 <div className="grid grid-cols-1 gap-3">
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                     <DocumentMetric title="Candidat" value={header.eTransportCandidate ? "Da" : "Nu"} tone={header.eTransportCandidate ? "amber" : "slate"} />
@@ -859,6 +941,60 @@ export default function TransferPage() {
 
                   <DocumentMetric title="Greutate bruta" value={`${formatNumber(eTransportSummary.totalGrossWeightKg)} kg`} tone="blue" />
 
+                  <DocumentField label="Generalitati">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <select
+                        value={header.eTransportOperationType}
+                        onChange={(e) => setHeader((prev) => ({ ...prev, eTransportOperationType: e.target.value }))}
+                        className={documentInputClass}
+                        disabled={isPosted}
+                      >
+                        {ETRANSPORT_OPERATION_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                      <input
+                        value={header.eTransportInternalRef}
+                        onChange={(e) => setHeader((prev) => ({ ...prev, eTransportInternalRef: e.target.value }))}
+                        className={documentInputClass}
+                        disabled={isPosted}
+                        placeholder="Referinta interna operatiune"
+                      />
+                    </div>
+                  </DocumentField>
+
+                  <DocumentField label="Partener">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[120px_minmax(0,1fr)_170px]">
+                      <input
+                        value={header.eTransportPartnerCountry}
+                        onChange={(e) => setHeader((prev) => ({ ...prev, eTransportPartnerCountry: e.target.value.toUpperCase() }))}
+                        className={documentInputClass}
+                        disabled={isPosted}
+                        placeholder="Tara"
+                      />
+                      <input
+                        value={header.eTransportPartnerCui}
+                        onChange={(e) => setHeader((prev) => ({ ...prev, eTransportPartnerCui: e.target.value }))}
+                        onBlur={() => {
+                          if (header.eTransportPartnerCui.trim()) lookupPartnerByCui()
+                        }}
+                        className={documentInputClass}
+                        disabled={isPosted || partnerLookupBusy}
+                        placeholder="CUI partener"
+                      />
+                      <button type="button" className={documentButtonSecondaryClass} onClick={lookupPartnerByCui} disabled={isPosted || partnerLookupBusy}>
+                        {partnerLookupBusy ? "Se cauta..." : "Cauta CUI"}
+                      </button>
+                    </div>
+                    <input
+                      value={header.eTransportPartnerName}
+                      onChange={(e) => setHeader((prev) => ({ ...prev, eTransportPartnerName: e.target.value }))}
+                      className={`${documentInputClass} mt-2`}
+                      disabled={isPosted}
+                      placeholder="Denumire partener"
+                    />
+                  </DocumentField>
+
                   <DocumentField label="Start transport">
                     <input
                       type="datetime-local"
@@ -867,6 +1003,31 @@ export default function TransferPage() {
                       className={documentInputClass}
                       disabled={isPosted}
                     />
+                  </DocumentField>
+
+                  <DocumentField label="Locuri start / final traseu">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <select
+                        value={header.eTransportStartScope}
+                        onChange={(e) => setHeader((prev) => ({ ...prev, eTransportStartScope: e.target.value }))}
+                        className={documentInputClass}
+                        disabled={isPosted}
+                      >
+                        {ETRANSPORT_SCOPE_OPTIONS.map((option) => (
+                          <option key={`start-${option.value}`} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={header.eTransportEndScope}
+                        onChange={(e) => setHeader((prev) => ({ ...prev, eTransportEndScope: e.target.value }))}
+                        className={documentInputClass}
+                        disabled={isPosted}
+                      >
+                        {ETRANSPORT_SCOPE_OPTIONS.map((option) => (
+                          <option key={`end-${option.value}`} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </div>
                   </DocumentField>
 
                   <DocumentField label="Organizator / transportator">

@@ -1220,6 +1220,13 @@ model TransferDoc {
   senderName     String?
   receiverName   String?
   approvedBy     String?
+  eTransportOperationType String?
+  eTransportPartnerCountry String?
+  eTransportPartnerCui String?
+  eTransportPartnerName String?
+  eTransportInternalRef String?
+  eTransportStartScope String?
+  eTransportEndScope String?
   eTransportCandidate Boolean      @default(false)
   eTransportRequired  Boolean      @default(false)
   eTransportDeclaredStart DateTime?

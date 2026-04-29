@@ -57,6 +57,18 @@ export function validateTransferForETransport(doc: any) {
     issues.push({ severity: "error", field: "eTransportDeclaredStart", message: "Completeaza data de start transport." })
   }
 
+  if (!normalizeText(doc?.eTransportOperationType)) {
+    issues.push({ severity: "error", field: "eTransportOperationType", message: "Selecteaza tipul operatiunii." })
+  }
+
+  if (!normalizeText(doc?.eTransportPartnerCui)) {
+    issues.push({ severity: "error", field: "eTransportPartnerCui", message: "Completeaza CUI-ul partenerului." })
+  }
+
+  if (!normalizeText(doc?.eTransportPartnerName)) {
+    issues.push({ severity: "error", field: "eTransportPartnerName", message: "Completeaza denumirea partenerului." })
+  }
+
   if (!normalizeText(doc?.vehicleNo)) {
     issues.push({ severity: "error", field: "vehicleNo", message: "Completeaza numarul auto." })
   }
@@ -139,6 +151,7 @@ export function generateTransferETransportXml(doc: any) {
     <Status>${xmlEscape(doc?.eTransportStatus || "PREPARED")}</Status>
   </Document>
   <Transport>
+    <OperationType>${xmlEscape(doc?.eTransportOperationType || "")}</OperationType>
     <DeclaredStart>${xmlEscape(startText)}</DeclaredStart>
     <VehicleNo>${xmlEscape(doc?.vehicleNo || "")}</VehicleNo>
     <TrailerNo>${xmlEscape(doc?.trailerNo || "")}</TrailerNo>
@@ -147,11 +160,13 @@ export function generateTransferETransportXml(doc: any) {
     <Operator>${xmlEscape(doc?.eTransportOperator || "")}</Operator>
   </Transport>
   <LoadingPlace>
+    <Scope>${xmlEscape(doc?.eTransportStartScope || "")}</Scope>
     <Code>${xmlEscape(doc?.fromLocation?.code || "")}</Code>
     <Name>${xmlEscape(doc?.fromLocation?.name || "")}</Name>
     <Address>${xmlEscape(buildLocationText(doc?.fromLocation))}</Address>
   </LoadingPlace>
   <UnloadingPlace>
+    <Scope>${xmlEscape(doc?.eTransportEndScope || "")}</Scope>
     <Code>${xmlEscape(doc?.toLocation?.code || "")}</Code>
     <Name>${xmlEscape(doc?.toLocation?.name || "")}</Name>
     <Address>${xmlEscape(buildLocationText(doc?.toLocation))}</Address>
@@ -162,6 +177,12 @@ export function generateTransferETransportXml(doc: any) {
     <TotalGrossWeightKg>${decimal(totalGrossWeightKg, 3)}</TotalGrossWeightKg>
     <TotalValueRon>${decimal(totalValueRon, 2)}</TotalValueRon>
   </Summary>
+  <Partner>
+    <Country>${xmlEscape(doc?.eTransportPartnerCountry || "RO")}</Country>
+    <Cui>${xmlEscape(doc?.eTransportPartnerCui || "")}</Cui>
+    <Name>${xmlEscape(doc?.eTransportPartnerName || "")}</Name>
+    <InternalReference>${xmlEscape(doc?.eTransportInternalRef || "")}</InternalReference>
+  </Partner>
   <Lines>
 ${linesXml}
   </Lines>

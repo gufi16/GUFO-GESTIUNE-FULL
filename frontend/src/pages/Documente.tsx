@@ -13,6 +13,7 @@ import {
   Factory,
   ClipboardList,
   FileText,
+  Truck,
 } from "lucide-react"
 import PageHeader from "../components/PageHeader"
 import { DocumentMetric, InlineNotice, documentInputClass } from "../components/DocumentUi"
@@ -321,7 +322,24 @@ type MinutesDocListItem = {
   itemsCount: number
 }
 
-type ActiveTab = "consumption" | "production" | "inventory" | "invoice" | "receipt" | "minutes"
+type TransferDocListItem = {
+  id: string
+  docNo: string
+  docDate: string
+  fromLocation?: { id?: string; name?: string; code?: string } | null
+  toLocation?: { id?: string; name?: string; code?: string } | null
+  totalQty: number
+  totalValue: number
+  status: string
+  eTransportCandidate?: boolean
+  eTransportRequired?: boolean
+  eTransportStatus?: string | null
+  eTransportUit?: string | null
+  eTransportPreparedXml?: string | null
+  items?: Array<{ id: string }>
+}
+
+type ActiveTab = "consumption" | "production" | "inventory" | "invoice" | "receipt" | "minutes" | "transfer"
 
 function formatDate(value?: string | null) {
   if (!value) return "-"
@@ -421,6 +439,8 @@ export default function Documente() {
             ? "receipt"
             : searchParams.get("tab") === "minutes"
               ? "minutes"
+              : searchParams.get("tab") === "transfer"
+                ? "transfer"
           : "consumption"
   ) as ActiveTab
   const token =
@@ -452,6 +472,7 @@ export default function Documente() {
   const [invoiceDocs, setInvoiceDocs] = useState<SalesInvoiceListItem[]>([])
   const [receiptDocs, setReceiptDocs] = useState<ReceiptListItem[]>([])
   const [minutesDocs, setMinutesDocs] = useState<MinutesDocListItem[]>([])
+  const [transferDocs, setTransferDocs] = useState<TransferDocListItem[]>([])
 
   const [selectedConsumptionDocId, setSelectedConsumptionDocId] = useState<string | null>(null)
   const [selectedConsumptionDoc, setSelectedConsumptionDoc] = useState<ConsumptionDocDetail | null>(null)
@@ -466,7 +487,7 @@ export default function Documente() {
 
   useEffect(() => {
     const tab = searchParams.get("tab")
-    if (tab === "inventory" || tab === "production" || tab === "consumption" || tab === "invoice" || tab === "receipt" || tab === "minutes") {
+    if (tab === "inventory" || tab === "production" || tab === "consumption" || tab === "invoice" || tab === "receipt" || tab === "minutes" || tab === "transfer") {
       setActiveTab(tab as ActiveTab)
     }
   }, [searchParams])
@@ -488,6 +509,8 @@ export default function Documente() {
       loadReceiptDocs()
     } else if (activeTab === "minutes") {
       loadMinutesDocs()
+    } else if (activeTab === "transfer") {
+      loadTransferDocs()
     } else {
       loadInventoryDocs()
     }
@@ -535,6 +558,43 @@ export default function Documente() {
       console.error("LOAD MINUTES DOCS ERROR", err)
       setMinutesDocs([])
       setError("Nu am putut incarca procesele verbale.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function loadTransferDocs() {
+    if (!token) {
+      setLoading(false)
+      setError("Lipseste sesiunea de autentificare.")
+      return
+    }
+
+    setLoading(true)
+    setError("")
+
+    try {
+      const params = new URLSearchParams()
+      if (dateFrom) params.set("dateFrom", dateFrom)
+      if (dateTo) params.set("dateTo", dateTo)
+      const res = await fetch(`${API}/api/v1/transfers?${params.toString()}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) throw new Error(data?.error || "Nu am putut incarca transferurile.")
+
+      let items: TransferDocListItem[] = Array.isArray(data?.docs) ? data.docs : []
+      if (selectedLocationId) {
+        items = items.filter((doc) => doc.fromLocation?.id === selectedLocationId || doc.toLocation?.id === selectedLocationId)
+      }
+      setTransferDocs(items)
+    } catch (err) {
+      console.error("LOAD TRANSFERS ERROR", err)
+      setTransferDocs([])
+      setError("Nu am putut incarca transferurile.")
     } finally {
       setLoading(false)
     }
@@ -1011,6 +1071,58 @@ export default function Documente() {
     }
   }
 
+  async function openTransferPdf(id: string) {
+    if (!token) return
+    try {
+      const res = await fetch(`${API}/api/v1/transfers/${id}/pdf`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      if (!res.ok) throw new Error("Nu am putut genera PDF-ul transferului.")
+      await openPdfInNewTab(res)
+    } catch (err) {
+      console.error("PDF TRANSFER ERROR", err)
+      alert("Nu am putut genera PDF-ul transferului.")
+    }
+  }
+
+  async function generateTransferXml(id: string) {
+    if (!token) return
+    try {
+      const res = await fetch(`${API}/api/v1/transfers/${id}/etransport/prepare`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) throw new Error(data?.error || "Nu am putut genera XML-ul RO e-Transport.")
+      setMessage(data?.message || "XML RO e-Transport generat.")
+      await loadTransferDocs()
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut genera XML-ul RO e-Transport.")
+    }
+  }
+
+  async function openTransferXml(id: string) {
+    if (!token) return
+    try {
+      const res = await fetch(`${API}/api/v1/transfers/${id}/etransport/xml`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data?.error || "Nu am putut descarca XML-ul RO e-Transport.")
+      }
+      await openPdfInNewTab(res)
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut descarca XML-ul RO e-Transport.")
+    }
+  }
+
   async function sendInvoiceEfactura(id: string) {
     if (!token) return
 
@@ -1215,6 +1327,29 @@ export default function Documente() {
     })
   }, [minutesDocs, search, minutesFilter])
 
+  const filteredTransferDocs = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return transferDocs
+
+    return transferDocs.filter((doc) => {
+      const values = [
+        doc.docNo,
+        doc.fromLocation?.name,
+        doc.fromLocation?.code,
+        doc.toLocation?.name,
+        doc.toLocation?.code,
+        doc.status,
+        doc.eTransportStatus,
+        doc.eTransportUit,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+
+      return values.includes(q)
+    })
+  }, [transferDocs, search])
+
   const activeTabMeta =
     activeTab === "consumption"
       ? {
@@ -1237,6 +1372,13 @@ export default function Documente() {
               placeholder: "Nr factura, client, CIF, locatie...",
               resultCount: filteredInvoiceDocs.length,
             }
+          : activeTab === "transfer"
+            ? {
+                title: "Transferuri intre gestiuni",
+                subtitle: "Vezi transferurile salvate si starea pregatirii pentru RO e-Transport.",
+                placeholder: "Nr transfer, locatie plecare/sosire, status, UIT...",
+                resultCount: filteredTransferDocs.length,
+              }
           : activeTab === "receipt"
             ? {
                 title: "Istoric receptii NIR",
@@ -1366,7 +1508,7 @@ export default function Documente() {
                 tone: "emerald",
               },
             ]
-          : activeTab === "minutes"
+        : activeTab === "minutes"
             ? [
                 {
                   title: "Procese verbale",
@@ -1386,6 +1528,30 @@ export default function Documente() {
                   title: "Valoare totala",
                   value: formatRon(filteredMinutesDocs.reduce((sum, doc) => sum + Number(doc.totalValue || 0), 0)),
                   hint: "Valoare documente",
+                  icon: FileCheck2,
+                  tone: "emerald",
+                },
+              ]
+          : activeTab === "transfer"
+            ? [
+                {
+                  title: "Transferuri",
+                  value: String(filteredTransferDocs.length),
+                  hint: "Documente intre gestiuni",
+                  icon: Truck,
+                  tone: "blue",
+                },
+                {
+                  title: "Pregatite RO e-Transport",
+                  value: String(filteredTransferDocs.filter((doc) => Boolean(doc.eTransportPreparedXml)).length),
+                  hint: "Transferuri cu XML generat",
+                  icon: FileText,
+                  tone: "slate",
+                },
+                {
+                  title: "Valoare totala",
+                  value: formatRon(filteredTransferDocs.reduce((sum, doc) => sum + Number(doc.totalValue || 0), 0)),
+                  hint: "Valoare transferata",
                   icon: FileCheck2,
                   tone: "emerald",
                 },
@@ -1485,6 +1651,18 @@ export default function Documente() {
         >
           <PackageSearch size={15} />
                 Note de receptie
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("transfer")}
+          className={`inline-flex items-center gap-1.5 rounded-[14px] px-3 py-1.5 text-[13px] font-semibold transition ${
+            activeTab === "transfer"
+              ? "bg-slate-900 text-white"
+              : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+          }`}
+        >
+          <Truck size={15} />
+          Transferuri
         </button>
         <button
           type="button"
@@ -1997,6 +2175,80 @@ export default function Documente() {
                           >
                             Deschide
                             <ArrowRight size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : activeTab === "transfer" ? (
+          <div className="overflow-hidden rounded-[22px] border border-slate-200">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-slate-500">
+                <tr>
+                  <th className="px-3 py-2 text-left font-medium">Nr.</th>
+                  <th className="px-3 py-2 text-left font-medium">Data</th>
+                  <th className="px-3 py-2 text-left font-medium">Plecare</th>
+                  <th className="px-3 py-2 text-left font-medium">Sosire</th>
+                  <th className="px-3 py-2 text-left font-medium">Status</th>
+                  <th className="px-3 py-2 text-left font-medium">RO e-Transport</th>
+                  <th className="px-3 py-2 text-left font-medium">Valoare</th>
+                  <th className="px-3 py-2 text-right font-medium">Actiuni</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {loading ? (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-8 text-center text-slate-500">Se incarca transferurile...</td>
+                  </tr>
+                ) : filteredTransferDocs.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-8 text-center text-slate-500">Nu exista transferuri in intervalul selectat.</td>
+                  </tr>
+                ) : (
+                  filteredTransferDocs.map((doc) => (
+                    <tr key={doc.id} className="border-t border-slate-200">
+                      <td className="px-3 py-2.5 font-semibold text-slate-900">{doc.docNo}</td>
+                      <td className="px-3 py-2.5 text-slate-600">{formatDate(doc.docDate)}</td>
+                      <td className="px-3 py-2.5 text-slate-600">{doc.fromLocation?.name || "-"}</td>
+                      <td className="px-3 py-2.5 text-slate-600">{doc.toLocation?.name || "-"}</td>
+                      <td className="px-3 py-2.5 text-slate-600">{doc.status || "-"}</td>
+                      <td className="px-3 py-2.5 text-slate-600">{doc.eTransportStatus || (doc.eTransportCandidate ? "Candidat" : "-")}</td>
+                      <td className="px-3 py-2.5 text-slate-600">{formatRon(doc.totalValue || 0)}</td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/transfer/edit?id=${doc.id}`)}
+                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openTransferPdf(doc.id)}
+                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                          >
+                            <Printer size={15} />
+                            PDF
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => generateTransferXml(doc.id)}
+                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                          >
+                            Genereaza XML
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openTransferXml(doc.id)}
+                            disabled={!doc.eTransportPreparedXml}
+                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            XML
                           </button>
                         </div>
                       </td>

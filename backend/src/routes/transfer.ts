@@ -357,6 +357,13 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
   const rawDocNo = String(header?.docNo || "").trim()
   const docDate = String(header?.docDate || "").trim()
   const trailerNo = String(header?.trailerNo || "").trim()
+  const eTransportOperationType = String(header?.eTransportOperationType || "").trim()
+  const eTransportPartnerCountry = String(header?.eTransportPartnerCountry || "").trim()
+  const eTransportPartnerCui = String(header?.eTransportPartnerCui || "").trim()
+  const eTransportPartnerName = String(header?.eTransportPartnerName || "").trim()
+  const eTransportInternalRef = String(header?.eTransportInternalRef || "").trim()
+  const eTransportStartScope = String(header?.eTransportStartScope || "").trim()
+  const eTransportEndScope = String(header?.eTransportEndScope || "").trim()
   const eTransportDeclaredStartRaw = String(header?.eTransportDeclaredStart || "").trim()
   const eTransportVehicleMaxMassKg = Math.max(0, toNumber(header?.eTransportVehicleMaxMassKg || 0))
   const eTransportOrganizer = String(header?.eTransportOrganizer || "").trim()
@@ -428,6 +435,13 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
           vehicle: header?.vehicle ? String(header.vehicle).trim() : null,
           vehicleNo: header?.vehicleNo ? String(header.vehicleNo).trim() : null,
           trailerNo: trailerNo || null,
+          eTransportOperationType: eTransportOperationType || null,
+          eTransportPartnerCountry: eTransportPartnerCountry || null,
+          eTransportPartnerCui: eTransportPartnerCui || null,
+          eTransportPartnerName: eTransportPartnerName || null,
+          eTransportInternalRef: eTransportInternalRef || null,
+          eTransportStartScope: eTransportStartScope || null,
+          eTransportEndScope: eTransportEndScope || null,
           senderName: header?.senderName ? String(header.senderName).trim() : null,
           receiverName: header?.receiverName ? String(header.receiverName).trim() : null,
           approvedBy: header?.approvedBy ? String(header.approvedBy).trim() : null,
@@ -481,6 +495,13 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
           vehicle: header?.vehicle ? String(header.vehicle).trim() : null,
           vehicleNo: header?.vehicleNo ? String(header.vehicleNo).trim() : null,
           trailerNo: trailerNo || null,
+          eTransportOperationType: eTransportOperationType || null,
+          eTransportPartnerCountry: eTransportPartnerCountry || null,
+          eTransportPartnerCui: eTransportPartnerCui || null,
+          eTransportPartnerName: eTransportPartnerName || null,
+          eTransportInternalRef: eTransportInternalRef || null,
+          eTransportStartScope: eTransportStartScope || null,
+          eTransportEndScope: eTransportEndScope || null,
           senderName: header?.senderName ? String(header.senderName).trim() : null,
           receiverName: header?.receiverName ? String(header.receiverName).trim() : null,
           approvedBy: header?.approvedBy ? String(header.approvedBy).trim() : null,
