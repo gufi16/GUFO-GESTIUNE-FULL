@@ -713,6 +713,31 @@ export default function TransferPage() {
     await downloadPdfFile(res, `RO-e-Transport-${header.docNo || "document"}.xml`)
   }
 
+  async function deleteTransfer() {
+    if (!transferId || !token) return
+    if (isPosted) {
+      setError("Transferurile postate nu pot fi sterse.")
+      return
+    }
+
+    const confirmed = window.confirm(`Stergi definitiv transferul ${header.docNo || ""}?`)
+    if (!confirmed) return
+
+    try {
+      const res = await fetch(`${API}/api/v1/transfers/${transferId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Nu am putut sterge transferul.")
+      }
+      navigate("/documente?tab=transfer")
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut sterge transferul.")
+    }
+  }
+
   const eTransportPrepared = ["PREPARED", "READY_TO_REVIEW", "SENT", "ACCEPTED"].includes(header.eTransportStatus || "")
 
   return (
@@ -756,6 +781,12 @@ export default function TransferPage() {
           <Truck size={16} className="mr-2" />
           XML
         </button>
+        {!isPosted && transferId ? (
+          <button type="button" className={documentButtonDangerClass} onClick={deleteTransfer}>
+            <Trash2 size={16} className="mr-2" />
+            Sterge
+          </button>
+        ) : null}
       </div>
 
       <div className="space-y-3">

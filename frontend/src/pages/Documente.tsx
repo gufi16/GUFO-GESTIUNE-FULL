@@ -10,6 +10,7 @@ import {
   Search,
   X,
   Printer,
+  Trash2,
   Factory,
   ClipboardList,
   FileText,
@@ -1120,6 +1121,29 @@ export default function Documente() {
       await openPdfInNewTab(res)
     } catch (err: any) {
       setError(err?.message || "Nu am putut descarca XML-ul RO e-Transport.")
+    }
+  }
+
+  async function deleteTransferDoc(id: string, docNo: string) {
+    if (!token) return
+    const confirmed = window.confirm(`Stergi definitiv transferul ${docNo}?`)
+    if (!confirmed) return
+
+    try {
+      const res = await fetch(`${API}/api/v1/transfers/${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Nu am putut sterge transferul.")
+      }
+      setMessage(data?.message || "Transferul a fost sters.")
+      await loadTransferDocs()
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut sterge transferul.")
     }
   }
 
@@ -2251,6 +2275,16 @@ export default function Documente() {
                           >
                             XML
                           </button>
+                          {doc.status === "DRAFT" ? (
+                            <button
+                              type="button"
+                              onClick={() => deleteTransferDoc(doc.id, doc.docNo)}
+                              className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-50"
+                            >
+                              <Trash2 size={15} />
+                              Sterge
+                            </button>
+                          ) : null}
                         </div>
                       </td>
                     </tr>

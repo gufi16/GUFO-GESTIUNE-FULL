@@ -351,6 +351,44 @@ router.get("/api/v1/transfers/:id/etransport/xml", async (req: AuthedRequest, re
   return res.send(doc.eTransportPreparedXml)
 })
 
+router.delete("/api/v1/transfers/:id", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
+  const id = String(req.params.id)
+
+  const doc = await prisma.transferDoc.findFirst({
+    where: { id, tenantId, companyId },
+    select: {
+      id: true,
+      docNo: true,
+      status: true,
+    },
+  })
+
+  if (!doc) {
+    return res.status(404).json({ ok: false, error: "Transferul nu a fost gasit." })
+  }
+
+  if (doc.status !== "DRAFT") {
+    return res.status(400).json({ ok: false, error: "Doar transferurile draft pot fi sterse." })
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.transferDocItem.deleteMany({
+      where: { transferId: doc.id },
+    })
+
+    await tx.transferDoc.delete({
+      where: { id: doc.id },
+    })
+  })
+
+  return res.json({
+    ok: true,
+    message: `Transferul ${doc.docNo || ""} a fost sters.`,
+  })
+})
+
 router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
   const companyId = await requireRequestCompanyId(req)
