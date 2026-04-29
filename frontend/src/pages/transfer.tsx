@@ -591,7 +591,7 @@ export default function TransferPage() {
   }
 
   async function lookupPartnerByCui() {
-    const normalizedCui = String(header.eTransportPartnerCui || "").trim().replace(/^RO/i, "")
+    const normalizedCui = String(header.eTransportPartnerCui || "").trim().replace(/^RO/i, "").replace(/\D/g, "")
     if (!normalizedCui) {
       setError("Completeaza CUI-ul partenerului.")
       return
@@ -613,7 +613,7 @@ export default function TransferPage() {
         ...prev,
         eTransportPartnerCui: normalizedCui,
         eTransportPartnerName: String(company.name || "").trim() || prev.eTransportPartnerName,
-        eTransportPartnerCountry: String(company.country || "RO").trim() || "RO",
+        eTransportPartnerCountry: "RO",
       }))
       setMessage("Partenerul a fost completat dupa CUI.")
     } catch {
@@ -690,7 +690,7 @@ export default function TransferPage() {
 
       <div className="grid grid-cols-1 items-start gap-3 2xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-3">
-          <DocumentSection title="Adauga produse transfer">
+          <DocumentSection title="Linii transfer" description="Adaugi produsele mutate intre gestiuni si completezi rapid cantitatea si pretul.">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="text-sm text-slate-500">Scrie minim 2 litere, alege produsul si completeaza cantitatea si pretul.</div>
               {!isPosted ? (
@@ -806,130 +806,137 @@ export default function TransferPage() {
         </div>
 
         <div className="space-y-3">
-          <DocumentSection title="Detalii document">
+          <DocumentSection title="Detalii transfer" description="Completezi documentul, transportul si datele RO e-Transport in blocuri separate.">
             <div className="space-y-3">
-              <DocumentField label="Gestiune predatoare" hint={fromLocation?.code ? `Cod: ${fromLocation.code}` : undefined}>
-                <div className="relative">
-                  <Warehouse className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                  <select
-                    value={header.fromLocationId}
-                    onChange={(e) => {
-                      const nextId = e.target.value
-                      setHeader((prev) => ({
-                        ...prev,
-                        fromLocationId: nextId,
-                        toLocationId: prev.toLocationId === nextId ? "" : prev.toLocationId,
-                      }))
-                      setActiveLocationId(nextId)
-                    }}
-                    className={`${documentInputClass} pl-9`}
-                    disabled={isPosted}
-                  >
-                    <option value="">Selecteaza</option>
-                    {locations.map((location) => (
-                      <option key={location.id} value={location.id}>{location.name}</option>
-                    ))}
-                  </select>
+              <DocumentSection title="Document si traseu">
+                <div className="space-y-3">
+                  <DocumentField label="Gestiuni">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <div className="relative">
+                        <Warehouse className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <select
+                          value={header.fromLocationId}
+                          onChange={(e) => {
+                            const nextId = e.target.value
+                            setHeader((prev) => ({
+                              ...prev,
+                              fromLocationId: nextId,
+                              toLocationId: prev.toLocationId === nextId ? "" : prev.toLocationId,
+                            }))
+                            setActiveLocationId(nextId)
+                          }}
+                          className={`${documentInputClass} pl-9`}
+                          disabled={isPosted}
+                        >
+                          <option value="">Gestiune predatoare</option>
+                          {locations.map((location) => (
+                            <option key={location.id} value={location.id}>{location.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="relative">
+                        <ArrowRightLeft className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <select
+                          value={header.toLocationId}
+                          onChange={(e) => setHeader((prev) => ({ ...prev, toLocationId: e.target.value }))}
+                          className={`${documentInputClass} pl-9`}
+                          disabled={isPosted}
+                        >
+                          <option value="">Gestiune primitoare</option>
+                          {toLocationOptions.map((location) => (
+                            <option key={location.id} value={location.id}>{location.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </DocumentField>
+
+                  <DocumentField label="Date document">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <input value={header.docNo} className={documentInputClass} readOnly style={readonlyInputStyle} />
+                      <input
+                        type="date"
+                        value={header.docDate}
+                        onChange={(e) => setHeader((prev) => ({ ...prev, docDate: e.target.value }))}
+                        className={documentInputClass}
+                        disabled={isPosted}
+                      />
+                    </div>
+                  </DocumentField>
+
+                  <DocumentField label="Motiv / observatii">
+                    <div className="space-y-2">
+                      <input
+                        value={header.reason}
+                        onChange={(e) => setHeader((prev) => ({ ...prev, reason: e.target.value }))}
+                        className={documentInputClass}
+                        disabled={isPosted}
+                        placeholder="Motiv transfer"
+                      />
+                      <textarea
+                        value={header.note}
+                        onChange={(e) => setHeader((prev) => ({ ...prev, note: e.target.value }))}
+                        rows={3}
+                        className={documentTextareaClass}
+                        disabled={isPosted}
+                        placeholder="Observatii"
+                      />
+                    </div>
+                  </DocumentField>
                 </div>
-              </DocumentField>
+              </DocumentSection>
 
-              <DocumentField label="Gestiune primitoare">
-                <div className="relative">
-                  <ArrowRightLeft className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                  <select
-                    value={header.toLocationId}
-                    onChange={(e) => setHeader((prev) => ({ ...prev, toLocationId: e.target.value }))}
-                    className={`${documentInputClass} pl-9`}
-                    disabled={isPosted}
-                  >
-                    <option value="">Selecteaza</option>
-                    {toLocationOptions.map((location) => (
-                      <option key={location.id} value={location.id}>{location.name}</option>
-                    ))}
-                  </select>
+              <DocumentSection title="Transport">
+                <div className="space-y-3">
+                  <DocumentField label="Mijloc transport">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      <div className="relative">
+                        <Truck className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <input
+                          value={header.vehicle}
+                          onChange={(e) => setHeader((prev) => ({ ...prev, vehicle: e.target.value }))}
+                          className={`${documentInputClass} pl-9`}
+                          disabled={isPosted}
+                          placeholder="Mijloc transport"
+                        />
+                      </div>
+                      <input
+                        value={header.vehicleNo}
+                        onChange={(e) => setHeader((prev) => ({ ...prev, vehicleNo: e.target.value }))}
+                        className={documentInputClass}
+                        disabled={isPosted}
+                        placeholder="Numar vehicul"
+                      />
+                      <input
+                        value={header.trailerNo}
+                        onChange={(e) => setHeader((prev) => ({ ...prev, trailerNo: e.target.value }))}
+                        className={documentInputClass}
+                        disabled={isPosted}
+                        placeholder="Numar remorca"
+                      />
+                    </div>
+                  </DocumentField>
+
+                  <DocumentField label="Delegat / CI">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <input
+                        value={header.delegateName}
+                        onChange={(e) => setHeader((prev) => ({ ...prev, delegateName: e.target.value }))}
+                        className={documentInputClass}
+                        disabled={isPosted}
+                        placeholder="Delegat"
+                      />
+                      <input
+                        value={header.delegateCi}
+                        onChange={(e) => setHeader((prev) => ({ ...prev, delegateCi: e.target.value }))}
+                        className={documentInputClass}
+                        disabled={isPosted}
+                        placeholder="CI / BI"
+                      />
+                    </div>
+                  </DocumentField>
                 </div>
-              </DocumentField>
-
-              <DocumentField label="Nr. document">
-                <input value={header.docNo} className={documentInputClass} readOnly style={readonlyInputStyle} />
-              </DocumentField>
-
-              <DocumentField label="Data document">
-                <input
-                  type="date"
-                  value={header.docDate}
-                  onChange={(e) => setHeader((prev) => ({ ...prev, docDate: e.target.value }))}
-                  className={documentInputClass}
-                  disabled={isPosted}
-                />
-              </DocumentField>
-
-              <DocumentField label="Motiv transfer">
-                <input
-                  value={header.reason}
-                  onChange={(e) => setHeader((prev) => ({ ...prev, reason: e.target.value }))}
-                  className={documentInputClass}
-                  disabled={isPosted}
-                />
-              </DocumentField>
-
-              <DocumentField label="Observatii">
-                <textarea
-                  value={header.note}
-                  onChange={(e) => setHeader((prev) => ({ ...prev, note: e.target.value }))}
-                  rows={4}
-                  className={documentTextareaClass}
-                  disabled={isPosted}
-                />
-              </DocumentField>
-
-              <DocumentField label="Delegat / CI">
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <input
-                    value={header.delegateName}
-                    onChange={(e) => setHeader((prev) => ({ ...prev, delegateName: e.target.value }))}
-                    className={documentInputClass}
-                    disabled={isPosted}
-                    placeholder="Delegat"
-                  />
-                  <input
-                    value={header.delegateCi}
-                    onChange={(e) => setHeader((prev) => ({ ...prev, delegateCi: e.target.value }))}
-                    className={documentInputClass}
-                    disabled={isPosted}
-                    placeholder="CI / BI"
-                  />
-                </div>
-              </DocumentField>
-
-              <DocumentField label="Transport">
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <div className="relative">
-                    <Truck className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                    <input
-                      value={header.vehicle}
-                      onChange={(e) => setHeader((prev) => ({ ...prev, vehicle: e.target.value }))}
-                      className={`${documentInputClass} pl-9`}
-                      disabled={isPosted}
-                      placeholder="Mijloc transport"
-                    />
-                  </div>
-                  <input
-                    value={header.vehicleNo}
-                    onChange={(e) => setHeader((prev) => ({ ...prev, vehicleNo: e.target.value }))}
-                    className={documentInputClass}
-                    disabled={isPosted}
-                    placeholder="Nr. auto"
-                  />
-                  <input
-                    value={header.trailerNo}
-                    onChange={(e) => setHeader((prev) => ({ ...prev, trailerNo: e.target.value }))}
-                    className={documentInputClass}
-                    disabled={isPosted}
-                    placeholder="Nr. remorca"
-                  />
-                </div>
-              </DocumentField>
+              </DocumentSection>
 
               <DocumentSection title="RO e-Transport" description="Completezi datele de notificare si generezi XML-ul local pentru transport.">
                 <div className="grid grid-cols-1 gap-3">

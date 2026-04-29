@@ -2220,13 +2220,13 @@ export default function Documente() {
                       <td className="px-3 py-2.5 text-slate-600">{formatRon(doc.totalValue || 0)}</td>
                       <td className="px-3 py-2.5">
                         <div className="flex justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => navigate(`/transfer/edit?id=${doc.id}`)}
-                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                          <a
+                            href={`/transfer/edit?id=${doc.id}`}
+                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-[#17324D] transition hover:bg-[#F4F7FB]"
                           >
-                            Edit
-                          </button>
+                            Deschide
+                            <ArrowRight size={16} />
+                          </a>
                           <button
                             type="button"
                             onClick={() => openTransferPdf(doc.id)}
