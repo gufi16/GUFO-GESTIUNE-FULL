@@ -73,6 +73,22 @@ export function validateTransferForETransport(doc: any) {
     issues.push({ severity: "error", field: "vehicleNo", message: "Completeaza numarul auto." })
   }
 
+  if (normalizeText(doc?.eTransportStartScope) === "PTF" && !normalizeText(doc?.eTransportStartBorderPoint)) {
+    issues.push({ severity: "error", field: "eTransportStartBorderPoint", message: "Selecteaza punctul de frontiera pentru start." })
+  }
+
+  if (normalizeText(doc?.eTransportEndScope) === "PTF" && !normalizeText(doc?.eTransportEndBorderPoint)) {
+    issues.push({ severity: "error", field: "eTransportEndBorderPoint", message: "Selecteaza punctul de frontiera pentru final." })
+  }
+
+  if (normalizeText(doc?.eTransportStartScope) === "ADR" && !normalizeText(doc?.eTransportStartAddress || buildLocationText(doc?.fromLocation))) {
+    issues.push({ severity: "error", field: "eTransportStartAddress", message: "Completeaza adresa de start a traseului." })
+  }
+
+  if (normalizeText(doc?.eTransportEndScope) === "ADR" && !normalizeText(doc?.eTransportEndAddress || buildLocationText(doc?.toLocation))) {
+    issues.push({ severity: "error", field: "eTransportEndAddress", message: "Completeaza adresa finala a traseului." })
+  }
+
   if (toNumber(doc?.eTransportVehicleMaxMassKg) < 2500) {
     issues.push({
       severity: "warning",
@@ -120,6 +136,12 @@ export function generateTransferETransportXml(doc: any) {
   }, 0)
   const totalValueRon = items.reduce((sum: number, item: any) => sum + toNumber(item?.lineValue), 0)
   const startText = formatDateTimeLocal(doc?.eTransportDeclaredStart)
+  const loadingAddress = normalizeText(doc?.eTransportStartScope) === "PTF"
+    ? normalizeText(doc?.eTransportStartBorderPoint)
+    : normalizeText(doc?.eTransportStartAddress || buildLocationText(doc?.fromLocation))
+  const unloadingAddress = normalizeText(doc?.eTransportEndScope) === "PTF"
+    ? normalizeText(doc?.eTransportEndBorderPoint)
+    : normalizeText(doc?.eTransportEndAddress || buildLocationText(doc?.toLocation))
 
   const linesXml = items
     .map((item: any, index: number) => {
@@ -163,13 +185,13 @@ export function generateTransferETransportXml(doc: any) {
     <Scope>${xmlEscape(doc?.eTransportStartScope || "")}</Scope>
     <Code>${xmlEscape(doc?.fromLocation?.code || "")}</Code>
     <Name>${xmlEscape(doc?.fromLocation?.name || "")}</Name>
-    <Address>${xmlEscape(buildLocationText(doc?.fromLocation))}</Address>
+    <Address>${xmlEscape(loadingAddress)}</Address>
   </LoadingPlace>
   <UnloadingPlace>
     <Scope>${xmlEscape(doc?.eTransportEndScope || "")}</Scope>
     <Code>${xmlEscape(doc?.toLocation?.code || "")}</Code>
     <Name>${xmlEscape(doc?.toLocation?.name || "")}</Name>
-    <Address>${xmlEscape(buildLocationText(doc?.toLocation))}</Address>
+    <Address>${xmlEscape(unloadingAddress)}</Address>
   </UnloadingPlace>
   <Summary>
     <Candidate>${doc?.eTransportCandidate ? "true" : "false"}</Candidate>

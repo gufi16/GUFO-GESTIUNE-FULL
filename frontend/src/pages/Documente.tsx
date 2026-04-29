@@ -2202,11 +2202,11 @@ export default function Documente() {
               <tbody className="divide-y divide-slate-200">
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-slate-500">Se incarca transferurile...</td>
+                    <td colSpan={9} className="px-4 py-8 text-center text-slate-500">Se incarca transferurile...</td>
                   </tr>
                 ) : filteredTransferDocs.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-slate-500">Nu exista transferuri in intervalul selectat.</td>
+                    <td colSpan={9} className="px-4 py-8 text-center text-slate-500">Nu exista transferuri in intervalul selectat.</td>
                   </tr>
                 ) : (
                   filteredTransferDocs.map((doc) => (
@@ -2220,13 +2220,14 @@ export default function Documente() {
                       <td className="px-3 py-2.5 text-slate-600">{formatRon(doc.totalValue || 0)}</td>
                       <td className="px-3 py-2.5">
                         <div className="flex justify-end gap-2">
-                          <a
-                            href={`/transfer/edit?id=${doc.id}`}
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/transfer/edit?id=${doc.id}`)}
                             className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-[#17324D] transition hover:bg-[#F4F7FB]"
                           >
                             Deschide
                             <ArrowRight size={16} />
-                          </a>
+                          </button>
                           <button
                             type="button"
                             onClick={() => openTransferPdf(doc.id)}

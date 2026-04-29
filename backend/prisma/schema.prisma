@@ -1227,6 +1227,10 @@ model TransferDoc {
   eTransportInternalRef String?
   eTransportStartScope String?
   eTransportEndScope String?
+  eTransportStartAddress String?
+  eTransportEndAddress String?
+  eTransportStartBorderPoint String?
+  eTransportEndBorderPoint String?
   eTransportCandidate Boolean      @default(false)
   eTransportRequired  Boolean      @default(false)
   eTransportDeclaredStart DateTime?

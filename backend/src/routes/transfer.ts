@@ -93,6 +93,10 @@ function serializeTransferDoc(doc: any) {
   return {
     ...doc,
     eTransportVehicleMaxMassKg: toNumber(doc.eTransportVehicleMaxMassKg || 0),
+    eTransportStartAddress: String(doc.eTransportStartAddress || ""),
+    eTransportEndAddress: String(doc.eTransportEndAddress || ""),
+    eTransportStartBorderPoint: String(doc.eTransportStartBorderPoint || ""),
+    eTransportEndBorderPoint: String(doc.eTransportEndBorderPoint || ""),
     totalQty: toNumber(doc.totalQty),
     totalValue: toNumber(doc.totalValue),
     items
@@ -364,6 +368,10 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
   const eTransportInternalRef = String(header?.eTransportInternalRef || "").trim()
   const eTransportStartScope = String(header?.eTransportStartScope || "").trim()
   const eTransportEndScope = String(header?.eTransportEndScope || "").trim()
+  const eTransportStartAddress = String(header?.eTransportStartAddress || "").trim()
+  const eTransportEndAddress = String(header?.eTransportEndAddress || "").trim()
+  const eTransportStartBorderPoint = String(header?.eTransportStartBorderPoint || "").trim()
+  const eTransportEndBorderPoint = String(header?.eTransportEndBorderPoint || "").trim()
   const eTransportDeclaredStartRaw = String(header?.eTransportDeclaredStart || "").trim()
   const eTransportVehicleMaxMassKg = Math.max(0, toNumber(header?.eTransportVehicleMaxMassKg || 0))
   const eTransportOrganizer = String(header?.eTransportOrganizer || "").trim()
@@ -442,6 +450,10 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
           eTransportInternalRef: eTransportInternalRef || null,
           eTransportStartScope: eTransportStartScope || null,
           eTransportEndScope: eTransportEndScope || null,
+          eTransportStartAddress: eTransportStartAddress || null,
+          eTransportEndAddress: eTransportEndAddress || null,
+          eTransportStartBorderPoint: eTransportStartBorderPoint || null,
+          eTransportEndBorderPoint: eTransportEndBorderPoint || null,
           senderName: header?.senderName ? String(header.senderName).trim() : null,
           receiverName: header?.receiverName ? String(header.receiverName).trim() : null,
           approvedBy: header?.approvedBy ? String(header.approvedBy).trim() : null,
@@ -502,6 +514,10 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
           eTransportInternalRef: eTransportInternalRef || null,
           eTransportStartScope: eTransportStartScope || null,
           eTransportEndScope: eTransportEndScope || null,
+          eTransportStartAddress: eTransportStartAddress || null,
+          eTransportEndAddress: eTransportEndAddress || null,
+          eTransportStartBorderPoint: eTransportStartBorderPoint || null,
+          eTransportEndBorderPoint: eTransportEndBorderPoint || null,
           senderName: header?.senderName ? String(header.senderName).trim() : null,
           receiverName: header?.receiverName ? String(header.receiverName).trim() : null,
           approvedBy: header?.approvedBy ? String(header.approvedBy).trim() : null,

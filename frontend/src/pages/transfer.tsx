@@ -1,6 +1,7 @@
 ﻿import { useEffect, useMemo, useState } from "react"
 import { ArrowLeft, ArrowRightLeft, FileOutput, Plus, Search, Trash2, Truck, Warehouse } from "lucide-react"
 import PageHeader from "../components/PageHeader"
+import { useNavigate } from "react-router-dom"
 import {
   DocumentField,
   DocumentMetric,
@@ -51,6 +52,11 @@ type CompanyLookupResult = {
   postalCode?: string
 }
 
+type ActiveCompany = {
+  name?: string
+  cui?: string
+}
+
 const ETRANSPORT_OPERATION_OPTIONS = [
   { value: "AIC", label: "AIC - Ach. intracomunitara" },
   { value: "LIH", label: "LIH - Lohn (UE) - intrare" },
@@ -68,6 +74,43 @@ const ETRANSPORT_OPERATION_OPTIONS = [
 const ETRANSPORT_SCOPE_OPTIONS = [
   { value: "ADR", label: "ADR - Traseul incepe / se finalizeaza intr-un loc de pe teritoriul national" },
   { value: "PTF", label: "PTF - Punct rutier de trecere a frontierei" },
+] as const
+
+const ETRANSPORT_BORDER_POINTS = [
+  "Albita",
+  "Bechet",
+  "Bors",
+  "Bors 2 - A3",
+  "Calafat",
+  "Calarasi (Chiciu)",
+  "Carei",
+  "Cenad",
+  "Constanta Sud Agigea",
+  "Corabia",
+  "Episcopia Bihor",
+  "Galati Giurgiulesti",
+  "Giurgiu",
+  "Halmeu",
+  "Jimbolia",
+  "Naidas",
+  "Nadlac",
+  "Nadlac 2 - A1",
+  "Negru Voda",
+  "Oncesti",
+  "Ostrov",
+  "Petea",
+  "Portile de Fier 1",
+  "Sculeni",
+  "Siret",
+  "Stanca Costesti",
+  "Stamora Moravita",
+  "Turnu Magurele",
+  "Urziceni",
+  "Valea lui Mihai",
+  "Vama Veche",
+  "Vladimirescu",
+  "Varsand",
+  "Zimnicea",
 ] as const
 
 type TransferLine = {
@@ -118,6 +161,14 @@ function formatUomOption(uom?: { code?: string | null; standardCode?: string | n
   return fallbackName || "-"
 }
 
+function buildLocationLabel(location?: LocationOption | null) {
+  if (!location) return ""
+  return [location.name, location.address, location.city, location.county]
+    .map((part) => String(part || "").trim())
+    .filter(Boolean)
+    .join(", ")
+}
+
 function parsePositive(value: any) {
   const normalized = String(value ?? "").replace(",", ".").trim()
   const parsed = Number(normalized)
@@ -125,11 +176,13 @@ function parsePositive(value: any) {
 }
 
 export default function TransferPage() {
+  const navigate = useNavigate()
   const token = getToken() || ""
   const transferId = getTransferIdFromUrl()
 
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [products, setProducts] = useState<ProductOption[]>([])
+  const [activeCompany, setActiveCompany] = useState<ActiveCompany | null>(null)
   const [numbering, setNumbering] = useState<NumberingPayload["previews"] | null>(null)
   const [loadingMeta, setLoadingMeta] = useState(false)
   const [loadingDoc, setLoadingDoc] = useState(false)
@@ -159,6 +212,10 @@ export default function TransferPage() {
     eTransportInternalRef: "",
     eTransportStartScope: "ADR",
     eTransportEndScope: "ADR",
+    eTransportStartAddress: "",
+    eTransportEndAddress: "",
+    eTransportStartBorderPoint: "",
+    eTransportEndBorderPoint: "",
     senderName: "",
     receiverName: "",
     approvedBy: "",
@@ -228,18 +285,24 @@ export default function TransferPage() {
       setLocations(nextLocations)
       setProducts(nextProducts)
       setNumbering(numberingData?.previews || null)
-      const activeCompany = companyData?.company || null
+      const nextActiveCompany = companyData?.company || null
+      setActiveCompany(nextActiveCompany)
 
       if (!transferId) {
         const activeLocationId = getActiveLocationId()
         const fallbackFrom = nextLocations.find((location) => location.id === activeLocationId)?.id || nextLocations[0]?.id || ""
+        const fallbackFromLocation = nextLocations.find((location) => location.id === fallbackFrom) || null
+        const fallbackToLocation =
+          nextLocations.find((location) => location.id !== fallbackFrom) || null
 
         setHeader((prev) => ({
           ...prev,
           fromLocationId: prev.fromLocationId || fallbackFrom,
           docNo: prev.docNo || getPreviewValue(numberingData?.previews, "transfer"),
-          eTransportOrganizer: prev.eTransportOrganizer || String(activeCompany?.name || "").trim(),
+          eTransportOrganizer: prev.eTransportOrganizer || String(nextActiveCompany?.name || "").trim(),
           eTransportPartnerCountry: prev.eTransportPartnerCountry || "RO",
+          eTransportStartAddress: prev.eTransportStartAddress || buildLocationLabel(fallbackFromLocation),
+          eTransportEndAddress: prev.eTransportEndAddress || buildLocationLabel(fallbackToLocation),
           toLocationId:
             prev.toLocationId && prev.toLocationId !== (prev.fromLocationId || fallbackFrom)
               ? prev.toLocationId
@@ -297,6 +360,10 @@ export default function TransferPage() {
         eTransportInternalRef: doc.eTransportInternalRef || "",
         eTransportStartScope: doc.eTransportStartScope || "ADR",
         eTransportEndScope: doc.eTransportEndScope || "ADR",
+        eTransportStartAddress: doc.eTransportStartAddress || buildLocationLabel(doc.fromLocation),
+        eTransportEndAddress: doc.eTransportEndAddress || buildLocationLabel(doc.toLocation),
+        eTransportStartBorderPoint: doc.eTransportStartBorderPoint || "",
+        eTransportEndBorderPoint: doc.eTransportEndBorderPoint || "",
         senderName: doc.senderName || "",
         receiverName: doc.receiverName || "",
         approvedBy: doc.approvedBy || "",
@@ -443,7 +510,10 @@ export default function TransferPage() {
 
   const isPosted = status === "POSTED"
   const fromLocation = locations.find((location) => location.id === header.fromLocationId)
+  const toLocation = locations.find((location) => location.id === header.toLocationId)
   const toLocationOptions = locations.filter((location) => location.id !== header.fromLocationId)
+  const startScopeIsBorder = header.eTransportStartScope === "PTF"
+  const endScopeIsBorder = header.eTransportEndScope === "PTF"
 
   async function saveDoc(postNow = false) {
     if (!token) {
@@ -521,7 +591,7 @@ export default function TransferPage() {
       }
 
       if (!transferId && data.doc?.id) {
-        window.location.href = `/transfer/edit?id=${data.doc.id}`
+        navigate(`/transfer/edit?id=${data.doc.id}`)
         return
       }
 
@@ -670,10 +740,10 @@ export default function TransferPage() {
       ) : null}
 
       <div className="flex flex-wrap gap-2">
-        <a href="/transfer" className={documentButtonSecondaryClass}>
+        <button type="button" onClick={() => navigate("/transfer")} className={documentButtonSecondaryClass}>
           <ArrowLeft size={16} className="mr-2" />
           Inapoi la lista
-        </a>
+        </button>
         <button type="button" className={documentButtonSecondaryClass} onClick={exportPdf} disabled={!transferId || loadingDoc}>
           <FileOutput size={16} className="mr-2" />
           PDF
@@ -690,15 +760,14 @@ export default function TransferPage() {
 
       <div className="flex flex-col gap-3">
         <div className="space-y-3 order-2">
-          <DocumentSection title="Linii transfer" description="Adaugi produsele mutate intre gestiuni si completezi rapid cantitatea si pretul.">
+          <DocumentSection title="Linii transfer" actions={!isPosted ? (
+            <button type="button" className={documentButtonPrimaryClass} onClick={addLine}>
+              <Plus size={16} className="mr-2" />
+              Adauga linie
+            </button>
+          ) : null}>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-sm text-slate-500">Scrie minim 2 litere, alege produsul si completeaza cantitatea si pretul.</div>
-              {!isPosted ? (
-                <button type="button" className={documentButtonPrimaryClass} onClick={addLine}>
-                  <Plus size={16} className="mr-2" />
-                  Adauga linie
-                </button>
-              ) : null}
+              <div className="text-sm text-slate-500">Scrie minim 2 litere, alege produsul si completeaza repede cantitatea si pretul.</div>
             </div>
 
             <div>
@@ -708,7 +777,7 @@ export default function TransferPage() {
                   const lineValue = parsePositive(line.qty) * Math.max(0, Number(line.unitPrice || 0))
 
                   return (
-                    <div key={line.id} className="rounded-[14px] border border-slate-200 bg-white px-3 py-2.5">
+                    <div key={line.id} className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2.5">
                       <div className="mb-2 flex items-center justify-between gap-2">
                         <div className="text-sm font-semibold text-slate-800">Pozitia {index + 1}</div>
                         {!isPosted ? (
@@ -719,19 +788,19 @@ export default function TransferPage() {
                         ) : null}
                       </div>
 
-                      <div className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1.8fr)_110px_120px_120px_120px] lg:items-start">
-                        <div className="min-w-0">
+                      <div className="grid grid-cols-1 gap-2 xl:grid-cols-[minmax(0,1.8fr)_120px_110px_120px_150px]">
+                        <div className="relative min-w-0">
                           <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Produs</div>
                           <input
                             value={line.search}
-                            onChange={(e) => setLineValue(line.id, { search: e.target.value, productId: "" })}
+                            onChange={(e) => setLineValue(line.id, { search: e.target.value, productId: "", sku: "", uomCode: "" })}
                             className={documentInputClass}
                             disabled={isPosted}
-                            placeholder="Scrie 2-3 litere"
+                            placeholder="Scrie minim 2 litere"
                           />
 
                           {line.search.trim().length >= 2 && !line.productId && !isPosted ? (
-                            <div className="mt-2 rounded-[14px] border border-slate-200 bg-white p-2 shadow-sm">
+                            <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-64 overflow-auto rounded-[14px] border border-slate-200 bg-white p-2 shadow-xl">
                               {matches.length ? (
                                 <div className="space-y-1.5">
                                   {matches.map((product) => (
@@ -777,14 +846,16 @@ export default function TransferPage() {
 
                         <div>
                           <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Pret / Total</div>
-                          <input
-                            value={line.unitPrice}
-                            onChange={(e) => setLineValue(line.id, { unitPrice: e.target.value })}
-                            className={documentInputClass}
-                            disabled={isPosted}
-                          />
-                          <div className="mt-2 rounded-[12px] bg-white px-3 py-2 text-sm font-semibold text-slate-900">
-                            {formatNumber(lineValue)} RON
+                          <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                            <input
+                              value={line.unitPrice}
+                              onChange={(e) => setLineValue(line.id, { unitPrice: e.target.value })}
+                              className={documentInputClass}
+                              disabled={isPosted}
+                            />
+                            <div className="inline-flex items-center rounded-[10px] border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900">
+                              {formatNumber(lineValue)}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -806,9 +877,9 @@ export default function TransferPage() {
         </div>
 
         <div className="space-y-3 order-1">
-          <DocumentSection title="Detalii transfer" description="Completezi documentul, transportul si datele RO e-Transport in blocuri separate.">
+          <DocumentSection title="Detalii transfer">
             <div className="space-y-3">
-              <DocumentSection title="Document si traseu">
+              <DocumentSection title="Document">
                 <div className="space-y-3">
                   <DocumentField label="Gestiuni">
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -818,10 +889,12 @@ export default function TransferPage() {
                           value={header.fromLocationId}
                           onChange={(e) => {
                             const nextId = e.target.value
+                            const nextLocation = locations.find((location) => location.id === nextId) || null
                             setHeader((prev) => ({
                               ...prev,
                               fromLocationId: nextId,
                               toLocationId: prev.toLocationId === nextId ? "" : prev.toLocationId,
+                              eTransportStartAddress: prev.eTransportStartScope === "ADR" ? buildLocationLabel(nextLocation) : prev.eTransportStartAddress,
                             }))
                             setActiveLocationId(nextId)
                           }}
@@ -838,7 +911,15 @@ export default function TransferPage() {
                         <ArrowRightLeft className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                         <select
                           value={header.toLocationId}
-                          onChange={(e) => setHeader((prev) => ({ ...prev, toLocationId: e.target.value }))}
+                          onChange={(e) => {
+                            const nextId = e.target.value
+                            const nextLocation = locations.find((location) => location.id === nextId) || null
+                            setHeader((prev) => ({
+                              ...prev,
+                              toLocationId: nextId,
+                              eTransportEndAddress: prev.eTransportEndScope === "ADR" ? buildLocationLabel(nextLocation) : prev.eTransportEndAddress,
+                            }))
+                          }}
                           className={`${documentInputClass} pl-9`}
                           disabled={isPosted}
                         >
@@ -886,59 +967,7 @@ export default function TransferPage() {
                 </div>
               </DocumentSection>
 
-              <DocumentSection title="Transport">
-                <div className="space-y-3">
-                  <DocumentField label="Mijloc transport">
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                      <div className="relative">
-                        <Truck className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                        <input
-                          value={header.vehicle}
-                          onChange={(e) => setHeader((prev) => ({ ...prev, vehicle: e.target.value }))}
-                          className={`${documentInputClass} pl-9`}
-                          disabled={isPosted}
-                          placeholder="Mijloc transport"
-                        />
-                      </div>
-                      <input
-                        value={header.vehicleNo}
-                        onChange={(e) => setHeader((prev) => ({ ...prev, vehicleNo: e.target.value }))}
-                        className={documentInputClass}
-                        disabled={isPosted}
-                        placeholder="Numar vehicul"
-                      />
-                      <input
-                        value={header.trailerNo}
-                        onChange={(e) => setHeader((prev) => ({ ...prev, trailerNo: e.target.value }))}
-                        className={documentInputClass}
-                        disabled={isPosted}
-                        placeholder="Numar remorca"
-                      />
-                    </div>
-                  </DocumentField>
-
-                  <DocumentField label="Delegat / CI">
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <input
-                        value={header.delegateName}
-                        onChange={(e) => setHeader((prev) => ({ ...prev, delegateName: e.target.value }))}
-                        className={documentInputClass}
-                        disabled={isPosted}
-                        placeholder="Delegat"
-                      />
-                      <input
-                        value={header.delegateCi}
-                        onChange={(e) => setHeader((prev) => ({ ...prev, delegateCi: e.target.value }))}
-                        className={documentInputClass}
-                        disabled={isPosted}
-                        placeholder="CI / BI"
-                      />
-                    </div>
-                  </DocumentField>
-                </div>
-              </DocumentSection>
-
-              <DocumentSection title="RO e-Transport" description="Completezi datele de notificare si generezi XML-ul local pentru transport.">
+              <DocumentSection title="RO e-Transport">
                 <div className="grid grid-cols-1 gap-3">
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                     <DocumentMetric title="Candidat" value={header.eTransportCandidate ? "Da" : "Nu"} tone={header.eTransportCandidate ? "amber" : "slate"} />
@@ -947,6 +976,18 @@ export default function TransferPage() {
                   </div>
 
                   <DocumentMetric title="Greutate bruta" value={`${formatNumber(eTransportSummary.totalGrossWeightKg)} kg`} tone="blue" />
+
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <DocumentField label="Tara organizator">
+                      <input value="Romania" readOnly className={documentInputClass} style={readonlyInputStyle} />
+                    </DocumentField>
+                    <DocumentField label="Cod organizator">
+                      <input value={String(activeCompany?.cui || "")} readOnly className={documentInputClass} style={readonlyInputStyle} />
+                    </DocumentField>
+                    <DocumentField label="Denumire organizator">
+                      <input value={header.eTransportOrganizer} readOnly className={documentInputClass} style={readonlyInputStyle} />
+                    </DocumentField>
+                  </div>
 
                   <DocumentField label="Generalitati">
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -971,23 +1012,16 @@ export default function TransferPage() {
                   </DocumentField>
 
                   <DocumentField label="Partener">
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[120px_minmax(0,1fr)_170px]">
-                      <input
-                        value={header.eTransportPartnerCountry}
-                        onChange={(e) => setHeader((prev) => ({ ...prev, eTransportPartnerCountry: e.target.value.toUpperCase() }))}
-                        className={documentInputClass}
-                        disabled={isPosted}
-                        placeholder="Tara"
-                      />
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_170px]">
                       <input
                         value={header.eTransportPartnerCui}
-                        onChange={(e) => setHeader((prev) => ({ ...prev, eTransportPartnerCui: e.target.value }))}
+                        onChange={(e) => setHeader((prev) => ({ ...prev, eTransportPartnerCui: e.target.value.replace(/\D/g, "") }))}
                         onBlur={() => {
                           if (header.eTransportPartnerCui.trim()) lookupPartnerByCui()
                         }}
                         className={documentInputClass}
                         disabled={isPosted || partnerLookupBusy}
-                        placeholder="CUI partener"
+                        placeholder="Scrie CUI-ul"
                       />
                       <button type="button" className={documentButtonSecondaryClass} onClick={lookupPartnerByCui} disabled={isPosted || partnerLookupBusy}>
                         {partnerLookupBusy ? "Se cauta..." : "Cauta CUI"}
@@ -995,9 +1029,9 @@ export default function TransferPage() {
                     </div>
                     <input
                       value={header.eTransportPartnerName}
-                      onChange={(e) => setHeader((prev) => ({ ...prev, eTransportPartnerName: e.target.value }))}
                       className={`${documentInputClass} mt-2`}
-                      disabled={isPosted}
+                      readOnly
+                      style={readonlyInputStyle}
                       placeholder="Denumire partener"
                     />
                   </DocumentField>
@@ -1013,58 +1047,120 @@ export default function TransferPage() {
                   </DocumentField>
 
                   <DocumentField label="Locuri start / final traseu">
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <select
-                        value={header.eTransportStartScope}
-                        onChange={(e) => setHeader((prev) => ({ ...prev, eTransportStartScope: e.target.value }))}
-                        className={documentInputClass}
-                        disabled={isPosted}
-                      >
-                        {ETRANSPORT_SCOPE_OPTIONS.map((option) => (
-                          <option key={`start-${option.value}`} value={option.value}>{option.label}</option>
-                        ))}
-                      </select>
-                      <select
-                        value={header.eTransportEndScope}
-                        onChange={(e) => setHeader((prev) => ({ ...prev, eTransportEndScope: e.target.value }))}
-                        className={documentInputClass}
-                        disabled={isPosted}
-                      >
-                        {ETRANSPORT_SCOPE_OPTIONS.map((option) => (
-                          <option key={`end-${option.value}`} value={option.value}>{option.label}</option>
-                        ))}
-                      </select>
+                    <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+                      <div className="space-y-2">
+                        <select
+                          value={header.eTransportStartScope}
+                          onChange={(e) =>
+                            setHeader((prev) => ({
+                              ...prev,
+                              eTransportStartScope: e.target.value,
+                              eTransportStartAddress: e.target.value === "ADR" ? (prev.eTransportStartAddress || buildLocationLabel(fromLocation)) : "",
+                            }))
+                          }
+                          className={documentInputClass}
+                          disabled={isPosted}
+                        >
+                          {ETRANSPORT_SCOPE_OPTIONS.map((option) => (
+                            <option key={`start-${option.value}`} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
+                        {startScopeIsBorder ? (
+                          <select
+                            value={header.eTransportStartBorderPoint}
+                            onChange={(e) => setHeader((prev) => ({ ...prev, eTransportStartBorderPoint: e.target.value }))}
+                            className={documentInputClass}
+                            disabled={isPosted}
+                          >
+                            <option value="">Alege punctul de frontiera</option>
+                            {ETRANSPORT_BORDER_POINTS.map((point) => (
+                              <option key={`start-point-${point}`} value={point}>{point}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <textarea
+                            value={header.eTransportStartAddress}
+                            onChange={(e) => setHeader((prev) => ({ ...prev, eTransportStartAddress: e.target.value }))}
+                            rows={3}
+                            className={documentTextareaClass}
+                            disabled={isPosted}
+                            placeholder="Adresa de start"
+                          />
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        <select
+                          value={header.eTransportEndScope}
+                          onChange={(e) =>
+                            setHeader((prev) => ({
+                              ...prev,
+                              eTransportEndScope: e.target.value,
+                              eTransportEndAddress: e.target.value === "ADR" ? (prev.eTransportEndAddress || buildLocationLabel(toLocation)) : "",
+                            }))
+                          }
+                          className={documentInputClass}
+                          disabled={isPosted}
+                        >
+                          {ETRANSPORT_SCOPE_OPTIONS.map((option) => (
+                            <option key={`end-${option.value}`} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
+                        {endScopeIsBorder ? (
+                          <select
+                            value={header.eTransportEndBorderPoint}
+                            onChange={(e) => setHeader((prev) => ({ ...prev, eTransportEndBorderPoint: e.target.value }))}
+                            className={documentInputClass}
+                            disabled={isPosted}
+                          >
+                            <option value="">Alege punctul de frontiera</option>
+                            {ETRANSPORT_BORDER_POINTS.map((point) => (
+                              <option key={`end-point-${point}`} value={point}>{point}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <textarea
+                            value={header.eTransportEndAddress}
+                            onChange={(e) => setHeader((prev) => ({ ...prev, eTransportEndAddress: e.target.value }))}
+                            rows={3}
+                            className={documentTextareaClass}
+                            disabled={isPosted}
+                            placeholder="Adresa finala"
+                          />
+                        )}
+                      </div>
                     </div>
                   </DocumentField>
 
-                  <DocumentField label="Organizator / transportator">
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <DocumentField label="Numar vehicul">
                       <input
-                        value={header.eTransportOrganizer}
-                        onChange={(e) => setHeader((prev) => ({ ...prev, eTransportOrganizer: e.target.value }))}
+                        value={header.vehicleNo}
+                        onChange={(e) => setHeader((prev) => ({ ...prev, vehicleNo: e.target.value.toUpperCase() }))}
                         className={documentInputClass}
                         disabled={isPosted}
-                        placeholder="Organizator transport"
+                        placeholder="Ex: CJ13POS"
                       />
+                    </DocumentField>
+                    <DocumentField label="Numar remorca">
                       <input
-                        value={header.eTransportOperator}
-                        onChange={(e) => setHeader((prev) => ({ ...prev, eTransportOperator: e.target.value }))}
+                        value={header.trailerNo}
+                        onChange={(e) => setHeader((prev) => ({ ...prev, trailerNo: e.target.value.toUpperCase() }))}
                         className={documentInputClass}
                         disabled={isPosted}
-                        placeholder="Operator / transportator"
+                        placeholder="Optional"
                       />
-                    </div>
-                  </DocumentField>
-
-                  <DocumentField label="Masa maxima vehicul (kg)">
-                    <input
-                      value={header.eTransportVehicleMaxMassKg}
-                      onChange={(e) => setHeader((prev) => ({ ...prev, eTransportVehicleMaxMassKg: e.target.value }))}
-                      className={documentInputClass}
-                      disabled={isPosted}
-                      placeholder="Ex: 3500"
-                    />
-                  </DocumentField>
+                    </DocumentField>
+                    <DocumentField label="Masa maxima vehicul (kg)">
+                      <input
+                        value={header.eTransportVehicleMaxMassKg}
+                        onChange={(e) => setHeader((prev) => ({ ...prev, eTransportVehicleMaxMassKg: e.target.value }))}
+                        className={documentInputClass}
+                        disabled={isPosted}
+                        placeholder="Ex: 3500"
+                      />
+                    </DocumentField>
+                  </div>
 
                   <DocumentField label="Coduri ANAF">
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -1077,32 +1173,6 @@ export default function TransferPage() {
                   {header.eTransportErrorText ? <InlineNotice tone="info">{header.eTransportErrorText}</InlineNotice> : null}
                 </div>
               </DocumentSection>
-
-              <DocumentField label="Semnaturi">
-                <div className="grid grid-cols-1 gap-2">
-                  <input
-                    value={header.senderName}
-                    onChange={(e) => setHeader((prev) => ({ ...prev, senderName: e.target.value }))}
-                    className={documentInputClass}
-                    disabled={isPosted}
-                    placeholder="Am predat"
-                  />
-                  <input
-                    value={header.receiverName}
-                    onChange={(e) => setHeader((prev) => ({ ...prev, receiverName: e.target.value }))}
-                    className={documentInputClass}
-                    disabled={isPosted}
-                    placeholder="Am primit"
-                  />
-                  <input
-                    value={header.approvedBy}
-                    onChange={(e) => setHeader((prev) => ({ ...prev, approvedBy: e.target.value }))}
-                    className={documentInputClass}
-                    disabled={isPosted}
-                    placeholder="Avizat"
-                  />
-                </div>
-              </DocumentField>
 
               <div className="grid grid-cols-1 gap-2">
                 {!isPosted ? (
