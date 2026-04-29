@@ -55,6 +55,31 @@ function addFileIfExists(zip: AdmZip, absolutePath: string, zipPath: string) {
   return true
 }
 
+function collectUploadFilesRecursively(rootDir: string, currentDir = rootDir) {
+  const files: string[] = []
+  if (!fs.existsSync(currentDir)) return files
+
+  for (const entry of fs.readdirSync(currentDir, { withFileTypes: true })) {
+    const absolutePath = path.join(currentDir, entry.name)
+    const relativeToUploads = path.relative(rootDir, absolutePath).replace(/\\/g, "/")
+
+    if (relativeToUploads === "tenant-backups" || relativeToUploads.startsWith("tenant-backups/")) {
+      continue
+    }
+
+    if (entry.isDirectory()) {
+      files.push(...collectUploadFilesRecursively(rootDir, absolutePath))
+      continue
+    }
+
+    if (entry.isFile()) {
+      files.push(relativeToUploads)
+    }
+  }
+
+  return files
+}
+
 export async function buildTenantExportZip(tenantId: string) {
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
@@ -240,6 +265,9 @@ export async function buildTenantExportZip(tenantId: string) {
   }
 
   const uploadPaths = new Set<string>()
+  for (const relativeToUploads of collectUploadFilesRecursively(uploadsDir)) {
+    uploadPaths.add(path.posix.join("uploads", relativeToUploads))
+  }
   for (const category of tenant.categories || []) {
     const relative = normalizeUploadRelativePath(category?.imageUrl)
     if (relative) uploadPaths.add(relative)
