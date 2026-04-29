@@ -688,8 +688,8 @@ export default function TransferPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-3 2xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-3">
+      <div className="flex flex-col gap-3">
+        <div className="space-y-3 order-2">
           <DocumentSection title="Linii transfer" description="Adaugi produsele mutate intre gestiuni si completezi rapid cantitatea si pretul.">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="text-sm text-slate-500">Scrie minim 2 litere, alege produsul si completeaza cantitatea si pretul.</div>
@@ -805,7 +805,7 @@ export default function TransferPage() {
           </DocumentSection>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-3 order-1">
           <DocumentSection title="Detalii transfer" description="Completezi documentul, transportul si datele RO e-Transport in blocuri separate.">
             <div className="space-y-3">
               <DocumentSection title="Document si traseu">
