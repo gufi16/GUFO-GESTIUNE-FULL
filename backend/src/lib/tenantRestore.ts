@@ -1,5 +1,6 @@
 // @ts-nocheck
 import fs from "fs"
+import path from "path"
 import AdmZip from "adm-zip"
 import { prisma } from "./prisma"
 
@@ -48,12 +49,42 @@ function readTenantPayloadFromZip(filePath: string) {
   return JSON.parse(zip.readAsText(entry))
 }
 
+function readTenantZip(filePath: string) {
+  if (!fs.existsSync(filePath)) {
+    throw new Error("Fisierul backup nu mai exista pe server.")
+  }
+  return new AdmZip(filePath)
+}
+
+function restoreUploadFilesFromZip(zip: AdmZip) {
+  const uploadsRoot = path.resolve(process.cwd(), "uploads")
+  let restoredFiles = 0
+
+  for (const entry of zip.getEntries()) {
+    if (entry.isDirectory) continue
+    if (!entry.entryName.startsWith("files/uploads/")) continue
+
+    const relativePath = entry.entryName.replace(/^files\//, "")
+    const absolutePath = path.resolve(process.cwd(), ...relativePath.split("/"))
+    if (!absolutePath.startsWith(uploadsRoot)) {
+      continue
+    }
+
+    fs.mkdirSync(path.dirname(absolutePath), { recursive: true })
+    fs.writeFileSync(absolutePath, entry.getData())
+    restoredFiles += 1
+  }
+
+  return restoredFiles
+}
+
 async function createManyIfAny(model: any, data: any[]) {
   if (!Array.isArray(data) || !data.length) return
   await model.createMany({ data })
 }
 
 export async function restoreTenantBackupFromFile(tenantId: string, filePath: string) {
+  const zip = readTenantZip(filePath)
   const payload = readTenantPayloadFromZip(filePath)
 
   if (String(payload?.tenantId || "") !== String(tenantId)) {
@@ -322,6 +353,8 @@ export async function restoreTenantBackupFromFile(tenantId: string, filePath: st
   await createManyIfAny(prisma.stockMove, stockMoves)
   await createManyIfAny(prisma.userCompanyAccess, userCompanyAccesses)
 
+  const restoredUploadFiles = restoreUploadFilesFromZip(zip)
+
   return {
     companies: companies.length,
     users: users.length,
@@ -355,5 +388,6 @@ export async function restoreTenantBackupFromFile(tenantId: string, filePath: st
     kitchenTickets: kitchenTickets.length,
     marketplaceMappings: marketplaceMappings.length,
     salesInvoices: salesInvoices.length,
+    restoredUploadFiles,
   }
 }

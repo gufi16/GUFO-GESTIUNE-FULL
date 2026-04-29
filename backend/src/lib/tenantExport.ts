@@ -3,6 +3,7 @@ import fs from "fs"
 import path from "path"
 import AdmZip from "adm-zip"
 import { prisma } from "./prisma"
+import { getEfacturaCertPath } from "./efacturaCertificate"
 
 const uploadsDir = path.join(process.cwd(), "uploads")
 const backupsDir = path.join(uploadsDir, "tenant-backups")
@@ -236,6 +237,13 @@ export async function buildTenantExportZip(tenantId: string) {
   for (const product of tenant.products || []) {
     const relative = normalizeUploadRelativePath(product?.imageUrl)
     if (relative) uploadPaths.add(relative)
+  }
+  for (const company of tenant.companies || []) {
+    if (!company?.efacturaCertFilename) continue
+    const certAbsolute = getEfacturaCertPath(tenantId, company.efacturaCertFilename)
+    if (fs.existsSync(certAbsolute)) {
+      uploadPaths.add(path.relative(process.cwd(), certAbsolute).replace(/\\/g, "/"))
+    }
   }
 
   for (const relative of uploadPaths) {
