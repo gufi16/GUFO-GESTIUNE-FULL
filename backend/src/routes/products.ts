@@ -174,7 +174,32 @@ async function getNextAvailableProductSkuValue(
 
 function normalizeImageUrl(value: any) {
   const text = String(value || "").trim()
-  return text || null
+  if (!text) return null
+
+  const lowered = text.toLowerCase()
+  if (
+    lowered === "null" ||
+    lowered === "undefined" ||
+    lowered === "false" ||
+    lowered === "about:blank" ||
+    lowered === "n/a" ||
+    lowered === "na" ||
+    lowered === "-"
+  ) {
+    return null
+  }
+
+  return text
+}
+
+function mergeImageUrl(requestedImageUrl: string | null, currentImageUrl: string | null) {
+  if (!requestedImageUrl) return currentImageUrl || null
+
+  if (/^https?:\/\//i.test(requestedImageUrl) || requestedImageUrl.startsWith("/uploads/")) {
+    return requestedImageUrl
+  }
+
+  return currentImageUrl || null
 }
 
 function buildPublicBaseUrl(req: any) {
@@ -600,7 +625,7 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
     return res.status(404).json({ ok: false, error: "Produsul nu exista." })
   }
 
-  const imageUrl = requestedImageUrl || current.imageUrl
+  const imageUrl = mergeImageUrl(requestedImageUrl, current.imageUrl)
 
   productionMode = normalizeProductionMode(
     req.body?.productionMode ?? current.productionMode ?? "AUTO"

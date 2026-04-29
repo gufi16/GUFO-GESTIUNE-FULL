@@ -150,7 +150,32 @@ router.use(requireAuth)
 
 function normalizeImageUrl(value: any) {
   const text = String(value || "").trim()
-  return text || null
+  if (!text) return null
+
+  const lowered = text.toLowerCase()
+  if (
+    lowered === "null" ||
+    lowered === "undefined" ||
+    lowered === "false" ||
+    lowered === "about:blank" ||
+    lowered === "n/a" ||
+    lowered === "na" ||
+    lowered === "-"
+  ) {
+    return null
+  }
+
+  return text
+}
+
+function mergeImageUrl(requestedImageUrl: string | null, currentImageUrl: string | null) {
+  if (!requestedImageUrl) return currentImageUrl || null
+
+  if (/^https?:\/\//i.test(requestedImageUrl) || requestedImageUrl.startsWith("/uploads/")) {
+    return requestedImageUrl
+  }
+
+  return currentImageUrl || null
 }
 
 function toNullableText(value: any) {
@@ -1274,7 +1299,7 @@ router.put("/api/v1/meta/categories/:id", async (req: AuthedRequest, res) => {
       })
     }
 
-    const imageUrl = requestedImageUrl || current.imageUrl
+    const imageUrl = mergeImageUrl(requestedImageUrl, current.imageUrl)
 
     if (departmentId) {
       const dep = await prisma.department.findFirst({

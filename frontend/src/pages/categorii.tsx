@@ -28,6 +28,17 @@ type Category = {
   department?: Department | null
 }
 
+function normalizeHostedImageUrl(value: any) {
+  const text = String(value || "").trim()
+  if (!text) return ""
+
+  if (typeof window !== "undefined" && window.location.protocol === "https:" && text.startsWith("http://")) {
+    return text.replace(/^http:\/\//i, "https://")
+  }
+
+  return text
+}
+
 export default function CategoriiPage() {
   const token = getToken() || ""
 
@@ -126,7 +137,7 @@ export default function CategoriiPage() {
         return
       }
 
-      setImageUrl(data.imageUrl || "")
+      setImageUrl(normalizeHostedImageUrl(data.imageUrl || ""))
       setPreviewImageFailed(false)
       setMessage("Imaginea categoriei a fost incarcata.")
     } catch {
@@ -170,7 +181,7 @@ export default function CategoriiPage() {
         body: JSON.stringify({
           name: name.trim(),
           departmentId,
-          imageUrl: imageUrl.trim() || null,
+          imageUrl: normalizeHostedImageUrl(imageUrl.trim()) || null,
           isVisibleInPos,
           ...(isEdit ? { isActive: true } : {}),
         }),
@@ -197,7 +208,7 @@ export default function CategoriiPage() {
     setEditingId(item.id)
     setName(item.name || "")
     setDepartmentId(item.departmentId || "")
-    setImageUrl(item.imageUrl || "")
+    setImageUrl(normalizeHostedImageUrl(item.imageUrl || ""))
     setIsVisibleInPos(item.isVisibleInPos !== false)
     setError("")
     setMessage("")
@@ -281,18 +292,6 @@ export default function CategoriiPage() {
                   {uploading ? "Se incarca..." : "Incarca poza categorie"}
                 </label>
 
-                {imageUrl.trim() ? (
-                  <button
-                    type="button"
-                    className={documentButtonDangerClass}
-                    onClick={() => {
-                      setImageUrl("")
-                      setPreviewImageFailed(false)
-                    }}
-                  >
-                    Sterge poza
-                  </button>
-                ) : null}
               </div>
             ) : (
               <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-4 text-sm text-slate-500">
@@ -313,7 +312,7 @@ export default function CategoriiPage() {
               />
             ) : (
               <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
-                Categoria nu are inca poza.
+                Categoria nu are inca poza. Pentru schimbare, incarca alta imagine.
               </div>
             )}
           </div>

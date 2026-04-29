@@ -1370,18 +1370,6 @@ function getDefaultVat(list = vatRates) {
                       </span>
                     </label>
 
-                    {form.imageUrl.trim() ? (
-                      <button
-                        type="button"
-                        style={btnDangerSoft}
-                        onClick={() => {
-                          setForm((prev) => ({ ...prev, imageUrl: "" }))
-                          setPreviewImageFailed(false)
-                        }}
-                      >
-                        Sterge
-                      </button>
-                    ) : null}
                   </div>
 
                   {form.imageUrl.trim() && !previewImageFailed ? (
