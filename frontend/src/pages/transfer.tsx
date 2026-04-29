@@ -802,7 +802,7 @@ export default function TransferPage() {
         ) : null}
       </div>
 
-      <div className="space-y-3">
+      <div className="flex flex-col gap-3">
         <div className="space-y-3 order-2">
           <DocumentSection title="Linii transfer" actions={!isPosted ? (
             <button type="button" className={documentButtonPrimaryClass} onClick={addLine}>
@@ -821,8 +821,8 @@ export default function TransferPage() {
                   const lineValue = parsePositive(line.qty) * Math.max(0, Number(line.unitPrice || 0))
 
                   return (
-                    <div key={line.id} className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2.5">
-                      <div className="mb-2 flex items-center justify-between gap-2">
+                    <div key={line.id} className="rounded-[12px] border border-slate-200 bg-white px-3 py-2">
+                      <div className="mb-1.5 flex items-center justify-between gap-2">
                         <div className="text-sm font-semibold text-slate-800">Pozitia {index + 1}</div>
                         {!isPosted ? (
                           <button type="button" onClick={() => removeLine(line.id)} className={documentButtonDangerClass}>
@@ -832,7 +832,7 @@ export default function TransferPage() {
                         ) : null}
                       </div>
 
-                      <div className="grid grid-cols-1 gap-2 xl:grid-cols-[minmax(0,1.8fr)_120px_110px_120px_150px]">
+                      <div className="grid grid-cols-1 gap-2 xl:grid-cols-[minmax(0,1.9fr)_110px_90px_100px_150px]">
                         <div className="relative min-w-0">
                           <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Produs</div>
                           <input
