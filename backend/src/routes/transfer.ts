@@ -10,6 +10,7 @@ import { reserveNextNumber } from "../lib/numbering"
 import { resolveTenantCompany } from "../lib/companyResolver"
 import { drawDocumentHero, drawInfoCards, drawSimpleTable, drawSignatureRow, drawTotalsBox, ensurePdfPage, pdfDate, pdfFmt, pdfText, registerPdfFonts } from "../lib/professionalPdf"
 import { requireRequestCompanyId } from "../lib/companyScope"
+import { generateTransferETransportXml, validateTransferForETransport } from "../lib/etransport"
 
 const router = Router()
 router.use(requireAuth)
@@ -238,6 +239,112 @@ router.get("/api/v1/transfers/:id", async (req: AuthedRequest, res) => {
   }
 
   res.json({ ok: true, doc: serializeTransferDoc(doc) })
+})
+
+router.post("/api/v1/transfers/:id/etransport/prepare", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
+  const id = String(req.params.id)
+
+  const doc = await prisma.transferDoc.findFirst({
+    where: { id, tenantId, companyId },
+    include: {
+      fromLocation: true,
+      toLocation: true,
+      items: {
+        include: {
+          product: {
+            include: {
+              uom: true,
+              vatRate: true,
+            },
+          },
+          uom: true,
+          vatRate: true,
+        },
+        orderBy: { createdAt: "asc" },
+      },
+    },
+  })
+
+  if (!doc) {
+    return res.status(404).json({ ok: false, error: "Transferul nu a fost gasit." })
+  }
+
+  const issues = validateTransferForETransport(doc)
+  const blockingIssues = issues.filter((issue) => issue.severity === "error")
+
+  if (blockingIssues.length) {
+    return res.status(400).json({
+      ok: false,
+      error: blockingIssues[0]?.message || "Transferul nu poate genera XML-ul RO e-Transport.",
+      issues,
+    })
+  }
+
+  const xmlText = generateTransferETransportXml(doc)
+  const nextStatus = doc.eTransportRequired ? "PREPARED" : "READY_TO_REVIEW"
+
+  const updated = await prisma.transferDoc.update({
+    where: { id: doc.id },
+    data: {
+      eTransportPreparedXml: xmlText,
+      eTransportStatus: nextStatus,
+      eTransportErrorText: issues.filter((issue) => issue.severity === "warning").map((issue) => issue.message).join("\n") || null,
+    },
+    include: {
+      fromLocation: true,
+      toLocation: true,
+      items: {
+        include: {
+          product: {
+            include: {
+              uom: true,
+              vatRate: true,
+            },
+          },
+          uom: true,
+          vatRate: true,
+        },
+        orderBy: { createdAt: "asc" },
+      },
+    },
+  })
+
+  return res.json({
+    ok: true,
+    doc: serializeTransferDoc(updated),
+    issues,
+    message: nextStatus === "PREPARED" ? "XML RO e-Transport generat." : "XML RO e-Transport generat pentru revizuire.",
+  })
+})
+
+router.get("/api/v1/transfers/:id/etransport/xml", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
+  const id = String(req.params.id)
+
+  const doc = await prisma.transferDoc.findFirst({
+    where: { id, tenantId, companyId },
+    select: {
+      id: true,
+      docNo: true,
+      eTransportPreparedXml: true,
+    },
+  })
+
+  if (!doc) {
+    return res.status(404).json({ ok: false, error: "Transferul nu a fost gasit." })
+  }
+
+  if (!doc.eTransportPreparedXml) {
+    return res.status(400).json({ ok: false, error: "Genereaza mai intai XML-ul RO e-Transport." })
+  }
+
+  const filename = safeFilePart(`ro-e-transport-${doc.docNo || doc.id}.xml`) || `ro-e-transport-${doc.id}.xml`
+  res.setHeader("Content-Type", "application/xml; charset=utf-8")
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`)
+  return res.send(doc.eTransportPreparedXml)
 })
 
 router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {

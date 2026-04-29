@@ -105,6 +105,7 @@ export default function TransferPage() {
   const [loadingMeta, setLoadingMeta] = useState(false)
   const [loadingDoc, setLoadingDoc] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [eTransportBusy, setETransportBusy] = useState(false)
   const [status, setStatus] = useState("DRAFT")
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
@@ -134,6 +135,7 @@ export default function TransferPage() {
     eTransportStatus: "",
     eTransportUploadIndex: "",
     eTransportDownloadId: "",
+    eTransportErrorText: "",
   })
 
   const [lines, setLines] = useState<TransferLine[]>([makeLine()])
@@ -262,6 +264,7 @@ export default function TransferPage() {
         eTransportStatus: doc.eTransportStatus || "",
         eTransportUploadIndex: doc.eTransportUploadIndex || "",
         eTransportDownloadId: doc.eTransportDownloadId || "",
+        eTransportErrorText: doc.eTransportErrorText || "",
       })
 
       const loadedLines = ensureArray(doc.items).map((item: any) => ({
@@ -501,6 +504,65 @@ export default function TransferPage() {
     await downloadPdfFile(res, `TRANSFER_${header.docNo || "document"}.pdf`)
   }
 
+  async function generateETransportXml() {
+    if (!transferId) {
+      setError("Salveaza mai intai transferul.")
+      return
+    }
+
+    setETransportBusy(true)
+    setError("")
+    setMessage("")
+
+    try {
+      const res = await fetch(`${API}/api/v1/transfers/${transferId}/etransport/prepare`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      const data = await res.json().catch(() => ({}))
+
+      if (res.status === 401) {
+        setError("Sesiunea a expirat. Intra din nou in cont si reincerca.")
+        return
+      }
+
+      if (!res.ok || !data.ok) {
+        setError(data.error || "Nu am putut genera XML-ul RO e-Transport.")
+        return
+      }
+
+      setMessage(data.message || "XML RO e-Transport generat.")
+      await loadDoc()
+    } catch {
+      setError("Nu am putut genera XML-ul RO e-Transport.")
+    } finally {
+      setETransportBusy(false)
+    }
+  }
+
+  async function downloadETransportXml() {
+    if (!transferId) {
+      setError("Salveaza mai intai transferul.")
+      return
+    }
+
+    setError("")
+    const res = await fetch(`${API}/api/v1/transfers/${transferId}/etransport/xml`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      setError(data.error || "Nu am putut descarca XML-ul RO e-Transport.")
+      return
+    }
+
+    await downloadPdfFile(res, `RO-e-Transport-${header.docNo || "document"}.xml`)
+  }
+
+  const eTransportPrepared = ["PREPARED", "READY_TO_REVIEW", "SENT", "ACCEPTED"].includes(header.eTransportStatus || "")
+
   return (
     <div className="w-full space-y-4">
       <PageHeader badge="document" title={!transferId ? "Transfer nou" : isPosted ? "Transfer postat" : "Editare transfer"} />
@@ -533,6 +595,14 @@ export default function TransferPage() {
         <button type="button" className={documentButtonSecondaryClass} onClick={exportPdf} disabled={!transferId || loadingDoc}>
           <FileOutput size={16} className="mr-2" />
           PDF
+        </button>
+        <button type="button" className={documentButtonSecondaryClass} onClick={generateETransportXml} disabled={!transferId || loadingDoc || eTransportBusy}>
+          <Truck size={16} className="mr-2" />
+          {eTransportBusy ? "Se genereaza..." : "Genereaza XML"}
+        </button>
+        <button type="button" className={documentButtonSecondaryClass} onClick={downloadETransportXml} disabled={!transferId || !eTransportPrepared || loadingDoc}>
+          <Truck size={16} className="mr-2" />
+          XML
         </button>
       </div>
 
@@ -783,9 +853,11 @@ export default function TransferPage() {
                 <div className="grid grid-cols-1 gap-3">
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                     <DocumentMetric title="Candidat" value={header.eTransportCandidate ? "Da" : "Nu"} tone={header.eTransportCandidate ? "amber" : "slate"} />
-                    <DocumentMetric title="Greutate bruta" value={`${formatNumber(eTransportSummary.totalGrossWeightKg)} kg`} tone="blue" />
+                    <DocumentMetric title="XML" value={eTransportPrepared ? "Generat" : "Negenerat"} tone={eTransportPrepared ? "emerald" : "slate"} />
                     <DocumentMetric title="Status UIT" value={header.eTransportStatus || "-"} tone="emerald" />
                   </div>
+
+                  <DocumentMetric title="Greutate bruta" value={`${formatNumber(eTransportSummary.totalGrossWeightKg)} kg`} tone="blue" />
 
                   <DocumentField label="Start transport">
                     <input
@@ -833,6 +905,8 @@ export default function TransferPage() {
                       <input value={header.eTransportDownloadId} readOnly className={documentInputClass} style={readonlyInputStyle} placeholder="ID descarcare" />
                     </div>
                   </DocumentField>
+
+                  {header.eTransportErrorText ? <InlineNotice tone="info">{header.eTransportErrorText}</InlineNotice> : null}
                 </div>
               </DocumentSection>
 
