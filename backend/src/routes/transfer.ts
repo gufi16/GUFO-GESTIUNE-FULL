@@ -61,6 +61,7 @@ function serializeTransferDoc(doc: any) {
       price: toNumber(product.price),
       costPrice: toNumber(product.costPrice),
       purchaseFactor: toNumber(product.purchaseFactor || 1),
+      grossWeightKg: toNumber(product.grossWeightKg || 0),
       sgrValue: toNumber(product.sgrValue),
       vatRate: product.vatRate
         ? {
@@ -90,9 +91,37 @@ function serializeTransferDoc(doc: any) {
 
   return {
     ...doc,
+    eTransportVehicleMaxMassKg: toNumber(doc.eTransportVehicleMaxMassKg || 0),
     totalQty: toNumber(doc.totalQty),
     totalValue: toNumber(doc.totalValue),
     items
+  }
+}
+
+function buildETransportSummary(items: any[], vehicleMaxMassKg: number) {
+  const normalizedItems = Array.isArray(items) ? items : []
+  const totalGrossWeightKg = normalizedItems.reduce((sum, item) => {
+    const qty = toNumber(item?.qty)
+    const grossWeightKg = toNumber(item?.product?.grossWeightKg || 0)
+    return sum + qty * grossWeightKg
+  }, 0)
+  const totalValueRon = normalizedItems.reduce((sum, item) => {
+    return sum + toNumber(item?.lineValue)
+  }, 0)
+  const hasFiscalRiskProducts = normalizedItems.some((item) => item?.product?.isFiscalRiskProduct === true)
+  const thresholdsReached = totalGrossWeightKg > 500 || totalValueRon > 10000
+  const vehicleEligible = vehicleMaxMassKg >= 2500
+  const candidate = hasFiscalRiskProducts && thresholdsReached
+  const required = candidate && vehicleEligible
+
+  return {
+    candidate,
+    required,
+    hasFiscalRiskProducts,
+    thresholdsReached,
+    vehicleEligible,
+    totalGrossWeightKg,
+    totalValueRon,
   }
 }
 
@@ -220,6 +249,12 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
   const toLocationId = String(header?.toLocationId || "").trim()
   const rawDocNo = String(header?.docNo || "").trim()
   const docDate = String(header?.docDate || "").trim()
+  const trailerNo = String(header?.trailerNo || "").trim()
+  const eTransportDeclaredStartRaw = String(header?.eTransportDeclaredStart || "").trim()
+  const eTransportVehicleMaxMassKg = Math.max(0, toNumber(header?.eTransportVehicleMaxMassKg || 0))
+  const eTransportOrganizer = String(header?.eTransportOrganizer || "").trim()
+  const eTransportOperator = String(header?.eTransportOperator || "").trim()
+  const requestedETransportRequired = Boolean(header?.eTransportRequired)
 
   if (!fromLocationId) {
     return res.status(400).json({ ok: false, error: "Locatia predatoare este obligatorie." })
@@ -285,9 +320,15 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
           delegateCi: header?.delegateCi ? String(header.delegateCi).trim() : null,
           vehicle: header?.vehicle ? String(header.vehicle).trim() : null,
           vehicleNo: header?.vehicleNo ? String(header.vehicleNo).trim() : null,
+          trailerNo: trailerNo || null,
           senderName: header?.senderName ? String(header.senderName).trim() : null,
           receiverName: header?.receiverName ? String(header.receiverName).trim() : null,
           approvedBy: header?.approvedBy ? String(header.approvedBy).trim() : null,
+          eTransportDeclaredStart: eTransportDeclaredStartRaw ? new Date(eTransportDeclaredStartRaw) : null,
+          eTransportVehicleMaxMassKg:
+            eTransportVehicleMaxMassKg > 0 ? new Prisma.Decimal(eTransportVehicleMaxMassKg) : null,
+          eTransportOrganizer: eTransportOrganizer || null,
+          eTransportOperator: eTransportOperator || null,
           status: "DRAFT"
         }
       })
@@ -332,9 +373,15 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
           delegateCi: header?.delegateCi ? String(header.delegateCi).trim() : null,
           vehicle: header?.vehicle ? String(header.vehicle).trim() : null,
           vehicleNo: header?.vehicleNo ? String(header.vehicleNo).trim() : null,
+          trailerNo: trailerNo || null,
           senderName: header?.senderName ? String(header.senderName).trim() : null,
           receiverName: header?.receiverName ? String(header.receiverName).trim() : null,
-          approvedBy: header?.approvedBy ? String(header.approvedBy).trim() : null
+          approvedBy: header?.approvedBy ? String(header.approvedBy).trim() : null,
+          eTransportDeclaredStart: eTransportDeclaredStartRaw ? new Date(eTransportDeclaredStartRaw) : null,
+          eTransportVehicleMaxMassKg:
+            eTransportVehicleMaxMassKg > 0 ? new Prisma.Decimal(eTransportVehicleMaxMassKg) : null,
+          eTransportOrganizer: eTransportOrganizer || null,
+          eTransportOperator: eTransportOperator || null
         }
       })
     }
@@ -393,6 +440,30 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
     }
 
     await recalcTransfer(transferId)
+
+    const transferWithProducts = await prisma.transferDoc.findFirst({
+      where: { id: transferId, tenantId, companyId },
+      include: {
+        items: {
+          include: {
+            product: true,
+          },
+        },
+      },
+    })
+
+    const eTransport = buildETransportSummary(
+      transferWithProducts?.items || [],
+      eTransportVehicleMaxMassKg
+    )
+
+    await prisma.transferDoc.update({
+      where: { id: transferId },
+      data: {
+        eTransportCandidate: eTransport.candidate,
+        eTransportRequired: eTransport.candidate ? requestedETransportRequired || eTransport.required : false,
+      },
+    })
 
     if (postNow === true) {
       await prisma.$transaction(async (tx) => {

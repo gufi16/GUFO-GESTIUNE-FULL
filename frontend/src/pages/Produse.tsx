@@ -10,6 +10,9 @@ type Product = {
   name: string
   imageUrl?: string | null
   class: string
+  ncCode?: string | null
+  isFiscalRiskProduct?: boolean
+  grossWeightKg?: number
   price: number
   costPrice?: number
   purchaseFactor?: number
@@ -55,11 +58,14 @@ type FormState = {
   purchaseFactor: string
   vatRateId: string
   categoryId: string
+  ncCode: string
+  grossWeightKg: string
   price: string
   costPrice: string
   isActive: boolean
   isVisibleInPos: boolean
   isSgr: boolean
+  isFiscalRiskProduct: boolean
   productionMode: "AUTO" | "MANUAL"
 }
 
@@ -121,11 +127,14 @@ const emptyForm: FormState = {
   purchaseFactor: "1",
   vatRateId: "",
   categoryId: "",
+  ncCode: "",
+  grossWeightKg: "0",
   price: "0",
   costPrice: "0",
   isActive: true,
   isVisibleInPos: true,
   isSgr: false,
+  isFiscalRiskProduct: false,
   productionMode: "AUTO"
 }
 
@@ -352,9 +361,12 @@ function getDefaultVat(list = vatRates) {
       purchaseUomId: defaultUom?.id || "",
       purchaseFactor: "1",
       vatRateId: isVatPayer ? defaultVat?.id || "" : "",
+      ncCode: "",
+      grossWeightKg: "0",
       isActive: true,
       isVisibleInPos: true,
       isSgr: false,
+      isFiscalRiskProduct: false,
       productionMode: "AUTO"
     })
     setError("")
@@ -375,11 +387,14 @@ function getDefaultVat(list = vatRates) {
       purchaseFactor: normalizeStrictPositiveString(item.purchaseFactor || 1, "1"),
       vatRateId: isVatPayer ? item.vatRate?.id || "" : "",
       categoryId: item.category?.id || "",
+      ncCode: item.ncCode || "",
+      grossWeightKg: normalizePositiveString(item.grossWeightKg || 0, "0"),
       price: normalizePositiveString(item.price || 0, "0"),
       costPrice: normalizePositiveString(item.costPrice || 0, "0"),
       isActive: item.isActive !== false,
       isVisibleInPos: item.isVisibleInPos !== false,
       isSgr: item.isSgr === true,
+      isFiscalRiskProduct: item.isFiscalRiskProduct === true,
       productionMode: item.productionMode === "MANUAL" ? "MANUAL" : "AUTO"
     })
     setError("")
@@ -464,6 +479,7 @@ function getDefaultVat(list = vatRates) {
     const normalizedFactor = isFinishedProduct
       ? 1
       : Math.max(0.000001, toNumberSafe(form.purchaseFactor || 1))
+    const normalizedGrossWeightKg = Math.max(0, toNumberSafe(form.grossWeightKg || 0))
     const normalizedPrice = Math.max(0, toNumberSafe(form.price || 0))
     const normalizedCost = Math.max(0, toNumberSafe(form.costPrice || 0))
 
@@ -494,11 +510,14 @@ function getDefaultVat(list = vatRates) {
           purchaseFactor: normalizedFactor,
           vatRateId: isVatPayer ? form.vatRateId : null,
           categoryId: form.categoryId || null,
+          ncCode: form.ncCode.trim().toUpperCase() || null,
+          grossWeightKg: normalizedGrossWeightKg,
           price: normalizedPrice,
           costPrice: normalizedCost,
           isActive: form.isActive,
           isVisibleInPos: form.isVisibleInPos,
           isSgr: form.isSgr,
+          isFiscalRiskProduct: form.isFiscalRiskProduct,
           productionMode: form.productionMode
         })
       })
@@ -1111,6 +1130,15 @@ function getDefaultVat(list = vatRates) {
                         style={{ ...input, background: "#f8fafc" }}
                       />
                     </Field>
+
+                    <Field label="Cod NC">
+                      <input
+                        value={form.ncCode}
+                        onChange={(e) => setForm((prev) => ({ ...prev, ncCode: e.target.value.toUpperCase() }))}
+                        style={input}
+                        placeholder="Ex: 22021000"
+                      />
+                    </Field>
                   </div>
                 </SectionCard>
 
@@ -1249,6 +1277,23 @@ function getDefaultVat(list = vatRates) {
                         Costul se introduce pe unitatea de baza, nu pe ambalaj.
                       </div>
                     </Field>
+
+                    <Field label="Greutate bruta / UM (kg)">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={form.grossWeightKg}
+                        onChange={(e) => setForm((prev) => ({ ...prev, grossWeightKg: e.target.value }))}
+                        onBlur={() =>
+                          setForm((prev) => ({
+                            ...prev,
+                            grossWeightKg: normalizePositiveString(prev.grossWeightKg, "0")
+                          }))
+                        }
+                        style={input}
+                      />
+                      <div style={fieldHint}>Se foloseste la pragurile automate pentru RO e-Transport.</div>
+                    </Field>
                   </div>
                 </SectionCard>
               </div>
@@ -1266,6 +1311,18 @@ function getDefaultVat(list = vatRates) {
                         <span>SGR</span>
                       </label>
                       <div style={checkHint}>SGR = 0.50 lei fara TVA.</div>
+                    </div>
+
+                    <div style={checkBlock}>
+                      <label style={checkLabel}>
+                        <input
+                          type="checkbox"
+                          checked={form.isFiscalRiskProduct}
+                          onChange={(e) => setForm((prev) => ({ ...prev, isFiscalRiskProduct: e.target.checked }))}
+                        />
+                        <span>Bun cu risc fiscal ridicat</span>
+                      </label>
+                      <div style={checkHint}>Activeaza verificarea automata pentru RO e-Transport pe documente.</div>
                     </div>
 
                     <div style={checkBlock}>

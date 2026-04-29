@@ -472,6 +472,11 @@ model Location {
   companyId String?
   name      String
   code      String
+  address   String?
+  city      String?
+  county    String?
+  country   String?  @default("RO")
+  postalCode String?
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -635,6 +640,9 @@ model Product {
   name     String
   imageUrl String?
   class    ProductClass @default(PRODUS_FIN)
+  ncCode   String?
+  isFiscalRiskProduct Boolean @default(false)
+  grossWeightKg Decimal @default(0)
 
   vatRateId      String
   uomId          String
@@ -1208,9 +1216,22 @@ model TransferDoc {
   delegateCi     String?
   vehicle        String?
   vehicleNo      String?
+  trailerNo      String?
   senderName     String?
   receiverName   String?
   approvedBy     String?
+  eTransportCandidate Boolean      @default(false)
+  eTransportRequired  Boolean      @default(false)
+  eTransportDeclaredStart DateTime?
+  eTransportVehicleMaxMassKg Decimal?
+  eTransportOrganizer String?
+  eTransportOperator  String?
+  eTransportUit       String?
+  eTransportStatus    String?
+  eTransportUploadIndex String?
+  eTransportDownloadId  String?
+  eTransportPreparedXml String?
+  eTransportErrorText   String?
   totalQty       Decimal        @default(0)
   totalValue     Decimal        @default(0)
   status         TransferStatus @default(DRAFT)

@@ -114,6 +114,7 @@ function serializeProduct(item: any) {
     price: toNumber(item.price),
     costPrice: toNumber(item.costPrice),
     purchaseFactor: toNumber(item.purchaseFactor || 1),
+    grossWeightKg: toNumber(item.grossWeightKg || 0),
     sgrValue: toNumber(item.sgrValue || 0),
     vatRate: item.vatRate
       ? {
@@ -288,8 +289,10 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
   const purchaseFactor = toNumber(req.body?.purchaseFactor || 1)
   const price = toNumber(req.body?.price || 0)
   const costPrice = toNumber(req.body?.costPrice || 0)
+  const grossWeightKg = Math.max(0, toNumber(req.body?.grossWeightKg || 0))
   const categoryIdRaw = String(req.body?.categoryId || "").trim()
   const categoryId = categoryIdRaw || null
+  const ncCode = toNullableText(req.body?.ncCode)?.toUpperCase() || null
   const requestedSku = String(req.body?.sku || "").trim()
   const classValue = String(req.body?.class || "MARFA").trim()
   const normalizedPurchaseUomId = classValue === "PRODUS_FIN" ? uomId : purchaseUomId
@@ -299,6 +302,8 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
   const requestedVisibleInPos =
     req.body?.isVisibleInPos === undefined ? true : Boolean(req.body?.isVisibleInPos)
   const requestedIsSgr = req.body?.isSgr === undefined ? false : Boolean(req.body?.isSgr)
+  const requestedIsFiscalRiskProduct =
+    req.body?.isFiscalRiskProduct === undefined ? false : Boolean(req.body?.isFiscalRiskProduct)
 
   if (!ALL_PRODUCT_CLASSES.includes(classValue)) {
     return res.status(400).json({ ok: false, error: "Clasificare produs invalida." })
@@ -463,6 +468,9 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
           purchaseFactor: normalizedPurchaseFactor,
           categoryId,
           departmentId: category?.departmentId || null,
+          ncCode,
+          isFiscalRiskProduct: requestedIsFiscalRiskProduct,
+          grossWeightKg,
           price: normalizedPrice,
           costPrice,
           isActive: forcedInactiveBecauseMissingRecipe ? false : requestedIsActive,
@@ -535,8 +543,10 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   const purchaseFactor = toNumber(req.body?.purchaseFactor || 1)
   const price = toNumber(req.body?.price || 0)
   const costPrice = toNumber(req.body?.costPrice || 0)
+  const grossWeightKg = Math.max(0, toNumber(req.body?.grossWeightKg || 0))
   const categoryIdRaw = String(req.body?.categoryId || "").trim()
   const categoryId = categoryIdRaw || null
+  const ncCode = toNullableText(req.body?.ncCode)?.toUpperCase() || null
   const classValue = String(req.body?.class || "MARFA").trim()
   const normalizedPurchaseUomId = classValue === "PRODUS_FIN" ? uomId : purchaseUomId
   const normalizedPurchaseFactor = classValue === "PRODUS_FIN" ? 1 : purchaseFactor
@@ -545,6 +555,8 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   const requestedVisibleInPos =
     req.body?.isVisibleInPos === undefined ? true : Boolean(req.body?.isVisibleInPos)
   const requestedIsSgr = req.body?.isSgr === undefined ? false : Boolean(req.body?.isSgr)
+  const requestedIsFiscalRiskProduct =
+    req.body?.isFiscalRiskProduct === undefined ? false : Boolean(req.body?.isFiscalRiskProduct)
 
   if (!ALL_PRODUCT_CLASSES.includes(classValue)) {
     return res.status(400).json({ ok: false, error: "Clasificare produs invalida." })
@@ -678,6 +690,9 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
           purchaseFactor: normalizedPurchaseFactor,
         categoryId,
         departmentId: category?.departmentId || null,
+        ncCode,
+        isFiscalRiskProduct: requestedIsFiscalRiskProduct,
+        grossWeightKg,
         price: normalizedPrice,
         costPrice,
         isActive: forcedInactiveBecauseMissingRecipe ? false : requestedIsActive,

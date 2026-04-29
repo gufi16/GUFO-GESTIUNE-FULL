@@ -153,6 +153,11 @@ function normalizeImageUrl(value: any) {
   return text || null
 }
 
+function toNullableText(value: any) {
+  const text = String(value || "").trim()
+  return text || null
+}
+
 function buildPublicImageUrl(req: any, folder: "products" | "categories", filename: string) {
   return `${req.protocol}://${req.get("host")}/uploads/${folder}/${filename}`
 }
@@ -229,6 +234,11 @@ router.post("/api/v1/meta/locations", async (req: AuthedRequest, res) => {
 
   const name = String(req.body?.name || "").trim()
   const code = String(req.body?.code || "").trim()
+  const address = toNullableText(req.body?.address)
+  const city = toNullableText(req.body?.city)
+  const county = toNullableText(req.body?.county)
+  const country = toNullableText(req.body?.country) || "RO"
+  const postalCode = toNullableText(req.body?.postalCode)
 
   if (!name) {
     return res.status(400).json({
@@ -268,6 +278,11 @@ router.post("/api/v1/meta/locations", async (req: AuthedRequest, res) => {
         companyId,
         name,
         code,
+        address,
+        city,
+        county,
+        country,
+        postalCode,
         isActive: true
       }
     })
@@ -288,6 +303,11 @@ router.put("/api/v1/meta/locations/:id", async (req: AuthedRequest, res) => {
 
   const name = String(req.body?.name || "").trim()
   const code = String(req.body?.code || "").trim()
+  const address = toNullableText(req.body?.address)
+  const city = toNullableText(req.body?.city)
+  const county = toNullableText(req.body?.county)
+  const country = toNullableText(req.body?.country) || "RO"
+  const postalCode = toNullableText(req.body?.postalCode)
   const isActive = Boolean(req.body?.isActive)
 
   if (!name) {
@@ -341,6 +361,11 @@ router.put("/api/v1/meta/locations/:id", async (req: AuthedRequest, res) => {
       data: {
         name,
         code,
+        address,
+        city,
+        county,
+        country,
+        postalCode,
         isActive
       }
     })

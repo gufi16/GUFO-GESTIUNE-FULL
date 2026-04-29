@@ -23,6 +23,11 @@ type LocationOption = {
   id: string
   name: string
   code?: string
+  address?: string | null
+  city?: string | null
+  county?: string | null
+  country?: string | null
+  postalCode?: string | null
 }
 
 type ProductOption = {
@@ -30,6 +35,9 @@ type ProductOption = {
   name: string
   sku?: string
   price?: number
+  ncCode?: string | null
+  isFiscalRiskProduct?: boolean
+  grossWeightKg?: number
   uom?: { code?: string; standardCode?: string | null; name?: string | null } | null
 }
 
@@ -112,9 +120,20 @@ export default function TransferPage() {
     delegateCi: "",
     vehicle: "",
     vehicleNo: "",
+    trailerNo: "",
     senderName: "",
     receiverName: "",
     approvedBy: "",
+    eTransportDeclaredStart: "",
+    eTransportVehicleMaxMassKg: "",
+    eTransportOrganizer: "",
+    eTransportOperator: "",
+    eTransportRequired: false,
+    eTransportCandidate: false,
+    eTransportUit: "",
+    eTransportStatus: "",
+    eTransportUploadIndex: "",
+    eTransportDownloadId: "",
   })
 
   const [lines, setLines] = useState<TransferLine[]>([makeLine()])
@@ -226,9 +245,23 @@ export default function TransferPage() {
         delegateCi: doc.delegateCi || "",
         vehicle: doc.vehicle || "",
         vehicleNo: doc.vehicleNo || "",
+        trailerNo: doc.trailerNo || "",
         senderName: doc.senderName || "",
         receiverName: doc.receiverName || "",
         approvedBy: doc.approvedBy || "",
+        eTransportDeclaredStart: doc.eTransportDeclaredStart ? String(doc.eTransportDeclaredStart).slice(0, 16) : "",
+        eTransportVehicleMaxMassKg:
+          doc.eTransportVehicleMaxMassKg || doc.eTransportVehicleMaxMassKg === 0
+            ? String(doc.eTransportVehicleMaxMassKg)
+            : "",
+        eTransportOrganizer: doc.eTransportOrganizer || "",
+        eTransportOperator: doc.eTransportOperator || "",
+        eTransportRequired: doc.eTransportRequired === true,
+        eTransportCandidate: doc.eTransportCandidate === true,
+        eTransportUit: doc.eTransportUit || "",
+        eTransportStatus: doc.eTransportStatus || "",
+        eTransportUploadIndex: doc.eTransportUploadIndex || "",
+        eTransportDownloadId: doc.eTransportDownloadId || "",
       })
 
       const loadedLines = ensureArray(doc.items).map((item: any) => ({
@@ -287,6 +320,45 @@ export default function TransferPage() {
 
   const validLines = useMemo(() => lines.filter((line) => line.productId && parsePositive(line.qty) > 0), [lines])
 
+  const eTransportSummary = useMemo(() => {
+    const selectedProducts = validLines
+      .map((line) => {
+        const product = products.find((item) => item.id === line.productId)
+        if (!product) return null
+        return {
+          qty: parsePositive(line.qty),
+          lineValue: parsePositive(line.qty) * Math.max(0, Number(line.unitPrice || 0)),
+          product,
+        }
+      })
+      .filter(Boolean) as Array<{
+      qty: number
+      lineValue: number
+      product: ProductOption
+    }>
+
+    const totalGrossWeightKg = selectedProducts.reduce((sum, line) => {
+      return sum + line.qty * Math.max(0, Number(line.product.grossWeightKg || 0))
+    }, 0)
+    const totalValueRon = selectedProducts.reduce((sum, line) => sum + line.lineValue, 0)
+    const hasFiscalRiskProducts = selectedProducts.some((line) => line.product.isFiscalRiskProduct === true)
+    const thresholdsReached = totalGrossWeightKg > 500 || totalValueRon > 10000
+    const vehicleMaxMassKg = parsePositive(header.eTransportVehicleMaxMassKg)
+    const vehicleEligible = vehicleMaxMassKg >= 2500
+    const candidate = hasFiscalRiskProducts && thresholdsReached
+    const required = candidate && vehicleEligible
+
+    return {
+      candidate,
+      required,
+      hasFiscalRiskProducts,
+      thresholdsReached,
+      vehicleEligible,
+      totalGrossWeightKg,
+      totalValueRon,
+    }
+  }, [validLines, products, header.eTransportVehicleMaxMassKg])
+
   const totals = useMemo(
     () =>
       validLines.reduce(
@@ -301,6 +373,21 @@ export default function TransferPage() {
       ),
     [validLines]
   )
+
+  useEffect(() => {
+    setHeader((prev) => {
+      const nextCandidate = eTransportSummary.candidate
+      const nextRequired = nextCandidate ? (prev.eTransportRequired || eTransportSummary.required) : false
+      if (prev.eTransportCandidate === nextCandidate && prev.eTransportRequired === nextRequired) {
+        return prev
+      }
+      return {
+        ...prev,
+        eTransportCandidate: nextCandidate,
+        eTransportRequired: nextRequired,
+      }
+    })
+  }, [eTransportSummary.candidate, eTransportSummary.required])
 
   const isPosted = status === "POSTED"
   const fromLocation = locations.find((location) => location.id === header.fromLocationId)
@@ -355,7 +442,11 @@ export default function TransferPage() {
         },
         body: JSON.stringify({
           id: transferId || null,
-          header,
+          header: {
+            ...header,
+            eTransportCandidate: eTransportSummary.candidate,
+            eTransportRequired: header.eTransportRequired || eTransportSummary.required,
+          },
           items: validLines.map((line) => ({
             productId: line.productId,
             qty: parsePositive(line.qty),
@@ -425,6 +516,14 @@ export default function TransferPage() {
         <DocumentMetric title="Cantitate totala" value={formatNumber(totals.totalQty)} tone="blue" />
         <DocumentMetric title="Valoare estimata" value={`${formatNumber(totals.totalValue)} RON`} tone="emerald" />
       </div>
+
+      {eTransportSummary.candidate ? (
+        <InlineNotice tone={eTransportSummary.required ? "success" : "info"}>
+          {eTransportSummary.required
+            ? "Transferul intra in zona RO e-Transport pe baza produselor, valorii/greutatii si vehiculului completat."
+            : "Transferul este candidat pentru RO e-Transport. Completeaza masa maxima a vehiculului si datele de transport pentru confirmare."}
+        </InlineNotice>
+      ) : null}
 
       <div className="flex flex-wrap gap-2">
         <a href="/transfer" className={documentButtonSecondaryClass}>
@@ -670,8 +769,72 @@ export default function TransferPage() {
                     disabled={isPosted}
                     placeholder="Nr. auto"
                   />
+                  <input
+                    value={header.trailerNo}
+                    onChange={(e) => setHeader((prev) => ({ ...prev, trailerNo: e.target.value }))}
+                    className={documentInputClass}
+                    disabled={isPosted}
+                    placeholder="Nr. remorca"
+                  />
                 </div>
               </DocumentField>
+
+              <DocumentSection title="RO e-Transport" description="Completam aici baza pentru raportarea transporturilor intre gestiuni.">
+                <div className="grid grid-cols-1 gap-3">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <DocumentMetric title="Candidat" value={header.eTransportCandidate ? "Da" : "Nu"} tone={header.eTransportCandidate ? "amber" : "slate"} />
+                    <DocumentMetric title="Greutate bruta" value={`${formatNumber(eTransportSummary.totalGrossWeightKg)} kg`} tone="blue" />
+                    <DocumentMetric title="Status UIT" value={header.eTransportStatus || "-"} tone="emerald" />
+                  </div>
+
+                  <DocumentField label="Start transport">
+                    <input
+                      type="datetime-local"
+                      value={header.eTransportDeclaredStart}
+                      onChange={(e) => setHeader((prev) => ({ ...prev, eTransportDeclaredStart: e.target.value }))}
+                      className={documentInputClass}
+                      disabled={isPosted}
+                    />
+                  </DocumentField>
+
+                  <DocumentField label="Organizator / transportator">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <input
+                        value={header.eTransportOrganizer}
+                        onChange={(e) => setHeader((prev) => ({ ...prev, eTransportOrganizer: e.target.value }))}
+                        className={documentInputClass}
+                        disabled={isPosted}
+                        placeholder="Organizator transport"
+                      />
+                      <input
+                        value={header.eTransportOperator}
+                        onChange={(e) => setHeader((prev) => ({ ...prev, eTransportOperator: e.target.value }))}
+                        className={documentInputClass}
+                        disabled={isPosted}
+                        placeholder="Operator / transportator"
+                      />
+                    </div>
+                  </DocumentField>
+
+                  <DocumentField label="Masa maxima vehicul (kg)">
+                    <input
+                      value={header.eTransportVehicleMaxMassKg}
+                      onChange={(e) => setHeader((prev) => ({ ...prev, eTransportVehicleMaxMassKg: e.target.value }))}
+                      className={documentInputClass}
+                      disabled={isPosted}
+                      placeholder="Ex: 3500"
+                    />
+                  </DocumentField>
+
+                  <DocumentField label="Coduri ANAF">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      <input value={header.eTransportUit} readOnly className={documentInputClass} style={readonlyInputStyle} placeholder="UIT" />
+                      <input value={header.eTransportUploadIndex} readOnly className={documentInputClass} style={readonlyInputStyle} placeholder="ID incarcare" />
+                      <input value={header.eTransportDownloadId} readOnly className={documentInputClass} style={readonlyInputStyle} placeholder="ID descarcare" />
+                    </div>
+                  </DocumentField>
+                </div>
+              </DocumentSection>
 
               <DocumentField label="Semnaturi">
                 <div className="grid grid-cols-1 gap-2">
