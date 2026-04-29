@@ -56,9 +56,17 @@ function readTenantZip(filePath: string) {
   return new AdmZip(filePath)
 }
 
-function restoreUploadFilesFromZip(zip: AdmZip) {
+function restoreUploadFilesFromZip(
+  zip: AdmZip,
+  options?: {
+    overwriteExisting?: boolean
+  },
+) {
   const uploadsRoot = path.resolve(process.cwd(), "uploads")
   let restoredFiles = 0
+  let skippedExistingFiles = 0
+
+  const overwriteExisting = options?.overwriteExisting !== false
 
   for (const entry of zip.getEntries()) {
     if (entry.isDirectory) continue
@@ -70,12 +78,20 @@ function restoreUploadFilesFromZip(zip: AdmZip) {
       continue
     }
 
+    if (!overwriteExisting && fs.existsSync(absolutePath)) {
+      skippedExistingFiles += 1
+      continue
+    }
+
     fs.mkdirSync(path.dirname(absolutePath), { recursive: true })
     fs.writeFileSync(absolutePath, entry.getData())
     restoredFiles += 1
   }
 
-  return restoredFiles
+  return {
+    restoredFiles,
+    skippedExistingFiles,
+  }
 }
 
 async function createManyIfAny(model: any, data: any[]) {
@@ -353,7 +369,7 @@ export async function restoreTenantBackupFromFile(tenantId: string, filePath: st
   await createManyIfAny(prisma.stockMove, stockMoves)
   await createManyIfAny(prisma.userCompanyAccess, userCompanyAccesses)
 
-  const restoredUploadFiles = restoreUploadFilesFromZip(zip)
+  const uploadRestore = restoreUploadFilesFromZip(zip, { overwriteExisting: true })
 
   return {
     companies: companies.length,
@@ -388,6 +404,23 @@ export async function restoreTenantBackupFromFile(tenantId: string, filePath: st
     kitchenTickets: kitchenTickets.length,
     marketplaceMappings: marketplaceMappings.length,
     salesInvoices: salesInvoices.length,
-    restoredUploadFiles,
+    restoredUploadFiles: uploadRestore.restoredFiles,
+    skippedExistingUploadFiles: uploadRestore.skippedExistingFiles,
+  }
+}
+
+export async function restoreMissingTenantFilesFromBackupFile(tenantId: string, filePath: string) {
+  const zip = readTenantZip(filePath)
+  const payload = readTenantPayloadFromZip(filePath)
+
+  if (String(payload?.tenantId || "") !== String(tenantId)) {
+    throw new Error("Backup-ul nu apartine acestui client.")
+  }
+
+  const uploadRestore = restoreUploadFilesFromZip(zip, { overwriteExisting: false })
+
+  return {
+    restoredUploadFiles: uploadRestore.restoredFiles,
+    skippedExistingUploadFiles: uploadRestore.skippedExistingFiles,
   }
 }

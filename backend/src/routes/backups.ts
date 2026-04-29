@@ -6,7 +6,7 @@ import multer from "multer"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { buildTenantBackupStats, buildTenantExportZip, ensureTenantBackupDir } from "../lib/tenantExport"
-import { restoreTenantBackupFromFile } from "../lib/tenantRestore"
+import { restoreMissingTenantFilesFromBackupFile, restoreTenantBackupFromFile } from "../lib/tenantRestore"
 
 const router = Router()
 const upload = multer({
@@ -204,6 +204,54 @@ router.post("/api/v1/settings/backups/restore-latest", async (req: AuthedRequest
   }
 })
 
+router.post("/api/v1/settings/backups/recover-files-latest", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth?.tenantId
+  if (!tenantId) {
+    return res.status(400).json({ ok: false, error: "Tenant lipsa pentru backup." })
+  }
+
+  const backups = await prisma.tenantBackup.findMany({
+    where: { tenantId },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  })
+
+  const latestBackup = backups.find((item) => fs.existsSync(item.filePath))
+  if (!latestBackup) {
+    return res.status(404).json({ ok: false, error: "Nu exista niciun backup valid pe server pentru recuperarea fisierelor." })
+  }
+
+  try {
+    const restored = await restoreMissingTenantFilesFromBackupFile(tenantId, latestBackup.filePath)
+
+    await prisma.auditLog.create({
+      data: {
+        tenantId,
+        actorType: "USER",
+        actorId: req.auth?.userId,
+        action: "TENANT_BACKUP_RECOVER_FILES_LATEST",
+        entityType: "TenantBackup",
+        entityId: latestBackup.id,
+        payload: {
+          fileName: latestBackup.fileName,
+          restored,
+        },
+      },
+    })
+
+    return res.json({
+      ok: true,
+      restored,
+      message: "Fisierele lipsa au fost recuperate din ultimul backup disponibil, fara suprascriere.",
+    })
+  } catch (error: any) {
+    return res.status(500).json({
+      ok: false,
+      error: error?.message || "Nu am putut recupera fisierele lipsa.",
+    })
+  }
+})
+
 router.post("/api/v1/settings/backups/upload-restore", upload.single("backup"), async (req: AuthedRequest, res) => {
   const tenantId = req.auth?.tenantId
   if (!tenantId) {
@@ -318,6 +366,58 @@ router.get("/api/v1/settings/backups/:id/download", async (req: AuthedRequest, r
   res.setHeader("Content-Type", "application/zip")
   res.setHeader("Content-Disposition", `attachment; filename="${item.fileName}"`)
   return res.send(fs.readFileSync(item.filePath))
+})
+
+router.post("/api/v1/settings/backups/:id/recover-files", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth?.tenantId
+  if (!tenantId) {
+    return res.status(400).json({ ok: false, error: "Tenant lipsa pentru backup." })
+  }
+
+  const item = await prisma.tenantBackup.findFirst({
+    where: {
+      id: req.params.id,
+      tenantId,
+    },
+  })
+
+  if (!item) {
+    return res.status(404).json({ ok: false, error: "Backup-ul nu a fost gasit." })
+  }
+
+  if (!fs.existsSync(item.filePath)) {
+    return res.status(404).json({ ok: false, error: "Fisierul backup nu mai exista pe server." })
+  }
+
+  try {
+    const restored = await restoreMissingTenantFilesFromBackupFile(tenantId, item.filePath)
+
+    await prisma.auditLog.create({
+      data: {
+        tenantId,
+        actorType: "USER",
+        actorId: req.auth?.userId,
+        action: "TENANT_BACKUP_RECOVER_FILES",
+        entityType: "TenantBackup",
+        entityId: item.id,
+        payload: {
+          fileName: item.fileName,
+          restored,
+        },
+      },
+    })
+
+    return res.json({
+      ok: true,
+      restored,
+      message: "Fisierele lipsa au fost recuperate din backup, fara suprascriere.",
+    })
+  } catch (error: any) {
+    return res.status(500).json({
+      ok: false,
+      error: error?.message || "Nu am putut recupera fisierele lipsa din backup.",
+    })
+  }
 })
 
 router.delete("/api/v1/settings/backups/:id", async (req: AuthedRequest, res) => {

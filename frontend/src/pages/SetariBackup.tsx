@@ -32,10 +32,12 @@ export default function SetariBackupPage() {
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [restoringLatest, setRestoringLatest] = useState(false)
+  const [recoveringLatestFiles, setRecoveringLatestFiles] = useState(false)
   const [uploadRestoring, setUploadRestoring] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
   const [restoringId, setRestoringId] = useState<string | null>(null)
+  const [recoveringFilesId, setRecoveringFilesId] = useState<string | null>(null)
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
   const [label, setLabel] = useState("")
@@ -79,7 +81,7 @@ export default function SetariBackupPage() {
   }
 
   async function handleRestoreLatest() {
-    if (!window.confirm("Restaurezi ultimul backup de pe server? Inainte de restore se va crea automat un backup de siguranta al starii curente.")) {
+    if (!window.confirm("Restaurezi complet ultimul backup de pe server? Datele curente vor fi suprascrise, iar inainte de restore se va crea automat un backup de siguranta.")) {
       return
     }
 
@@ -96,6 +98,27 @@ export default function SetariBackupPage() {
       setError(err?.message || "Nu am putut restaura ultimul backup.")
     } finally {
       setRestoringLatest(false)
+    }
+  }
+
+  async function handleRecoverLatestFiles() {
+    if (!window.confirm("Recuperezi doar fisierele lipsa din ultimul backup? Nu se suprascriu datele si nu se ating fisierele existente.")) {
+      return
+    }
+
+    try {
+      setRecoveringLatestFiles(true)
+      setError("")
+      setMessage("")
+      const data = await api<{ message?: string }>("/api/v1/settings/backups/recover-files-latest", {
+        method: "POST",
+      })
+      setMessage(data?.message || "Fisierele lipsa au fost recuperate.")
+      await load()
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut recupera fisierele lipsa.")
+    } finally {
+      setRecoveringLatestFiles(false)
     }
   }
 
@@ -169,7 +192,7 @@ export default function SetariBackupPage() {
   }
 
   async function handleRestore(item: BackupItem) {
-    if (!window.confirm(`Restaurezi backup-ul ${item.fileName} direct din server? Datele curente de configurare, nomenclator si utilizatori vor fi suprascrise.`)) {
+    if (!window.confirm(`Restaurezi complet backup-ul ${item.fileName}? Datele curente de configurare, nomenclator si utilizatori vor fi suprascrise.`)) {
       return
     }
 
@@ -186,6 +209,27 @@ export default function SetariBackupPage() {
       setError(err?.message || "Nu am putut restaura backup-ul.")
     } finally {
       setRestoringId(null)
+    }
+  }
+
+  async function handleRecoverFiles(item: BackupItem) {
+    if (!window.confirm(`Recuperezi doar fisierele lipsa din backup-ul ${item.fileName}? Nu se suprascriu fisierele existente si nu se ating datele din ERP.`)) {
+      return
+    }
+
+    try {
+      setRecoveringFilesId(item.id)
+      setError("")
+      setMessage("")
+      const data = await api<{ message?: string }>(`/api/v1/settings/backups/${item.id}/recover-files`, {
+        method: "POST",
+      })
+      setMessage(data?.message || "Fisierele lipsa au fost recuperate din backup.")
+      await load()
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut recupera fisierele lipsa din backup.")
+    } finally {
+      setRecoveringFilesId(null)
     }
   }
 
@@ -232,7 +276,16 @@ export default function SetariBackupPage() {
               className="inline-flex items-center justify-center rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <RotateCcw size={16} className="mr-2" />
-              {restoringLatest ? "Se restaureaza..." : "Restore"}
+              {restoringLatest ? "Se restaureaza..." : "Restore complet"}
+            </button>
+            <button
+              type="button"
+              onClick={handleRecoverLatestFiles}
+              disabled={recoveringLatestFiles || creating || !latestAvailableBackup}
+              className="inline-flex items-center justify-center rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-medium text-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RefreshCcw size={16} className="mr-2" />
+              {recoveringLatestFiles ? "Se recupereaza..." : "Recupereaza fisiere lipsa"}
             </button>
             <label className="inline-flex cursor-pointer items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 disabled:opacity-60">
               <input
@@ -307,12 +360,21 @@ export default function SetariBackupPage() {
                       </button>
                       <button
                         type="button"
+                        onClick={() => handleRecoverFiles(item)}
+                        disabled={recoveringFilesId === item.id || item.fileExists === false}
+                        className="inline-flex items-center gap-2 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <RefreshCcw size={15} />
+                        {recoveringFilesId === item.id ? "Se recupereaza..." : "Fisiere lipsa"}
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => handleRestore(item)}
                         disabled={restoringId === item.id || item.fileExists === false}
                         className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <RotateCcw size={15} />
-                        {restoringId === item.id ? "Se restaureaza..." : "Restore"}
+                        {restoringId === item.id ? "Se restaureaza..." : "Restore complet"}
                       </button>
                       <button
                         type="button"
