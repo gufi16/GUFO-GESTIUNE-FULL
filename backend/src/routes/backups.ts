@@ -2,12 +2,29 @@
 import fs from "fs"
 import path from "path"
 import { Router } from "express"
+import multer from "multer"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { buildTenantBackupStats, buildTenantExportZip, ensureTenantBackupDir } from "../lib/tenantExport"
 import { restoreTenantBackupFromFile } from "../lib/tenantRestore"
 
 const router = Router()
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 250 * 1024 * 1024,
+  },
+  fileFilter: (_req, file, cb) => {
+    const isZip =
+      String(file.mimetype || "").includes("zip") ||
+      String(file.originalname || "").toLowerCase().endsWith(".zip")
+    if (!isZip) {
+      cb(new Error("Se accepta doar fisiere backup .zip."))
+      return
+    }
+    cb(null, true)
+  },
+})
 
 router.use(requireAuth)
 
@@ -25,6 +42,57 @@ function fileBaseName(value: string) {
   return String(value || "")
     .replace(/\.zip$/i, "")
     .trim()
+}
+
+async function persistTenantBackupSnapshot(
+  tenantId: string,
+  companyId: string | null,
+  userId: string | null | undefined,
+  label: string,
+) {
+  const { zip, filename } = await buildTenantExportZip(tenantId)
+  const tenantEntry = zip.getEntry("data/tenant.json")
+  const payload = tenantEntry ? JSON.parse(zip.readAsText(tenantEntry)) : null
+  const tableCounts = buildTenantBackupStats(payload)
+  const backupDir = ensureTenantBackupDir(tenantId)
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
+  const baseName = sanitizeLabel(label) || fileBaseName(filename)
+  const finalFileName = `${timestamp}-${baseName}.zip`
+  const absolutePath = path.join(backupDir, finalFileName)
+  const buffer = zip.toBuffer()
+  fs.writeFileSync(absolutePath, buffer)
+
+  const item = await prisma.tenantBackup.create({
+    data: {
+      tenantId,
+      companyId,
+      createdByUserId: userId || null,
+      label: label || null,
+      fileName: finalFileName,
+      filePath: absolutePath,
+      fileSizeBytes: buffer.length,
+      tableCounts,
+    },
+  })
+
+  await prisma.auditLog.create({
+    data: {
+      tenantId,
+      actorType: "USER",
+      actorId: userId || null,
+      action: "TENANT_BACKUP_CREATED",
+      entityType: "TenantBackup",
+      entityId: item.id,
+      payload: {
+        fileName: finalFileName,
+        fileSizeBytes: buffer.length,
+        tableCounts,
+        label,
+      },
+    },
+  })
+
+  return item
 }
 
 router.get("/api/v1/settings/backups", async (req: AuthedRequest, res) => {
@@ -52,52 +120,163 @@ router.post("/api/v1/settings/backups", async (req: AuthedRequest, res) => {
   const companyId = req.auth?.activeCompanyId || null
 
   try {
-    const { zip, filename } = await buildTenantExportZip(tenantId)
-    const tenantEntry = zip.getEntry("data/tenant.json")
-    const payload = tenantEntry ? JSON.parse(zip.readAsText(tenantEntry)) : null
-    const tableCounts = buildTenantBackupStats(payload)
-    const backupDir = ensureTenantBackupDir(tenantId)
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
-    const baseName = sanitizeLabel(label) || fileBaseName(filename)
-    const finalFileName = `${timestamp}-${baseName}.zip`
-    const absolutePath = path.join(backupDir, finalFileName)
-    const buffer = zip.toBuffer()
-    fs.writeFileSync(absolutePath, buffer)
-
-    const item = await prisma.tenantBackup.create({
-      data: {
-        tenantId,
-        companyId,
-        createdByUserId: req.auth?.userId || null,
-        label: label || null,
-        fileName: finalFileName,
-        filePath: absolutePath,
-        fileSizeBytes: buffer.length,
-        tableCounts,
-      },
-    })
-
-    await prisma.auditLog.create({
-      data: {
-        tenantId,
-        actorType: "USER",
-        actorId: req.auth?.userId,
-        action: "TENANT_BACKUP_CREATED",
-        entityType: "TenantBackup",
-        entityId: item.id,
-        payload: {
-          fileName: finalFileName,
-          fileSizeBytes: buffer.length,
-          tableCounts,
-        },
-      },
-    })
+    const item = await persistTenantBackupSnapshot(
+      tenantId,
+      companyId,
+      req.auth?.userId,
+      label || "backup-manual",
+    )
 
     return res.json({ ok: true, item })
   } catch (error: any) {
     return res.status(500).json({
       ok: false,
       error: error?.message || "Nu am putut genera backup-ul clientului.",
+    })
+  }
+})
+
+router.post("/api/v1/settings/backups/restore-latest", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth?.tenantId
+  if (!tenantId) {
+    return res.status(400).json({ ok: false, error: "Tenant lipsa pentru backup." })
+  }
+
+  const latestBackup = await prisma.tenantBackup.findFirst({
+    where: { tenantId },
+    orderBy: { createdAt: "desc" },
+  })
+
+  if (!latestBackup) {
+    return res.status(404).json({ ok: false, error: "Nu exista backup-uri salvate pentru restore." })
+  }
+
+  try {
+    const safetyBackup = await persistTenantBackupSnapshot(
+      tenantId,
+      req.auth?.activeCompanyId || null,
+      req.auth?.userId,
+      "siguranta-inainte-restore",
+    )
+
+    const restored = await restoreTenantBackupFromFile(tenantId, latestBackup.filePath)
+
+    await prisma.auditLog.create({
+      data: {
+        tenantId,
+        actorType: "USER",
+        actorId: req.auth?.userId,
+        action: "TENANT_BACKUP_RESTORED_LATEST",
+        entityType: "TenantBackup",
+        entityId: latestBackup.id,
+        payload: {
+          fileName: latestBackup.fileName,
+          restored,
+          safetyBackupId: safetyBackup.id,
+          safetyBackupFileName: safetyBackup.fileName,
+        },
+      },
+    })
+
+    return res.json({
+      ok: true,
+      restored,
+      safetyBackup: {
+        id: safetyBackup.id,
+        fileName: safetyBackup.fileName,
+      },
+      message: "Ultimul backup a fost restaurat. Starea curenta a fost salvata automat inainte de restore.",
+    })
+  } catch (error: any) {
+    return res.status(500).json({
+      ok: false,
+      error: error?.message || "Nu am putut restaura ultimul backup.",
+    })
+  }
+})
+
+router.post("/api/v1/settings/backups/upload-restore", upload.single("backup"), async (req: AuthedRequest, res) => {
+  const tenantId = req.auth?.tenantId
+  if (!tenantId) {
+    return res.status(400).json({ ok: false, error: "Tenant lipsa pentru backup." })
+  }
+
+  if (!req.file?.buffer?.length) {
+    return res.status(400).json({ ok: false, error: "Nu ai incarcat niciun backup .zip." })
+  }
+
+  const originalName = String(req.file.originalname || "backup-manual.zip").trim() || "backup-manual.zip"
+  const backupDir = ensureTenantBackupDir(tenantId)
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
+  const finalFileName = `${timestamp}-${sanitizeLabel(fileBaseName(originalName)) || "backup-manual"}.zip`
+  const absolutePath = path.join(backupDir, finalFileName)
+
+  try {
+    const safetyBackup = await persistTenantBackupSnapshot(
+      tenantId,
+      req.auth?.activeCompanyId || null,
+      req.auth?.userId,
+      "siguranta-inainte-restore-upload",
+    )
+
+    fs.writeFileSync(absolutePath, req.file.buffer)
+
+    const item = await prisma.tenantBackup.create({
+      data: {
+        tenantId,
+        companyId: req.auth?.activeCompanyId || null,
+        createdByUserId: req.auth?.userId || null,
+        label: "restore-upload-manual",
+        fileName: finalFileName,
+        filePath: absolutePath,
+        fileSizeBytes: req.file.buffer.length,
+        tableCounts: null,
+      },
+    })
+
+    const restored = await restoreTenantBackupFromFile(tenantId, absolutePath)
+
+    await prisma.auditLog.create({
+      data: {
+        tenantId,
+        actorType: "USER",
+        actorId: req.auth?.userId,
+        action: "TENANT_BACKUP_RESTORED_FROM_UPLOAD",
+        entityType: "TenantBackup",
+        entityId: item.id,
+        payload: {
+          fileName: finalFileName,
+          restored,
+          safetyBackupId: safetyBackup.id,
+          safetyBackupFileName: safetyBackup.fileName,
+        },
+      },
+    })
+
+    return res.json({
+      ok: true,
+      restored,
+      uploadedBackup: {
+        id: item.id,
+        fileName: item.fileName,
+      },
+      safetyBackup: {
+        id: safetyBackup.id,
+        fileName: safetyBackup.fileName,
+      },
+      message: "Backup-ul incarcat a fost restaurat. Starea curenta a fost salvata automat inainte de restore.",
+    })
+  } catch (error: any) {
+    if (fs.existsSync(absolutePath)) {
+      try {
+        fs.unlinkSync(absolutePath)
+      } catch {
+        // ignore cleanup errors
+      }
+    }
+    return res.status(500).json({
+      ok: false,
+      error: error?.message || "Nu am putut restaura backup-ul incarcat.",
     })
   }
 })

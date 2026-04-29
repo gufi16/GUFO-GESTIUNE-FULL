@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { Archive, Download, RefreshCcw, RotateCcw, Trash2 } from "lucide-react"
 import PageHeader from "../components/PageHeader"
-import { api } from "../lib/api"
+import { API_BASE, api, authHeaders } from "../lib/api"
 import { DocumentMetric, InlineNotice, documentButtonPrimaryClass, documentButtonSecondaryClass, documentInputClass } from "../components/DocumentUi"
 
 type BackupItem = {
@@ -30,6 +30,8 @@ function fmtDate(value: string) {
 export default function SetariBackupPage() {
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
+  const [restoringLatest, setRestoringLatest] = useState(false)
+  const [uploadRestoring, setUploadRestoring] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
   const [restoringId, setRestoringId] = useState<string | null>(null)
@@ -71,6 +73,56 @@ export default function SetariBackupPage() {
       setError(err?.message || "Nu am putut crea backup-ul clientului.")
     } finally {
       setCreating(false)
+    }
+  }
+
+  async function handleRestoreLatest() {
+    if (!window.confirm("Restaurezi ultimul backup de pe server? Inainte de restore se va crea automat un backup de siguranta al starii curente.")) {
+      return
+    }
+
+    try {
+      setRestoringLatest(true)
+      setError("")
+      setMessage("")
+      const data = await api<{ message?: string }>("/api/v1/settings/backups/restore-latest", {
+        method: "POST",
+      })
+      setMessage(data?.message || "Ultimul backup a fost restaurat.")
+      await load()
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut restaura ultimul backup.")
+    } finally {
+      setRestoringLatest(false)
+    }
+  }
+
+  async function handleUploadRestore(file: File) {
+    const formData = new FormData()
+    formData.append("backup", file)
+
+    try {
+      setUploadRestoring(true)
+      setError("")
+      setMessage("")
+
+      const response = await fetch(`${API_BASE}/api/v1/settings/backups/upload-restore`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: formData,
+      })
+
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "Nu am putut restaura backup-ul incarcat.")
+      }
+
+      setMessage(data?.message || "Backup-ul incarcat a fost restaurat.")
+      await load()
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut restaura backup-ul incarcat.")
+    } finally {
+      setUploadRestoring(false)
     }
   }
 
@@ -171,6 +223,32 @@ export default function SetariBackupPage() {
               <Archive size={16} className="mr-2" />
               {creating ? "Se creeaza..." : "Creeaza backup"}
             </button>
+            <button
+              type="button"
+              onClick={handleRestoreLatest}
+              disabled={restoringLatest || creating || !items.length}
+              className="inline-flex items-center justify-center rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RotateCcw size={16} className="mr-2" />
+              {restoringLatest ? "Se restaureaza..." : "Restore"}
+            </button>
+            <label className="inline-flex cursor-pointer items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 disabled:opacity-60">
+              <input
+                type="file"
+                accept=".zip,application/zip"
+                className="hidden"
+                disabled={uploadRestoring || creating}
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) {
+                    void handleUploadRestore(file)
+                  }
+                  e.currentTarget.value = ""
+                }}
+              />
+              <RotateCcw size={16} className="mr-2" />
+              {uploadRestoring ? "Se incarca..." : "Restore din ZIP"}
+            </label>
             <button type="button" onClick={load} disabled={loading || creating} className={documentButtonSecondaryClass}>
               <RefreshCcw size={16} className="mr-2" />
               Reincarca
