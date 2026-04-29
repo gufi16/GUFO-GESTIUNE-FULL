@@ -202,7 +202,6 @@ export default function CategoriiPage() {
     setError("")
     setMessage("")
     setPreviewImageFailed(false)
-    window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
   async function remove(id: string) {
@@ -235,40 +234,9 @@ export default function CategoriiPage() {
     }
   }
 
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        badge="nomenclator"
-        title="Categorii produse"
-        subtitle="Categorii organizate pe departamente, cu imagine si vizibilitate pentru Android POS."
-      />
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-        <DocumentMetric title="Categorii" value={stats.total} tone="slate" />
-        <DocumentMetric title="Cu imagine" value={stats.withImage} tone="blue" />
-        <DocumentMetric title="Vizibile in POS" value={stats.visibleInPos} tone="emerald" />
-        <DocumentMetric title="Departamente active" value={stats.departments} tone="amber" />
-      </div>
-
-      {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
-      {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
-
-      <DocumentSection
-        title={editingId ? "Edit categorie" : "Adauga categorie"}
-        description="Salvezi categoria, apoi poti incarca poza si o vezi imediat in preview."
-        actions={
-          <>
-            {editingId ? (
-              <button type="button" onClick={resetForm} className={documentButtonSecondaryClass}>
-                Renunta
-              </button>
-            ) : null}
-            <button type="button" onClick={save} className={documentButtonPrimaryClass} disabled={saving || uploading}>
-              {saving ? "Se salveaza..." : editingId ? "Salveaza" : "Adauga"}
-            </button>
-          </>
-        }
-      >
+  function renderCategoryForm(isEdit: boolean) {
+    return (
+      <>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           <DocumentField label="Categorie">
             <input placeholder="Categorie" value={name} onChange={(e) => setName(e.target.value)} className={documentInputClass} />
@@ -297,7 +265,7 @@ export default function CategoriiPage() {
           <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
             <div className="mb-3 text-sm font-semibold text-slate-900">Imagine categorie</div>
 
-            {editingId ? (
+            {isEdit ? (
               <div className="flex flex-wrap gap-3">
                 <label className={documentButtonSecondaryClass}>
                   <input
@@ -350,6 +318,38 @@ export default function CategoriiPage() {
             )}
           </div>
         </div>
+      </>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        badge="nomenclator"
+        title="Categorii produse"
+        subtitle="Categorii organizate pe departamente, cu imagine si vizibilitate pentru Android POS."
+      />
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <DocumentMetric title="Categorii" value={stats.total} tone="slate" />
+        <DocumentMetric title="Cu imagine" value={stats.withImage} tone="blue" />
+        <DocumentMetric title="Vizibile in POS" value={stats.visibleInPos} tone="emerald" />
+        <DocumentMetric title="Departamente active" value={stats.departments} tone="amber" />
+      </div>
+
+      {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
+      {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
+
+      <DocumentSection
+        title="Adauga categorie"
+        description="Salvezi categoria, apoi poti intra pe edit pentru poza si alte ajustari."
+        actions={
+          <button type="button" onClick={save} className={documentButtonPrimaryClass} disabled={saving || uploading}>
+            {saving ? "Se salveaza..." : "Adauga"}
+          </button>
+        }
+      >
+        {renderCategoryForm(false)}
       </DocumentSection>
 
       <DocumentSection title="Categorii existente" description="Le vezi pe toate, cu departamentul, vizibilitatea in POS si imaginea asociata.">
@@ -420,6 +420,34 @@ export default function CategoriiPage() {
           </div>
         )}
       </DocumentSection>
+
+      {editingId ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
+          <div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-[28px] bg-white shadow-2xl">
+            <DocumentSection
+              title="Edit categorie"
+              description="Editezi categoria intr-un popup separat, fara sa pierzi contextul listei."
+              actions={
+                <>
+                  <button type="button" onClick={resetForm} className={documentButtonSecondaryClass}>
+                    Inchide
+                  </button>
+                  <button
+                    type="button"
+                    onClick={save}
+                    className={documentButtonPrimaryClass}
+                    disabled={saving || uploading}
+                  >
+                    {saving ? "Se salveaza..." : "Salveaza"}
+                  </button>
+                </>
+              }
+            >
+              {renderCategoryForm(true)}
+            </DocumentSection>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
