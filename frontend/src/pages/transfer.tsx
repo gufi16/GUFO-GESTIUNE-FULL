@@ -758,7 +758,7 @@ export default function TransferPage() {
         </button>
       </div>
 
-      <div className="flex flex-col gap-3">
+      <div className="space-y-3">
         <div className="space-y-3 order-2">
           <DocumentSection title="Linii transfer" actions={!isPosted ? (
             <button type="button" className={documentButtonPrimaryClass} onClick={addLine}>
@@ -877,9 +877,22 @@ export default function TransferPage() {
         </div>
 
         <div className="space-y-3 order-1">
-          <DocumentSection title="Detalii transfer">
+          <DocumentSection
+            title="Detalii transfer"
+            actions={!isPosted ? (
+              <div className="flex flex-wrap gap-2">
+                <button type="button" className={documentButtonSecondaryClass} onClick={() => saveDoc(false)} disabled={saving || loadingDoc}>
+                  {saving ? "Se salveaza..." : "Salveaza draft"}
+                </button>
+                <button type="button" className={documentButtonPrimaryClass} onClick={() => saveDoc(true)} disabled={saving || loadingDoc}>
+                  {saving ? "Se salveaza..." : "Salveaza si posteaza"}
+                </button>
+              </div>
+            ) : null}
+          >
             <div className="space-y-3">
-              <DocumentSection title="Document">
+              <div className="rounded-[18px] border border-slate-200 bg-slate-50 p-4">
+                <div className="mb-3 text-sm font-semibold text-slate-900">Document</div>
                 <div className="space-y-3">
                   <DocumentField label="Gestiuni">
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -946,7 +959,7 @@ export default function TransferPage() {
                   </DocumentField>
 
                   <DocumentField label="Motiv / observatii">
-                    <div className="space-y-2">
+                    <div className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]">
                       <input
                         value={header.reason}
                         onChange={(e) => setHeader((prev) => ({ ...prev, reason: e.target.value }))}
@@ -957,7 +970,7 @@ export default function TransferPage() {
                       <textarea
                         value={header.note}
                         onChange={(e) => setHeader((prev) => ({ ...prev, note: e.target.value }))}
-                        rows={3}
+                        rows={2}
                         className={documentTextareaClass}
                         disabled={isPosted}
                         placeholder="Observatii"
@@ -965,9 +978,10 @@ export default function TransferPage() {
                     </div>
                   </DocumentField>
                 </div>
-              </DocumentSection>
+              </div>
 
-              <DocumentSection title="RO e-Transport">
+              <div className="rounded-[18px] border border-slate-200 bg-slate-50 p-4">
+                <div className="mb-3 text-sm font-semibold text-slate-900">RO e-Transport</div>
                 <div className="grid grid-cols-1 gap-3">
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                     <DocumentMetric title="Candidat" value={header.eTransportCandidate ? "Da" : "Nu"} tone={header.eTransportCandidate ? "amber" : "slate"} />
@@ -990,7 +1004,7 @@ export default function TransferPage() {
                   </div>
 
                   <DocumentField label="Generalitati">
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-2 xl:grid-cols-3">
                       <select
                         value={header.eTransportOperationType}
                         onChange={(e) => setHeader((prev) => ({ ...prev, eTransportOperationType: e.target.value }))}
@@ -1008,11 +1022,18 @@ export default function TransferPage() {
                         disabled={isPosted}
                         placeholder="Referinta interna operatiune"
                       />
+                      <input
+                        type="datetime-local"
+                        value={header.eTransportDeclaredStart}
+                        onChange={(e) => setHeader((prev) => ({ ...prev, eTransportDeclaredStart: e.target.value }))}
+                        className={documentInputClass}
+                        disabled={isPosted}
+                      />
                     </div>
                   </DocumentField>
 
                   <DocumentField label="Partener">
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_170px]">
+                    <div className="grid grid-cols-1 gap-2 xl:grid-cols-[160px_minmax(0,1fr)_170px]">
                       <input
                         value={header.eTransportPartnerCui}
                         onChange={(e) => setHeader((prev) => ({ ...prev, eTransportPartnerCui: e.target.value.replace(/\D/g, "") }))}
@@ -1026,24 +1047,14 @@ export default function TransferPage() {
                       <button type="button" className={documentButtonSecondaryClass} onClick={lookupPartnerByCui} disabled={isPosted || partnerLookupBusy}>
                         {partnerLookupBusy ? "Se cauta..." : "Cauta CUI"}
                       </button>
+                      <input
+                        value={header.eTransportPartnerName}
+                        className={documentInputClass}
+                        readOnly
+                        style={readonlyInputStyle}
+                        placeholder="Denumire partener"
+                      />
                     </div>
-                    <input
-                      value={header.eTransportPartnerName}
-                      className={`${documentInputClass} mt-2`}
-                      readOnly
-                      style={readonlyInputStyle}
-                      placeholder="Denumire partener"
-                    />
-                  </DocumentField>
-
-                  <DocumentField label="Start transport">
-                    <input
-                      type="datetime-local"
-                      value={header.eTransportDeclaredStart}
-                      onChange={(e) => setHeader((prev) => ({ ...prev, eTransportDeclaredStart: e.target.value }))}
-                      className={documentInputClass}
-                      disabled={isPosted}
-                    />
                   </DocumentField>
 
                   <DocumentField label="Locuri start / final traseu">
@@ -1172,7 +1183,7 @@ export default function TransferPage() {
 
                   {header.eTransportErrorText ? <InlineNotice tone="info">{header.eTransportErrorText}</InlineNotice> : null}
                 </div>
-              </DocumentSection>
+              </div>
 
               <div className="grid grid-cols-1 gap-2">
                 {!isPosted ? (
