@@ -33,8 +33,18 @@ function safeJson(value: any) {
 
 function normalizeUploadRelativePath(value?: string | null) {
   const text = String(value || "").trim()
-  if (!text || !text.startsWith("/uploads/")) return null
-  return text.replace(/^\/+/, "")
+  if (!text) return null
+
+  if (text.startsWith("/uploads/")) {
+    return text.replace(/^\/+/, "")
+  }
+
+  const uploadsIndex = text.indexOf("/uploads/")
+  if (uploadsIndex >= 0) {
+    return text.slice(uploadsIndex + 1)
+  }
+
+  return null
 }
 
 function addFileIfExists(zip: AdmZip, absolutePath: string, zipPath: string) {
