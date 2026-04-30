@@ -439,14 +439,15 @@ export default function TransferPage() {
     }
   }
 
-  async function loadDoc() {
-    if (!token || !transferId) return
+  async function loadDoc(idOverride?: string) {
+    const activeTransferId = idOverride || transferId
+    if (!token || !activeTransferId) return
     setLoadingDoc(true)
     setError("")
     setMessage("")
 
     try {
-      const res = await fetch(`${API}/api/v1/transfers/${transferId}`, {
+      const res = await fetch(`${API}/api/v1/transfers/${activeTransferId}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
 
@@ -664,40 +665,61 @@ export default function TransferPage() {
     })
   }, [toLocation?.id])
 
-  async function saveDoc(postNow = false) {
+  function buildTransferPayload(postNow = false) {
+    return {
+      id: transferId || null,
+      header: {
+        ...header,
+        eTransportStartAddress:
+          header.eTransportStartScope === "ADR" ? serializeAdrForm(startAdr) : header.eTransportStartBorderPoint,
+        eTransportEndAddress:
+          header.eTransportEndScope === "ADR" ? serializeAdrForm(endAdr) : header.eTransportEndBorderPoint,
+        eTransportCandidate: eTransportSummary.candidate,
+        eTransportRequired: header.eTransportRequired || eTransportSummary.required,
+      },
+      items: validLines.map((line) => ({
+        productId: line.productId,
+        qty: parsePositive(line.qty),
+        unitPrice: Math.max(0, Number(line.unitPrice || 0)),
+      })),
+      postNow,
+    }
+  }
+
+  async function persistTransfer(postNow = false, navigateOnCreate = false) {
     if (!token) {
       setError("Lipseste sesiunea de autentificare.")
-      return
+      return { ok: false as const, id: "" }
     }
 
     if (isPosted) {
       setError("Transferul este deja postat si nu mai poate fi modificat.")
-      return
+      return { ok: false as const, id: transferId || "" }
     }
 
     if (!header.fromLocationId) {
       setError("Selecteaza gestiunea predatoare.")
-      return
+      return { ok: false as const, id: transferId || "" }
     }
 
     if (!header.toLocationId) {
       setError("Selecteaza gestiunea primitoare.")
-      return
+      return { ok: false as const, id: transferId || "" }
     }
 
     if (header.fromLocationId === header.toLocationId) {
       setError("Gestiunea de plecare si cea de sosire trebuie sa fie diferite.")
-      return
+      return { ok: false as const, id: transferId || "" }
     }
 
     if (!header.docDate) {
       setError("Completeaza data documentului.")
-      return
+      return { ok: false as const, id: transferId || "" }
     }
 
     if (!validLines.length) {
       setError("Adauga cel putin un produs in transfer.")
-      return
+      return { ok: false as const, id: transferId || "" }
     }
 
     setSaving(true)
@@ -711,41 +733,26 @@ export default function TransferPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          id: transferId || null,
-          header: {
-            ...header,
-            eTransportStartAddress:
-              header.eTransportStartScope === "ADR" ? serializeAdrForm(startAdr) : header.eTransportStartBorderPoint,
-            eTransportEndAddress:
-              header.eTransportEndScope === "ADR" ? serializeAdrForm(endAdr) : header.eTransportEndBorderPoint,
-            eTransportCandidate: eTransportSummary.candidate,
-            eTransportRequired: header.eTransportRequired || eTransportSummary.required,
-          },
-          items: validLines.map((line) => ({
-            productId: line.productId,
-            qty: parsePositive(line.qty),
-            unitPrice: Math.max(0, Number(line.unitPrice || 0)),
-          })),
-          postNow,
-        }),
+        body: JSON.stringify(buildTransferPayload(postNow)),
       })
 
       const data = await res.json().catch(() => ({}))
 
       if (res.status === 401) {
         setError("Sesiunea a expirat. Intra din nou in cont si reincerca.")
-        return
+        return { ok: false as const, id: transferId || "" }
       }
 
       if (!data.ok) {
         setError(data.error || "Transferul nu a putut fi salvat.")
-        return
+        return { ok: false as const, id: transferId || "" }
       }
 
-      if (!transferId && data.doc?.id) {
+      const nextId = String(data.doc?.id || transferId || "")
+
+      if (!transferId && data.doc?.id && navigateOnCreate) {
         navigate(`/transfer/edit?id=${data.doc.id}`)
-        return
+        return { ok: true as const, id: nextId, data }
       }
 
       setStatus(data.doc?.status || (postNow ? "POSTED" : "DRAFT"))
@@ -753,12 +760,18 @@ export default function TransferPage() {
         setHeader((prev) => ({ ...prev, docNo: data.doc.docNo }))
       }
       setMessage(postNow ? "Transferul a fost salvat si postat." : "Transferul a fost salvat ca draft.")
-      if (transferId) await loadDoc()
+      if (transferId || (!navigateOnCreate && nextId)) await loadDoc(nextId || undefined)
+      return { ok: true as const, id: nextId, data }
     } catch {
       setError("A aparut o eroare la salvarea transferului.")
+      return { ok: false as const, id: transferId || "" }
     } finally {
       setSaving(false)
     }
+  }
+
+  async function saveDoc(postNow = false) {
+    await persistTransfer(postNow, true)
   }
 
   async function exportPdf() {
@@ -780,17 +793,16 @@ export default function TransferPage() {
   }
 
   async function generateETransportXml() {
-    if (!transferId) {
-      setError("Salveaza mai intai transferul.")
-      return
-    }
-
     setETransportBusy(true)
     setError("")
     setMessage("")
 
     try {
-      const res = await fetch(`${API}/api/v1/transfers/${transferId}/etransport/prepare`, {
+      const persisted = await persistTransfer(false, false)
+      const activeTransferId = persisted.id || transferId || ""
+      if (!persisted.ok || !activeTransferId) return
+
+      const res = await fetch(`${API}/api/v1/transfers/${activeTransferId}/etransport/prepare`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       })
@@ -808,7 +820,10 @@ export default function TransferPage() {
       }
 
       setMessage(data.message || "XML RO e-Transport generat.")
-      await loadDoc()
+      if (!transferId && activeTransferId) {
+        navigate(`/transfer/edit?id=${activeTransferId}`, { replace: true })
+      }
+      await loadDoc(activeTransferId)
     } catch {
       setError("Nu am putut genera XML-ul RO e-Transport.")
     } finally {
@@ -938,16 +953,15 @@ export default function TransferPage() {
   }
 
   async function sendETransport() {
-    if (!transferId) {
-      setError("Salveaza mai intai transferul.")
-      return
-    }
-
     setETransportBusy(true)
     setError("")
     setMessage("")
     try {
-      const res = await fetch(`${API}/api/v1/transfers/${transferId}/etransport/send`, {
+      const persisted = await persistTransfer(false, false)
+      const activeTransferId = persisted.id || transferId || ""
+      if (!persisted.ok || !activeTransferId) return
+
+      const res = await fetch(`${API}/api/v1/transfers/${activeTransferId}/etransport/send`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       })
@@ -957,7 +971,10 @@ export default function TransferPage() {
         return
       }
       setMessage(data?.message || "RO e-Transport a fost trimis la ANAF.")
-      await loadDoc()
+      if (!transferId && activeTransferId) {
+        navigate(`/transfer/edit?id=${activeTransferId}`, { replace: true })
+      }
+      await loadDoc(activeTransferId)
     } catch {
       setError("Nu am putut trimite RO e-Transport la ANAF.")
     } finally {
