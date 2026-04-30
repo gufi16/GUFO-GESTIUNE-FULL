@@ -1203,9 +1203,16 @@ export default function TransferPage() {
                 <button type="button" className={documentButtonSecondaryClass} onClick={() => saveDoc(false)} disabled={saving || loadingDoc}>
                   {saving ? "Se salveaza..." : "Salveaza draft"}
                 </button>
-                <button type="button" className={documentButtonPrimaryClass} onClick={() => saveDoc(true)} disabled={saving || loadingDoc}>
-                  {saving ? "Se salveaza..." : "Salveaza si posteaza"}
-                </button>
+                {transferId ? (
+                  <>
+                    <button type="button" className={documentButtonPrimaryClass} onClick={() => saveDoc(true)} disabled={saving || loadingDoc}>
+                      {saving ? "Se salveaza..." : "Finalizeaza"}
+                    </button>
+                    <button type="button" className={documentButtonDangerClass} onClick={deleteTransfer} disabled={saving || loadingDoc}>
+                      Anuleaza
+                    </button>
+                  </>
+                ) : null}
               </div>
             ) : null}
           >
@@ -1337,7 +1344,7 @@ export default function TransferPage() {
                     <div className="mb-4 flex items-start justify-between gap-4">
                       <div>
                         <div className="text-lg font-semibold text-slate-900">RO e-Transport</div>
-                        <div className="mt-1 text-sm text-slate-500">Completezi datele doar pentru transferurile care necesita raportare.</div>
+                        <div className="mt-1 text-sm text-slate-500">Completezi datele aici, iar actiunile ANAF apar dupa finalizarea documentului.</div>
                       </div>
                       <button type="button" className={documentButtonSecondaryClass} onClick={() => setShowETransportModal(false)}>
                         <ArrowLeft size={16} className="mr-2" />
@@ -1346,28 +1353,34 @@ export default function TransferPage() {
                     </div>
 
                     <div className="space-y-4">
-                      <div className="flex flex-wrap gap-2">
-                        <button type="button" className={documentButtonSecondaryClass} onClick={generateETransportXml} disabled={!transferId || loadingDoc || eTransportBusy}>
-                          <Truck size={16} className="mr-2" />
-                          {eTransportBusy ? "Se genereaza..." : "Genereaza XML"}
-                        </button>
-                        <button type="button" className={documentButtonSecondaryClass} onClick={sendETransport} disabled={!transferId || loadingDoc || eTransportBusy}>
-                          <Truck size={16} className="mr-2" />
-                          {eTransportBusy ? "Se trimite..." : "Trimite la ANAF"}
-                        </button>
-                        <button type="button" className={documentButtonSecondaryClass} onClick={checkETransportStatus} disabled={!transferId || loadingDoc || eTransportBusy || !header.eTransportUploadIndex}>
-                          <Truck size={16} className="mr-2" />
-                          Verifica stare
-                        </button>
-                        <button type="button" className={documentButtonSecondaryClass} onClick={downloadETransportXml} disabled={!transferId || !eTransportPrepared || loadingDoc}>
-                          <Truck size={16} className="mr-2" />
-                          XML
-                        </button>
-                        <button type="button" className={documentButtonSecondaryClass} onClick={downloadETransportReceipt} disabled={!transferId || loadingDoc || !header.eTransportUploadIndex}>
-                          <Truck size={16} className="mr-2" />
-                          Raspuns ANAF
-                        </button>
-                      </div>
+                      {isPosted ? (
+                        <div className="flex flex-wrap gap-2">
+                          <button type="button" className={documentButtonSecondaryClass} onClick={generateETransportXml} disabled={!transferId || loadingDoc || eTransportBusy}>
+                            <Truck size={16} className="mr-2" />
+                            {eTransportBusy ? "Se genereaza..." : "Genereaza XML"}
+                          </button>
+                          <button type="button" className={documentButtonSecondaryClass} onClick={sendETransport} disabled={!transferId || loadingDoc || eTransportBusy}>
+                            <Truck size={16} className="mr-2" />
+                            {eTransportBusy ? "Se trimite..." : "Trimite la ANAF"}
+                          </button>
+                          <button type="button" className={documentButtonSecondaryClass} onClick={checkETransportStatus} disabled={!transferId || loadingDoc || eTransportBusy || !header.eTransportUploadIndex}>
+                            <Truck size={16} className="mr-2" />
+                            Verifica stare
+                          </button>
+                          <button type="button" className={documentButtonSecondaryClass} onClick={downloadETransportXml} disabled={!transferId || !eTransportPrepared || loadingDoc}>
+                            <Truck size={16} className="mr-2" />
+                            XML
+                          </button>
+                          <button type="button" className={documentButtonSecondaryClass} onClick={downloadETransportReceipt} disabled={!transferId || loadingDoc || !header.eTransportUploadIndex}>
+                            <Truck size={16} className="mr-2" />
+                            Raspuns ANAF
+                          </button>
+                        </div>
+                      ) : (
+                        <InlineNotice tone="info">
+                          Completeaza datele necesare aici, salveaza documentul, apoi il finalizezi din documentul de transfer. Dupa finalizare apar aici actiunile pentru XML si ANAF.
+                        </InlineNotice>
+                      )}
 
                       <div className="rounded-[18px] border border-slate-200 bg-slate-50 p-4">
                 <div className="mb-3 text-sm font-semibold text-slate-900">RO e-Transport</div>
