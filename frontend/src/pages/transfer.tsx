@@ -308,6 +308,7 @@ export default function TransferPage() {
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
   const [partnerLookupBusy, setPartnerLookupBusy] = useState(false)
+  const [showETransportModal, setShowETransportModal] = useState(false)
   const [startAdr, setStartAdr] = useState<ETransportAdrForm>(createEmptyAdrForm())
   const [endAdr, setEndAdr] = useState<ETransportAdrForm>(createEmptyAdrForm())
   const [startAdrLookupBusy, setStartAdrLookupBusy] = useState(false)
@@ -748,6 +749,9 @@ export default function TransferPage() {
       }
 
       setStatus(data.doc?.status || (postNow ? "POSTED" : "DRAFT"))
+      if (data.doc?.docNo) {
+        setHeader((prev) => ({ ...prev, docNo: data.doc.docNo }))
+      }
       setMessage(postNow ? "Transferul a fost salvat si postat." : "Transferul a fost salvat ca draft.")
       if (transferId) await loadDoc()
     } catch {
@@ -964,17 +968,13 @@ export default function TransferPage() {
           <ArrowLeft size={16} className="mr-2" />
           Inapoi la lista
         </button>
+        <button type="button" className={documentButtonSecondaryClass} onClick={() => setShowETransportModal(true)}>
+          <Truck size={16} className="mr-2" />
+          E-Transport
+        </button>
         <button type="button" className={documentButtonSecondaryClass} onClick={exportPdf} disabled={!transferId || loadingDoc}>
           <FileOutput size={16} className="mr-2" />
           PDF
-        </button>
-        <button type="button" className={documentButtonSecondaryClass} onClick={generateETransportXml} disabled={!transferId || loadingDoc || eTransportBusy}>
-          <Truck size={16} className="mr-2" />
-          {eTransportBusy ? "Se genereaza..." : "Genereaza XML"}
-        </button>
-        <button type="button" className={documentButtonSecondaryClass} onClick={downloadETransportXml} disabled={!transferId || !eTransportPrepared || loadingDoc}>
-          <Truck size={16} className="mr-2" />
-          XML
         </button>
         {!isPosted && transferId ? (
           <button type="button" className={documentButtonDangerClass} onClick={deleteTransfer}>
@@ -1220,6 +1220,51 @@ export default function TransferPage() {
               </div>
 
               <div className="rounded-[18px] border border-slate-200 bg-slate-50 p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">Rezumat RO e-Transport</div>
+                    <div className="mt-1 text-xs text-slate-500">Completezi doar cand documentul chiar necesita raportare.</div>
+                  </div>
+                  <button type="button" className={documentButtonSecondaryClass} onClick={() => setShowETransportModal(true)}>
+                    <Truck size={16} className="mr-2" />
+                    Deschide e-Transport
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 gap-2 lg:grid-cols-4">
+                  <DocumentMetric title="Candidat" value={header.eTransportCandidate ? "Da" : "Nu"} tone={header.eTransportCandidate ? "amber" : "slate"} />
+                  <DocumentMetric title="XML" value={eTransportPrepared ? "Generat" : "Negenerat"} tone={eTransportPrepared ? "emerald" : "slate"} />
+                  <DocumentMetric title="Status UIT" value={header.eTransportStatus || "-"} tone="emerald" />
+                  <DocumentMetric title="Greutate bruta" value={`${formatNumber(eTransportSummary.totalGrossWeightKg)} kg`} tone="blue" />
+                </div>
+              </div>
+
+              {showETransportModal ? (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
+                  <div className="max-h-[92vh] w-full max-w-6xl overflow-auto rounded-[28px] border border-slate-200 bg-white p-5 shadow-2xl">
+                    <div className="mb-4 flex items-start justify-between gap-4">
+                      <div>
+                        <div className="text-lg font-semibold text-slate-900">RO e-Transport</div>
+                        <div className="mt-1 text-sm text-slate-500">Completezi datele doar pentru transferurile care necesita raportare.</div>
+                      </div>
+                      <button type="button" className={documentButtonSecondaryClass} onClick={() => setShowETransportModal(false)}>
+                        <ArrowLeft size={16} className="mr-2" />
+                        Inchide
+                      </button>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="flex flex-wrap gap-2">
+                        <button type="button" className={documentButtonSecondaryClass} onClick={generateETransportXml} disabled={!transferId || loadingDoc || eTransportBusy}>
+                          <Truck size={16} className="mr-2" />
+                          {eTransportBusy ? "Se genereaza..." : "Genereaza XML"}
+                        </button>
+                        <button type="button" className={documentButtonSecondaryClass} onClick={downloadETransportXml} disabled={!transferId || !eTransportPrepared || loadingDoc}>
+                          <Truck size={16} className="mr-2" />
+                          XML
+                        </button>
+                      </div>
+
+                      <div className="rounded-[18px] border border-slate-200 bg-slate-50 p-4">
                 <div className="mb-3 text-sm font-semibold text-slate-900">RO e-Transport</div>
                 <div className="space-y-3">
                   <div className="grid grid-cols-1 gap-2 lg:grid-cols-4">
@@ -1600,6 +1645,10 @@ export default function TransferPage() {
                   {header.eTransportErrorText ? <InlineNotice tone="info">{header.eTransportErrorText}</InlineNotice> : null}
                 </div>
               </div>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </DocumentSection>
         </div>

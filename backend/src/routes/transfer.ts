@@ -451,11 +451,9 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
 
   try {
     let transferId = id ? String(id) : ""
-    const autoDocNo =
-      !transferId && !rawDocNo
-        ? await prisma.$transaction((tx) => reserveNextNumber(tx, tenantId, "transfer"))
-        : ""
-    const docNo = rawDocNo || autoDocNo
+    const docNo = !transferId
+      ? await prisma.$transaction((tx) => reserveNextNumber(tx, tenantId, "transfer"))
+      : rawDocNo
 
     if (!transferId) {
       const duplicate = await prisma.transferDoc.findFirst({
