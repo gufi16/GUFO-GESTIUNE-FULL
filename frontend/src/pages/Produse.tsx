@@ -87,6 +87,13 @@ type RecipeForm = {
   items: RecipeLine[]
 }
 
+type NcSuggestion = {
+  code: string
+  label: string
+  confidence: number
+  matchedKeywords: string[]
+}
+
 const CLASS_OPTIONS = [
   { value: "MATERIE_PRIMA", label: "materie prima" },
   { value: "ALTE_MATERIALE", label: "alte materiale" },
@@ -218,6 +225,8 @@ export default function ProdusePage() {
   const [editingItem, setEditingItem] = useState<Product | null>(null)
   const [recipeProduct, setRecipeProduct] = useState<Product | null>(null)
   const [previewImageFailed, setPreviewImageFailed] = useState(false)
+  const [ncSuggesting, setNcSuggesting] = useState(false)
+  const [ncSuggestion, setNcSuggestion] = useState<NcSuggestion | null>(null)
   const [page, setPage] = useState(1)
   const [classFilter, setClassFilter] = useState<string>("ALL")
   const [nextSku, setNextSku] = useState("")
@@ -371,6 +380,7 @@ function getDefaultVat(list = vatRates) {
     })
     setError("")
     setMessage("")
+    setNcSuggestion(null)
     setPreviewImageFailed(false)
     setShowModal(true)
   }
@@ -399,6 +409,7 @@ function getDefaultVat(list = vatRates) {
     })
     setError("")
     setMessage("")
+    setNcSuggestion(null)
     setPreviewImageFailed(false)
     setShowModal(true)
   }
@@ -408,6 +419,7 @@ function getDefaultVat(list = vatRates) {
     setSaving(false)
     setUploading(false)
     setEditingItem(null)
+    setNcSuggestion(null)
     setPreviewImageFailed(false)
   }
 
@@ -573,6 +585,32 @@ function getDefaultVat(list = vatRates) {
       setError("Nu am putut salva produsul.")
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function suggestNcCode(force = false) {
+    const productName = String(form.name || "").trim()
+    if (!token || !productName) return
+    if (!force && String(form.ncCode || "").trim()) return
+
+    setNcSuggesting(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/products/nc-suggest?name=${encodeURIComponent(productName)}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) return
+
+      const best = data?.best as NcSuggestion | null
+      setNcSuggestion(best || null)
+      if (best?.code) {
+        setForm((prev) => ({
+          ...prev,
+          ncCode: force || !String(prev.ncCode || "").trim() ? best.code : prev.ncCode,
+        }))
+      }
+    } finally {
+      setNcSuggesting(false)
     }
   }
 
@@ -1069,6 +1107,9 @@ function getDefaultVat(list = vatRates) {
                       <input
                         value={form.name}
                         onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                        onBlur={() => {
+                          void suggestNcCode(false)
+                        }}
                         style={input}
                       />
                     </Field>
@@ -1132,12 +1173,40 @@ function getDefaultVat(list = vatRates) {
                     </Field>
 
                     <Field label="Cod NC">
-                      <input
-                        value={form.ncCode}
-                        onChange={(e) => setForm((prev) => ({ ...prev, ncCode: e.target.value.toUpperCase() }))}
-                        style={input}
-                        placeholder="Ex: 22021000"
-                      />
+                      <div style={{ display: "grid", gap: 6 }}>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <input
+                            value={form.ncCode}
+                            onChange={(e) => setForm((prev) => ({ ...prev, ncCode: e.target.value.toUpperCase() }))}
+                            style={{ ...input, flex: 1 }}
+                            placeholder="Ex: 22021000"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void suggestNcCode(true)
+                            }}
+                            disabled={ncSuggesting || !String(form.name || "").trim()}
+                            style={{
+                              border: "1px solid #cbd5e1",
+                              background: "#f8fafc",
+                              borderRadius: 10,
+                              padding: "0 12px",
+                              fontSize: 13,
+                              fontWeight: 600,
+                              color: "#17324D",
+                              minWidth: 110,
+                            }}
+                          >
+                            {ncSuggesting ? "Cauta..." : "Sugereaza"}
+                          </button>
+                        </div>
+                        {ncSuggestion ? (
+                          <div style={{ fontSize: 12, color: "#64748b" }}>
+                            Sugestie: <strong>{ncSuggestion.code}</strong> - {ncSuggestion.label}
+                          </div>
+                        ) : null}
+                      </div>
                     </Field>
                   </div>
                 </SectionCard>

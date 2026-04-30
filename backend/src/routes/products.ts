@@ -8,6 +8,7 @@ import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { resolveTenantCompany } from "../lib/companyResolver"
 import { requireRequestCompanyId } from "../lib/companyScope"
+import { suggestNcCodes } from "../lib/ncSuggest"
 
 const router = Router()
 
@@ -290,6 +291,20 @@ router.get("/api/v1/products/next-sku", async (req: AuthedRequest, res) => {
   } catch (e: any) {
     res.status(400).json({ ok: false, error: e?.message || "Nu pot genera urmatorul SKU." })
   }
+})
+
+router.get("/api/v1/products/nc-suggest", async (req: AuthedRequest, res) => {
+  const name = String(req.query.name || "").trim()
+  if (!name) {
+    return res.status(400).json({ ok: false, error: "Scrie numele produsului pentru sugestie." })
+  }
+
+  const suggestions = suggestNcCodes(name)
+  return res.json({
+    ok: true,
+    suggestions,
+    best: suggestions[0] || null,
+  })
 })
 
 router.post("/api/v1/products", async (req: AuthedRequest, res) => {
