@@ -798,9 +798,15 @@ export default function TransferPage() {
     setMessage("")
 
     try {
-      const persisted = await persistTransfer(false, false)
-      const activeTransferId = persisted.id || transferId || ""
-      if (!persisted.ok || !activeTransferId) return
+      let activeTransferId = transferId || ""
+      if (!isPosted) {
+        const persisted = await persistTransfer(false, false)
+        activeTransferId = persisted.id || transferId || ""
+        if (!persisted.ok || !activeTransferId) return
+      } else if (!activeTransferId) {
+        setError("Salveaza mai intai transferul.")
+        return
+      }
 
       const res = await fetch(`${API}/api/v1/transfers/${activeTransferId}/etransport/prepare`, {
         method: "POST",
@@ -957,9 +963,15 @@ export default function TransferPage() {
     setError("")
     setMessage("")
     try {
-      const persisted = await persistTransfer(false, false)
-      const activeTransferId = persisted.id || transferId || ""
-      if (!persisted.ok || !activeTransferId) return
+      let activeTransferId = transferId || ""
+      if (!isPosted) {
+        const persisted = await persistTransfer(false, false)
+        activeTransferId = persisted.id || transferId || ""
+        if (!persisted.ok || !activeTransferId) return
+      } else if (!activeTransferId) {
+        setError("Salveaza mai intai transferul.")
+        return
+      }
 
       const res = await fetch(`${API}/api/v1/transfers/${activeTransferId}/etransport/send`, {
         method: "POST",
