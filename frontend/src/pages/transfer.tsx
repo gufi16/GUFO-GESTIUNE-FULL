@@ -1522,7 +1522,7 @@ export default function TransferPage() {
                     <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
                       <div className="rounded-[14px] border border-slate-200 bg-slate-50 p-3">
                         <div className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Loc start</div>
-                        <div className="grid grid-cols-1 gap-2 lg:grid-cols-[240px_minmax(0,1fr)]">
+                        <div className="grid grid-cols-1 gap-2 lg:grid-cols-[250px_minmax(0,1fr)]">
                         <select
                           value={header.eTransportStartScope}
                           onChange={(e) =>
@@ -1577,7 +1577,7 @@ export default function TransferPage() {
 
                         {!startScopeIsBorder ? (
                           <div className="mt-2 space-y-2">
-                            <div className="grid grid-cols-1 gap-2 lg:grid-cols-[140px_150px_minmax(0,1fr)]">
+                            <div className="grid grid-cols-1 gap-2 lg:grid-cols-[130px_150px_minmax(0,1fr)]">
                               <input
                                 value={startAdr.companyCui}
                                 onChange={(e) => setStartAdr((prev) => ({ ...prev, companyCui: e.target.value.replace(/\D/g, ""), sourceLocationId: "" }))}
@@ -1596,13 +1596,12 @@ export default function TransferPage() {
                                 placeholder="Denumire firma / punct de lucru"
                               />
                             </div>
-                            <div className="grid grid-cols-1 gap-2 lg:grid-cols-[160px_160px_minmax(0,1fr)_120px]">
+                            <div className="grid grid-cols-1 gap-2 lg:grid-cols-[96px_150px_minmax(0,1fr)_110px]">
                               <input
-                                value={startAdr.country}
-                                onChange={(e) => setStartAdr((prev) => ({ ...prev, country: e.target.value, sourceLocationId: "" }))}
+                                value="RO"
+                                readOnly
                                 className={documentInputClass}
-                                disabled={isPosted}
-                                placeholder="Tara"
+                                style={readonlyInputStyle}
                               />
                               <input
                                 value={startAdr.county}
@@ -1623,23 +1622,16 @@ export default function TransferPage() {
                                 onChange={(e) => setStartAdr((prev) => ({ ...prev, postalCode: e.target.value, sourceLocationId: "" }))}
                                 className={documentInputClass}
                                 disabled={isPosted}
-                                placeholder="Cod postal"
+                                placeholder="Cod post."
                               />
                             </div>
-                            <div className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_220px]">
+                            <div className="grid grid-cols-1 gap-2">
                               <input
                                 value={startAdr.address}
                                 onChange={(e) => setStartAdr((prev) => ({ ...prev, address: e.target.value, sourceLocationId: "" }))}
                                 className={documentInputClass}
                                 disabled={isPosted}
                                 placeholder="Strada, numar"
-                              />
-                              <input
-                                value={startAdr.extra}
-                                onChange={(e) => setStartAdr((prev) => ({ ...prev, extra: e.target.value, sourceLocationId: "" }))}
-                                className={documentInputClass}
-                                disabled={isPosted}
-                                placeholder="Detalii suplimentare"
                               />
                             </div>
                           </div>
@@ -1648,7 +1640,7 @@ export default function TransferPage() {
 
                       <div className="rounded-[14px] border border-slate-200 bg-slate-50 p-3">
                         <div className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Loc final</div>
-                        <div className="grid grid-cols-1 gap-2 lg:grid-cols-[240px_minmax(0,1fr)]">
+                        <div className="grid grid-cols-1 gap-2 lg:grid-cols-[250px_minmax(0,1fr)]">
                         <select
                           value={header.eTransportEndScope}
                           onChange={(e) =>
@@ -1703,7 +1695,7 @@ export default function TransferPage() {
 
                         {!endScopeIsBorder ? (
                           <div className="mt-2 space-y-2">
-                            <div className="grid grid-cols-1 gap-2 lg:grid-cols-[140px_150px_minmax(0,1fr)]">
+                            <div className="grid grid-cols-1 gap-2 lg:grid-cols-[130px_150px_minmax(0,1fr)]">
                               <input
                                 value={endAdr.companyCui}
                                 onChange={(e) => setEndAdr((prev) => ({ ...prev, companyCui: e.target.value.replace(/\D/g, ""), sourceLocationId: "" }))}
@@ -1722,13 +1714,12 @@ export default function TransferPage() {
                                 placeholder="Denumire firma / punct de lucru"
                               />
                             </div>
-                            <div className="grid grid-cols-1 gap-2 lg:grid-cols-[160px_160px_minmax(0,1fr)_120px]">
+                            <div className="grid grid-cols-1 gap-2 lg:grid-cols-[96px_150px_minmax(0,1fr)_110px]">
                               <input
-                                value={endAdr.country}
-                                onChange={(e) => setEndAdr((prev) => ({ ...prev, country: e.target.value, sourceLocationId: "" }))}
+                                value="RO"
+                                readOnly
                                 className={documentInputClass}
-                                disabled={isPosted}
-                                placeholder="Tara"
+                                style={readonlyInputStyle}
                               />
                               <input
                                 value={endAdr.county}
@@ -1749,23 +1740,16 @@ export default function TransferPage() {
                                 onChange={(e) => setEndAdr((prev) => ({ ...prev, postalCode: e.target.value, sourceLocationId: "" }))}
                                 className={documentInputClass}
                                 disabled={isPosted}
-                                placeholder="Cod postal"
+                                placeholder="Cod post."
                               />
                             </div>
-                            <div className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_220px]">
+                            <div className="grid grid-cols-1 gap-2">
                               <input
                                 value={endAdr.address}
                                 onChange={(e) => setEndAdr((prev) => ({ ...prev, address: e.target.value, sourceLocationId: "" }))}
                                 className={documentInputClass}
                                 disabled={isPosted}
                                 placeholder="Strada, numar"
-                              />
-                              <input
-                                value={endAdr.extra}
-                                onChange={(e) => setEndAdr((prev) => ({ ...prev, extra: e.target.value, sourceLocationId: "" }))}
-                                className={documentInputClass}
-                                disabled={isPosted}
-                                placeholder="Detalii suplimentare"
                               />
                             </div>
                           </div>
