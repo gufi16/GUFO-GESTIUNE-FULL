@@ -1,4 +1,4 @@
-﻿import { ArrowRight, ArrowLeftRight, Factory, Warehouse } from "lucide-react"
+import { ArrowRight, ArrowLeftRight, Factory, Truck, Warehouse } from "lucide-react"
 import PageHeader from "../components/PageHeader"
 import { useNavigate } from "react-router-dom"
 
@@ -16,6 +16,12 @@ const items = [
     icon: ArrowLeftRight,
   },
   {
+    name: "RO e-Transport",
+    desc: "Gestionezi notificarile separate pentru transfer, livrare, import sau completare manuala.",
+    route: "/e-transport",
+    icon: Truck,
+  },
+  {
     name: "Productie",
     desc: "Controlezi transformarea materiilor prime.",
     route: "/gestiune/productie",
@@ -30,7 +36,7 @@ export default function Gestiune() {
     <div className="space-y-3">
       <PageHeader badge="gestiune" title="Gestiune" />
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
         {items.map((item) => {
           const Icon = item.icon
           return (
