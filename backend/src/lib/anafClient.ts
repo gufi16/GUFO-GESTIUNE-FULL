@@ -162,8 +162,8 @@ export function buildAnafAuthHeaders(accessToken: string, extraHeaders: Record<s
 
 function getEtransportBaseUrl(environment: string | null | undefined) {
   return String(environment || "test").toLowerCase() === "prod"
-    ? "https://api.anaf.ro/prod/ETRANSPORT/ws/v1"
-    : "https://api.anaf.ro/test/ETRANSPORT/ws/v1"
+    ? "https://webserviceapl.anaf.ro/prod/ETRANSPORT/ws/v1"
+    : "https://webserviceapl.anaf.ro/test/ETRANSPORT/ws/v1"
 }
 
 function logAnafRequestStart(label: string, details: Record<string, unknown>) {
