@@ -227,6 +227,7 @@ export default function ProdusePage() {
   const [previewImageFailed, setPreviewImageFailed] = useState(false)
   const [ncSuggesting, setNcSuggesting] = useState(false)
   const [ncSuggestion, setNcSuggestion] = useState<NcSuggestion | null>(null)
+  const [ncCodeManual, setNcCodeManual] = useState(false)
   const [page, setPage] = useState(1)
   const [classFilter, setClassFilter] = useState<string>("ALL")
   const [nextSku, setNextSku] = useState("")
@@ -381,6 +382,7 @@ function getDefaultVat(list = vatRates) {
     setError("")
     setMessage("")
     setNcSuggestion(null)
+    setNcCodeManual(false)
     setPreviewImageFailed(false)
     setShowModal(true)
   }
@@ -410,6 +412,7 @@ function getDefaultVat(list = vatRates) {
     setError("")
     setMessage("")
     setNcSuggestion(null)
+    setNcCodeManual(false)
     setPreviewImageFailed(false)
     setShowModal(true)
   }
@@ -420,6 +423,7 @@ function getDefaultVat(list = vatRates) {
     setUploading(false)
     setEditingItem(null)
     setNcSuggestion(null)
+    setNcCodeManual(false)
     setPreviewImageFailed(false)
   }
 
@@ -591,7 +595,7 @@ function getDefaultVat(list = vatRates) {
   async function suggestNcCode(force = false) {
     const productName = String(form.name || "").trim()
     if (!token || !productName) return
-    if (!force && String(form.ncCode || "").trim()) return
+    if (!force && String(form.ncCode || "").trim() && ncCodeManual) return
 
     setNcSuggesting(true)
     try {
@@ -606,13 +610,33 @@ function getDefaultVat(list = vatRates) {
       if (best?.code) {
         setForm((prev) => ({
           ...prev,
-          ncCode: force || !String(prev.ncCode || "").trim() ? best.code : prev.ncCode,
+          ncCode:
+            force || !String(prev.ncCode || "").trim() || !ncCodeManual
+              ? best.code
+              : prev.ncCode,
         }))
       }
     } finally {
       setNcSuggesting(false)
     }
   }
+
+  useEffect(() => {
+    if (!showModal) return
+    const productName = String(form.name || "").trim()
+    if (productName.length < 3) {
+      if (!ncCodeManual) {
+        setNcSuggestion(null)
+      }
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      void suggestNcCode(false)
+    }, 450)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [form.name, showModal, ncCodeManual])
 
   async function deleteProduct(item: Product) {
     if (!token) {
@@ -1177,13 +1201,17 @@ function getDefaultVat(list = vatRates) {
                         <div style={{ display: "flex", gap: 8 }}>
                           <input
                             value={form.ncCode}
-                            onChange={(e) => setForm((prev) => ({ ...prev, ncCode: e.target.value.toUpperCase() }))}
+                            onChange={(e) => {
+                              setNcCodeManual(true)
+                              setForm((prev) => ({ ...prev, ncCode: e.target.value.toUpperCase() }))
+                            }}
                             style={{ ...input, flex: 1 }}
                             placeholder="Ex: 22021000"
                           />
                           <button
                             type="button"
                             onClick={() => {
+                              setNcCodeManual(false)
                               void suggestNcCode(true)
                             }}
                             disabled={ncSuggesting || !String(form.name || "").trim()}
