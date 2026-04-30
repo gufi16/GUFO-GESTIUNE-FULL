@@ -295,6 +295,15 @@ model Company {
   efacturaOauthRefreshTokenExpiresAt DateTime?
   efacturaOauthConnectedAt           DateTime?
   efacturaOauthLastError             String?
+  etransportOauthClientId            String?
+  etransportOauthClientSecret        String?
+  etransportOauthRedirectUri         String?
+  etransportOauthAccessToken         String?
+  etransportOauthRefreshToken        String?
+  etransportOauthAccessTokenExpiresAt DateTime?
+  etransportOauthRefreshTokenExpiresAt DateTime?
+  etransportOauthConnectedAt         DateTime?
+  etransportOauthLastError           String?
   invoiceSeries                      String    @default("FAC")
   purchaseSeries                     String    @default("NIR")
   transferSeries                     String    @default("TRF")

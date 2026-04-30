@@ -22,12 +22,25 @@ const COMPANY_ANAF_SELECT = {
   efacturaOauthRedirectUri: true,
   efacturaOauthAccessToken: true,
   efacturaOauthLastError: true,
+  etransportOauthClientId: true,
+  etransportOauthClientSecret: true,
+  etransportOauthRedirectUri: true,
+  etransportOauthAccessToken: true,
+  etransportOauthRefreshToken: true,
+  etransportOauthAccessTokenExpiresAt: true,
+  etransportOauthRefreshTokenExpiresAt: true,
+  etransportOauthConnectedAt: true,
+  etransportOauthLastError: true,
   efacturaCertSerial: true,
   efacturaCertFilename: true,
   efacturaCertPasswordEnc: true,
 }
 
-export async function loadAnafCompanyContext(tenantId: string, activeCompanyId?: string | null) {
+export async function loadAnafCompanyContext(
+  tenantId: string,
+  activeCompanyId?: string | null,
+  service: "efactura" | "etrtransport" = "efactura"
+) {
   const company = await resolveTenantCompany(prisma, tenantId, activeCompanyId, {
     select: COMPANY_ANAF_SELECT,
   })
@@ -40,17 +53,62 @@ export async function loadAnafCompanyContext(tenantId: string, activeCompanyId?:
   })
 
   const usesOwnOauthConfig = Boolean(
-    company?.efacturaOauthClientId &&
-      company?.efacturaOauthClientSecret &&
-      company?.efacturaOauthRedirectUri
+    service === "etrtransport"
+      ? company?.etrtransportOauthClientId &&
+        company?.etrtransportOauthClientSecret &&
+        company?.etrtransportOauthRedirectUri
+      : company?.efacturaOauthClientId &&
+        company?.efacturaOauthClientSecret &&
+        company?.efacturaOauthRedirectUri
   )
+
+  const ownClientId =
+    service === "etrtransport" ? company?.etrtransportOauthClientId : company?.efacturaOauthClientId
+  const ownClientSecret =
+    service === "etrtransport" ? company?.etrtransportOauthClientSecret : company?.efacturaOauthClientSecret
+  const ownRedirectUri =
+    service === "etrtransport" ? company?.etrtransportOauthRedirectUri : company?.efacturaOauthRedirectUri
+  const ownAccessToken =
+    service === "etrtransport"
+      ? company?.etrtransportOauthAccessToken || company?.efacturaOauthAccessToken
+      : company?.efacturaOauthAccessToken
+  const ownRefreshToken =
+    service === "etrtransport"
+      ? company?.etrtransportOauthRefreshToken || company?.efacturaOauthRefreshToken
+      : company?.efacturaOauthRefreshToken
+  const ownAccessTokenExpiresAt =
+    service === "etrtransport"
+      ? company?.etrtransportOauthAccessTokenExpiresAt || company?.efacturaOauthAccessTokenExpiresAt
+      : company?.efacturaOauthAccessTokenExpiresAt
+  const ownRefreshTokenExpiresAt =
+    service === "etrtransport"
+      ? company?.etrtransportOauthRefreshTokenExpiresAt || company?.efacturaOauthRefreshTokenExpiresAt
+      : company?.efacturaOauthRefreshTokenExpiresAt
+  const ownConnectedAt =
+    service === "etrtransport"
+      ? company?.etrtransportOauthConnectedAt || company?.efacturaOauthConnectedAt
+      : company?.efacturaOauthConnectedAt
+  const ownLastError =
+    service === "etrtransport"
+      ? company?.etrtransportOauthLastError || company?.efacturaOauthLastError
+      : company?.efacturaOauthLastError
 
   return {
     ...company,
+    anafService: service,
     efacturaUsesPlatformConfig: !usesOwnOauthConfig,
     efacturaEnvironment: usesOwnOauthConfig
       ? String(company?.efacturaEnvironment || "test").trim() || "test"
       : String(platform?.efacturaEnvironment || company?.efacturaEnvironment || "test").trim() || "test",
+    anafOauthClientId: ownClientId || (!usesOwnOauthConfig ? platform?.efacturaOauthClientId || "" : ""),
+    anafOauthClientSecret: ownClientSecret || (!usesOwnOauthConfig ? platform?.efacturaOauthClientSecret || "" : ""),
+    anafOauthRedirectUri: ownRedirectUri || (!usesOwnOauthConfig ? platform?.efacturaOauthRedirectUri || "" : ""),
+    anafOauthAccessToken: ownAccessToken || "",
+    anafOauthRefreshToken: ownRefreshToken || null,
+    anafOauthAccessTokenExpiresAt: ownAccessTokenExpiresAt || null,
+    anafOauthRefreshTokenExpiresAt: ownRefreshTokenExpiresAt || null,
+    anafOauthConnectedAt: ownConnectedAt || null,
+    anafOauthLastError: ownLastError || null,
   }
 }
 
@@ -109,7 +167,7 @@ export function getAnafTokenDiagnostics(accessToken: string) {
 }
 
 export function getAnafCompanyDiagnostics(company: any) {
-  const tokenDiagnostics = getAnafTokenDiagnostics(String(company?.efacturaOauthAccessToken || ""))
+  const tokenDiagnostics = getAnafTokenDiagnostics(String(company?.anafOauthAccessToken || company?.efacturaOauthAccessToken || ""))
   const certOptions = getAnafCertificateOptions(company)
   const certSerialConfigured = company?.efacturaCertSerial || null
   const tokenSerial = tokenDiagnostics.tokenSerial || null
@@ -120,7 +178,7 @@ export function getAnafCompanyDiagnostics(company: any) {
     tenantId: company?.tenantId || null,
     environment: company?.efacturaEnvironment || "test",
     cif: normalizeCompanyCui(company?.cui),
-    hasAccessToken: Boolean(company?.efacturaOauthAccessToken),
+    hasAccessToken: Boolean(company?.anafOauthAccessToken || company?.efacturaOauthAccessToken),
     hasCertificateFile: Boolean(company?.efacturaCertFilename),
     usingClientCertificate: Boolean(certOptions?.pfx),
     certSerialConfigured,
@@ -141,7 +199,7 @@ export function requireAnafReadyCompany(company: any, actionLabel = "operatiunea
   if (!cif) {
     throw new Error(`Firma nu are CUI valid pentru ${actionLabel}.`)
   }
-  if (!company?.efacturaOauthAccessToken) {
+  if (!company?.anafOauthAccessToken && !company?.efacturaOauthAccessToken) {
     throw new Error(`Nu exista token ANAF salvat pentru aceasta firma. Genereaza mai intai tokenul ANAF pentru ${actionLabel}.`)
   }
 
@@ -149,7 +207,7 @@ export function requireAnafReadyCompany(company: any, actionLabel = "operatiunea
     cif,
     certOptions: getAnafCertificateOptions(company),
     baseUrl: getEfacturaBaseUrl(company?.efacturaEnvironment),
-    accessToken: String(company.efacturaOauthAccessToken),
+    accessToken: String(company.anafOauthAccessToken || company.efacturaOauthAccessToken),
   }
 }
 
