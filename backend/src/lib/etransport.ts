@@ -27,6 +27,34 @@ function normalizeText(value: unknown) {
   return String(value || "").trim()
 }
 
+function decodeStructuredAddress(value: unknown) {
+  const text = normalizeText(value)
+  if (!text.startsWith("ADRJSON:")) return null
+
+  try {
+    return JSON.parse(text.slice("ADRJSON:".length))
+  } catch {
+    return null
+  }
+}
+
+function buildStructuredAddressText(value: unknown) {
+  const parsed = decodeStructuredAddress(value)
+  if (!parsed) return normalizeText(value)
+
+  return [
+    normalizeText(parsed.companyName),
+    normalizeText(parsed.address),
+    normalizeText(parsed.city),
+    normalizeText(parsed.county),
+    normalizeText(parsed.postalCode),
+    normalizeText(parsed.country || "Romania"),
+    normalizeText(parsed.extra),
+  ]
+    .filter(Boolean)
+    .join(", ")
+}
+
 function buildLocationText(location: any) {
   if (!location) return ""
   return [location.address, location.city, location.county, location.country || "RO"]
@@ -81,11 +109,11 @@ export function validateTransferForETransport(doc: any) {
     issues.push({ severity: "error", field: "eTransportEndBorderPoint", message: "Selecteaza punctul de frontiera pentru final." })
   }
 
-  if (normalizeText(doc?.eTransportStartScope) === "ADR" && !normalizeText(doc?.eTransportStartAddress || buildLocationText(doc?.fromLocation))) {
+  if (normalizeText(doc?.eTransportStartScope) === "ADR" && !normalizeText(buildStructuredAddressText(doc?.eTransportStartAddress) || buildLocationText(doc?.fromLocation))) {
     issues.push({ severity: "error", field: "eTransportStartAddress", message: "Completeaza adresa de start a traseului." })
   }
 
-  if (normalizeText(doc?.eTransportEndScope) === "ADR" && !normalizeText(doc?.eTransportEndAddress || buildLocationText(doc?.toLocation))) {
+  if (normalizeText(doc?.eTransportEndScope) === "ADR" && !normalizeText(buildStructuredAddressText(doc?.eTransportEndAddress) || buildLocationText(doc?.toLocation))) {
     issues.push({ severity: "error", field: "eTransportEndAddress", message: "Completeaza adresa finala a traseului." })
   }
 
@@ -138,10 +166,10 @@ export function generateTransferETransportXml(doc: any) {
   const startText = formatDateTimeLocal(doc?.eTransportDeclaredStart)
   const loadingAddress = normalizeText(doc?.eTransportStartScope) === "PTF"
     ? normalizeText(doc?.eTransportStartBorderPoint)
-    : normalizeText(doc?.eTransportStartAddress || buildLocationText(doc?.fromLocation))
+    : normalizeText(buildStructuredAddressText(doc?.eTransportStartAddress) || buildLocationText(doc?.fromLocation))
   const unloadingAddress = normalizeText(doc?.eTransportEndScope) === "PTF"
     ? normalizeText(doc?.eTransportEndBorderPoint)
-    : normalizeText(doc?.eTransportEndAddress || buildLocationText(doc?.toLocation))
+    : normalizeText(buildStructuredAddressText(doc?.eTransportEndAddress) || buildLocationText(doc?.toLocation))
 
   const linesXml = items
     .map((item: any, index: number) => {

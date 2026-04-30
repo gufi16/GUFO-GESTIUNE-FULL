@@ -50,6 +50,18 @@ type CompanyLookupResult = {
   postalCode?: string
 }
 
+type ETransportAdrForm = {
+  sourceLocationId: string
+  companyCui: string
+  companyName: string
+  country: string
+  county: string
+  city: string
+  address: string
+  postalCode: string
+  extra: string
+}
+
 type ActiveCompany = {
   name?: string
   cui?: string
@@ -177,6 +189,102 @@ function buildAddressOptions(locations: LocationOption[]) {
     .filter((location) => location.label)
 }
 
+function createEmptyAdrForm(): ETransportAdrForm {
+  return {
+    sourceLocationId: "",
+    companyCui: "",
+    companyName: "",
+    country: "Romania",
+    county: "",
+    city: "",
+    address: "",
+    postalCode: "",
+    extra: "",
+  }
+}
+
+function buildAdrFormFromLocation(location?: LocationOption | null): ETransportAdrForm {
+  if (!location) return createEmptyAdrForm()
+  return {
+    sourceLocationId: location.id,
+    companyCui: "",
+    companyName: location.name || "",
+    country: location.country || "Romania",
+    county: location.county || "",
+    city: location.city || "",
+    address: location.address || "",
+    postalCode: location.postalCode || "",
+    extra: "",
+  }
+}
+
+function normalizeCountryLabel(value: string) {
+  const text = String(value || "").trim()
+  if (!text) return "Romania"
+  return text.toUpperCase() === "RO" ? "Romania" : text
+}
+
+function normalizeStoredAddressText(value: string) {
+  return String(value || "").trim()
+}
+
+function serializeAdrForm(form: ETransportAdrForm) {
+  return `ADRJSON:${JSON.stringify({
+    sourceLocationId: form.sourceLocationId || "",
+    companyCui: form.companyCui || "",
+    companyName: form.companyName || "",
+    country: form.country || "",
+    county: form.county || "",
+    city: form.city || "",
+    address: form.address || "",
+    postalCode: form.postalCode || "",
+    extra: form.extra || "",
+  })}`
+}
+
+function parseAdrForm(value: string, fallbackLocation?: LocationOption | null) {
+  const text = normalizeStoredAddressText(value)
+  if (text.startsWith("ADRJSON:")) {
+    try {
+      const parsed = JSON.parse(text.slice("ADRJSON:".length))
+      return {
+        sourceLocationId: String(parsed?.sourceLocationId || ""),
+        companyCui: String(parsed?.companyCui || ""),
+        companyName: String(parsed?.companyName || ""),
+        country: normalizeCountryLabel(String(parsed?.country || "")),
+        county: String(parsed?.county || ""),
+        city: String(parsed?.city || ""),
+        address: String(parsed?.address || ""),
+        postalCode: String(parsed?.postalCode || ""),
+        extra: String(parsed?.extra || ""),
+      } satisfies ETransportAdrForm
+    } catch {
+      return buildAdrFormFromLocation(fallbackLocation)
+    }
+  }
+
+  if (text) {
+    return {
+      ...buildAdrFormFromLocation(fallbackLocation),
+      address: text,
+      sourceLocationId: "",
+    }
+  }
+
+  return buildAdrFormFromLocation(fallbackLocation)
+}
+
+function adrFormHasContent(form: ETransportAdrForm) {
+  return Boolean(
+    form.companyName.trim() ||
+      form.address.trim() ||
+      form.city.trim() ||
+      form.county.trim() ||
+      form.postalCode.trim() ||
+      form.extra.trim()
+  )
+}
+
 function parsePositive(value: any) {
   const normalized = String(value ?? "").replace(",", ".").trim()
   const parsed = Number(normalized)
@@ -200,6 +308,10 @@ export default function TransferPage() {
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
   const [partnerLookupBusy, setPartnerLookupBusy] = useState(false)
+  const [startAdr, setStartAdr] = useState<ETransportAdrForm>(createEmptyAdrForm())
+  const [endAdr, setEndAdr] = useState<ETransportAdrForm>(createEmptyAdrForm())
+  const [startAdrLookupBusy, setStartAdrLookupBusy] = useState(false)
+  const [endAdrLookupBusy, setEndAdrLookupBusy] = useState(false)
 
   const [header, setHeader] = useState({
     fromLocationId: getActiveLocationId(),
@@ -316,6 +428,8 @@ export default function TransferPage() {
               ? prev.toLocationId
               : nextLocations.find((location) => location.id !== (prev.fromLocationId || fallbackFrom))?.id || "",
         }))
+        setStartAdr(buildAdrFormFromLocation(fallbackFromLocation))
+        setEndAdr(buildAdrFormFromLocation(fallbackToLocation))
       }
     } catch {
       setError("Nu am putut incarca datele pentru transfer.")
@@ -390,6 +504,9 @@ export default function TransferPage() {
         eTransportDownloadId: doc.eTransportDownloadId || "",
         eTransportErrorText: doc.eTransportErrorText || "",
       })
+
+      setStartAdr(parseAdrForm(doc.eTransportStartAddress || "", doc.fromLocation))
+      setEndAdr(parseAdrForm(doc.eTransportEndAddress || "", doc.toLocation))
 
       const loadedLines = ensureArray(doc.items).map((item: any) => ({
         id: item.id || crypto.randomUUID(),
@@ -523,10 +640,28 @@ export default function TransferPage() {
   const addressOptions = useMemo(() => buildAddressOptions(locations), [locations])
   const startScopeIsBorder = header.eTransportStartScope === "PTF"
   const endScopeIsBorder = header.eTransportEndScope === "PTF"
-  const selectedStartAddressOption =
-    addressOptions.find((option) => option.label === header.eTransportStartAddress)?.id || "__manual__"
-  const selectedEndAddressOption =
-    addressOptions.find((option) => option.label === header.eTransportEndAddress)?.id || "__manual__"
+  const selectedStartAddressOption = startAdr.sourceLocationId || "__manual__"
+  const selectedEndAddressOption = endAdr.sourceLocationId || "__manual__"
+
+  useEffect(() => {
+    if (!fromLocation) return
+    setStartAdr((prev) => {
+      if (!prev.sourceLocationId || prev.sourceLocationId === fromLocation.id || !adrFormHasContent(prev)) {
+        return buildAdrFormFromLocation(fromLocation)
+      }
+      return prev
+    })
+  }, [fromLocation?.id])
+
+  useEffect(() => {
+    if (!toLocation) return
+    setEndAdr((prev) => {
+      if (!prev.sourceLocationId || prev.sourceLocationId === toLocation.id || !adrFormHasContent(prev)) {
+        return buildAdrFormFromLocation(toLocation)
+      }
+      return prev
+    })
+  }, [toLocation?.id])
 
   async function saveDoc(postNow = false) {
     if (!token) {
@@ -579,6 +714,10 @@ export default function TransferPage() {
           id: transferId || null,
           header: {
             ...header,
+            eTransportStartAddress:
+              header.eTransportStartScope === "ADR" ? serializeAdrForm(startAdr) : header.eTransportStartBorderPoint,
+            eTransportEndAddress:
+              header.eTransportEndScope === "ADR" ? serializeAdrForm(endAdr) : header.eTransportEndBorderPoint,
             eTransportCandidate: eTransportSummary.candidate,
             eTransportRequired: header.eTransportRequired || eTransportSummary.required,
           },
@@ -670,6 +809,49 @@ export default function TransferPage() {
       setError("Nu am putut genera XML-ul RO e-Transport.")
     } finally {
       setETransportBusy(false)
+    }
+  }
+
+  async function lookupAdrByCui(side: "start" | "end") {
+    const isStart = side === "start"
+    const form = isStart ? startAdr : endAdr
+    const setBusy = isStart ? setStartAdrLookupBusy : setEndAdrLookupBusy
+    const setForm = isStart ? setStartAdr : setEndAdr
+    const normalizedCui = String(form.companyCui || "").trim().replace(/^RO/i, "").replace(/\D/g, "")
+
+    if (!normalizedCui) {
+      setError(`Completeaza mai intai CUI-ul pentru locul de ${isStart ? "start" : "final"}.`)
+      return
+    }
+
+    setBusy(true)
+    setError("")
+    try {
+      const res = await fetch(`${API}/api/v1/company/cui-lookup?cui=${encodeURIComponent(normalizedCui)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok || !data?.company) {
+        throw new Error(data?.error || "Nu am putut obtine datele firmei dupa CUI.")
+      }
+
+      const company = data.company as CompanyLookupResult
+      setForm((prev) => ({
+        ...prev,
+        companyCui: normalizedCui,
+        companyName: String(company.name || "").trim() || prev.companyName,
+        country: normalizeCountryLabel(String(company.country || "")) || prev.country,
+        county: String(company.county || "").trim() || prev.county,
+        city: String(company.city || "").trim() || prev.city,
+        address: String(company.address || "").trim() || prev.address,
+        postalCode: String(company.postalCode || "").trim() || prev.postalCode,
+        sourceLocationId: "",
+      }))
+      setMessage(`Adresa pentru locul de ${isStart ? "start" : "final"} a fost completata dupa CUI.`)
+    } catch (e: any) {
+      setError(e?.message || "Nu am putut cauta firma dupa CUI.")
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -951,8 +1133,13 @@ export default function TransferPage() {
                             ...prev,
                             fromLocationId: nextId,
                             toLocationId: prev.toLocationId === nextId ? "" : prev.toLocationId,
-                            eTransportStartAddress: prev.eTransportStartScope === "ADR" ? buildLocationLabel(nextLocation) : prev.eTransportStartAddress,
                           }))
+                          setStartAdr((prev) => {
+                            if (!prev.sourceLocationId || prev.sourceLocationId === header.fromLocationId || !adrFormHasContent(prev)) {
+                              return buildAdrFormFromLocation(nextLocation)
+                            }
+                            return prev
+                          })
                           setActiveLocationId(nextId)
                         }}
                         className={`${documentInputClass} pl-9`}
@@ -977,8 +1164,13 @@ export default function TransferPage() {
                           setHeader((prev) => ({
                             ...prev,
                             toLocationId: nextId,
-                            eTransportEndAddress: prev.eTransportEndScope === "ADR" ? buildLocationLabel(nextLocation) : prev.eTransportEndAddress,
                           }))
+                          setEndAdr((prev) => {
+                            if (!prev.sourceLocationId || prev.sourceLocationId === header.toLocationId || !adrFormHasContent(prev)) {
+                              return buildAdrFormFromLocation(nextLocation)
+                            }
+                            return prev
+                          })
                         }}
                         className={`${documentInputClass} pl-9`}
                         disabled={isPosted}
@@ -1147,14 +1339,13 @@ export default function TransferPage() {
                     <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
                       <div className="rounded-[14px] border border-slate-200 bg-slate-50 p-3">
                         <div className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Loc start</div>
-                        <div className="grid grid-cols-1 gap-2 lg:grid-cols-[210px_minmax(0,1fr)]">
+                        <div className="grid grid-cols-1 gap-2 lg:grid-cols-[240px_minmax(0,1fr)]">
                         <select
                           value={header.eTransportStartScope}
                           onChange={(e) =>
                             setHeader((prev) => ({
                               ...prev,
                               eTransportStartScope: e.target.value,
-                              eTransportStartAddress: e.target.value === "ADR" ? (prev.eTransportStartAddress || buildLocationLabel(fromLocation)) : "",
                             }))
                           }
                           className={documentInputClass}
@@ -1181,15 +1372,19 @@ export default function TransferPage() {
                             <select
                               value={selectedStartAddressOption}
                               onChange={(e) => {
-                                if (e.target.value === "__manual__") return
+                                if (e.target.value === "__manual__") {
+                                  setStartAdr((prev) => ({ ...prev, sourceLocationId: "" }))
+                                  return
+                                }
                                 const option = addressOptions.find((item) => item.id === e.target.value)
+                                const location = locations.find((item) => item.id === e.target.value) || null
                                 if (!option) return
-                                setHeader((prev) => ({ ...prev, eTransportStartAddress: option.label }))
+                                setStartAdr(buildAdrFormFromLocation(location))
                               }}
                               className={documentInputClass}
                               disabled={isPosted}
                             >
-                              <option value="__manual__">Selecteaza adresa</option>
+                              <option value="__manual__">Completare manuala</option>
                               {addressOptions.map((option) => (
                                 <option key={`start-addr-${option.id}`} value={option.id}>{option.name}</option>
                               ))}
@@ -1198,26 +1393,85 @@ export default function TransferPage() {
                         </div>
 
                         {!startScopeIsBorder ? (
-                          <input
-                            value={header.eTransportStartAddress}
-                            onChange={(e) => setHeader((prev) => ({ ...prev, eTransportStartAddress: e.target.value }))}
-                            className={`${documentInputClass} mt-2`}
-                            disabled={isPosted}
-                            placeholder="Adresa de start sau completare manuala"
-                          />
+                          <div className="mt-2 space-y-2">
+                            <div className="grid grid-cols-1 gap-2 lg:grid-cols-[140px_150px_minmax(0,1fr)]">
+                              <input
+                                value={startAdr.companyCui}
+                                onChange={(e) => setStartAdr((prev) => ({ ...prev, companyCui: e.target.value.replace(/\D/g, ""), sourceLocationId: "" }))}
+                                className={documentInputClass}
+                                disabled={isPosted || startAdrLookupBusy}
+                                placeholder="CUI"
+                              />
+                              <button type="button" className={`${documentButtonSecondaryClass} w-full justify-center`} onClick={() => lookupAdrByCui("start")} disabled={isPosted || startAdrLookupBusy}>
+                                {startAdrLookupBusy ? "Se cauta..." : "Cauta CUI"}
+                              </button>
+                              <input
+                                value={startAdr.companyName}
+                                onChange={(e) => setStartAdr((prev) => ({ ...prev, companyName: e.target.value, sourceLocationId: "" }))}
+                                className={documentInputClass}
+                                disabled={isPosted}
+                                placeholder="Denumire firma / punct de lucru"
+                              />
+                            </div>
+                            <div className="grid grid-cols-1 gap-2 lg:grid-cols-[160px_160px_minmax(0,1fr)_120px]">
+                              <input
+                                value={startAdr.country}
+                                onChange={(e) => setStartAdr((prev) => ({ ...prev, country: e.target.value, sourceLocationId: "" }))}
+                                className={documentInputClass}
+                                disabled={isPosted}
+                                placeholder="Tara"
+                              />
+                              <input
+                                value={startAdr.county}
+                                onChange={(e) => setStartAdr((prev) => ({ ...prev, county: e.target.value, sourceLocationId: "" }))}
+                                className={documentInputClass}
+                                disabled={isPosted}
+                                placeholder="Judet"
+                              />
+                              <input
+                                value={startAdr.city}
+                                onChange={(e) => setStartAdr((prev) => ({ ...prev, city: e.target.value, sourceLocationId: "" }))}
+                                className={documentInputClass}
+                                disabled={isPosted}
+                                placeholder="Localitate"
+                              />
+                              <input
+                                value={startAdr.postalCode}
+                                onChange={(e) => setStartAdr((prev) => ({ ...prev, postalCode: e.target.value, sourceLocationId: "" }))}
+                                className={documentInputClass}
+                                disabled={isPosted}
+                                placeholder="Cod postal"
+                              />
+                            </div>
+                            <div className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_220px]">
+                              <input
+                                value={startAdr.address}
+                                onChange={(e) => setStartAdr((prev) => ({ ...prev, address: e.target.value, sourceLocationId: "" }))}
+                                className={documentInputClass}
+                                disabled={isPosted}
+                                placeholder="Strada, numar"
+                              />
+                              <input
+                                value={startAdr.extra}
+                                onChange={(e) => setStartAdr((prev) => ({ ...prev, extra: e.target.value, sourceLocationId: "" }))}
+                                className={documentInputClass}
+                                disabled={isPosted}
+                                placeholder="Detalii suplimentare"
+                              />
+                            </div>
+                          </div>
                         ) : null}
                       </div>
 
                       <div className="rounded-[14px] border border-slate-200 bg-slate-50 p-3">
                         <div className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Loc final</div>
-                        <div className="grid grid-cols-1 gap-2 lg:grid-cols-[210px_minmax(0,1fr)]">
+                        <div className="grid grid-cols-1 gap-2 lg:grid-cols-[240px_minmax(0,1fr)]">
                         <select
                           value={header.eTransportEndScope}
                           onChange={(e) =>
                             setHeader((prev) => ({
                               ...prev,
                               eTransportEndScope: e.target.value,
-                              eTransportEndAddress: e.target.value === "ADR" ? (prev.eTransportEndAddress || buildLocationLabel(toLocation)) : "",
                             }))
                           }
                           className={documentInputClass}
@@ -1244,15 +1498,19 @@ export default function TransferPage() {
                             <select
                               value={selectedEndAddressOption}
                               onChange={(e) => {
-                                if (e.target.value === "__manual__") return
+                                if (e.target.value === "__manual__") {
+                                  setEndAdr((prev) => ({ ...prev, sourceLocationId: "" }))
+                                  return
+                                }
                                 const option = addressOptions.find((item) => item.id === e.target.value)
+                                const location = locations.find((item) => item.id === e.target.value) || null
                                 if (!option) return
-                                setHeader((prev) => ({ ...prev, eTransportEndAddress: option.label }))
+                                setEndAdr(buildAdrFormFromLocation(location))
                               }}
                               className={documentInputClass}
                               disabled={isPosted}
                             >
-                              <option value="__manual__">Selecteaza adresa</option>
+                              <option value="__manual__">Completare manuala</option>
                               {addressOptions.map((option) => (
                                 <option key={`end-addr-${option.id}`} value={option.id}>{option.name}</option>
                               ))}
@@ -1261,13 +1519,73 @@ export default function TransferPage() {
                         </div>
 
                         {!endScopeIsBorder ? (
-                          <input
-                            value={header.eTransportEndAddress}
-                            onChange={(e) => setHeader((prev) => ({ ...prev, eTransportEndAddress: e.target.value }))}
-                            className={`${documentInputClass} mt-2`}
-                            disabled={isPosted}
-                            placeholder="Adresa finala sau completare manuala"
-                          />
+                          <div className="mt-2 space-y-2">
+                            <div className="grid grid-cols-1 gap-2 lg:grid-cols-[140px_150px_minmax(0,1fr)]">
+                              <input
+                                value={endAdr.companyCui}
+                                onChange={(e) => setEndAdr((prev) => ({ ...prev, companyCui: e.target.value.replace(/\D/g, ""), sourceLocationId: "" }))}
+                                className={documentInputClass}
+                                disabled={isPosted || endAdrLookupBusy}
+                                placeholder="CUI"
+                              />
+                              <button type="button" className={`${documentButtonSecondaryClass} w-full justify-center`} onClick={() => lookupAdrByCui("end")} disabled={isPosted || endAdrLookupBusy}>
+                                {endAdrLookupBusy ? "Se cauta..." : "Cauta CUI"}
+                              </button>
+                              <input
+                                value={endAdr.companyName}
+                                onChange={(e) => setEndAdr((prev) => ({ ...prev, companyName: e.target.value, sourceLocationId: "" }))}
+                                className={documentInputClass}
+                                disabled={isPosted}
+                                placeholder="Denumire firma / punct de lucru"
+                              />
+                            </div>
+                            <div className="grid grid-cols-1 gap-2 lg:grid-cols-[160px_160px_minmax(0,1fr)_120px]">
+                              <input
+                                value={endAdr.country}
+                                onChange={(e) => setEndAdr((prev) => ({ ...prev, country: e.target.value, sourceLocationId: "" }))}
+                                className={documentInputClass}
+                                disabled={isPosted}
+                                placeholder="Tara"
+                              />
+                              <input
+                                value={endAdr.county}
+                                onChange={(e) => setEndAdr((prev) => ({ ...prev, county: e.target.value, sourceLocationId: "" }))}
+                                className={documentInputClass}
+                                disabled={isPosted}
+                                placeholder="Judet"
+                              />
+                              <input
+                                value={endAdr.city}
+                                onChange={(e) => setEndAdr((prev) => ({ ...prev, city: e.target.value, sourceLocationId: "" }))}
+                                className={documentInputClass}
+                                disabled={isPosted}
+                                placeholder="Localitate"
+                              />
+                              <input
+                                value={endAdr.postalCode}
+                                onChange={(e) => setEndAdr((prev) => ({ ...prev, postalCode: e.target.value, sourceLocationId: "" }))}
+                                className={documentInputClass}
+                                disabled={isPosted}
+                                placeholder="Cod postal"
+                              />
+                            </div>
+                            <div className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_220px]">
+                              <input
+                                value={endAdr.address}
+                                onChange={(e) => setEndAdr((prev) => ({ ...prev, address: e.target.value, sourceLocationId: "" }))}
+                                className={documentInputClass}
+                                disabled={isPosted}
+                                placeholder="Strada, numar"
+                              />
+                              <input
+                                value={endAdr.extra}
+                                onChange={(e) => setEndAdr((prev) => ({ ...prev, extra: e.target.value, sourceLocationId: "" }))}
+                                className={documentInputClass}
+                                disabled={isPosted}
+                                placeholder="Detalii suplimentare"
+                              />
+                            </div>
+                          </div>
                         ) : null}
                       </div>
                     </div>
