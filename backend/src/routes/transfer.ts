@@ -73,6 +73,14 @@ function classifyEtransportStatus(payload: any, rawText: string) {
   return "SENT"
 }
 
+function explainEtransportAnafError(status: number, summary: string) {
+  const message = String(summary || "").trim()
+  if (status === 403 || /^forbidden$/i.test(message)) {
+    return "ANAF a refuzat cererea RO e-Transport. Cel mai probabil aplicatia OAuth/tokenul curent nu are serviciul E-Transport activat in ANAF."
+  }
+  return message || "ANAF a respins operatiunea RO e-Transport."
+}
+
 function extractUit(raw: string) {
   const match = String(raw || "").match(/\bUIT\b[^A-Z0-9]*([A-Z0-9\-]{6,})/i)
   return match?.[1] || ""
@@ -524,7 +532,7 @@ router.post("/api/v1/transfers/:id/etransport/send", async (req: AuthedRequest, 
   try {
     const uploadResult = await anafUploadEtransportXml(company, xmlText)
     const uploadIndex = uploadResult.uploadIndex
-    const summary = uploadResult.summary
+    const summary = explainEtransportAnafError(uploadResult.response.status, uploadResult.summary)
 
     if (!uploadResult.response.ok || !uploadIndex) {
       await prisma.transferDoc.update({
