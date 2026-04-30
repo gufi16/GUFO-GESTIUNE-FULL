@@ -160,6 +160,12 @@ export function buildAnafAuthHeaders(accessToken: string, extraHeaders: Record<s
   }
 }
 
+function getEtransportBaseUrl(environment: string | null | undefined) {
+  return String(environment || "test").toLowerCase() === "prod"
+    ? "https://api.anaf.ro/prod/ETRANSPORT/ws/v1"
+    : "https://api.anaf.ro/test/ETRANSPORT/ws/v1"
+}
+
 function logAnafRequestStart(label: string, details: Record<string, unknown>) {
   console.log("ANAF REQUEST START", {
     label,
@@ -325,6 +331,93 @@ export async function anafCheckUploadStatus(company: any, uploadIndex: string) {
     rawText,
     payload,
     downloadId,
+    summary: summarizeAnafResponse(payload, rawText),
+  }
+}
+
+export async function anafUploadEtransportXml(company: any, xmlText: string) {
+  const ready = requireAnafReadyCompany(company, "trimiterea RO e-Transport")
+  const url = `${getEtransportBaseUrl(company?.efacturaEnvironment)}/upload/ETRANSPORT/${encodeURIComponent(ready.cif)}`
+  const response = await anafHttpRequest(url, {
+    method: "POST",
+    headers: buildAnafAuthHeaders(ready.accessToken, {
+      "Content-Type": "application/xml; charset=utf-8",
+    }),
+    body: xmlText,
+    ...ready.certOptions,
+  })
+  const rawText = response.text
+  const payload = parseAnafPayload(rawText)
+  const uploadIndex = extractUploadIndex(payload, rawText)
+
+  return {
+    url,
+    response,
+    rawText,
+    payload,
+    uploadIndex,
+    summary: summarizeAnafResponse(payload, rawText),
+  }
+}
+
+export async function anafCheckEtransportStatus(company: any, uploadIndex: string) {
+  const ready = requireAnafReadyCompany(company, "verificarea starii RO e-Transport")
+  const url = `${getEtransportBaseUrl(company?.efacturaEnvironment)}/stareMesaj/${encodeURIComponent(uploadIndex)}`
+  const response = await anafHttpRequest(url, {
+    headers: buildAnafAuthHeaders(ready.accessToken),
+    ...ready.certOptions,
+  })
+  const rawText = response.text
+  const payload = parseAnafPayload(rawText)
+  const downloadId = extractDownloadId(payload, rawText)
+
+  return {
+    url,
+    response,
+    rawText,
+    payload,
+    downloadId,
+    summary: summarizeAnafResponse(payload, rawText),
+  }
+}
+
+export async function anafListEtransportMessages(company: any, options: { days?: number; cif?: string } = {}) {
+  const ready = requireAnafReadyCompany(company, "sincronizarea RO e-Transport")
+  const cif = options.cif || ready.cif
+  const days = Math.min(60, Math.max(1, Number(options.days || 30)))
+  const url = `${getEtransportBaseUrl(company?.efacturaEnvironment)}/lista/${days}/${encodeURIComponent(cif)}`
+  const response = await anafHttpRequest(url, {
+    headers: buildAnafAuthHeaders(ready.accessToken),
+    ...ready.certOptions,
+  })
+  const rawText = response.text
+  const payload = parseAnafPayload(rawText)
+
+  return {
+    url,
+    response,
+    rawText,
+    payload,
+    items: collectMessageItems(payload),
+    summary: summarizeAnafResponse(payload, rawText),
+  }
+}
+
+export async function anafDownloadEtransportById(company: any, downloadId: string) {
+  const ready = requireAnafReadyCompany(company, "descarcarea raspunsului RO e-Transport")
+  const url = `${getEtransportBaseUrl(company?.efacturaEnvironment)}/descarcare/${encodeURIComponent(downloadId)}`
+  const response = await anafHttpRequest(url, {
+    headers: buildAnafAuthHeaders(ready.accessToken),
+    ...ready.certOptions,
+  })
+  const rawText = response.buffer.toString("utf8")
+  const payload = parseAnafPayload(rawText)
+
+  return {
+    url,
+    response,
+    rawText,
+    payload,
     summary: summarizeAnafResponse(payload, rawText),
   }
 }

@@ -937,29 +937,80 @@ export default function TransferPage() {
     }
   }
 
-  async function createSeparateETransportNotice() {
-    if (!transferId || !token) {
+  async function sendETransport() {
+    if (!transferId) {
       setError("Salveaza mai intai transferul.")
       return
     }
 
+    setETransportBusy(true)
+    setError("")
+    setMessage("")
     try {
-      setETransportBusy(true)
-      setError("")
-      const res = await fetch(`${API}/api/v1/etransport/notices/from-transfer/${transferId}`, {
+      const res = await fetch(`${API}/api/v1/transfers/${transferId}/etransport/send`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok || !data?.ok || !data?.item?.id) {
-        throw new Error(data?.error || "Nu am putut crea notificarea separata.")
+      if (!res.ok || !data?.ok) {
+        setError(data?.error || "Nu am putut trimite RO e-Transport la ANAF.")
+        return
       }
-      navigate(`/e-transport/edit?id=${data.item.id}`)
-    } catch (err: any) {
-      setError(err?.message || "Nu am putut crea notificarea separata.")
+      setMessage(data?.message || "RO e-Transport a fost trimis la ANAF.")
+      await loadDoc()
+    } catch {
+      setError("Nu am putut trimite RO e-Transport la ANAF.")
     } finally {
       setETransportBusy(false)
     }
+  }
+
+  async function checkETransportStatus() {
+    if (!transferId) {
+      setError("Salveaza mai intai transferul.")
+      return
+    }
+
+    setETransportBusy(true)
+    setError("")
+    setMessage("")
+    try {
+      const res = await fetch(`${API}/api/v1/transfers/${transferId}/etransport/status`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        setError(data?.error || "Nu am putut verifica starea RO e-Transport.")
+        return
+      }
+      setMessage(data?.message || "Starea RO e-Transport a fost verificata.")
+      await loadDoc()
+    } catch {
+      setError("Nu am putut verifica starea RO e-Transport.")
+    } finally {
+      setETransportBusy(false)
+    }
+  }
+
+  async function downloadETransportReceipt() {
+    if (!transferId) {
+      setError("Salveaza mai intai transferul.")
+      return
+    }
+
+    setError("")
+    const res = await fetch(`${API}/api/v1/transfers/${transferId}/etransport/receipt`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      setError(data.error || "Nu am putut descarca raspunsul ANAF.")
+      return
+    }
+
+    await downloadPdfFile(res, `RO-e-Transport-Raspuns-${header.docNo || "document"}.zip`)
+    await loadDoc()
   }
 
   const eTransportPrepared = ["PREPARED", "READY_TO_REVIEW", "SENT", "ACCEPTED"].includes(header.eTransportStatus || "")
@@ -997,12 +1048,6 @@ export default function TransferPage() {
           <Truck size={16} className="mr-2" />
           E-Transport
         </button>
-        {transferId ? (
-          <button type="button" className={documentButtonSecondaryClass} onClick={createSeparateETransportNotice} disabled={eTransportBusy}>
-            <Truck size={16} className="mr-2" />
-            Registru RO e-Transport
-          </button>
-        ) : null}
         <button type="button" className={documentButtonSecondaryClass} onClick={exportPdf} disabled={!transferId || loadingDoc}>
           <FileOutput size={16} className="mr-2" />
           PDF
@@ -1289,9 +1334,21 @@ export default function TransferPage() {
                           <Truck size={16} className="mr-2" />
                           {eTransportBusy ? "Se genereaza..." : "Genereaza XML"}
                         </button>
+                        <button type="button" className={documentButtonSecondaryClass} onClick={sendETransport} disabled={!transferId || loadingDoc || eTransportBusy}>
+                          <Truck size={16} className="mr-2" />
+                          {eTransportBusy ? "Se trimite..." : "Trimite la ANAF"}
+                        </button>
+                        <button type="button" className={documentButtonSecondaryClass} onClick={checkETransportStatus} disabled={!transferId || loadingDoc || eTransportBusy || !header.eTransportUploadIndex}>
+                          <Truck size={16} className="mr-2" />
+                          Verifica stare
+                        </button>
                         <button type="button" className={documentButtonSecondaryClass} onClick={downloadETransportXml} disabled={!transferId || !eTransportPrepared || loadingDoc}>
                           <Truck size={16} className="mr-2" />
                           XML
+                        </button>
+                        <button type="button" className={documentButtonSecondaryClass} onClick={downloadETransportReceipt} disabled={!transferId || loadingDoc || !header.eTransportUploadIndex}>
+                          <Truck size={16} className="mr-2" />
+                          Raspuns ANAF
                         </button>
                       </div>
 
@@ -1407,6 +1464,56 @@ export default function TransferPage() {
                         disabled={isPosted}
                         placeholder="Optional"
                       />
+                    </div>
+                    <div className="xl:col-span-2">
+                      <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">UIT</div>
+                      <input value={header.eTransportUit} readOnly className={documentInputClass} style={readonlyInputStyle} />
+                    </div>
+                    <div className="xl:col-span-2">
+                      <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">ID incarcare</div>
+                      <input value={header.eTransportUploadIndex} readOnly className={documentInputClass} style={readonlyInputStyle} />
+                    </div>
+                    <div className="xl:col-span-2">
+                      <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">ID descarcare</div>
+                      <input value={header.eTransportDownloadId} readOnly className={documentInputClass} style={readonlyInputStyle} />
+                    </div>
+                  </div>
+
+                  <div className="rounded-[16px] border border-slate-200 bg-white p-3">
+                    <div className="mb-2 text-sm font-semibold text-slate-900">Bunuri preluate din transfer</div>
+                    <div className="mb-3 text-xs text-slate-500">Produsele pentru RO e-Transport vin direct din liniile transferului. Daca vrei sa schimbi un produs, il modifici in documentul de transfer.</div>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-200 text-left text-slate-500">
+                            <th className="px-2 py-2">Produs</th>
+                            <th className="px-2 py-2">SKU</th>
+                            <th className="px-2 py-2">Cod NC</th>
+                            <th className="px-2 py-2">UM</th>
+                            <th className="px-2 py-2">Cantitate</th>
+                            <th className="px-2 py-2">Valoare fara TVA</th>
+                            <th className="px-2 py-2">Greutate bruta</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {validLines.map((line) => {
+                            const product = products.find((item) => item.id === line.productId)
+                            const qty = parsePositive(line.qty)
+                            const gross = qty * Math.max(0, Number(product?.grossWeightKg || 0))
+                            return (
+                              <tr key={`etr-${line.id}`} className="border-b border-slate-100">
+                                <td className="px-2 py-2 text-slate-700">{line.search || "-"}</td>
+                                <td className="px-2 py-2 text-slate-600">{line.sku || "-"}</td>
+                                <td className="px-2 py-2 text-slate-600">{product?.ncCode || "-"}</td>
+                                <td className="px-2 py-2 text-slate-600">{formatUomOption(product?.uom)}</td>
+                                <td className="px-2 py-2 text-slate-600">{formatNumber(qty)}</td>
+                                <td className="px-2 py-2 text-slate-600">{formatNumber(qty * Math.max(0, Number(line.unitPrice || 0)))}</td>
+                                <td className="px-2 py-2 text-slate-600">{formatNumber(gross)}</td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
 

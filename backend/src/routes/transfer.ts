@@ -8,9 +8,23 @@ import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { assertSufficientStock, decrementStockBalanceStrict, incrementStockBalance } from "../lib/stock"
 import { reserveNextNumber } from "../lib/numbering"
 import { resolveTenantCompany } from "../lib/companyResolver"
+import { readAnafHeader } from "../lib/anafHttp"
 import { drawDocumentHero, drawInfoCards, drawSimpleTable, drawSignatureRow, drawTotalsBox, ensurePdfPage, pdfDate, pdfFmt, pdfText, registerPdfFonts } from "../lib/professionalPdf"
 import { requireRequestCompanyId } from "../lib/companyScope"
 import { generateTransferETransportXml, validateTransferForETransport } from "../lib/etransport"
+import {
+  anafCheckEtransportStatus,
+  anafDownloadEtransportById,
+  anafListEtransportMessages,
+  anafUploadEtransportXml,
+  loadAnafCompanyContext,
+  logAnafRouteError,
+} from "../lib/anafClient"
+import {
+  extractDownloadId,
+  normalizeCompanyCui,
+  summarizeAnafResponse,
+} from "../lib/incomingEfactura"
 
 const router = Router()
 router.use(requireAuth)
@@ -50,6 +64,36 @@ function safeFilePart(value: string) {
 function text(value: any) {
   const t = String(value || "").trim()
   return t || "-"
+}
+
+function classifyEtransportStatus(payload: any, rawText: string) {
+  const textBlob = `${JSON.stringify(payload || {})} ${rawText}`.toLowerCase()
+  if (/(nok|respins|rejected|eroare|error|invalid)/i.test(textBlob)) return "REJECTED"
+  if (/(ok|acceptat|accepted|validat|uit|disponibil|descarcare)/i.test(textBlob)) return "ACCEPTED"
+  return "SENT"
+}
+
+function extractUit(raw: string) {
+  const match = String(raw || "").match(/\bUIT\b[^A-Z0-9]*([A-Z0-9\-]{6,})/i)
+  return match?.[1] || ""
+}
+
+async function resolveEtransportDownloadId(company: any, doc: any) {
+  const cif = normalizeCompanyCui(company?.cui)
+  if (!cif || !company?.efacturaOauthAccessToken || !doc?.eTransportUploadIndex) {
+    return ""
+  }
+
+  const listResult = await anafListEtransportMessages(company, { days: 60, cif })
+  const matched = listResult.items.find((item: any) => {
+    const blob = JSON.stringify(item || {}).toLowerCase()
+    return blob.includes(String(doc.eTransportUploadIndex).toLowerCase()) || blob.includes(String(doc.docNo || "").toLowerCase())
+  })
+
+  return (
+    extractDownloadId(matched, JSON.stringify(matched || {})) ||
+    extractDownloadId(listResult.payload, listResult.rawText)
+  )
 }
 
 function serializeTransferDoc(doc: any) {
@@ -349,6 +393,311 @@ router.get("/api/v1/transfers/:id/etransport/xml", async (req: AuthedRequest, re
   res.setHeader("Content-Type", "application/xml; charset=utf-8")
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`)
   return res.send(doc.eTransportPreparedXml)
+})
+
+router.post("/api/v1/transfers/:id/etransport/send", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
+  const id = String(req.params.id)
+
+  const doc = await prisma.transferDoc.findFirst({
+    where: { id, tenantId, companyId },
+    include: {
+      fromLocation: true,
+      toLocation: true,
+      items: {
+        include: {
+          product: {
+            include: {
+              uom: true,
+              vatRate: true,
+            },
+          },
+          uom: true,
+          vatRate: true,
+        },
+        orderBy: { createdAt: "asc" },
+      },
+    },
+  })
+
+  if (!doc) {
+    return res.status(404).json({ ok: false, error: "Transferul nu a fost gasit." })
+  }
+
+  const company = await loadAnafCompanyContext(tenantId, req.auth?.activeCompanyId)
+  const cif = normalizeCompanyCui(company?.cui)
+  if (!cif) {
+    return res.status(400).json({ ok: false, error: "Firma nu are CUI valid pentru transmiterea la ANAF." })
+  }
+  if (!company?.efacturaOauthAccessToken) {
+    return res.status(400).json({ ok: false, error: "Nu exista token ANAF salvat pentru aceasta firma." })
+  }
+
+  const issues = validateTransferForETransport(doc)
+  const blockingIssues = issues.filter((issue) => issue.severity === "error")
+  if (blockingIssues.length) {
+    return res.status(400).json({
+      ok: false,
+      error: blockingIssues[0]?.message || "Transferul nu poate fi trimis la ANAF.",
+      issues,
+    })
+  }
+
+  const xmlText = doc.eTransportPreparedXml || generateTransferETransportXml(doc)
+
+  try {
+    const uploadResult = await anafUploadEtransportXml(company, xmlText)
+    const uploadIndex = uploadResult.uploadIndex
+    const summary = uploadResult.summary
+
+    if (!uploadResult.response.ok || !uploadIndex) {
+      await prisma.transferDoc.update({
+        where: { id: doc.id },
+        data: {
+          eTransportPreparedXml: xmlText,
+          eTransportStatus: "ERROR",
+          eTransportErrorText: summary || "ANAF a respins upload-ul RO e-Transport.",
+        },
+      })
+      return res.status(400).json({
+        ok: false,
+        error: summary || "ANAF a respins upload-ul RO e-Transport.",
+      })
+    }
+
+    const updated = await prisma.transferDoc.update({
+      where: { id: doc.id },
+      data: {
+        eTransportPreparedXml: xmlText,
+        eTransportStatus: "SENT",
+        eTransportUploadIndex: uploadIndex,
+        eTransportErrorText: summary || null,
+      },
+      include: {
+        fromLocation: true,
+        toLocation: true,
+        items: {
+          include: {
+            product: {
+              include: {
+                uom: true,
+                vatRate: true,
+              },
+            },
+            uom: true,
+            vatRate: true,
+          },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    })
+
+    return res.json({
+      ok: true,
+      message: summary || "RO e-Transport a fost trimis la ANAF.",
+      uploadIndex,
+      doc: serializeTransferDoc(updated),
+    })
+  } catch (error: any) {
+    const message = error?.message || "Eroare la trimiterea RO e-Transport catre ANAF."
+    logAnafRouteError("TRANSFER ETRANSPORT SEND ERROR", {
+      tenantId,
+      transferId: id,
+      message,
+      stack: error?.stack || null,
+    })
+    await prisma.transferDoc.update({
+      where: { id: doc.id },
+      data: {
+        eTransportPreparedXml: xmlText,
+        eTransportStatus: "ERROR",
+        eTransportErrorText: message,
+      },
+    })
+    return res.status(500).json({ ok: false, error: message })
+  }
+})
+
+router.get("/api/v1/transfers/:id/etransport/status", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
+  const id = String(req.params.id)
+
+  const doc = await prisma.transferDoc.findFirst({
+    where: { id, tenantId, companyId },
+    include: {
+      fromLocation: true,
+      toLocation: true,
+      items: {
+        include: {
+          product: {
+            include: {
+              uom: true,
+              vatRate: true,
+            },
+          },
+          uom: true,
+          vatRate: true,
+        },
+        orderBy: { createdAt: "asc" },
+      },
+    },
+  })
+
+  if (!doc) {
+    return res.status(404).json({ ok: false, error: "Transferul nu a fost gasit." })
+  }
+
+  if (!doc.eTransportUploadIndex) {
+    return res.status(400).json({ ok: false, error: "Documentul nu a fost trimis inca la ANAF." })
+  }
+
+  const company = await loadAnafCompanyContext(tenantId, req.auth?.activeCompanyId)
+  if (!company?.efacturaOauthAccessToken) {
+    return res.status(400).json({ ok: false, error: "Nu exista token ANAF salvat pentru aceasta firma." })
+  }
+
+  try {
+    const statusResult = await anafCheckEtransportStatus(company, doc.eTransportUploadIndex)
+    const summary = statusResult.summary
+    const nextStatus = classifyEtransportStatus(statusResult.payload, statusResult.rawText)
+    const downloadId = statusResult.downloadId || doc.eTransportDownloadId || null
+    const uit = extractUit(statusResult.rawText) || doc.eTransportUit || null
+
+    if (!statusResult.response.ok) {
+      return res.status(400).json({
+        ok: false,
+        error: summary || "Nu am putut verifica starea la ANAF.",
+      })
+    }
+
+    const updated = await prisma.transferDoc.update({
+      where: { id: doc.id },
+      data: {
+        eTransportStatus: nextStatus,
+        eTransportDownloadId: downloadId,
+        eTransportUit: uit,
+        eTransportErrorText: summary || null,
+      },
+      include: {
+        fromLocation: true,
+        toLocation: true,
+        items: {
+          include: {
+            product: {
+              include: {
+                uom: true,
+                vatRate: true,
+              },
+            },
+            uom: true,
+            vatRate: true,
+          },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    })
+
+    return res.json({
+      ok: true,
+      status: nextStatus,
+      uit,
+      downloadId,
+      message: summary || "Starea RO e-Transport a fost verificata la ANAF.",
+      doc: serializeTransferDoc(updated),
+    })
+  } catch (error: any) {
+    const message = error?.message || "Eroare la verificarea starii in ANAF."
+    logAnafRouteError("TRANSFER ETRANSPORT STATUS ERROR", {
+      tenantId,
+      transferId: id,
+      uploadIndex: doc.eTransportUploadIndex || null,
+      message,
+      stack: error?.stack || null,
+    })
+    return res.status(500).json({ ok: false, error: message })
+  }
+})
+
+router.get("/api/v1/transfers/:id/etransport/receipt", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
+  const id = String(req.params.id)
+
+  const doc = await prisma.transferDoc.findFirst({
+    where: { id, tenantId, companyId },
+    select: {
+      id: true,
+      docNo: true,
+      eTransportUploadIndex: true,
+      eTransportDownloadId: true,
+      eTransportUit: true,
+    },
+  })
+
+  if (!doc) {
+    return res.status(404).json({ ok: false, error: "Transferul nu a fost gasit." })
+  }
+
+  const company = await loadAnafCompanyContext(tenantId, req.auth?.activeCompanyId)
+  if (!company?.efacturaOauthAccessToken) {
+    return res.status(400).json({ ok: false, error: "Nu exista token ANAF salvat pentru aceasta firma." })
+  }
+
+  let downloadId = doc.eTransportDownloadId || ""
+  if (!downloadId) {
+    downloadId = await resolveEtransportDownloadId(company, doc)
+  }
+
+  if (!downloadId) {
+    return res.status(400).json({ ok: false, error: "Raspunsul ANAF nu este inca disponibil pentru acest transport." })
+  }
+
+  try {
+    const receiptResult = await anafDownloadEtransportById(company, downloadId)
+    const summary = receiptResult.response.ok ? "Raspunsul ANAF a fost descarcat." : receiptResult.summary
+    const uit = extractUit(receiptResult.rawText) || doc.eTransportUit || null
+
+    if (!receiptResult.response.ok) {
+      return res.status(400).json({
+        ok: false,
+        error: summary || "Nu am putut descarca raspunsul ANAF.",
+      })
+    }
+
+    await prisma.transferDoc.update({
+      where: { id: doc.id },
+      data: {
+        eTransportDownloadId: downloadId,
+        eTransportUit: uit,
+        eTransportStatus: "ACCEPTED",
+        eTransportErrorText: null,
+      },
+    })
+
+    const fileNameBase = safeFilePart(`Raspuns_RO_eTransport_${doc.docNo}`) || `Raspuns_RO_eTransport_${doc.id}`
+    const contentType = readAnafHeader(receiptResult.response.headers, "content-type") || "application/octet-stream"
+    const extension =
+      contentType.includes("zip") ? "zip" :
+      contentType.includes("pdf") ? "pdf" :
+      contentType.includes("xml") ? "xml" :
+      "bin"
+
+    res.setHeader("Content-Type", contentType)
+    res.setHeader("Content-Disposition", `attachment; filename="${fileNameBase}.${extension}"`)
+    return res.send(receiptResult.response.buffer)
+  } catch (error: any) {
+    const message = error?.message || "Eroare la descarcarea raspunsului ANAF."
+    logAnafRouteError("TRANSFER ETRANSPORT RECEIPT ERROR", {
+      tenantId,
+      transferId: id,
+      downloadId: downloadId || null,
+      message,
+      stack: error?.stack || null,
+    })
+    return res.status(500).json({ ok: false, error: message })
+  }
 })
 
 router.delete("/api/v1/transfers/:id", async (req: AuthedRequest, res) => {

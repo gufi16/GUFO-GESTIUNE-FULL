@@ -17,7 +17,6 @@ import {
   BarChart3,
   FileSpreadsheet,
   ScrollText,
-  Truck,
 } from "lucide-react"
 import clsx from "clsx"
 
@@ -59,7 +58,6 @@ const sections: SidebarSection[] = [
     items: [
       { to: "/gestiune/stoc", label: "Stoc", icon: Warehouse },
       { to: "/transfer", label: "Transfer intre gestiuni", icon: ArrowLeftRight },
-      { to: "/e-transport", label: "RO e-Transport", icon: Truck },
       { to: "/gestiune/productie", label: "Productie", icon: Factory },
       { to: "/documente", label: "Documente", icon: FileText },
       { to: "/rapoarte", label: "Rapoarte", icon: BarChart3 },

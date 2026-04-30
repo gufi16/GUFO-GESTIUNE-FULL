@@ -1,4 +1,4 @@
-import { ArrowRight, ArrowLeftRight, Factory, Truck, Warehouse } from "lucide-react"
+import { ArrowRight, ArrowLeftRight, Factory, Warehouse } from "lucide-react"
 import PageHeader from "../components/PageHeader"
 import { useNavigate } from "react-router-dom"
 
@@ -14,12 +14,6 @@ const items = [
     desc: "Muti marfa intre locatii.",
     route: "/transfer",
     icon: ArrowLeftRight,
-  },
-  {
-    name: "RO e-Transport",
-    desc: "Gestionezi notificarile separate pentru transfer, livrare, import sau completare manuala.",
-    route: "/e-transport",
-    icon: Truck,
   },
   {
     name: "Productie",
