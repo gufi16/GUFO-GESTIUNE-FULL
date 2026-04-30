@@ -1519,10 +1519,10 @@ export default function TransferPage() {
 
                   <div className="rounded-[16px] border border-slate-200 bg-white p-3">
                     <div className="mb-3 text-sm font-semibold text-slate-900">Locuri start / final traseu</div>
-                    <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-                      <div className="rounded-[14px] border border-slate-200 bg-slate-50 p-3">
-                        <div className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Loc start</div>
-                        <div className="grid grid-cols-1 gap-2 lg:grid-cols-[250px_minmax(0,1fr)]">
+                    <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
+                      <div className="rounded-[14px] border border-slate-200 bg-slate-50 p-2.5">
+                        <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Loc start</div>
+                        <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-[240px_minmax(0,1fr)]">
                         <select
                           value={header.eTransportStartScope}
                           onChange={(e) =>
@@ -1576,8 +1576,8 @@ export default function TransferPage() {
                         </div>
 
                         {!startScopeIsBorder ? (
-                          <div className="mt-2 space-y-2">
-                            <div className="grid grid-cols-1 gap-2 lg:grid-cols-[130px_150px_minmax(0,1fr)]">
+                          <div className="mt-1.5 space-y-1.5">
+                            <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-[120px_130px_minmax(0,1fr)]">
                               <input
                                 value={startAdr.companyCui}
                                 onChange={(e) => setStartAdr((prev) => ({ ...prev, companyCui: e.target.value.replace(/\D/g, ""), sourceLocationId: "" }))}
@@ -1596,13 +1596,7 @@ export default function TransferPage() {
                                 placeholder="Denumire firma / punct de lucru"
                               />
                             </div>
-                            <div className="grid grid-cols-1 gap-2 lg:grid-cols-[96px_150px_minmax(0,1fr)_110px]">
-                              <input
-                                value="RO"
-                                readOnly
-                                className={documentInputClass}
-                                style={readonlyInputStyle}
-                              />
+                            <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-[150px_minmax(0,1fr)_110px]">
                               <input
                                 value={startAdr.county}
                                 onChange={(e) => setStartAdr((prev) => ({ ...prev, county: e.target.value, sourceLocationId: "" }))}
@@ -1625,7 +1619,7 @@ export default function TransferPage() {
                                 placeholder="Cod post."
                               />
                             </div>
-                            <div className="grid grid-cols-1 gap-2">
+                            <div className="grid grid-cols-1 gap-1.5">
                               <input
                                 value={startAdr.address}
                                 onChange={(e) => setStartAdr((prev) => ({ ...prev, address: e.target.value, sourceLocationId: "" }))}
@@ -1638,9 +1632,9 @@ export default function TransferPage() {
                         ) : null}
                       </div>
 
-                      <div className="rounded-[14px] border border-slate-200 bg-slate-50 p-3">
-                        <div className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Loc final</div>
-                        <div className="grid grid-cols-1 gap-2 lg:grid-cols-[250px_minmax(0,1fr)]">
+                      <div className="rounded-[14px] border border-slate-200 bg-slate-50 p-2.5">
+                        <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Loc final</div>
+                        <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-[240px_minmax(0,1fr)]">
                         <select
                           value={header.eTransportEndScope}
                           onChange={(e) =>
@@ -1694,8 +1688,8 @@ export default function TransferPage() {
                         </div>
 
                         {!endScopeIsBorder ? (
-                          <div className="mt-2 space-y-2">
-                            <div className="grid grid-cols-1 gap-2 lg:grid-cols-[130px_150px_minmax(0,1fr)]">
+                          <div className="mt-1.5 space-y-1.5">
+                            <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-[120px_130px_minmax(0,1fr)]">
                               <input
                                 value={endAdr.companyCui}
                                 onChange={(e) => setEndAdr((prev) => ({ ...prev, companyCui: e.target.value.replace(/\D/g, ""), sourceLocationId: "" }))}
@@ -1714,13 +1708,7 @@ export default function TransferPage() {
                                 placeholder="Denumire firma / punct de lucru"
                               />
                             </div>
-                            <div className="grid grid-cols-1 gap-2 lg:grid-cols-[96px_150px_minmax(0,1fr)_110px]">
-                              <input
-                                value="RO"
-                                readOnly
-                                className={documentInputClass}
-                                style={readonlyInputStyle}
-                              />
+                            <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-[150px_minmax(0,1fr)_110px]">
                               <input
                                 value={endAdr.county}
                                 onChange={(e) => setEndAdr((prev) => ({ ...prev, county: e.target.value, sourceLocationId: "" }))}
@@ -1743,7 +1731,7 @@ export default function TransferPage() {
                                 placeholder="Cod post."
                               />
                             </div>
-                            <div className="grid grid-cols-1 gap-2">
+                            <div className="grid grid-cols-1 gap-1.5">
                               <input
                                 value={endAdr.address}
                                 onChange={(e) => setEndAdr((prev) => ({ ...prev, address: e.target.value, sourceLocationId: "" }))}
