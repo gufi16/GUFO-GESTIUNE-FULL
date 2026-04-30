@@ -55,6 +55,14 @@ function buildStructuredAddressText(value: unknown) {
     .join(", ")
 }
 
+function resolveTransportUomCode(item: any) {
+  const standardCode = normalizeText(item?.uom?.standardCode || item?.product?.uom?.standardCode || item?.uomStandardCode)
+  if (standardCode) return standardCode
+
+  const internalCode = normalizeText(item?.uom?.code || item?.product?.uom?.code || item?.uomCode)
+  return internalCode
+}
+
 function buildLocationText(location: any) {
   if (!location) return ""
   return [location.address, location.city, location.county, location.country || "RO"]
@@ -182,7 +190,7 @@ export function generateTransferETransportXml(doc: any) {
       <Name>${xmlEscape(item?.product?.name || item?.productName || "")}</Name>
       <NcCode>${xmlEscape(item?.product?.ncCode || "")}</NcCode>
       <FiscalRisk>${item?.product?.isFiscalRiskProduct ? "true" : "false"}</FiscalRisk>
-      <Uom>${xmlEscape(item?.uom?.code || item?.product?.uom?.code || item?.uomCode || "")}</Uom>
+      <Uom>${xmlEscape(resolveTransportUomCode(item))}</Uom>
       <Quantity>${decimal(qty, 3)}</Quantity>
       <UnitPriceRon>${decimal(unitPrice, 2)}</UnitPriceRon>
       <LineValueRon>${decimal(lineValue, 2)}</LineValueRon>
