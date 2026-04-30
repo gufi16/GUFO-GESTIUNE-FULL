@@ -367,6 +367,81 @@ router.post("/api/v1/transfers/:id/etransport/prepare", async (req: AuthedReques
   })
 })
 
+router.patch("/api/v1/transfers/:id/etransport-fields", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
+  const id = String(req.params.id)
+  const header = req.body?.header || {}
+
+  const existing = await prisma.transferDoc.findFirst({
+    where: { id, tenantId, companyId },
+    include: {
+      items: {
+        include: {
+          product: true,
+        },
+      },
+    },
+  })
+
+  if (!existing) {
+    return res.status(404).json({ ok: false, error: "Transferul nu a fost gasit." })
+  }
+
+  const eTransportVehicleMaxMassKg = Math.max(0, toNumber(header?.eTransportVehicleMaxMassKg || 0))
+  const requestedETransportRequired = Boolean(header?.eTransportRequired)
+  const eTransport = buildETransportSummary(existing.items || [], eTransportVehicleMaxMassKg)
+
+  const updated = await prisma.transferDoc.update({
+    where: { id: existing.id },
+    data: {
+      eTransportOperationType: String(header?.eTransportOperationType || "").trim() || null,
+      eTransportPartnerCountry: String(header?.eTransportPartnerCountry || "").trim() || null,
+      eTransportPartnerCui: String(header?.eTransportPartnerCui || "").trim() || null,
+      eTransportPartnerName: String(header?.eTransportPartnerName || "").trim() || null,
+      eTransportInternalRef: String(header?.eTransportInternalRef || "").trim() || null,
+      eTransportStartScope: String(header?.eTransportStartScope || "").trim() || null,
+      eTransportEndScope: String(header?.eTransportEndScope || "").trim() || null,
+      eTransportStartAddress: String(header?.eTransportStartAddress || "").trim() || null,
+      eTransportEndAddress: String(header?.eTransportEndAddress || "").trim() || null,
+      eTransportStartBorderPoint: String(header?.eTransportStartBorderPoint || "").trim() || null,
+      eTransportEndBorderPoint: String(header?.eTransportEndBorderPoint || "").trim() || null,
+      eTransportDeclaredStart: String(header?.eTransportDeclaredStart || "").trim() ? new Date(String(header.eTransportDeclaredStart).trim()) : null,
+      eTransportVehicleMaxMassKg: eTransportVehicleMaxMassKg > 0 ? new Prisma.Decimal(eTransportVehicleMaxMassKg) : null,
+      eTransportOrganizer: String(header?.eTransportOrganizer || "").trim() || null,
+      eTransportOperator: String(header?.eTransportOperator || "").trim() || null,
+      vehicleNo: String(header?.vehicleNo || "").trim() || null,
+      trailerNo: String(header?.trailerNo || "").trim() || null,
+      eTransportCandidate: eTransport.candidate,
+      eTransportRequired: eTransport.candidate ? requestedETransportRequired || eTransport.required : false,
+      eTransportPreparedXml: null,
+      eTransportUploadIndex: null,
+      eTransportDownloadId: null,
+      eTransportUit: null,
+      eTransportErrorText: null,
+      eTransportStatus: "EDITED",
+    },
+    include: {
+      fromLocation: true,
+      toLocation: true,
+      items: {
+        include: {
+          product: { include: { uom: true, vatRate: true } },
+          uom: true,
+          vatRate: true,
+        },
+        orderBy: { createdAt: "asc" },
+      },
+    },
+  })
+
+  return res.json({
+    ok: true,
+    doc: serializeTransferDoc(updated),
+    message: "Datele RO e-Transport au fost salvate.",
+  })
+})
+
 router.get("/api/v1/transfers/:id/etransport/xml", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
   const companyId = await requireRequestCompanyId(req)

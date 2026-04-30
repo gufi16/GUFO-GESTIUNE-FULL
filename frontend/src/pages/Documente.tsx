@@ -2333,6 +2333,15 @@ export default function Documente() {
                             Deschide
                             <ArrowRight size={16} />
                           </button>
+                          {doc.status === "POSTED" ? (
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/transfer/edit?id=${doc.id}&etr=1`)}
+                              className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                            >
+                              Editeaza e-Transport
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             onClick={() => openTransferPdf(doc.id)}

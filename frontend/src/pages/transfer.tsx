@@ -154,6 +154,11 @@ function getTransferIdFromUrl() {
   return params.get("id") || ""
 }
 
+function shouldOpenETransportFromUrl() {
+  const params = new URLSearchParams(window.location.search)
+  return params.get("etr") === "1"
+}
+
 function formatNumber(value: any) {
   return Number(value || 0).toLocaleString("ro-RO", {
     minimumFractionDigits: 2,
@@ -644,6 +649,7 @@ export default function TransferPage() {
   const endScopeIsBorder = header.eTransportEndScope === "PTF"
   const selectedStartAddressOption = startAdr.sourceLocationId || "__manual__"
   const selectedEndAddressOption = endAdr.sourceLocationId || "__manual__"
+  const eTransportFieldDisabled = loadingDoc || eTransportBusy
 
   useEffect(() => {
     if (!fromLocation) return
@@ -664,6 +670,12 @@ export default function TransferPage() {
       return prev
     })
   }, [toLocation?.id])
+
+  useEffect(() => {
+    if (transferId && shouldOpenETransportFromUrl()) {
+      setShowETransportModal(true)
+    }
+  }, [transferId])
 
   function buildTransferPayload(postNow = false) {
     return {
@@ -772,6 +784,65 @@ export default function TransferPage() {
 
   async function saveDoc(postNow = false) {
     await persistTransfer(postNow, true)
+  }
+
+  async function saveETransportDetails() {
+    setETransportBusy(true)
+    setError("")
+    setMessage("")
+    try {
+      if (isPosted && transferId) {
+        const res = await fetch(`${API}/api/v1/transfers/${transferId}/etransport-fields`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            header: {
+              eTransportOperationType: header.eTransportOperationType,
+              eTransportPartnerCountry: header.eTransportPartnerCountry,
+              eTransportPartnerCui: header.eTransportPartnerCui,
+              eTransportPartnerName: header.eTransportPartnerName,
+              eTransportInternalRef: header.eTransportInternalRef,
+              eTransportStartScope: header.eTransportStartScope,
+              eTransportEndScope: header.eTransportEndScope,
+              eTransportStartAddress:
+                header.eTransportStartScope === "ADR" ? serializeAdrForm(startAdr) : header.eTransportStartBorderPoint,
+              eTransportEndAddress:
+                header.eTransportEndScope === "ADR" ? serializeAdrForm(endAdr) : header.eTransportEndBorderPoint,
+              eTransportStartBorderPoint: header.eTransportStartBorderPoint,
+              eTransportEndBorderPoint: header.eTransportEndBorderPoint,
+              eTransportDeclaredStart: header.eTransportDeclaredStart,
+              eTransportVehicleMaxMassKg: header.eTransportVehicleMaxMassKg,
+              eTransportOrganizer: header.eTransportOrganizer,
+              eTransportOperator: header.eTransportOperator,
+              eTransportRequired: header.eTransportRequired || eTransportSummary.required,
+              vehicleNo: header.vehicleNo,
+              trailerNo: header.trailerNo,
+            },
+          }),
+        })
+
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok || !data?.ok) {
+          setError(data?.error || "Nu am putut salva datele RO e-Transport.")
+          return
+        }
+
+        setMessage(data?.message || "Datele RO e-Transport au fost salvate.")
+        await loadDoc(transferId)
+        return
+      }
+
+      const persisted = await persistTransfer(false, false)
+      if (!persisted.ok) return
+      setMessage("Datele RO e-Transport au fost salvate.")
+    } catch {
+      setError("Nu am putut salva datele RO e-Transport.")
+    } finally {
+      setETransportBusy(false)
+    }
   }
 
   async function exportPdf() {
@@ -1356,7 +1427,7 @@ export default function TransferPage() {
                     <div className="mb-4 flex items-start justify-between gap-4">
                       <div>
                         <div className="text-lg font-semibold text-slate-900">RO e-Transport</div>
-                        <div className="mt-1 text-sm text-slate-500">Completezi datele aici, iar actiunile ANAF apar dupa finalizarea documentului.</div>
+                        <div className="mt-1 text-sm text-slate-500">Completezi datele aici, le salvezi, iar dupa finalizare poti genera XML si trimite la ANAF.</div>
                       </div>
                       <button type="button" className={documentButtonSecondaryClass} onClick={() => setShowETransportModal(false)}>
                         <ArrowLeft size={16} className="mr-2" />
@@ -1367,6 +1438,10 @@ export default function TransferPage() {
                     <div className="space-y-4">
                       {isPosted ? (
                         <div className="flex flex-wrap gap-2">
+                          <button type="button" className={documentButtonSecondaryClass} onClick={saveETransportDetails} disabled={loadingDoc || eTransportBusy}>
+                            <Truck size={16} className="mr-2" />
+                            {eTransportBusy ? "Se salveaza..." : "Salveaza date"}
+                          </button>
                           <button type="button" className={documentButtonSecondaryClass} onClick={generateETransportXml} disabled={!transferId || loadingDoc || eTransportBusy}>
                             <Truck size={16} className="mr-2" />
                             {eTransportBusy ? "Se genereaza..." : "Genereaza XML"}
@@ -1389,9 +1464,15 @@ export default function TransferPage() {
                           </button>
                         </div>
                       ) : (
-                        <InlineNotice tone="info">
-                          Completeaza datele necesare aici, salveaza documentul, apoi il finalizezi din documentul de transfer. Dupa finalizare apar aici actiunile pentru XML si ANAF.
-                        </InlineNotice>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button type="button" className={documentButtonSecondaryClass} onClick={saveETransportDetails} disabled={loadingDoc || eTransportBusy}>
+                            <Truck size={16} className="mr-2" />
+                            {eTransportBusy ? "Se salveaza..." : "Salveaza date"}
+                          </button>
+                          <InlineNotice tone="info">
+                            Completeaza datele necesare aici, salveaza documentul, apoi il finalizezi din documentul de transfer. Dupa finalizare apar aici actiunile pentru XML si ANAF.
+                          </InlineNotice>
+                        </div>
                       )}
 
                       <div className="rounded-[18px] border border-slate-200 bg-slate-50 p-4">
@@ -1423,7 +1504,7 @@ export default function TransferPage() {
                         value={header.eTransportDeclaredStart}
                         onChange={(e) => setHeader((prev) => ({ ...prev, eTransportDeclaredStart: e.target.value }))}
                         className={documentInputClass}
-                        disabled={isPosted}
+                        disabled={eTransportFieldDisabled}
                       />
                     </div>
 
@@ -1433,7 +1514,7 @@ export default function TransferPage() {
                         value={header.eTransportOperationType}
                         onChange={(e) => setHeader((prev) => ({ ...prev, eTransportOperationType: e.target.value }))}
                         className={documentInputClass}
-                        disabled={isPosted}
+                        disabled={eTransportFieldDisabled}
                       >
                         {ETRANSPORT_OPERATION_OPTIONS.map((option) => (
                           <option key={option.value} value={option.value}>{option.label}</option>
@@ -1446,7 +1527,7 @@ export default function TransferPage() {
                         value={header.eTransportInternalRef}
                         onChange={(e) => setHeader((prev) => ({ ...prev, eTransportInternalRef: e.target.value }))}
                         className={documentInputClass}
-                        disabled={isPosted}
+                        disabled={eTransportFieldDisabled}
                         placeholder="Referinta interna operatiune"
                       />
                     </div>
@@ -1456,7 +1537,7 @@ export default function TransferPage() {
                         value={header.eTransportVehicleMaxMassKg}
                         onChange={(e) => setHeader((prev) => ({ ...prev, eTransportVehicleMaxMassKg: e.target.value }))}
                         className={documentInputClass}
-                        disabled={isPosted}
+                        disabled={eTransportFieldDisabled}
                         placeholder="Ex: 3500"
                       />
                     </div>
@@ -1467,13 +1548,13 @@ export default function TransferPage() {
                         value={header.eTransportPartnerCui}
                         onChange={(e) => setHeader((prev) => ({ ...prev, eTransportPartnerCui: e.target.value.replace(/\D/g, "") }))}
                         className={documentInputClass}
-                        disabled={isPosted || partnerLookupBusy}
+                        disabled={eTransportFieldDisabled || partnerLookupBusy}
                         placeholder="Scrie CUI-ul"
                       />
                     </div>
                     <div className="xl:col-span-2">
                       <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Partener</div>
-                      <button type="button" className={`${documentButtonSecondaryClass} w-full justify-center`} onClick={lookupPartnerByCui} disabled={isPosted || partnerLookupBusy}>
+                      <button type="button" className={`${documentButtonSecondaryClass} w-full justify-center`} onClick={lookupPartnerByCui} disabled={eTransportFieldDisabled || partnerLookupBusy}>
                         {partnerLookupBusy ? "Se cauta..." : "Cauta CUI"}
                       </button>
                     </div>
@@ -1493,7 +1574,7 @@ export default function TransferPage() {
                         value={header.vehicleNo}
                         onChange={(e) => setHeader((prev) => ({ ...prev, vehicleNo: e.target.value.toUpperCase() }))}
                         className={documentInputClass}
-                        disabled={isPosted}
+                        disabled={eTransportFieldDisabled}
                         placeholder="CJ13POS"
                       />
                     </div>
@@ -1503,7 +1584,7 @@ export default function TransferPage() {
                         value={header.trailerNo}
                         onChange={(e) => setHeader((prev) => ({ ...prev, trailerNo: e.target.value.toUpperCase() }))}
                         className={documentInputClass}
-                        disabled={isPosted}
+                        disabled={eTransportFieldDisabled}
                         placeholder="Optional"
                       />
                     </div>
@@ -1574,7 +1655,7 @@ export default function TransferPage() {
                             }))
                           }
                           className={documentInputClass}
-                          disabled={isPosted}
+                          disabled={eTransportFieldDisabled}
                           >
                             {ETRANSPORT_SCOPE_OPTIONS.map((option) => (
                               <option key={`start-${option.value}`} value={option.value}>{option.label}</option>
@@ -1586,7 +1667,7 @@ export default function TransferPage() {
                               value={header.eTransportStartBorderPoint}
                               onChange={(e) => setHeader((prev) => ({ ...prev, eTransportStartBorderPoint: e.target.value }))}
                               className={documentInputClass}
-                              disabled={isPosted}
+                              disabled={eTransportFieldDisabled}
                             >
                               <option value="">Alege punctul de frontiera</option>
                               {ETRANSPORT_BORDER_POINTS.map((point) => (
@@ -1607,7 +1688,7 @@ export default function TransferPage() {
                                 setStartAdr(buildAdrFormFromLocation(location))
                               }}
                               className={documentInputClass}
-                              disabled={isPosted}
+                              disabled={eTransportFieldDisabled}
                             >
                               <option value="__manual__">Completare manuala</option>
                               {addressOptions.map((option) => (
@@ -1624,17 +1705,17 @@ export default function TransferPage() {
                                 value={startAdr.companyCui}
                                 onChange={(e) => setStartAdr((prev) => ({ ...prev, companyCui: e.target.value.replace(/\D/g, ""), sourceLocationId: "" }))}
                                 className={documentInputClass}
-                                disabled={isPosted || startAdrLookupBusy}
+                                disabled={eTransportFieldDisabled || startAdrLookupBusy}
                                 placeholder="CUI"
                               />
-                              <button type="button" className={`${documentButtonSecondaryClass} w-full justify-center`} onClick={() => lookupAdrByCui("start")} disabled={isPosted || startAdrLookupBusy}>
+                              <button type="button" className={`${documentButtonSecondaryClass} w-full justify-center`} onClick={() => lookupAdrByCui("start")} disabled={eTransportFieldDisabled || startAdrLookupBusy}>
                                 {startAdrLookupBusy ? "Se cauta..." : "Cauta CUI"}
                               </button>
                               <input
                                 value={startAdr.companyName}
                                 onChange={(e) => setStartAdr((prev) => ({ ...prev, companyName: e.target.value, sourceLocationId: "" }))}
                                 className={documentInputClass}
-                                disabled={isPosted}
+                                disabled={eTransportFieldDisabled}
                                 placeholder="Denumire firma / punct de lucru"
                               />
                             </div>
@@ -1643,21 +1724,21 @@ export default function TransferPage() {
                                 value={startAdr.county}
                                 onChange={(e) => setStartAdr((prev) => ({ ...prev, county: e.target.value, sourceLocationId: "" }))}
                                 className={documentInputClass}
-                                disabled={isPosted}
+                                disabled={eTransportFieldDisabled}
                                 placeholder="Judet"
                               />
                               <input
                                 value={startAdr.city}
                                 onChange={(e) => setStartAdr((prev) => ({ ...prev, city: e.target.value, sourceLocationId: "" }))}
                                 className={documentInputClass}
-                                disabled={isPosted}
+                                disabled={eTransportFieldDisabled}
                                 placeholder="Localitate"
                               />
                               <input
                                 value={startAdr.postalCode}
                                 onChange={(e) => setStartAdr((prev) => ({ ...prev, postalCode: e.target.value, sourceLocationId: "" }))}
                                 className={documentInputClass}
-                                disabled={isPosted}
+                                disabled={eTransportFieldDisabled}
                                 placeholder="Cod post."
                               />
                             </div>
@@ -1666,7 +1747,7 @@ export default function TransferPage() {
                                 value={startAdr.address}
                                 onChange={(e) => setStartAdr((prev) => ({ ...prev, address: e.target.value, sourceLocationId: "" }))}
                                 className={documentInputClass}
-                                disabled={isPosted}
+                                disabled={eTransportFieldDisabled}
                                 placeholder="Strada, numar"
                               />
                             </div>
@@ -1686,7 +1767,7 @@ export default function TransferPage() {
                             }))
                           }
                           className={documentInputClass}
-                          disabled={isPosted}
+                          disabled={eTransportFieldDisabled}
                           >
                             {ETRANSPORT_SCOPE_OPTIONS.map((option) => (
                               <option key={`end-${option.value}`} value={option.value}>{option.label}</option>
@@ -1698,7 +1779,7 @@ export default function TransferPage() {
                               value={header.eTransportEndBorderPoint}
                               onChange={(e) => setHeader((prev) => ({ ...prev, eTransportEndBorderPoint: e.target.value }))}
                               className={documentInputClass}
-                              disabled={isPosted}
+                              disabled={eTransportFieldDisabled}
                             >
                               <option value="">Alege punctul de frontiera</option>
                               {ETRANSPORT_BORDER_POINTS.map((point) => (
@@ -1719,7 +1800,7 @@ export default function TransferPage() {
                                 setEndAdr(buildAdrFormFromLocation(location))
                               }}
                               className={documentInputClass}
-                              disabled={isPosted}
+                              disabled={eTransportFieldDisabled}
                             >
                               <option value="__manual__">Completare manuala</option>
                               {addressOptions.map((option) => (
@@ -1736,17 +1817,17 @@ export default function TransferPage() {
                                 value={endAdr.companyCui}
                                 onChange={(e) => setEndAdr((prev) => ({ ...prev, companyCui: e.target.value.replace(/\D/g, ""), sourceLocationId: "" }))}
                                 className={documentInputClass}
-                                disabled={isPosted || endAdrLookupBusy}
+                                disabled={eTransportFieldDisabled || endAdrLookupBusy}
                                 placeholder="CUI"
                               />
-                              <button type="button" className={`${documentButtonSecondaryClass} w-full justify-center`} onClick={() => lookupAdrByCui("end")} disabled={isPosted || endAdrLookupBusy}>
+                              <button type="button" className={`${documentButtonSecondaryClass} w-full justify-center`} onClick={() => lookupAdrByCui("end")} disabled={eTransportFieldDisabled || endAdrLookupBusy}>
                                 {endAdrLookupBusy ? "Se cauta..." : "Cauta CUI"}
                               </button>
                               <input
                                 value={endAdr.companyName}
                                 onChange={(e) => setEndAdr((prev) => ({ ...prev, companyName: e.target.value, sourceLocationId: "" }))}
                                 className={documentInputClass}
-                                disabled={isPosted}
+                                disabled={eTransportFieldDisabled}
                                 placeholder="Denumire firma / punct de lucru"
                               />
                             </div>
@@ -1755,21 +1836,21 @@ export default function TransferPage() {
                                 value={endAdr.county}
                                 onChange={(e) => setEndAdr((prev) => ({ ...prev, county: e.target.value, sourceLocationId: "" }))}
                                 className={documentInputClass}
-                                disabled={isPosted}
+                                disabled={eTransportFieldDisabled}
                                 placeholder="Judet"
                               />
                               <input
                                 value={endAdr.city}
                                 onChange={(e) => setEndAdr((prev) => ({ ...prev, city: e.target.value, sourceLocationId: "" }))}
                                 className={documentInputClass}
-                                disabled={isPosted}
+                                disabled={eTransportFieldDisabled}
                                 placeholder="Localitate"
                               />
                               <input
                                 value={endAdr.postalCode}
                                 onChange={(e) => setEndAdr((prev) => ({ ...prev, postalCode: e.target.value, sourceLocationId: "" }))}
                                 className={documentInputClass}
-                                disabled={isPosted}
+                                disabled={eTransportFieldDisabled}
                                 placeholder="Cod post."
                               />
                             </div>
@@ -1778,7 +1859,7 @@ export default function TransferPage() {
                                 value={endAdr.address}
                                 onChange={(e) => setEndAdr((prev) => ({ ...prev, address: e.target.value, sourceLocationId: "" }))}
                                 className={documentInputClass}
-                                disabled={isPosted}
+                                disabled={eTransportFieldDisabled}
                                 placeholder="Strada, numar"
                               />
                             </div>
@@ -1808,6 +1889,7 @@ export default function TransferPage() {
     </div>
   )
 }
+
 
 
 
