@@ -64,6 +64,17 @@ type NoticeHeader = {
   totalValueRon: number
 }
 
+type ProductOption = {
+  id: string
+  name: string
+  sku?: string
+  price?: number
+  ncCode?: string | null
+  isFiscalRiskProduct?: boolean
+  grossWeightKg?: number
+  uom?: { code?: string | null; standardCode?: string | null; name?: string | null } | null
+}
+
 type NoticeRecord = {
   id: string
   noticeNo: string
@@ -171,6 +182,16 @@ function formatDateTimeInput(value?: string | null) {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
 }
 
+function formatUomOption(uom?: { code?: string | null; standardCode?: string | null; name?: string | null } | null) {
+  const shortCode = String(uom?.code || "").trim().toUpperCase()
+  const standardCode = String(uom?.standardCode || "").trim().toUpperCase()
+  const fallbackName = String(uom?.name || "").trim()
+  if (shortCode && standardCode) return `${shortCode}-${standardCode}`
+  if (shortCode) return shortCode
+  if (standardCode) return standardCode
+  return fallbackName || ""
+}
+
 export default function ETransportPage() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -183,6 +204,7 @@ export default function ETransportPage() {
   const [saving, setSaving] = useState(false)
   const [lookupBusy, setLookupBusy] = useState(false)
   const [notices, setNotices] = useState<NoticeRecord[]>([])
+  const [products, setProducts] = useState<ProductOption[]>([])
   const [header, setHeader] = useState<NoticeHeader>(makeHeader())
   const [items, setItems] = useState<NoticeItem[]>([makeLine(1)])
   const [error, setError] = useState("")
@@ -193,6 +215,12 @@ export default function ETransportPage() {
     const totalValueRon = items.reduce((sum, item) => sum + toNumber(item.lineValue), 0)
     return { totalGrossWeightKg, totalValueRon }
   }, [items])
+
+  useEffect(() => {
+    if (!isListMode) {
+      void loadProducts()
+    }
+  }, [isListMode])
 
   useEffect(() => {
     if (isListMode) {
@@ -206,6 +234,20 @@ export default function ETransportPage() {
     setHeader(makeHeader())
     setItems([makeLine(1)])
   }, [isListMode, noticeId])
+
+  async function loadProducts() {
+    if (!token) return
+    try {
+      const res = await fetch(`${API}/api/v1/products`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !Array.isArray(data?.items)) return
+      setProducts(data.items)
+    } catch {
+      // Keep the page usable even if products fail to load.
+    }
+  }
 
   async function loadList() {
     if (!token) return
@@ -309,6 +351,35 @@ export default function ETransportPage() {
         }
       })
     )
+  }
+
+  function productMatches(search: string) {
+    const q = String(search || "").trim().toLowerCase()
+    if (q.length < 2) return []
+    return products
+      .filter((product) => {
+        const haystack = [product.name, product.sku, product.ncCode].filter(Boolean).join(" ").toLowerCase()
+        return haystack.includes(q)
+      })
+      .slice(0, 8)
+  }
+
+  function chooseProduct(index: number, product: ProductOption) {
+    const qty = toNumber(items[index]?.qty || 1) || 1
+    const grossWeightPerUnitKg = toNumber(product.grossWeightKg || 0)
+    const unitPrice = toNumber(product.price || 0)
+    patchLine(index, {
+      productId: product.id,
+      sku: product.sku || "",
+      name: product.name || "",
+      ncCode: String(product.ncCode || ""),
+      fiscalRisk: product.isFiscalRiskProduct === true,
+      uomCode: formatUomOption(product.uom),
+      qty: String(qty),
+      unitPrice: String(unitPrice),
+      grossWeightPerUnitKg: String(grossWeightPerUnitKg),
+      grossWeightTotalKg: String(qty * grossWeightPerUnitKg),
+    })
   }
 
   function addLine() {
@@ -700,7 +771,35 @@ export default function ETransportPage() {
               </div>
               <div className="grid gap-3 md:grid-cols-4">
                 <input placeholder="SKU" value={line.sku} onChange={(e) => patchLine(index, { sku: e.target.value })} className={documentInputClass} />
-                <input placeholder="Denumire bun" value={line.name} onChange={(e) => patchLine(index, { name: e.target.value })} className={documentInputClass} />
+                <div className="relative md:col-span-2">
+                  <input
+                    placeholder="Cauta produs dupa nume, cod sau NC"
+                    value={line.name}
+                    onChange={(e) => patchLine(index, { name: e.target.value, productId: "" })}
+                    className={documentInputClass}
+                  />
+                  {line.name.trim().length >= 2 && !line.productId ? (
+                    <div className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-[14px] border border-slate-200 bg-white p-1 shadow-xl">
+                      {productMatches(line.name).length ? (
+                        productMatches(line.name).map((product) => (
+                          <button
+                            key={product.id}
+                            type="button"
+                            onClick={() => chooseProduct(index, product)}
+                            className="flex w-full flex-col rounded-[10px] px-3 py-2 text-left hover:bg-slate-50"
+                          >
+                            <span className="text-sm font-semibold text-slate-900">{product.name}</span>
+                            <span className="text-xs text-slate-500">
+                              {[product.sku, product.ncCode, formatUomOption(product.uom)].filter(Boolean).join(" • ")}
+                            </span>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2 text-sm text-slate-500">Nu am gasit niciun produs.</div>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
                 <input placeholder="Cod NC" value={line.ncCode} onChange={(e) => patchLine(index, { ncCode: e.target.value })} className={documentInputClass} />
                 <input placeholder="Cod UM ANAF" value={line.uomCode} onChange={(e) => patchLine(index, { uomCode: e.target.value })} className={documentInputClass} />
                 <input placeholder="Cantitate" value={line.qty} onChange={(e) => patchLine(index, { qty: e.target.value })} className={documentInputClass} />
