@@ -71,6 +71,23 @@ function buildLocationText(location: any) {
     .join(", ")
 }
 
+function buildNoticeAddressText(scope: unknown, adrValue: unknown, borderPoint: unknown) {
+  return normalizeText(scope) === "PTF"
+    ? normalizeText(borderPoint)
+    : normalizeText(buildStructuredAddressText(adrValue))
+}
+
+function resolveNoticeTotals(items: any[]) {
+  const normalizedItems = Array.isArray(items) ? items : []
+  const totalGrossWeightKg = normalizedItems.reduce((sum: number, item: any) => {
+    const qty = toNumber(item?.qty)
+    const grossWeightPerUnitKg = toNumber(item?.grossWeightPerUnitKg || item?.product?.grossWeightKg || 0)
+    return sum + qty * grossWeightPerUnitKg
+  }, 0)
+  const totalValueRon = normalizedItems.reduce((sum: number, item: any) => sum + toNumber(item?.lineValue), 0)
+  return { totalGrossWeightKg, totalValueRon }
+}
+
 export type ETransportValidationIssue = {
   severity: "error" | "warning"
   field: string
@@ -167,10 +184,7 @@ export function validateTransferForETransport(doc: any) {
 
 export function generateTransferETransportXml(doc: any) {
   const items = Array.isArray(doc?.items) ? doc.items : []
-  const totalGrossWeightKg = items.reduce((sum: number, item: any) => {
-    return sum + toNumber(item?.qty) * toNumber(item?.product?.grossWeightKg || 0)
-  }, 0)
-  const totalValueRon = items.reduce((sum: number, item: any) => sum + toNumber(item?.lineValue), 0)
+  const { totalGrossWeightKg, totalValueRon } = resolveNoticeTotals(items)
   const startText = formatDateTimeLocal(doc?.eTransportDeclaredStart)
   const loadingAddress = normalizeText(doc?.eTransportStartScope) === "PTF"
     ? normalizeText(doc?.eTransportStartBorderPoint)
@@ -240,6 +254,164 @@ export function generateTransferETransportXml(doc: any) {
     <Cui>${xmlEscape(doc?.eTransportPartnerCui || "")}</Cui>
     <Name>${xmlEscape(doc?.eTransportPartnerName || "")}</Name>
     <InternalReference>${xmlEscape(doc?.eTransportInternalRef || "")}</InternalReference>
+  </Partner>
+  <Lines>
+${linesXml}
+  </Lines>
+</ROeTransportDraft>`
+}
+
+export function validateNoticeForETransport(notice: any) {
+  const issues: ETransportValidationIssue[] = []
+  const items = Array.isArray(notice?.items) ? notice.items : []
+
+  if (!normalizeText(notice?.declaredStart)) {
+    issues.push({ severity: "error", field: "declaredStart", message: "Completeaza data de start transport." })
+  }
+
+  if (!normalizeText(notice?.operationType)) {
+    issues.push({ severity: "error", field: "operationType", message: "Selecteaza tipul operatiunii." })
+  }
+
+  if (!normalizeText(notice?.partnerCui)) {
+    issues.push({ severity: "error", field: "partnerCui", message: "Completeaza CUI-ul partenerului." })
+  }
+
+  if (!normalizeText(notice?.partnerName)) {
+    issues.push({ severity: "error", field: "partnerName", message: "Completeaza denumirea partenerului." })
+  }
+
+  if (!normalizeText(notice?.vehicleNo)) {
+    issues.push({ severity: "error", field: "vehicleNo", message: "Completeaza numarul auto." })
+  }
+
+  if (normalizeText(notice?.startScope) === "PTF" && !normalizeText(notice?.startBorderPoint)) {
+    issues.push({ severity: "error", field: "startBorderPoint", message: "Selecteaza punctul de frontiera pentru start." })
+  }
+
+  if (normalizeText(notice?.endScope) === "PTF" && !normalizeText(notice?.endBorderPoint)) {
+    issues.push({ severity: "error", field: "endBorderPoint", message: "Selecteaza punctul de frontiera pentru final." })
+  }
+
+  if (normalizeText(notice?.startScope) === "ADR" && !buildNoticeAddressText(notice?.startScope, notice?.startAddress, notice?.startBorderPoint)) {
+    issues.push({ severity: "error", field: "startAddress", message: "Completeaza adresa de start a traseului." })
+  }
+
+  if (normalizeText(notice?.endScope) === "ADR" && !buildNoticeAddressText(notice?.endScope, notice?.endAddress, notice?.endBorderPoint)) {
+    issues.push({ severity: "error", field: "endAddress", message: "Completeaza adresa finala a traseului." })
+  }
+
+  if (toNumber(notice?.vehicleMaxMassKg) < 2500) {
+    issues.push({
+      severity: "warning",
+      field: "vehicleMaxMassKg",
+      message: "Masa maxima a vehiculului este sub 2.500 kg sau nu este completata.",
+    })
+  }
+
+  if (!normalizeText(notice?.organizerName)) {
+    issues.push({ severity: "warning", field: "organizerName", message: "Completeaza organizatorul transportului." })
+  }
+
+  if (!normalizeText(notice?.operatorName)) {
+    issues.push({ severity: "warning", field: "operatorName", message: "Completeaza transportatorul / operatorul." })
+  }
+
+  if (!items.length) {
+    issues.push({ severity: "error", field: "items", message: "Notificarea trebuie sa aiba cel putin o linie." })
+  }
+
+  items.forEach((item: any, index: number) => {
+    const label = `Linia ${index + 1}`
+    if (!normalizeText(item?.name || item?.product?.name)) {
+      issues.push({ severity: "error", field: `items[${index}].name`, message: `${label}: lipseste denumirea bunului.` })
+    }
+    if (toNumber(item?.qty) <= 0) {
+      issues.push({ severity: "error", field: `items[${index}].qty`, message: `${label}: cantitatea trebuie sa fie mai mare decat 0.` })
+    }
+    if (!normalizeText(item?.ncCode || item?.product?.ncCode)) {
+      issues.push({
+        severity: item?.fiscalRisk || item?.product?.isFiscalRiskProduct ? "error" : "warning",
+        field: `items[${index}].ncCode`,
+        message: `${label}: produsul nu are Cod NC completat.`,
+      })
+    }
+    if (!normalizeText(item?.uomCode || resolveTransportUomCode(item))) {
+      issues.push({ severity: "warning", field: `items[${index}].uomCode`, message: `${label}: lipseste codul UM.` })
+    }
+  })
+
+  return issues
+}
+
+export function generateETransportNoticeXml(notice: any) {
+  const items = Array.isArray(notice?.items) ? notice.items : []
+  const { totalGrossWeightKg, totalValueRon } = resolveNoticeTotals(items)
+  const startText = formatDateTimeLocal(notice?.declaredStart)
+  const loadingAddress = buildNoticeAddressText(notice?.startScope, notice?.startAddress, notice?.startBorderPoint)
+  const unloadingAddress = buildNoticeAddressText(notice?.endScope, notice?.endAddress, notice?.endBorderPoint)
+
+  const linesXml = items
+    .map((item: any, index: number) => {
+      const qty = toNumber(item?.qty)
+      const unitPrice = toNumber(item?.unitPrice)
+      const lineValue = toNumber(item?.lineValue)
+      const grossWeightKg = toNumber(item?.grossWeightPerUnitKg || item?.product?.grossWeightKg || 0)
+      return `    <Line index="${index + 1}">
+      <Sku>${xmlEscape(item?.sku || item?.product?.sku || "")}</Sku>
+      <Name>${xmlEscape(item?.name || item?.product?.name || "")}</Name>
+      <NcCode>${xmlEscape(item?.ncCode || item?.product?.ncCode || "")}</NcCode>
+      <FiscalRisk>${item?.fiscalRisk || item?.product?.isFiscalRiskProduct ? "true" : "false"}</FiscalRisk>
+      <Uom>${xmlEscape(item?.uomCode || resolveTransportUomCode(item))}</Uom>
+      <Quantity>${decimal(qty, 3)}</Quantity>
+      <UnitPriceRon>${decimal(unitPrice, 2)}</UnitPriceRon>
+      <LineValueRon>${decimal(lineValue, 2)}</LineValueRon>
+      <GrossWeightPerUnitKg>${decimal(grossWeightKg, 3)}</GrossWeightPerUnitKg>
+      <GrossWeightTotalKg>${decimal(toNumber(item?.grossWeightTotalKg) || qty * grossWeightKg, 3)}</GrossWeightTotalKg>
+      <InternalReference>${xmlEscape(item?.internalReference || "")}</InternalReference>
+    </Line>`
+    })
+    .join("\n")
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<ROeTransportDraft>
+  <Document>
+    <Type>${xmlEscape(notice?.sourceType || "MANUAL")}</Type>
+    <Number>${xmlEscape(notice?.noticeNo || "")}</Number>
+    <Date>${xmlEscape(String(notice?.declaredStart || notice?.createdAt || "").slice(0, 10))}</Date>
+    <Status>${xmlEscape(notice?.status || "PREPARED")}</Status>
+    <SourceDocNo>${xmlEscape(notice?.sourceDocNo || "")}</SourceDocNo>
+  </Document>
+  <Transport>
+    <OperationType>${xmlEscape(notice?.operationType || "")}</OperationType>
+    <DeclaredStart>${xmlEscape(startText)}</DeclaredStart>
+    <VehicleNo>${xmlEscape(notice?.vehicleNo || "")}</VehicleNo>
+    <TrailerNo>${xmlEscape(notice?.trailerNo || "")}</TrailerNo>
+    <VehicleMaxMassKg>${decimal(notice?.vehicleMaxMassKg || 0, 2)}</VehicleMaxMassKg>
+    <OrganizerCountry>${xmlEscape(notice?.organizerCountry || "RO")}</OrganizerCountry>
+    <OrganizerCode>${xmlEscape(notice?.organizerCode || "")}</OrganizerCode>
+    <Organizer>${xmlEscape(notice?.organizerName || "")}</Organizer>
+    <Operator>${xmlEscape(notice?.operatorName || "")}</Operator>
+  </Transport>
+  <LoadingPlace>
+    <Scope>${xmlEscape(notice?.startScope || "")}</Scope>
+    <Address>${xmlEscape(loadingAddress)}</Address>
+  </LoadingPlace>
+  <UnloadingPlace>
+    <Scope>${xmlEscape(notice?.endScope || "")}</Scope>
+    <Address>${xmlEscape(unloadingAddress)}</Address>
+  </UnloadingPlace>
+  <Summary>
+    <Candidate>${notice?.candidate ? "true" : "false"}</Candidate>
+    <Required>${notice?.required ? "true" : "false"}</Required>
+    <TotalGrossWeightKg>${decimal(totalGrossWeightKg, 3)}</TotalGrossWeightKg>
+    <TotalValueRon>${decimal(totalValueRon, 2)}</TotalValueRon>
+  </Summary>
+  <Partner>
+    <Country>${xmlEscape(notice?.partnerCountry || "RO")}</Country>
+    <Cui>${xmlEscape(notice?.partnerCui || "")}</Cui>
+    <Name>${xmlEscape(notice?.partnerName || "")}</Name>
+    <InternalReference>${xmlEscape(notice?.internalRef || "")}</InternalReference>
   </Partner>
   <Lines>
 ${linesXml}

@@ -937,6 +937,31 @@ export default function TransferPage() {
     }
   }
 
+  async function createSeparateETransportNotice() {
+    if (!transferId || !token) {
+      setError("Salveaza mai intai transferul.")
+      return
+    }
+
+    try {
+      setETransportBusy(true)
+      setError("")
+      const res = await fetch(`${API}/api/v1/etransport/notices/from-transfer/${transferId}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok || !data?.item?.id) {
+        throw new Error(data?.error || "Nu am putut crea notificarea separata.")
+      }
+      navigate(`/e-transport/edit?id=${data.item.id}`)
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut crea notificarea separata.")
+    } finally {
+      setETransportBusy(false)
+    }
+  }
+
   const eTransportPrepared = ["PREPARED", "READY_TO_REVIEW", "SENT", "ACCEPTED"].includes(header.eTransportStatus || "")
 
   return (
@@ -972,6 +997,12 @@ export default function TransferPage() {
           <Truck size={16} className="mr-2" />
           E-Transport
         </button>
+        {transferId ? (
+          <button type="button" className={documentButtonSecondaryClass} onClick={createSeparateETransportNotice} disabled={eTransportBusy}>
+            <Truck size={16} className="mr-2" />
+            Registru RO e-Transport
+          </button>
+        ) : null}
         <button type="button" className={documentButtonSecondaryClass} onClick={exportPdf} disabled={!transferId || loadingDoc}>
           <FileOutput size={16} className="mr-2" />
           PDF

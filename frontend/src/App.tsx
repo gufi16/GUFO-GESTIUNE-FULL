@@ -29,6 +29,7 @@ import TransferPage from "./pages/transfer"
 import FacturaPage from "./pages/factura"
 import ProcesVerbalPage from "./pages/proces-verbal"
 import FacturiPrimiteSPVPage from "./pages/FacturiPrimiteSPV"
+import ETransportPage from "./pages/ETransport"
 import UomPage from "./pages/uom"
 import DepartamentePage from "./pages/departamente"
 import CategoriiPage from "./pages/categorii"
@@ -129,6 +130,9 @@ export default function App() {
         <Route path="/transfer" element={<RequireModule code="documents"><TransferPage /></RequireModule>} />
         <Route path="/transfer/new" element={<RequireModule code="documents"><TransferPage /></RequireModule>} />
         <Route path="/transfer/edit" element={<RequireModule code="documents"><TransferPage /></RequireModule>} />
+        <Route path="/e-transport" element={<RequireModule code="documents"><ETransportPage /></RequireModule>} />
+        <Route path="/e-transport/new" element={<RequireModule code="documents"><ETransportPage /></RequireModule>} />
+        <Route path="/e-transport/edit" element={<RequireModule code="documents"><ETransportPage /></RequireModule>} />
 
         <Route path="/gestiune" element={<RequireModule code="inventory"><Gestiune /></RequireModule>} />
         <Route path="/gestiune/stoc" element={<RequireModule code="inventory"><Stoc /></RequireModule>} />

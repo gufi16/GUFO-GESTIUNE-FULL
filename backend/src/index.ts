@@ -48,6 +48,7 @@ import auditRouter from "./routes/audit"
 import gufoAiRouter from "./routes/gufoAi"
 import financeRouter from "./routes/finance"
 import backupsRouter from "./routes/backups"
+import eTransportRegistryRouter from "./routes/etrransport"
 
 dotenv.config()
 
@@ -1308,6 +1309,7 @@ app.use(reportsRouter)
 app.use(accountingExportRouter)
 app.use(financeRouter)
 app.use(backupsRouter)
+app.use(eTransportRegistryRouter)
 app.use(adminRouter)
 app.use(marketplaceRouter)
 app.use(salesInvoicesRouter)

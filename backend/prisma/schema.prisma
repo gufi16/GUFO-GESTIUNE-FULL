@@ -237,6 +237,7 @@ model Tenant {
   accountingExportConfigs AccountingExportConfig[]
   accountingStockTypes    AccountingStockType[]
   backups               TenantBackup[]
+  eTransportNotices    ETransportNotice[]
 }
 
 model PlatformConfig {
@@ -324,9 +325,10 @@ model Company {
   sales Sale[]
     stockBalances StockBalance[]
     stockMoves StockMove[]
-    consumptionDocs ConsumptionDoc[]
-    productionDocs ProductionDoc[]
-    transferDocs TransferDoc[]
+  consumptionDocs ConsumptionDoc[]
+  productionDocs ProductionDoc[]
+  transferDocs TransferDoc[]
+  eTransportNotices ETransportNotice[]
   inventoryDocs InventoryDoc[]
   minutesDocs MinutesDoc[]
   userAccesses UserCompanyAccess[]
@@ -680,6 +682,7 @@ model Product {
   stockMoves               StockMove[]
   receiptItems             PurchaseReceiptItem[]
   transferItems            TransferDocItem[]
+  eTransportNoticeItems    ETransportNoticeItem[]
   consumptionItems         ConsumptionDocItem[]  @relation("ConsumptionIngredientProduct")
   finishedConsumptionItems ConsumptionDocItem[]  @relation("ConsumptionFinishedProduct")
   productionItems          ProductionDocItem[]
@@ -1263,6 +1266,86 @@ model TransferDoc {
   @@index([toLocationId])
   @@index([status])
   @@index([docDate])
+}
+
+model ETransportNotice {
+  id                    String   @id @default(cuid())
+  tenantId              String
+  companyId             String?
+  noticeNo              String
+  sourceType            String?
+  sourceId              String?
+  sourceDocNo           String?
+  operationType         String?
+  partnerCountry        String?
+  partnerCui            String?
+  partnerName           String?
+  internalRef           String?
+  startScope            String?
+  endScope              String?
+  startAddress          String?
+  endAddress            String?
+  startBorderPoint      String?
+  endBorderPoint        String?
+  candidate             Boolean  @default(false)
+  required              Boolean  @default(false)
+  declaredStart         DateTime?
+  vehicleNo             String?
+  trailerNo             String?
+  vehicleMaxMassKg      Decimal?
+  organizerCountry      String?
+  organizerCode         String?
+  organizerName         String?
+  operatorName          String?
+  uit                   String?
+  status                String?
+  uploadIndex           String?
+  downloadId            String?
+  preparedXml           String?
+  errorText             String?
+  totalGrossWeightKg    Decimal  @default(0)
+  totalValueRon         Decimal  @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  tenant                Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company               Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  items                 ETransportNoticeItem[]
+
+  @@unique([tenantId, companyId, noticeNo])
+  @@index([tenantId])
+  @@index([tenantId, companyId])
+  @@index([companyId])
+  @@index([sourceType, sourceId])
+  @@index([status])
+  @@index([declaredStart])
+}
+
+model ETransportNoticeItem {
+  id                    String   @id @default(cuid())
+  noticeId              String
+  productId             String?
+  sourceItemId          String?
+  lineNo                Int      @default(1)
+  sku                   String?
+  name                  String
+  ncCode                String?
+  fiscalRisk            Boolean  @default(false)
+  uomCode               String?
+  qty                   Decimal  @default(0)
+  unitPrice             Decimal  @default(0)
+  lineValue             Decimal  @default(0)
+  grossWeightPerUnitKg  Decimal  @default(0)
+  grossWeightTotalKg    Decimal  @default(0)
+  internalReference     String?
+  createdAt             DateTime @default(now())
+
+  notice                ETransportNotice @relation(fields: [noticeId], references: [id], onDelete: Cascade)
+  product               Product?         @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([noticeId])
+  @@index([productId])
+  @@index([sourceItemId])
 }
 
 model TransferDocItem {
