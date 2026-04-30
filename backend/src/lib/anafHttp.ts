@@ -36,6 +36,14 @@ function shouldRetryWithCurl(error: unknown) {
   return /EPROTO|handshake failure|tls alert/i.test(message)
 }
 
+function toFriendlyAnafHttpError(error: unknown) {
+  const message = String((error as any)?.message || "")
+  if (/EPROTO|handshake failure|tls alert|SSL routines/i.test(message)) {
+    return new Error("Conexiunea securizata cu ANAF a esuat in timpul handshake-ului SSL/TLS.")
+  }
+  return error instanceof Error ? error : new Error(message || "Eroare de comunicare cu ANAF.")
+}
+
 function withLegacyTlsProfile(args: string[]) {
   return [
     ...args,
@@ -140,8 +148,8 @@ async function anafCurlRequest(url: string, options: AnafRequestOptions = {}): P
       const legacyArgs = finalizeArgs(withLegacyTlsProfile([...baseArgs, url]))
       try {
         await execCurl(legacyArgs)
-      } catch {
-        throw firstError
+      } catch (secondError) {
+        throw toFriendlyAnafHttpError(secondError || firstError)
       }
     }
 

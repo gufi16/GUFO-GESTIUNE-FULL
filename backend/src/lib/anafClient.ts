@@ -344,7 +344,6 @@ export async function anafUploadEtransportXml(company: any, xmlText: string) {
       "Content-Type": "application/xml; charset=utf-8",
     }),
     body: xmlText,
-    ...ready.certOptions,
   })
   const rawText = response.text
   const payload = parseAnafPayload(rawText)
@@ -365,7 +364,6 @@ export async function anafCheckEtransportStatus(company: any, uploadIndex: strin
   const url = `${getEtransportBaseUrl(company?.efacturaEnvironment)}/stareMesaj/${encodeURIComponent(uploadIndex)}`
   const response = await anafHttpRequest(url, {
     headers: buildAnafAuthHeaders(ready.accessToken),
-    ...ready.certOptions,
   })
   const rawText = response.text
   const payload = parseAnafPayload(rawText)
@@ -388,7 +386,6 @@ export async function anafListEtransportMessages(company: any, options: { days?:
   const url = `${getEtransportBaseUrl(company?.efacturaEnvironment)}/lista/${days}/${encodeURIComponent(cif)}`
   const response = await anafHttpRequest(url, {
     headers: buildAnafAuthHeaders(ready.accessToken),
-    ...ready.certOptions,
   })
   const rawText = response.text
   const payload = parseAnafPayload(rawText)
@@ -408,7 +405,6 @@ export async function anafDownloadEtransportById(company: any, downloadId: strin
   const url = `${getEtransportBaseUrl(company?.efacturaEnvironment)}/descarcare/${encodeURIComponent(downloadId)}`
   const response = await anafHttpRequest(url, {
     headers: buildAnafAuthHeaders(ready.accessToken),
-    ...ready.certOptions,
   })
   const rawText = response.buffer.toString("utf8")
   const payload = parseAnafPayload(rawText)
