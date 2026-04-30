@@ -337,6 +337,8 @@ type TransferDocListItem = {
   eTransportStatus?: string | null
   eTransportUit?: string | null
   eTransportPreparedXml?: string | null
+  eTransportUploadIndex?: string | null
+  eTransportDownloadId?: string | null
   items?: Array<{ id: string }>
 }
 
@@ -1121,6 +1123,85 @@ export default function Documente() {
       await openPdfInNewTab(res)
     } catch (err: any) {
       setError(err?.message || "Nu am putut descarca XML-ul RO e-Transport.")
+    }
+  }
+
+  async function finalizeTransferDoc(id: string) {
+    if (!token) return
+    try {
+      const res = await fetch(`${API}/api/v1/transfers/${id}/post`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Nu am putut finaliza transferul.")
+      }
+      setMessage(data?.message || "Transferul a fost finalizat.")
+      await loadTransferDocs()
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut finaliza transferul.")
+    }
+  }
+
+  async function sendTransferToAnaf(id: string) {
+    if (!token) return
+    try {
+      const res = await fetch(`${API}/api/v1/transfers/${id}/etransport/send`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Nu am putut trimite transportul la ANAF.")
+      }
+      setMessage(data?.message || "Transportul a fost trimis la ANAF.")
+      await loadTransferDocs()
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut trimite transportul la ANAF.")
+    }
+  }
+
+  async function checkTransferAnafStatus(id: string) {
+    if (!token) return
+    try {
+      const res = await fetch(`${API}/api/v1/transfers/${id}/etransport/status`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Nu am putut verifica starea la ANAF.")
+      }
+      setMessage(data?.message || "Starea transportului a fost actualizata.")
+      await loadTransferDocs()
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut verifica starea la ANAF.")
+    }
+  }
+
+  async function openTransferAnafReceipt(id: string) {
+    if (!token) return
+    try {
+      const res = await fetch(`${API}/api/v1/transfers/${id}/etransport/receipt`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data?.error || "Nu am putut descarca raspunsul ANAF.")
+      }
+      await openPdfInNewTab(res)
+      setMessage("Raspunsul ANAF a fost descarcat.")
+      await loadTransferDocs()
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut descarca raspunsul ANAF.")
     }
   }
 
@@ -2260,31 +2341,66 @@ export default function Documente() {
                             <Printer size={15} />
                             PDF
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => generateTransferXml(doc.id)}
-                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-                          >
-                            Genereaza XML
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => openTransferXml(doc.id)}
-                            disabled={!doc.eTransportPreparedXml}
-                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            XML
-                          </button>
                           {doc.status === "DRAFT" ? (
-                            <button
-                              type="button"
-                              onClick={() => deleteTransferDoc(doc.id, doc.docNo)}
-                              className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-50"
-                            >
-                              <Trash2 size={15} />
-                              Sterge
-                            </button>
-                          ) : null}
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => finalizeTransferDoc(doc.id)}
+                                className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                              >
+                                Finalizeaza
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => deleteTransferDoc(doc.id, doc.docNo)}
+                                className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-50"
+                              >
+                                <Trash2 size={15} />
+                                Anuleaza
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => generateTransferXml(doc.id)}
+                                className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                              >
+                                Genereaza XML
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => sendTransferToAnaf(doc.id)}
+                                className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                              >
+                                ANAF
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => checkTransferAnafStatus(doc.id)}
+                                disabled={!doc.eTransportUploadIndex}
+                                className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                Verifica
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => openTransferXml(doc.id)}
+                                disabled={!doc.eTransportPreparedXml}
+                                className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                XML
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => openTransferAnafReceipt(doc.id)}
+                                disabled={!doc.eTransportUploadIndex}
+                                className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                Raspuns ANAF
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>

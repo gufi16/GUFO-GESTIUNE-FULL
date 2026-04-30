@@ -700,6 +700,109 @@ router.get("/api/v1/transfers/:id/etransport/receipt", async (req: AuthedRequest
   }
 })
 
+router.post("/api/v1/transfers/:id/post", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
+  const id = String(req.params.id)
+
+  const existing = await prisma.transferDoc.findFirst({
+    where: { id, tenantId, companyId },
+    include: {
+      fromLocation: true,
+      toLocation: true,
+      items: true,
+    },
+  })
+
+  if (!existing) {
+    return res.status(404).json({ ok: false, error: "Transferul nu a fost gasit." })
+  }
+
+  if (existing.status !== "DRAFT") {
+    return res.status(400).json({ ok: false, error: "Doar documentele DRAFT pot fi finalizate." })
+  }
+
+  await prisma.$transaction(async (tx) => {
+    for (const item of existing.items) {
+      const qty = Number(item.qty || 0)
+
+      const product = await tx.product.findFirst({
+        where: { id: item.productId, tenantId, companyId },
+        include: { uom: true },
+      })
+
+      await decrementStockBalanceStrict(tx, {
+        tenantId,
+        companyId,
+        locationId: existing.fromLocationId,
+        productId: item.productId,
+        qty: new Prisma.Decimal(qty),
+        productName: product?.name || "produs",
+        uomCode: product?.uom?.code || null,
+      })
+
+      await incrementStockBalance(tx, {
+        tenantId,
+        companyId,
+        locationId: existing.toLocationId,
+        productId: item.productId,
+        qty: new Prisma.Decimal(qty),
+      })
+
+      await tx.stockMove.create({
+        data: {
+          tenantId,
+          companyId,
+          locationId: existing.fromLocationId,
+          productId: item.productId,
+          type: "OUT",
+          qty: new Prisma.Decimal(qty),
+          refType: "TRANSFER",
+          refId: existing.id,
+          note: `Nota transfer ${existing.docNo} catre ${existing.toLocation?.name || "-"}`,
+        },
+      })
+
+      await tx.stockMove.create({
+        data: {
+          tenantId,
+          companyId,
+          locationId: existing.toLocationId,
+          productId: item.productId,
+          type: "IN",
+          qty: new Prisma.Decimal(qty),
+          refType: "TRANSFER",
+          refId: existing.id,
+          note: `Nota transfer ${existing.docNo} din ${existing.fromLocation?.name || "-"}`,
+        },
+      })
+    }
+
+    await tx.transferDoc.update({
+      where: { id: existing.id },
+      data: { status: "POSTED" },
+    })
+  })
+
+  const doc = await prisma.transferDoc.findFirst({
+    where: { id, tenantId, companyId },
+    include: {
+      fromLocation: true,
+      toLocation: true,
+      items: {
+        include: {
+          product: { include: { uom: true, vatRate: true } },
+          uom: true,
+          vatRate: true,
+        },
+        orderBy: { createdAt: "asc" },
+      },
+    },
+  })
+
+  return res.json({ ok: true, doc: serializeTransferDoc(doc), message: "Transferul a fost finalizat." })
+})
+
 router.delete("/api/v1/transfers/:id", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
   const companyId = await requireRequestCompanyId(req)
