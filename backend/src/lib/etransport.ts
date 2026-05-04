@@ -158,6 +158,19 @@ function normalizeCountyKey(value: unknown) {
     .toUpperCase()
 }
 
+function normalizeCountryCode(value: unknown) {
+  const raw = normalizeText(value)
+  if (!raw) return "RO"
+  const normalized = raw
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "")
+    .toUpperCase()
+
+  if (normalized === "RO" || normalized === "ROMANIA") return "RO"
+  return raw.length <= 3 ? raw.toUpperCase() : raw
+}
+
 function resolveCountyCode(value: unknown) {
   const key = normalizeCountyKey(value)
   if (!key) return ""
@@ -284,7 +297,13 @@ function resolveTransportUomCode(item: any) {
   if (standardCode) return standardCode
 
   const internalCode = normalizeText(item?.uom?.code || item?.product?.uom?.code || item?.uomCode)
-  return internalCode
+  if (!internalCode) return ""
+  if (internalCode.includes("-")) {
+    const parts = internalCode.split("-").map((part) => normalizeText(part)).filter(Boolean)
+    const maybeStandardCode = parts[parts.length - 1]
+    if (/^[A-Z0-9]{1,8}$/i.test(maybeStandardCode)) return maybeStandardCode.toUpperCase()
+  }
+  return internalCode.toUpperCase()
 }
 
 function buildLocationText(location: any) {
@@ -430,12 +449,12 @@ export function generateTransferETransportXml(doc: any) {
 <eTransport xmlns="${ETRANSPORT_XMLNS}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" codDeclarant="${xmlEscape(declarantCode)}" refDeclarant="${xmlEscape(declarantRef)}">
   <notificare codTipOperatiune="${xmlEscape(operationTypeCode)}">
 ${linesXml}
-    <partenerComercial codTara="${xmlEscape(doc?.eTransportPartnerCountry || "RO")}" cod="${xmlEscape(doc?.eTransportPartnerCui || "")}" denumire="${xmlEscape(doc?.eTransportPartnerName || "")}" />
+    <partenerComercial codTara="${xmlEscape(normalizeCountryCode(doc?.eTransportPartnerCountry))}" cod="${xmlEscape(doc?.eTransportPartnerCui || "")}" denumire="${xmlEscape(doc?.eTransportPartnerName || "")}" />
     <dateTransport ${buildTransportAttrs({
       vehicleNo: doc?.vehicleNo,
       trailerNo: doc?.trailerNo,
       transportDate: doc?.eTransportDeclaredStart || doc?.docDate,
-      transporterCountry: "RO",
+      transporterCountry: normalizeCountryCode(doc?.company?.country || "RO"),
       transporterCode: declarantCode,
       transporterName: doc?.eTransportOrganizer || doc?.company?.name || "",
       startScope: doc?.eTransportStartScope,
@@ -546,12 +565,12 @@ export function generateETransportNoticeXml(notice: any) {
 <eTransport xmlns="${ETRANSPORT_XMLNS}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" codDeclarant="${xmlEscape(declarantCode)}" refDeclarant="${xmlEscape(declarantRef)}">
   <notificare codTipOperatiune="${xmlEscape(operationTypeCode)}">
 ${linesXml}
-    <partenerComercial codTara="${xmlEscape(notice?.partnerCountry || "RO")}" cod="${xmlEscape(notice?.partnerCui || "")}" denumire="${xmlEscape(notice?.partnerName || "")}" />
+    <partenerComercial codTara="${xmlEscape(normalizeCountryCode(notice?.partnerCountry))}" cod="${xmlEscape(notice?.partnerCui || "")}" denumire="${xmlEscape(notice?.partnerName || "")}" />
     <dateTransport ${buildTransportAttrs({
       vehicleNo: notice?.vehicleNo,
       trailerNo: notice?.trailerNo,
       transportDate: notice?.declaredStart || notice?.createdAt,
-      transporterCountry: notice?.organizerCountry || "RO",
+      transporterCountry: normalizeCountryCode(notice?.organizerCountry || "RO"),
       transporterCode: notice?.organizerCode || "",
       transporterName: notice?.organizerName || "",
       startScope: notice?.startScope,
