@@ -18,10 +18,6 @@ type EFacturaForm = {
   efacturaEnvironment: string
   efacturaPlatformConfigured: boolean
   efacturaUsesPlatformConfig: boolean
-  etransportOauthConfigured: boolean
-  etransportOauthClientId: string
-  etransportOauthClientSecret: string
-  etransportOauthRedirectUri: string
   companyName: string
   companyCui: string
   companyCity: string
@@ -115,10 +111,6 @@ const emptyForm: EFacturaForm = {
   efacturaEnvironment: "test",
   efacturaPlatformConfigured: false,
   efacturaUsesPlatformConfig: false,
-  etransportOauthConfigured: false,
-  etransportOauthClientId: "",
-  etransportOauthClientSecret: "",
-  etransportOauthRedirectUri: "",
   companyName: "",
   companyCui: "",
   companyCity: "",
@@ -221,12 +213,6 @@ export default function SetariEFacturaPage() {
     expiresAt: "",
     lastError: "",
   })
-  const [eTransportOauthStatus, setETransportOauthStatus] = useState({
-    connected: false,
-    connectedAt: "",
-    expiresAt: "",
-    lastError: "",
-  })
   const [localAgentUrl, setLocalAgentUrl] = useState(DEFAULT_LOCAL_AGENT_URL)
   const [localAgentLoading, setLocalAgentLoading] = useState(false)
   const [localAgentError, setLocalAgentError] = useState("")
@@ -282,10 +268,6 @@ export default function SetariEFacturaPage() {
         efacturaEnvironment: data?.company?.efacturaEnvironment || "test",
         efacturaPlatformConfigured: Boolean(data?.company?.efacturaPlatformConfigured),
         efacturaUsesPlatformConfig: Boolean(data?.company?.efacturaUsesPlatformConfig),
-        etransportOauthConfigured: Boolean(data?.company?.etransportOauthConfigured),
-        etransportOauthClientId: data?.company?.etransportOauthClientId || "",
-        etransportOauthClientSecret: data?.company?.etransportOauthClientSecret || "",
-        etransportOauthRedirectUri: data?.company?.etransportOauthRedirectUri || "",
         companyName: data?.company?.name || "",
         companyCui: data?.company?.cui || "",
         companyCity: data?.company?.efacturaSellerCity || data?.company?.city || "",
@@ -310,13 +292,6 @@ export default function SetariEFacturaPage() {
         expiresAt: data?.company?.efacturaOauthAccessTokenExpiresAt || "",
         lastError: data?.company?.efacturaOauthLastError || "",
       })
-      setETransportOauthStatus({
-        connected: Boolean(data?.company?.etransportOauthAccessToken),
-        connectedAt: data?.company?.etransportOauthConnectedAt || "",
-        expiresAt: data?.company?.etransportOauthAccessTokenExpiresAt || "",
-        lastError: data?.company?.etransportOauthLastError || "",
-      })
-
       if (connected) {
         setError("")
 
@@ -516,9 +491,6 @@ export default function SetariEFacturaPage() {
           efacturaEnabled: form.efacturaEnabled,
           efacturaEnvironment: form.efacturaEnvironment,
           efacturaCertSerial: form.efacturaCertSerial,
-          etransportOauthClientId: form.etransportOauthClientId,
-          etransportOauthClientSecret: form.etransportOauthClientSecret,
-          etransportOauthRedirectUri: form.etransportOauthRedirectUri,
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -599,69 +571,6 @@ export default function SetariEFacturaPage() {
       await loadSettings()
     } catch (e: any) {
       setError(normalizeAnafMessage(e?.message || "Testul conexiunii ANAF a esuat."))
-      await loadSettings()
-    } finally {
-      setTesting(false)
-    }
-  }
-
-  async function startETransportOauthConnect() {
-    if (!token) {
-      setError("Nu exista token de autentificare. Fa login din nou.")
-      return
-    }
-
-    if (!form.etransportOauthClientId || !form.etransportOauthClientSecret || !form.etransportOauthRedirectUri) {
-      setError("Completeaza aplicatia ANAF pentru RO e-Transport si salveaza inainte.")
-      return
-    }
-
-    setConnecting(true)
-    setError("")
-    setMessage("")
-    try {
-      const returnTo = `${window.location.origin}/setari/efactura`
-      const res = await fetch(`${API}/api/v1/company/etransport/oauth/start?returnTo=${encodeURIComponent(returnTo)}`, {
-        credentials: "include",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok || !data?.ok || !data?.url) {
-        throw new Error(normalizeAnafMessage(data?.error || "Nu am putut porni conectarea RO e-Transport."))
-      }
-      window.location.href = data.url
-    } catch (e: any) {
-      setError(normalizeAnafMessage(e?.message || "Nu am putut porni conectarea RO e-Transport."))
-      setConnecting(false)
-    }
-  }
-
-  async function testETransportOauthConnection() {
-    if (!token) {
-      setError("Nu exista token de autentificare. Fa login din nou.")
-      return
-    }
-
-    setTesting(true)
-    setError("")
-    setMessage("")
-    try {
-      const res = await fetch(`${API}/api/v1/company/etransport/oauth/test`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok || !data?.ok) {
-        throw new Error(normalizeAnafMessage(data?.error || "Testul conexiunii RO e-Transport a esuat."))
-      }
-      setMessage(data?.message || "Conexiunea ANAF pentru RO e-Transport a raspuns corect.")
-      await loadSettings()
-    } catch (e: any) {
-      setError(normalizeAnafMessage(e?.message || "Testul conexiunii RO e-Transport a esuat."))
       await loadSettings()
     } finally {
       setTesting(false)
@@ -878,45 +787,6 @@ export default function SetariEFacturaPage() {
               Expira: <span className="font-semibold text-slate-900">{oauthStatus.expiresAt ? new Date(oauthStatus.expiresAt).toLocaleString("ro-RO") : "-"}</span>
             </div>
           </div>
-        </DocumentSection>
-
-        <DocumentSection
-          title="Token RO e-Transport"
-          description="Separat de e-Factura. Foloseste aplicatia ANAF dedicata pentru E-Transport."
-          actions={
-            <div className="flex gap-2">
-              <button type="button" onClick={testETransportOauthConnection} className={documentButtonSecondaryClass} disabled={testing || loading || !eTransportOauthStatus.connected}>
-                {testing ? "Testare..." : "Testeaza"}
-              </button>
-              <button type="button" onClick={startETransportOauthConnect} className={documentButtonPrimaryClass} disabled={connecting || loading}>
-                {connecting ? "Se deschide..." : "Genereaza token"}
-              </button>
-            </div>
-          }
-        >
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <DocumentField label="Client ID E-Transport">
-              <input value={form.etransportOauthClientId} onChange={(e) => updateField("etransportOauthClientId", e.target.value)} className={documentInputClass} placeholder="Client ID ANAF E-Transport" />
-            </DocumentField>
-            <DocumentField label="Client Secret E-Transport">
-              <input value={form.etransportOauthClientSecret} onChange={(e) => updateField("etransportOauthClientSecret", e.target.value)} className={documentInputClass} placeholder="Client Secret ANAF E-Transport" />
-            </DocumentField>
-            <DocumentField label="Redirect URI E-Transport">
-              <input value={form.etransportOauthRedirectUri} onChange={(e) => updateField("etransportOauthRedirectUri", e.target.value)} className={documentInputClass} placeholder="https://.../api/v1/company/efactura/oauth/callback" />
-            </DocumentField>
-          </div>
-          <div className="mt-3 space-y-2 text-sm text-slate-600">
-            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
-              Status: <span className="font-semibold text-slate-900">{eTransportOauthStatus.connected ? "Conectat" : "Neconectat"}</span>
-            </div>
-            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
-              Generat la: <span className="font-semibold text-slate-900">{eTransportOauthStatus.connectedAt ? new Date(eTransportOauthStatus.connectedAt).toLocaleString("ro-RO") : "-"}</span>
-            </div>
-            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
-              Expira: <span className="font-semibold text-slate-900">{eTransportOauthStatus.expiresAt ? new Date(eTransportOauthStatus.expiresAt).toLocaleString("ro-RO") : "-"}</span>
-            </div>
-          </div>
-          {eTransportOauthStatus.lastError && !eTransportOauthStatus.connected ? <div className="mt-3"><InlineNotice tone="error">{eTransportOauthStatus.lastError}</InlineNotice></div> : null}
         </DocumentSection>
 
         {isDebugMode ? (
