@@ -35,49 +35,51 @@ function normalizeText(value: unknown) {
 }
 
 const COUNTY_CODE_MAP: Record<string, string> = {
-  ALBA: "1",
-  ARAD: "2",
-  ARGES: "3",
-  BACAU: "4",
-  BIHOR: "5",
-  "BISTRITA-NASAUD": "6",
-  BOTOSANI: "7",
-  BRASOV: "8",
-  BRAILA: "9",
-  BUZAU: "10",
-  "CARAS-SEVERIN": "11",
-  CLUJ: "12",
-  CONSTANTA: "13",
-  COVASNA: "14",
-  DAMBOVITA: "15",
-  DOLJ: "16",
-  GALATI: "17",
-  GORJ: "18",
-  HARGHITA: "19",
-  HUNEDOARA: "20",
-  IALOMITA: "21",
-  IASI: "22",
-  ILFOV: "23",
-  MARAMURES: "24",
-  MEHEDINTI: "25",
-  MURES: "26",
-  NEAMT: "27",
-  OLT: "28",
-  PRAHOVA: "29",
-  "SATU-MARE": "30",
-  SALAJ: "31",
-  SIBIU: "32",
-  SUCEAVA: "33",
-  TELEORMAN: "34",
-  TIMIS: "35",
-  TULCEA: "36",
-  VASLUI: "37",
-  VALCEA: "38",
-  VRANCEA: "39",
-  BUCURESTI: "40",
-  CALARASI: "41",
-  GIURGIU: "42",
+  ALBA: "AB",
+  ARAD: "AR",
+  ARGES: "AG",
+  BACAU: "BC",
+  BIHOR: "BH",
+  "BISTRITA-NASAUD": "BN",
+  BOTOSANI: "BT",
+  BRASOV: "BV",
+  BRAILA: "BR",
+  BUZAU: "BZ",
+  "CARAS-SEVERIN": "CS",
+  CLUJ: "CJ",
+  CONSTANTA: "CT",
+  COVASNA: "CV",
+  DAMBOVITA: "DB",
+  DOLJ: "DJ",
+  GALATI: "GL",
+  GORJ: "GJ",
+  HARGHITA: "HR",
+  HUNEDOARA: "HD",
+  IALOMITA: "IL",
+  IASI: "IS",
+  ILFOV: "IF",
+  MARAMURES: "MM",
+  MEHEDINTI: "MH",
+  MURES: "MS",
+  NEAMT: "NT",
+  OLT: "OT",
+  PRAHOVA: "PH",
+  "SATU-MARE": "SM",
+  SALAJ: "SJ",
+  SIBIU: "SB",
+  SUCEAVA: "SV",
+  TELEORMAN: "TR",
+  TIMIS: "TM",
+  TULCEA: "TL",
+  VASLUI: "VS",
+  VALCEA: "VL",
+  VRANCEA: "VN",
+  BUCURESTI: "B",
+  CALARASI: "CL",
+  GIURGIU: "GR",
 }
+
+const ETRANSPORT_XMLNS = "mfp:anaf:dgti:eTransport:declaratie:v2"
 
 const OPERATION_TYPE_CODE_MAP: Record<string, string> = {
   AIC: "10",
@@ -217,13 +219,7 @@ function extractStructuredAddress(value: unknown) {
   }
 }
 
-function buildPlaceXml(tagName: string, scope: unknown, adrValue: unknown, borderPoint: unknown) {
-  const normalizedScope = normalizeText(scope).toUpperCase() || "ADR"
-  if (normalizedScope === "PTF") {
-    const ptfCode = normalizeText(borderPoint)
-    return `    <${tagName} codPtf="${xmlEscape(ptfCode)}" />`
-  }
-
+function buildLocationAttrs(adrValue: unknown) {
   const address = extractStructuredAddress(adrValue)
   const attrs = [
     `codJudet="${xmlEscape(resolveCountyCode(address.county))}"`,
@@ -239,9 +235,48 @@ function buildPlaceXml(tagName: string, scope: unknown, adrValue: unknown, borde
   if (address.details) attrs.push(`alteInfo="${xmlEscape(address.details)}"`)
   if (address.postalCode) attrs.push(`codPostal="${xmlEscape(address.postalCode)}"`)
 
-  return `    <${tagName}>
-      <locatie ${attrs.join(" ")} />
-    </${tagName}>`
+  return attrs.join(" ")
+}
+
+function buildPlaceXml(tagName: string, adrValue: unknown) {
+  return `    <${tagName} ${buildLocationAttrs(adrValue)} />`
+}
+
+function resolveBorderPointCode(startScope: unknown, startBorderPoint: unknown, endScope: unknown, endBorderPoint: unknown) {
+  if (normalizeText(startScope).toUpperCase() === "PTF" && normalizeText(startBorderPoint)) {
+    return normalizeText(startBorderPoint)
+  }
+  if (normalizeText(endScope).toUpperCase() === "PTF" && normalizeText(endBorderPoint)) {
+    return normalizeText(endBorderPoint)
+  }
+  return ""
+}
+
+function buildTransportAttrs(input: {
+  vehicleNo?: unknown
+  trailerNo?: unknown
+  transportDate?: unknown
+  transporterCountry?: unknown
+  transporterCode?: unknown
+  transporterName?: unknown
+  startScope?: unknown
+  startBorderPoint?: unknown
+  endScope?: unknown
+  endBorderPoint?: unknown
+}) {
+  const attrs = [
+    `nrVehicul="${xmlEscape(input.vehicleNo || "")}"`,
+    `codTaraTransportator="${xmlEscape(input.transporterCountry || "RO")}"`,
+    `codTransportator="${xmlEscape(input.transporterCode || "")}"`,
+    `denumireTransportator="${xmlEscape(input.transporterName || "")}"`,
+    `dataTransport="${xmlEscape(formatDateOnly(input.transportDate))}"`,
+  ]
+
+  if (normalizeText(input.trailerNo)) attrs.push(`nrRemorca1="${xmlEscape(input.trailerNo || "")}"`)
+  const ptfCode = resolveBorderPointCode(input.startScope, input.startBorderPoint, input.endScope, input.endBorderPoint)
+  if (ptfCode) attrs.push(`codPtf="${xmlEscape(ptfCode)}"`)
+
+  return attrs.join(" ")
 }
 
 function resolveTransportUomCode(item: any) {
@@ -392,14 +427,23 @@ export function generateTransferETransportXml(doc: any) {
     .join("\n")
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<eTransport codDeclarant="${xmlEscape(declarantCode)}" refDeclarant="${xmlEscape(declarantRef)}">
+<eTransport xmlns="${ETRANSPORT_XMLNS}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" codDeclarant="${xmlEscape(declarantCode)}" refDeclarant="${xmlEscape(declarantRef)}">
   <notificare codTipOperatiune="${xmlEscape(operationTypeCode)}">
 ${linesXml}
     <partenerComercial codTara="${xmlEscape(doc?.eTransportPartnerCountry || "RO")}" cod="${xmlEscape(doc?.eTransportPartnerCui || "")}" denumire="${xmlEscape(doc?.eTransportPartnerName || "")}" />
-    <dateTransport nrVehicul="${xmlEscape(doc?.vehicleNo || "")}"${normalizeText(doc?.trailerNo) ? ` nrRemorca1="${xmlEscape(doc?.trailerNo || "")}"` : ""} codTaraOrgTransport="RO" codOrgTransport="${xmlEscape(declarantCode)}" denumireOrgTransport="${xmlEscape(doc?.eTransportOrganizer || doc?.company?.name || "")}" dataTransport="${xmlEscape(transportDate)}" />
-${buildPlaceXml("locStartTraseuRutier", doc?.eTransportStartScope, doc?.eTransportStartAddress, doc?.eTransportStartBorderPoint)}
-${buildPlaceXml("locFinalTraseuRutier", doc?.eTransportEndScope, doc?.eTransportEndAddress, doc?.eTransportEndBorderPoint)}
-    <documenteTransport tipDocument="${xmlEscape(documentTypeCode)}" numarDocument="${xmlEscape(doc?.eTransportTransportDocNo || doc?.docNo || "")}" dataDocument="${xmlEscape(transportDocDate)}"${normalizeText(doc?.eTransportTransportDocNotes) ? ` observatii="${xmlEscape(doc?.eTransportTransportDocNotes || "")}"` : ""} />
+    <dateTransport ${buildTransportAttrs({
+      vehicleNo: doc?.vehicleNo,
+      trailerNo: doc?.trailerNo,
+      transportDate: doc?.eTransportDeclaredStart || doc?.docDate,
+      transporterCountry: "RO",
+      transporterCode: declarantCode,
+      transporterName: doc?.eTransportOrganizer || doc?.company?.name || "",
+      startScope: doc?.eTransportStartScope,
+      startBorderPoint: doc?.eTransportStartBorderPoint,
+      endScope: doc?.eTransportEndScope,
+      endBorderPoint: doc?.eTransportEndBorderPoint,
+    })} />
+${normalizeText(doc?.eTransportStartScope).toUpperCase() === "ADR" ? buildPlaceXml("locIncarcare", doc?.eTransportStartAddress) + "\n" : ""}${normalizeText(doc?.eTransportEndScope).toUpperCase() === "ADR" ? buildPlaceXml("locDescarcare", doc?.eTransportEndAddress) + "\n" : ""}    <documenteTransport tipDocument="${xmlEscape(documentTypeCode)}" numarDocument="${xmlEscape(doc?.eTransportTransportDocNo || doc?.docNo || "")}" dataDocument="${xmlEscape(transportDocDate)}"${normalizeText(doc?.eTransportTransportDocNotes) ? ` observatii="${xmlEscape(doc?.eTransportTransportDocNotes || "")}"` : ""} />
   </notificare>
 </eTransport>`
 }
@@ -499,14 +543,23 @@ export function generateETransportNoticeXml(notice: any) {
     .join("\n")
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<eTransport codDeclarant="${xmlEscape(declarantCode)}" refDeclarant="${xmlEscape(declarantRef)}">
+<eTransport xmlns="${ETRANSPORT_XMLNS}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" codDeclarant="${xmlEscape(declarantCode)}" refDeclarant="${xmlEscape(declarantRef)}">
   <notificare codTipOperatiune="${xmlEscape(operationTypeCode)}">
 ${linesXml}
     <partenerComercial codTara="${xmlEscape(notice?.partnerCountry || "RO")}" cod="${xmlEscape(notice?.partnerCui || "")}" denumire="${xmlEscape(notice?.partnerName || "")}" />
-    <dateTransport nrVehicul="${xmlEscape(notice?.vehicleNo || "")}"${normalizeText(notice?.trailerNo) ? ` nrRemorca1="${xmlEscape(notice?.trailerNo || "")}"` : ""} codTaraOrgTransport="${xmlEscape(notice?.organizerCountry || "RO")}" codOrgTransport="${xmlEscape(notice?.organizerCode || "")}" denumireOrgTransport="${xmlEscape(notice?.organizerName || "")}" dataTransport="${xmlEscape(transportDate)}" />
-${buildPlaceXml("locStartTraseuRutier", notice?.startScope, notice?.startAddress, notice?.startBorderPoint)}
-${buildPlaceXml("locFinalTraseuRutier", notice?.endScope, notice?.endAddress, notice?.endBorderPoint)}
-    <documenteTransport tipDocument="${xmlEscape(documentTypeCode)}" numarDocument="${xmlEscape(notice?.transportDocNo || "")}" dataDocument="${xmlEscape(transportDocDate)}"${normalizeText(notice?.transportDocNotes) ? ` observatii="${xmlEscape(notice?.transportDocNotes || "")}"` : ""} />
+    <dateTransport ${buildTransportAttrs({
+      vehicleNo: notice?.vehicleNo,
+      trailerNo: notice?.trailerNo,
+      transportDate: notice?.declaredStart || notice?.createdAt,
+      transporterCountry: notice?.organizerCountry || "RO",
+      transporterCode: notice?.organizerCode || "",
+      transporterName: notice?.organizerName || "",
+      startScope: notice?.startScope,
+      startBorderPoint: notice?.startBorderPoint,
+      endScope: notice?.endScope,
+      endBorderPoint: notice?.endBorderPoint,
+    })} />
+${normalizeText(notice?.startScope).toUpperCase() === "ADR" ? buildPlaceXml("locIncarcare", notice?.startAddress) + "\n" : ""}${normalizeText(notice?.endScope).toUpperCase() === "ADR" ? buildPlaceXml("locDescarcare", notice?.endAddress) + "\n" : ""}    <documenteTransport tipDocument="${xmlEscape(documentTypeCode)}" numarDocument="${xmlEscape(notice?.transportDocNo || "")}" dataDocument="${xmlEscape(transportDocDate)}"${normalizeText(notice?.transportDocNotes) ? ` observatii="${xmlEscape(notice?.transportDocNotes || "")}"` : ""} />
   </notificare>
 </eTransport>`
 }
