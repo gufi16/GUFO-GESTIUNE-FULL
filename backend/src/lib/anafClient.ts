@@ -41,24 +41,24 @@ export async function loadAnafCompanyContext(
   activeCompanyId?: string | null,
   service: "efactura" | "etrtransport" = "efactura"
 ) {
-  const company = await resolveTenantCompany(prisma, tenantId, activeCompanyId, {
-    select: {
-      id: true,
-      ...COMPANY_ANAF_SELECT,
-    },
-  })
-
-  if (!company) return company
-
-  const primaryCompany =
-    activeCompanyId && company?.id !== activeCompanyId
-      ? await resolveTenantCompany(prisma, tenantId, null, {
+  const [company, primaryCompany] = await Promise.all([
+    resolveTenantCompany(prisma, tenantId, activeCompanyId, {
+      select: {
+        id: true,
+        ...COMPANY_ANAF_SELECT,
+      },
+    }),
+    activeCompanyId
+      ? resolveTenantCompany(prisma, tenantId, null, {
           select: {
             id: true,
             ...COMPANY_ANAF_SELECT,
           },
         })
-      : null
+      : Promise.resolve(null),
+  ])
+
+  if (!company) return company
 
   const fallbackCompany = primaryCompany && primaryCompany.id !== company.id ? primaryCompany : null
 
