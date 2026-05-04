@@ -160,10 +160,58 @@ export function buildAnafAuthHeaders(accessToken: string, extraHeaders: Record<s
   }
 }
 
-function getEtransportBaseUrl(environment: string | null | undefined) {
-  return String(environment || "test").toLowerCase() === "prod"
-    ? "https://webserviceapl.anaf.ro/prod/ETRANSPORT/ws/v1"
-    : "https://webserviceapl.anaf.ro/test/ETRANSPORT/ws/v1"
+function getEtransportBaseUrls(environment: string | null | undefined) {
+  const env = String(environment || "test").toLowerCase() === "prod" ? "prod" : "test"
+  return [
+    `https://webserviceapl.anaf.ro/${env}/ETRANSPORT/ws/v1`,
+    `https://api.anaf.ro/${env}/ETRANSPORT/ws/v1`,
+  ]
+}
+
+function isTlsHandshakeError(error: unknown) {
+  return /SSL\/TLS|handshake/i.test(String((error as any)?.message || ""))
+}
+
+async function anafEtransportRequest(
+  company: any,
+  pathBuilder: (baseUrl: string) => string,
+  requestOptions: (url: string, accessToken: string) => any,
+  logLabel: string,
+  startDetails: Record<string, unknown>,
+) {
+  const ready = requireAnafReadyCompany(company, "operatiunea RO e-Transport")
+  const baseUrls = getEtransportBaseUrls(company?.efacturaEnvironment)
+  let lastError: any = null
+
+  for (let index = 0; index < baseUrls.length; index += 1) {
+    const baseUrl = baseUrls[index]
+    const url = pathBuilder(baseUrl)
+    try {
+      logAnafRequestStart(logLabel, {
+        ...startDetails,
+        tenantId: company?.tenantId || null,
+        environment: company?.efacturaEnvironment || "test",
+        url,
+        fallbackIndex: index,
+      })
+      const response = await anafHttpRequest(url, requestOptions(url, ready.accessToken))
+      return { response, url, accessToken: ready.accessToken, fallbackIndex: index }
+    } catch (error) {
+      lastError = error
+      logAnafRouteError("ETRANSPORT HTTP ERROR", {
+        tenantId: company?.tenantId || null,
+        label: logLabel,
+        url,
+        fallbackIndex: index,
+        message: (error as any)?.message || String(error),
+      })
+      if (!isTlsHandshakeError(error) || index === baseUrls.length - 1) {
+        throw error
+      }
+    }
+  }
+
+  throw lastError || new Error("Nu am putut comunica cu ANAF pentru RO e-Transport.")
 }
 
 function logAnafRequestStart(label: string, details: Record<string, unknown>) {
@@ -337,26 +385,27 @@ export async function anafCheckUploadStatus(company: any, uploadIndex: string) {
 
 export async function anafUploadEtransportXml(company: any, xmlText: string) {
   const ready = requireAnafReadyCompany(company, "trimiterea RO e-Transport")
-  const url = `${getEtransportBaseUrl(company?.efacturaEnvironment)}/upload/ETRANSPORT/${encodeURIComponent(ready.cif)}`
   const tokenDiagnostics = getAnafTokenDiagnostics(ready.accessToken)
-  logAnafRequestStart("etrtransport-upload", {
-    tenantId: company?.tenantId || null,
-    environment: company?.efacturaEnvironment || "test",
-    cif: ready.cif,
-    url,
-    xmlSize: Buffer.byteLength(xmlText, "utf8"),
-    tokenSerial: tokenDiagnostics.tokenSerial,
-    tokenScopes: tokenDiagnostics.tokenScopes,
-    tokenRoles: tokenDiagnostics.tokenRoles,
-    tokenExp: tokenDiagnostics.tokenExp,
-  })
-  const response = await anafHttpRequest(url, {
-    method: "POST",
-    headers: buildAnafAuthHeaders(ready.accessToken, {
-      "Content-Type": "application/xml; charset=utf-8",
+  const { response, url, fallbackIndex } = await anafEtransportRequest(
+    company,
+    (baseUrl) => `${baseUrl}/upload/ETRANSPORT/${encodeURIComponent(ready.cif)}`,
+    (_url, accessToken) => ({
+      method: "POST",
+      headers: buildAnafAuthHeaders(accessToken, {
+        "Content-Type": "application/xml; charset=utf-8",
+      }),
+      body: xmlText,
     }),
-    body: xmlText,
-  })
+    "etrtransport-upload",
+    {
+      cif: ready.cif,
+      xmlSize: Buffer.byteLength(xmlText, "utf8"),
+      tokenSerial: tokenDiagnostics.tokenSerial,
+      tokenScopes: tokenDiagnostics.tokenScopes,
+      tokenRoles: tokenDiagnostics.tokenRoles,
+      tokenExp: tokenDiagnostics.tokenExp,
+    },
+  )
   const rawText = response.text
   const payload = parseAnafPayload(rawText)
   const uploadIndex = extractUploadIndex(payload, rawText)
@@ -364,6 +413,8 @@ export async function anafUploadEtransportXml(company: any, xmlText: string) {
     tenantId: company?.tenantId || null,
     status: response.status,
     ok: response.ok,
+    url,
+    fallbackIndex,
     uploadIndex,
     summary: summarizeAnafResponse(payload, rawText),
   })
@@ -379,17 +430,17 @@ export async function anafUploadEtransportXml(company: any, xmlText: string) {
 }
 
 export async function anafCheckEtransportStatus(company: any, uploadIndex: string) {
-  const ready = requireAnafReadyCompany(company, "verificarea starii RO e-Transport")
-  const url = `${getEtransportBaseUrl(company?.efacturaEnvironment)}/stareMesaj/${encodeURIComponent(uploadIndex)}`
-  logAnafRequestStart("etrtransport-stareMesaj", {
-    tenantId: company?.tenantId || null,
-    environment: company?.efacturaEnvironment || "test",
-    uploadIndex,
-    url,
-  })
-  const response = await anafHttpRequest(url, {
-    headers: buildAnafAuthHeaders(ready.accessToken),
-  })
+  const { response, url, fallbackIndex } = await anafEtransportRequest(
+    company,
+    (baseUrl) => `${baseUrl}/stareMesaj/${encodeURIComponent(uploadIndex)}`,
+    (_url, accessToken) => ({
+      headers: buildAnafAuthHeaders(accessToken),
+    }),
+    "etrtransport-stareMesaj",
+    {
+      uploadIndex,
+    },
+  )
   const rawText = response.text
   const payload = parseAnafPayload(rawText)
   const downloadId = extractDownloadId(payload, rawText)
@@ -398,6 +449,8 @@ export async function anafCheckEtransportStatus(company: any, uploadIndex: strin
     uploadIndex,
     status: response.status,
     ok: response.ok,
+    url,
+    fallbackIndex,
     downloadId,
     summary: summarizeAnafResponse(payload, rawText),
   })
@@ -416,23 +469,26 @@ export async function anafListEtransportMessages(company: any, options: { days?:
   const ready = requireAnafReadyCompany(company, "sincronizarea RO e-Transport")
   const cif = options.cif || ready.cif
   const days = Math.min(60, Math.max(1, Number(options.days || 30)))
-  const url = `${getEtransportBaseUrl(company?.efacturaEnvironment)}/lista/${days}/${encodeURIComponent(cif)}`
-  logAnafRequestStart("etrtransport-lista", {
-    tenantId: company?.tenantId || null,
-    environment: company?.efacturaEnvironment || "test",
-    cif,
-    days,
-    url,
-  })
-  const response = await anafHttpRequest(url, {
-    headers: buildAnafAuthHeaders(ready.accessToken),
-  })
+  const { response, url, fallbackIndex } = await anafEtransportRequest(
+    company,
+    (baseUrl) => `${baseUrl}/lista/${days}/${encodeURIComponent(cif)}`,
+    (_url, accessToken) => ({
+      headers: buildAnafAuthHeaders(accessToken),
+    }),
+    "etrtransport-lista",
+    {
+      cif,
+      days,
+    },
+  )
   const rawText = response.text
   const payload = parseAnafPayload(rawText)
   logAnafRequestFinish("etrtransport-lista", {
     tenantId: company?.tenantId || null,
     status: response.status,
     ok: response.ok,
+    url,
+    fallbackIndex,
     itemCount: collectMessageItems(payload).length,
     summary: summarizeAnafResponse(payload, rawText),
   })
@@ -448,17 +504,17 @@ export async function anafListEtransportMessages(company: any, options: { days?:
 }
 
 export async function anafDownloadEtransportById(company: any, downloadId: string) {
-  const ready = requireAnafReadyCompany(company, "descarcarea raspunsului RO e-Transport")
-  const url = `${getEtransportBaseUrl(company?.efacturaEnvironment)}/descarcare/${encodeURIComponent(downloadId)}`
-  logAnafRequestStart("etrtransport-descarcare", {
-    tenantId: company?.tenantId || null,
-    environment: company?.efacturaEnvironment || "test",
-    downloadId,
-    url,
-  })
-  const response = await anafHttpRequest(url, {
-    headers: buildAnafAuthHeaders(ready.accessToken),
-  })
+  const { response, url, fallbackIndex } = await anafEtransportRequest(
+    company,
+    (baseUrl) => `${baseUrl}/descarcare/${encodeURIComponent(downloadId)}`,
+    (_url, accessToken) => ({
+      headers: buildAnafAuthHeaders(accessToken),
+    }),
+    "etrtransport-descarcare",
+    {
+      downloadId,
+    },
+  )
   const rawText = response.buffer.toString("utf8")
   const payload = parseAnafPayload(rawText)
   logAnafRequestFinish("etrtransport-descarcare", {
@@ -466,6 +522,8 @@ export async function anafDownloadEtransportById(company: any, downloadId: strin
     downloadId,
     status: response.status,
     ok: response.ok,
+    url,
+    fallbackIndex,
     summary: summarizeAnafResponse(payload, rawText),
   })
 
