@@ -181,6 +181,12 @@ function isEtransportSchemaDeclarationError(summary: unknown, rawText: unknown) 
   )
 }
 
+function stripEtransportSchemaHints(xmlText: string) {
+  return String(xmlText || "")
+    .replace(/\s+xmlns:xsi="[^"]*"/i, "")
+    .replace(/\s+xsi:schemaLocation="[^"]*"/i, "")
+}
+
 async function anafEtransportRequest(
   company: any,
   pathBuilder: (baseUrl: string) => string,
@@ -396,72 +402,90 @@ export async function anafUploadEtransportXml(company: any, xmlText: string) {
   const ready = requireAnafReadyCompany(company, "trimiterea RO e-Transport")
   const tokenDiagnostics = getAnafTokenDiagnostics(ready.accessToken)
   const baseUrls = getEtransportBaseUrls(company?.efacturaEnvironment)
-  const uploadStandards = ["ETRANSP", "ETRANSPORT"]
+  const uploadStandards = ["ETRANSP"]
+  const xmlVariants = [
+    { key: "plain", body: xmlText },
+    { key: "no-schema-hints", body: stripEtransportSchemaHints(xmlText) },
+  ]
   let lastResult: any = null
   let lastError: any = null
 
   for (let baseIndex = 0; baseIndex < baseUrls.length; baseIndex += 1) {
     const baseUrl = baseUrls[baseIndex]
     for (const uploadStandard of uploadStandards) {
-      const url = `${baseUrl}/upload/${uploadStandard}/${encodeURIComponent(ready.cif)}?versiune=2`
-      try {
-        logAnafRequestStart("etrtransport-upload", {
-          tenantId: company?.tenantId || null,
-          environment: company?.efacturaEnvironment || "test",
-          cif: ready.cif,
-          xmlSize: Buffer.byteLength(xmlText, "utf8"),
-          tokenSerial: tokenDiagnostics.tokenSerial,
-          tokenScopes: tokenDiagnostics.tokenScopes,
-          tokenRoles: tokenDiagnostics.tokenRoles,
-          tokenExp: tokenDiagnostics.tokenExp,
-          url,
-          fallbackIndex: baseIndex,
-          uploadStandard,
-        })
-        const response = await anafHttpRequest(url, {
-          method: "POST",
-          headers: buildAnafAuthHeaders(ready.accessToken, {
-            "Content-Type": "application/xml; charset=utf-8",
-          }),
-          body: xmlText,
-        })
-        const rawText = response.text
-        const payload = parseAnafPayload(rawText)
-        const uploadIndex = extractUploadIndex(payload, rawText)
-        const summary = summarizeAnafResponse(payload, rawText)
+      for (const xmlVariant of xmlVariants) {
+        const url = `${baseUrl}/upload/${uploadStandard}/${encodeURIComponent(ready.cif)}?versiune=2`
+        try {
+          logAnafRequestStart("etrtransport-upload", {
+            tenantId: company?.tenantId || null,
+            environment: company?.efacturaEnvironment || "test",
+            cif: ready.cif,
+            xmlSize: Buffer.byteLength(xmlVariant.body, "utf8"),
+            tokenSerial: tokenDiagnostics.tokenSerial,
+            tokenScopes: tokenDiagnostics.tokenScopes,
+            tokenRoles: tokenDiagnostics.tokenRoles,
+            tokenExp: tokenDiagnostics.tokenExp,
+            url,
+            fallbackIndex: baseIndex,
+            uploadStandard,
+            xmlVariant: xmlVariant.key,
+          })
+          const response = await anafHttpRequest(url, {
+            method: "POST",
+            headers: buildAnafAuthHeaders(ready.accessToken, {
+              "Content-Type": "application/xml; charset=utf-8",
+            }),
+            body: xmlVariant.body,
+          })
+          const rawText = response.text
+          const payload = parseAnafPayload(rawText)
+          const uploadIndex = extractUploadIndex(payload, rawText)
+          const summary = summarizeAnafResponse(payload, rawText)
 
-        logAnafRequestFinish("etrtransport-upload", {
-          tenantId: company?.tenantId || null,
-          status: response.status,
-          ok: response.ok,
-          url,
-          fallbackIndex: baseIndex,
-          uploadStandard,
-          uploadIndex,
-          summary,
-        })
+          logAnafRequestFinish("etrtransport-upload", {
+            tenantId: company?.tenantId || null,
+            status: response.status,
+            ok: response.ok,
+            url,
+            fallbackIndex: baseIndex,
+            uploadStandard,
+            xmlVariant: xmlVariant.key,
+            uploadIndex,
+            summary,
+          })
 
-        lastResult = { url, response, rawText, payload, uploadIndex, summary, fallbackIndex: baseIndex }
+          lastResult = {
+            url,
+            response,
+            rawText,
+            payload,
+            uploadIndex,
+            summary,
+            fallbackIndex: baseIndex,
+            xmlVariant: xmlVariant.key,
+          }
 
-        if (response.ok && uploadIndex) {
-          return lastResult
-        }
+          if (response.ok && uploadIndex) {
+            return lastResult
+          }
 
-        if (!isEtransportSchemaDeclarationError(summary, rawText)) {
-          return lastResult
-        }
-      } catch (error) {
-        lastError = error
-        logAnafRouteError("ETRANSPORT HTTP ERROR", {
-          tenantId: company?.tenantId || null,
-          label: "etrtransport-upload",
-          url,
-          fallbackIndex: baseIndex,
-          uploadStandard,
-          message: (error as any)?.message || String(error),
-        })
-        if (!isTlsHandshakeError(error)) {
-          throw error
+          if (!isEtransportSchemaDeclarationError(summary, rawText)) {
+            return lastResult
+          }
+        } catch (error) {
+          lastError = error
+          logAnafRouteError("ETRANSPORT HTTP ERROR", {
+            tenantId: company?.tenantId || null,
+            label: "etrtransport-upload",
+            url,
+            fallbackIndex: baseIndex,
+            uploadStandard,
+            xmlVariant: xmlVariant.key,
+            message: (error as any)?.message || String(error),
+          })
+          if (!isTlsHandshakeError(error)) {
+            throw error
+          }
         }
       }
     }
