@@ -172,6 +172,15 @@ function isTlsHandshakeError(error: unknown) {
   return /SSL\/TLS|handshake/i.test(String((error as any)?.message || ""))
 }
 
+function isEtransportSchemaDeclarationError(summary: unknown, rawText: unknown) {
+  const blob = `${String(summary || "")} ${String(rawText || "")}`.toLowerCase()
+  return (
+    blob.includes("cannot find the declaration of element 'etrtransport'") ||
+    blob.includes("cannot find the declaration of element 'etransport'") ||
+    blob.includes("cannot find the declaration of element 'etrtransport'".replace("etrtransport", "etransport"))
+  )
+}
+
 async function anafEtransportRequest(
   company: any,
   pathBuilder: (baseUrl: string) => string,
@@ -386,47 +395,80 @@ export async function anafCheckUploadStatus(company: any, uploadIndex: string) {
 export async function anafUploadEtransportXml(company: any, xmlText: string) {
   const ready = requireAnafReadyCompany(company, "trimiterea RO e-Transport")
   const tokenDiagnostics = getAnafTokenDiagnostics(ready.accessToken)
-  const { response, url, fallbackIndex } = await anafEtransportRequest(
-    company,
-    (baseUrl) => `${baseUrl}/upload/ETRANSP/${encodeURIComponent(ready.cif)}?versiune=2`,
-    (_url, accessToken) => ({
-      method: "POST",
-      headers: buildAnafAuthHeaders(accessToken, {
-        "Content-Type": "application/xml; charset=utf-8",
-      }),
-      body: xmlText,
-    }),
-    "etrtransport-upload",
-    {
-      cif: ready.cif,
-      xmlSize: Buffer.byteLength(xmlText, "utf8"),
-      tokenSerial: tokenDiagnostics.tokenSerial,
-      tokenScopes: tokenDiagnostics.tokenScopes,
-      tokenRoles: tokenDiagnostics.tokenRoles,
-      tokenExp: tokenDiagnostics.tokenExp,
-    },
-  )
-  const rawText = response.text
-  const payload = parseAnafPayload(rawText)
-  const uploadIndex = extractUploadIndex(payload, rawText)
-  logAnafRequestFinish("etrtransport-upload", {
-    tenantId: company?.tenantId || null,
-    status: response.status,
-    ok: response.ok,
-    url,
-    fallbackIndex,
-    uploadIndex,
-    summary: summarizeAnafResponse(payload, rawText),
-  })
+  const baseUrls = getEtransportBaseUrls(company?.efacturaEnvironment)
+  const uploadStandards = ["ETRANSP", "ETRANSPORT"]
+  let lastResult: any = null
+  let lastError: any = null
 
-  return {
-    url,
-    response,
-    rawText,
-    payload,
-    uploadIndex,
-    summary: summarizeAnafResponse(payload, rawText),
+  for (let baseIndex = 0; baseIndex < baseUrls.length; baseIndex += 1) {
+    const baseUrl = baseUrls[baseIndex]
+    for (const uploadStandard of uploadStandards) {
+      const url = `${baseUrl}/upload/${uploadStandard}/${encodeURIComponent(ready.cif)}?versiune=2`
+      try {
+        logAnafRequestStart("etrtransport-upload", {
+          tenantId: company?.tenantId || null,
+          environment: company?.efacturaEnvironment || "test",
+          cif: ready.cif,
+          xmlSize: Buffer.byteLength(xmlText, "utf8"),
+          tokenSerial: tokenDiagnostics.tokenSerial,
+          tokenScopes: tokenDiagnostics.tokenScopes,
+          tokenRoles: tokenDiagnostics.tokenRoles,
+          tokenExp: tokenDiagnostics.tokenExp,
+          url,
+          fallbackIndex: baseIndex,
+          uploadStandard,
+        })
+        const response = await anafHttpRequest(url, {
+          method: "POST",
+          headers: buildAnafAuthHeaders(ready.accessToken, {
+            "Content-Type": "application/xml; charset=utf-8",
+          }),
+          body: xmlText,
+        })
+        const rawText = response.text
+        const payload = parseAnafPayload(rawText)
+        const uploadIndex = extractUploadIndex(payload, rawText)
+        const summary = summarizeAnafResponse(payload, rawText)
+
+        logAnafRequestFinish("etrtransport-upload", {
+          tenantId: company?.tenantId || null,
+          status: response.status,
+          ok: response.ok,
+          url,
+          fallbackIndex: baseIndex,
+          uploadStandard,
+          uploadIndex,
+          summary,
+        })
+
+        lastResult = { url, response, rawText, payload, uploadIndex, summary, fallbackIndex: baseIndex }
+
+        if (response.ok && uploadIndex) {
+          return lastResult
+        }
+
+        if (!isEtransportSchemaDeclarationError(summary, rawText)) {
+          return lastResult
+        }
+      } catch (error) {
+        lastError = error
+        logAnafRouteError("ETRANSPORT HTTP ERROR", {
+          tenantId: company?.tenantId || null,
+          label: "etrtransport-upload",
+          url,
+          fallbackIndex: baseIndex,
+          uploadStandard,
+          message: (error as any)?.message || String(error),
+        })
+        if (!isTlsHandshakeError(error)) {
+          throw error
+        }
+      }
+    }
   }
+
+  if (lastResult) return lastResult
+  throw lastError || new Error("Nu am putut comunica cu ANAF pentru upload-ul RO e-Transport.")
 }
 
 export async function anafCheckEtransportStatus(company: any, uploadIndex: string) {
