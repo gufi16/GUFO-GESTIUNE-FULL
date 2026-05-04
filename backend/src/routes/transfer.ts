@@ -508,12 +508,12 @@ router.post("/api/v1/transfers/:id/etransport/send", async (req: AuthedRequest, 
     return res.status(404).json({ ok: false, error: "Transferul nu a fost gasit." })
   }
 
-  const company = await loadAnafCompanyContext(tenantId, req.auth?.activeCompanyId, "etrtransport")
+  const company = await loadAnafCompanyContext(tenantId, req.auth?.activeCompanyId)
   const cif = normalizeCompanyCui(company?.cui)
   if (!cif) {
     return res.status(400).json({ ok: false, error: "Firma nu are CUI valid pentru transmiterea la ANAF." })
   }
-  if (!company?.anafOauthAccessToken && !company?.efacturaOauthAccessToken) {
+  if (!company?.efacturaOauthAccessToken) {
     return res.status(400).json({ ok: false, error: "Nu exista token ANAF salvat pentru aceasta firma." })
   }
 
@@ -636,8 +636,8 @@ router.get("/api/v1/transfers/:id/etransport/status", async (req: AuthedRequest,
     return res.status(400).json({ ok: false, error: "Documentul nu a fost trimis inca la ANAF." })
   }
 
-  const company = await loadAnafCompanyContext(tenantId, req.auth?.activeCompanyId, "etrtransport")
-  if (!company?.anafOauthAccessToken && !company?.efacturaOauthAccessToken) {
+  const company = await loadAnafCompanyContext(tenantId, req.auth?.activeCompanyId)
+  if (!company?.efacturaOauthAccessToken) {
     return res.status(400).json({ ok: false, error: "Nu exista token ANAF salvat pentru aceasta firma." })
   }
 
@@ -723,8 +723,8 @@ router.get("/api/v1/transfers/:id/etransport/receipt", async (req: AuthedRequest
     return res.status(404).json({ ok: false, error: "Transferul nu a fost gasit." })
   }
 
-  const company = await loadAnafCompanyContext(tenantId, req.auth?.activeCompanyId, "etrtransport")
-  if (!company?.anafOauthAccessToken && !company?.efacturaOauthAccessToken) {
+  const company = await loadAnafCompanyContext(tenantId, req.auth?.activeCompanyId)
+  if (!company?.efacturaOauthAccessToken) {
     return res.status(400).json({ ok: false, error: "Nu exista token ANAF salvat pentru aceasta firma." })
   }
 
