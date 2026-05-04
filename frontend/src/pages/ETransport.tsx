@@ -333,6 +333,25 @@ function companyToAdrForm(company?: CompanyLookupResult | null, fallback?: Parti
   }
 }
 
+function routeAdrFromParty(form: NoticeAddressForm): NoticeAddressForm {
+  return {
+    ...createEmptyAdrForm(),
+    companyCui: form.companyCui || "",
+    companyName: form.companyName || "",
+    country: form.country || "Romania",
+    county: form.county || "",
+    city: form.city || "",
+    street: form.street || "",
+    streetNo: form.streetNo || "",
+    building: form.building || "",
+    staircase: form.staircase || "",
+    floor: form.floor || "",
+    apartment: form.apartment || "",
+    postalCode: form.postalCode || "",
+    details: form.details || "",
+  }
+}
+
 function labelValue(label: string, value: string) {
   return (
     <div className="rounded-[10px] border border-slate-200 bg-slate-50 px-3 py-2">
@@ -346,39 +365,46 @@ function AddressEditor(props: {
   title: string
   form: NoticeAddressForm
   onChange: (patch: Partial<NoticeAddressForm>) => void
-  onLookup: () => void
+  onLookup?: () => void
   lookupBusy?: boolean
+  showLookupRow?: boolean
 }) {
-  const { title, form, onChange, onLookup, lookupBusy } = props
+  const { title, form, onChange, onLookup, lookupBusy, showLookupRow = true } = props
 
   return (
     <div className="space-y-3 rounded-[16px] border border-slate-200 bg-white p-4">
       <div className="text-sm font-semibold text-slate-900">{title}</div>
-      <div className="grid gap-3 xl:grid-cols-[160px_150px_minmax(0,1fr)]">
-        <div className="space-y-1">
-          <label className="block text-xs font-medium text-[#17324D]">Tara</label>
-          <input value={form.country} onChange={(e) => onChange({ country: e.target.value })} className={documentInputClass} placeholder="Tara" />
-        </div>
-        <div className="space-y-1">
-          <label className="block text-xs font-medium text-[#17324D]">CUI</label>
-          <input
-            value={form.companyCui}
-            onChange={(e) => onChange({ companyCui: e.target.value.replace(/^RO/i, "").replace(/\D/g, "") })}
-            className={documentInputClass}
-            placeholder="CUI"
-          />
-        </div>
-        <div className="space-y-1">
-          <label className="block text-xs font-medium text-[#17324D]">Denumire</label>
-          <div className="flex gap-2">
-            <input value={form.companyName} onChange={(e) => onChange({ companyName: e.target.value })} className={documentInputClass} placeholder="Denumire firma" />
-            <button type="button" onClick={onLookup} disabled={lookupBusy} className={documentButtonSecondaryClass}>
-              <Search size={16} className="mr-2" />
-              {lookupBusy ? "Se cauta..." : "Cauta CUI"}
-            </button>
+      {showLookupRow ? (
+        <div className="grid gap-3 xl:grid-cols-[160px_150px_minmax(0,1fr)]">
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-[#17324D]">Tara</label>
+            <input value={form.country} onChange={(e) => onChange({ country: e.target.value })} className={documentInputClass} placeholder="Tara" />
+          </div>
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-[#17324D]">CUI</label>
+            <input
+              value={form.companyCui}
+              onChange={(e) => onChange({ companyCui: e.target.value.replace(/^RO/i, "").replace(/\D/g, "") })}
+              className={documentInputClass}
+              placeholder="CUI"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-[#17324D]">Denumire</label>
+            <div className="flex gap-2">
+              <input value={form.companyName} onChange={(e) => onChange({ companyName: e.target.value })} className={documentInputClass} placeholder="Denumire firma" />
+              <button type="button" onClick={onLookup} disabled={lookupBusy || !onLookup} className={documentButtonSecondaryClass}>
+                <Search size={16} className="mr-2" />
+                {lookupBusy ? "Se cauta..." : "Cauta CUI"}
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="rounded-[12px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+          Adresa este preluata automat din organizator pentru start si din partener pentru final. Aici ramane doar completarea sau ajustarea detaliilor de adresa.
+        </div>
+      )}
 
       <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-4">
         <div className="space-y-1">
@@ -565,20 +591,22 @@ export default function ETransportPage() {
         totalGrossWeightKg: toNumber(item.totalGrossWeightKg),
         totalValueRon: toNumber(item.totalValueRon),
       })
-      setPartnerAdr({
+      const nextPartnerAdr = {
         ...parseAdrForm(item.partnerAddress || ""),
         companyCui: item.partnerCui || "",
         companyName: item.partnerName || "",
         country: normalizeCountryLabel(item.partnerCountry || "RO"),
-      })
-      setOrganizerAdr({
+      }
+      const nextOrganizerAdr = {
         ...parseAdrForm(item.organizerAddress || ""),
         companyCui: item.organizerCode || "",
         companyName: item.organizerName || "",
         country: normalizeCountryLabel(item.organizerCountry || "RO"),
-      })
-      setStartAdr(parseAdrForm(item.startAddress || ""))
-      setEndAdr(parseAdrForm(item.endAddress || ""))
+      }
+      setPartnerAdr(nextPartnerAdr)
+      setOrganizerAdr(nextOrganizerAdr)
+      setStartAdr(item.startAddress ? parseAdrForm(item.startAddress || "") : routeAdrFromParty(nextOrganizerAdr))
+      setEndAdr(item.endAddress ? parseAdrForm(item.endAddress || "") : routeAdrFromParty(nextPartnerAdr))
       const nextItems = Array.isArray(item.items) && item.items.length
         ? item.items.map((line: any, index: number) => ({
             id: line.id,
@@ -695,6 +723,7 @@ export default function ETransportPage() {
     await lookupCompanyByCui(partnerAdr.companyCui, setPartnerLookupBusy, (company, normalizedCui) => {
       const next = companyToAdrForm(company, { companyCui: normalizedCui })
       setPartnerAdr((prev) => ({ ...prev, ...next, companyCui: normalizedCui }))
+      setEndAdr(routeAdrFromParty({ ...next, companyCui: normalizedCui }))
       setHeader((prev) => ({
         ...prev,
         partnerCui: normalizedCui,
@@ -708,6 +737,7 @@ export default function ETransportPage() {
     await lookupCompanyByCui(organizerAdr.companyCui, setOrganizerLookupBusy, (company, normalizedCui) => {
       const next = companyToAdrForm(company, { companyCui: normalizedCui })
       setOrganizerAdr((prev) => ({ ...prev, ...next, companyCui: normalizedCui }))
+      setStartAdr(routeAdrFromParty({ ...next, companyCui: normalizedCui }))
       setHeader((prev) => ({
         ...prev,
         organizerCode: normalizedCui,
@@ -1102,7 +1132,11 @@ export default function ETransportPage() {
             title="Organizator transport"
             form={organizerAdr}
             onChange={(patch) => {
-              setOrganizerAdr((prev) => ({ ...prev, ...patch }))
+              setOrganizerAdr((prev) => {
+                const next = { ...prev, ...patch }
+                setStartAdr(routeAdrFromParty(next))
+                return next
+              })
               if (patch.companyCui !== undefined || patch.companyName !== undefined || patch.country !== undefined) {
                 setHeader((prev) => ({
                   ...prev,
@@ -1119,7 +1153,11 @@ export default function ETransportPage() {
             title="Partener comercial"
             form={partnerAdr}
             onChange={(patch) => {
-              setPartnerAdr((prev) => ({ ...prev, ...patch }))
+              setPartnerAdr((prev) => {
+                const next = { ...prev, ...patch }
+                setEndAdr(routeAdrFromParty(next))
+                return next
+              })
               if (patch.companyCui !== undefined || patch.companyName !== undefined || patch.country !== undefined) {
                 setHeader((prev) => ({
                   ...prev,
@@ -1167,8 +1205,7 @@ export default function ETransportPage() {
                 title="Adresa loc start"
                 form={startAdr}
                 onChange={(patch) => setStartAdr((prev) => ({ ...prev, ...patch }))}
-                onLookup={() => lookupRouteAddress("start")}
-                lookupBusy={startLookupBusy}
+                showLookupRow={false}
               />
             ) : null}
           </div>
@@ -1197,8 +1234,7 @@ export default function ETransportPage() {
                 title="Adresa loc final"
                 form={endAdr}
                 onChange={(patch) => setEndAdr((prev) => ({ ...prev, ...patch }))}
-                onLookup={() => lookupRouteAddress("end")}
-                lookupBusy={endLookupBusy}
+                showLookupRow={false}
               />
             ) : null}
           </div>

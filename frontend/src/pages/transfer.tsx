@@ -238,6 +238,27 @@ function buildAdrFormFromLocation(location?: LocationOption | null): ETransportA
     }
   }
 
+function buildAdrFormFromCompany(company?: CompanyLookupResult | null, fallback?: Partial<ETransportAdrForm>) {
+  return {
+    ...createEmptyAdrForm(),
+    ...fallback,
+    sourceLocationId: "",
+    companyCui: String(fallback?.companyCui || company?.cui || ""),
+    companyName: String(company?.name || fallback?.companyName || ""),
+    country: normalizeCountryLabel(String(company?.country || fallback?.country || "Romania")),
+    county: String(company?.county || fallback?.county || ""),
+    city: String(company?.city || fallback?.city || ""),
+    street: String(company?.address || fallback?.street || ""),
+    streetNo: String(fallback?.streetNo || ""),
+    building: String(fallback?.building || ""),
+    staircase: String(fallback?.staircase || ""),
+    floor: String(fallback?.floor || ""),
+    apartment: String(fallback?.apartment || ""),
+    postalCode: String(company?.postalCode || fallback?.postalCode || ""),
+    details: String(fallback?.details || ""),
+  }
+}
+
 function normalizeCountryLabel(value: string) {
   const text = String(value || "").trim()
   if (!text) return "Romania"
@@ -554,8 +575,24 @@ export default function TransferPage() {
         eTransportErrorText: doc.eTransportErrorText || "",
       })
 
-      setStartAdr(parseAdrForm(doc.eTransportStartAddress || "", doc.fromLocation))
-      setEndAdr(parseAdrForm(doc.eTransportEndAddress || "", doc.toLocation))
+      const fallbackStartAdr = {
+        ...buildAdrFormFromLocation(doc.fromLocation),
+        companyCui: String(activeCompany?.cui || ""),
+        companyName: String(activeCompany?.name || doc.fromLocation?.name || ""),
+      }
+      const fallbackEndAdr = doc.eTransportPartnerCui || doc.eTransportPartnerName
+        ? buildAdrFormFromCompany(
+            {
+              name: doc.eTransportPartnerName || "",
+              cui: doc.eTransportPartnerCui || "",
+              country: doc.eTransportPartnerCountry || "RO",
+            },
+            { companyCui: doc.eTransportPartnerCui || "" },
+          )
+        : buildAdrFormFromLocation(doc.toLocation)
+
+      setStartAdr(doc.eTransportStartAddress ? parseAdrForm(doc.eTransportStartAddress || "", doc.fromLocation) : fallbackStartAdr)
+      setEndAdr(doc.eTransportEndAddress ? parseAdrForm(doc.eTransportEndAddress || "", doc.toLocation) : fallbackEndAdr)
 
       const loadedLines = ensureArray(doc.items).map((item: any) => ({
         id: item.id || crypto.randomUUID(),
@@ -697,11 +734,15 @@ export default function TransferPage() {
     if (!fromLocation) return
     setStartAdr((prev) => {
       if (!prev.sourceLocationId || prev.sourceLocationId === fromLocation.id || !adrFormHasContent(prev)) {
-        return buildAdrFormFromLocation(fromLocation)
+        return {
+          ...buildAdrFormFromLocation(fromLocation),
+          companyCui: String(activeCompany?.cui || ""),
+          companyName: String(activeCompany?.name || fromLocation.name || ""),
+        }
       }
       return prev
     })
-  }, [fromLocation?.id])
+  }, [fromLocation?.id, activeCompany?.cui, activeCompany?.name])
 
   useEffect(() => {
     if (!toLocation) return
@@ -1026,6 +1067,7 @@ export default function TransferPage() {
         eTransportPartnerName: String(company.name || "").trim() || prev.eTransportPartnerName,
         eTransportPartnerCountry: "RO",
       }))
+      setEndAdr(buildAdrFormFromCompany(company, { companyCui: normalizedCui }))
       setMessage("Partenerul a fost completat dupa CUI.")
     } catch {
       setError("Nu am putut cauta partenerul dupa CUI.")
@@ -1812,24 +1854,8 @@ export default function TransferPage() {
 
                         {!startScopeIsBorder ? (
                           <div className="mt-1.5 space-y-1.5">
-                            <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-[120px_130px_minmax(0,1fr)]">
-                              <input
-                                value={startAdr.companyCui}
-                                onChange={(e) => setStartAdr((prev) => ({ ...prev, companyCui: e.target.value.replace(/\D/g, ""), sourceLocationId: "" }))}
-                                className={documentInputClass}
-                                disabled={eTransportFieldDisabled || startAdrLookupBusy}
-                                placeholder="CUI"
-                              />
-                              <button type="button" className={`${documentButtonSecondaryClass} w-full justify-center`} onClick={() => lookupAdrByCui("start")} disabled={eTransportFieldDisabled || startAdrLookupBusy}>
-                                {startAdrLookupBusy ? "Se cauta..." : "Cauta CUI"}
-                              </button>
-                              <input
-                                value={startAdr.companyName}
-                                onChange={(e) => setStartAdr((prev) => ({ ...prev, companyName: e.target.value, sourceLocationId: "" }))}
-                                className={documentInputClass}
-                                disabled={eTransportFieldDisabled}
-                                placeholder="Denumire firma / punct de lucru"
-                              />
+                            <div className="rounded-[10px] border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
+                              Locul de start foloseste automat datele organizatorului / gestiunii de plecare. Aici ajustezi doar adresa.
                             </div>
                             <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-[140px_minmax(0,1fr)_110px]">
                               <input
@@ -1975,24 +2001,8 @@ export default function TransferPage() {
 
                         {!endScopeIsBorder ? (
                           <div className="mt-1.5 space-y-1.5">
-                            <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-[120px_130px_minmax(0,1fr)]">
-                              <input
-                                value={endAdr.companyCui}
-                                onChange={(e) => setEndAdr((prev) => ({ ...prev, companyCui: e.target.value.replace(/\D/g, ""), sourceLocationId: "" }))}
-                                className={documentInputClass}
-                                disabled={eTransportFieldDisabled || endAdrLookupBusy}
-                                placeholder="CUI"
-                              />
-                              <button type="button" className={`${documentButtonSecondaryClass} w-full justify-center`} onClick={() => lookupAdrByCui("end")} disabled={eTransportFieldDisabled || endAdrLookupBusy}>
-                                {endAdrLookupBusy ? "Se cauta..." : "Cauta CUI"}
-                              </button>
-                              <input
-                                value={endAdr.companyName}
-                                onChange={(e) => setEndAdr((prev) => ({ ...prev, companyName: e.target.value, sourceLocationId: "" }))}
-                                className={documentInputClass}
-                                disabled={eTransportFieldDisabled}
-                                placeholder="Denumire firma / punct de lucru"
-                              />
+                            <div className="rounded-[10px] border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
+                              Locul final foloseste automat datele partenerului selectat. Aici ajustezi doar adresa finala, fara cautare dubla dupa CUI.
                             </div>
                             <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-[140px_minmax(0,1fr)_110px]">
                               <input
