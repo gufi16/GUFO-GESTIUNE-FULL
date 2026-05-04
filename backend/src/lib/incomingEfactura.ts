@@ -20,8 +20,8 @@ export function normalizeCompanyCui(value: string | null | undefined) {
 
 export function getEfacturaBaseUrl(environment: string | null | undefined) {
   return String(environment || "test").toLowerCase() === "prod"
-    ? "https://webserviceapl.anaf.ro/prod/FCTEL/rest"
-    : "https://webserviceapl.anaf.ro/test/FCTEL/rest"
+    ? "https://api.anaf.ro/prod/FCTEL/rest"
+    : "https://api.anaf.ro/test/FCTEL/rest"
 }
 
 export function parseAnafPayload(rawText: string) {

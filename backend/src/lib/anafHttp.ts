@@ -36,6 +36,14 @@ function shouldRetryWithCurl(error: unknown) {
   return /EPROTO|handshake failure|tls alert/i.test(message)
 }
 
+function toFriendlyAnafHttpError(error: unknown) {
+  const message = String((error as any)?.message || "")
+  if (/EPROTO|handshake failure|tls alert|SSL routines/i.test(message)) {
+    return new Error("Conexiunea securizata cu ANAF a esuat in timpul handshake-ului SSL/TLS.")
+  }
+  return error instanceof Error ? error : new Error(message || "Eroare de comunicare cu ANAF.")
+}
+
 function parseCurlHeaders(rawText: string) {
   const blocks = rawText
     .split(/\r?\n\r?\n/)
@@ -120,7 +128,11 @@ async function anafCurlRequest(url: string, options: AnafRequestOptions = {}): P
     }
 
     args.push(url)
-    await execCurl(args)
+    try {
+      await execCurl(args)
+    } catch (error) {
+      throw toFriendlyAnafHttpError(error)
+    }
 
     const [rawHeaders, bodyBuffer] = await Promise.all([
       fs.readFile(headersPath, "utf8"),
@@ -198,7 +210,7 @@ export async function anafHttpRequest(url: string, options: AnafRequestOptions =
     return await anafNodeRequest(url, options)
   } catch (error) {
     if (!shouldRetryWithCurl(error)) {
-      throw error
+      throw toFriendlyAnafHttpError(error)
     }
 
     return anafCurlRequest(url, options)
