@@ -222,14 +222,10 @@ export default function SetariEFacturaPage() {
   const [agentPairingBusy, setAgentPairingBusy] = useState(false)
   const [agentPairing, setAgentPairing] = useState<AgentPairingCodeState | null>(null)
   const [activeModal, setActiveModal] = useState<ActiveModal>(null)
-  const isDebugMode =
-    typeof window !== "undefined" &&
-    new URLSearchParams(window.location.search).get("debugSpv") === "1"
+  const isDebugMode = false
 
   useEffect(() => {
     loadSettings()
-    void loadLocalAgentStatus()
-    void loadAgentDownloadInfo()
 
     const params = new URLSearchParams(window.location.search)
     const oauth = params.get("oauth")
