@@ -262,7 +262,6 @@ export async function anafListMessages(company: any, options: { days?: number; c
   })
   const response = await anafHttpRequest(url, {
     headers: buildAnafAuthHeaders(ready.accessToken),
-    ...ready.certOptions,
   })
   const rawText = response.text
   const payload = parseAnafPayload(rawText)
@@ -296,7 +295,6 @@ export async function anafDownloadById(company: any, downloadId: string) {
   })
   const response = await anafHttpRequest(url, {
     headers: buildAnafAuthHeaders(ready.accessToken),
-    ...ready.certOptions,
   })
   const rawText = response.buffer.toString("utf8")
   const payload = parseAnafPayload(rawText)
@@ -334,7 +332,6 @@ export async function anafUploadXml(company: any, xmlText: string) {
       "Content-Type": "application/xml; charset=utf-8",
     }),
     body: xmlText,
-    ...ready.certOptions,
   })
   const rawText = response.text
   const payload = parseAnafPayload(rawText)
@@ -369,7 +366,6 @@ export async function anafCheckUploadStatus(company: any, uploadIndex: string) {
   })
   const response = await anafHttpRequest(url, {
     headers: buildAnafAuthHeaders(ready.accessToken),
-    ...ready.certOptions,
   })
   const rawText = response.text
   const payload = parseAnafPayload(rawText)
