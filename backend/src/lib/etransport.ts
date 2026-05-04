@@ -444,14 +444,6 @@ export function validateNoticeForETransport(notice: any) {
     issues.push({ severity: "error", field: "endAddress", message: "Completeaza adresa finala a traseului." })
   }
 
-  if (toNumber(notice?.vehicleMaxMassKg) < 2500) {
-    issues.push({
-      severity: "warning",
-      field: "vehicleMaxMassKg",
-      message: "Masa maxima a vehiculului este sub 2.500 kg sau nu este completata.",
-    })
-  }
-
   if (!normalizeText(notice?.organizerName)) {
     issues.push({ severity: "warning", field: "organizerName", message: "Completeaza organizatorul transportului." })
   }

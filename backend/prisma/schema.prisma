@@ -1294,6 +1294,7 @@ model ETransportNotice {
   partnerCountry        String?
   partnerCui            String?
   partnerName           String?
+  partnerAddress        String?
   internalRef           String?
   startScope            String?
   endScope              String?
@@ -1315,6 +1316,7 @@ model ETransportNotice {
   organizerCountry      String?
   organizerCode         String?
   organizerName         String?
+  organizerAddress      String?
   operatorName          String?
   uit                   String?
   status                String?
