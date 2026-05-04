@@ -1,4 +1,4 @@
-﻿// @ts-nocheck
+// @ts-nocheck
 import { Router } from "express"
 import jwt from "jsonwebtoken"
 import fs from "fs"
@@ -189,15 +189,6 @@ function mapCompanyResponse(company: any, oauthConfig: any) {
     efacturaUsesPlatformConfig: oauthConfig.usesPlatformConfig,
     efacturaCertHasFile: hasStoredCertificate,
     efacturaCertPasswordConfigured: Boolean(company?.efacturaCertPasswordEnc),
-    etransportOauthConfigured: Boolean(
-      company?.etransportOauthClientId &&
-      company?.etransportOauthClientSecret &&
-      company?.etransportOauthRedirectUri
-    ),
-    etransportOauthAccessToken: company?.etransportOauthAccessToken || null,
-    etransportOauthAccessTokenExpiresAt: company?.etransportOauthAccessTokenExpiresAt || null,
-    etransportOauthConnectedAt: company?.etransportOauthConnectedAt || null,
-    etransportOauthLastError: company?.etransportOauthLastError || null,
   }
 }
 
@@ -227,11 +218,7 @@ async function updateRequestCompany(
   )
 }
 
-async function getEffectiveAnafOauthConfig(
-  tenantId: string,
-  activeCompanyId: string | null = null,
-  service: "efactura" | "etransport" = "efactura"
-) {
+async function getEffectiveAnafOauthConfig(tenantId: string, activeCompanyId: string | null = null) {
   const [company, platform] = await Promise.all([
     resolveTenantCompany(prisma, tenantId, activeCompanyId, {
       select: {
@@ -239,9 +226,6 @@ async function getEffectiveAnafOauthConfig(
         efacturaOauthClientId: true,
         efacturaOauthClientSecret: true,
         efacturaOauthRedirectUri: true,
-        etransportOauthClientId: true,
-        etransportOauthClientSecret: true,
-        etransportOauthRedirectUri: true,
       },
     }),
     prisma.platformConfig.findUnique({
@@ -255,27 +239,21 @@ async function getEffectiveAnafOauthConfig(
     }),
   ])
 
-  const usesCompanyConfig = service === "etransport"
-    ? Boolean(
-        company?.etransportOauthClientId &&
-        company?.etransportOauthClientSecret &&
-        company?.etransportOauthRedirectUri
-      )
-    : Boolean(
-        company?.efacturaOauthClientId &&
-        company?.efacturaOauthClientSecret &&
-        company?.efacturaOauthRedirectUri
-      )
+  const usesCompanyConfig = Boolean(
+    company?.efacturaOauthClientId &&
+      company?.efacturaOauthClientSecret &&
+      company?.efacturaOauthRedirectUri
+  )
 
   return {
     clientId: usesCompanyConfig
-        ? (service === "etransport" ? company.etransportOauthClientId : company.efacturaOauthClientId)
+        ? company.efacturaOauthClientId
         : platform?.efacturaOauthClientId || "",
     clientSecret: usesCompanyConfig
-        ? (service === "etransport" ? company.etransportOauthClientSecret : company.efacturaOauthClientSecret)
+        ? company.efacturaOauthClientSecret
         : platform?.efacturaOauthClientSecret || "",
     redirectUri: usesCompanyConfig
-        ? (service === "etransport" ? company.etransportOauthRedirectUri : company.efacturaOauthRedirectUri)
+        ? company.efacturaOauthRedirectUri
         : platform?.efacturaOauthRedirectUri || "",
     environment: usesCompanyConfig
       ? String(company?.efacturaEnvironment || "test").trim() || "test"
@@ -372,19 +350,12 @@ export async function handleAnafOauthCallback(req, res) {
 
   let state: { tenantId: string; returnTo: string } | null = null
   try {
-    state = jwt.verify(effectiveStateRaw, JWT_SECRET) as {
-      tenantId: string
-      returnTo: string
-      service?: "efactura" | "etransport"
-      activeCompanyId?: string | null
-    }
+    state = jwt.verify(effectiveStateRaw, JWT_SECRET) as { tenantId: string; returnTo: string }
   } catch {
     return res.status(400).send("State OAuth invalid sau expirat.")
   }
 
-  const oauthService = state?.service === "etransport" ? "etransport" : "efactura"
-  const oauthTargetCompanyId = state?.activeCompanyId ? String(state.activeCompanyId).trim() || null : null
-  const oauthConfig = await getEffectiveAnafOauthConfig(state.tenantId, oauthTargetCompanyId, oauthService)
+  const oauthConfig = await getEffectiveAnafOauthConfig(state.tenantId)
   const moduleCheck = await requireTenantModule(state.tenantId, "efactura")
 
   if (!moduleCheck.enabled) {
@@ -401,11 +372,9 @@ export async function handleAnafOauthCallback(req, res) {
         ? "Autorizarea ANAF a fost anulata sau refuzata."
         : errorDescription || error || "Autorizarea ANAF nu a putut fi finalizata."
 
-      await updateOrCreateTenantCompany(prisma, state.tenantId, oauthTargetCompanyId, oauthService === "etransport" ? {
-        etransportOauthLastError: nextError,
-      } : {
-        efacturaOauthLastError: nextError,
-      })
+    await updateOrCreateTenantCompany(prisma, state.tenantId, null, {
+      efacturaOauthLastError: nextError,
+    })
 
     return res.redirect(
       `${state.returnTo}${state.returnTo.includes("?") ? "&" : "?"}oauth=denied`,
@@ -437,23 +406,14 @@ export async function handleAnafOauthCallback(req, res) {
     const payload = await tokenRes.json().catch(() => ({}))
 
     if (!tokenRes.ok || !payload?.access_token) {
-      await updateOrCreateTenantCompany(prisma, state.tenantId, oauthTargetCompanyId, oauthService === "etransport" ? {
-        etransportOauthLastError: String(payload?.error_description || payload?.error || "Nu am putut obtine token-ul ANAF."),
-      } : {
+      await updateOrCreateTenantCompany(prisma, state.tenantId, null, {
         efacturaOauthLastError: String(payload?.error_description || payload?.error || "Nu am putut obtine token-ul ANAF."),
       })
 
       return res.redirect(`${state.returnTo}${state.returnTo.includes("?") ? "&" : "?"}oauth=error`)
     }
 
-    await updateOrCreateTenantCompany(prisma, state.tenantId, oauthTargetCompanyId, oauthService === "etransport" ? {
-      etransportOauthAccessToken: String(payload.access_token),
-      etransportOauthRefreshToken: payload.refresh_token ? String(payload.refresh_token) : null,
-      etransportOauthAccessTokenExpiresAt: decodeTokenExpiry(String(payload.access_token)),
-      etransportOauthRefreshTokenExpiresAt: decodeTokenExpiry(payload.refresh_token ? String(payload.refresh_token) : null),
-      etransportOauthConnectedAt: new Date(),
-      etransportOauthLastError: null,
-    } : {
+    await updateOrCreateTenantCompany(prisma, state.tenantId, null, {
       efacturaOauthAccessToken: String(payload.access_token),
       efacturaOauthRefreshToken: payload.refresh_token ? String(payload.refresh_token) : null,
       efacturaOauthAccessTokenExpiresAt: decodeTokenExpiry(String(payload.access_token)),
@@ -464,9 +424,7 @@ export async function handleAnafOauthCallback(req, res) {
 
     return res.redirect(`${state.returnTo}${state.returnTo.includes("?") ? "&" : "?"}oauth=success`)
   } catch (error: any) {
-    await updateOrCreateTenantCompany(prisma, state.tenantId, oauthTargetCompanyId, oauthService === "etransport" ? {
-      etransportOauthLastError: error?.message || "Eroare la schimbul token-ului ANAF.",
-    } : {
+    await updateOrCreateTenantCompany(prisma, state.tenantId, null, {
       efacturaOauthLastError: error?.message || "Eroare la schimbul token-ului ANAF.",
     })
 
@@ -703,10 +661,7 @@ router.post("/api/v1/company", async (req: AuthedRequest, res) => {
     efacturaCertPassword,
     efacturaOauthClientId,
     efacturaOauthClientSecret,
-    efacturaOauthRedirectUri,
-    etransportOauthClientId,
-    etransportOauthClientSecret,
-    etransportOauthRedirectUri,
+    efacturaOauthRedirectUri
   } = req.body || {}
 
   if (!String(name || "").trim()) {
@@ -769,9 +724,6 @@ router.post("/api/v1/company", async (req: AuthedRequest, res) => {
         efacturaOauthClientId: efacturaOauthClientId ? String(efacturaOauthClientId).trim() : null,
         efacturaOauthClientSecret: efacturaOauthClientSecret ? String(efacturaOauthClientSecret).trim() : null,
         efacturaOauthRedirectUri: efacturaOauthRedirectUri ? String(efacturaOauthRedirectUri).trim() : null,
-        etransportOauthClientId: etransportOauthClientId ? String(etransportOauthClientId).trim() : null,
-        etransportOauthClientSecret: etransportOauthClientSecret ? String(etransportOauthClientSecret).trim() : null,
-        etransportOauthRedirectUri: etransportOauthRedirectUri ? String(etransportOauthRedirectUri).trim() : null,
         posSyncInterval: posSyncInterval !== undefined
           ? nextPosSyncInterval
           : (existing?.posSyncInterval ?? 5),
@@ -812,9 +764,6 @@ router.post("/api/v1/company", async (req: AuthedRequest, res) => {
         efacturaOauthClientId: efacturaOauthClientId ? String(efacturaOauthClientId).trim() : null,
         efacturaOauthClientSecret: efacturaOauthClientSecret ? String(efacturaOauthClientSecret).trim() : null,
         efacturaOauthRedirectUri: efacturaOauthRedirectUri ? String(efacturaOauthRedirectUri).trim() : null,
-        etransportOauthClientId: etransportOauthClientId ? String(etransportOauthClientId).trim() : null,
-        etransportOauthClientSecret: etransportOauthClientSecret ? String(etransportOauthClientSecret).trim() : null,
-        etransportOauthRedirectUri: etransportOauthRedirectUri ? String(etransportOauthRedirectUri).trim() : null,
         posSyncInterval: nextPosSyncInterval,
         invoiceSeries: "FAC",
         purchaseSeries: "NIR",
@@ -934,7 +883,6 @@ router.delete("/api/v1/company/efactura/certificate", requireAuth, async (req: A
 
 router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
-  const activeCompanyId = getActiveCompanyId(req)
   const returnTo = String(req.query.returnTo || "").trim() || "http://localhost:5173/setari/efactura"
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
 
@@ -945,7 +893,7 @@ router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, re
     })
   }
 
-  const oauthConfig = await getEffectiveAnafOauthConfig(tenantId, getActiveCompanyId(req), "efactura")
+  const oauthConfig = await getEffectiveAnafOauthConfig(tenantId, getActiveCompanyId(req))
 
   if (!oauthConfig.clientId || !oauthConfig.redirectUri) {
     return res.status(400).json({
@@ -958,8 +906,6 @@ router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, re
     {
       tenantId,
       returnTo,
-      service: "efactura",
-      activeCompanyId,
     },
     JWT_SECRET,
     { expiresIn: "15m" },
@@ -985,51 +931,6 @@ router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, re
     usesPlatformConfig: oauthConfig.usesPlatformConfig,
     clientIdSuffix: oauthConfig.clientId ? oauthConfig.clientId.slice(-8) : "",
     redirectUri: oauthConfig.redirectUri,
-  })
-
-  return res.json({
-    ok: true,
-    url: `${ANAF_AUTH_URL}?${params.toString()}`,
-  })
-})
-
-router.get("/api/v1/company/etransport/oauth/start", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const activeCompanyId = getActiveCompanyId(req)
-  const returnTo = String(req.query.returnTo || "").trim() || "http://localhost:5173/setari/efactura"
-  const oauthConfig = await getEffectiveAnafOauthConfig(tenantId, getActiveCompanyId(req), "etransport")
-
-  if (!oauthConfig.clientId || !oauthConfig.redirectUri) {
-    return res.status(400).json({
-      ok: false,
-      error: "Nu este configurata aplicatia ANAF pentru RO e-Transport.",
-    })
-  }
-
-  const state = jwt.sign(
-    {
-      tenantId,
-      returnTo,
-      service: "etransport",
-      activeCompanyId,
-    },
-    JWT_SECRET,
-    { expiresIn: "15m" },
-  )
-
-  res.cookie(ANAF_OAUTH_CTX_COOKIE, state, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/api/v1/company/efactura/oauth/callback",
-    maxAge: 15 * 60 * 1000,
-  })
-
-  const params = new URLSearchParams({
-    response_type: "code",
-    client_id: oauthConfig.clientId,
-    redirect_uri: oauthConfig.redirectUri,
-    token_content_type: "jwt",
   })
 
   return res.json({
@@ -1104,66 +1005,6 @@ router.post("/api/v1/company/efactura/oauth/test", async (req: AuthedRequest, re
     return res.status(500).json({
       ok: false,
       error: error?.message || "Eroare la testarea conexiunii ANAF.",
-    })
-  }
-})
-
-router.post("/api/v1/company/etransport/oauth/test", async (req: AuthedRequest, res) => {
-  const company = await getRequestCompany(req, {
-    select: {
-      etransportOauthAccessToken: true,
-      etransportOauthConnectedAt: true,
-      etransportOauthAccessTokenExpiresAt: true,
-    },
-  })
-
-  if (!company?.etransportOauthAccessToken) {
-    return res.status(400).json({
-      ok: false,
-      error: "Nu exista token ANAF salvat pentru RO e-Transport.",
-    })
-  }
-
-  try {
-    const response = await anafHttpRequest(ANAF_TEST_URL, {
-      headers: {
-        Authorization: `Bearer ${company.etransportOauthAccessToken}`,
-      },
-    })
-
-    const text = response.text
-
-    if (!response.ok) {
-      await updateRequestCompany(req, {
-        etransportOauthLastError: text.slice(0, 1000),
-      })
-
-      return res.status(400).json({
-        ok: false,
-        error: "Conexiunea ANAF pentru RO e-Transport a raspuns cu eroare.",
-        details: text,
-      })
-    }
-
-    await updateRequestCompany(req, {
-      etransportOauthConnectedAt: company.etransportOauthConnectedAt ?? new Date(),
-      etransportOauthLastError: null,
-    })
-
-    return res.json({
-      ok: true,
-      message: "Conexiunea ANAF pentru RO e-Transport a raspuns corect.",
-      details: text,
-      expiresAt: company.etransportOauthAccessTokenExpiresAt,
-    })
-  } catch (error: any) {
-    await updateRequestCompany(req, {
-      etransportOauthLastError: error?.message || "Eroare la testarea conexiunii RO e-Transport.",
-    })
-
-    return res.status(500).json({
-      ok: false,
-      error: error?.message || "Eroare la testarea conexiunii RO e-Transport.",
     })
   }
 })
@@ -1492,4 +1333,3 @@ router.post("/api/v1/company/pos-sync-config", async (req: AuthedRequest, res) =
 })
 
 export default router
-

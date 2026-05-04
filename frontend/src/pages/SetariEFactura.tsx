@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import { Navigate } from "react-router-dom"
 import PageHeader from "../components/PageHeader"
 import {
@@ -222,10 +222,14 @@ export default function SetariEFacturaPage() {
   const [agentPairingBusy, setAgentPairingBusy] = useState(false)
   const [agentPairing, setAgentPairing] = useState<AgentPairingCodeState | null>(null)
   const [activeModal, setActiveModal] = useState<ActiveModal>(null)
-  const isDebugMode = false
+  const isDebugMode =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("debugSpv") === "1"
 
   useEffect(() => {
     loadSettings()
+    void loadLocalAgentStatus()
+    void loadAgentDownloadInfo()
 
     const params = new URLSearchParams(window.location.search)
     const oauth = params.get("oauth")
@@ -288,6 +292,7 @@ export default function SetariEFacturaPage() {
         expiresAt: data?.company?.efacturaOauthAccessTokenExpiresAt || "",
         lastError: data?.company?.efacturaOauthLastError || "",
       })
+
       if (connected) {
         setError("")
 
@@ -1107,4 +1112,3 @@ export default function SetariEFacturaPage() {
     </div>
   )
 }
-
