@@ -80,6 +80,7 @@ const COUNTY_CODE_MAP: Record<string, string> = {
 }
 
 const ETRANSPORT_XMLNS = "mfp:anaf:dgti:eTransport:declaratie:v2"
+const ETRANSPORT_SCHEMA_LOCATION = `${ETRANSPORT_XMLNS} schema_ETR_v2_20221215.xsd`
 
 const OPERATION_TYPE_CODE_MAP: Record<string, string> = {
   AIC: "10",
@@ -446,7 +447,7 @@ export function generateTransferETransportXml(doc: any) {
     .join("\n")
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<eTransport xmlns="${ETRANSPORT_XMLNS}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" codDeclarant="${xmlEscape(declarantCode)}" refDeclarant="${xmlEscape(declarantRef)}">
+<eTransport xmlns="${ETRANSPORT_XMLNS}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="${xmlEscape(ETRANSPORT_SCHEMA_LOCATION)}" codDeclarant="${xmlEscape(declarantCode)}" refDeclarant="${xmlEscape(declarantRef)}">
   <notificare codTipOperatiune="${xmlEscape(operationTypeCode)}">
 ${linesXml}
     <partenerComercial codTara="${xmlEscape(normalizeCountryCode(doc?.eTransportPartnerCountry))}" cod="${xmlEscape(doc?.eTransportPartnerCui || "")}" denumire="${xmlEscape(doc?.eTransportPartnerName || "")}" />
@@ -562,7 +563,7 @@ export function generateETransportNoticeXml(notice: any) {
     .join("\n")
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<eTransport xmlns="${ETRANSPORT_XMLNS}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" codDeclarant="${xmlEscape(declarantCode)}" refDeclarant="${xmlEscape(declarantRef)}">
+<eTransport xmlns="${ETRANSPORT_XMLNS}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="${xmlEscape(ETRANSPORT_SCHEMA_LOCATION)}" codDeclarant="${xmlEscape(declarantCode)}" refDeclarant="${xmlEscape(declarantRef)}">
   <notificare codTipOperatiune="${xmlEscape(operationTypeCode)}">
 ${linesXml}
     <partenerComercial codTara="${xmlEscape(normalizeCountryCode(notice?.partnerCountry))}" cod="${xmlEscape(notice?.partnerCui || "")}" denumire="${xmlEscape(notice?.partnerName || "")}" />
