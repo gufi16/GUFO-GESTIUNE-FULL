@@ -149,6 +149,11 @@ function serializeTransferDoc(doc: any) {
     eTransportEndAddress: String(doc.eTransportEndAddress || ""),
     eTransportStartBorderPoint: String(doc.eTransportStartBorderPoint || ""),
     eTransportEndBorderPoint: String(doc.eTransportEndBorderPoint || ""),
+    eTransportTransportDocType: String(doc.eTransportTransportDocType || ""),
+    eTransportTransportDocNo: String(doc.eTransportTransportDocNo || ""),
+    eTransportTransportDocDate: doc.eTransportTransportDocDate ? new Date(doc.eTransportTransportDocDate).toISOString() : "",
+    eTransportTransportDocNotes: String(doc.eTransportTransportDocNotes || ""),
+    eTransportExtraInfo: String(doc.eTransportExtraInfo || ""),
     totalQty: toNumber(doc.totalQty),
     totalValue: toNumber(doc.totalValue),
     items
@@ -301,6 +306,10 @@ router.post("/api/v1/transfers/:id/etransport/prepare", async (req: AuthedReques
   const tenantId = req.auth!.tenantId
   const companyId = await requireRequestCompanyId(req)
   const id = String(req.params.id)
+  const company = await prisma.company.findFirst({
+    where: { id: companyId, tenantId },
+    select: { id: true, name: true, cui: true },
+  })
 
   const doc = await prisma.transferDoc.findFirst({
     where: { id, tenantId, companyId },
@@ -338,7 +347,11 @@ router.post("/api/v1/transfers/:id/etransport/prepare", async (req: AuthedReques
     })
   }
 
-  const xmlText = generateTransferETransportXml(doc)
+  const xmlText = generateTransferETransportXml({
+    ...doc,
+    company,
+    declarantCode: company?.cui || "",
+  })
   const nextStatus = doc.eTransportRequired ? "PREPARED" : "READY_TO_REVIEW"
 
   const updated = await prisma.transferDoc.update({
@@ -414,6 +427,13 @@ router.patch("/api/v1/transfers/:id/etransport-fields", async (req: AuthedReques
       eTransportEndAddress: String(header?.eTransportEndAddress || "").trim() || null,
       eTransportStartBorderPoint: String(header?.eTransportStartBorderPoint || "").trim() || null,
       eTransportEndBorderPoint: String(header?.eTransportEndBorderPoint || "").trim() || null,
+      eTransportTransportDocType: String(header?.eTransportTransportDocType || "").trim() || null,
+      eTransportTransportDocNo: String(header?.eTransportTransportDocNo || "").trim() || null,
+      eTransportTransportDocDate: String(header?.eTransportTransportDocDate || "").trim()
+        ? new Date(String(header.eTransportTransportDocDate).trim())
+        : null,
+      eTransportTransportDocNotes: String(header?.eTransportTransportDocNotes || "").trim() || null,
+      eTransportExtraInfo: String(header?.eTransportExtraInfo || "").trim() || null,
       eTransportDeclaredStart: String(header?.eTransportDeclaredStart || "").trim() ? new Date(String(header.eTransportDeclaredStart).trim()) : null,
       eTransportVehicleMaxMassKg: eTransportVehicleMaxMassKg > 0 ? new Prisma.Decimal(eTransportVehicleMaxMassKg) : null,
       eTransportOrganizer: String(header?.eTransportOrganizer || "").trim() || null,
@@ -527,7 +547,13 @@ router.post("/api/v1/transfers/:id/etransport/send", async (req: AuthedRequest, 
     })
   }
 
-  const xmlText = doc.eTransportPreparedXml || generateTransferETransportXml(doc)
+  const xmlText =
+    doc.eTransportPreparedXml ||
+    generateTransferETransportXml({
+      ...doc,
+      company,
+      declarantCode: company?.cui || "",
+    })
 
   try {
     const uploadResult = await anafUploadEtransportXml(company, xmlText)
@@ -945,6 +971,11 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
   const eTransportEndAddress = String(header?.eTransportEndAddress || "").trim()
   const eTransportStartBorderPoint = String(header?.eTransportStartBorderPoint || "").trim()
   const eTransportEndBorderPoint = String(header?.eTransportEndBorderPoint || "").trim()
+  const eTransportTransportDocType = String(header?.eTransportTransportDocType || "").trim()
+  const eTransportTransportDocNo = String(header?.eTransportTransportDocNo || "").trim()
+  const eTransportTransportDocDateRaw = String(header?.eTransportTransportDocDate || "").trim()
+  const eTransportTransportDocNotes = String(header?.eTransportTransportDocNotes || "").trim()
+  const eTransportExtraInfo = String(header?.eTransportExtraInfo || "").trim()
   const eTransportDeclaredStartRaw = String(header?.eTransportDeclaredStart || "").trim()
   const eTransportVehicleMaxMassKg = Math.max(0, toNumber(header?.eTransportVehicleMaxMassKg || 0))
   const eTransportOrganizer = String(header?.eTransportOrganizer || "").trim()
@@ -1025,6 +1056,11 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
           eTransportEndAddress: eTransportEndAddress || null,
           eTransportStartBorderPoint: eTransportStartBorderPoint || null,
           eTransportEndBorderPoint: eTransportEndBorderPoint || null,
+          eTransportTransportDocType: eTransportTransportDocType || null,
+          eTransportTransportDocNo: eTransportTransportDocNo || null,
+          eTransportTransportDocDate: eTransportTransportDocDateRaw ? new Date(eTransportTransportDocDateRaw) : null,
+          eTransportTransportDocNotes: eTransportTransportDocNotes || null,
+          eTransportExtraInfo: eTransportExtraInfo || null,
           senderName: header?.senderName ? String(header.senderName).trim() : null,
           receiverName: header?.receiverName ? String(header.receiverName).trim() : null,
           approvedBy: header?.approvedBy ? String(header.approvedBy).trim() : null,
@@ -1089,6 +1125,11 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
           eTransportEndAddress: eTransportEndAddress || null,
           eTransportStartBorderPoint: eTransportStartBorderPoint || null,
           eTransportEndBorderPoint: eTransportEndBorderPoint || null,
+          eTransportTransportDocType: eTransportTransportDocType || null,
+          eTransportTransportDocNo: eTransportTransportDocNo || null,
+          eTransportTransportDocDate: eTransportTransportDocDateRaw ? new Date(eTransportTransportDocDateRaw) : null,
+          eTransportTransportDocNotes: eTransportTransportDocNotes || null,
+          eTransportExtraInfo: eTransportExtraInfo || null,
           senderName: header?.senderName ? String(header.senderName).trim() : null,
           receiverName: header?.receiverName ? String(header.receiverName).trim() : null,
           approvedBy: header?.approvedBy ? String(header.approvedBy).trim() : null,

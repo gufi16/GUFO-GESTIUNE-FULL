@@ -36,6 +36,11 @@ type NoticeHeader = {
   noticeNo: string
   sourceType: string
   sourceDocNo: string
+  transportDocType: string
+  transportDocNo: string
+  transportDocDate: string
+  transportDocNotes: string
+  extraInfo: string
   operationType: string
   partnerCountry: string
   partnerCui: string
@@ -59,6 +64,9 @@ type NoticeHeader = {
   candidate: boolean
   required: boolean
   uit: string
+  uploadIndex: string
+  downloadId: string
+  errorText: string
   preparedXml: string
   totalGrossWeightKg: number
   totalValueRon: number
@@ -140,6 +148,11 @@ function makeHeader(): NoticeHeader {
     noticeNo: "",
     sourceType: "MANUAL",
     sourceDocNo: "",
+    transportDocType: "ALTELE",
+    transportDocNo: "",
+    transportDocDate: "",
+    transportDocNotes: "",
+    extraInfo: "",
     operationType: "TTN",
     partnerCountry: "RO",
     partnerCui: "",
@@ -163,6 +176,9 @@ function makeHeader(): NoticeHeader {
     candidate: false,
     required: false,
     uit: "",
+    uploadIndex: "",
+    downloadId: "",
+    errorText: "",
     preparedXml: "",
     totalGrossWeightKg: 0,
     totalValueRon: 0,
@@ -282,6 +298,11 @@ export default function ETransportPage() {
         noticeNo: item.noticeNo || "",
         sourceType: item.sourceType || "MANUAL",
         sourceDocNo: item.sourceDocNo || "",
+        transportDocType: item.transportDocType || "ALTELE",
+        transportDocNo: item.transportDocNo || "",
+        transportDocDate: item.transportDocDate ? String(item.transportDocDate).slice(0, 10) : "",
+        transportDocNotes: item.transportDocNotes || "",
+        extraInfo: item.extraInfo || "",
         operationType: item.operationType || "TTN",
         partnerCountry: item.partnerCountry || "RO",
         partnerCui: item.partnerCui || "",
@@ -305,6 +326,9 @@ export default function ETransportPage() {
         candidate: Boolean(item.candidate),
         required: Boolean(item.required),
         uit: item.uit || "",
+        uploadIndex: item.uploadIndex || "",
+        downloadId: item.downloadId || "",
+        errorText: item.errorText || "",
         preparedXml: item.preparedXml || "",
         totalGrossWeightKg: toNumber(item.totalGrossWeightKg),
         totalValueRon: toNumber(item.totalValueRon),
@@ -488,6 +512,69 @@ export default function ETransportPage() {
     }
   }
 
+  async function sendToAnaf() {
+    if (!noticeId || !token) return
+    setSaving(true)
+    setError("")
+    setMessage("")
+    try {
+      const res = await fetch(`${API}/api/v1/etransport/notices/${noticeId}/send`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) throw new Error(data?.error || "Nu am putut trimite e-Transport la ANAF.")
+      setMessage(data?.message || "RO e-Transport a fost trimis la ANAF.")
+      await loadItem(noticeId)
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut trimite e-Transport la ANAF.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function checkStatus() {
+    if (!noticeId || !token) return
+    setSaving(true)
+    setError("")
+    setMessage("")
+    try {
+      const res = await fetch(`${API}/api/v1/etransport/notices/${noticeId}/status`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) throw new Error(data?.error || "Nu am putut verifica starea in ANAF.")
+      setMessage(data?.message || "Starea RO e-Transport a fost verificata.")
+      await loadItem(noticeId)
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut verifica starea in ANAF.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function downloadReceipt() {
+    if (!noticeId || !token) return
+    const res = await fetch(`${API}/api/v1/etransport/notices/${noticeId}/receipt`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      setError(data?.error || "Nu am putut descarca raspunsul ANAF.")
+      return
+    }
+    const blob = await res.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `RO-e-Transport-Raspuns-${header.noticeNo || noticeId}.zip`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    window.URL.revokeObjectURL(url)
+    await loadItem(noticeId)
+  }
+
   async function downloadXml(id: string) {
     if (!token) return
     const res = await fetch(`${API}/api/v1/etransport/notices/${id}/xml`, {
@@ -604,17 +691,28 @@ export default function ETransportPage() {
           <FileText size={16} className="mr-2" />
           Genereaza XML
         </button>
+        <button type="button" onClick={sendToAnaf} disabled={!noticeId || saving} className={documentButtonSecondaryClass}>
+          Trimite la ANAF
+        </button>
+        <button type="button" onClick={checkStatus} disabled={!noticeId || saving || !header.uploadIndex} className={documentButtonSecondaryClass}>
+          Verifica stare
+        </button>
         <button type="button" onClick={() => noticeId && downloadXml(noticeId)} disabled={!noticeId || !header.preparedXml} className={documentButtonSecondaryClass}>
           XML
+        </button>
+        <button type="button" onClick={downloadReceipt} disabled={!noticeId || !header.uploadIndex} className={documentButtonSecondaryClass}>
+          Raspuns ANAF
         </button>
       </div>
 
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
+      {header.errorText ? <InlineNotice tone="info">{header.errorText}</InlineNotice> : null}
 
       <div className="grid gap-3 md:grid-cols-4">
         <DocumentMetric title="Notificare" value={header.noticeNo || "-"} tone="blue" />
         <DocumentMetric title="Status" value={header.status || "DRAFT"} tone="slate" />
+        <DocumentMetric title="UIT" value={header.uit || "-"} tone="emerald" />
         <DocumentMetric title="Greutate bruta" value={`${totals.totalGrossWeightKg.toLocaleString("ro-RO", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg`} tone="emerald" />
         <DocumentMetric title="Valoare fara TVA" value={`${totals.totalValueRon.toLocaleString("ro-RO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON`} tone="amber" />
       </div>
@@ -628,6 +726,24 @@ export default function ETransportPage() {
           <div className="space-y-1">
             <label className="block text-xs font-medium text-[#17324D]">Document sursa</label>
             <input value={header.sourceDocNo} onChange={(e) => setHeader((prev) => ({ ...prev, sourceDocNo: e.target.value }))} className={documentInputClass} />
+          </div>
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-[#17324D]">Tip document transport</label>
+            <select value={header.transportDocType} onChange={(e) => setHeader((prev) => ({ ...prev, transportDocType: e.target.value }))} className={documentInputClass}>
+              <option value="FACTURA">Factura</option>
+              <option value="CMR">CMR</option>
+              <option value="AVIZ">Aviz</option>
+              <option value="TRANSFER">Transfer</option>
+              <option value="ALTELE">Alt document</option>
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-[#17324D]">Nr. document transport</label>
+            <input value={header.transportDocNo} onChange={(e) => setHeader((prev) => ({ ...prev, transportDocNo: e.target.value }))} className={documentInputClass} />
+          </div>
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-[#17324D]">Data document transport</label>
+            <input type="date" value={header.transportDocDate} onChange={(e) => setHeader((prev) => ({ ...prev, transportDocDate: e.target.value }))} className={documentInputClass} />
           </div>
           <div className="space-y-1">
             <label className="block text-xs font-medium text-[#17324D]">Tip operatiune</label>
@@ -654,6 +770,14 @@ export default function ETransportPage() {
           <div className="space-y-1">
             <label className="block text-xs font-medium text-[#17324D]">Masa maxima vehicul (kg)</label>
             <input value={header.vehicleMaxMassKg} onChange={(e) => setHeader((prev) => ({ ...prev, vehicleMaxMassKg: e.target.value }))} className={documentInputClass} />
+          </div>
+          <div className="space-y-1 md:col-span-2">
+            <label className="block text-xs font-medium text-[#17324D]">Observatii document</label>
+            <input value={header.transportDocNotes} onChange={(e) => setHeader((prev) => ({ ...prev, transportDocNotes: e.target.value }))} className={documentInputClass} />
+          </div>
+          <div className="space-y-1 md:col-span-2">
+            <label className="block text-xs font-medium text-[#17324D]">Informatii suplimentare</label>
+            <input value={header.extraInfo} onChange={(e) => setHeader((prev) => ({ ...prev, extraInfo: e.target.value }))} className={documentInputClass} />
           </div>
         </div>
       </DocumentSection>

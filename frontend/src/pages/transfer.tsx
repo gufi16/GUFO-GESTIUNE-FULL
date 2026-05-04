@@ -374,6 +374,11 @@ export default function TransferPage() {
     eTransportEndAddress: "",
     eTransportStartBorderPoint: "",
     eTransportEndBorderPoint: "",
+    eTransportTransportDocType: "TRANSFER",
+    eTransportTransportDocNo: "",
+    eTransportTransportDocDate: "",
+    eTransportTransportDocNotes: "",
+    eTransportExtraInfo: "",
     senderName: "",
     receiverName: "",
     approvedBy: "",
@@ -525,6 +530,11 @@ export default function TransferPage() {
         eTransportEndAddress: doc.eTransportEndAddress || buildLocationLabel(doc.toLocation),
         eTransportStartBorderPoint: doc.eTransportStartBorderPoint || "",
         eTransportEndBorderPoint: doc.eTransportEndBorderPoint || "",
+        eTransportTransportDocType: doc.eTransportTransportDocType || "TRANSFER",
+        eTransportTransportDocNo: doc.eTransportTransportDocNo || doc.docNo || "",
+        eTransportTransportDocDate: doc.eTransportTransportDocDate ? String(doc.eTransportTransportDocDate).slice(0, 10) : "",
+        eTransportTransportDocNotes: doc.eTransportTransportDocNotes || "",
+        eTransportExtraInfo: doc.eTransportExtraInfo || "",
         senderName: doc.senderName || "",
         receiverName: doc.receiverName || "",
         approvedBy: doc.approvedBy || "",
@@ -843,6 +853,11 @@ export default function TransferPage() {
                 header.eTransportStartScope === "ADR" ? serializeAdrForm(startAdr) : header.eTransportStartBorderPoint,
               eTransportEndAddress:
                 header.eTransportEndScope === "ADR" ? serializeAdrForm(endAdr) : header.eTransportEndBorderPoint,
+              eTransportTransportDocType: header.eTransportTransportDocType,
+              eTransportTransportDocNo: header.eTransportTransportDocNo,
+              eTransportTransportDocDate: header.eTransportTransportDocDate,
+              eTransportTransportDocNotes: header.eTransportTransportDocNotes,
+              eTransportExtraInfo: header.eTransportExtraInfo,
               eTransportStartBorderPoint: header.eTransportStartBorderPoint,
               eTransportEndBorderPoint: header.eTransportEndBorderPoint,
               eTransportDeclaredStart: header.eTransportDeclaredStart,
@@ -870,6 +885,9 @@ export default function TransferPage() {
       const persisted = await persistTransfer(false, false)
       if (!persisted.ok) return
       setMessage("Datele RO e-Transport au fost salvate.")
+      if (!transferId && persisted.id) {
+        navigate(`/transfer/edit?id=${persisted.id}&etr=1`, { replace: true })
+      }
     } catch {
       setError("Nu am putut salva datele RO e-Transport.")
     } finally {
@@ -1455,12 +1473,12 @@ export default function TransferPage() {
 
               {showETransportModal ? (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
-                  <div className="max-h-[92vh] w-full max-w-6xl overflow-auto rounded-[28px] border border-slate-200 bg-white p-5 shadow-2xl">
+                  <div className="max-h-[94vh] w-full max-w-7xl overflow-auto rounded-[28px] border border-slate-200 bg-white p-6 shadow-2xl">
                     <div className="mb-4 flex items-start justify-between gap-4">
-                      <div>
-                        <div className="text-lg font-semibold text-slate-900">RO e-Transport</div>
-                        <div className="mt-1 text-sm text-slate-500">Completezi datele aici, le salvezi, iar dupa finalizare poti genera XML si trimite la ANAF.</div>
-                      </div>
+                        <div>
+                          <div className="text-lg font-semibold text-slate-900">RO e-Transport</div>
+                          <div className="mt-1 text-sm text-slate-500">Completezi clar datele de traseu, document transport si bunuri. Salvarea trebuie sa ramana legata de transferul curent, iar dupa finalizare poti genera XML si trimite la ANAF.</div>
+                        </div>
                       <button type="button" className={documentButtonSecondaryClass} onClick={() => setShowETransportModal(false)}>
                         <ArrowLeft size={16} className="mr-2" />
                         Inchide
@@ -1669,6 +1687,68 @@ export default function TransferPage() {
                           })}
                         </tbody>
                       </table>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[16px] border border-slate-200 bg-white p-3">
+                    <div className="mb-3 text-sm font-semibold text-slate-900">Document de transport si detalii declaratie</div>
+                    <div className="grid grid-cols-1 gap-2 xl:grid-cols-12">
+                      <div className="xl:col-span-3">
+                        <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Tip document</div>
+                        <select
+                          value={header.eTransportTransportDocType}
+                          onChange={(e) => setHeader((prev) => ({ ...prev, eTransportTransportDocType: e.target.value }))}
+                          className={documentInputClass}
+                          disabled={eTransportFieldDisabled}
+                        >
+                          <option value="TRANSFER">Transfer intre gestiuni</option>
+                          <option value="FACTURA">Factura</option>
+                          <option value="AVIZ">Aviz de insotire</option>
+                          <option value="CMR">CMR</option>
+                          <option value="COMANDA">Comanda</option>
+                          <option value="ALTELE">Alt document</option>
+                        </select>
+                      </div>
+                      <div className="xl:col-span-3">
+                        <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Numar document</div>
+                        <input
+                          value={header.eTransportTransportDocNo}
+                          onChange={(e) => setHeader((prev) => ({ ...prev, eTransportTransportDocNo: e.target.value }))}
+                          className={documentInputClass}
+                          disabled={eTransportFieldDisabled}
+                          placeholder="TRF-00006 / CMR / Factura"
+                        />
+                      </div>
+                      <div className="xl:col-span-2">
+                        <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Data document</div>
+                        <input
+                          type="date"
+                          value={header.eTransportTransportDocDate}
+                          onChange={(e) => setHeader((prev) => ({ ...prev, eTransportTransportDocDate: e.target.value }))}
+                          className={documentInputClass}
+                          disabled={eTransportFieldDisabled}
+                        />
+                      </div>
+                      <div className="xl:col-span-4">
+                        <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Observatii document</div>
+                        <input
+                          value={header.eTransportTransportDocNotes}
+                          onChange={(e) => setHeader((prev) => ({ ...prev, eTransportTransportDocNotes: e.target.value }))}
+                          className={documentInputClass}
+                          disabled={eTransportFieldDisabled}
+                          placeholder="Observatii despre documentul de transport"
+                        />
+                      </div>
+                      <div className="xl:col-span-12">
+                        <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Informatii suplimentare</div>
+                        <input
+                          value={header.eTransportExtraInfo}
+                          onChange={(e) => setHeader((prev) => ({ ...prev, eTransportExtraInfo: e.target.value }))}
+                          className={documentInputClass}
+                          disabled={eTransportFieldDisabled}
+                          placeholder="Alte mentiuni utile pentru declaratia e-Transport"
+                        />
+                      </div>
                     </div>
                   </div>
 

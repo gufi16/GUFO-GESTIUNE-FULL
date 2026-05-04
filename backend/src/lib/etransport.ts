@@ -23,8 +23,83 @@ function formatDateTimeLocal(value: unknown) {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
 }
 
+function formatDateOnly(value: unknown) {
+  if (!value) return ""
+  const date = value instanceof Date ? value : new Date(String(value))
+  if (Number.isNaN(date.getTime())) return ""
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+}
+
 function normalizeText(value: unknown) {
   return String(value || "").trim()
+}
+
+const COUNTY_CODE_MAP: Record<string, string> = {
+  ALBA: "1",
+  ARAD: "2",
+  ARGES: "3",
+  BACAU: "4",
+  BIHOR: "5",
+  "BISTRITA-NASAUD": "6",
+  BOTOSANI: "7",
+  BRASOV: "8",
+  BRAILA: "9",
+  BUZAU: "10",
+  "CARAS-SEVERIN": "11",
+  CLUJ: "12",
+  CONSTANTA: "13",
+  COVASNA: "14",
+  DAMBOVITA: "15",
+  DOLJ: "16",
+  GALATI: "17",
+  GORJ: "18",
+  HARGHITA: "19",
+  HUNEDOARA: "20",
+  IALOMITA: "21",
+  IASI: "22",
+  ILFOV: "23",
+  MARAMURES: "24",
+  MEHEDINTI: "25",
+  MURES: "26",
+  NEAMT: "27",
+  OLT: "28",
+  PRAHOVA: "29",
+  "SATU-MARE": "30",
+  SALAJ: "31",
+  SIBIU: "32",
+  SUCEAVA: "33",
+  TELEORMAN: "34",
+  TIMIS: "35",
+  TULCEA: "36",
+  VASLUI: "37",
+  VALCEA: "38",
+  VRANCEA: "39",
+  BUCURESTI: "40",
+  CALARASI: "41",
+  GIURGIU: "42",
+}
+
+const OPERATION_TYPE_CODE_MAP: Record<string, string> = {
+  AIC: "10",
+  LIH: "12",
+  SCI: "14",
+  LIC: "20",
+  LHE: "22",
+  SCE: "24",
+  TTN: "30",
+  IMP: "40",
+  EXP: "50",
+  ITD: "60",
+  DIE: "70",
+}
+
+const TRANSPORT_DOCUMENT_TYPE_CODE_MAP: Record<string, string> = {
+  CMR: "10",
+  FACTURA: "20",
+  AVIZ: "30",
+  TRANSFER: "30",
+  ALTELE: "9999",
+  COMANDA: "9999",
 }
 
 function decodeStructuredAddress(value: unknown) {
@@ -70,6 +145,103 @@ function buildStructuredAddressText(value: unknown) {
   ]
     .filter(Boolean)
     .join(", ")
+}
+
+function normalizeCountyKey(value: unknown) {
+  return normalizeText(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[./]/g, " ")
+    .replace(/\s+/g, "-")
+    .toUpperCase()
+}
+
+function resolveCountyCode(value: unknown) {
+  const key = normalizeCountyKey(value)
+  if (!key) return ""
+  return COUNTY_CODE_MAP[key] || COUNTY_CODE_MAP[key.replace(/-/g, " ")] || ""
+}
+
+function resolveOperationTypeCode(value: unknown) {
+  const raw = normalizeText(value).toUpperCase()
+  if (!raw) return "30"
+  return OPERATION_TYPE_CODE_MAP[raw] || raw
+}
+
+function resolveGoodsPurposeCode(operationTypeCode: string, sourceType: string, transportDocType: string) {
+  const op = normalizeText(operationTypeCode)
+  const source = normalizeText(sourceType).toUpperCase()
+  const docType = normalizeText(transportDocType).toUpperCase()
+  if (op === "30") {
+    if (source === "TRANSFER" || docType === "TRANSFER") return "704"
+    return "101"
+  }
+  if (op === "10" || op === "20") return "101"
+  return "9999"
+}
+
+function resolveTransportDocumentTypeCode(value: unknown) {
+  const raw = normalizeText(value).toUpperCase()
+  if (!raw) return "9999"
+  return TRANSPORT_DOCUMENT_TYPE_CODE_MAP[raw] || raw
+}
+
+function extractStructuredAddress(value: unknown) {
+  const parsed = decodeStructuredAddress(value)
+  if (parsed) {
+    return {
+      county: normalizeText(parsed.county),
+      city: normalizeText(parsed.city),
+      street: normalizeText(parsed.street || parsed.address),
+      streetNo: normalizeText(parsed.streetNo),
+      building: normalizeText(parsed.building),
+      staircase: normalizeText(parsed.staircase),
+      floor: normalizeText(parsed.floor),
+      apartment: normalizeText(parsed.apartment),
+      postalCode: normalizeText(parsed.postalCode),
+      details: normalizeText(parsed.details || parsed.extra),
+    }
+  }
+
+  return {
+    county: "",
+    city: "",
+    street: normalizeText(value),
+    streetNo: "",
+    building: "",
+    staircase: "",
+    floor: "",
+    apartment: "",
+    postalCode: "",
+    details: "",
+  }
+}
+
+function buildPlaceXml(tagName: string, scope: unknown, adrValue: unknown, borderPoint: unknown) {
+  const normalizedScope = normalizeText(scope).toUpperCase() || "ADR"
+  if (normalizedScope === "PTF") {
+    const ptfCode = normalizeText(borderPoint)
+    return `    <${tagName} codPtf="${xmlEscape(ptfCode)}" />`
+  }
+
+  const address = extractStructuredAddress(adrValue)
+  const attrs = [
+    `codJudet="${xmlEscape(resolveCountyCode(address.county))}"`,
+    `denumireLocalitate="${xmlEscape(address.city)}"`,
+    `denumireStrada="${xmlEscape(address.street)}"`,
+  ]
+
+  if (address.streetNo) attrs.push(`numar="${xmlEscape(address.streetNo)}"`)
+  if (address.building) attrs.push(`bloc="${xmlEscape(address.building)}"`)
+  if (address.staircase) attrs.push(`scara="${xmlEscape(address.staircase)}"`)
+  if (address.floor) attrs.push(`etaj="${xmlEscape(address.floor)}"`)
+  if (address.apartment) attrs.push(`apartament="${xmlEscape(address.apartment)}"`)
+  if (address.details) attrs.push(`alteInfo="${xmlEscape(address.details)}"`)
+  if (address.postalCode) attrs.push(`codPostal="${xmlEscape(address.postalCode)}"`)
+
+  return `    <${tagName}>
+      <locatie ${attrs.join(" ")} />
+    </${tagName}>`
 }
 
 function resolveTransportUomCode(item: any) {
@@ -201,14 +373,13 @@ export function validateTransferForETransport(doc: any) {
 
 export function generateTransferETransportXml(doc: any) {
   const items = Array.isArray(doc?.items) ? doc.items : []
-  const { totalGrossWeightKg, totalValueRon } = resolveNoticeTotals(items)
-  const startText = formatDateTimeLocal(doc?.eTransportDeclaredStart)
-  const loadingAddress = normalizeText(doc?.eTransportStartScope) === "PTF"
-    ? normalizeText(doc?.eTransportStartBorderPoint)
-    : normalizeText(buildStructuredAddressText(doc?.eTransportStartAddress) || buildLocationText(doc?.fromLocation))
-  const unloadingAddress = normalizeText(doc?.eTransportEndScope) === "PTF"
-    ? normalizeText(doc?.eTransportEndBorderPoint)
-    : normalizeText(buildStructuredAddressText(doc?.eTransportEndAddress) || buildLocationText(doc?.toLocation))
+  const transportDate = formatDateOnly(doc?.eTransportDeclaredStart || doc?.docDate)
+  const transportDocDate = formatDateOnly(doc?.eTransportTransportDocDate || doc?.docDate)
+  const operationTypeCode = resolveOperationTypeCode(doc?.eTransportOperationType)
+  const goodsPurposeCode = resolveGoodsPurposeCode(operationTypeCode, "TRANSFER", doc?.eTransportTransportDocType || "TRANSFER")
+  const declarantCode = normalizeText(doc?.company?.cui || doc?.declarantCode)
+  const declarantRef = normalizeText(doc?.eTransportInternalRef || doc?.docNo)
+  const documentTypeCode = resolveTransportDocumentTypeCode(doc?.eTransportTransportDocType || "TRANSFER")
 
   const linesXml = items
     .map((item: any, index: number) => {
@@ -216,66 +387,21 @@ export function generateTransferETransportXml(doc: any) {
       const unitPrice = toNumber(item?.unitPrice)
       const lineValue = toNumber(item?.lineValue)
       const grossWeightKg = toNumber(item?.product?.grossWeightKg || 0)
-      return `    <Line index="${index + 1}">
-      <Sku>${xmlEscape(item?.product?.sku || "")}</Sku>
-      <Name>${xmlEscape(item?.product?.name || item?.productName || "")}</Name>
-      <NcCode>${xmlEscape(item?.product?.ncCode || "")}</NcCode>
-      <FiscalRisk>${item?.product?.isFiscalRiskProduct ? "true" : "false"}</FiscalRisk>
-      <Uom>${xmlEscape(resolveTransportUomCode(item))}</Uom>
-      <Quantity>${decimal(qty, 3)}</Quantity>
-      <UnitPriceRon>${decimal(unitPrice, 2)}</UnitPriceRon>
-      <LineValueRon>${decimal(lineValue, 2)}</LineValueRon>
-      <GrossWeightPerUnitKg>${decimal(grossWeightKg, 3)}</GrossWeightPerUnitKg>
-      <GrossWeightTotalKg>${decimal(qty * grossWeightKg, 3)}</GrossWeightTotalKg>
-    </Line>`
+      return `    <bunuriTransportate nrCrt="${index + 1}" codTarifar="${xmlEscape(item?.product?.ncCode || "")}" denumireMarfa="${xmlEscape(item?.product?.name || item?.productName || "")}" codScopOperatiune="${xmlEscape(goodsPurposeCode)}" cantitate="${decimal(qty, 3)}" codUnitateMasura="${xmlEscape(resolveTransportUomCode(item))}" greutateNeta="${decimal(qty * grossWeightKg, 3)}" greutateBruta="${decimal(qty * grossWeightKg, 3)}" valoareLeiFaraTva="${decimal(lineValue, 2)}" refDeclarant="${xmlEscape(item?.product?.sku || "")}" />`
     })
     .join("\n")
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<ROeTransportDraft>
-  <Document>
-    <Type>TRANSFER</Type>
-    <Number>${xmlEscape(doc?.docNo || "")}</Number>
-    <Date>${xmlEscape(String(doc?.docDate || "").slice(0, 10))}</Date>
-    <Status>${xmlEscape(doc?.eTransportStatus || "PREPARED")}</Status>
-  </Document>
-  <Transport>
-    <OperationType>${xmlEscape(doc?.eTransportOperationType || "")}</OperationType>
-    <DeclaredStart>${xmlEscape(startText)}</DeclaredStart>
-    <VehicleNo>${xmlEscape(doc?.vehicleNo || "")}</VehicleNo>
-    <TrailerNo>${xmlEscape(doc?.trailerNo || "")}</TrailerNo>
-    <VehicleMaxMassKg>${decimal(doc?.eTransportVehicleMaxMassKg || 0, 2)}</VehicleMaxMassKg>
-    <Organizer>${xmlEscape(doc?.eTransportOrganizer || "")}</Organizer>
-    <Operator>${xmlEscape(doc?.eTransportOperator || "")}</Operator>
-  </Transport>
-  <LoadingPlace>
-    <Scope>${xmlEscape(doc?.eTransportStartScope || "")}</Scope>
-    <Code>${xmlEscape(doc?.fromLocation?.code || "")}</Code>
-    <Name>${xmlEscape(doc?.fromLocation?.name || "")}</Name>
-    <Address>${xmlEscape(loadingAddress)}</Address>
-  </LoadingPlace>
-  <UnloadingPlace>
-    <Scope>${xmlEscape(doc?.eTransportEndScope || "")}</Scope>
-    <Code>${xmlEscape(doc?.toLocation?.code || "")}</Code>
-    <Name>${xmlEscape(doc?.toLocation?.name || "")}</Name>
-    <Address>${xmlEscape(unloadingAddress)}</Address>
-  </UnloadingPlace>
-  <Summary>
-    <Candidate>${doc?.eTransportCandidate ? "true" : "false"}</Candidate>
-    <Required>${doc?.eTransportRequired ? "true" : "false"}</Required>
-    <TotalGrossWeightKg>${decimal(totalGrossWeightKg, 3)}</TotalGrossWeightKg>
-    <TotalValueRon>${decimal(totalValueRon, 2)}</TotalValueRon>
-  </Summary>
-  <Partner>
-    <Country>${xmlEscape(doc?.eTransportPartnerCountry || "RO")}</Country>
-    <Cui>${xmlEscape(doc?.eTransportPartnerCui || "")}</Cui>
-    <Name>${xmlEscape(doc?.eTransportPartnerName || "")}</Name>
-    <InternalReference>${xmlEscape(doc?.eTransportInternalRef || "")}</InternalReference>
-  </Partner>
-  <Lines>
+<eTransport codDeclarant="${xmlEscape(declarantCode)}" refDeclarant="${xmlEscape(declarantRef)}">
+  <notificare codTipOperatiune="${xmlEscape(operationTypeCode)}">
 ${linesXml}
-  </Lines>
-</ROeTransportDraft>`
+    <partenerComercial codTara="${xmlEscape(doc?.eTransportPartnerCountry || "RO")}" cod="${xmlEscape(doc?.eTransportPartnerCui || "")}" denumire="${xmlEscape(doc?.eTransportPartnerName || "")}" />
+    <dateTransport nrVehicul="${xmlEscape(doc?.vehicleNo || "")}"${normalizeText(doc?.trailerNo) ? ` nrRemorca1="${xmlEscape(doc?.trailerNo || "")}"` : ""} codTaraOrgTransport="RO" codOrgTransport="${xmlEscape(declarantCode)}" denumireOrgTransport="${xmlEscape(doc?.eTransportOrganizer || doc?.company?.name || "")}" dataTransport="${xmlEscape(transportDate)}" />
+${buildPlaceXml("locStartTraseuRutier", doc?.eTransportStartScope, doc?.eTransportStartAddress, doc?.eTransportStartBorderPoint)}
+${buildPlaceXml("locFinalTraseuRutier", doc?.eTransportEndScope, doc?.eTransportEndAddress, doc?.eTransportEndBorderPoint)}
+    <documenteTransport tipDocument="${xmlEscape(documentTypeCode)}" numarDocument="${xmlEscape(doc?.eTransportTransportDocNo || doc?.docNo || "")}" dataDocument="${xmlEscape(transportDocDate)}"${normalizeText(doc?.eTransportTransportDocNotes) ? ` observatii="${xmlEscape(doc?.eTransportTransportDocNotes || "")}"` : ""} />
+  </notificare>
+</eTransport>`
 }
 
 export function validateNoticeForETransport(notice: any) {
@@ -363,75 +489,32 @@ export function validateNoticeForETransport(notice: any) {
 
 export function generateETransportNoticeXml(notice: any) {
   const items = Array.isArray(notice?.items) ? notice.items : []
-  const { totalGrossWeightKg, totalValueRon } = resolveNoticeTotals(items)
-  const startText = formatDateTimeLocal(notice?.declaredStart)
-  const loadingAddress = buildNoticeAddressText(notice?.startScope, notice?.startAddress, notice?.startBorderPoint)
-  const unloadingAddress = buildNoticeAddressText(notice?.endScope, notice?.endAddress, notice?.endBorderPoint)
+  const transportDate = formatDateOnly(notice?.declaredStart || notice?.createdAt)
+  const transportDocDate = formatDateOnly(notice?.transportDocDate)
+  const operationTypeCode = resolveOperationTypeCode(notice?.operationType)
+  const goodsPurposeCode = resolveGoodsPurposeCode(operationTypeCode, notice?.sourceType, notice?.transportDocType)
+  const declarantCode = normalizeText(notice?.company?.cui || notice?.organizerCode)
+  const declarantRef = normalizeText(notice?.internalRef || notice?.noticeNo)
+  const documentTypeCode = resolveTransportDocumentTypeCode(notice?.transportDocType || "ALTELE")
 
   const linesXml = items
     .map((item: any, index: number) => {
       const qty = toNumber(item?.qty)
-      const unitPrice = toNumber(item?.unitPrice)
       const lineValue = toNumber(item?.lineValue)
       const grossWeightKg = toNumber(item?.grossWeightPerUnitKg || item?.product?.grossWeightKg || 0)
-      return `    <Line index="${index + 1}">
-      <Sku>${xmlEscape(item?.sku || item?.product?.sku || "")}</Sku>
-      <Name>${xmlEscape(item?.name || item?.product?.name || "")}</Name>
-      <NcCode>${xmlEscape(item?.ncCode || item?.product?.ncCode || "")}</NcCode>
-      <FiscalRisk>${item?.fiscalRisk || item?.product?.isFiscalRiskProduct ? "true" : "false"}</FiscalRisk>
-      <Uom>${xmlEscape(item?.uomCode || resolveTransportUomCode(item))}</Uom>
-      <Quantity>${decimal(qty, 3)}</Quantity>
-      <UnitPriceRon>${decimal(unitPrice, 2)}</UnitPriceRon>
-      <LineValueRon>${decimal(lineValue, 2)}</LineValueRon>
-      <GrossWeightPerUnitKg>${decimal(grossWeightKg, 3)}</GrossWeightPerUnitKg>
-      <GrossWeightTotalKg>${decimal(toNumber(item?.grossWeightTotalKg) || qty * grossWeightKg, 3)}</GrossWeightTotalKg>
-      <InternalReference>${xmlEscape(item?.internalReference || "")}</InternalReference>
-    </Line>`
+      return `    <bunuriTransportate nrCrt="${index + 1}" codTarifar="${xmlEscape(item?.ncCode || item?.product?.ncCode || "")}" denumireMarfa="${xmlEscape(item?.name || item?.product?.name || "")}" codScopOperatiune="${xmlEscape(goodsPurposeCode)}" cantitate="${decimal(qty, 3)}" codUnitateMasura="${xmlEscape(item?.uomCode || resolveTransportUomCode(item))}" greutateNeta="${decimal(toNumber(item?.grossWeightTotalKg) || qty * grossWeightKg, 3)}" greutateBruta="${decimal(toNumber(item?.grossWeightTotalKg) || qty * grossWeightKg, 3)}" valoareLeiFaraTva="${decimal(lineValue, 2)}"${normalizeText(item?.internalReference) ? ` refDeclarant="${xmlEscape(item?.internalReference || "")}"` : ""} />`
     })
     .join("\n")
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<ROeTransportDraft>
-  <Document>
-    <Type>${xmlEscape(notice?.sourceType || "MANUAL")}</Type>
-    <Number>${xmlEscape(notice?.noticeNo || "")}</Number>
-    <Date>${xmlEscape(String(notice?.declaredStart || notice?.createdAt || "").slice(0, 10))}</Date>
-    <Status>${xmlEscape(notice?.status || "PREPARED")}</Status>
-    <SourceDocNo>${xmlEscape(notice?.sourceDocNo || "")}</SourceDocNo>
-  </Document>
-  <Transport>
-    <OperationType>${xmlEscape(notice?.operationType || "")}</OperationType>
-    <DeclaredStart>${xmlEscape(startText)}</DeclaredStart>
-    <VehicleNo>${xmlEscape(notice?.vehicleNo || "")}</VehicleNo>
-    <TrailerNo>${xmlEscape(notice?.trailerNo || "")}</TrailerNo>
-    <VehicleMaxMassKg>${decimal(notice?.vehicleMaxMassKg || 0, 2)}</VehicleMaxMassKg>
-    <OrganizerCountry>${xmlEscape(notice?.organizerCountry || "RO")}</OrganizerCountry>
-    <OrganizerCode>${xmlEscape(notice?.organizerCode || "")}</OrganizerCode>
-    <Organizer>${xmlEscape(notice?.organizerName || "")}</Organizer>
-    <Operator>${xmlEscape(notice?.operatorName || "")}</Operator>
-  </Transport>
-  <LoadingPlace>
-    <Scope>${xmlEscape(notice?.startScope || "")}</Scope>
-    <Address>${xmlEscape(loadingAddress)}</Address>
-  </LoadingPlace>
-  <UnloadingPlace>
-    <Scope>${xmlEscape(notice?.endScope || "")}</Scope>
-    <Address>${xmlEscape(unloadingAddress)}</Address>
-  </UnloadingPlace>
-  <Summary>
-    <Candidate>${notice?.candidate ? "true" : "false"}</Candidate>
-    <Required>${notice?.required ? "true" : "false"}</Required>
-    <TotalGrossWeightKg>${decimal(totalGrossWeightKg, 3)}</TotalGrossWeightKg>
-    <TotalValueRon>${decimal(totalValueRon, 2)}</TotalValueRon>
-  </Summary>
-  <Partner>
-    <Country>${xmlEscape(notice?.partnerCountry || "RO")}</Country>
-    <Cui>${xmlEscape(notice?.partnerCui || "")}</Cui>
-    <Name>${xmlEscape(notice?.partnerName || "")}</Name>
-    <InternalReference>${xmlEscape(notice?.internalRef || "")}</InternalReference>
-  </Partner>
-  <Lines>
+<eTransport codDeclarant="${xmlEscape(declarantCode)}" refDeclarant="${xmlEscape(declarantRef)}">
+  <notificare codTipOperatiune="${xmlEscape(operationTypeCode)}">
 ${linesXml}
-  </Lines>
-</ROeTransportDraft>`
+    <partenerComercial codTara="${xmlEscape(notice?.partnerCountry || "RO")}" cod="${xmlEscape(notice?.partnerCui || "")}" denumire="${xmlEscape(notice?.partnerName || "")}" />
+    <dateTransport nrVehicul="${xmlEscape(notice?.vehicleNo || "")}"${normalizeText(notice?.trailerNo) ? ` nrRemorca1="${xmlEscape(notice?.trailerNo || "")}"` : ""} codTaraOrgTransport="${xmlEscape(notice?.organizerCountry || "RO")}" codOrgTransport="${xmlEscape(notice?.organizerCode || "")}" denumireOrgTransport="${xmlEscape(notice?.organizerName || "")}" dataTransport="${xmlEscape(transportDate)}" />
+${buildPlaceXml("locStartTraseuRutier", notice?.startScope, notice?.startAddress, notice?.startBorderPoint)}
+${buildPlaceXml("locFinalTraseuRutier", notice?.endScope, notice?.endAddress, notice?.endBorderPoint)}
+    <documenteTransport tipDocument="${xmlEscape(documentTypeCode)}" numarDocument="${xmlEscape(notice?.transportDocNo || "")}" dataDocument="${xmlEscape(transportDocDate)}"${normalizeText(notice?.transportDocNotes) ? ` observatii="${xmlEscape(notice?.transportDocNotes || "")}"` : ""} />
+  </notificare>
+</eTransport>`
 }

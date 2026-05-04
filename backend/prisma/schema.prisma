@@ -1243,6 +1243,11 @@ model TransferDoc {
   eTransportEndAddress String?
   eTransportStartBorderPoint String?
   eTransportEndBorderPoint String?
+  eTransportTransportDocType String?
+  eTransportTransportDocNo String?
+  eTransportTransportDocDate DateTime?
+  eTransportTransportDocNotes String?
+  eTransportExtraInfo String?
   eTransportCandidate Boolean      @default(false)
   eTransportRequired  Boolean      @default(false)
   eTransportDeclaredStart DateTime?
@@ -1296,6 +1301,11 @@ model ETransportNotice {
   endAddress            String?
   startBorderPoint      String?
   endBorderPoint        String?
+  transportDocType      String?
+  transportDocNo        String?
+  transportDocDate      DateTime?
+  transportDocNotes     String?
+  extraInfo             String?
   candidate             Boolean  @default(false)
   required              Boolean  @default(false)
   declaredStart         DateTime?

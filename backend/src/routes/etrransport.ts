@@ -5,6 +5,16 @@ import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { requireRequestCompany, requireRequestCompanyId } from "../lib/companyScope"
 import { generateETransportNoticeXml, validateNoticeForETransport } from "../lib/etransport"
+import { readAnafHeader } from "../lib/anafHttp"
+import {
+  anafCheckEtransportStatus,
+  anafDownloadEtransportById,
+  anafListEtransportMessages,
+  anafUploadEtransportXml,
+  loadAnafCompanyContext,
+  logAnafRouteError,
+} from "../lib/anafClient"
+import { extractDownloadId, normalizeCompanyCui } from "../lib/incomingEfactura"
 
 const router = Router()
 router.use(requireAuth)
@@ -33,6 +43,39 @@ function makeNoticeNo() {
   const timePart = now.toISOString().slice(11, 19).replace(/:/g, "")
   const rand = Math.floor(Math.random() * 900 + 100)
   return `ETR-${datePart}-${timePart}-${rand}`
+}
+
+function classifyEtransportStatus(payload: any, rawText: string) {
+  const textBlob = `${JSON.stringify(payload || {})} ${rawText}`.toLowerCase()
+  if (/(nok|respins|rejected|eroare|error|invalid)/i.test(textBlob)) return "REJECTED"
+  if (/(ok|acceptat|accepted|validat|uit|disponibil|descarcare)/i.test(textBlob)) return "ACCEPTED"
+  return "SENT"
+}
+
+function explainEtransportAnafError(status: number, summary: string) {
+  const message = String(summary || "").trim()
+  if (status === 403 || /^forbidden$/i.test(message)) {
+    return "ANAF a refuzat cererea RO e-Transport. Verifica aplicatia OAuth si drepturile E-Transport active in ANAF."
+  }
+  return message || "ANAF a respins operatiunea RO e-Transport."
+}
+
+function extractUit(raw: string) {
+  const match = String(raw || "").match(/\bUIT\b[^A-Z0-9]*([A-Z0-9\-]{6,})/i)
+  return match?.[1] || ""
+}
+
+async function resolveNoticeDownloadId(company: any, notice: any) {
+  const cif = normalizeCompanyCui(company?.cui)
+  if (!cif || !company?.efacturaOauthAccessToken || !notice?.uploadIndex) return ""
+
+  const listResult = await anafListEtransportMessages(company, { days: 60, cif })
+  const matched = listResult.items.find((item: any) => {
+    const blob = JSON.stringify(item || {}).toLowerCase()
+    return blob.includes(String(notice.uploadIndex).toLowerCase()) || blob.includes(String(notice.noticeNo || "").toLowerCase())
+  })
+
+  return extractDownloadId(matched, JSON.stringify(matched || {})) || extractDownloadId(listResult.payload, listResult.rawText)
 }
 
 function serializeNotice(notice: any) {
@@ -125,6 +168,7 @@ router.post("/api/v1/etransport/notices", async (req: AuthedRequest, res) => {
       noticeNo: makeNoticeNo(),
       sourceType: "MANUAL",
       status: "DRAFT",
+      transportDocType: "ALTELE",
       operationType: "TTN",
       partnerCountry: "RO",
       startScope: "ADR",
@@ -188,6 +232,11 @@ router.post("/api/v1/etransport/notices/from-transfer/:transferId", async (req: 
       sourceType: "TRANSFER",
       sourceId: transfer.id,
       sourceDocNo: transfer.docNo,
+      transportDocType: "TRANSFER",
+      transportDocNo: transfer.docNo,
+      transportDocDate: transfer.docDate,
+      transportDocNotes: text(transfer.eTransportTransportDocNotes),
+      extraInfo: text(transfer.eTransportExtraInfo),
       operationType: text(transfer.eTransportOperationType) || "TTN",
       partnerCountry: text(transfer.eTransportPartnerCountry) || "RO",
       partnerCui: text(transfer.eTransportPartnerCui),
@@ -260,6 +309,13 @@ router.put("/api/v1/etransport/notices/:id", async (req: AuthedRequest, res) => 
     return tx.eTransportNotice.update({
       where: { id: current.id },
       data: {
+        sourceType: text(header.sourceType) || current.sourceType || "MANUAL",
+        sourceDocNo: text(header.sourceDocNo) || null,
+        transportDocType: text(header.transportDocType) || null,
+        transportDocNo: text(header.transportDocNo) || null,
+        transportDocDate: header.transportDocDate ? new Date(String(header.transportDocDate)) : null,
+        transportDocNotes: text(header.transportDocNotes) || null,
+        extraInfo: text(header.extraInfo) || null,
         operationType: text(header.operationType) || null,
         partnerCountry: text(header.partnerCountry || "RO") || "RO",
         partnerCui: text(header.partnerCui) || null,
@@ -285,6 +341,9 @@ router.put("/api/v1/etransport/notices/:id", async (req: AuthedRequest, res) => 
         totalValueRon: new Prisma.Decimal(summary.totalValueRon),
         status: current.status === "PREPARED" ? "DRAFT" : current.status,
         preparedXml: null,
+        uploadIndex: null,
+        downloadId: null,
+        uit: null,
         errorText: null,
         items: {
           create: items,
@@ -309,6 +368,10 @@ router.post("/api/v1/etransport/notices/:id/prepare", async (req: AuthedRequest,
   const tenantId = req.auth!.tenantId
   const companyId = await requireRequestCompanyId(req)
   const id = String(req.params.id)
+  const company = await prisma.company.findFirst({
+    where: { id: companyId, tenantId },
+    select: { id: true, name: true, cui: true },
+  })
   const notice = await prisma.eTransportNotice.findFirst({
     where: { id, tenantId, companyId },
     include: { items: { orderBy: { lineNo: "asc" } } },
@@ -327,7 +390,10 @@ router.post("/api/v1/etransport/notices/:id/prepare", async (req: AuthedRequest,
     })
   }
 
-  const xmlText = generateETransportNoticeXml(notice)
+  const xmlText = generateETransportNoticeXml({
+    ...notice,
+    company,
+  })
   const updated = await prisma.eTransportNotice.update({
     where: { id: notice.id },
     data: {
@@ -359,6 +425,263 @@ router.get("/api/v1/etransport/notices/:id/xml", async (req: AuthedRequest, res)
   res.setHeader("Content-Type", "application/xml; charset=utf-8")
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`)
   return res.send(notice.preparedXml)
+})
+
+router.post("/api/v1/etransport/notices/:id/send", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
+  const id = String(req.params.id)
+  const notice = await prisma.eTransportNotice.findFirst({
+    where: { id, tenantId, companyId },
+    include: { items: { orderBy: { lineNo: "asc" } } },
+  })
+
+  if (!notice) {
+    return res.status(404).json({ ok: false, error: "Notificarea nu a fost gasita." })
+  }
+
+  const company = await loadAnafCompanyContext(tenantId, req.auth?.activeCompanyId)
+  const cif = normalizeCompanyCui(company?.cui)
+  if (!cif) {
+    return res.status(400).json({ ok: false, error: "Firma nu are CUI valid pentru transmiterea la ANAF." })
+  }
+  if (!company?.efacturaOauthAccessToken) {
+    return res.status(400).json({ ok: false, error: "Nu exista token ANAF salvat pentru aceasta firma." })
+  }
+
+  const issues = validateNoticeForETransport(notice)
+  const blockingIssues = issues.filter((issue) => issue.severity === "error")
+  if (blockingIssues.length) {
+    return res.status(400).json({
+      ok: false,
+      error: blockingIssues[0]?.message || "Notificarea nu poate fi trimisa la ANAF.",
+      issues,
+    })
+  }
+
+  const xmlText =
+    notice.preparedXml ||
+    generateETransportNoticeXml({
+      ...notice,
+      company,
+    })
+
+  try {
+    const uploadResult = await anafUploadEtransportXml(company, xmlText)
+    const uploadIndex = uploadResult.uploadIndex
+    const summary = explainEtransportAnafError(uploadResult.response.status, uploadResult.summary)
+
+    if (!uploadResult.response.ok || !uploadIndex) {
+      await prisma.eTransportNotice.update({
+        where: { id: notice.id },
+        data: {
+          preparedXml: xmlText,
+          status: "ERROR",
+          errorText: summary || "ANAF a respins upload-ul RO e-Transport.",
+        },
+      })
+      return res.status(400).json({ ok: false, error: summary || "ANAF a respins upload-ul RO e-Transport." })
+    }
+
+    const updated = await prisma.eTransportNotice.update({
+      where: { id: notice.id },
+      data: {
+        preparedXml: xmlText,
+        status: "SENT",
+        uploadIndex,
+        errorText: summary || null,
+      },
+      include: {
+        items: {
+          include: {
+            product: {
+              include: { uom: true, vatRate: true },
+            },
+          },
+          orderBy: { lineNo: "asc" },
+        },
+      },
+    })
+
+    return res.json({
+      ok: true,
+      message: summary || "RO e-Transport a fost trimis la ANAF.",
+      uploadIndex,
+      item: serializeNotice(updated),
+    })
+  } catch (error: any) {
+    const message = error?.message || "Eroare la trimiterea RO e-Transport catre ANAF."
+    logAnafRouteError("NOTICE ETRANSPORT SEND ERROR", {
+      tenantId,
+      noticeId: id,
+      message,
+      stack: error?.stack || null,
+    })
+    await prisma.eTransportNotice.update({
+      where: { id: notice.id },
+      data: {
+        preparedXml: xmlText,
+        status: "ERROR",
+        errorText: message,
+      },
+    })
+    return res.status(500).json({ ok: false, error: message })
+  }
+})
+
+router.get("/api/v1/etransport/notices/:id/status", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
+  const id = String(req.params.id)
+  const notice = await prisma.eTransportNotice.findFirst({
+    where: { id, tenantId, companyId },
+    include: {
+      items: {
+        include: {
+          product: { include: { uom: true, vatRate: true } },
+        },
+        orderBy: { lineNo: "asc" },
+      },
+    },
+  })
+
+  if (!notice) {
+    return res.status(404).json({ ok: false, error: "Notificarea nu a fost gasita." })
+  }
+
+  if (!notice.uploadIndex) {
+    return res.status(400).json({ ok: false, error: "Notificarea nu a fost trimisa inca la ANAF." })
+  }
+
+  const company = await loadAnafCompanyContext(tenantId, req.auth?.activeCompanyId)
+  if (!company?.efacturaOauthAccessToken) {
+    return res.status(400).json({ ok: false, error: "Nu exista token ANAF salvat pentru aceasta firma." })
+  }
+
+  try {
+    const statusResult = await anafCheckEtransportStatus(company, notice.uploadIndex)
+    const summary = statusResult.summary
+    const nextStatus = classifyEtransportStatus(statusResult.payload, statusResult.rawText)
+    const downloadId = statusResult.downloadId || notice.downloadId || null
+    const uit = extractUit(statusResult.rawText) || notice.uit || null
+
+    if (!statusResult.response.ok) {
+      return res.status(400).json({ ok: false, error: summary || "Nu am putut verifica starea la ANAF." })
+    }
+
+    const updated = await prisma.eTransportNotice.update({
+      where: { id: notice.id },
+      data: {
+        status: nextStatus,
+        downloadId,
+        uit,
+        errorText: summary || null,
+      },
+      include: {
+        items: {
+          include: {
+            product: { include: { uom: true, vatRate: true } },
+          },
+          orderBy: { lineNo: "asc" },
+        },
+      },
+    })
+
+    return res.json({
+      ok: true,
+      status: nextStatus,
+      uit,
+      downloadId,
+      message: summary || "Starea RO e-Transport a fost verificata la ANAF.",
+      item: serializeNotice(updated),
+    })
+  } catch (error: any) {
+    const message = error?.message || "Eroare la verificarea starii in ANAF."
+    logAnafRouteError("NOTICE ETRANSPORT STATUS ERROR", {
+      tenantId,
+      noticeId: id,
+      uploadIndex: notice.uploadIndex || null,
+      message,
+      stack: error?.stack || null,
+    })
+    return res.status(500).json({ ok: false, error: message })
+  }
+})
+
+router.get("/api/v1/etransport/notices/:id/receipt", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
+  const id = String(req.params.id)
+  const notice = await prisma.eTransportNotice.findFirst({
+    where: { id, tenantId, companyId },
+    select: {
+      id: true,
+      noticeNo: true,
+      uploadIndex: true,
+      downloadId: true,
+      uit: true,
+    },
+  })
+
+  if (!notice) {
+    return res.status(404).json({ ok: false, error: "Notificarea nu a fost gasita." })
+  }
+
+  const company = await loadAnafCompanyContext(tenantId, req.auth?.activeCompanyId)
+  if (!company?.efacturaOauthAccessToken) {
+    return res.status(400).json({ ok: false, error: "Nu exista token ANAF salvat pentru aceasta firma." })
+  }
+
+  let downloadId = notice.downloadId || ""
+  if (!downloadId) {
+    downloadId = await resolveNoticeDownloadId(company, notice)
+  }
+
+  if (!downloadId) {
+    return res.status(400).json({ ok: false, error: "Raspunsul ANAF nu este inca disponibil pentru acest e-Transport." })
+  }
+
+  try {
+    const receiptResult = await anafDownloadEtransportById(company, downloadId)
+    const summary = receiptResult.response.ok ? "Raspunsul ANAF a fost descarcat." : receiptResult.summary
+    const uit = extractUit(receiptResult.rawText) || notice.uit || null
+
+    if (!receiptResult.response.ok) {
+      return res.status(400).json({ ok: false, error: summary || "Nu am putut descarca raspunsul ANAF." })
+    }
+
+    await prisma.eTransportNotice.update({
+      where: { id: notice.id },
+      data: {
+        downloadId,
+        uit,
+        status: "ACCEPTED",
+        errorText: null,
+      },
+    })
+
+    const fileNameBase = safeFilePart(`Raspuns_RO_eTransport_${notice.noticeNo}`) || `Raspuns_RO_eTransport_${notice.id}`
+    const contentType = readAnafHeader(receiptResult.response.headers, "content-type") || "application/octet-stream"
+    const extension =
+      contentType.includes("zip") ? "zip" :
+      contentType.includes("pdf") ? "pdf" :
+      contentType.includes("xml") ? "xml" :
+      "bin"
+
+    res.setHeader("Content-Type", contentType)
+    res.setHeader("Content-Disposition", `attachment; filename="${fileNameBase}.${extension}"`)
+    return res.send(receiptResult.response.buffer)
+  } catch (error: any) {
+    const message = error?.message || "Eroare la descarcarea raspunsului ANAF."
+    logAnafRouteError("NOTICE ETRANSPORT RECEIPT ERROR", {
+      tenantId,
+      noticeId: id,
+      downloadId: notice.downloadId || null,
+      message,
+      stack: error?.stack || null,
+    })
+    return res.status(500).json({ ok: false, error: message })
+  }
 })
 
 export default router
