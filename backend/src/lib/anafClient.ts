@@ -42,10 +42,75 @@ export async function loadAnafCompanyContext(
   service: "efactura" | "etrtransport" = "efactura"
 ) {
   const company = await resolveTenantCompany(prisma, tenantId, activeCompanyId, {
-    select: COMPANY_ANAF_SELECT,
+    select: {
+      id: true,
+      ...COMPANY_ANAF_SELECT,
+    },
   })
 
   if (!company) return company
+
+  const primaryCompany =
+    activeCompanyId && company?.id !== activeCompanyId
+      ? await resolveTenantCompany(prisma, tenantId, null, {
+          select: {
+            id: true,
+            ...COMPANY_ANAF_SELECT,
+          },
+        })
+      : null
+
+  const fallbackCompany = primaryCompany && primaryCompany.id !== company.id ? primaryCompany : null
+
+  const mergedCompany = fallbackCompany
+    ? {
+        ...fallbackCompany,
+        ...company,
+        efacturaOauthClientId: company?.efacturaOauthClientId || fallbackCompany?.efacturaOauthClientId || null,
+        efacturaOauthClientSecret:
+          company?.efacturaOauthClientSecret || fallbackCompany?.efacturaOauthClientSecret || null,
+        efacturaOauthRedirectUri:
+          company?.efacturaOauthRedirectUri || fallbackCompany?.efacturaOauthRedirectUri || null,
+        efacturaOauthAccessToken:
+          company?.efacturaOauthAccessToken || fallbackCompany?.efacturaOauthAccessToken || null,
+        efacturaOauthRefreshToken:
+          company?.efacturaOauthRefreshToken || fallbackCompany?.efacturaOauthRefreshToken || null,
+        efacturaOauthAccessTokenExpiresAt:
+          company?.efacturaOauthAccessTokenExpiresAt || fallbackCompany?.efacturaOauthAccessTokenExpiresAt || null,
+        efacturaOauthRefreshTokenExpiresAt:
+          company?.efacturaOauthRefreshTokenExpiresAt || fallbackCompany?.efacturaOauthRefreshTokenExpiresAt || null,
+        efacturaOauthConnectedAt:
+          company?.efacturaOauthConnectedAt || fallbackCompany?.efacturaOauthConnectedAt || null,
+        efacturaOauthLastError:
+          company?.efacturaOauthLastError || fallbackCompany?.efacturaOauthLastError || null,
+        etransportOauthClientId:
+          company?.etrtransportOauthClientId || fallbackCompany?.etrtransportOauthClientId || null,
+        etransportOauthClientSecret:
+          company?.etrtransportOauthClientSecret || fallbackCompany?.etrtransportOauthClientSecret || null,
+        etransportOauthRedirectUri:
+          company?.etrtransportOauthRedirectUri || fallbackCompany?.etrtransportOauthRedirectUri || null,
+        etransportOauthAccessToken:
+          company?.etrtransportOauthAccessToken || fallbackCompany?.etrtransportOauthAccessToken || null,
+        etransportOauthRefreshToken:
+          company?.etrtransportOauthRefreshToken || fallbackCompany?.etrtransportOauthRefreshToken || null,
+        etransportOauthAccessTokenExpiresAt:
+          company?.etrtransportOauthAccessTokenExpiresAt ||
+          fallbackCompany?.etrtransportOauthAccessTokenExpiresAt ||
+          null,
+        etransportOauthRefreshTokenExpiresAt:
+          company?.etrtransportOauthRefreshTokenExpiresAt ||
+          fallbackCompany?.etrtransportOauthRefreshTokenExpiresAt ||
+          null,
+        etransportOauthConnectedAt:
+          company?.etrtransportOauthConnectedAt || fallbackCompany?.etrtransportOauthConnectedAt || null,
+        etransportOauthLastError:
+          company?.etrtransportOauthLastError || fallbackCompany?.etrtransportOauthLastError || null,
+        efacturaCertSerial: company?.efacturaCertSerial || fallbackCompany?.efacturaCertSerial || null,
+        efacturaCertFilename: company?.efacturaCertFilename || fallbackCompany?.efacturaCertFilename || null,
+        efacturaCertPasswordEnc:
+          company?.efacturaCertPasswordEnc || fallbackCompany?.efacturaCertPasswordEnc || null,
+      }
+    : company
 
   const platform = await prisma.platformConfig.findUnique({
     where: { key: "global" },
@@ -54,52 +119,52 @@ export async function loadAnafCompanyContext(
 
   const usesOwnOauthConfig = Boolean(
     service === "etrtransport"
-      ? company?.etrtransportOauthClientId &&
-        company?.etrtransportOauthClientSecret &&
-        company?.etrtransportOauthRedirectUri
-      : company?.efacturaOauthClientId &&
-        company?.efacturaOauthClientSecret &&
-        company?.efacturaOauthRedirectUri
+      ? mergedCompany?.etrtransportOauthClientId &&
+        mergedCompany?.etrtransportOauthClientSecret &&
+        mergedCompany?.etrtransportOauthRedirectUri
+      : mergedCompany?.efacturaOauthClientId &&
+        mergedCompany?.efacturaOauthClientSecret &&
+        mergedCompany?.efacturaOauthRedirectUri
   )
 
   const ownClientId =
-    service === "etrtransport" ? company?.etrtransportOauthClientId : company?.efacturaOauthClientId
+    service === "etrtransport" ? mergedCompany?.etrtransportOauthClientId : mergedCompany?.efacturaOauthClientId
   const ownClientSecret =
-    service === "etrtransport" ? company?.etrtransportOauthClientSecret : company?.efacturaOauthClientSecret
+    service === "etrtransport" ? mergedCompany?.etrtransportOauthClientSecret : mergedCompany?.efacturaOauthClientSecret
   const ownRedirectUri =
-    service === "etrtransport" ? company?.etrtransportOauthRedirectUri : company?.efacturaOauthRedirectUri
+    service === "etrtransport" ? mergedCompany?.etrtransportOauthRedirectUri : mergedCompany?.efacturaOauthRedirectUri
   const ownAccessToken =
     service === "etrtransport"
-      ? company?.etrtransportOauthAccessToken || company?.efacturaOauthAccessToken
-      : company?.efacturaOauthAccessToken
+      ? mergedCompany?.etrtransportOauthAccessToken || mergedCompany?.efacturaOauthAccessToken
+      : mergedCompany?.efacturaOauthAccessToken
   const ownRefreshToken =
     service === "etrtransport"
-      ? company?.etrtransportOauthRefreshToken || company?.efacturaOauthRefreshToken
-      : company?.efacturaOauthRefreshToken
+      ? mergedCompany?.etrtransportOauthRefreshToken || mergedCompany?.efacturaOauthRefreshToken
+      : mergedCompany?.efacturaOauthRefreshToken
   const ownAccessTokenExpiresAt =
     service === "etrtransport"
-      ? company?.etrtransportOauthAccessTokenExpiresAt || company?.efacturaOauthAccessTokenExpiresAt
-      : company?.efacturaOauthAccessTokenExpiresAt
+      ? mergedCompany?.etrtransportOauthAccessTokenExpiresAt || mergedCompany?.efacturaOauthAccessTokenExpiresAt
+      : mergedCompany?.efacturaOauthAccessTokenExpiresAt
   const ownRefreshTokenExpiresAt =
     service === "etrtransport"
-      ? company?.etrtransportOauthRefreshTokenExpiresAt || company?.efacturaOauthRefreshTokenExpiresAt
-      : company?.efacturaOauthRefreshTokenExpiresAt
+      ? mergedCompany?.etrtransportOauthRefreshTokenExpiresAt || mergedCompany?.efacturaOauthRefreshTokenExpiresAt
+      : mergedCompany?.efacturaOauthRefreshTokenExpiresAt
   const ownConnectedAt =
     service === "etrtransport"
-      ? company?.etrtransportOauthConnectedAt || company?.efacturaOauthConnectedAt
-      : company?.efacturaOauthConnectedAt
+      ? mergedCompany?.etrtransportOauthConnectedAt || mergedCompany?.efacturaOauthConnectedAt
+      : mergedCompany?.efacturaOauthConnectedAt
   const ownLastError =
     service === "etrtransport"
-      ? company?.etrtransportOauthLastError || company?.efacturaOauthLastError
-      : company?.efacturaOauthLastError
+      ? mergedCompany?.etrtransportOauthLastError || mergedCompany?.efacturaOauthLastError
+      : mergedCompany?.efacturaOauthLastError
 
   return {
-    ...company,
+    ...mergedCompany,
     anafService: service,
     efacturaUsesPlatformConfig: !usesOwnOauthConfig,
     efacturaEnvironment: usesOwnOauthConfig
-      ? String(company?.efacturaEnvironment || "test").trim() || "test"
-      : String(platform?.efacturaEnvironment || company?.efacturaEnvironment || "test").trim() || "test",
+      ? String(mergedCompany?.efacturaEnvironment || "test").trim() || "test"
+      : String(platform?.efacturaEnvironment || mergedCompany?.efacturaEnvironment || "test").trim() || "test",
     anafOauthClientId: ownClientId || (!usesOwnOauthConfig ? platform?.efacturaOauthClientId || "" : ""),
     anafOauthClientSecret: ownClientSecret || (!usesOwnOauthConfig ? platform?.efacturaOauthClientSecret || "" : ""),
     anafOauthRedirectUri: ownRedirectUri || (!usesOwnOauthConfig ? platform?.efacturaOauthRedirectUri || "" : ""),
