@@ -36,28 +36,6 @@ function shouldRetryWithCurl(error: unknown) {
   return /EPROTO|handshake failure|tls alert/i.test(message)
 }
 
-function toFriendlyAnafHttpError(error: unknown) {
-  const message = String((error as any)?.message || "")
-  if (/EPROTO|handshake failure|tls alert|SSL routines/i.test(message)) {
-    return new Error("Conexiunea securizata cu ANAF a esuat in timpul handshake-ului SSL/TLS.")
-  }
-  return error instanceof Error ? error : new Error(message || "Eroare de comunicare cu ANAF.")
-}
-
-function withLegacyTlsProfile(args: string[]) {
-  return [
-    ...args,
-    "-4",
-    "--http1.1",
-    "--tlsv1.2",
-    "--tls-max",
-    "1.2",
-    "--ciphers",
-    "DEFAULT@SECLEVEL=1",
-    "--no-alpn",
-  ]
-}
-
 function parseCurlHeaders(rawText: string) {
   const blocks = rawText
     .split(/\r?\n\r?\n/)
@@ -102,10 +80,18 @@ async function anafCurlRequest(url: string, options: AnafRequestOptions = {}): P
   const requestBodyPath = path.join(tempDir, "request.bin")
 
   try {
-    const baseArgs = [
+    const args = [
       "--silent",
       "--show-error",
       "--location",
+      "-4",
+      "--http1.1",
+      "--tlsv1.2",
+      "--tls-max",
+      "1.2",
+      "--ciphers",
+      "DEFAULT@SECLEVEL=1",
+      "--no-alpn",
       "--max-time",
       String(Math.max(1, Math.ceil(timeoutMs / 1000))),
       "--dump-header",
@@ -115,43 +101,26 @@ async function anafCurlRequest(url: string, options: AnafRequestOptions = {}): P
       "-X",
       options.method || "GET",
     ]
-
-    const finalizeArgs = (inputArgs: string[]) => {
-      const args = [...inputArgs]
-
-      for (const [name, value] of Object.entries(options.headers || {})) {
-        args.push("-H", `${name}: ${value}`)
-      }
-
-      return args
+    for (const [name, value] of Object.entries(options.headers || {})) {
+      args.push("-H", `${name}: ${value}`)
     }
 
     if (options.pfx) {
       const certPath = path.join(tempDir, "client-cert.p12")
       await fs.writeFile(certPath, options.pfx)
-      baseArgs.push("--cert-type", "P12")
-      baseArgs.push("--cert", certPath)
-      baseArgs.push("--pass", `pass:${options.passphrase || ""}`)
+      args.push("--cert-type", "P12")
+      args.push("--cert", certPath)
+      args.push("--pass", `pass:${options.passphrase || ""}`)
     }
 
     if (options.body) {
       const bodyBuffer = Buffer.isBuffer(options.body) ? options.body : Buffer.from(options.body)
       await fs.writeFile(requestBodyPath, bodyBuffer)
-      baseArgs.push("--data-binary", `@${requestBodyPath}`)
+      args.push("--data-binary", `@${requestBodyPath}`)
     }
 
-    const modernArgs = finalizeArgs([...baseArgs, url])
-
-    try {
-      await execCurl(modernArgs)
-    } catch (firstError) {
-      const legacyArgs = finalizeArgs(withLegacyTlsProfile([...baseArgs, url]))
-      try {
-        await execCurl(legacyArgs)
-      } catch (secondError) {
-        throw toFriendlyAnafHttpError(secondError || firstError)
-      }
-    }
+    args.push(url)
+    await execCurl(args)
 
     const [rawHeaders, bodyBuffer] = await Promise.all([
       fs.readFile(headersPath, "utf8"),
@@ -188,6 +157,8 @@ function anafNodeRequest(url: string, options: AnafRequestOptions = {}) {
         family: 4,
         servername: parsed.hostname,
         minVersion: "TLSv1.2",
+        maxVersion: "TLSv1.2",
+        ciphers: "DEFAULT@SECLEVEL=1",
         secureOptions: crypto.constants.SSL_OP_LEGACY_SERVER_CONNECT,
         pfx: options.pfx,
         passphrase: options.passphrase,
