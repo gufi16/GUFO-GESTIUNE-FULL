@@ -388,7 +388,7 @@ export async function anafUploadEtransportXml(company: any, xmlText: string) {
   const tokenDiagnostics = getAnafTokenDiagnostics(ready.accessToken)
   const { response, url, fallbackIndex } = await anafEtransportRequest(
     company,
-    (baseUrl) => `${baseUrl}/upload/ETRANSPORT/${encodeURIComponent(ready.cif)}`,
+    (baseUrl) => `${baseUrl}/upload/ETRANSP/${encodeURIComponent(ready.cif)}`,
     (_url, accessToken) => ({
       method: "POST",
       headers: buildAnafAuthHeaders(accessToken, {

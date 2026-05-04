@@ -57,9 +57,14 @@ type ETransportAdrForm = {
   country: string
   county: string
   city: string
-  address: string
+  street: string
+  streetNo: string
+  building: string
+  staircase: string
+  floor: string
+  apartment: string
   postalCode: string
-  extra: string
+  details: string
 }
 
 type ActiveCompany = {
@@ -202,9 +207,14 @@ function createEmptyAdrForm(): ETransportAdrForm {
     country: "Romania",
     county: "",
     city: "",
-    address: "",
+    street: "",
+    streetNo: "",
+    building: "",
+    staircase: "",
+    floor: "",
+    apartment: "",
     postalCode: "",
-    extra: "",
+    details: "",
   }
 }
 
@@ -212,16 +222,21 @@ function buildAdrFormFromLocation(location?: LocationOption | null): ETransportA
   if (!location) return createEmptyAdrForm()
   return {
     sourceLocationId: location.id,
-    companyCui: "",
-    companyName: location.name || "",
-    country: location.country || "Romania",
-    county: location.county || "",
-    city: location.city || "",
-    address: location.address || "",
-    postalCode: location.postalCode || "",
-    extra: "",
+      companyCui: "",
+      companyName: location.name || "",
+      country: location.country || "Romania",
+      county: location.county || "",
+      city: location.city || "",
+      street: location.address || "",
+      streetNo: "",
+      building: "",
+      staircase: "",
+      floor: "",
+      apartment: "",
+      postalCode: location.postalCode || "",
+      details: "",
+    }
   }
-}
 
 function normalizeCountryLabel(value: string) {
   const text = String(value || "").trim()
@@ -241,9 +256,16 @@ function serializeAdrForm(form: ETransportAdrForm) {
     country: form.country || "",
     county: form.county || "",
     city: form.city || "",
-    address: form.address || "",
+    street: form.street || "",
+    streetNo: form.streetNo || "",
+    building: form.building || "",
+    staircase: form.staircase || "",
+    floor: form.floor || "",
+    apartment: form.apartment || "",
+    address: form.street || "",
     postalCode: form.postalCode || "",
-    extra: form.extra || "",
+    details: form.details || "",
+    extra: form.details || "",
   })}`
 }
 
@@ -252,43 +274,53 @@ function parseAdrForm(value: string, fallbackLocation?: LocationOption | null) {
   if (text.startsWith("ADRJSON:")) {
     try {
       const parsed = JSON.parse(text.slice("ADRJSON:".length))
-      return {
-        sourceLocationId: String(parsed?.sourceLocationId || ""),
-        companyCui: String(parsed?.companyCui || ""),
-        companyName: String(parsed?.companyName || ""),
-        country: normalizeCountryLabel(String(parsed?.country || "")),
-        county: String(parsed?.county || ""),
-        city: String(parsed?.city || ""),
-        address: String(parsed?.address || ""),
-        postalCode: String(parsed?.postalCode || ""),
-        extra: String(parsed?.extra || ""),
-      } satisfies ETransportAdrForm
-    } catch {
-      return buildAdrFormFromLocation(fallbackLocation)
+        return {
+          sourceLocationId: String(parsed?.sourceLocationId || ""),
+          companyCui: String(parsed?.companyCui || ""),
+          companyName: String(parsed?.companyName || ""),
+          country: normalizeCountryLabel(String(parsed?.country || "")),
+          county: String(parsed?.county || ""),
+          city: String(parsed?.city || ""),
+          street: String(parsed?.street || parsed?.address || ""),
+          streetNo: String(parsed?.streetNo || ""),
+          building: String(parsed?.building || ""),
+          staircase: String(parsed?.staircase || ""),
+          floor: String(parsed?.floor || ""),
+          apartment: String(parsed?.apartment || ""),
+          postalCode: String(parsed?.postalCode || ""),
+          details: String(parsed?.details || parsed?.extra || ""),
+        } satisfies ETransportAdrForm
+      } catch {
+        return buildAdrFormFromLocation(fallbackLocation)
+      }
     }
-  }
 
   if (text) {
-    return {
-      ...buildAdrFormFromLocation(fallbackLocation),
-      address: text,
-      sourceLocationId: "",
+      return {
+        ...buildAdrFormFromLocation(fallbackLocation),
+        street: text,
+        sourceLocationId: "",
+      }
     }
-  }
 
   return buildAdrFormFromLocation(fallbackLocation)
 }
 
 function adrFormHasContent(form: ETransportAdrForm) {
   return Boolean(
-    form.companyName.trim() ||
-      form.address.trim() ||
-      form.city.trim() ||
-      form.county.trim() ||
-      form.postalCode.trim() ||
-      form.extra.trim()
-  )
-}
+      form.companyName.trim() ||
+        form.street.trim() ||
+        form.streetNo.trim() ||
+        form.building.trim() ||
+        form.staircase.trim() ||
+        form.floor.trim() ||
+        form.apartment.trim() ||
+        form.city.trim() ||
+        form.county.trim() ||
+        form.postalCode.trim() ||
+        form.details.trim()
+    )
+  }
 
 function parsePositive(value: any) {
   const normalized = String(value ?? "").replace(",", ".").trim()
@@ -937,12 +969,12 @@ export default function TransferPage() {
         companyCui: normalizedCui,
         companyName: String(company.name || "").trim() || prev.companyName,
         country: normalizeCountryLabel(String(company.country || "")) || prev.country,
-        county: String(company.county || "").trim() || prev.county,
-        city: String(company.city || "").trim() || prev.city,
-        address: String(company.address || "").trim() || prev.address,
-        postalCode: String(company.postalCode || "").trim() || prev.postalCode,
-        sourceLocationId: "",
-      }))
+          county: String(company.county || "").trim() || prev.county,
+          city: String(company.city || "").trim() || prev.city,
+          street: String(company.address || "").trim() || prev.street,
+          postalCode: String(company.postalCode || "").trim() || prev.postalCode,
+          sourceLocationId: "",
+        }))
       setMessage(`Adresa pentru locul de ${isStart ? "start" : "final"} a fost completata dupa CUI.`)
     } catch (e: any) {
       setError(e?.message || "Nu am putut cauta firma dupa CUI.")
@@ -1719,7 +1751,14 @@ export default function TransferPage() {
                                 placeholder="Denumire firma / punct de lucru"
                               />
                             </div>
-                            <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-[150px_minmax(0,1fr)_110px]">
+                            <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-[140px_minmax(0,1fr)_110px]">
+                              <input
+                                value={startAdr.country}
+                                onChange={(e) => setStartAdr((prev) => ({ ...prev, country: e.target.value, sourceLocationId: "" }))}
+                                className={documentInputClass}
+                                disabled={eTransportFieldDisabled}
+                                placeholder="Tara"
+                              />
                               <input
                                 value={startAdr.county}
                                 onChange={(e) => setStartAdr((prev) => ({ ...prev, county: e.target.value, sourceLocationId: "" }))}
@@ -1742,13 +1781,57 @@ export default function TransferPage() {
                                 placeholder="Cod post."
                               />
                             </div>
-                            <div className="grid grid-cols-1 gap-1.5">
+                            <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-[minmax(0,1fr)_110px_90px_90px_90px_90px]">
                               <input
-                                value={startAdr.address}
-                                onChange={(e) => setStartAdr((prev) => ({ ...prev, address: e.target.value, sourceLocationId: "" }))}
+                                value={startAdr.street}
+                                onChange={(e) => setStartAdr((prev) => ({ ...prev, street: e.target.value, sourceLocationId: "" }))}
                                 className={documentInputClass}
                                 disabled={eTransportFieldDisabled}
-                                placeholder="Strada, numar"
+                                placeholder="Strada"
+                              />
+                              <input
+                                value={startAdr.streetNo}
+                                onChange={(e) => setStartAdr((prev) => ({ ...prev, streetNo: e.target.value, sourceLocationId: "" }))}
+                                className={documentInputClass}
+                                disabled={eTransportFieldDisabled}
+                                placeholder="Numar"
+                              />
+                              <input
+                                value={startAdr.building}
+                                onChange={(e) => setStartAdr((prev) => ({ ...prev, building: e.target.value, sourceLocationId: "" }))}
+                                className={documentInputClass}
+                                disabled={eTransportFieldDisabled}
+                                placeholder="Bl."
+                              />
+                              <input
+                                value={startAdr.staircase}
+                                onChange={(e) => setStartAdr((prev) => ({ ...prev, staircase: e.target.value, sourceLocationId: "" }))}
+                                className={documentInputClass}
+                                disabled={eTransportFieldDisabled}
+                                placeholder="Sc."
+                              />
+                              <input
+                                value={startAdr.floor}
+                                onChange={(e) => setStartAdr((prev) => ({ ...prev, floor: e.target.value, sourceLocationId: "" }))}
+                                className={documentInputClass}
+                                disabled={eTransportFieldDisabled}
+                                placeholder="Et."
+                              />
+                              <input
+                                value={startAdr.apartment}
+                                onChange={(e) => setStartAdr((prev) => ({ ...prev, apartment: e.target.value, sourceLocationId: "" }))}
+                                className={documentInputClass}
+                                disabled={eTransportFieldDisabled}
+                                placeholder="Ap."
+                              />
+                            </div>
+                            <div className="grid grid-cols-1 gap-1.5">
+                              <input
+                                value={startAdr.details}
+                                onChange={(e) => setStartAdr((prev) => ({ ...prev, details: e.target.value, sourceLocationId: "" }))}
+                                className={documentInputClass}
+                                disabled={eTransportFieldDisabled}
+                                placeholder="Detalii suplimentare"
                               />
                             </div>
                           </div>
@@ -1831,7 +1914,14 @@ export default function TransferPage() {
                                 placeholder="Denumire firma / punct de lucru"
                               />
                             </div>
-                            <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-[150px_minmax(0,1fr)_110px]">
+                            <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-[140px_minmax(0,1fr)_110px]">
+                              <input
+                                value={endAdr.country}
+                                onChange={(e) => setEndAdr((prev) => ({ ...prev, country: e.target.value, sourceLocationId: "" }))}
+                                className={documentInputClass}
+                                disabled={eTransportFieldDisabled}
+                                placeholder="Tara"
+                              />
                               <input
                                 value={endAdr.county}
                                 onChange={(e) => setEndAdr((prev) => ({ ...prev, county: e.target.value, sourceLocationId: "" }))}
@@ -1854,13 +1944,57 @@ export default function TransferPage() {
                                 placeholder="Cod post."
                               />
                             </div>
-                            <div className="grid grid-cols-1 gap-1.5">
+                            <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-[minmax(0,1fr)_110px_90px_90px_90px_90px]">
                               <input
-                                value={endAdr.address}
-                                onChange={(e) => setEndAdr((prev) => ({ ...prev, address: e.target.value, sourceLocationId: "" }))}
+                                value={endAdr.street}
+                                onChange={(e) => setEndAdr((prev) => ({ ...prev, street: e.target.value, sourceLocationId: "" }))}
                                 className={documentInputClass}
                                 disabled={eTransportFieldDisabled}
-                                placeholder="Strada, numar"
+                                placeholder="Strada"
+                              />
+                              <input
+                                value={endAdr.streetNo}
+                                onChange={(e) => setEndAdr((prev) => ({ ...prev, streetNo: e.target.value, sourceLocationId: "" }))}
+                                className={documentInputClass}
+                                disabled={eTransportFieldDisabled}
+                                placeholder="Numar"
+                              />
+                              <input
+                                value={endAdr.building}
+                                onChange={(e) => setEndAdr((prev) => ({ ...prev, building: e.target.value, sourceLocationId: "" }))}
+                                className={documentInputClass}
+                                disabled={eTransportFieldDisabled}
+                                placeholder="Bl."
+                              />
+                              <input
+                                value={endAdr.staircase}
+                                onChange={(e) => setEndAdr((prev) => ({ ...prev, staircase: e.target.value, sourceLocationId: "" }))}
+                                className={documentInputClass}
+                                disabled={eTransportFieldDisabled}
+                                placeholder="Sc."
+                              />
+                              <input
+                                value={endAdr.floor}
+                                onChange={(e) => setEndAdr((prev) => ({ ...prev, floor: e.target.value, sourceLocationId: "" }))}
+                                className={documentInputClass}
+                                disabled={eTransportFieldDisabled}
+                                placeholder="Et."
+                              />
+                              <input
+                                value={endAdr.apartment}
+                                onChange={(e) => setEndAdr((prev) => ({ ...prev, apartment: e.target.value, sourceLocationId: "" }))}
+                                className={documentInputClass}
+                                disabled={eTransportFieldDisabled}
+                                placeholder="Ap."
+                              />
+                            </div>
+                            <div className="grid grid-cols-1 gap-1.5">
+                              <input
+                                value={endAdr.details}
+                                onChange={(e) => setEndAdr((prev) => ({ ...prev, details: e.target.value, sourceLocationId: "" }))}
+                                className={documentInputClass}
+                                disabled={eTransportFieldDisabled}
+                                placeholder="Detalii suplimentare"
                               />
                             </div>
                           </div>

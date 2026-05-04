@@ -42,14 +42,31 @@ function buildStructuredAddressText(value: unknown) {
   const parsed = decodeStructuredAddress(value)
   if (!parsed) return normalizeText(value)
 
+  const streetLine = [
+    normalizeText(parsed.street || parsed.address),
+    normalizeText(parsed.streetNo),
+  ]
+    .filter(Boolean)
+    .join(" ")
+
+  const buildingLine = [
+    normalizeText(parsed.building ? `Bl. ${parsed.building}` : ""),
+    normalizeText(parsed.staircase ? `Sc. ${parsed.staircase}` : ""),
+    normalizeText(parsed.floor ? `Et. ${parsed.floor}` : ""),
+    normalizeText(parsed.apartment ? `Ap. ${parsed.apartment}` : ""),
+  ]
+    .filter(Boolean)
+    .join(", ")
+
   return [
     normalizeText(parsed.companyName),
-    normalizeText(parsed.address),
+    streetLine,
+    buildingLine,
     normalizeText(parsed.city),
     normalizeText(parsed.county),
     normalizeText(parsed.postalCode),
     normalizeText(parsed.country || "Romania"),
-    normalizeText(parsed.extra),
+    normalizeText(parsed.details || parsed.extra),
   ]
     .filter(Boolean)
     .join(", ")
