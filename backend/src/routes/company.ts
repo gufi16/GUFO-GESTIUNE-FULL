@@ -378,8 +378,19 @@ export async function handleAnafOauthCallback(req, res) {
   }
 
   const oauthService = state?.service === "etransport" ? "etransport" : "efactura"
-  const oauthConfig = await getEffectiveAnafOauthConfig(state.tenantId, null, oauthService)
+  const [oauthConfig, efacturaConfig, etransportConfig] = await Promise.all([
+    getEffectiveAnafOauthConfig(state.tenantId, null, oauthService),
+    getEffectiveAnafOauthConfig(state.tenantId, null, "efactura"),
+    getEffectiveAnafOauthConfig(state.tenantId, null, "etransport"),
+  ])
   const moduleCheck = await requireTenantModule(state.tenantId, "efactura")
+  const sharesSameOauthApp = Boolean(
+    efacturaConfig?.clientId &&
+      etransportConfig?.clientId &&
+      efacturaConfig.clientId === etransportConfig.clientId &&
+      efacturaConfig.clientSecret === etransportConfig.clientSecret &&
+      efacturaConfig.redirectUri === etransportConfig.redirectUri
+  )
 
   if (!moduleCheck.enabled) {
     return res.status(403).send("Modulul e-Factura nu este activ pe licenta acestui client.")
@@ -395,11 +406,15 @@ export async function handleAnafOauthCallback(req, res) {
         ? "Autorizarea ANAF a fost anulata sau refuzata."
         : errorDescription || error || "Autorizarea ANAF nu a putut fi finalizata."
 
-      await updateOrCreateTenantCompany(prisma, state.tenantId, null, oauthService === "etransport" ? {
-        etransportOauthLastError: nextError,
-      } : {
-        efacturaOauthLastError: nextError,
-      })
+      await updateOrCreateTenantCompany(prisma, state.tenantId, null, oauthService === "etransport"
+        ? {
+            etransportOauthLastError: nextError,
+            ...(sharesSameOauthApp ? { efacturaOauthLastError: nextError } : {}),
+          }
+        : {
+            efacturaOauthLastError: nextError,
+            ...(sharesSameOauthApp ? { etransportOauthLastError: nextError } : {}),
+          })
 
     return res.redirect(
       `${state.returnTo}${state.returnTo.includes("?") ? "&" : "?"}oauth=denied`,
@@ -431,38 +446,76 @@ export async function handleAnafOauthCallback(req, res) {
     const payload = await tokenRes.json().catch(() => ({}))
 
     if (!tokenRes.ok || !payload?.access_token) {
-      await updateOrCreateTenantCompany(prisma, state.tenantId, null, oauthService === "etransport" ? {
-        etransportOauthLastError: String(payload?.error_description || payload?.error || "Nu am putut obtine token-ul ANAF."),
-      } : {
-        efacturaOauthLastError: String(payload?.error_description || payload?.error || "Nu am putut obtine token-ul ANAF."),
-      })
+      const nextError = String(payload?.error_description || payload?.error || "Nu am putut obtine token-ul ANAF.")
+      await updateOrCreateTenantCompany(prisma, state.tenantId, null, oauthService === "etransport"
+        ? {
+            etransportOauthLastError: nextError,
+            ...(sharesSameOauthApp ? { efacturaOauthLastError: nextError } : {}),
+          }
+        : {
+            efacturaOauthLastError: nextError,
+            ...(sharesSameOauthApp ? { etransportOauthLastError: nextError } : {}),
+          })
 
       return res.redirect(`${state.returnTo}${state.returnTo.includes("?") ? "&" : "?"}oauth=error`)
     }
 
-    await updateOrCreateTenantCompany(prisma, state.tenantId, null, oauthService === "etransport" ? {
-      etransportOauthAccessToken: String(payload.access_token),
-      etransportOauthRefreshToken: payload.refresh_token ? String(payload.refresh_token) : null,
-      etransportOauthAccessTokenExpiresAt: decodeTokenExpiry(String(payload.access_token)),
-      etransportOauthRefreshTokenExpiresAt: decodeTokenExpiry(payload.refresh_token ? String(payload.refresh_token) : null),
-      etransportOauthConnectedAt: new Date(),
-      etransportOauthLastError: null,
-    } : {
-      efacturaOauthAccessToken: String(payload.access_token),
-      efacturaOauthRefreshToken: payload.refresh_token ? String(payload.refresh_token) : null,
-      efacturaOauthAccessTokenExpiresAt: decodeTokenExpiry(String(payload.access_token)),
-      efacturaOauthRefreshTokenExpiresAt: decodeTokenExpiry(payload.refresh_token ? String(payload.refresh_token) : null),
-      efacturaOauthConnectedAt: new Date(),
-      efacturaOauthLastError: null,
-    })
+    const accessToken = String(payload.access_token)
+    const refreshToken = payload.refresh_token ? String(payload.refresh_token) : null
+    const accessTokenExpiresAt = decodeTokenExpiry(accessToken)
+    const refreshTokenExpiresAt = decodeTokenExpiry(refreshToken)
+    const connectedAt = new Date()
+
+    await updateOrCreateTenantCompany(prisma, state.tenantId, null, oauthService === "etransport"
+      ? {
+          etransportOauthAccessToken: accessToken,
+          etransportOauthRefreshToken: refreshToken,
+          etransportOauthAccessTokenExpiresAt: accessTokenExpiresAt,
+          etransportOauthRefreshTokenExpiresAt: refreshTokenExpiresAt,
+          etransportOauthConnectedAt: connectedAt,
+          etransportOauthLastError: null,
+          ...(sharesSameOauthApp
+            ? {
+                efacturaOauthAccessToken: accessToken,
+                efacturaOauthRefreshToken: refreshToken,
+                efacturaOauthAccessTokenExpiresAt: accessTokenExpiresAt,
+                efacturaOauthRefreshTokenExpiresAt: refreshTokenExpiresAt,
+                efacturaOauthConnectedAt: connectedAt,
+                efacturaOauthLastError: null,
+              }
+            : {}),
+        }
+      : {
+          efacturaOauthAccessToken: accessToken,
+          efacturaOauthRefreshToken: refreshToken,
+          efacturaOauthAccessTokenExpiresAt: accessTokenExpiresAt,
+          efacturaOauthRefreshTokenExpiresAt: refreshTokenExpiresAt,
+          efacturaOauthConnectedAt: connectedAt,
+          efacturaOauthLastError: null,
+          ...(sharesSameOauthApp
+            ? {
+                etransportOauthAccessToken: accessToken,
+                etransportOauthRefreshToken: refreshToken,
+                etransportOauthAccessTokenExpiresAt: accessTokenExpiresAt,
+                etransportOauthRefreshTokenExpiresAt: refreshTokenExpiresAt,
+                etransportOauthConnectedAt: connectedAt,
+                etransportOauthLastError: null,
+              }
+            : {}),
+        })
 
     return res.redirect(`${state.returnTo}${state.returnTo.includes("?") ? "&" : "?"}oauth=success`)
   } catch (error: any) {
-    await updateOrCreateTenantCompany(prisma, state.tenantId, null, oauthService === "etransport" ? {
-      etransportOauthLastError: error?.message || "Eroare la schimbul token-ului ANAF.",
-    } : {
-      efacturaOauthLastError: error?.message || "Eroare la schimbul token-ului ANAF.",
-    })
+    const nextError = error?.message || "Eroare la schimbul token-ului ANAF."
+    await updateOrCreateTenantCompany(prisma, state.tenantId, null, oauthService === "etransport"
+      ? {
+          etransportOauthLastError: nextError,
+          ...(sharesSameOauthApp ? { efacturaOauthLastError: nextError } : {}),
+        }
+      : {
+          efacturaOauthLastError: nextError,
+          ...(sharesSameOauthApp ? { etransportOauthLastError: nextError } : {}),
+        })
 
     return res.redirect(`${state.returnTo}${state.returnTo.includes("?") ? "&" : "?"}oauth=error`)
   }
