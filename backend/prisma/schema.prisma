@@ -653,6 +653,7 @@ model Product {
   class    ProductClass @default(PRODUS_FIN)
   ncCode   String?
   isFiscalRiskProduct Boolean @default(false)
+  netWeightKg Decimal @default(0)
   grossWeightKg Decimal @default(0)
 
   vatRateId      String

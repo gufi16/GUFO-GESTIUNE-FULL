@@ -12,6 +12,7 @@ type Product = {
   class: string
   ncCode?: string | null
   isFiscalRiskProduct?: boolean
+  netWeightKg?: number
   grossWeightKg?: number
   price: number
   costPrice?: number
@@ -59,6 +60,7 @@ type FormState = {
   vatRateId: string
   categoryId: string
   ncCode: string
+  netWeightKg: string
   grossWeightKg: string
   price: string
   costPrice: string
@@ -135,6 +137,7 @@ const emptyForm: FormState = {
   vatRateId: "",
   categoryId: "",
   ncCode: "",
+  netWeightKg: "0",
   grossWeightKg: "0",
   price: "0",
   costPrice: "0",
@@ -372,6 +375,7 @@ function getDefaultVat(list = vatRates) {
       purchaseFactor: "1",
       vatRateId: isVatPayer ? defaultVat?.id || "" : "",
       ncCode: "",
+      netWeightKg: "0",
       grossWeightKg: "0",
       isActive: true,
       isVisibleInPos: true,
@@ -400,6 +404,7 @@ function getDefaultVat(list = vatRates) {
       vatRateId: isVatPayer ? item.vatRate?.id || "" : "",
       categoryId: item.category?.id || "",
       ncCode: item.ncCode || "",
+      netWeightKg: normalizePositiveString(item.netWeightKg || 0, "0"),
       grossWeightKg: normalizePositiveString(item.grossWeightKg || 0, "0"),
       price: normalizePositiveString(item.price || 0, "0"),
       costPrice: normalizePositiveString(item.costPrice || 0, "0"),
@@ -495,6 +500,7 @@ function getDefaultVat(list = vatRates) {
     const normalizedFactor = isFinishedProduct
       ? 1
       : Math.max(0.000001, toNumberSafe(form.purchaseFactor || 1))
+    const normalizedNetWeightKg = Math.max(0, toNumberSafe(form.netWeightKg || 0))
     const normalizedGrossWeightKg = Math.max(0, toNumberSafe(form.grossWeightKg || 0))
     const normalizedPrice = Math.max(0, toNumberSafe(form.price || 0))
     const normalizedCost = Math.max(0, toNumberSafe(form.costPrice || 0))
@@ -526,8 +532,9 @@ function getDefaultVat(list = vatRates) {
           purchaseFactor: normalizedFactor,
           vatRateId: isVatPayer ? form.vatRateId : null,
           categoryId: form.categoryId || null,
-          ncCode: form.ncCode.trim().toUpperCase() || null,
-          grossWeightKg: normalizedGrossWeightKg,
+          ncCode: form.isFiscalRiskProduct ? form.ncCode.trim().toUpperCase() || null : null,
+          netWeightKg: form.isFiscalRiskProduct ? normalizedNetWeightKg : 0,
+          grossWeightKg: form.isFiscalRiskProduct ? normalizedGrossWeightKg : 0,
           price: normalizedPrice,
           costPrice: normalizedCost,
           isActive: form.isActive,
@@ -637,6 +644,19 @@ function getDefaultVat(list = vatRates) {
 
     return () => window.clearTimeout(timeoutId)
   }, [form.name, showModal, ncCodeManual])
+
+  useEffect(() => {
+    if (form.isFiscalRiskProduct) return
+    if (!form.ncCode && toNumberSafe(form.netWeightKg) === 0 && toNumberSafe(form.grossWeightKg) === 0) return
+    setForm((prev) => ({
+      ...prev,
+      ncCode: "",
+      netWeightKg: "0",
+      grossWeightKg: "0",
+    }))
+    setNcSuggestion(null)
+    setNcCodeManual(false)
+  }, [form.isFiscalRiskProduct])
 
   async function deleteProduct(item: Product) {
     if (!token) {
@@ -1196,46 +1216,48 @@ function getDefaultVat(list = vatRates) {
                       />
                     </Field>
 
-                    <Field label="Cod NC">
-                      <div style={{ display: "grid", gap: 6 }}>
-                        <div style={{ display: "flex", gap: 8 }}>
-                          <input
-                            value={form.ncCode}
-                            onChange={(e) => {
-                              setNcCodeManual(true)
-                              setForm((prev) => ({ ...prev, ncCode: e.target.value.toUpperCase() }))
-                            }}
-                            style={{ ...input, flex: 1 }}
-                            placeholder="Ex: 22021000"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setNcCodeManual(false)
-                              void suggestNcCode(true)
-                            }}
-                            disabled={ncSuggesting || !String(form.name || "").trim()}
-                            style={{
-                              border: "1px solid #cbd5e1",
-                              background: "#f8fafc",
-                              borderRadius: 10,
-                              padding: "0 12px",
-                              fontSize: 13,
-                              fontWeight: 600,
-                              color: "#17324D",
-                              minWidth: 110,
-                            }}
-                          >
-                            {ncSuggesting ? "Cauta..." : "Sugereaza"}
-                          </button>
-                        </div>
-                        {ncSuggestion ? (
-                          <div style={{ fontSize: 12, color: "#64748b" }}>
-                            Sugestie: <strong>{ncSuggestion.code}</strong> - {ncSuggestion.label}
+                    {form.isFiscalRiskProduct ? (
+                      <Field label="Cod NC">
+                        <div style={{ display: "grid", gap: 6 }}>
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <input
+                              value={form.ncCode}
+                              onChange={(e) => {
+                                setNcCodeManual(true)
+                                setForm((prev) => ({ ...prev, ncCode: e.target.value.toUpperCase() }))
+                              }}
+                              style={{ ...input, flex: 1 }}
+                              placeholder="Ex: 22021000"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNcCodeManual(false)
+                                void suggestNcCode(true)
+                              }}
+                              disabled={ncSuggesting || !String(form.name || "").trim()}
+                              style={{
+                                border: "1px solid #cbd5e1",
+                                background: "#f8fafc",
+                                borderRadius: 10,
+                                padding: "0 12px",
+                                fontSize: 13,
+                                fontWeight: 600,
+                                color: "#17324D",
+                                minWidth: 110,
+                              }}
+                            >
+                              {ncSuggesting ? "Cauta..." : "Sugereaza"}
+                            </button>
                           </div>
-                        ) : null}
-                      </div>
-                    </Field>
+                          {ncSuggestion ? (
+                            <div style={{ fontSize: 12, color: "#64748b" }}>
+                              Sugestie: <strong>{ncSuggestion.code}</strong> - {ncSuggestion.label}
+                            </div>
+                          ) : null}
+                        </div>
+                      </Field>
+                    ) : null}
                   </div>
                 </SectionCard>
 
@@ -1375,22 +1397,43 @@ function getDefaultVat(list = vatRates) {
                       </div>
                     </Field>
 
-                    <Field label="Greutate bruta / UM (kg)">
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={form.grossWeightKg}
-                        onChange={(e) => setForm((prev) => ({ ...prev, grossWeightKg: e.target.value }))}
-                        onBlur={() =>
-                          setForm((prev) => ({
-                            ...prev,
-                            grossWeightKg: normalizePositiveString(prev.grossWeightKg, "0")
-                          }))
-                        }
-                        style={input}
-                      />
-                      <div style={fieldHint}>Se foloseste la pragurile automate pentru RO e-Transport.</div>
-                    </Field>
+                    {form.isFiscalRiskProduct ? (
+                      <>
+                        <Field label="Greutate neta / UM (kg)">
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={form.netWeightKg}
+                            onChange={(e) => setForm((prev) => ({ ...prev, netWeightKg: e.target.value }))}
+                            onBlur={() =>
+                              setForm((prev) => ({
+                                ...prev,
+                                netWeightKg: normalizePositiveString(prev.netWeightKg, "0")
+                              }))
+                            }
+                            style={input}
+                          />
+                          <div style={fieldHint}>Se foloseste la greutatea neta din RO e-Transport.</div>
+                        </Field>
+
+                        <Field label="Greutate bruta / UM (kg)">
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={form.grossWeightKg}
+                            onChange={(e) => setForm((prev) => ({ ...prev, grossWeightKg: e.target.value }))}
+                            onBlur={() =>
+                              setForm((prev) => ({
+                                ...prev,
+                                grossWeightKg: normalizePositiveString(prev.grossWeightKg, "0")
+                              }))
+                            }
+                            style={input}
+                          />
+                          <div style={fieldHint}>Se foloseste la pragurile automate si la greutatea bruta din RO e-Transport.</div>
+                        </Field>
+                      </>
+                    ) : null}
                   </div>
                 </SectionCard>
               </div>

@@ -115,6 +115,7 @@ function serializeProduct(item: any) {
     price: toNumber(item.price),
     costPrice: toNumber(item.costPrice),
     purchaseFactor: toNumber(item.purchaseFactor || 1),
+    netWeightKg: toNumber(item.netWeightKg || 0),
     grossWeightKg: toNumber(item.grossWeightKg || 0),
     sgrValue: toNumber(item.sgrValue || 0),
     vatRate: item.vatRate
@@ -329,6 +330,7 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
   const purchaseFactor = toNumber(req.body?.purchaseFactor || 1)
   const price = toNumber(req.body?.price || 0)
   const costPrice = toNumber(req.body?.costPrice || 0)
+  const netWeightKg = Math.max(0, toNumber(req.body?.netWeightKg || 0))
   const grossWeightKg = Math.max(0, toNumber(req.body?.grossWeightKg || 0))
   const categoryIdRaw = String(req.body?.categoryId || "").trim()
   const categoryId = categoryIdRaw || null
@@ -396,6 +398,18 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
 
   if (normalizedPurchaseFactor <= 0) {
     return res.status(400).json({ ok: false, error: "Factorul trebuie sa fie mai mare decat 0." })
+  }
+
+  if (requestedIsFiscalRiskProduct) {
+    if (!ncCode) {
+      return res.status(400).json({ ok: false, error: "Codul NC este obligatoriu pentru bunurile cu risc fiscal ridicat." })
+    }
+    if (netWeightKg <= 0) {
+      return res.status(400).json({ ok: false, error: "Greutatea neta / UM trebuie sa fie mai mare decat 0 pentru bunurile cu risc fiscal ridicat." })
+    }
+    if (grossWeightKg <= 0) {
+      return res.status(400).json({ ok: false, error: "Greutatea bruta / UM trebuie sa fie mai mare decat 0 pentru bunurile cu risc fiscal ridicat." })
+    }
   }
 
   const [vatRate, fallbackVatRate, uom, purchaseUom, category] = await Promise.all([
@@ -508,9 +522,10 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
           purchaseFactor: normalizedPurchaseFactor,
           categoryId,
           departmentId: category?.departmentId || null,
-          ncCode,
+          ncCode: requestedIsFiscalRiskProduct ? ncCode : null,
           isFiscalRiskProduct: requestedIsFiscalRiskProduct,
-          grossWeightKg,
+          netWeightKg: requestedIsFiscalRiskProduct ? netWeightKg : 0,
+          grossWeightKg: requestedIsFiscalRiskProduct ? grossWeightKg : 0,
           price: normalizedPrice,
           costPrice,
           isActive: forcedInactiveBecauseMissingRecipe ? false : requestedIsActive,
@@ -583,6 +598,7 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   const purchaseFactor = toNumber(req.body?.purchaseFactor || 1)
   const price = toNumber(req.body?.price || 0)
   const costPrice = toNumber(req.body?.costPrice || 0)
+  const netWeightKg = Math.max(0, toNumber(req.body?.netWeightKg || 0))
   const grossWeightKg = Math.max(0, toNumber(req.body?.grossWeightKg || 0))
   const categoryIdRaw = String(req.body?.categoryId || "").trim()
   const categoryId = categoryIdRaw || null
@@ -626,6 +642,18 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
 
   if (normalizedPurchaseFactor <= 0) {
     return res.status(400).json({ ok: false, error: "Factorul trebuie sa fie mai mare decat 0." })
+  }
+
+  if (requestedIsFiscalRiskProduct) {
+    if (!ncCode) {
+      return res.status(400).json({ ok: false, error: "Codul NC este obligatoriu pentru bunurile cu risc fiscal ridicat." })
+    }
+    if (netWeightKg <= 0) {
+      return res.status(400).json({ ok: false, error: "Greutatea neta / UM trebuie sa fie mai mare decat 0 pentru bunurile cu risc fiscal ridicat." })
+    }
+    if (grossWeightKg <= 0) {
+      return res.status(400).json({ ok: false, error: "Greutatea bruta / UM trebuie sa fie mai mare decat 0 pentru bunurile cu risc fiscal ridicat." })
+    }
   }
 
   const current = await prisma.product.findFirst({
@@ -730,9 +758,10 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
           purchaseFactor: normalizedPurchaseFactor,
         categoryId,
         departmentId: category?.departmentId || null,
-        ncCode,
+        ncCode: requestedIsFiscalRiskProduct ? ncCode : null,
         isFiscalRiskProduct: requestedIsFiscalRiskProduct,
-        grossWeightKg,
+        netWeightKg: requestedIsFiscalRiskProduct ? netWeightKg : 0,
+        grossWeightKg: requestedIsFiscalRiskProduct ? grossWeightKg : 0,
         price: normalizedPrice,
         costPrice,
         isActive: forcedInactiveBecauseMissingRecipe ? false : requestedIsActive,

@@ -98,6 +98,7 @@ type ProductOption = {
   price?: number
   ncCode?: string | null
   isFiscalRiskProduct?: boolean
+  netWeightKg?: number
   grossWeightKg?: number
   vatRate?: { rate?: number | null } | null
   uom?: { code?: string | null; standardCode?: string | null; name?: string | null } | null
@@ -627,7 +628,7 @@ export default function ETransportPage() {
             qty: String(line.qty ?? "0"),
             unitPrice: String(line.unitPrice ?? "0"),
             lineValue: String(line.lineValue ?? "0"),
-            netWeightPerUnitKg: String(line.netWeightPerUnitKg ?? line.product?.grossWeightKg ?? "0"),
+            netWeightPerUnitKg: String(line.netWeightPerUnitKg ?? line.product?.netWeightKg ?? line.product?.grossWeightKg ?? "0"),
             netWeightTotalKg: String(line.netWeightTotalKg ?? "0"),
             grossWeightPerUnitKg: String(line.grossWeightPerUnitKg ?? line.product?.grossWeightKg ?? "0"),
             grossWeightTotalKg: String(line.grossWeightTotalKg ?? "0"),
@@ -672,6 +673,7 @@ export default function ETransportPage() {
 
   function chooseProduct(index: number, product: ProductOption) {
     const qty = toNumber(items[index]?.qty || 1) || 1
+    const netWeightPerUnitKg = toNumber(product.netWeightKg || product.grossWeightKg || 0)
     const grossWeightPerUnitKg = toNumber(product.grossWeightKg || 0)
     const vatRate = toNumber(product.vatRate?.rate || 0)
     const productGrossPrice = toNumber(product.price || 0)
@@ -685,8 +687,8 @@ export default function ETransportPage() {
       uomCode: formatUomOption(product.uom),
       qty: String(qty),
       unitPrice: String(unitPrice),
-      netWeightPerUnitKg: String(grossWeightPerUnitKg),
-      netWeightTotalKg: String(qty * grossWeightPerUnitKg),
+      netWeightPerUnitKg: String(netWeightPerUnitKg),
+      netWeightTotalKg: String(qty * netWeightPerUnitKg),
       grossWeightPerUnitKg: String(grossWeightPerUnitKg),
       grossWeightTotalKg: String(qty * grossWeightPerUnitKg),
       internalReference: product.sku || product.name || "",
