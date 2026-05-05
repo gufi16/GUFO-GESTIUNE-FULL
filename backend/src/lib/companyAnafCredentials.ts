@@ -16,12 +16,6 @@ export const COMPANY_ANAF_LEGACY_FIELDS = {
   efacturaOauthRefreshTokenExpiresAt: true,
   efacturaOauthConnectedAt: true,
   efacturaOauthLastError: true,
-  etransportOauthAccessToken: true,
-  etransportOauthRefreshToken: true,
-  etransportOauthAccessTokenExpiresAt: true,
-  etransportOauthRefreshTokenExpiresAt: true,
-  etransportOauthConnectedAt: true,
-  etransportOauthLastError: true,
 }
 
 export const ANAF_CREDENTIAL_SELECT = {
@@ -40,12 +34,6 @@ export const ANAF_CREDENTIAL_SELECT = {
   efacturaOauthRefreshTokenExpiresAt: true,
   efacturaOauthConnectedAt: true,
   efacturaOauthLastError: true,
-  etransportOauthAccessToken: true,
-  etransportOauthRefreshToken: true,
-  etransportOauthAccessTokenExpiresAt: true,
-  etransportOauthRefreshTokenExpiresAt: true,
-  etransportOauthConnectedAt: true,
-  etransportOauthLastError: true,
   createdAt: true,
   updatedAt: true,
 }
@@ -88,12 +76,6 @@ function buildCredentialPayloadFromCompany(company: any) {
     efacturaOauthRefreshTokenExpiresAt: company?.efacturaOauthRefreshTokenExpiresAt || null,
     efacturaOauthConnectedAt: company?.efacturaOauthConnectedAt || null,
     efacturaOauthLastError: company?.efacturaOauthLastError || null,
-    etransportOauthAccessToken: company?.etrtransportOauthAccessToken || null,
-    etransportOauthRefreshToken: company?.etrtransportOauthRefreshToken || null,
-    etransportOauthAccessTokenExpiresAt: company?.etrtransportOauthAccessTokenExpiresAt || null,
-    etransportOauthRefreshTokenExpiresAt: company?.etrtransportOauthRefreshTokenExpiresAt || null,
-    etransportOauthConnectedAt: company?.etrtransportOauthConnectedAt || null,
-    etransportOauthLastError: company?.etrtransportOauthLastError || null,
   }
 }
 
@@ -116,12 +98,6 @@ function overlayCredentialOnCompany(company: any, credential: any) {
     efacturaOauthRefreshTokenExpiresAt: credential.efacturaOauthRefreshTokenExpiresAt,
     efacturaOauthConnectedAt: credential.efacturaOauthConnectedAt,
     efacturaOauthLastError: credential.efacturaOauthLastError,
-    etransportOauthAccessToken: credential.etrtransportOauthAccessToken,
-    etransportOauthRefreshToken: credential.etrtransportOauthRefreshToken,
-    etransportOauthAccessTokenExpiresAt: credential.etrtransportOauthAccessTokenExpiresAt,
-    etransportOauthRefreshTokenExpiresAt: credential.etrtransportOauthRefreshTokenExpiresAt,
-    etransportOauthConnectedAt: credential.etrtransportOauthConnectedAt,
-    etransportOauthLastError: credential.etrtransportOauthLastError,
   }
 }
 
@@ -144,7 +120,6 @@ export function mapAnafCredentialSummary(credential: any) {
     hasCertificatePassword,
     hasEfacturaToken,
     connected: hasCertificateFile && hasCertificatePassword && hasEfacturaToken,
-    hasEtransportToken: Boolean(credential.etrtransportOauthAccessToken),
   }
 }
 
@@ -320,12 +295,6 @@ export async function syncDefaultAnafCredentialToCompany(
       efacturaOauthRefreshTokenExpiresAt: credential.efacturaOauthRefreshTokenExpiresAt || null,
       efacturaOauthConnectedAt: credential.efacturaOauthConnectedAt || null,
       efacturaOauthLastError: credential.efacturaOauthLastError || null,
-      etransportOauthAccessToken: credential.etrtransportOauthAccessToken || null,
-      etransportOauthRefreshToken: credential.etrtransportOauthRefreshToken || null,
-      etransportOauthAccessTokenExpiresAt: credential.etrtransportOauthAccessTokenExpiresAt || null,
-      etransportOauthRefreshTokenExpiresAt: credential.etrtransportOauthRefreshTokenExpiresAt || null,
-      etransportOauthConnectedAt: credential.etrtransportOauthConnectedAt || null,
-      etransportOauthLastError: credential.etrtransportOauthLastError || null,
     },
   })
 }
@@ -355,3 +324,4 @@ export async function setDefaultCompanyAnafCredential(
   await syncDefaultAnafCredentialToCompany(prismaClient, companyId, credential)
   return credential
 }
+
