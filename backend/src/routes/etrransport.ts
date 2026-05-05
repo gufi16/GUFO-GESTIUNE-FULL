@@ -79,7 +79,26 @@ async function resolveNoticeDownloadId(company: any, notice: any) {
     return blob.includes(String(notice.uploadIndex).toLowerCase()) || blob.includes(String(notice.noticeNo || "").toLowerCase())
   })
 
-  return extractDownloadId(matched, JSON.stringify(matched || {})) || extractDownloadId(listResult.payload, listResult.rawText)
+  return matched
+    ? (
+        text(matched?.id_descarcare) ||
+        text(matched?.downloadId) ||
+        text(matched?.id)
+      )
+    : ""
+}
+
+async function resolveNoticeUit(company: any, notice: any) {
+  const cif = normalizeCompanyCui(company?.cui)
+  if (!cif || !company?.efacturaOauthAccessToken || !notice?.uploadIndex) return ""
+
+  const listResult = await anafListEtransportMessages(company, { days: 60, cif })
+  const matched = listResult.items.find((item: any) => {
+    const blob = JSON.stringify(item || {}).toLowerCase()
+    return blob.includes(String(notice.uploadIndex).toLowerCase()) || blob.includes(String(notice.noticeNo || "").toLowerCase())
+  })
+
+  return text(matched?.uit)
 }
 
 function serializeNotice(notice: any) {
@@ -572,10 +591,28 @@ router.get("/api/v1/etransport/notices/:id/status", async (req: AuthedRequest, r
     const statusResult = await anafCheckEtransportStatus(company, notice.uploadIndex)
     const summary = statusResult.summary
     const nextStatus = classifyEtransportStatus(statusResult.payload, statusResult.rawText)
-    const downloadId = hasExplicitDownloadId(statusResult.rawText)
+    let downloadId = hasExplicitDownloadId(statusResult.rawText)
       ? (statusResult.downloadId || notice.downloadId || null)
       : (notice.downloadId || null)
-    const uit = extractUit(statusResult.rawText) || notice.uit || null
+    let uit = extractUit(statusResult.rawText) || notice.uit || null
+
+    if (!uit || !downloadId) {
+      try {
+        const [resolvedUit, resolvedDownloadId] = await Promise.all([
+          !uit ? resolveNoticeUit(company, notice) : Promise.resolve(""),
+          !downloadId ? resolveNoticeDownloadId(company, notice) : Promise.resolve(""),
+        ])
+        if (!uit && resolvedUit) uit = resolvedUit
+        if (!downloadId && resolvedDownloadId) downloadId = resolvedDownloadId
+      } catch (lookupError: any) {
+        logAnafRouteError("NOTICE ETRANSPORT STATUS LIST LOOKUP ERROR", {
+          tenantId,
+          noticeId: id,
+          uploadIndex: notice.uploadIndex || null,
+          message: lookupError?.message || String(lookupError),
+        })
+      }
+    }
 
     if (!statusResult.response.ok) {
       return res.status(400).json({ ok: false, error: summary || "Nu am putut verifica starea la ANAF." })
@@ -650,7 +687,19 @@ router.get("/api/v1/etransport/notices/:id/receipt", async (req: AuthedRequest, 
   }
 
   if (!downloadId) {
-    return res.status(400).json({ ok: false, error: "Raspunsul ANAF nu este inca disponibil pentru acest e-Transport." })
+    const uitFromList = (await resolveNoticeUit(company, notice)) || notice.uit || ""
+    if (uitFromList && !notice.uit) {
+      await prisma.eTransportNotice.update({
+        where: { id: notice.id },
+        data: { uit: uitFromList, status: "ACCEPTED", errorText: null },
+      })
+    }
+    return res.status(400).json({
+      ok: false,
+      error: uitFromList
+        ? `e-Transportul este acceptat, iar UIT-ul este ${uitFromList}, dar ANAF nu ofera inca un fisier de raspuns descarcabil pentru acest mesaj in mediul curent.`
+        : "Raspunsul ANAF nu este inca disponibil pentru acest e-Transport.",
+    })
   }
 
   try {
