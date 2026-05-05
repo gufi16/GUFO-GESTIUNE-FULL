@@ -255,36 +255,79 @@ const emptyLocationForm = (): LocationFormState => ({
   details: "",
 })
 
+function splitLocationAddress(value?: string | null) {
+  const text = String(value || "").trim()
+  if (!text) {
+    return {
+      street: "",
+      streetNo: "",
+      building: "",
+      staircase: "",
+      floor: "",
+      apartment: "",
+      details: "",
+    }
+  }
+
+  const nrMatch = text.match(/^(.*?)(?:,\s*)?Nr\.\s*([^,]+)(.*)$/i)
+  if (!nrMatch) {
+    return {
+      street: text,
+      streetNo: "",
+      building: "",
+      staircase: "",
+      floor: "",
+      apartment: "",
+      details: "",
+    }
+  }
+
+  const suffix = String(nrMatch[3] || "")
+  const extract = (pattern: RegExp) => suffix.match(pattern)?.[1]?.trim() || ""
+
+  return {
+    street: nrMatch[1].trim(),
+    streetNo: nrMatch[2].trim(),
+    building: extract(/Bl\.\s*([^,]+)/i),
+    staircase: extract(/Sc\.\s*([^,]+)/i),
+    floor: extract(/Et\.\s*([^,]+)/i),
+    apartment: extract(/Ap\.\s*([^,]+)/i),
+    details: "",
+  }
+}
+
 function buildLocationAddressSummary(location?: Partial<LocationItem> | null) {
   if (!location) return "-"
-  const lineOne = [location.street, location.streetNo].filter(Boolean).join(" ")
+  const parsed = splitLocationAddress(location.address)
+  const lineOne = [location.street || parsed.street, location.streetNo || parsed.streetNo].filter(Boolean).join(" ")
   const lineTwo = [
-    location.building ? `Bl. ${location.building}` : "",
-    location.staircase ? `Sc. ${location.staircase}` : "",
-    location.floor ? `Et. ${location.floor}` : "",
-    location.apartment ? `Ap. ${location.apartment}` : "",
+    (location.building || parsed.building) ? `Bl. ${location.building || parsed.building}` : "",
+    (location.staircase || parsed.staircase) ? `Sc. ${location.staircase || parsed.staircase}` : "",
+    (location.floor || parsed.floor) ? `Et. ${location.floor || parsed.floor}` : "",
+    (location.apartment || parsed.apartment) ? `Ap. ${location.apartment || parsed.apartment}` : "",
   ]
     .filter(Boolean)
     .join(", ")
   const locality = [location.city, location.county, location.postalCode].filter(Boolean).join(", ")
-  const extra = [location.details, location.country].filter(Boolean).join(" | ")
+  const extra = [location.details || parsed.details, location.country].filter(Boolean).join(" | ")
   return [lineOne, lineTwo, locality, extra].filter(Boolean).join(" | ") || location.address || "-"
 }
 
 function buildLocationFormFromItem(location?: Partial<LocationItem> | null): LocationFormState {
+  const parsed = splitLocationAddress(location?.address)
   return {
     name: String(location?.name || ""),
     country: String(location?.country || "Romania"),
     county: String(location?.county || ""),
     city: String(location?.city || ""),
     postalCode: String(location?.postalCode || ""),
-    street: String(location?.street || ""),
-    streetNo: String(location?.streetNo || ""),
-    building: String(location?.building || ""),
-    staircase: String(location?.staircase || ""),
-    floor: String(location?.floor || ""),
-    apartment: String(location?.apartment || ""),
-    details: String(location?.details || ""),
+    street: String(location?.street || parsed.street || ""),
+    streetNo: String(location?.streetNo || parsed.streetNo || ""),
+    building: String(location?.building || parsed.building || ""),
+    staircase: String(location?.staircase || parsed.staircase || ""),
+    floor: String(location?.floor || parsed.floor || ""),
+    apartment: String(location?.apartment || parsed.apartment || ""),
+    details: String(location?.details || parsed.details || ""),
   }
 }
 
