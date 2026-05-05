@@ -135,7 +135,7 @@ export async function restoreTenantBackupFromFile(tenantId: string, filePath: st
   )
 
   const locations = asArray(payload.locations).map((item) =>
-    pickFields(item, ["id", "tenantId", "companyId", "name", "code", "address", "city", "county", "country", "postalCode", "isActive", "createdAt", "updatedAt"]),
+    pickFields(item, ["id", "tenantId", "companyId", "name", "code", "isActive", "createdAt", "updatedAt"]),
   )
 
   const terminals = asArray(payload.terminals).map((item) =>

@@ -486,7 +486,7 @@ model Location {
   address   String?
   city      String?
   county    String?
-  country   String? @default("RO")
+  country   String?  @default("RO")
   postalCode String?
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())

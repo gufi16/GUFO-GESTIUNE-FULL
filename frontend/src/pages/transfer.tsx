@@ -23,13 +23,6 @@ type LocationOption = {
   name: string
   code?: string
   address?: string | null
-  street?: string | null
-  streetNo?: string | null
-  building?: string | null
-  staircase?: string | null
-  floor?: string | null
-  apartment?: string | null
-  details?: string | null
   city?: string | null
   county?: string | null
   country?: string | null
@@ -53,13 +46,6 @@ type CompanyLookupResult = {
   name?: string
   cui?: string
   address?: string
-  street?: string
-  streetNo?: string
-  building?: string
-  staircase?: string
-  floor?: string
-  apartment?: string
-  details?: string
   city?: string
   county?: string
   country?: string
@@ -86,18 +72,6 @@ type ETransportAdrForm = {
 type ActiveCompany = {
   name?: string
   cui?: string
-  address?: string
-  street?: string
-  streetNo?: string
-  building?: string
-  staircase?: string
-  floor?: string
-  apartment?: string
-  details?: string
-  city?: string
-  county?: string
-  country?: string
-  postalCode?: string
 }
 
 const ETRANSPORT_OPERATION_OPTIONS = [
@@ -271,7 +245,7 @@ function splitStreetAddress(value: string) {
 
 function buildAdrFormFromLocation(location?: LocationOption | null): ETransportAdrForm {
   if (!location) return createEmptyAdrForm()
-  const parsedStreet = splitStreetAddress(String(location.street || location.address || ""))
+  const parsedStreet = splitStreetAddress(String(location.address || ""))
   return {
     sourceLocationId: location.id,
       companyCui: "",
@@ -279,19 +253,19 @@ function buildAdrFormFromLocation(location?: LocationOption | null): ETransportA
       country: location.country || "Romania",
       county: location.county || "",
       city: location.city || "",
-      street: String(location.street || parsedStreet.street || ""),
-      streetNo: String(location.streetNo || parsedStreet.streetNo || ""),
-      building: String(location.building || ""),
-      staircase: String(location.staircase || ""),
-      floor: String(location.floor || ""),
-      apartment: String(location.apartment || ""),
+      street: parsedStreet.street,
+      streetNo: parsedStreet.streetNo,
+      building: "",
+      staircase: "",
+      floor: "",
+      apartment: "",
       postalCode: location.postalCode || "",
-      details: String(location.details || ""),
+      details: "",
     }
   }
 
 function buildAdrFormFromCompany(company?: CompanyLookupResult | null, fallback?: Partial<ETransportAdrForm>) {
-  const rawStreet = String(company?.street || company?.address || fallback?.street || "")
+  const rawStreet = String(company?.address || fallback?.street || "")
   const parsedStreet = splitStreetAddress(rawStreet)
   return {
     ...createEmptyAdrForm(),
@@ -302,14 +276,14 @@ function buildAdrFormFromCompany(company?: CompanyLookupResult | null, fallback?
     country: normalizeCountryLabel(String(company?.country || fallback?.country || "Romania")),
     county: String(company?.county || fallback?.county || ""),
     city: String(company?.city || fallback?.city || ""),
-    street: String(company?.street || parsedStreet.street || fallback?.street || ""),
-    streetNo: String(company?.streetNo || fallback?.streetNo || parsedStreet.streetNo || ""),
-    building: String(company?.building || fallback?.building || ""),
-    staircase: String(company?.staircase || fallback?.staircase || ""),
-    floor: String(company?.floor || fallback?.floor || ""),
-    apartment: String(company?.apartment || fallback?.apartment || ""),
+    street: parsedStreet.street,
+    streetNo: String(fallback?.streetNo || parsedStreet.streetNo || ""),
+    building: String(fallback?.building || ""),
+    staircase: String(fallback?.staircase || ""),
+    floor: String(fallback?.floor || ""),
+    apartment: String(fallback?.apartment || ""),
     postalCode: String(company?.postalCode || fallback?.postalCode || ""),
-    details: String(company?.details || fallback?.details || ""),
+    details: String(fallback?.details || ""),
   }
 }
 
@@ -334,34 +308,8 @@ function routeAdrFromParty(form?: Partial<ETransportAdrForm> | null): ETransport
 }
 
 function buildOrganizerStartAdr(company: ActiveCompany | null, location?: LocationOption | null): ETransportAdrForm {
-  const locationAdr = buildAdrFormFromLocation(location)
-  const companyAdr = buildAdrFormFromCompany(
-    company
-        ? {
-            cui: company.cui,
-            name: company.name,
-            address: company.address,
-            street: company.street,
-            streetNo: company.streetNo,
-            building: company.building,
-            staircase: company.staircase,
-            floor: company.floor,
-            apartment: company.apartment,
-            details: company.details,
-            city: company.city,
-            county: company.county,
-            country: company.country,
-            postalCode: company.postalCode,
-        }
-      : null,
-    {
-      companyCui: String(company?.cui || ""),
-      companyName: String(company?.name || ""),
-    },
-  )
   return {
-    ...companyAdr,
-    ...locationAdr,
+    ...buildAdrFormFromLocation(location),
     companyCui: String(company?.cui || ""),
     companyName: String(company?.name || location?.name || ""),
   }

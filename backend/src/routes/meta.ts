@@ -38,34 +38,6 @@ function normalizeStandardUomCode(value: any) {
   return text || null
 }
 
-function toNullableText(value: any) {
-  const text = String(value ?? "").trim()
-  return text || null
-}
-
-function buildStructuredLocationAddress(data: {
-  street?: string | null
-  streetNo?: string | null
-  building?: string | null
-  staircase?: string | null
-  floor?: string | null
-  apartment?: string | null
-  details?: string | null
-}) {
-  const streetLine = [data.street, data.streetNo ? `Nr. ${data.streetNo}` : null].filter(Boolean).join(" ").trim()
-  const secondaryLine = [
-    data.building ? `Bl. ${data.building}` : null,
-    data.staircase ? `Sc. ${data.staircase}` : null,
-    data.floor ? `Et. ${data.floor}` : null,
-    data.apartment ? `Ap. ${data.apartment}` : null,
-  ]
-    .filter(Boolean)
-    .join(", ")
-    .trim()
-
-  return [streetLine, secondaryLine, data.details].filter(Boolean).join(", ").trim() || null
-}
-
 async function buildPreferredCompanyFilter(
   model: "location" | "terminal",
   tenantId: string,
@@ -287,14 +259,7 @@ router.post("/api/v1/meta/locations", async (req: AuthedRequest, res) => {
 
   const name = String(req.body?.name || "").trim()
   const code = String(req.body?.code || "").trim()
-  const street = toNullableText(req.body?.street)
-  const streetNo = toNullableText(req.body?.streetNo)
-  const building = toNullableText(req.body?.building)
-  const staircase = toNullableText(req.body?.staircase)
-  const floor = toNullableText(req.body?.floor)
-  const apartment = toNullableText(req.body?.apartment)
-  const details = toNullableText(req.body?.details)
-  const address = toNullableText(req.body?.address) || buildStructuredLocationAddress({ street, streetNo, building, staircase, floor, apartment, details })
+  const address = toNullableText(req.body?.address)
   const city = toNullableText(req.body?.city)
   const county = toNullableText(req.body?.county)
   const country = toNullableText(req.body?.country) || "RO"
@@ -363,14 +328,7 @@ router.put("/api/v1/meta/locations/:id", async (req: AuthedRequest, res) => {
 
   const name = String(req.body?.name || "").trim()
   const code = String(req.body?.code || "").trim()
-  const street = toNullableText(req.body?.street)
-  const streetNo = toNullableText(req.body?.streetNo)
-  const building = toNullableText(req.body?.building)
-  const staircase = toNullableText(req.body?.staircase)
-  const floor = toNullableText(req.body?.floor)
-  const apartment = toNullableText(req.body?.apartment)
-  const details = toNullableText(req.body?.details)
-  const address = toNullableText(req.body?.address) || buildStructuredLocationAddress({ street, streetNo, building, staircase, floor, apartment, details })
+  const address = toNullableText(req.body?.address)
   const city = toNullableText(req.body?.city)
   const county = toNullableText(req.body?.county)
   const country = toNullableText(req.body?.country) || "RO"

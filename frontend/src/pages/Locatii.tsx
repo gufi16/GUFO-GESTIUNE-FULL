@@ -18,13 +18,6 @@ type LocationItem = {
   name: string
   code: string
   address?: string | null
-  street?: string | null
-  streetNo?: string | null
-  building?: string | null
-  staircase?: string | null
-  floor?: string | null
-  apartment?: string | null
-  details?: string | null
   city?: string | null
   county?: string | null
   country?: string | null
@@ -35,13 +28,7 @@ type LocationItem = {
 type LocationForm = {
   name: string
   code: string
-  street: string
-  streetNo: string
-  building: string
-  staircase: string
-  floor: string
-  apartment: string
-  details: string
+  address: string
   city: string
   county: string
   country: string
@@ -51,47 +38,11 @@ type LocationForm = {
 const emptyForm: LocationForm = {
   name: "",
   code: "",
-  street: "",
-  streetNo: "",
-  building: "",
-  staircase: "",
-  floor: "",
-  apartment: "",
-  details: "",
+  address: "",
   city: "",
   county: "",
   country: "RO",
   postalCode: "",
-}
-
-function buildLocationAddressLabel(item: {
-  address?: string | null
-  street?: string | null
-  streetNo?: string | null
-  building?: string | null
-  staircase?: string | null
-  floor?: string | null
-  apartment?: string | null
-  details?: string | null
-  city?: string | null
-  county?: string | null
-  country?: string | null
-  postalCode?: string | null
-}) {
-  const streetLine = [item.street, item.streetNo ? `Nr. ${item.streetNo}` : null].filter(Boolean).join(" ").trim()
-  const extraLine = [
-    item.building ? `Bl. ${item.building}` : null,
-    item.staircase ? `Sc. ${item.staircase}` : null,
-    item.floor ? `Et. ${item.floor}` : null,
-    item.apartment ? `Ap. ${item.apartment}` : null,
-  ]
-    .filter(Boolean)
-    .join(", ")
-    .trim()
-
-  return [streetLine || item.address, extraLine, item.details, item.city, item.county, item.country, item.postalCode]
-    .filter(Boolean)
-    .join(", ")
 }
 
 export default function LocatiiPage() {
@@ -163,13 +114,7 @@ export default function LocatiiPage() {
     setForm({
       name: item.name || "",
       code: item.code || "",
-      street: item.street || "",
-      streetNo: item.streetNo || "",
-      building: item.building || "",
-      staircase: item.staircase || "",
-      floor: item.floor || "",
-      apartment: item.apartment || "",
-      details: item.details || "",
+      address: item.address || "",
       city: item.city || "",
       county: item.county || "",
       country: item.country || "RO",
@@ -344,28 +289,17 @@ export default function LocatiiPage() {
             />
           </DocumentField>
 
-          <div className="grid grid-cols-1 gap-3 md:col-span-2 xl:grid-cols-[minmax(0,1fr)_120px_110px_110px_110px_110px]">
-            <DocumentField label="Strada">
-              <input value={form.street} onChange={(e) => setForm({ ...form, street: e.target.value })} className={documentInputClass} placeholder="Ex: Calea Floresti" />
-            </DocumentField>
-            <DocumentField label="Nr.">
-              <input value={form.streetNo} onChange={(e) => setForm({ ...form, streetNo: e.target.value })} className={documentInputClass} />
-            </DocumentField>
-            <DocumentField label="Bl.">
-              <input value={form.building} onChange={(e) => setForm({ ...form, building: e.target.value })} className={documentInputClass} />
-            </DocumentField>
-            <DocumentField label="Sc.">
-              <input value={form.staircase} onChange={(e) => setForm({ ...form, staircase: e.target.value })} className={documentInputClass} />
-            </DocumentField>
-            <DocumentField label="Et.">
-              <input value={form.floor} onChange={(e) => setForm({ ...form, floor: e.target.value })} className={documentInputClass} />
-            </DocumentField>
-            <DocumentField label="Ap.">
-              <input value={form.apartment} onChange={(e) => setForm({ ...form, apartment: e.target.value })} className={documentInputClass} />
-            </DocumentField>
-          </div>
+          <DocumentField label="Adresa">
+            <textarea
+              value={form.address}
+              onChange={(e) => setForm({ ...form, address: e.target.value })}
+              className={documentTextareaClass}
+              rows={3}
+              placeholder="Strada, numar, detalii"
+            />
+          </DocumentField>
 
-          <div className="grid grid-cols-1 gap-3 md:col-span-2 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <DocumentField label="Localitate">
               <input
                 value={form.city}
@@ -397,18 +331,6 @@ export default function LocatiiPage() {
                 className={documentInputClass}
               />
             </DocumentField>
-
-            <div className="sm:col-span-2 xl:col-span-5">
-              <DocumentField label="Detalii suplimentare">
-                <textarea
-                  value={form.details}
-                  onChange={(e) => setForm({ ...form, details: e.target.value })}
-                  className={documentTextareaClass}
-                  rows={2}
-                  placeholder="Repere, cladire, corp, observatii utile"
-                />
-              </DocumentField>
-            </div>
           </div>
         </div>
       </DocumentSection>
@@ -446,13 +368,13 @@ export default function LocatiiPage() {
                     </td>
                     <td className="px-3 py-2.5 text-slate-600">{item.code}</td>
                     <td className="px-3 py-2.5 text-slate-600">
-                        <div className="flex items-start gap-2">
-                          <MapPin size={15} className="mt-0.5 shrink-0 text-slate-400" />
-                          <span>
-                          {buildLocationAddressLabel(item) || "-"}
-                          </span>
-                        </div>
-                      </td>
+                      <div className="flex items-start gap-2">
+                        <MapPin size={15} className="mt-0.5 shrink-0 text-slate-400" />
+                        <span>
+                          {[item.address, item.city, item.county, item.country, item.postalCode].filter(Boolean).join(", ") || "-"}
+                        </span>
+                      </div>
+                    </td>
                     <td className="px-3 py-2.5">
                       <button type="button" onClick={() => openEdit(item)} className={documentButtonSecondaryClass}>
                         <Pencil size={16} className="mr-2" />
@@ -487,27 +409,10 @@ export default function LocatiiPage() {
               <DocumentField label="Cod locatie">
                 <input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} className={documentInputClass} />
               </DocumentField>
-              <div className="grid grid-cols-1 gap-3 md:col-span-2 xl:grid-cols-[minmax(0,1fr)_120px_110px_110px_110px_110px]">
-                <DocumentField label="Strada">
-                  <input value={form.street} onChange={(e) => setForm({ ...form, street: e.target.value })} className={documentInputClass} />
-                </DocumentField>
-                <DocumentField label="Nr.">
-                  <input value={form.streetNo} onChange={(e) => setForm({ ...form, streetNo: e.target.value })} className={documentInputClass} />
-                </DocumentField>
-                <DocumentField label="Bl.">
-                  <input value={form.building} onChange={(e) => setForm({ ...form, building: e.target.value })} className={documentInputClass} />
-                </DocumentField>
-                <DocumentField label="Sc.">
-                  <input value={form.staircase} onChange={(e) => setForm({ ...form, staircase: e.target.value })} className={documentInputClass} />
-                </DocumentField>
-                <DocumentField label="Et.">
-                  <input value={form.floor} onChange={(e) => setForm({ ...form, floor: e.target.value })} className={documentInputClass} />
-                </DocumentField>
-                <DocumentField label="Ap.">
-                  <input value={form.apartment} onChange={(e) => setForm({ ...form, apartment: e.target.value })} className={documentInputClass} />
-                </DocumentField>
-              </div>
-              <div className="grid grid-cols-1 gap-3 md:col-span-2 sm:grid-cols-2 xl:grid-cols-5">
+              <DocumentField label="Adresa">
+                <textarea value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className={documentTextareaClass} rows={3} />
+              </DocumentField>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <DocumentField label="Localitate">
                   <input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} className={documentInputClass} />
                 </DocumentField>
@@ -520,11 +425,6 @@ export default function LocatiiPage() {
                 <DocumentField label="Cod postal">
                   <input value={form.postalCode} onChange={(e) => setForm({ ...form, postalCode: e.target.value })} className={documentInputClass} />
                 </DocumentField>
-                <div className="sm:col-span-2 xl:col-span-5">
-                  <DocumentField label="Detalii suplimentare">
-                    <textarea value={form.details} onChange={(e) => setForm({ ...form, details: e.target.value })} className={documentTextareaClass} rows={2} />
-                  </DocumentField>
-                </div>
               </div>
             </div>
 
