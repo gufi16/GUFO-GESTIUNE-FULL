@@ -159,6 +159,45 @@ function moduleMapFromLicense(license: {
   }
 }
 
+async function ensureTenantEfacturaModuleEnabled(tx: any, tenantId: string) {
+  const moduleRecord = await tx.appModule.upsert({
+    where: { code: "efactura" },
+    update: {
+      name: "e-Factura",
+      description: "Integrare ANAF e-Factura",
+      target: "GESTIUNE",
+      isActive: true,
+    },
+    create: {
+      code: "efactura",
+      name: "e-Factura",
+      description: "Integrare ANAF e-Factura",
+      target: "GESTIUNE",
+      isCore: false,
+      isActive: true,
+    },
+  })
+
+  return tx.tenantModule.upsert({
+    where: {
+      tenantId_moduleId: {
+        tenantId,
+        moduleId: moduleRecord.id,
+      },
+    },
+    update: {
+      enabled: true,
+      source: "client_create",
+    },
+    create: {
+      tenantId,
+      moduleId: moduleRecord.id,
+      enabled: true,
+      source: "client_create",
+    },
+  })
+}
+
 function randomChunk(length = 4) {
   return Math.random().toString(36).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, length)
 }
@@ -1050,6 +1089,8 @@ router.post("/api/v1/admin/clients", requireAuth, requireOwner, async (req: Auth
           isActive: true,
         },
       })
+
+      await ensureTenantEfacturaModuleEnabled(tx, tenant.id)
 
       await tx.auditLog.create({
         data: {

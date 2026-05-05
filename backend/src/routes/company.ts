@@ -196,6 +196,36 @@ function getActiveCompanyId(req: AuthedRequest) {
   return req.auth?.activeCompanyId || null
 }
 
+async function requireExplicitAnafCompanyContext(tenantId: string, activeCompanyId?: string | null) {
+  const companies = await prisma.company.findMany({
+    where: { tenantId },
+    orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+    select: {
+      id: true,
+      name: true,
+      isDefault: true,
+    },
+  })
+
+  if (!companies.length) {
+    throw new Error("Nu exista nicio firma configurata pentru acest tenant.")
+  }
+
+  if (!activeCompanyId) {
+    if (companies.length > 1) {
+      throw new Error("Selecteaza mai intai firma activa din ERP, apoi genereaza tokenul ANAF.")
+    }
+    return companies[0]
+  }
+
+  const activeCompany = companies.find((company) => company.id === activeCompanyId)
+  if (!activeCompany) {
+    throw new Error("Firma activa selectata nu mai exista. Reincarca pagina si selecteaza firma din nou.")
+  }
+
+  return activeCompany
+}
+
 async function getRequestCompany(req: AuthedRequest, extra: Record<string, any> = {}) {
   return resolveTenantCompany(prisma, req.auth!.tenantId, getActiveCompanyId(req), extra)
 }
@@ -348,14 +378,20 @@ export async function handleAnafOauthCallback(req, res) {
     return res.status(400).send("Lipsesc parametrii OAuth ANAF.")
   }
 
-  let state: { tenantId: string; returnTo: string } | null = null
+  let state: { tenantId: string; returnTo: string; activeCompanyId?: string | null } | null = null
   try {
-    state = jwt.verify(effectiveStateRaw, JWT_SECRET) as { tenantId: string; returnTo: string }
+    state = jwt.verify(effectiveStateRaw, JWT_SECRET) as { tenantId: string; returnTo: string; activeCompanyId?: string | null }
   } catch {
     return res.status(400).send("State OAuth invalid sau expirat.")
   }
 
-  const oauthConfig = await getEffectiveAnafOauthConfig(state.tenantId)
+  try {
+    await requireExplicitAnafCompanyContext(state.tenantId, state.activeCompanyId || null)
+  } catch (error: any) {
+    return res.redirect(`${state.returnTo}${state.returnTo.includes("?") ? "&" : "?"}oauth=error&message=${encodeURIComponent(String(error?.message || "Firma activa nu este disponibila pentru OAuth."))}`)
+  }
+
+  const oauthConfig = await getEffectiveAnafOauthConfig(state.tenantId, state.activeCompanyId || null)
   const moduleCheck = await requireTenantModule(state.tenantId, "efactura")
 
   if (!moduleCheck.enabled) {
@@ -372,7 +408,7 @@ export async function handleAnafOauthCallback(req, res) {
         ? "Autorizarea ANAF a fost anulata sau refuzata."
         : errorDescription || error || "Autorizarea ANAF nu a putut fi finalizata."
 
-    await updateOrCreateTenantCompany(prisma, state.tenantId, null, {
+    await updateOrCreateTenantCompany(prisma, state.tenantId, state.activeCompanyId || null, {
       efacturaOauthLastError: nextError,
     })
 
@@ -406,14 +442,14 @@ export async function handleAnafOauthCallback(req, res) {
     const payload = await tokenRes.json().catch(() => ({}))
 
     if (!tokenRes.ok || !payload?.access_token) {
-      await updateOrCreateTenantCompany(prisma, state.tenantId, null, {
+      await updateOrCreateTenantCompany(prisma, state.tenantId, state.activeCompanyId || null, {
         efacturaOauthLastError: String(payload?.error_description || payload?.error || "Nu am putut obtine token-ul ANAF."),
       })
 
       return res.redirect(`${state.returnTo}${state.returnTo.includes("?") ? "&" : "?"}oauth=error`)
     }
 
-    await updateOrCreateTenantCompany(prisma, state.tenantId, null, {
+    await updateOrCreateTenantCompany(prisma, state.tenantId, state.activeCompanyId || null, {
       efacturaOauthAccessToken: String(payload.access_token),
       efacturaOauthRefreshToken: payload.refresh_token ? String(payload.refresh_token) : null,
       efacturaOauthAccessTokenExpiresAt: decodeTokenExpiry(String(payload.access_token)),
@@ -424,7 +460,7 @@ export async function handleAnafOauthCallback(req, res) {
 
     return res.redirect(`${state.returnTo}${state.returnTo.includes("?") ? "&" : "?"}oauth=success`)
   } catch (error: any) {
-    await updateOrCreateTenantCompany(prisma, state.tenantId, null, {
+    await updateOrCreateTenantCompany(prisma, state.tenantId, state.activeCompanyId || null, {
       efacturaOauthLastError: error?.message || "Eroare la schimbul token-ului ANAF.",
     })
 
@@ -883,6 +919,7 @@ router.delete("/api/v1/company/efactura/certificate", requireAuth, async (req: A
 
 router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const activeCompanyId = getActiveCompanyId(req)
   const returnTo = String(req.query.returnTo || "").trim() || "http://localhost:5173/setari/efactura"
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
 
@@ -893,7 +930,17 @@ router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, re
     })
   }
 
-  const oauthConfig = await getEffectiveAnafOauthConfig(tenantId, getActiveCompanyId(req))
+  let activeCompany: { id: string; name: string } | null = null
+  try {
+    activeCompany = await requireExplicitAnafCompanyContext(tenantId, activeCompanyId)
+  } catch (error: any) {
+    return res.status(409).json({
+      ok: false,
+      error: error?.message || "Nu am putut determina firma activa pentru OAuth ANAF.",
+    })
+  }
+
+  const oauthConfig = await getEffectiveAnafOauthConfig(tenantId, activeCompanyId)
 
   if (!oauthConfig.clientId || !oauthConfig.redirectUri) {
     return res.status(400).json({
@@ -906,6 +953,7 @@ router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, re
     {
       tenantId,
       returnTo,
+      activeCompanyId,
     },
     JWT_SECRET,
     { expiresIn: "15m" },
@@ -928,6 +976,8 @@ router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, re
 
   console.log("ANAF OAUTH START", {
     tenantId,
+    activeCompanyId,
+    activeCompanyName: activeCompany?.name || null,
     usesPlatformConfig: oauthConfig.usesPlatformConfig,
     clientIdSuffix: oauthConfig.clientId ? oauthConfig.clientId.slice(-8) : "",
     redirectUri: oauthConfig.redirectUri,
