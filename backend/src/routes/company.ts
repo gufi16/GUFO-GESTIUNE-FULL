@@ -258,9 +258,17 @@ async function requireExplicitAnafCompanyContext(tenantId: string, activeCompany
 }
 
 async function getRequestCompany(req: AuthedRequest, extra: Record<string, any> = {}) {
+  const includeCredentialList = Boolean(extra?.includeCredentialList)
+  const select =
+    extra && typeof extra === "object" && "select" in extra
+      ? extra.select || {}
+      : Object.fromEntries(
+          Object.entries(extra || {}).filter(([key]) => key !== "includeCredentialList")
+        )
+
   return resolveCompanyWithAnafCredential(prisma as any, req.auth!.tenantId, getActiveCompanyId(req), {
-    select: extra?.select || extra,
-    includeCredentialList: Boolean(extra?.includeCredentialList),
+    select,
+    includeCredentialList,
   })
 }
 
