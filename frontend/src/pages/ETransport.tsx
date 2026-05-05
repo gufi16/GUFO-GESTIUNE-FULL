@@ -26,6 +26,8 @@ type NoticeItem = {
   qty: string
   unitPrice: string
   lineValue: string
+  netWeightPerUnitKg: string
+  netWeightTotalKg: string
   grossWeightPerUnitKg: string
   grossWeightTotalKg: string
   internalReference: string
@@ -97,6 +99,7 @@ type ProductOption = {
   ncCode?: string | null
   isFiscalRiskProduct?: boolean
   grossWeightKg?: number
+  vatRate?: { rate?: number | null } | null
   uom?: { code?: string | null; standardCode?: string | null; name?: string | null } | null
 }
 
@@ -160,6 +163,8 @@ function makeLine(index = 1): NoticeItem {
     qty: "1",
     unitPrice: "0",
     lineValue: "0",
+    netWeightPerUnitKg: "0",
+    netWeightTotalKg: "0",
     grossWeightPerUnitKg: "0",
     grossWeightTotalKg: "0",
     internalReference: "",
@@ -481,7 +486,8 @@ export default function ETransportPage() {
   const totals = useMemo(() => {
     const totalGrossWeightKg = items.reduce((sum, item) => sum + toNumber(item.grossWeightTotalKg || toNumber(item.qty) * toNumber(item.grossWeightPerUnitKg)), 0)
     const totalValueRon = items.reduce((sum, item) => sum + toNumber(item.lineValue), 0)
-    return { totalGrossWeightKg, totalValueRon }
+    const totalNetWeightKg = items.reduce((sum, item) => sum + toNumber(item.netWeightTotalKg || toNumber(item.qty) * toNumber(item.netWeightPerUnitKg)), 0)
+    return { totalGrossWeightKg, totalValueRon, totalNetWeightKg }
   }, [items])
 
   useEffect(() => {
@@ -621,6 +627,8 @@ export default function ETransportPage() {
             qty: String(line.qty ?? "0"),
             unitPrice: String(line.unitPrice ?? "0"),
             lineValue: String(line.lineValue ?? "0"),
+            netWeightPerUnitKg: String(line.netWeightPerUnitKg ?? line.product?.grossWeightKg ?? "0"),
+            netWeightTotalKg: String(line.netWeightTotalKg ?? "0"),
             grossWeightPerUnitKg: String(line.grossWeightPerUnitKg ?? line.product?.grossWeightKg ?? "0"),
             grossWeightTotalKg: String(line.grossWeightTotalKg ?? "0"),
             internalReference: line.internalReference || line.sku || "",
@@ -640,10 +648,12 @@ export default function ETransportPage() {
       const next = { ...line, ...patch }
       const qty = toNumber(next.qty)
       const unitPrice = toNumber(next.unitPrice)
+      const netWeightPerUnitKg = toNumber(next.netWeightPerUnitKg)
       const grossWeightPerUnitKg = toNumber(next.grossWeightPerUnitKg)
       return {
         ...next,
         lineValue: String(qty * unitPrice),
+        netWeightTotalKg: String(qty * netWeightPerUnitKg),
         grossWeightTotalKg: String(qty * grossWeightPerUnitKg),
       }
     }))
@@ -663,7 +673,9 @@ export default function ETransportPage() {
   function chooseProduct(index: number, product: ProductOption) {
     const qty = toNumber(items[index]?.qty || 1) || 1
     const grossWeightPerUnitKg = toNumber(product.grossWeightKg || 0)
-    const unitPrice = toNumber(product.price || 0)
+    const vatRate = toNumber(product.vatRate?.rate || 0)
+    const productGrossPrice = toNumber(product.price || 0)
+    const unitPrice = vatRate > 0 ? productGrossPrice / (1 + vatRate / 100) : productGrossPrice
     patchLine(index, {
       productId: product.id,
       sku: product.sku || "",
@@ -673,6 +685,8 @@ export default function ETransportPage() {
       uomCode: formatUomOption(product.uom),
       qty: String(qty),
       unitPrice: String(unitPrice),
+      netWeightPerUnitKg: String(grossWeightPerUnitKg),
+      netWeightTotalKg: String(qty * grossWeightPerUnitKg),
       grossWeightPerUnitKg: String(grossWeightPerUnitKg),
       grossWeightTotalKg: String(qty * grossWeightPerUnitKg),
       internalReference: product.sku || product.name || "",
@@ -1297,18 +1311,38 @@ export default function ETransportPage() {
                   <input value={line.unitPrice} onChange={(e) => patchLine(index, { unitPrice: e.target.value })} className={documentInputClass} />
                 </div>
               </div>
-              <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
                 {labelValue("Cod produs", line.sku)}
                 {labelValue("Cod NC", line.ncCode)}
                 {labelValue("UM", line.uomCode)}
-                {labelValue("Greutate / UM", `${toNumber(line.grossWeightPerUnitKg).toLocaleString("ro-RO", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg`)}
+                <div className="space-y-1">
+                  <label className="block text-xs font-medium text-[#17324D]">Greutate neta / UM (kg)</label>
+                  <input
+                    value={line.netWeightPerUnitKg}
+                    onChange={(e) => patchLine(index, { netWeightPerUnitKg: e.target.value })}
+                    className={documentInputClass}
+                    placeholder="Ex: 0.25"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-xs font-medium text-[#17324D]">Greutate bruta / UM (kg)</label>
+                  <input
+                    value={line.grossWeightPerUnitKg}
+                    onChange={(e) => patchLine(index, { grossWeightPerUnitKg: e.target.value })}
+                    className={documentInputClass}
+                    placeholder="Ex: 0.33"
+                  />
+                </div>
               </div>
-              <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <div className="rounded-[10px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
                   Valoare fara TVA: {toNumber(line.lineValue).toLocaleString("ro-RO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON
                 </div>
                 <div className="rounded-[10px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                  Greutate totala: {toNumber(line.grossWeightTotalKg).toLocaleString("ro-RO", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg
+                  Greutate neta totala: {toNumber(line.netWeightTotalKg).toLocaleString("ro-RO", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg
+                </div>
+                <div className="rounded-[10px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                  Greutate bruta totala: {toNumber(line.grossWeightTotalKg).toLocaleString("ro-RO", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg
                 </div>
                 <label className="flex items-center gap-2 rounded-[10px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
                   <input type="checkbox" checked={line.fiscalRisk} onChange={(e) => patchLine(index, { fiscalRisk: e.target.checked })} />

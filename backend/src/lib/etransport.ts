@@ -442,6 +442,13 @@ export function validateTransferForETransport(doc: any) {
         message: `${label}: produsul nu are Cod NC completat.`,
       })
     }
+    if (toNumber(item?.product?.grossWeightKg || 0) <= 0) {
+      issues.push({
+        severity: "error",
+        field: `items[${index}].product.grossWeightKg`,
+        message: `${label}: produsul trebuie sa aiba greutate bruta / UM mai mare decat 0 pentru RO e-Transport.`,
+      })
+    }
   })
 
   return issues
@@ -570,6 +577,20 @@ export function validateNoticeForETransport(notice: any) {
     if (!normalizeText(item?.uomCode || resolveTransportUomCode(item))) {
       issues.push({ severity: "warning", field: `items[${index}].uomCode`, message: `${label}: lipseste codul UM.` })
     }
+    if (toNumber(item?.grossWeightPerUnitKg) <= 0 && toNumber(item?.grossWeightTotalKg) <= 0) {
+      issues.push({
+        severity: "error",
+        field: `items[${index}].grossWeightPerUnitKg`,
+        message: `${label}: completeaza o greutate bruta mai mare decat 0 pentru RO e-Transport.`,
+      })
+    }
+    if (toNumber(item?.netWeightPerUnitKg) <= 0 && toNumber(item?.netWeightTotalKg) <= 0) {
+      issues.push({
+        severity: "error",
+        field: `items[${index}].netWeightPerUnitKg`,
+        message: `${label}: completeaza o greutate neta mai mare decat 0 pentru RO e-Transport.`,
+      })
+    }
   })
 
   return issues
@@ -589,8 +610,9 @@ export function generateETransportNoticeXml(notice: any) {
     .map((item: any, index: number) => {
       const qty = toNumber(item?.qty)
       const lineValue = toNumber(item?.lineValue)
-      const grossWeightKg = toNumber(item?.grossWeightPerUnitKg || item?.product?.grossWeightKg || 0)
-      return `    <bunuriTransportate codScopOperatiune="${xmlEscape(goodsPurposeCode)}" codTarifar="${xmlEscape(item?.ncCode || item?.product?.ncCode || "")}" denumireMarfa="${xmlEscape(item?.name || item?.product?.name || "")}" cantitate="${transportDecimal(qty)}" codUnitateMasura="${xmlEscape(resolveTransportUomCode(item))}" greutateNeta="${transportDecimal(toNumber(item?.grossWeightTotalKg) || qty * grossWeightKg)}" greutateBruta="${transportDecimal(toNumber(item?.grossWeightTotalKg) || qty * grossWeightKg)}" valoareLeiFaraTva="${decimal(lineValue, 2)}"/>`
+      const netWeightPerUnitKg = toNumber(item?.netWeightPerUnitKg || item?.grossWeightPerUnitKg || item?.product?.grossWeightKg || 0)
+      const grossWeightPerUnitKg = toNumber(item?.grossWeightPerUnitKg || item?.product?.grossWeightKg || 0)
+      return `    <bunuriTransportate codScopOperatiune="${xmlEscape(goodsPurposeCode)}" codTarifar="${xmlEscape(item?.ncCode || item?.product?.ncCode || "")}" denumireMarfa="${xmlEscape(item?.name || item?.product?.name || "")}" cantitate="${transportDecimal(qty)}" codUnitateMasura="${xmlEscape(resolveTransportUomCode(item))}" greutateNeta="${transportDecimal(toNumber(item?.netWeightTotalKg) || qty * netWeightPerUnitKg)}" greutateBruta="${transportDecimal(toNumber(item?.grossWeightTotalKg) || qty * grossWeightPerUnitKg)}" valoareLeiFaraTva="${decimal(lineValue, 2)}"/>`
     })
     .join("\n")
 

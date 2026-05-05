@@ -110,12 +110,14 @@ function serializeNotice(notice: any) {
     totalValueRon: toNumber(notice.totalValueRon || 0),
     items: Array.isArray(notice.items)
       ? notice.items.map((item: any) => ({
-          ...item,
-          qty: toNumber(item.qty),
-          unitPrice: toNumber(item.unitPrice),
-          lineValue: toNumber(item.lineValue),
-          grossWeightPerUnitKg: toNumber(item.grossWeightPerUnitKg),
-          grossWeightTotalKg: toNumber(item.grossWeightTotalKg),
+        ...item,
+        qty: toNumber(item.qty),
+        unitPrice: toNumber(item.unitPrice),
+        lineValue: toNumber(item.lineValue),
+        netWeightPerUnitKg: toNumber(item.netWeightPerUnitKg),
+        netWeightTotalKg: toNumber(item.netWeightTotalKg),
+        grossWeightPerUnitKg: toNumber(item.grossWeightPerUnitKg),
+        grossWeightTotalKg: toNumber(item.grossWeightTotalKg),
           product: item.product
             ? {
                 ...item.product,
@@ -243,6 +245,8 @@ router.post("/api/v1/etransport/notices/from-transfer/:transferId", async (req: 
     qty: new Prisma.Decimal(toNumber(item.qty)),
     unitPrice: new Prisma.Decimal(toNumber(item.unitPrice)),
     lineValue: new Prisma.Decimal(toNumber(item.lineValue)),
+    netWeightPerUnitKg: new Prisma.Decimal(toNumber(item.product?.grossWeightKg || 0)),
+    netWeightTotalKg: new Prisma.Decimal(toNumber(item.qty) * toNumber(item.product?.grossWeightKg || 0)),
     grossWeightPerUnitKg: new Prisma.Decimal(toNumber(item.product?.grossWeightKg || 0)),
     grossWeightTotalKg: new Prisma.Decimal(toNumber(item.qty) * toNumber(item.product?.grossWeightKg || 0)),
     internalReference: text(transfer.docNo),
@@ -325,6 +329,8 @@ router.put("/api/v1/etransport/notices/:id", async (req: AuthedRequest, res) => 
     qty: new Prisma.Decimal(toNumber(item.qty)),
     unitPrice: new Prisma.Decimal(toNumber(item.unitPrice)),
     lineValue: new Prisma.Decimal(toNumber(item.lineValue)),
+    netWeightPerUnitKg: new Prisma.Decimal(toNumber(item.netWeightPerUnitKg)),
+    netWeightTotalKg: new Prisma.Decimal(toNumber(item.netWeightTotalKg || toNumber(item.qty) * toNumber(item.netWeightPerUnitKg))),
     grossWeightPerUnitKg: new Prisma.Decimal(toNumber(item.grossWeightPerUnitKg)),
     grossWeightTotalKg: new Prisma.Decimal(toNumber(item.grossWeightTotalKg || toNumber(item.qty) * toNumber(item.grossWeightPerUnitKg))),
     internalReference: text(item.internalReference) || null,

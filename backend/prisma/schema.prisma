@@ -1356,6 +1356,8 @@ model ETransportNoticeItem {
   qty                   Decimal  @default(0)
   unitPrice             Decimal  @default(0)
   lineValue             Decimal  @default(0)
+  netWeightPerUnitKg    Decimal  @default(0)
+  netWeightTotalKg      Decimal  @default(0)
   grossWeightPerUnitKg  Decimal  @default(0)
   grossWeightTotalKg    Decimal  @default(0)
   internalReference     String?
