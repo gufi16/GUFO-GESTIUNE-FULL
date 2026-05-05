@@ -8,6 +8,7 @@ import {
   KeyRound,
   MapPin,
   PauseCircle,
+  Pencil,
   Plus,
   RefreshCw,
   Save,
@@ -270,6 +271,23 @@ function buildLocationAddressSummary(location?: Partial<LocationItem> | null) {
   return [lineOne, lineTwo, locality, extra].filter(Boolean).join(" | ") || location.address || "-"
 }
 
+function buildLocationFormFromItem(location?: Partial<LocationItem> | null): LocationFormState {
+  return {
+    name: String(location?.name || ""),
+    country: String(location?.country || "Romania"),
+    county: String(location?.county || ""),
+    city: String(location?.city || ""),
+    postalCode: String(location?.postalCode || ""),
+    street: String(location?.street || ""),
+    streetNo: String(location?.streetNo || ""),
+    building: String(location?.building || ""),
+    staircase: String(location?.staircase || ""),
+    floor: String(location?.floor || ""),
+    apartment: String(location?.apartment || ""),
+    details: String(location?.details || ""),
+  }
+}
+
 function metricCard(label: string, value: string | number) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
@@ -301,6 +319,8 @@ export default function ControlPanelClientDetails() {
   const [editingUserId, setEditingUserId] = useState<string | null>(null)
   const [newLocationCompanyId, setNewLocationCompanyId] = useState("")
   const [locationForm, setLocationForm] = useState<LocationFormState>(emptyLocationForm())
+  const [locationModalOpen, setLocationModalOpen] = useState(false)
+  const [editingLocationId, setEditingLocationId] = useState<string | null>(null)
   const [deviceForms, setDeviceForms] = useState<Record<string, { label: string }>>({})
   const [openDeviceLocationId, setOpenDeviceLocationId] = useState<string | null>(null)
   const [locationError, setLocationError] = useState<string | null>(null)
@@ -786,6 +806,70 @@ export default function ControlPanelClientDetails() {
     }, 50)
   }
 
+  async function handleUpdateLocation() {
+    if (!editingLocationId) return
+    const name = locationForm.name.trim()
+    if (!name) {
+      setLocationError("Introdu numele locatiei.")
+      return
+    }
+    if (!newLocationCompanyId) {
+      setLocationError("Selecteaza firma pentru care vrei sa actualizezi locatia.")
+      return
+    }
+    try {
+      setCreatingLocation(true)
+      setLocationError(null)
+      await api<CreateLocationResponse>(`/api/v1/admin/locations/${editingLocationId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          name,
+          companyId: newLocationCompanyId,
+          country: locationForm.country.trim() || "Romania",
+          county: locationForm.county.trim(),
+          city: locationForm.city.trim(),
+          postalCode: locationForm.postalCode.trim(),
+          street: locationForm.street.trim(),
+          streetNo: locationForm.streetNo.trim(),
+          building: locationForm.building.trim(),
+          staircase: locationForm.staircase.trim(),
+          floor: locationForm.floor.trim(),
+          apartment: locationForm.apartment.trim(),
+          details: locationForm.details.trim(),
+        }),
+      })
+      setMessage("Locatia a fost actualizata.")
+      closeLocationModal()
+      await load()
+    } catch (err: any) {
+      setLocationError(err?.message || "Nu am putut actualiza locatia.")
+    } finally {
+      setCreatingLocation(false)
+    }
+  }
+
+  function openCreateLocationModal() {
+    setEditingLocationId(null)
+    setLocationError(null)
+    setLocationForm(emptyLocationForm())
+    setLocationModalOpen(true)
+  }
+
+  function openEditLocationModal(location: LocationItem) {
+    setEditingLocationId(location.id)
+    setNewLocationCompanyId(location.companyId || location.company?.id || "")
+    setLocationError(null)
+    setLocationForm(buildLocationFormFromItem(location))
+    setLocationModalOpen(true)
+  }
+
+  function closeLocationModal() {
+    setLocationModalOpen(false)
+    setEditingLocationId(null)
+    setLocationError(null)
+    setLocationForm(emptyLocationForm())
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-slate-200 bg-white px-4 py-4 shadow-sm">
@@ -1158,103 +1242,14 @@ export default function ControlPanelClientDetails() {
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div><div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Locatii si POS</div><div className="mt-1 text-sm font-semibold text-[#17324D]">Administrare locatii, terminale si chei de licenta</div></div>
             <div className="flex flex-col gap-2 sm:flex-row">
-              <select
-                value={newLocationCompanyId}
-                onChange={(e) => setNewLocationCompanyId(e.target.value)}
-                className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
-              >
-                <option value="">Selecteaza firma</option>
-                {companies.map((company: any) => (
-                  <option key={company.id} value={company.id}>
-                    {company.name}
-                  </option>
-                ))}
-              </select>
             <button
-              onClick={handleCreateLocation}
+              onClick={openCreateLocationModal}
               disabled={creatingLocation}
               className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Plus size={15} />
-              {creatingLocation ? "Se creeaza..." : "Adauga locatie"}
+              Adauga locatie
             </button>
-          </div>
-        </div>
-
-        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <input
-              value={locationForm.name}
-              onChange={(e) => setLocationForm((prev) => ({ ...prev, name: e.target.value }))}
-              placeholder="Nume locatie"
-              className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
-            />
-            <input
-              value={locationForm.country}
-              onChange={(e) => setLocationForm((prev) => ({ ...prev, country: e.target.value }))}
-              placeholder="Tara"
-              className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
-            />
-            <input
-              value={locationForm.county}
-              onChange={(e) => setLocationForm((prev) => ({ ...prev, county: e.target.value }))}
-              placeholder="Judet"
-              className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
-            />
-            <input
-              value={locationForm.city}
-              onChange={(e) => setLocationForm((prev) => ({ ...prev, city: e.target.value }))}
-              placeholder="Oras / Localitate"
-              className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
-            />
-            <input
-              value={locationForm.postalCode}
-              onChange={(e) => setLocationForm((prev) => ({ ...prev, postalCode: e.target.value }))}
-              placeholder="Cod postal"
-              className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
-            />
-            <input
-              value={locationForm.street}
-              onChange={(e) => setLocationForm((prev) => ({ ...prev, street: e.target.value }))}
-              placeholder="Strada"
-              className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
-            />
-            <input
-              value={locationForm.streetNo}
-              onChange={(e) => setLocationForm((prev) => ({ ...prev, streetNo: e.target.value }))}
-              placeholder="Nr."
-              className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
-            />
-            <input
-              value={locationForm.building}
-              onChange={(e) => setLocationForm((prev) => ({ ...prev, building: e.target.value }))}
-              placeholder="Bl."
-              className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
-            />
-            <input
-              value={locationForm.staircase}
-              onChange={(e) => setLocationForm((prev) => ({ ...prev, staircase: e.target.value }))}
-              placeholder="Sc."
-              className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
-            />
-            <input
-              value={locationForm.floor}
-              onChange={(e) => setLocationForm((prev) => ({ ...prev, floor: e.target.value }))}
-              placeholder="Et."
-              className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
-            />
-            <input
-              value={locationForm.apartment}
-              onChange={(e) => setLocationForm((prev) => ({ ...prev, apartment: e.target.value }))}
-              placeholder="Ap."
-              className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
-            />
-            <input
-              value={locationForm.details}
-              onChange={(e) => setLocationForm((prev) => ({ ...prev, details: e.target.value }))}
-              placeholder="Detalii suplimentare"
-              className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
-            />
           </div>
         </div>
 
@@ -1284,6 +1279,13 @@ export default function ControlPanelClientDetails() {
                     </div>
 
                   <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => openEditLocationModal(location)}
+                      className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                    >
+                      <Pencil size={13} />
+                      Edit
+                    </button>
                     <button
                       onClick={() => setOpenDeviceLocationId(openDeviceLocationId === location.id ? null : location.id)}
                       className="inline-flex items-center gap-2 rounded-2xl border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700"
@@ -1559,6 +1561,139 @@ export default function ControlPanelClientDetails() {
           </div>
         </div>
       </section>
+
+      {locationModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 py-6">
+          <div className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-[28px] border border-slate-200 bg-white p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Locatie</div>
+                <div className="mt-1 text-xl font-semibold text-[#17324D]">
+                  {editingLocationId ? "Editeaza locatia" : "Adauga locatie noua"}
+                </div>
+                <div className="mt-1 text-sm text-slate-500">
+                  Salvezi o singura data adresa completa, iar apoi o poti refolosi in ERP si e-Transport.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={closeLocationModal}
+                className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600"
+              >
+                Inchide
+              </button>
+            </div>
+
+            <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <select
+                value={newLocationCompanyId}
+                onChange={(e) => setNewLocationCompanyId(e.target.value)}
+                className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+              >
+                <option value="">Selecteaza firma</option>
+                {companies.map((company: any) => (
+                  <option key={company.id} value={company.id}>
+                    {company.name}
+                  </option>
+                ))}
+              </select>
+              <input
+                value={locationForm.name}
+                onChange={(e) => setLocationForm((prev) => ({ ...prev, name: e.target.value }))}
+                placeholder="Nume locatie"
+                className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+              />
+              <input
+                value={locationForm.country}
+                onChange={(e) => setLocationForm((prev) => ({ ...prev, country: e.target.value }))}
+                placeholder="Tara"
+                className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+              />
+              <input
+                value={locationForm.county}
+                onChange={(e) => setLocationForm((prev) => ({ ...prev, county: e.target.value }))}
+                placeholder="Judet"
+                className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+              />
+              <input
+                value={locationForm.city}
+                onChange={(e) => setLocationForm((prev) => ({ ...prev, city: e.target.value }))}
+                placeholder="Oras / Localitate"
+                className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+              />
+              <input
+                value={locationForm.postalCode}
+                onChange={(e) => setLocationForm((prev) => ({ ...prev, postalCode: e.target.value }))}
+                placeholder="Cod postal"
+                className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+              />
+              <input
+                value={locationForm.street}
+                onChange={(e) => setLocationForm((prev) => ({ ...prev, street: e.target.value }))}
+                placeholder="Strada"
+                className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+              />
+              <input
+                value={locationForm.streetNo}
+                onChange={(e) => setLocationForm((prev) => ({ ...prev, streetNo: e.target.value }))}
+                placeholder="Nr."
+                className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+              />
+              <input
+                value={locationForm.building}
+                onChange={(e) => setLocationForm((prev) => ({ ...prev, building: e.target.value }))}
+                placeholder="Bl."
+                className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+              />
+              <input
+                value={locationForm.staircase}
+                onChange={(e) => setLocationForm((prev) => ({ ...prev, staircase: e.target.value }))}
+                placeholder="Sc."
+                className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+              />
+              <input
+                value={locationForm.floor}
+                onChange={(e) => setLocationForm((prev) => ({ ...prev, floor: e.target.value }))}
+                placeholder="Et."
+                className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+              />
+              <input
+                value={locationForm.apartment}
+                onChange={(e) => setLocationForm((prev) => ({ ...prev, apartment: e.target.value }))}
+                placeholder="Ap."
+                className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+              />
+            </div>
+
+            <textarea
+              value={locationForm.details}
+              onChange={(e) => setLocationForm((prev) => ({ ...prev, details: e.target.value }))}
+              placeholder="Detalii suplimentare"
+              rows={3}
+              className="mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+            />
+
+            <div className="mt-5 flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-4">
+              <button
+                type="button"
+                onClick={closeLocationModal}
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700"
+              >
+                Renunta
+              </button>
+              <button
+                type="button"
+                onClick={editingLocationId ? handleUpdateLocation : handleCreateLocation}
+                disabled={creatingLocation}
+                className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Save size={15} />
+                {creatingLocation ? "Se salveaza..." : editingLocationId ? "Salveaza modificarile" : "Adauga locatia"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
         <span className="font-semibold">Atentie:</span> locatia se poate sterge doar daca nu are device-uri POS.

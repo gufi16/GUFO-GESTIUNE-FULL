@@ -1530,6 +1530,153 @@ router.post("/api/v1/admin/clients/:id/locations", requireAuth, requireOwner, as
   }
 })
 
+router.patch("/api/v1/admin/locations/:id", requireAuth, requireOwner, async (req: AuthedRequest, res) => {
+  const parsed = CreateLocationSchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res.status(400).json({ ok: false, error: parsed.error.flatten() })
+  }
+
+  const existing = await prisma.location.findUnique({
+    where: { id: req.params.id },
+    include: {
+      tenant: {
+        include: {
+          companies: {
+            orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+            select: {
+              id: true,
+              name: true,
+              code: true,
+              cui: true,
+              regNo: true,
+              address: true,
+              email: true,
+              phone: true,
+              isDefault: true,
+              createdAt: true,
+            },
+          },
+        },
+      },
+      company: {
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          cui: true,
+          regNo: true,
+          address: true,
+          email: true,
+          phone: true,
+          isDefault: true,
+          createdAt: true,
+        },
+      },
+    },
+  })
+
+  if (!existing || !existing.tenant) {
+    return res.status(404).json({ ok: false, error: "Locatie inexistenta" })
+  }
+
+  try {
+    const company = resolveOwnedCompany(existing.tenant.companies, parsed.data.companyId)
+    if (!company) {
+      return res.status(400).json({
+        ok: false,
+        error: "Selecteaza firma pentru care vrei sa actualizezi locatia.",
+      })
+    }
+
+    const street = toNullableText(parsed.data.street)
+    const streetNo = toNullableText(parsed.data.streetNo)
+    const building = toNullableText(parsed.data.building)
+    const staircase = toNullableText(parsed.data.staircase)
+    const floor = toNullableText(parsed.data.floor)
+    const apartment = toNullableText(parsed.data.apartment)
+    const details = toNullableText(parsed.data.details)
+    const city = toNullableText(parsed.data.city)
+    const county = toNullableText(parsed.data.county)
+    const country = toNullableText(parsed.data.country) || "RO"
+    const postalCode = toNullableText(parsed.data.postalCode)
+    const address = buildStructuredLocationAddress({ street, streetNo, building, staircase, floor, apartment, details })
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const location = await tx.location.update({
+        where: { id: existing.id },
+        data: {
+          companyId: company.id,
+          name: parsed.data.name.trim(),
+          address,
+          street,
+          streetNo,
+          building,
+          staircase,
+          floor,
+          apartment,
+          details,
+          city,
+          county,
+          country,
+          postalCode,
+        },
+      })
+
+      await tx.auditLog.create({
+        data: {
+          tenantId: existing.tenantId,
+          actorType: "OWNER",
+          actorId: req.auth?.userId,
+          action: "LOCATION_UPDATED",
+          entityType: "Location",
+          entityId: location.id,
+          payload: {
+            companyId: company.id,
+            companyName: company.name,
+            name: location.name,
+            code: location.code,
+            address: location.address,
+            city: location.city,
+            county: location.county,
+            postalCode: location.postalCode,
+          },
+        },
+      })
+
+      return location
+    })
+
+    return res.json({
+      ok: true,
+      item: {
+        id: updated.id,
+        name: updated.name,
+        code: updated.code,
+        isActive: updated.isActive,
+        address: updated.address,
+        street: updated.street,
+        streetNo: updated.streetNo,
+        building: updated.building,
+        staircase: updated.staircase,
+        floor: updated.floor,
+        apartment: updated.apartment,
+        details: updated.details,
+        city: updated.city,
+        county: updated.county,
+        country: updated.country,
+        postalCode: updated.postalCode,
+        companyId: company.id,
+        company: serializeCompanySummary(company),
+      },
+    })
+  } catch (error: any) {
+    return res.status(500).json({
+      ok: false,
+      error: error?.message || "Nu am putut actualiza locatia",
+    })
+  }
+})
+
 router.post("/api/v1/admin/locations/:id/devices", requireAuth, requireOwner, async (req: AuthedRequest, res) => {
   const parsed = CreateDeviceSchema.safeParse(req.body)
   if (!parsed.success) {
