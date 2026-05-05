@@ -275,6 +275,29 @@ function normalizeStoredAddressText(value: string) {
   return String(value || "").trim()
 }
 
+function splitStreetAddress(value: string) {
+  const text = String(value || "").trim()
+  if (!text) return { street: "", streetNo: "" }
+
+  const explicitNo = text.match(/^(.*?)(?:\s*,?\s*(?:nr|nr\.)\s*)([A-Za-z0-9\-\/]+)\s*$/i)
+  if (explicitNo) {
+    return {
+      street: explicitNo[1].trim(),
+      streetNo: explicitNo[2].trim(),
+    }
+  }
+
+  const trailingNo = text.match(/^(.*?)(?:\s+)(\d+[A-Za-z0-9\-\/]*)$/)
+  if (trailingNo) {
+    return {
+      street: trailingNo[1].trim(),
+      streetNo: trailingNo[2].trim(),
+    }
+  }
+
+  return { street: text, streetNo: "" }
+}
+
 function serializeAdrForm(form: NoticeAddressForm) {
   return `ADRJSON:${JSON.stringify({
     companyCui: form.companyCui || "",
@@ -327,6 +350,8 @@ function parseAdrForm(value: string) {
 }
 
 function companyToAdrForm(company?: CompanyLookupResult | null, fallback?: Partial<NoticeAddressForm>) {
+  const rawStreet = String(company?.address || fallback?.street || "")
+  const parsedStreet = splitStreetAddress(rawStreet)
   return {
     ...createEmptyAdrForm(),
     ...fallback,
@@ -334,7 +359,8 @@ function companyToAdrForm(company?: CompanyLookupResult | null, fallback?: Parti
     country: normalizeCountryLabel(company?.country || fallback?.country || "Romania"),
     county: String(company?.county || fallback?.county || ""),
     city: String(company?.city || fallback?.city || ""),
-    street: String(company?.address || fallback?.street || ""),
+    street: parsedStreet.street,
+    streetNo: String(fallback?.streetNo || parsedStreet.streetNo || ""),
     postalCode: String(company?.postalCode || fallback?.postalCode || ""),
   }
 }

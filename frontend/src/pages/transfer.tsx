@@ -36,7 +36,9 @@ type ProductOption = {
   price?: number
   ncCode?: string | null
   isFiscalRiskProduct?: boolean
+  netWeightKg?: number
   grossWeightKg?: number
+  vatRate?: { rate?: number | null } | null
   uom?: { code?: string; standardCode?: string | null; name?: string | null } | null
 }
 
@@ -218,8 +220,32 @@ function createEmptyAdrForm(): ETransportAdrForm {
   }
 }
 
+function splitStreetAddress(value: string) {
+  const text = String(value || "").trim()
+  if (!text) return { street: "", streetNo: "" }
+
+  const explicitNo = text.match(/^(.*?)(?:\s*,?\s*(?:nr|nr\.)\s*)([A-Za-z0-9\-\/]+)\s*$/i)
+  if (explicitNo) {
+    return {
+      street: explicitNo[1].trim(),
+      streetNo: explicitNo[2].trim(),
+    }
+  }
+
+  const trailingNo = text.match(/^(.*?)(?:\s+)(\d+[A-Za-z0-9\-\/]*)$/)
+  if (trailingNo) {
+    return {
+      street: trailingNo[1].trim(),
+      streetNo: trailingNo[2].trim(),
+    }
+  }
+
+  return { street: text, streetNo: "" }
+}
+
 function buildAdrFormFromLocation(location?: LocationOption | null): ETransportAdrForm {
   if (!location) return createEmptyAdrForm()
+  const parsedStreet = splitStreetAddress(String(location.address || ""))
   return {
     sourceLocationId: location.id,
       companyCui: "",
@@ -227,8 +253,8 @@ function buildAdrFormFromLocation(location?: LocationOption | null): ETransportA
       country: location.country || "Romania",
       county: location.county || "",
       city: location.city || "",
-      street: location.address || "",
-      streetNo: "",
+      street: parsedStreet.street,
+      streetNo: parsedStreet.streetNo,
       building: "",
       staircase: "",
       floor: "",
@@ -239,6 +265,8 @@ function buildAdrFormFromLocation(location?: LocationOption | null): ETransportA
   }
 
 function buildAdrFormFromCompany(company?: CompanyLookupResult | null, fallback?: Partial<ETransportAdrForm>) {
+  const rawStreet = String(company?.address || fallback?.street || "")
+  const parsedStreet = splitStreetAddress(rawStreet)
   return {
     ...createEmptyAdrForm(),
     ...fallback,
@@ -248,8 +276,8 @@ function buildAdrFormFromCompany(company?: CompanyLookupResult | null, fallback?
     country: normalizeCountryLabel(String(company?.country || fallback?.country || "Romania")),
     county: String(company?.county || fallback?.county || ""),
     city: String(company?.city || fallback?.city || ""),
-    street: String(company?.address || fallback?.street || ""),
-    streetNo: String(fallback?.streetNo || ""),
+    street: parsedStreet.street,
+    streetNo: String(fallback?.streetNo || parsedStreet.streetNo || ""),
     building: String(fallback?.building || ""),
     staircase: String(fallback?.staircase || ""),
     floor: String(fallback?.floor || ""),
@@ -257,6 +285,53 @@ function buildAdrFormFromCompany(company?: CompanyLookupResult | null, fallback?
     postalCode: String(company?.postalCode || fallback?.postalCode || ""),
     details: String(fallback?.details || ""),
   }
+}
+
+function routeAdrFromParty(form?: Partial<ETransportAdrForm> | null): ETransportAdrForm {
+  return {
+    ...createEmptyAdrForm(),
+    companyCui: String(form?.companyCui || ""),
+    companyName: String(form?.companyName || ""),
+    country: String(form?.country || "Romania"),
+    county: String(form?.county || ""),
+    city: String(form?.city || ""),
+    street: String(form?.street || ""),
+    streetNo: String(form?.streetNo || ""),
+    building: String(form?.building || ""),
+    staircase: String(form?.staircase || ""),
+    floor: String(form?.floor || ""),
+    apartment: String(form?.apartment || ""),
+    postalCode: String(form?.postalCode || ""),
+    details: String(form?.details || ""),
+    sourceLocationId: "",
+  }
+}
+
+function buildOrganizerStartAdr(company: ActiveCompany | null, location?: LocationOption | null): ETransportAdrForm {
+  return {
+    ...buildAdrFormFromLocation(location),
+    companyCui: String(company?.cui || ""),
+    companyName: String(company?.name || location?.name || ""),
+  }
+}
+
+function buildPartnerEndAdr(
+  partner: { cui?: string | null; name?: string | null; country?: string | null },
+  fallbackLocation?: LocationOption | null,
+): ETransportAdrForm {
+  if (partner.cui || partner.name) {
+    return routeAdrFromParty(
+      buildAdrFormFromCompany(
+        {
+          cui: partner.cui || "",
+          name: partner.name || "",
+          country: partner.country || "RO",
+        },
+        { companyCui: partner.cui || "" },
+      ),
+    )
+  }
+  return buildAdrFormFromLocation(fallbackLocation)
 }
 
 function normalizeCountryLabel(value: string) {
@@ -492,7 +567,7 @@ export default function TransferPage() {
               ? prev.toLocationId
               : nextLocations.find((location) => location.id !== (prev.fromLocationId || fallbackFrom))?.id || "",
         }))
-        setStartAdr(buildAdrFormFromLocation(fallbackFromLocation))
+        setStartAdr(buildOrganizerStartAdr(nextActiveCompany, fallbackFromLocation))
         setEndAdr(buildAdrFormFromLocation(fallbackToLocation))
       }
     } catch {
@@ -575,21 +650,15 @@ export default function TransferPage() {
         eTransportErrorText: doc.eTransportErrorText || "",
       })
 
-      const fallbackStartAdr = {
-        ...buildAdrFormFromLocation(doc.fromLocation),
-        companyCui: String(activeCompany?.cui || ""),
-        companyName: String(activeCompany?.name || doc.fromLocation?.name || ""),
-      }
-      const fallbackEndAdr = doc.eTransportPartnerCui || doc.eTransportPartnerName
-        ? buildAdrFormFromCompany(
-            {
-              name: doc.eTransportPartnerName || "",
-              cui: doc.eTransportPartnerCui || "",
-              country: doc.eTransportPartnerCountry || "RO",
-            },
-            { companyCui: doc.eTransportPartnerCui || "" },
-          )
-        : buildAdrFormFromLocation(doc.toLocation)
+      const fallbackStartAdr = buildOrganizerStartAdr(activeCompany, doc.fromLocation)
+      const fallbackEndAdr = buildPartnerEndAdr(
+        {
+          name: doc.eTransportPartnerName || "",
+          cui: doc.eTransportPartnerCui || "",
+          country: doc.eTransportPartnerCountry || "RO",
+        },
+        doc.toLocation,
+      )
 
       setStartAdr(doc.eTransportStartAddress ? parseAdrForm(doc.eTransportStartAddress || "", doc.fromLocation) : fallbackStartAdr)
       setEndAdr(doc.eTransportEndAddress ? parseAdrForm(doc.eTransportEndAddress || "", doc.toLocation) : fallbackEndAdr)
@@ -639,12 +708,15 @@ export default function TransferPage() {
   }
 
   function chooseProduct(lineId: string, product: ProductOption) {
+    const vatRate = Math.max(0, Number(product.vatRate?.rate || 0))
+    const grossPrice = Math.max(0, Number(product.price || 0))
+    const unitPrice = vatRate > 0 ? grossPrice / (1 + vatRate / 100) : grossPrice
     setLineValue(lineId, {
       productId: product.id,
       search: product.name || "",
       sku: product.sku || "",
       uomCode: product.uom?.code || "",
-      unitPrice: String(product.price ?? 0),
+      unitPrice: String(unitPrice),
     })
   }
 
@@ -734,17 +806,30 @@ export default function TransferPage() {
     if (!fromLocation) return
     setStartAdr((prev) => {
       if (!prev.sourceLocationId || prev.sourceLocationId === fromLocation.id || !adrFormHasContent(prev)) {
-        return {
-          ...buildAdrFormFromLocation(fromLocation),
-          companyCui: String(activeCompany?.cui || ""),
-          companyName: String(activeCompany?.name || fromLocation.name || ""),
-        }
+        return buildOrganizerStartAdr(activeCompany, fromLocation)
       }
       return prev
     })
   }, [fromLocation?.id, activeCompany?.cui, activeCompany?.name])
 
   useEffect(() => {
+    if (header.eTransportPartnerCui || header.eTransportPartnerName) {
+      setEndAdr((prev) => {
+        const normalizedPartnerCui = String(header.eTransportPartnerCui || "").trim()
+        if (adrFormHasContent(prev) && prev.companyCui === normalizedPartnerCui) {
+          return prev
+        }
+        return buildPartnerEndAdr(
+          {
+            cui: header.eTransportPartnerCui,
+            name: header.eTransportPartnerName,
+            country: header.eTransportPartnerCountry,
+          },
+          toLocation,
+        )
+      })
+      return
+    }
     if (!toLocation) return
     setEndAdr((prev) => {
       if (!prev.sourceLocationId || prev.sourceLocationId === toLocation.id || !adrFormHasContent(prev)) {
@@ -752,7 +837,7 @@ export default function TransferPage() {
       }
       return prev
     })
-  }, [toLocation?.id])
+  }, [toLocation?.id, header.eTransportPartnerCui, header.eTransportPartnerName, header.eTransportPartnerCountry])
 
   useEffect(() => {
     if (transferId && shouldOpenETransportFromUrl()) {
@@ -1067,7 +1152,7 @@ export default function TransferPage() {
         eTransportPartnerName: String(company.name || "").trim() || prev.eTransportPartnerName,
         eTransportPartnerCountry: "RO",
       }))
-      setEndAdr(buildAdrFormFromCompany(company, { companyCui: normalizedCui }))
+      setEndAdr(routeAdrFromParty(buildAdrFormFromCompany(company, { companyCui: normalizedCui })))
       setMessage("Partenerul a fost completat dupa CUI.")
     } catch {
       setError("Nu am putut cauta partenerul dupa CUI.")
@@ -1411,7 +1496,7 @@ export default function TransferPage() {
                           }))
                           setStartAdr((prev) => {
                             if (!prev.sourceLocationId || prev.sourceLocationId === header.fromLocationId || !adrFormHasContent(prev)) {
-                              return buildAdrFormFromLocation(nextLocation)
+                              return buildOrganizerStartAdr(activeCompany, nextLocation)
                             }
                             return prev
                           })
@@ -1839,7 +1924,7 @@ export default function TransferPage() {
                                 const option = addressOptions.find((item) => item.id === e.target.value)
                                 const location = locations.find((item) => item.id === e.target.value) || null
                                 if (!option) return
-                                setStartAdr(buildAdrFormFromLocation(location))
+                                setStartAdr(buildOrganizerStartAdr(activeCompany, location))
                               }}
                               className={documentInputClass}
                               disabled={eTransportFieldDisabled}

@@ -94,6 +94,8 @@ type NcSuggestion = {
   label: string
   confidence: number
   matchedKeywords: string[]
+  fiscalRisk: boolean
+  fiscalRiskCategory?: string | null
 }
 
 const CLASS_OPTIONS = [
@@ -251,6 +253,15 @@ export default function ProdusePage() {
   const selectedPurchaseUom = useMemo(() => {
     return uoms.find((u) => u.id === form.purchaseUomId) || null
   }, [uoms, form.purchaseUomId])
+
+  const fiscalRiskPrompt = useMemo(() => {
+    if (form.isFiscalRiskProduct || !ncSuggestion?.fiscalRisk) return null
+    return {
+      code: ncSuggestion.code,
+      label: ncSuggestion.label,
+      category: ncSuggestion.fiscalRiskCategory || "categorie ANAF cu risc fiscal ridicat",
+    }
+  }, [form.isFiscalRiskProduct, ncSuggestion])
 
   const isFinishedProduct = form.class === "PRODUS_FIN"
 
@@ -1463,6 +1474,59 @@ function getDefaultVat(list = vatRates) {
                         <span>Bun cu risc fiscal ridicat</span>
                       </label>
                       <div style={checkHint}>Activeaza verificarea automata pentru RO e-Transport pe documente.</div>
+                      {fiscalRiskPrompt ? (
+                        <div
+                          style={{
+                            marginTop: 10,
+                            border: "1px solid #f59e0b",
+                            background: "#fffbeb",
+                            color: "#92400e",
+                            borderRadius: 12,
+                            padding: "10px 12px",
+                            display: "grid",
+                            gap: 8,
+                          }}
+                        >
+                          <div style={{ fontSize: 12, lineHeight: 1.45 }}>
+                            Produsul pare sa intre intr-o categorie ANAF cu risc fiscal ridicat:
+                            {" "}
+                            <strong>{fiscalRiskPrompt.category}</strong>.
+                            Pentru RO e-Transport recomandam sa bifezi optiunea si sa completezi
+                            {" "}
+                            <strong>Cod NC</strong>,
+                            {" "}
+                            <strong>greutate neta</strong>
+                            {" "}si{" "}
+                            <strong>greutate bruta</strong>.
+                          </div>
+                          <div style={{ fontSize: 12, color: "#b45309" }}>
+                            Sugestie curenta: <strong>{fiscalRiskPrompt.code}</strong> - {fiscalRiskPrompt.label}
+                          </div>
+                          <div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setForm((prev) => ({
+                                  ...prev,
+                                  isFiscalRiskProduct: true,
+                                  ncCode: prev.ncCode || fiscalRiskPrompt.code,
+                                }))
+                              }
+                              style={{
+                                border: "1px solid #f59e0b",
+                                background: "#fff7ed",
+                                borderRadius: 10,
+                                padding: "8px 12px",
+                                fontSize: 12,
+                                fontWeight: 700,
+                                color: "#9a3412",
+                              }}
+                            >
+                              Bifeaza automat produsul cu risc fiscal
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
 
                     <div style={checkBlock}>

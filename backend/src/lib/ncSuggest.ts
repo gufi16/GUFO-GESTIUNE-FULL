@@ -3,12 +3,19 @@ type Suggestion = {
   label: string
   confidence: number
   matchedKeywords: string[]
+  fiscalRisk: boolean
+  fiscalRiskCategory: string | null
 }
 
 type Rule = {
   code: string
   label: string
   keywords: string[]
+}
+
+type FiscalRiskMeta = {
+  fiscalRisk: boolean
+  category: string | null
 }
 
 const RULES: Rule[] = [
@@ -54,6 +61,44 @@ function normalize(value: string) {
     .trim()
 }
 
+function getNcChapter(code: string) {
+  const digits = String(code || "").replace(/\D/g, "")
+  return digits.slice(0, 4)
+}
+
+function resolveFiscalRiskMeta(code: string): FiscalRiskMeta {
+  const chapter = getNcChapter(code)
+  if (!chapter) return { fiscalRisk: false, category: null }
+
+  const chapterNo = Number(chapter)
+  if (chapterNo >= 701 && chapterNo <= 714) {
+    return { fiscalRisk: true, category: "Legume, plante, radacini si tuberculi alimentari" }
+  }
+  if (chapterNo >= 801 && chapterNo <= 814) {
+    return { fiscalRisk: true, category: "Fructe comestibile" }
+  }
+  if (chapterNo >= 2201 && chapterNo <= 2208) {
+    return { fiscalRisk: true, category: "Bauturi, lichide alcoolice si otet" }
+  }
+  if (chapter === "2505" || chapter === "2517") {
+    return { fiscalRisk: true, category: "Sare, sulf, pamanturi, pietre, ipsos, var si ciment" }
+  }
+  if (chapterNo >= 6101 && chapterNo <= 6117) {
+    return { fiscalRisk: true, category: "Imbracaminte si accesorii tricotate/crosetate" }
+  }
+  if ((chapterNo >= 6201 && chapterNo <= 6212) || (chapterNo >= 6214 && chapterNo <= 6217)) {
+    return { fiscalRisk: true, category: "Imbracaminte si accesorii netricotate" }
+  }
+  if (chapterNo >= 6401 && chapterNo <= 6405) {
+    return { fiscalRisk: true, category: "Incaltaminte" }
+  }
+  if (chapter === "7213" || chapter === "7214") {
+    return { fiscalRisk: true, category: "Fonta, fier si otel" }
+  }
+
+  return { fiscalRisk: false, category: null }
+}
+
 export function suggestNcCodes(name: string, limit = 5): Suggestion[] {
   const normalized = normalize(name)
   if (!normalized) return []
@@ -61,11 +106,14 @@ export function suggestNcCodes(name: string, limit = 5): Suggestion[] {
   const results = RULES.map((rule) => {
     const matchedKeywords = rule.keywords.filter((keyword) => normalized.includes(normalize(keyword)))
     const confidence = matchedKeywords.length / rule.keywords.length
+    const fiscalRiskMeta = resolveFiscalRiskMeta(rule.code)
     return {
       code: rule.code,
       label: rule.label,
       confidence,
       matchedKeywords,
+      fiscalRisk: fiscalRiskMeta.fiscalRisk,
+      fiscalRiskCategory: fiscalRiskMeta.category,
     }
   })
     .filter((item) => item.matchedKeywords.length > 0)
