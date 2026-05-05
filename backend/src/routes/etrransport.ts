@@ -65,6 +65,10 @@ function extractUit(raw: string) {
   return match?.[1] || ""
 }
 
+function hasExplicitDownloadId(raw: string) {
+  return /id_descarcare|downloadId/i.test(String(raw || ""))
+}
+
 async function resolveNoticeDownloadId(company: any, notice: any) {
   const cif = normalizeCompanyCui(company?.cui)
   if (!cif || !company?.efacturaOauthAccessToken || !notice?.uploadIndex) return ""
@@ -568,7 +572,9 @@ router.get("/api/v1/etransport/notices/:id/status", async (req: AuthedRequest, r
     const statusResult = await anafCheckEtransportStatus(company, notice.uploadIndex)
     const summary = statusResult.summary
     const nextStatus = classifyEtransportStatus(statusResult.payload, statusResult.rawText)
-    const downloadId = statusResult.downloadId || notice.downloadId || null
+    const downloadId = hasExplicitDownloadId(statusResult.rawText)
+      ? (statusResult.downloadId || notice.downloadId || null)
+      : (notice.downloadId || null)
     const uit = extractUit(statusResult.rawText) || notice.uit || null
 
     if (!statusResult.response.ok) {
@@ -638,9 +644,9 @@ router.get("/api/v1/etransport/notices/:id/receipt", async (req: AuthedRequest, 
     return res.status(400).json({ ok: false, error: "Nu exista token ANAF salvat pentru aceasta firma." })
   }
 
-  let downloadId = notice.downloadId || ""
+  let downloadId = await resolveNoticeDownloadId(company, notice)
   if (!downloadId) {
-    downloadId = await resolveNoticeDownloadId(company, notice)
+    downloadId = notice.downloadId || ""
   }
 
   if (!downloadId) {
