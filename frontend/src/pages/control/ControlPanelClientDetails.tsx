@@ -56,6 +56,18 @@ type LocationItem = {
   name: string
   code?: string
   isActive?: boolean
+  address?: string | null
+  street?: string | null
+  streetNo?: string | null
+  building?: string | null
+  staircase?: string | null
+  floor?: string | null
+  apartment?: string | null
+  details?: string | null
+  city?: string | null
+  county?: string | null
+  country?: string | null
+  postalCode?: string | null
   companyId?: string | null
   company?: {
     id: string
@@ -103,6 +115,18 @@ type CreateLocationResponse = {
     id: string
     name: string
     code: string
+    address?: string | null
+    street?: string | null
+    streetNo?: string | null
+    building?: string | null
+    staircase?: string | null
+    floor?: string | null
+    apartment?: string | null
+    details?: string | null
+    city?: string | null
+    county?: string | null
+    country?: string | null
+    postalCode?: string | null
     companyId?: string | null
   }
 }
@@ -200,6 +224,52 @@ function currencyFormat(value?: number, currency?: string) {
   return `${value.toLocaleString("ro-RO")} ${currency || "RON"}`
 }
 
+type LocationFormState = {
+  name: string
+  country: string
+  county: string
+  city: string
+  postalCode: string
+  street: string
+  streetNo: string
+  building: string
+  staircase: string
+  floor: string
+  apartment: string
+  details: string
+}
+
+const emptyLocationForm = (): LocationFormState => ({
+  name: "",
+  country: "Romania",
+  county: "",
+  city: "",
+  postalCode: "",
+  street: "",
+  streetNo: "",
+  building: "",
+  staircase: "",
+  floor: "",
+  apartment: "",
+  details: "",
+})
+
+function buildLocationAddressSummary(location?: Partial<LocationItem> | null) {
+  if (!location) return "-"
+  const lineOne = [location.street, location.streetNo].filter(Boolean).join(" ")
+  const lineTwo = [
+    location.building ? `Bl. ${location.building}` : "",
+    location.staircase ? `Sc. ${location.staircase}` : "",
+    location.floor ? `Et. ${location.floor}` : "",
+    location.apartment ? `Ap. ${location.apartment}` : "",
+  ]
+    .filter(Boolean)
+    .join(", ")
+  const locality = [location.city, location.county, location.postalCode].filter(Boolean).join(", ")
+  const extra = [location.details, location.country].filter(Boolean).join(" | ")
+  return [lineOne, lineTwo, locality, extra].filter(Boolean).join(" | ") || location.address || "-"
+}
+
 function metricCard(label: string, value: string | number) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
@@ -229,8 +299,8 @@ export default function ControlPanelClientDetails() {
   const [savingUser, setSavingUser] = useState(false)
   const [exportingClient, setExportingClient] = useState(false)
   const [editingUserId, setEditingUserId] = useState<string | null>(null)
-  const [newLocationName, setNewLocationName] = useState("")
   const [newLocationCompanyId, setNewLocationCompanyId] = useState("")
+  const [locationForm, setLocationForm] = useState<LocationFormState>(emptyLocationForm())
   const [deviceForms, setDeviceForms] = useState<Record<string, { label: string }>>({})
   const [openDeviceLocationId, setOpenDeviceLocationId] = useState<string | null>(null)
   const [locationError, setLocationError] = useState<string | null>(null)
@@ -560,7 +630,7 @@ export default function ControlPanelClientDetails() {
 
   async function handleCreateLocation() {
     if (!id) return
-    const name = newLocationName.trim()
+    const name = locationForm.name.trim()
     if (!name) {
       setLocationError("Introdu numele locatiei.")
       return
@@ -574,9 +644,23 @@ export default function ControlPanelClientDetails() {
       setLocationError(null)
       await api<CreateLocationResponse>(`/api/v1/admin/clients/${id}/locations`, {
         method: "POST",
-        body: JSON.stringify({ name, companyId: newLocationCompanyId }),
+        body: JSON.stringify({
+          name,
+          companyId: newLocationCompanyId,
+          country: locationForm.country.trim() || "Romania",
+          county: locationForm.county.trim(),
+          city: locationForm.city.trim(),
+          postalCode: locationForm.postalCode.trim(),
+          street: locationForm.street.trim(),
+          streetNo: locationForm.streetNo.trim(),
+          building: locationForm.building.trim(),
+          staircase: locationForm.staircase.trim(),
+          floor: locationForm.floor.trim(),
+          apartment: locationForm.apartment.trim(),
+          details: locationForm.details.trim(),
+        }),
       })
-      setNewLocationName("")
+      setLocationForm(emptyLocationForm())
       setMessage("Locatia a fost adaugata.")
       await load()
     } catch (err: any) {
@@ -1086,12 +1170,6 @@ export default function ControlPanelClientDetails() {
                   </option>
                 ))}
               </select>
-              <input
-                value={newLocationName}
-                onChange={(e) => setNewLocationName(e.target.value)}
-                placeholder="Locatie noua"
-                className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
-            />
             <button
               onClick={handleCreateLocation}
               disabled={creatingLocation}
@@ -1100,6 +1178,83 @@ export default function ControlPanelClientDetails() {
               <Plus size={15} />
               {creatingLocation ? "Se creeaza..." : "Adauga locatie"}
             </button>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <input
+              value={locationForm.name}
+              onChange={(e) => setLocationForm((prev) => ({ ...prev, name: e.target.value }))}
+              placeholder="Nume locatie"
+              className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+            />
+            <input
+              value={locationForm.country}
+              onChange={(e) => setLocationForm((prev) => ({ ...prev, country: e.target.value }))}
+              placeholder="Tara"
+              className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+            />
+            <input
+              value={locationForm.county}
+              onChange={(e) => setLocationForm((prev) => ({ ...prev, county: e.target.value }))}
+              placeholder="Judet"
+              className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+            />
+            <input
+              value={locationForm.city}
+              onChange={(e) => setLocationForm((prev) => ({ ...prev, city: e.target.value }))}
+              placeholder="Oras / Localitate"
+              className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+            />
+            <input
+              value={locationForm.postalCode}
+              onChange={(e) => setLocationForm((prev) => ({ ...prev, postalCode: e.target.value }))}
+              placeholder="Cod postal"
+              className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+            />
+            <input
+              value={locationForm.street}
+              onChange={(e) => setLocationForm((prev) => ({ ...prev, street: e.target.value }))}
+              placeholder="Strada"
+              className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+            />
+            <input
+              value={locationForm.streetNo}
+              onChange={(e) => setLocationForm((prev) => ({ ...prev, streetNo: e.target.value }))}
+              placeholder="Nr."
+              className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+            />
+            <input
+              value={locationForm.building}
+              onChange={(e) => setLocationForm((prev) => ({ ...prev, building: e.target.value }))}
+              placeholder="Bl."
+              className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+            />
+            <input
+              value={locationForm.staircase}
+              onChange={(e) => setLocationForm((prev) => ({ ...prev, staircase: e.target.value }))}
+              placeholder="Sc."
+              className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+            />
+            <input
+              value={locationForm.floor}
+              onChange={(e) => setLocationForm((prev) => ({ ...prev, floor: e.target.value }))}
+              placeholder="Et."
+              className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+            />
+            <input
+              value={locationForm.apartment}
+              onChange={(e) => setLocationForm((prev) => ({ ...prev, apartment: e.target.value }))}
+              placeholder="Ap."
+              className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+            />
+            <input
+              value={locationForm.details}
+              onChange={(e) => setLocationForm((prev) => ({ ...prev, details: e.target.value }))}
+              placeholder="Detalii suplimentare"
+              className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+            />
           </div>
         </div>
 
@@ -1125,6 +1280,7 @@ export default function ControlPanelClientDetails() {
                       <div className="mt-1 text-xs text-slate-500">
                         {[location.code || "-", location.company?.code || null, `${location.devices?.length || 0} device-uri`].filter(Boolean).join(" | ")}
                       </div>
+                      <div className="mt-1 text-xs text-slate-500">{buildLocationAddressSummary(location)}</div>
                     </div>
 
                   <div className="flex flex-wrap gap-2">

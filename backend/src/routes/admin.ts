@@ -68,6 +68,33 @@ function serializeCompanySummary(company?: any | null) {
   }
 }
 
+function toNullableText(value: unknown) {
+  const text = String(value ?? "").trim()
+  return text || null
+}
+
+function buildStructuredLocationAddress(data: {
+  street?: string | null
+  streetNo?: string | null
+  building?: string | null
+  staircase?: string | null
+  floor?: string | null
+  apartment?: string | null
+  details?: string | null
+}) {
+  const streetLine = [data.street, data.streetNo ? `Nr. ${data.streetNo}` : null].filter(Boolean).join(" ").trim()
+  const secondaryLine = [
+    data.building ? `Bl. ${data.building}` : null,
+    data.staircase ? `Sc. ${data.staircase}` : null,
+    data.floor ? `Et. ${data.floor}` : null,
+    data.apartment ? `Ap. ${data.apartment}` : null,
+  ]
+    .filter(Boolean)
+    .join(", ")
+    .trim()
+  return [streetLine, secondaryLine, data.details].filter(Boolean).join(", ").trim() || null
+}
+
 function resolveOwnedCompany(companies: Array<any>, requestedCompanyId?: string | null) {
   if (!Array.isArray(companies) || !companies.length) return null
   if (requestedCompanyId) {
@@ -242,6 +269,17 @@ const AdminUpdateUserSchema = z.object({
 const CreateLocationSchema = z.object({
   name: z.string().min(2),
   companyId: z.string().optional().nullable(),
+  street: z.string().optional(),
+  streetNo: z.string().optional(),
+  building: z.string().optional(),
+  staircase: z.string().optional(),
+  floor: z.string().optional(),
+  apartment: z.string().optional(),
+  details: z.string().optional(),
+  city: z.string().optional(),
+  county: z.string().optional(),
+  country: z.string().optional(),
+  postalCode: z.string().optional(),
 })
 
 const CreateDeviceSchema = z.object({
@@ -741,6 +779,18 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
           name: location.name,
           code: location.code,
           isActive: location.isActive,
+          address: location.address,
+          street: location.street,
+          streetNo: location.streetNo,
+          building: location.building,
+          staircase: location.staircase,
+          floor: location.floor,
+          apartment: location.apartment,
+          details: location.details,
+          city: location.city,
+          county: location.county,
+          country: location.country,
+          postalCode: location.postalCode,
           companyId: location.companyId,
           company: serializeCompanySummary(location.company),
           terminalsCount: devices.length,
@@ -1389,6 +1439,18 @@ router.post("/api/v1/admin/clients/:id/locations", requireAuth, requireOwner, as
     }
 
     const code = await generateUniqueLocationCode(tenant.id, company.id, parsed.data.name)
+    const street = toNullableText(parsed.data.street)
+    const streetNo = toNullableText(parsed.data.streetNo)
+    const building = toNullableText(parsed.data.building)
+    const staircase = toNullableText(parsed.data.staircase)
+    const floor = toNullableText(parsed.data.floor)
+    const apartment = toNullableText(parsed.data.apartment)
+    const details = toNullableText(parsed.data.details)
+    const city = toNullableText(parsed.data.city)
+    const county = toNullableText(parsed.data.county)
+    const country = toNullableText(parsed.data.country) || "RO"
+    const postalCode = toNullableText(parsed.data.postalCode)
+    const address = buildStructuredLocationAddress({ street, streetNo, building, staircase, floor, apartment, details })
 
     const location = await prisma.$transaction(async (tx) => {
       const created = await tx.location.create({
@@ -1397,6 +1459,18 @@ router.post("/api/v1/admin/clients/:id/locations", requireAuth, requireOwner, as
           companyId: company.id,
           name: parsed.data.name.trim(),
           code,
+          address,
+          street,
+          streetNo,
+          building,
+          staircase,
+          floor,
+          apartment,
+          details,
+          city,
+          county,
+          country,
+          postalCode,
           isActive: true,
         },
       })
@@ -1414,6 +1488,10 @@ router.post("/api/v1/admin/clients/:id/locations", requireAuth, requireOwner, as
             companyName: company.name,
             name: created.name,
             code: created.code,
+            address: created.address,
+            city: created.city,
+            county: created.county,
+            postalCode: created.postalCode,
           },
         },
       })
@@ -1428,6 +1506,18 @@ router.post("/api/v1/admin/clients/:id/locations", requireAuth, requireOwner, as
         name: location.name,
         code: location.code,
         isActive: location.isActive,
+        address: location.address,
+        street: location.street,
+        streetNo: location.streetNo,
+        building: location.building,
+        staircase: location.staircase,
+        floor: location.floor,
+        apartment: location.apartment,
+        details: location.details,
+        city: location.city,
+        county: location.county,
+        country: location.country,
+        postalCode: location.postalCode,
         companyId: company.id,
         company: serializeCompanySummary(company),
       },

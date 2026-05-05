@@ -484,6 +484,13 @@ model Location {
   name      String
   code      String
   address   String?
+  street    String?
+  streetNo  String?
+  building  String?
+  staircase String?
+  floor     String?
+  apartment String?
+  details   String?
   city      String?
   county    String?
   country   String?  @default("RO")
