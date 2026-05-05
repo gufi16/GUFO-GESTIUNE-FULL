@@ -16,6 +16,10 @@ function decimal(value: unknown, digits = 2) {
   return toNumber(value).toFixed(digits)
 }
 
+function transportDecimal(value: unknown) {
+  return decimal(value, 2)
+}
+
 function formatDateTimeLocal(value: unknown) {
   if (!value) return ""
   const date = value instanceof Date ? value : new Date(String(value))
@@ -459,7 +463,7 @@ export function generateTransferETransportXml(doc: any) {
       const unitPrice = toNumber(item?.unitPrice)
       const lineValue = toNumber(item?.lineValue)
       const grossWeightKg = toNumber(item?.product?.grossWeightKg || 0)
-      return `    <bunuriTransportate codScopOperatiune="${xmlEscape(goodsPurposeCode)}" codTarifar="${xmlEscape(item?.product?.ncCode || "")}" denumireMarfa="${xmlEscape(item?.product?.name || item?.productName || "")}" cantitate="${decimal(qty, 3)}" codUnitateMasura="${xmlEscape(resolveTransportUomCode(item))}" greutateNeta="${decimal(qty * grossWeightKg, 3)}" greutateBruta="${decimal(qty * grossWeightKg, 3)}" valoareLeiFaraTva="${decimal(lineValue, 2)}"/>`
+      return `    <bunuriTransportate codScopOperatiune="${xmlEscape(goodsPurposeCode)}" codTarifar="${xmlEscape(item?.product?.ncCode || "")}" denumireMarfa="${xmlEscape(item?.product?.name || item?.productName || "")}" cantitate="${transportDecimal(qty)}" codUnitateMasura="${xmlEscape(resolveTransportUomCode(item))}" greutateNeta="${transportDecimal(qty * grossWeightKg)}" greutateBruta="${transportDecimal(qty * grossWeightKg)}" valoareLeiFaraTva="${decimal(lineValue, 2)}"/>`
     })
     .join("\n")
 
@@ -586,7 +590,7 @@ export function generateETransportNoticeXml(notice: any) {
       const qty = toNumber(item?.qty)
       const lineValue = toNumber(item?.lineValue)
       const grossWeightKg = toNumber(item?.grossWeightPerUnitKg || item?.product?.grossWeightKg || 0)
-      return `    <bunuriTransportate codScopOperatiune="${xmlEscape(goodsPurposeCode)}" codTarifar="${xmlEscape(item?.ncCode || item?.product?.ncCode || "")}" denumireMarfa="${xmlEscape(item?.name || item?.product?.name || "")}" cantitate="${decimal(qty, 3)}" codUnitateMasura="${xmlEscape(resolveTransportUomCode(item))}" greutateNeta="${decimal(toNumber(item?.grossWeightTotalKg) || qty * grossWeightKg, 3)}" greutateBruta="${decimal(toNumber(item?.grossWeightTotalKg) || qty * grossWeightKg, 3)}" valoareLeiFaraTva="${decimal(lineValue, 2)}"/>`
+      return `    <bunuriTransportate codScopOperatiune="${xmlEscape(goodsPurposeCode)}" codTarifar="${xmlEscape(item?.ncCode || item?.product?.ncCode || "")}" denumireMarfa="${xmlEscape(item?.name || item?.product?.name || "")}" cantitate="${transportDecimal(qty)}" codUnitateMasura="${xmlEscape(resolveTransportUomCode(item))}" greutateNeta="${transportDecimal(toNumber(item?.grossWeightTotalKg) || qty * grossWeightKg)}" greutateBruta="${transportDecimal(toNumber(item?.grossWeightTotalKg) || qty * grossWeightKg)}" valoareLeiFaraTva="${decimal(lineValue, 2)}"/>`
     })
     .join("\n")
 
