@@ -40,7 +40,12 @@ const certStorage = multer.diskStorage({
     cb(null, certUploadsDir)
   },
   filename: (req: AuthedRequest, file, cb) => {
-    cb(null, path.basename(getEfacturaCertPath(req.auth!.tenantId, file.originalname)))
+    cb(
+      null,
+      path.basename(
+        getEfacturaCertPath(req.auth!.tenantId, req.auth?.activeCompanyId || null, file.originalname)
+      )
+    )
   },
 })
 
@@ -180,7 +185,7 @@ function createEfacturaAgentPairingCode(payload: {
 }
 
 function mapCompanyResponse(company: any, oauthConfig: any) {
-  const hasStoredCertificate = hasEfacturaCertificateFile(company?.tenantId, company?.efacturaCertFilename)
+  const hasStoredCertificate = hasEfacturaCertificateFile(company?.tenantId, company?.id, company?.efacturaCertFilename)
 
   return {
     ...company,
@@ -232,6 +237,34 @@ async function getRequestCompany(req: AuthedRequest, extra: Record<string, any> 
 
 async function ensureRequestCompany(req: AuthedRequest, seedData: Record<string, any> = {}) {
   return ensureTenantCompany(prisma, req.auth!.tenantId, getActiveCompanyId(req), seedData)
+}
+
+async function getRequestCompanyCertificateState(req: AuthedRequest) {
+  return getRequestCompany(req, {
+    select: {
+      id: true,
+      tenantId: true,
+      name: true,
+      efacturaCertFilename: true,
+      efacturaCertPasswordEnc: true,
+      efacturaCertSerial: true,
+    },
+  })
+}
+
+function ensureCompanyCertificateReady(company: any) {
+  if (!company?.id) {
+    throw new Error("Firma activa nu este disponibila.")
+  }
+  if (!company?.efacturaCertFilename) {
+    throw new Error("Incarca mai intai certificatul SPV pentru firma activa.")
+  }
+  if (!hasEfacturaCertificateFile(company?.tenantId, company?.id, company?.efacturaCertFilename)) {
+    throw new Error("Fisierul certificatului SPV lipseste pentru firma activa. Reincarca certificatul.")
+  }
+  if (!company?.efacturaCertPasswordEnc) {
+    throw new Error("Salveaza parola certificatului SPV pentru firma activa.")
+  }
 }
 
 async function updateRequestCompany(
@@ -849,6 +882,7 @@ router.post(
 
       const existing = await getRequestCompany(req, {
         select: {
+          id: true,
           tenantId: true,
           name: true,
           efacturaCertFilename: true,
@@ -856,7 +890,7 @@ router.post(
       })
 
       if (existing?.efacturaCertFilename && existing.efacturaCertFilename !== req.file.filename) {
-        deleteEfacturaCertificateFile(tenantId, existing.efacturaCertFilename)
+        deleteEfacturaCertificateFile(tenantId, existing.id, existing.efacturaCertFilename)
       }
 
       const company = await updateRequestCompany(req, {
@@ -894,11 +928,12 @@ router.delete("/api/v1/company/efactura/certificate", requireAuth, async (req: A
   try {
     const company = await getRequestCompany(req, {
       select: {
+        id: true,
         efacturaCertFilename: true,
       },
     })
 
-    deleteEfacturaCertificateFile(tenantId, company?.efacturaCertFilename)
+    deleteEfacturaCertificateFile(tenantId, company?.id, company?.efacturaCertFilename)
 
     const updated = await updateRequestCompany(req, {
       efacturaCertFilename: null,
@@ -937,6 +972,16 @@ router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, re
     return res.status(409).json({
       ok: false,
       error: error?.message || "Nu am putut determina firma activa pentru OAuth ANAF.",
+    })
+  }
+
+  try {
+    const certificateCompany = await getRequestCompanyCertificateState(req)
+    ensureCompanyCertificateReady(certificateCompany)
+  } catch (error: any) {
+    return res.status(409).json({
+      ok: false,
+      error: error?.message || "Firma activa nu are certificatul SPV configurat complet.",
     })
   }
 

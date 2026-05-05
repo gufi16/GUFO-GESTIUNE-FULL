@@ -278,7 +278,7 @@ export async function buildTenantExportZip(tenantId: string) {
   }
   for (const company of tenant.companies || []) {
     if (!company?.efacturaCertFilename) continue
-    const certAbsolute = getEfacturaCertPath(tenantId, company.efacturaCertFilename)
+    const certAbsolute = getEfacturaCertPath(tenantId, company.id, company.efacturaCertFilename)
     if (fs.existsSync(certAbsolute)) {
       uploadPaths.add(path.relative(process.cwd(), certAbsolute).replace(/\\/g, "/"))
     }

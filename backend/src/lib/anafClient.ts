@@ -14,6 +14,7 @@ import {
 } from "./incomingEfactura"
 
 const COMPANY_ANAF_SELECT = {
+  id: true,
   tenantId: true,
   cui: true,
   efacturaEnvironment: true,
