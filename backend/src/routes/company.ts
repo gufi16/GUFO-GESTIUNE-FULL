@@ -12,6 +12,7 @@ import { anafHttpRequest } from "../lib/anafHttp"
 import { getAnafCompanyDiagnostics } from "../lib/anafClient"
 import { ensureTenantCompany, resolveTenantCompany, updateOrCreateTenantCompany } from "../lib/companyResolver"
 import {
+  ANAF_CREDENTIAL_SELECT,
   getCompanyAnafCredentialById,
   getDefaultCompanyAnafCredential,
   listCompanyAnafCredentials,
@@ -561,6 +562,7 @@ export async function handleAnafOauthCallback(req, res) {
         const updated = await prisma.companyAnafCredential.update({
           where: { id: credential.id },
           data: { efacturaOauthLastError: nextError },
+          select: ANAF_CREDENTIAL_SELECT,
         })
         if (credential.isDefault) {
           await syncDefaultAnafCredentialToCompany(prisma as any, company.id, updated)
@@ -615,6 +617,7 @@ export async function handleAnafOauthCallback(req, res) {
             data: {
               efacturaOauthLastError: String(payload?.error_description || payload?.error || "Nu am putut obtine token-ul ANAF."),
             },
+            select: ANAF_CREDENTIAL_SELECT,
           })
           if (credential.isDefault) {
             await syncDefaultAnafCredentialToCompany(prisma as any, company.id, updated)
@@ -651,6 +654,7 @@ export async function handleAnafOauthCallback(req, res) {
         efacturaOauthConnectedAt: new Date(),
         efacturaOauthLastError: null,
       },
+      select: ANAF_CREDENTIAL_SELECT,
     })
 
     if (credential.isDefault) {
@@ -670,6 +674,7 @@ export async function handleAnafOauthCallback(req, res) {
         const updated = await prisma.companyAnafCredential.update({
           where: { id: credential.id },
           data: { efacturaOauthLastError: error?.message || "Eroare la schimbul token-ului ANAF." },
+          select: ANAF_CREDENTIAL_SELECT,
         })
         if (credential.isDefault) {
           await syncDefaultAnafCredentialToCompany(prisma as any, company.id, updated)
@@ -1095,6 +1100,7 @@ router.post(
             label: `${existingCompany?.name || "Firma"} - SPV principal`,
             isDefault: true,
           },
+          select: ANAF_CREDENTIAL_SELECT,
         })
       }
 
@@ -1113,6 +1119,7 @@ router.post(
           certPasswordEnc: encryptSecret(password),
           isDefault: credential.isDefault ?? true,
         },
+        select: ANAF_CREDENTIAL_SELECT,
       })
 
       if (updatedCredential.isDefault) {
@@ -1165,6 +1172,7 @@ router.delete("/api/v1/company/efactura/certificate", requireAuth, async (req: A
           certPasswordEnc: null,
           certSerial: null,
         },
+        select: ANAF_CREDENTIAL_SELECT,
       })
       if (updatedCredential.isDefault) {
         await syncDefaultAnafCredentialToCompany(prisma as any, company.id, updatedCredential)
@@ -1318,6 +1326,7 @@ router.post("/api/v1/company/efactura/oauth/test", async (req: AuthedRequest, re
           data: {
             efacturaOauthLastError: text.slice(0, 1000),
           },
+          select: ANAF_CREDENTIAL_SELECT,
         })
         await syncDefaultAnafCredentialToCompany(prisma as any, company.id, updatedCredential)
       }
@@ -1336,6 +1345,7 @@ router.post("/api/v1/company/efactura/oauth/test", async (req: AuthedRequest, re
           efacturaOauthConnectedAt: credential.efacturaOauthConnectedAt ?? new Date(),
           efacturaOauthLastError: null,
         },
+        select: ANAF_CREDENTIAL_SELECT,
       })
       await syncDefaultAnafCredentialToCompany(prisma as any, company.id, updatedCredential)
     }
@@ -1353,6 +1363,7 @@ router.post("/api/v1/company/efactura/oauth/test", async (req: AuthedRequest, re
         data: {
           efacturaOauthLastError: error?.message || "Eroare la testarea conexiunii ANAF.",
         },
+        select: ANAF_CREDENTIAL_SELECT,
       })
       await syncDefaultAnafCredentialToCompany(prisma as any, company.id, updatedCredential)
     }
@@ -1443,6 +1454,7 @@ router.post("/api/v1/company/efactura/credentials", requireAuth, async (req: Aut
         label,
         isDefault: existing.length === 0,
       },
+      select: ANAF_CREDENTIAL_SELECT,
     })
 
     if (created.isDefault) {
@@ -1518,6 +1530,7 @@ router.patch("/api/v1/company/efactura/credentials/:id", requireAuth, async (req
         updatedCredential = await prisma.companyAnafCredential.update({
           where: { id: credential.id },
           data: updateData,
+          select: ANAF_CREDENTIAL_SELECT,
         })
         await syncDefaultAnafCredentialToCompany(prisma as any, company.id, updatedCredential)
       }
