@@ -54,6 +54,24 @@ type EFacturaCertificateState = {
   passwordConfigured: boolean
 }
 
+type AnafCredentialSummary = {
+  id: string
+  label: string
+  isDefault: boolean
+  certSerial: string
+  certFilename: string
+  certUploadedAt: string | null
+  certPasswordConfigured: boolean
+  efacturaConnectedAt: string | null
+  efacturaAccessTokenExpiresAt: string | null
+  efacturaLastError: string
+  hasCertificateFile: boolean
+  hasCertificatePassword: boolean
+  hasEfacturaToken: boolean
+  connected: boolean
+  hasEtransportToken: boolean
+}
+
 type LocalAgentCertificateStatus = {
   configuredSerial: string | null
   detected: boolean
@@ -183,6 +201,12 @@ function SettingsModal({
   )
 }
 
+function findCredentialById(credentials: AnafCredentialSummary[], credentialId: string | null | undefined) {
+  const targetId = String(credentialId || "").trim()
+  if (!targetId) return null
+  return credentials.find((item) => item.id === targetId) || null
+}
+
 export default function SetariEFacturaPage() {
   if (!hasModule("efactura")) {
     return <Navigate to="/setari" replace />
@@ -196,6 +220,7 @@ export default function SetariEFacturaPage() {
   const [testing, setTesting] = useState(false)
   const [loadingDiagnostics, setLoadingDiagnostics] = useState(false)
   const [certBusy, setCertBusy] = useState(false)
+  const [credentialBusy, setCredentialBusy] = useState(false)
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
   const [diagnostics, setDiagnostics] = useState<EFacturaDiagnostics | null>(null)
@@ -213,6 +238,10 @@ export default function SetariEFacturaPage() {
     expiresAt: "",
     lastError: "",
   })
+  const [credentials, setCredentials] = useState<AnafCredentialSummary[]>([])
+  const [selectedCredentialId, setSelectedCredentialId] = useState("")
+  const [selectedCredentialLabel, setSelectedCredentialLabel] = useState("")
+  const [newCredentialLabel, setNewCredentialLabel] = useState("")
   const [localAgentUrl, setLocalAgentUrl] = useState(DEFAULT_LOCAL_AGENT_URL)
   const [localAgentLoading, setLocalAgentLoading] = useState(false)
   const [localAgentError, setLocalAgentError] = useState("")
@@ -240,6 +269,77 @@ export default function SetariEFacturaPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  useEffect(() => {
+    const selectedCredential =
+      findCredentialById(credentials, selectedCredentialId) ||
+      credentials.find((item) => item.isDefault) ||
+      credentials[0] ||
+      null
+
+    if (!selectedCredential) {
+      setSelectedCredentialLabel("")
+      return
+    }
+
+    if (selectedCredential.id !== selectedCredentialId) {
+      setSelectedCredentialId(selectedCredential.id)
+    }
+
+    applyCredentialState(selectedCredential, {
+      efacturaCertSerial: form.efacturaCertSerial,
+      efacturaCertHasFile: certState.hasFile,
+      efacturaCertFilename: certState.filename,
+      efacturaCertUploadedAt: certState.uploadedAt,
+      efacturaCertPasswordConfigured: certState.passwordConfigured,
+      efacturaOauthAccessToken: oauthStatus.connected,
+      efacturaOauthConnectedAt: oauthStatus.connectedAt,
+      efacturaOauthAccessTokenExpiresAt: oauthStatus.expiresAt,
+      efacturaOauthLastError: oauthStatus.lastError,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCredentialId, credentials])
+
+  useEffect(() => {
+    if (!token || !selectedCredentialId) return
+    void loadDiagnostics()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCredentialId])
+
+  function applyCredentialState(credential: AnafCredentialSummary | null, company: any) {
+    const fallbackSerial = String(company?.efacturaCertSerial || "").trim()
+    const fallbackHasFile = Boolean(company?.efacturaCertHasFile)
+    const fallbackPassword = Boolean(company?.efacturaCertPasswordConfigured)
+    const fallbackHasToken = Boolean(company?.efacturaOauthAccessToken)
+    const hasCompanyCertificate = fallbackHasFile && fallbackPassword
+
+    setForm((prev) => ({
+      ...prev,
+      efacturaCertSerial: credential?.certSerial || fallbackSerial,
+    }))
+
+    setSelectedCredentialLabel(credential?.label || "")
+    setCertState({
+      hasFile: credential ? Boolean(credential.hasCertificateFile) : fallbackHasFile,
+      filename: credential?.certFilename || company?.efacturaCertFilename || "",
+      uploadedAt: credential?.certUploadedAt || company?.efacturaCertUploadedAt || "",
+      passwordConfigured: credential ? Boolean(credential.certPasswordConfigured) : fallbackPassword,
+    })
+
+    const connected = credential ? Boolean(credential.connected) : fallbackHasToken && hasCompanyCertificate
+    const lastError = credential
+      ? String(credential.efacturaLastError || "")
+      : !hasCompanyCertificate && fallbackHasToken
+        ? "Exista un token ANAF salvat, dar firma activa nu are certificatul SPV configurat complet."
+        : String(company?.efacturaOauthLastError || "")
+
+    setOauthStatus({
+      connected,
+      connectedAt: credential?.efacturaConnectedAt || company?.efacturaOauthConnectedAt || "",
+      expiresAt: credential?.efacturaAccessTokenExpiresAt || company?.efacturaOauthAccessTokenExpiresAt || "",
+      lastError,
+    })
+  }
+
   async function loadSettings() {
     if (!token) {
       setError("Nu exista token de autentificare. Fa login din nou.")
@@ -263,6 +363,22 @@ export default function SetariEFacturaPage() {
         throw new Error(data?.error || "Nu am putut incarca setarile e-Factura.")
       }
 
+      const company = data?.company || {}
+      const nextCredentials = Array.isArray(company?.anafCredentials) ? (company.anafCredentials as AnafCredentialSummary[]) : []
+      const fallbackCredentialId = String(company?.anafCredentialId || "").trim()
+      const preservedCredential =
+        findCredentialById(nextCredentials, selectedCredentialId) ||
+        findCredentialById(nextCredentials, fallbackCredentialId) ||
+        nextCredentials.find((item) => item.isDefault) ||
+        nextCredentials[0] ||
+        null
+
+      setCredentials(nextCredentials)
+      setSelectedCredentialId(preservedCredential?.id || "")
+      if (!newCredentialLabel.trim() && company?.name) {
+        setNewCredentialLabel(`${company.name} - SPV principal`)
+      }
+
       setForm({
         efacturaEnabled: data?.company?.efacturaEnabled ?? false,
         efacturaEnvironment: data?.company?.efacturaEnvironment || "test",
@@ -275,32 +391,11 @@ export default function SetariEFacturaPage() {
         companyPostalCode: data?.company?.efacturaSellerPostalCode || data?.company?.postalCode || "",
         companyCountry: data?.company?.efacturaSellerCountryCode || data?.company?.country || "RO",
         contactEmail: data?.company?.efacturaContactEmail || data?.company?.contactEmail || "",
-        efacturaCertSerial: data?.company?.efacturaCertSerial || "",
+        efacturaCertSerial: preservedCredential?.certSerial || data?.company?.efacturaCertSerial || "",
       })
-      setCertState({
-        hasFile: Boolean(data?.company?.efacturaCertHasFile),
-        filename: data?.company?.efacturaCertFilename || "",
-        uploadedAt: data?.company?.efacturaCertUploadedAt || "",
-        passwordConfigured: Boolean(data?.company?.efacturaCertPasswordConfigured),
-      })
+      applyCredentialState(preservedCredential, company)
 
-      const hasOauthToken = Boolean(data?.company?.efacturaOauthAccessToken)
-      const hasCompanyCertificate =
-        Boolean(data?.company?.efacturaCertHasFile) &&
-        Boolean(data?.company?.efacturaCertPasswordConfigured)
-      const connected = hasOauthToken && hasCompanyCertificate
-
-      setOauthStatus({
-        connected,
-        connectedAt: data?.company?.efacturaOauthConnectedAt || "",
-        expiresAt: data?.company?.efacturaOauthAccessTokenExpiresAt || "",
-        lastError:
-          !hasCompanyCertificate && hasOauthToken
-            ? "Exista un token ANAF salvat, dar firma activa nu are certificatul SPV configurat complet."
-            : data?.company?.efacturaOauthLastError || "",
-      })
-
-      if (connected) {
+      if (preservedCredential?.connected || data?.company?.efacturaOauthAccessToken) {
         setError("")
 
         const params = new URLSearchParams(window.location.search)
@@ -423,8 +518,12 @@ export default function SetariEFacturaPage() {
       const res = await fetch(`${API}/api/v1/company/efactura/agent-pairing-code`, {
         method: "POST",
         headers: {
+          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
+        body: JSON.stringify({
+          credentialId: currentCredential?.id || null,
+        }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data?.ok || !data?.pairing?.code) {
@@ -494,12 +593,11 @@ export default function SetariEFacturaPage() {
           email: company.email || "",
           contactEmail: company.contactEmail || "",
           phone: company.phone || "",
-          isVatPayer: company.isVatPayer ?? true,
-          posSyncInterval: company.posSyncInterval ?? 5,
-          efacturaEnabled: form.efacturaEnabled,
-          efacturaEnvironment: form.efacturaEnvironment,
-          efacturaCertSerial: form.efacturaCertSerial,
-        }),
+        isVatPayer: company.isVatPayer ?? true,
+        posSyncInterval: company.posSyncInterval ?? 5,
+        efacturaEnabled: form.efacturaEnabled,
+        efacturaEnvironment: form.efacturaEnvironment,
+      }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data?.ok) {
@@ -512,6 +610,132 @@ export default function SetariEFacturaPage() {
       setError(e?.message || "Nu am putut salva setarile e-Factura.")
     } finally {
       setSaving(false)
+    }
+  }
+
+  const currentCredential =
+    findCredentialById(credentials, selectedCredentialId) ||
+    credentials.find((item) => item.isDefault) ||
+    credentials[0] ||
+    null
+
+  async function createCredential() {
+    if (!token) {
+      setError("Nu exista token de autentificare. Fa login din nou.")
+      return
+    }
+
+    const label = newCredentialLabel.trim()
+    if (!label) {
+      setError("Completeaza eticheta credențialei ANAF.")
+      return
+    }
+
+    setCredentialBusy(true)
+    setError("")
+    setMessage("")
+    try {
+      const res = await fetch(`${API}/api/v1/company/efactura/credentials`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ label }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Nu am putut crea credențiala ANAF.")
+      }
+      setCredentials(Array.isArray(data?.credentials) ? data.credentials : [])
+      setSelectedCredentialId(String(data?.activeCredentialId || data?.credential?.id || ""))
+      setMessage("Credențiala ANAF a fost adaugata pentru firma curenta.")
+      await loadSettings()
+    } catch (e: any) {
+      setError(e?.message || "Nu am putut crea credențiala ANAF.")
+    } finally {
+      setCredentialBusy(false)
+    }
+  }
+
+  async function saveCredentialDetails() {
+    if (!token) {
+      setError("Nu exista token de autentificare. Fa login din nou.")
+      return
+    }
+    if (!currentCredential?.id) {
+      setError("Alege mai intai o credențiala ANAF.")
+      return
+    }
+
+    setCredentialBusy(true)
+    setError("")
+    setMessage("")
+    try {
+      const res = await fetch(`${API}/api/v1/company/efactura/credentials/${encodeURIComponent(currentCredential.id)}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          label: selectedCredentialLabel.trim() || currentCredential.label,
+          certSerial: form.efacturaCertSerial.trim(),
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Nu am putut salva credențiala ANAF.")
+      }
+      setCredentials(Array.isArray(data?.credentials) ? data.credentials : [])
+      setSelectedCredentialId(String(data?.activeCredentialId || currentCredential.id))
+      setMessage("Datele credențialei ANAF au fost salvate.")
+      await loadSettings()
+    } catch (e: any) {
+      setError(e?.message || "Nu am putut salva credențiala ANAF.")
+    } finally {
+      setCredentialBusy(false)
+    }
+  }
+
+  async function makeCredentialDefault() {
+    if (!token) {
+      setError("Nu exista token de autentificare. Fa login din nou.")
+      return
+    }
+    if (!currentCredential?.id) {
+      setError("Alege mai intai o credențiala ANAF.")
+      return
+    }
+
+    setCredentialBusy(true)
+    setError("")
+    setMessage("")
+    try {
+      const res = await fetch(`${API}/api/v1/company/efactura/credentials/${encodeURIComponent(currentCredential.id)}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          label: selectedCredentialLabel.trim() || currentCredential.label,
+          certSerial: form.efacturaCertSerial.trim(),
+          isDefault: true,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Nu am putut seta credențiala implicita.")
+      }
+      setCredentials(Array.isArray(data?.credentials) ? data.credentials : [])
+      setSelectedCredentialId(String(data?.activeCredentialId || currentCredential.id))
+      setMessage("Credențiala ANAF a fost setata ca implicita pentru firma curenta.")
+      await loadSettings()
+    } catch (e: any) {
+      setError(e?.message || "Nu am putut seta credențiala implicita.")
+    } finally {
+      setCredentialBusy(false)
     }
   }
 
@@ -538,7 +762,13 @@ export default function SetariEFacturaPage() {
     setMessage("")
     try {
       const returnTo = `${window.location.origin}/setari/efactura`
-      const res = await fetch(`${API}/api/v1/company/efactura/oauth/start?returnTo=${encodeURIComponent(returnTo)}`, {
+      const search = new URLSearchParams({
+        returnTo,
+      })
+      if (currentCredential?.id) {
+        search.set("credentialId", currentCredential.id)
+      }
+      const res = await fetch(`${API}/api/v1/company/efactura/oauth/start?${search.toString()}`, {
         credentials: "include",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -568,8 +798,12 @@ export default function SetariEFacturaPage() {
       const res = await fetch(`${API}/api/v1/company/efactura/oauth/test`, {
         method: "POST",
         headers: {
+          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
+        body: JSON.stringify({
+          credentialId: currentCredential?.id || null,
+        }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data?.ok) {
@@ -594,7 +828,10 @@ export default function SetariEFacturaPage() {
     setLoadingDiagnostics(true)
     setError("")
     try {
-      const res = await fetch(`${API}/api/v1/company/efactura/diagnostics`, {
+      const diagnosticsUrl = currentCredential?.id
+        ? `${API}/api/v1/company/efactura/diagnostics?credentialId=${encodeURIComponent(currentCredential.id)}`
+        : `${API}/api/v1/company/efactura/diagnostics`
+      const res = await fetch(diagnosticsUrl, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -633,6 +870,9 @@ export default function SetariEFacturaPage() {
       const body = new FormData()
       body.append("certificate", certFile)
       body.append("efacturaCertPassword", certPassword.trim())
+      if (currentCredential?.id) {
+        body.append("credentialId", currentCredential.id)
+      }
       if (form.efacturaCertSerial.trim()) {
         body.append("efacturaCertSerial", form.efacturaCertSerial.trim())
       }
@@ -672,7 +912,10 @@ export default function SetariEFacturaPage() {
     setMessage("")
 
     try {
-      const res = await fetch(`${API}/api/v1/company/efactura/certificate`, {
+      const deleteUrl = currentCredential?.id
+        ? `${API}/api/v1/company/efactura/certificate?credentialId=${encodeURIComponent(currentCredential.id)}`
+        : `${API}/api/v1/company/efactura/certificate`
+      const res = await fetch(deleteUrl, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -749,6 +992,82 @@ export default function SetariEFacturaPage() {
         <InlineNotice tone="success">Agentul local este conectat si certificatul este pregatit pentru SPV.</InlineNotice>
       ) : null}
 
+      <DocumentSection
+        title="Credențiale ANAF pe firma curenta"
+        description="Fiecare firma isi poate avea propriile certificate si tokenuri SPV. Aici alegi semnatarul pe care lucrezi."
+      >
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.2fr_1fr]">
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-[1.3fr_1fr_auto]">
+              <DocumentField label="Credențiala selectata">
+                <select
+                  value={selectedCredentialId}
+                  onChange={(e) => setSelectedCredentialId(e.target.value)}
+                  className={documentInputClass}
+                >
+                  {credentials.length ? null : <option value="">Nu exista inca nicio credențiala</option>}
+                  {credentials.map((credential) => (
+                    <option key={credential.id} value={credential.id}>
+                      {credential.label}{credential.isDefault ? " (implicit)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </DocumentField>
+              <DocumentField label="Eticheta / semnatar">
+                <input
+                  value={selectedCredentialLabel}
+                  onChange={(e) => setSelectedCredentialLabel(e.target.value)}
+                  className={documentInputClass}
+                  placeholder="Ex: Administrator SPV"
+                  disabled={!currentCredential}
+                />
+              </DocumentField>
+              <div className="flex items-end gap-2">
+                <button type="button" onClick={saveCredentialDetails} className={documentButtonSecondaryClass} disabled={credentialBusy || !currentCredential}>
+                  Salveaza
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto_auto]">
+              <DocumentField label="Adauga semnatar / certificat nou">
+                <input
+                  value={newCredentialLabel}
+                  onChange={(e) => setNewCredentialLabel(e.target.value)}
+                  className={documentInputClass}
+                  placeholder="Ex: Contabil firma 2"
+                />
+              </DocumentField>
+              <div className="flex items-end">
+                <button type="button" onClick={createCredential} className={documentButtonPrimaryClass} disabled={credentialBusy}>
+                  {credentialBusy ? "Se proceseaza..." : "Adauga credențiala"}
+                </button>
+              </div>
+              <div className="flex items-end">
+                <button type="button" onClick={makeCredentialDefault} className={documentButtonSecondaryClass} disabled={credentialBusy || !currentCredential || currentCredential.isDefault}>
+                  Seteaza implicita
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-2 text-sm text-slate-600 md:grid-cols-2 xl:grid-cols-1">
+            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
+              Semnatar activ: <span className="font-semibold text-slate-900">{currentCredential?.label || "-"}</span>
+            </div>
+            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
+              Credențiala implicita: <span className="font-semibold text-slate-900">{currentCredential?.isDefault ? "Da" : "Nu"}</span>
+            </div>
+            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
+              Certificat: <span className="font-semibold text-slate-900">{certState.hasFile ? "Incarcat" : "Lipsa"}</span>
+            </div>
+            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
+              Token: <span className="font-semibold text-slate-900">{oauthStatus.connected ? "Conectat" : "Neconectat"}</span>
+            </div>
+          </div>
+        </div>
+      </DocumentSection>
+
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
         <DocumentSection
           title="Flux firma"
@@ -778,7 +1097,7 @@ export default function SetariEFacturaPage() {
               <button type="button" onClick={testOauthConnection} className={documentButtonSecondaryClass} disabled={testing || loading || !oauthStatus.connected}>
                 {testing ? "Testare..." : "Testeaza"}
               </button>
-              <button type="button" onClick={startOauthConnect} className={documentButtonPrimaryClass} disabled={connecting || loading}>
+              <button type="button" onClick={startOauthConnect} className={documentButtonPrimaryClass} disabled={connecting || loading || !currentCredential}>
                 {connecting ? "Se deschide..." : "Genereaza token"}
               </button>
             </div>

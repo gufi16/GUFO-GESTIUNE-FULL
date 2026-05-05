@@ -126,6 +126,9 @@ function overlayCredentialOnCompany(company: any, credential: any) {
 }
 
 export function mapAnafCredentialSummary(credential: any) {
+  const hasCertificateFile = Boolean(credential.certFilename)
+  const hasCertificatePassword = Boolean(credential.certPasswordEnc)
+  const hasEfacturaToken = Boolean(credential.efacturaOauthAccessToken)
   return {
     id: credential.id,
     label: credential.label,
@@ -133,11 +136,14 @@ export function mapAnafCredentialSummary(credential: any) {
     certSerial: credential.certSerial || "",
     certFilename: credential.certFilename || "",
     certUploadedAt: credential.certUploadedAt || null,
+    certPasswordConfigured: hasCertificatePassword,
     efacturaConnectedAt: credential.efacturaOauthConnectedAt || null,
     efacturaAccessTokenExpiresAt: credential.efacturaOauthAccessTokenExpiresAt || null,
-    hasCertificateFile: Boolean(credential.certFilename),
-    hasCertificatePassword: Boolean(credential.certPasswordEnc),
-    hasEfacturaToken: Boolean(credential.efacturaOauthAccessToken),
+    efacturaLastError: credential.efacturaOauthLastError || "",
+    hasCertificateFile,
+    hasCertificatePassword,
+    hasEfacturaToken,
+    connected: hasCertificateFile && hasCertificatePassword && hasEfacturaToken,
     hasEtransportToken: Boolean(credential.etrtransportOauthAccessToken),
   }
 }
