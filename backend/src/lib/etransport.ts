@@ -35,51 +35,52 @@ function normalizeText(value: unknown) {
 }
 
 const COUNTY_CODE_MAP: Record<string, string> = {
-  ALBA: "AB",
-  ARAD: "AR",
-  ARGES: "AG",
-  BACAU: "BC",
-  BIHOR: "BH",
-  "BISTRITA-NASAUD": "BN",
-  BOTOSANI: "BT",
-  BRASOV: "BV",
-  BRAILA: "BR",
-  BUZAU: "BZ",
-  "CARAS-SEVERIN": "CS",
-  CLUJ: "CJ",
-  CONSTANTA: "CT",
-  COVASNA: "CV",
-  DAMBOVITA: "DB",
-  DOLJ: "DJ",
-  GALATI: "GL",
-  GORJ: "GJ",
-  HARGHITA: "HR",
-  HUNEDOARA: "HD",
-  IALOMITA: "IL",
-  IASI: "IS",
-  ILFOV: "IF",
-  MARAMURES: "MM",
-  MEHEDINTI: "MH",
-  MURES: "MS",
-  NEAMT: "NT",
-  OLT: "OT",
-  PRAHOVA: "PH",
-  "SATU-MARE": "SM",
-  SALAJ: "SJ",
-  SIBIU: "SB",
-  SUCEAVA: "SV",
-  TELEORMAN: "TR",
-  TIMIS: "TM",
-  TULCEA: "TL",
-  VASLUI: "VS",
-  VALCEA: "VL",
-  VRANCEA: "VN",
-  BUCURESTI: "B",
-  CALARASI: "CL",
-  GIURGIU: "GR",
+  ALBA: "1",
+  ARAD: "2",
+  ARGES: "3",
+  BACAU: "4",
+  BIHOR: "5",
+  "BISTRITA-NASAUD": "6",
+  BOTOSANI: "7",
+  BRASOV: "8",
+  BRAILA: "9",
+  BUZAU: "10",
+  "CARAS-SEVERIN": "11",
+  CLUJ: "12",
+  CONSTANTA: "13",
+  COVASNA: "14",
+  DAMBOVITA: "15",
+  DOLJ: "16",
+  GALATI: "17",
+  GORJ: "18",
+  HARGHITA: "19",
+  HUNEDOARA: "20",
+  IALOMITA: "21",
+  IASI: "22",
+  ILFOV: "23",
+  MARAMURES: "24",
+  MEHEDINTI: "25",
+  MURES: "26",
+  NEAMT: "27",
+  OLT: "28",
+  PRAHOVA: "29",
+  "SATU-MARE": "30",
+  SALAJ: "31",
+  SIBIU: "32",
+  SUCEAVA: "33",
+  TELEORMAN: "34",
+  TIMIS: "35",
+  TULCEA: "36",
+  VASLUI: "37",
+  VALCEA: "38",
+  VRANCEA: "39",
+  BUCURESTI: "40",
+  CALARASI: "41",
+  GIURGIU: "42",
 }
 
 const ETRANSPORT_XMLNS = "mfp:anaf:dgti:eTransport:declaratie:v2"
+const ETRANSPORT_SCHEMA_LOCATION = `${ETRANSPORT_XMLNS} file:/D:/formInteractive/_inLucru/_proiecte/eTransport/final/schema_ETR_v2_20221215.xsd`
 
 const OPERATION_TYPE_CODE_MAP: Record<string, string> = {
   AIC: "10",
@@ -185,12 +186,7 @@ function resolveOperationTypeCode(value: unknown) {
 
 function resolveGoodsPurposeCode(operationTypeCode: string, sourceType: string, transportDocType: string) {
   const op = normalizeText(operationTypeCode)
-  const source = normalizeText(sourceType).toUpperCase()
-  const docType = normalizeText(transportDocType).toUpperCase()
-  if (op === "30") {
-    if (source === "TRANSFER" || docType === "TRANSFER") return "704"
-    return "101"
-  }
+  if (op === "30") return "101"
   if (op === "10" || op === "20") return "101"
   return "9999"
 }
@@ -251,8 +247,14 @@ function buildLocationAttrs(adrValue: unknown) {
   return attrs.join(" ")
 }
 
-function buildPlaceXml(tagName: string, adrValue: unknown) {
-  return `    <${tagName} ${buildLocationAttrs(adrValue)} />`
+function buildAddressPlaceXml(tagName: string, adrValue: unknown) {
+  return `    <${tagName}>
+      <locatie ${buildLocationAttrs(adrValue)} />
+    </${tagName}>`
+}
+
+function buildBorderPlaceXml(tagName: string, borderPoint: unknown) {
+  return `    <${tagName} codPtf="${xmlEscape(borderPoint || "")}"/>`
 }
 
 function resolveBorderPointCode(startScope: unknown, startBorderPoint: unknown, endScope: unknown, endBorderPoint: unknown) {
@@ -279,17 +281,33 @@ function buildTransportAttrs(input: {
 }) {
   const attrs = [
     `nrVehicul="${xmlEscape(input.vehicleNo || "")}"`,
-    `codTaraTransportator="${xmlEscape(input.transporterCountry || "RO")}"`,
-    `codTransportator="${xmlEscape(input.transporterCode || "")}"`,
-    `denumireTransportator="${xmlEscape(input.transporterName || "")}"`,
+    `codTaraOrgTransport="${xmlEscape(input.transporterCountry || "RO")}"`,
+    `codOrgTransport="${xmlEscape(input.transporterCode || "")}"`,
+    `denumireOrgTransport="${xmlEscape(input.transporterName || "")}"`,
     `dataTransport="${xmlEscape(formatDateOnly(input.transportDate))}"`,
   ]
 
   if (normalizeText(input.trailerNo)) attrs.push(`nrRemorca1="${xmlEscape(input.trailerNo || "")}"`)
-  const ptfCode = resolveBorderPointCode(input.startScope, input.startBorderPoint, input.endScope, input.endBorderPoint)
-  if (ptfCode) attrs.push(`codPtf="${xmlEscape(ptfCode)}"`)
 
   return attrs.join(" ")
+}
+
+function buildRoutePlacesXml(startScope: unknown, startAddress: unknown, startBorderPoint: unknown, endScope: unknown, endAddress: unknown, endBorderPoint: unknown) {
+  const parts: string[] = []
+
+  if (normalizeText(startScope).toUpperCase() === "PTF" && normalizeText(startBorderPoint)) {
+    parts.push(buildBorderPlaceXml("locStartTraseuRutier", startBorderPoint))
+  } else if (normalizeText(startScope).toUpperCase() === "ADR") {
+    parts.push(buildAddressPlaceXml("locStartTraseuRutier", startAddress))
+  }
+
+  if (normalizeText(endScope).toUpperCase() === "PTF" && normalizeText(endBorderPoint)) {
+    parts.push(buildBorderPlaceXml("locFinalTraseuRutier", endBorderPoint))
+  } else if (normalizeText(endScope).toUpperCase() === "ADR") {
+    parts.push(buildAddressPlaceXml("locFinalTraseuRutier", endAddress))
+  }
+
+  return parts.join("\n")
 }
 
 function resolveTransportUomCode(item: any) {
@@ -441,12 +459,15 @@ export function generateTransferETransportXml(doc: any) {
       const unitPrice = toNumber(item?.unitPrice)
       const lineValue = toNumber(item?.lineValue)
       const grossWeightKg = toNumber(item?.product?.grossWeightKg || 0)
-      return `    <bunuriTransportate nrCrt="${index + 1}" codTarifar="${xmlEscape(item?.product?.ncCode || "")}" denumireMarfa="${xmlEscape(item?.product?.name || item?.productName || "")}" codScopOperatiune="${xmlEscape(goodsPurposeCode)}" cantitate="${decimal(qty, 3)}" codUnitateMasura="${xmlEscape(resolveTransportUomCode(item))}" greutateNeta="${decimal(qty * grossWeightKg, 3)}" greutateBruta="${decimal(qty * grossWeightKg, 3)}" valoareLeiFaraTva="${decimal(lineValue, 2)}" refDeclarant="${xmlEscape(item?.product?.sku || "")}" />`
+      return `    <bunuriTransportate codScopOperatiune="${xmlEscape(goodsPurposeCode)}" codTarifar="${xmlEscape(item?.product?.ncCode || "")}" denumireMarfa="${xmlEscape(item?.product?.name || item?.productName || "")}" cantitate="${decimal(qty, 3)}" codUnitateMasura="${xmlEscape(resolveTransportUomCode(item))}" greutateNeta="${decimal(qty * grossWeightKg, 3)}" greutateBruta="${decimal(qty * grossWeightKg, 3)}" valoareLeiFaraTva="${decimal(lineValue, 2)}"/>`
     })
     .join("\n")
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<eTransport xmlns="${ETRANSPORT_XMLNS}" codDeclarant="${xmlEscape(declarantCode)}" refDeclarant="${xmlEscape(declarantRef)}">
+<eTransport xmlns="${ETRANSPORT_XMLNS}"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="${xmlEscape(ETRANSPORT_SCHEMA_LOCATION)}"
+  codDeclarant="${xmlEscape(declarantCode)}" refDeclarant="${xmlEscape(declarantRef)}">
   <notificare codTipOperatiune="${xmlEscape(operationTypeCode)}">
 ${linesXml}
     <partenerComercial codTara="${xmlEscape(normalizeCountryCode(doc?.eTransportPartnerCountry))}" cod="${xmlEscape(doc?.eTransportPartnerCui || "")}" denumire="${xmlEscape(doc?.eTransportPartnerName || "")}" />
@@ -462,7 +483,15 @@ ${linesXml}
       endScope: doc?.eTransportEndScope,
       endBorderPoint: doc?.eTransportEndBorderPoint,
     })} />
-${normalizeText(doc?.eTransportStartScope).toUpperCase() === "ADR" ? buildPlaceXml("locIncarcare", doc?.eTransportStartAddress) + "\n" : ""}${normalizeText(doc?.eTransportEndScope).toUpperCase() === "ADR" ? buildPlaceXml("locDescarcare", doc?.eTransportEndAddress) + "\n" : ""}    <documenteTransport tipDocument="${xmlEscape(documentTypeCode)}" numarDocument="${xmlEscape(doc?.eTransportTransportDocNo || doc?.docNo || "")}" dataDocument="${xmlEscape(transportDocDate)}"${normalizeText(doc?.eTransportTransportDocNotes) ? ` observatii="${xmlEscape(doc?.eTransportTransportDocNotes || "")}"` : ""} />
+${buildRoutePlacesXml(
+  doc?.eTransportStartScope,
+  doc?.eTransportStartAddress,
+  doc?.eTransportStartBorderPoint,
+  doc?.eTransportEndScope,
+  doc?.eTransportEndAddress,
+  doc?.eTransportEndBorderPoint,
+)}
+    <documenteTransport tipDocument="${xmlEscape(documentTypeCode)}"${normalizeText(doc?.eTransportTransportDocNo || doc?.docNo) ? ` numarDocument="${xmlEscape(doc?.eTransportTransportDocNo || doc?.docNo || "")}"` : ""} dataDocument="${xmlEscape(transportDocDate)}"${normalizeText(doc?.eTransportTransportDocNotes) ? ` observatii="${xmlEscape(doc?.eTransportTransportDocNotes || "")}"` : ""} />
   </notificare>
 </eTransport>`
 }
@@ -557,12 +586,15 @@ export function generateETransportNoticeXml(notice: any) {
       const qty = toNumber(item?.qty)
       const lineValue = toNumber(item?.lineValue)
       const grossWeightKg = toNumber(item?.grossWeightPerUnitKg || item?.product?.grossWeightKg || 0)
-      return `    <bunuriTransportate nrCrt="${index + 1}" codTarifar="${xmlEscape(item?.ncCode || item?.product?.ncCode || "")}" denumireMarfa="${xmlEscape(item?.name || item?.product?.name || "")}" codScopOperatiune="${xmlEscape(goodsPurposeCode)}" cantitate="${decimal(qty, 3)}" codUnitateMasura="${xmlEscape(resolveTransportUomCode(item))}" greutateNeta="${decimal(toNumber(item?.grossWeightTotalKg) || qty * grossWeightKg, 3)}" greutateBruta="${decimal(toNumber(item?.grossWeightTotalKg) || qty * grossWeightKg, 3)}" valoareLeiFaraTva="${decimal(lineValue, 2)}"${normalizeText(item?.internalReference) ? ` refDeclarant="${xmlEscape(item?.internalReference || "")}"` : ""} />`
+      return `    <bunuriTransportate codScopOperatiune="${xmlEscape(goodsPurposeCode)}" codTarifar="${xmlEscape(item?.ncCode || item?.product?.ncCode || "")}" denumireMarfa="${xmlEscape(item?.name || item?.product?.name || "")}" cantitate="${decimal(qty, 3)}" codUnitateMasura="${xmlEscape(resolveTransportUomCode(item))}" greutateNeta="${decimal(toNumber(item?.grossWeightTotalKg) || qty * grossWeightKg, 3)}" greutateBruta="${decimal(toNumber(item?.grossWeightTotalKg) || qty * grossWeightKg, 3)}" valoareLeiFaraTva="${decimal(lineValue, 2)}"/>`
     })
     .join("\n")
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<eTransport xmlns="${ETRANSPORT_XMLNS}" codDeclarant="${xmlEscape(declarantCode)}" refDeclarant="${xmlEscape(declarantRef)}">
+<eTransport xmlns="${ETRANSPORT_XMLNS}"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="${xmlEscape(ETRANSPORT_SCHEMA_LOCATION)}"
+  codDeclarant="${xmlEscape(declarantCode)}" refDeclarant="${xmlEscape(declarantRef)}">
   <notificare codTipOperatiune="${xmlEscape(operationTypeCode)}">
 ${linesXml}
     <partenerComercial codTara="${xmlEscape(normalizeCountryCode(notice?.partnerCountry))}" cod="${xmlEscape(notice?.partnerCui || "")}" denumire="${xmlEscape(notice?.partnerName || "")}" />
@@ -578,7 +610,15 @@ ${linesXml}
       endScope: notice?.endScope,
       endBorderPoint: notice?.endBorderPoint,
     })} />
-${normalizeText(notice?.startScope).toUpperCase() === "ADR" ? buildPlaceXml("locIncarcare", notice?.startAddress) + "\n" : ""}${normalizeText(notice?.endScope).toUpperCase() === "ADR" ? buildPlaceXml("locDescarcare", notice?.endAddress) + "\n" : ""}    <documenteTransport tipDocument="${xmlEscape(documentTypeCode)}" numarDocument="${xmlEscape(notice?.transportDocNo || "")}" dataDocument="${xmlEscape(transportDocDate)}"${normalizeText(notice?.transportDocNotes) ? ` observatii="${xmlEscape(notice?.transportDocNotes || "")}"` : ""} />
+${buildRoutePlacesXml(
+  notice?.startScope,
+  notice?.startAddress,
+  notice?.startBorderPoint,
+  notice?.endScope,
+  notice?.endAddress,
+  notice?.endBorderPoint,
+)}
+    <documenteTransport tipDocument="${xmlEscape(documentTypeCode)}"${normalizeText(notice?.transportDocNo) ? ` numarDocument="${xmlEscape(notice?.transportDocNo || "")}"` : ""} dataDocument="${xmlEscape(transportDocDate)}"${normalizeText(notice?.transportDocNotes) ? ` observatii="${xmlEscape(notice?.transportDocNotes || "")}"` : ""} />
   </notificare>
 </eTransport>`
 }
