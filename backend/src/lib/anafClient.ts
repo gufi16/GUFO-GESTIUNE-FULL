@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { prisma } from "./prisma"
-import { resolveTenantCompany } from "./companyResolver"
+import { resolveCompanyWithAnafCredential } from "./companyAnafCredentials"
 import { anafHttpRequest } from "./anafHttp"
 import { getAnafCertificateOptions } from "./efacturaCertificate"
 import {
@@ -14,8 +14,6 @@ import {
 } from "./incomingEfactura"
 
 const COMPANY_ANAF_SELECT = {
-  id: true,
-  tenantId: true,
   cui: true,
   efacturaEnvironment: true,
   efacturaOauthClientId: true,
@@ -29,7 +27,7 @@ const COMPANY_ANAF_SELECT = {
 }
 
 export async function loadAnafCompanyContext(tenantId: string, activeCompanyId?: string | null) {
-  const company = await resolveTenantCompany(prisma, tenantId, activeCompanyId, {
+  const company = await resolveCompanyWithAnafCredential(prisma as any, tenantId, activeCompanyId, {
     select: COMPANY_ANAF_SELECT,
   })
 
@@ -134,6 +132,8 @@ export function getAnafCompanyDiagnostics(company: any) {
     tokenScopes: tokenDiagnostics.tokenScopes,
     tokenRoles: tokenDiagnostics.tokenRoles,
     tokenExp: tokenDiagnostics.tokenExp,
+    credentialId: company?.anafCredentialId || null,
+    credentialLabel: company?.anafCredentialLabel || null,
   }
 }
 

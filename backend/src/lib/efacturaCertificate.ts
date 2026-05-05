@@ -19,28 +19,50 @@ export function ensureEfacturaCertDir() {
   return CERT_DIR
 }
 
-export function getEfacturaCertPath(tenantId: string, companyId?: string | null, originalName?: string | null) {
+export function getEfacturaCertPath(
+  tenantId: string,
+  companyId?: string | null,
+  originalName?: string | null,
+  credentialId?: string | null,
+) {
   const ext = String(path.extname(originalName || "").toLowerCase() || ".p12")
   const normalizedExt = ext === ".pfx" || ext === ".p12" ? ext : ".p12"
   const companySuffix = String(companyId || "").trim() || "default"
-  return path.join(ensureEfacturaCertDir(), `${tenantId}-${companySuffix}${normalizedExt}`)
+  const credentialSuffix = String(credentialId || "").trim()
+  const suffix = credentialSuffix ? `${companySuffix}-${credentialSuffix}` : companySuffix
+  return path.join(ensureEfacturaCertDir(), `${tenantId}-${suffix}${normalizedExt}`)
 }
 
-export function hasEfacturaCertificateFile(tenantId: string, companyId?: string | null, filename?: string | null) {
+export function hasEfacturaCertificateFile(
+  tenantId: string,
+  companyId?: string | null,
+  filename?: string | null,
+  credentialId?: string | null,
+) {
   if (!filename) return false
-  return fs.existsSync(getEfacturaCertPath(tenantId, companyId, filename))
+  return fs.existsSync(getEfacturaCertPath(tenantId, companyId, filename, credentialId))
 }
 
-export function readEfacturaCertificateFile(tenantId: string, companyId?: string | null, filename?: string | null) {
+export function readEfacturaCertificateFile(
+  tenantId: string,
+  companyId?: string | null,
+  filename?: string | null,
+  credentialId?: string | null,
+) {
   if (!filename) return null
-  const filePath = getEfacturaCertPath(tenantId, companyId, filename)
+  const filePath = getEfacturaCertPath(tenantId, companyId, filename, credentialId)
   if (!fs.existsSync(filePath)) return null
   return fs.readFileSync(filePath)
 }
 
-export function deleteEfacturaCertificateFile(tenantId: string, companyId?: string | null, filename?: string | null) {
+export function deleteEfacturaCertificateFile(
+  tenantId: string,
+  companyId?: string | null,
+  filename?: string | null,
+  credentialId?: string | null,
+) {
   if (!filename) return
-  const filePath = getEfacturaCertPath(tenantId, companyId, filename)
+  const filePath = getEfacturaCertPath(tenantId, companyId, filename, credentialId)
   if (fs.existsSync(filePath)) {
     fs.unlinkSync(filePath)
   }
@@ -84,6 +106,7 @@ export function decryptSecret(value?: string | null) {
 export function getAnafCertificateOptions(company: {
   tenantId?: string | null
   id?: string | null
+  anafCredentialId?: string | null
   efacturaCertFilename?: string | null
   efacturaCertPasswordEnc?: string | null
 }) {
@@ -92,7 +115,12 @@ export function getAnafCertificateOptions(company: {
     return {}
   }
 
-  const pfx = readEfacturaCertificateFile(tenantId, company?.id, company?.efacturaCertFilename)
+  const pfx = readEfacturaCertificateFile(
+    tenantId,
+    company?.id,
+    company?.efacturaCertFilename,
+    company?.anafCredentialId || null,
+  )
   if (!pfx) {
     return {}
   }

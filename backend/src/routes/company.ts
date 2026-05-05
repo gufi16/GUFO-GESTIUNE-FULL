@@ -12,6 +12,15 @@ import { anafHttpRequest } from "../lib/anafHttp"
 import { getAnafCompanyDiagnostics } from "../lib/anafClient"
 import { ensureTenantCompany, resolveTenantCompany, updateOrCreateTenantCompany } from "../lib/companyResolver"
 import {
+  getCompanyAnafCredentialById,
+  getDefaultCompanyAnafCredential,
+  listCompanyAnafCredentials,
+  mapAnafCredentialSummary,
+  resolveCompanyWithAnafCredential,
+  syncCompanyToDefaultAnafCredential,
+  syncDefaultAnafCredentialToCompany,
+} from "../lib/companyAnafCredentials"
+import {
   deleteEfacturaCertificateFile,
   encryptSecret,
   ensureEfacturaCertDir,
@@ -39,13 +48,10 @@ const certStorage = multer.diskStorage({
   destination: (_req, _file, cb) => {
     cb(null, certUploadsDir)
   },
-  filename: (req: AuthedRequest, file, cb) => {
-    cb(
-      null,
-      path.basename(
-        getEfacturaCertPath(req.auth!.tenantId, req.auth?.activeCompanyId || null, file.originalname)
-      )
-    )
+  filename: (_req: AuthedRequest, file, cb) => {
+    const ext = String(path.extname(file.originalname || "").toLowerCase() || ".p12")
+    const normalizedExt = ext === ".pfx" || ext === ".p12" ? ext : ".p12"
+    cb(null, `upload-${Date.now()}-${Math.random().toString(36).slice(2)}${normalizedExt}`)
   },
 })
 
@@ -185,7 +191,12 @@ function createEfacturaAgentPairingCode(payload: {
 }
 
 function mapCompanyResponse(company: any, oauthConfig: any) {
-  const hasStoredCertificate = hasEfacturaCertificateFile(company?.tenantId, company?.id, company?.efacturaCertFilename)
+  const hasStoredCertificate = hasEfacturaCertificateFile(
+    company?.tenantId,
+    company?.id,
+    company?.efacturaCertFilename,
+    company?.anafCredentialId || null,
+  )
 
   return {
     ...company,
@@ -199,6 +210,14 @@ function mapCompanyResponse(company: any, oauthConfig: any) {
 
 function getActiveCompanyId(req: AuthedRequest) {
   return req.auth?.activeCompanyId || null
+}
+
+function getRequestedCredentialId(req: AuthedRequest) {
+  const bodyValue = String(req.body?.credentialId || "").trim()
+  if (bodyValue) return bodyValue
+  const queryValue = String(req.query?.credentialId || "").trim()
+  if (queryValue) return queryValue
+  return null
 }
 
 async function requireExplicitAnafCompanyContext(tenantId: string, activeCompanyId?: string | null) {
@@ -232,7 +251,10 @@ async function requireExplicitAnafCompanyContext(tenantId: string, activeCompany
 }
 
 async function getRequestCompany(req: AuthedRequest, extra: Record<string, any> = {}) {
-  return resolveTenantCompany(prisma, req.auth!.tenantId, getActiveCompanyId(req), extra)
+  return resolveCompanyWithAnafCredential(prisma as any, req.auth!.tenantId, getActiveCompanyId(req), {
+    select: extra?.select || extra,
+    includeCredentialList: Boolean(extra?.includeCredentialList),
+  })
 }
 
 async function ensureRequestCompany(req: AuthedRequest, seedData: Record<string, any> = {}) {
@@ -248,8 +270,80 @@ async function getRequestCompanyCertificateState(req: AuthedRequest) {
       efacturaCertFilename: true,
       efacturaCertPasswordEnc: true,
       efacturaCertSerial: true,
+      anafCredentialId: true,
+      anafCredentialLabel: true,
     },
   })
+}
+
+async function getRequestAnafCredential(req: AuthedRequest, explicitCredentialId?: string | null) {
+  const company = await resolveTenantCompany(prisma, req.auth!.tenantId, getActiveCompanyId(req), {
+    select: {
+      id: true,
+      tenantId: true,
+      name: true,
+      efacturaCertSerial: true,
+      efacturaCertPasswordEnc: true,
+      efacturaCertFilename: true,
+      efacturaCertUploadedAt: true,
+      efacturaOauthAccessToken: true,
+      efacturaOauthRefreshToken: true,
+      efacturaOauthAccessTokenExpiresAt: true,
+      efacturaOauthRefreshTokenExpiresAt: true,
+      efacturaOauthConnectedAt: true,
+      efacturaOauthLastError: true,
+      etransportOauthAccessToken: true,
+      etransportOauthRefreshToken: true,
+      etransportOauthAccessTokenExpiresAt: true,
+      etransportOauthRefreshTokenExpiresAt: true,
+      etransportOauthConnectedAt: true,
+      etransportOauthLastError: true,
+    },
+  })
+
+  if (!company?.id) {
+    throw new Error("Firma activa nu este disponibila.")
+  }
+
+  const requestedCredentialId = explicitCredentialId || getRequestedCredentialId(req)
+  const credential = requestedCredentialId
+    ? await getCompanyAnafCredentialById(prisma as any, req.auth!.tenantId, company.id, requestedCredentialId)
+    : await getDefaultCompanyAnafCredential(prisma as any, req.auth!.tenantId, company.id, company)
+
+  if (!credential) {
+    return {
+      company,
+      credential: null,
+    }
+  }
+
+  return {
+    company,
+    credential: {
+      ...credential,
+      tenantId: company.tenantId,
+      companyId: company.id,
+      name: company.name,
+      anafCredentialId: credential.id,
+      anafCredentialLabel: credential.label,
+      efacturaCertSerial: credential.certSerial,
+      efacturaCertPasswordEnc: credential.certPasswordEnc,
+      efacturaCertFilename: credential.certFilename,
+      efacturaCertUploadedAt: credential.certUploadedAt,
+      efacturaOauthAccessToken: credential.efacturaOauthAccessToken,
+      efacturaOauthRefreshToken: credential.efacturaOauthRefreshToken,
+      efacturaOauthAccessTokenExpiresAt: credential.efacturaOauthAccessTokenExpiresAt,
+      efacturaOauthRefreshTokenExpiresAt: credential.efacturaOauthRefreshTokenExpiresAt,
+      efacturaOauthConnectedAt: credential.efacturaOauthConnectedAt,
+      efacturaOauthLastError: credential.efacturaOauthLastError,
+      etransportOauthAccessToken: credential.etrtransportOauthAccessToken,
+      etransportOauthRefreshToken: credential.etrtransportOauthRefreshToken,
+      etransportOauthAccessTokenExpiresAt: credential.etrtransportOauthAccessTokenExpiresAt,
+      etransportOauthRefreshTokenExpiresAt: credential.etrtransportOauthRefreshTokenExpiresAt,
+      etransportOauthConnectedAt: credential.etrtransportOauthConnectedAt,
+      etransportOauthLastError: credential.etrtransportOauthLastError,
+    },
+  }
 }
 
 function ensureCompanyCertificateReady(company: any) {
@@ -259,7 +353,7 @@ function ensureCompanyCertificateReady(company: any) {
   if (!company?.efacturaCertFilename) {
     throw new Error("Incarca mai intai certificatul SPV pentru firma activa.")
   }
-  if (!hasEfacturaCertificateFile(company?.tenantId, company?.id, company?.efacturaCertFilename)) {
+  if (!hasEfacturaCertificateFile(company?.tenantId, company?.id, company?.efacturaCertFilename, company?.anafCredentialId || null)) {
     throw new Error("Fisierul certificatului SPV lipseste pentru firma activa. Reincarca certificatul.")
   }
   if (!company?.efacturaCertPasswordEnc) {
@@ -283,7 +377,7 @@ async function updateRequestCompany(
 
 async function getEffectiveAnafOauthConfig(tenantId: string, activeCompanyId: string | null = null) {
   const [company, platform] = await Promise.all([
-    resolveTenantCompany(prisma, tenantId, activeCompanyId, {
+    resolveCompanyWithAnafCredential(prisma as any, tenantId, activeCompanyId, {
       select: {
         efacturaEnvironment: true,
         efacturaOauthClientId: true,
@@ -411,9 +505,9 @@ export async function handleAnafOauthCallback(req, res) {
     return res.status(400).send("Lipsesc parametrii OAuth ANAF.")
   }
 
-  let state: { tenantId: string; returnTo: string; activeCompanyId?: string | null } | null = null
+  let state: { tenantId: string; returnTo: string; activeCompanyId?: string | null; credentialId?: string | null } | null = null
   try {
-    state = jwt.verify(effectiveStateRaw, JWT_SECRET) as { tenantId: string; returnTo: string; activeCompanyId?: string | null }
+    state = jwt.verify(effectiveStateRaw, JWT_SECRET) as { tenantId: string; returnTo: string; activeCompanyId?: string | null; credentialId?: string | null }
   } catch {
     return res.status(400).send("State OAuth invalid sau expirat.")
   }
@@ -441,9 +535,27 @@ export async function handleAnafOauthCallback(req, res) {
         ? "Autorizarea ANAF a fost anulata sau refuzata."
         : errorDescription || error || "Autorizarea ANAF nu a putut fi finalizata."
 
-    await updateOrCreateTenantCompany(prisma, state.tenantId, state.activeCompanyId || null, {
-      efacturaOauthLastError: nextError,
+    const company = await resolveTenantCompany(prisma, state.tenantId, state.activeCompanyId || null, {
+      select: { id: true, tenantId: true, name: true },
     })
+    if (company?.id) {
+      const credential = state.credentialId
+        ? await getCompanyAnafCredentialById(prisma as any, state.tenantId, company.id, state.credentialId)
+        : await getDefaultCompanyAnafCredential(prisma as any, state.tenantId, company.id)
+      if (credential?.id) {
+        const updated = await prisma.companyAnafCredential.update({
+          where: { id: credential.id },
+          data: { efacturaOauthLastError: nextError },
+        })
+        if (credential.isDefault) {
+          await syncDefaultAnafCredentialToCompany(prisma as any, company.id, updated)
+        }
+      } else {
+        await updateOrCreateTenantCompany(prisma, state.tenantId, state.activeCompanyId || null, {
+          efacturaOauthLastError: nextError,
+        })
+      }
+    }
 
     return res.redirect(
       `${state.returnTo}${state.returnTo.includes("?") ? "&" : "?"}oauth=denied`,
@@ -475,27 +587,80 @@ export async function handleAnafOauthCallback(req, res) {
     const payload = await tokenRes.json().catch(() => ({}))
 
     if (!tokenRes.ok || !payload?.access_token) {
-      await updateOrCreateTenantCompany(prisma, state.tenantId, state.activeCompanyId || null, {
-        efacturaOauthLastError: String(payload?.error_description || payload?.error || "Nu am putut obtine token-ul ANAF."),
+      const company = await resolveTenantCompany(prisma, state.tenantId, state.activeCompanyId || null, {
+        select: { id: true, tenantId: true, name: true },
       })
+      if (company?.id) {
+        const credential = state.credentialId
+          ? await getCompanyAnafCredentialById(prisma as any, state.tenantId, company.id, state.credentialId)
+          : await getDefaultCompanyAnafCredential(prisma as any, state.tenantId, company.id)
+        if (credential?.id) {
+          const updated = await prisma.companyAnafCredential.update({
+            where: { id: credential.id },
+            data: {
+              efacturaOauthLastError: String(payload?.error_description || payload?.error || "Nu am putut obtine token-ul ANAF."),
+            },
+          })
+          if (credential.isDefault) {
+            await syncDefaultAnafCredentialToCompany(prisma as any, company.id, updated)
+          }
+        }
+      }
 
       return res.redirect(`${state.returnTo}${state.returnTo.includes("?") ? "&" : "?"}oauth=error`)
     }
 
-    await updateOrCreateTenantCompany(prisma, state.tenantId, state.activeCompanyId || null, {
-      efacturaOauthAccessToken: String(payload.access_token),
-      efacturaOauthRefreshToken: payload.refresh_token ? String(payload.refresh_token) : null,
-      efacturaOauthAccessTokenExpiresAt: decodeTokenExpiry(String(payload.access_token)),
-      efacturaOauthRefreshTokenExpiresAt: decodeTokenExpiry(payload.refresh_token ? String(payload.refresh_token) : null),
-      efacturaOauthConnectedAt: new Date(),
-      efacturaOauthLastError: null,
+    const company = await resolveTenantCompany(prisma, state.tenantId, state.activeCompanyId || null, {
+      select: { id: true, tenantId: true, name: true },
     })
+
+    if (!company?.id) {
+      throw new Error("Firma activa nu este disponibila pentru salvarea tokenului ANAF.")
+    }
+
+    const credential = state.credentialId
+      ? await getCompanyAnafCredentialById(prisma as any, state.tenantId, company.id, state.credentialId)
+      : await getDefaultCompanyAnafCredential(prisma as any, state.tenantId, company.id)
+
+    if (!credential?.id) {
+      throw new Error("Nu exista o credențiala ANAF disponibila pentru firma activa.")
+    }
+
+    const updatedCredential = await prisma.companyAnafCredential.update({
+      where: { id: credential.id },
+      data: {
+        efacturaOauthAccessToken: String(payload.access_token),
+        efacturaOauthRefreshToken: payload.refresh_token ? String(payload.refresh_token) : null,
+        efacturaOauthAccessTokenExpiresAt: decodeTokenExpiry(String(payload.access_token)),
+        efacturaOauthRefreshTokenExpiresAt: decodeTokenExpiry(payload.refresh_token ? String(payload.refresh_token) : null),
+        efacturaOauthConnectedAt: new Date(),
+        efacturaOauthLastError: null,
+      },
+    })
+
+    if (credential.isDefault) {
+      await syncDefaultAnafCredentialToCompany(prisma as any, company.id, updatedCredential)
+    }
 
     return res.redirect(`${state.returnTo}${state.returnTo.includes("?") ? "&" : "?"}oauth=success`)
   } catch (error: any) {
-    await updateOrCreateTenantCompany(prisma, state.tenantId, state.activeCompanyId || null, {
-      efacturaOauthLastError: error?.message || "Eroare la schimbul token-ului ANAF.",
+    const company = await resolveTenantCompany(prisma, state.tenantId, state.activeCompanyId || null, {
+      select: { id: true, tenantId: true, name: true },
     })
+    if (company?.id) {
+      const credential = state.credentialId
+        ? await getCompanyAnafCredentialById(prisma as any, state.tenantId, company.id, state.credentialId)
+        : await getDefaultCompanyAnafCredential(prisma as any, state.tenantId, company.id)
+      if (credential?.id) {
+        const updated = await prisma.companyAnafCredential.update({
+          where: { id: credential.id },
+          data: { efacturaOauthLastError: error?.message || "Eroare la schimbul token-ului ANAF." },
+        })
+        if (credential.isDefault) {
+          await syncDefaultAnafCredentialToCompany(prisma as any, company.id, updated)
+        }
+      }
+    }
 
     return res.redirect(`${state.returnTo}${state.returnTo.includes("?") ? "&" : "?"}oauth=error`)
   }
@@ -603,7 +768,7 @@ router.get("/api/v1/public/efactura/agent-pairing/resolve", async (req, res) => 
     })
   }
 
-  const company = await resolveTenantCompany(prisma, tenantId, null, {
+  const company = await resolveCompanyWithAnafCredential(prisma as any, tenantId, null, {
     select: {
       name: true,
       efacturaCertSerial: true,
@@ -631,7 +796,7 @@ router.get("/api/v1/company", async (req: AuthedRequest, res) => {
 
   try {
     const [company, oauthConfig] = await Promise.all([
-      getRequestCompany(req),
+      getRequestCompany(req, { includeCredentialList: true }),
       getEffectiveAnafOauthConfig(tenantId, getActiveCompanyId(req)),
     ])
 
@@ -843,9 +1008,13 @@ router.post("/api/v1/company", async (req: AuthedRequest, res) => {
         supplierCodePrefix: "FUR",
       })
 
+    await syncCompanyToDefaultAnafCredential(prisma as any, tenantId, company.id)
+
+    const resolvedCompany = await getRequestCompany(req, { includeCredentialList: true })
+
     return res.json({
       ok: true,
-      company: mapCompanyResponse(company, await getEffectiveAnafOauthConfig(tenantId, getActiveCompanyId(req)))
+      company: mapCompanyResponse(resolvedCompany, await getEffectiveAnafOauthConfig(tenantId, getActiveCompanyId(req)))
     })
   } catch (e: any) {
     return res.status(500).json({
@@ -886,25 +1055,51 @@ router.post(
           tenantId: true,
           name: true,
           efacturaCertFilename: true,
+          anafCredentialId: true,
         },
       })
 
-      if (existing?.efacturaCertFilename && existing.efacturaCertFilename !== req.file.filename) {
-        deleteEfacturaCertificateFile(tenantId, existing.id, existing.efacturaCertFilename)
+      if (!existing?.id) {
+        throw new Error("Firma activa nu este disponibila pentru certificatul SPV.")
       }
 
-      const company = await updateRequestCompany(req, {
-          efacturaCertFilename: req.file.filename,
-          efacturaCertUploadedAt: new Date(),
-          efacturaCertSerial: serial,
-          efacturaCertPasswordEnc: encryptSecret(password),
-        }, {
-          name: existing?.name || "Companie",
-          efacturaCertFilename: req.file.filename,
-          efacturaCertUploadedAt: new Date(),
-          efacturaCertSerial: serial,
-          efacturaCertPasswordEnc: encryptSecret(password),
+      let credential = existing?.anafCredentialId
+        ? await getCompanyAnafCredentialById(prisma as any, tenantId, existing.id, existing.anafCredentialId)
+        : await getDefaultCompanyAnafCredential(prisma as any, tenantId, existing.id)
+
+      if (!credential) {
+        credential = await prisma.companyAnafCredential.create({
+          data: {
+            tenantId,
+            companyId: existing.id,
+            label: `${existing?.name || "Firma"} - SPV principal`,
+            isDefault: true,
+          },
         })
+      }
+
+      const finalPath = getEfacturaCertPath(tenantId, existing.id, req.file.originalname, credential.id)
+      if (credential?.certFilename) {
+        deleteEfacturaCertificateFile(tenantId, existing.id, credential.certFilename, credential.id)
+      }
+      fs.renameSync(req.file.path, finalPath)
+
+      const updatedCredential = await prisma.companyAnafCredential.update({
+        where: { id: credential.id },
+        data: {
+          certFilename: path.basename(finalPath),
+          certUploadedAt: new Date(),
+          certSerial: serial,
+          certPasswordEnc: encryptSecret(password),
+          isDefault: credential.isDefault ?? true,
+        },
+      })
+
+      if (updatedCredential.isDefault) {
+        await syncDefaultAnafCredentialToCompany(prisma as any, existing.id, updatedCredential)
+      }
+
+      const company = await getRequestCompany(req, { includeCredentialList: true })
 
       return res.json({
         ok: true,
@@ -930,15 +1125,33 @@ router.delete("/api/v1/company/efactura/certificate", requireAuth, async (req: A
       select: {
         id: true,
         efacturaCertFilename: true,
+        anafCredentialId: true,
       },
     })
 
-    deleteEfacturaCertificateFile(tenantId, company?.id, company?.efacturaCertFilename)
+    if (company?.anafCredentialId) {
+      deleteEfacturaCertificateFile(tenantId, company?.id, company?.efacturaCertFilename, company?.anafCredentialId)
+      const updatedCredential = await prisma.companyAnafCredential.update({
+        where: { id: company.anafCredentialId },
+        data: {
+          certFilename: null,
+          certUploadedAt: null,
+          certPasswordEnc: null,
+          certSerial: null,
+        },
+      })
+      if (updatedCredential.isDefault) {
+        await syncDefaultAnafCredentialToCompany(prisma as any, company.id, updatedCredential)
+      }
+    } else {
+      deleteEfacturaCertificateFile(tenantId, company?.id, company?.efacturaCertFilename)
+      await updateRequestCompany(req, {
+        efacturaCertFilename: null,
+        efacturaCertUploadedAt: null,
+      })
+    }
 
-    const updated = await updateRequestCompany(req, {
-      efacturaCertFilename: null,
-      efacturaCertUploadedAt: null,
-    })
+    const updated = await getRequestCompany(req, { includeCredentialList: true })
 
     return res.json({
       ok: true,
@@ -955,6 +1168,7 @@ router.delete("/api/v1/company/efactura/certificate", requireAuth, async (req: A
 router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
   const activeCompanyId = getActiveCompanyId(req)
+  const requestedCredentialId = getRequestedCredentialId(req)
   const returnTo = String(req.query.returnTo || "").trim() || "http://localhost:5173/setari/efactura"
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
 
@@ -976,8 +1190,8 @@ router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, re
   }
 
   try {
-    const certificateCompany = await getRequestCompanyCertificateState(req)
-    ensureCompanyCertificateReady(certificateCompany)
+    const { credential } = await getRequestAnafCredential(req, requestedCredentialId)
+    ensureCompanyCertificateReady(credential)
   } catch (error: any) {
     return res.status(409).json({
       ok: false,
@@ -999,6 +1213,7 @@ router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, re
       tenantId,
       returnTo,
       activeCompanyId,
+      credentialId: requestedCredentialId,
     },
     JWT_SECRET,
     { expiresIn: "15m" },
@@ -1022,6 +1237,7 @@ router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, re
   console.log("ANAF OAUTH START", {
     tenantId,
     activeCompanyId,
+    credentialId: requestedCredentialId,
     activeCompanyName: activeCompany?.name || null,
     usesPlatformConfig: oauthConfig.usesPlatformConfig,
     clientIdSuffix: oauthConfig.clientId ? oauthConfig.clientId.slice(-8) : "",
@@ -1045,15 +1261,9 @@ router.post("/api/v1/company/efactura/oauth/test", async (req: AuthedRequest, re
     })
   }
 
-  const company = await getRequestCompany(req, {
-    select: {
-      efacturaOauthAccessToken: true,
-      efacturaOauthConnectedAt: true,
-      efacturaOauthAccessTokenExpiresAt: true,
-    },
-  })
+  const { company, credential } = await getRequestAnafCredential(req)
 
-  if (!company?.efacturaOauthAccessToken) {
+  if (!credential?.efacturaOauthAccessToken) {
     return res.status(400).json({
       ok: false,
       error: "Nu exista token ANAF salvat pentru aceasta firma. Genereaza mai intai tokenul cu certificatul digital.",
@@ -1063,16 +1273,22 @@ router.post("/api/v1/company/efactura/oauth/test", async (req: AuthedRequest, re
   try {
     const response = await anafHttpRequest(ANAF_TEST_URL, {
       headers: {
-        Authorization: `Bearer ${company.efacturaOauthAccessToken}`,
+        Authorization: `Bearer ${credential.efacturaOauthAccessToken}`,
       },
     })
 
     const text = response.text
 
     if (!response.ok) {
-      await updateRequestCompany(req, {
-        efacturaOauthLastError: text.slice(0, 1000),
-      })
+      if (credential?.anafCredentialId) {
+        const updatedCredential = await prisma.companyAnafCredential.update({
+          where: { id: credential.anafCredentialId },
+          data: {
+            efacturaOauthLastError: text.slice(0, 1000),
+          },
+        })
+        await syncDefaultAnafCredentialToCompany(prisma as any, company.id, updatedCredential)
+      }
 
       return res.status(400).json({
         ok: false,
@@ -1081,21 +1297,33 @@ router.post("/api/v1/company/efactura/oauth/test", async (req: AuthedRequest, re
       })
     }
 
-    await updateRequestCompany(req, {
-      efacturaOauthConnectedAt: company.efacturaOauthConnectedAt ?? new Date(),
-      efacturaOauthLastError: null,
-    })
+    if (credential?.anafCredentialId) {
+      const updatedCredential = await prisma.companyAnafCredential.update({
+        where: { id: credential.anafCredentialId },
+        data: {
+          efacturaOauthConnectedAt: credential.efacturaOauthConnectedAt ?? new Date(),
+          efacturaOauthLastError: null,
+        },
+      })
+      await syncDefaultAnafCredentialToCompany(prisma as any, company.id, updatedCredential)
+    }
 
     return res.json({
       ok: true,
       message: "Conexiunea ANAF a raspuns corect.",
       details: text,
-      expiresAt: company.efacturaOauthAccessTokenExpiresAt,
+      expiresAt: credential.efacturaOauthAccessTokenExpiresAt,
     })
   } catch (error: any) {
-    await updateRequestCompany(req, {
-      efacturaOauthLastError: error?.message || "Eroare la testarea conexiunii ANAF.",
-    })
+    if (credential?.anafCredentialId) {
+      const updatedCredential = await prisma.companyAnafCredential.update({
+        where: { id: credential.anafCredentialId },
+        data: {
+          efacturaOauthLastError: error?.message || "Eroare la testarea conexiunii ANAF.",
+        },
+      })
+      await syncDefaultAnafCredentialToCompany(prisma as any, company.id, updatedCredential)
+    }
 
     return res.status(500).json({
       ok: false,
@@ -1120,6 +1348,35 @@ router.get("/api/v1/company/efactura/agent-download-info", requireAuth, async (r
     ok: true,
     agent: source,
   })
+})
+
+router.get("/api/v1/company/efactura/credentials", requireAuth, async (req: AuthedRequest, res) => {
+  try {
+    const company = await getRequestCompany(req, {
+      select: {
+        id: true,
+      },
+    })
+
+    if (!company?.id) {
+      return res.status(404).json({
+        ok: false,
+        error: "Firma activa nu este disponibila.",
+      })
+    }
+
+    const credentials = await listCompanyAnafCredentials(prisma as any, req.auth!.tenantId, company.id)
+    return res.json({
+      ok: true,
+      credentials: credentials.map(mapAnafCredentialSummary),
+      activeCredentialId: company?.anafCredentialId || null,
+    })
+  } catch (error: any) {
+    return res.status(500).json({
+      ok: false,
+      error: error?.message || "Nu am putut incarca lista de credențiale ANAF.",
+    })
+  }
 })
 
 router.get("/api/v1/company/efactura/agent-download", requireAuth, async (req: AuthedRequest, res) => {
@@ -1211,6 +1468,7 @@ router.post("/api/v1/company/efactura/agent-pairing-code", requireAuth, async (r
     select: {
       name: true,
       efacturaCertSerial: true,
+      anafCredentialId: true,
     },
   })
 
@@ -1229,6 +1487,7 @@ router.post("/api/v1/company/efactura/agent-pairing-code", requireAuth, async (r
       code,
       erpUrl,
       certSerial,
+      credentialId: company?.anafCredentialId || null,
       companyName: company?.name || null,
       expiresAt: decoded?.exp ? new Date(decoded.exp * 1000).toISOString() : null,
     },
@@ -1250,12 +1509,15 @@ router.get("/api/v1/company/efactura/diagnostics", async (req: AuthedRequest, re
     const company = await getRequestCompany(req, {
       select: {
         tenantId: true,
+        id: true,
         cui: true,
         efacturaEnvironment: true,
         efacturaOauthAccessToken: true,
         efacturaCertSerial: true,
         efacturaCertFilename: true,
         efacturaCertPasswordEnc: true,
+        anafCredentialId: true,
+        anafCredentialLabel: true,
       },
     })
 

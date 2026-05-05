@@ -238,6 +238,7 @@ model Tenant {
   accountingStockTypes    AccountingStockType[]
   backups               TenantBackup[]
   eTransportNotices    ETransportNotice[]
+  anafCredentials      CompanyAnafCredential[]
 }
 
 model PlatformConfig {
@@ -343,11 +344,49 @@ model Company {
   userAccesses UserCompanyAccess[]
   accountingExportConfig AccountingExportConfig?
   accountingStockTypes   AccountingStockType[]
+  anafCredentials CompanyAnafCredential[]
 
     @@index([tenantId])
     @@unique([tenantId, name])
     @@unique([tenantId, code])
   }
+
+model CompanyAnafCredential {
+  id        String   @id @default(cuid())
+  tenantId  String
+  companyId String
+
+  label      String
+  isDefault  Boolean @default(false)
+
+  certSerial      String?
+  certPasswordEnc String?
+  certFilename    String?
+  certUploadedAt  DateTime?
+
+  efacturaOauthAccessToken           String?
+  efacturaOauthRefreshToken          String?
+  efacturaOauthAccessTokenExpiresAt  DateTime?
+  efacturaOauthRefreshTokenExpiresAt DateTime?
+  efacturaOauthConnectedAt           DateTime?
+  efacturaOauthLastError             String?
+
+  etransportOauthAccessToken           String?
+  etransportOauthRefreshToken          String?
+  etransportOauthAccessTokenExpiresAt  DateTime?
+  etransportOauthRefreshTokenExpiresAt DateTime?
+  etransportOauthConnectedAt           DateTime?
+  etransportOauthLastError             String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, companyId])
+  @@index([companyId, isDefault])
+}
 
 model AccountingExportConfig {
   id                    String   @id @default(cuid())
