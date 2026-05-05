@@ -414,7 +414,7 @@ export async function anafUploadEtransportXml(company: any, xmlText: string) {
     const baseUrl = baseUrls[baseIndex]
     for (const uploadStandard of uploadStandards) {
       for (const xmlVariant of xmlVariants) {
-        const url = `${baseUrl}/upload/${uploadStandard}/${encodeURIComponent(ready.cif)}?versiune=2`
+        const url = `${baseUrl}/upload/${uploadStandard}/${encodeURIComponent(ready.cif)}/2`
         try {
           logAnafRequestStart("etrtransport-upload", {
             tenantId: company?.tenantId || null,
