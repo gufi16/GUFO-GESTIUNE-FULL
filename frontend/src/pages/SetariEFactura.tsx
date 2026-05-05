@@ -284,13 +284,20 @@ export default function SetariEFacturaPage() {
         passwordConfigured: Boolean(data?.company?.efacturaCertPasswordConfigured),
       })
 
-      const connected = Boolean(data?.company?.efacturaOauthAccessToken)
+      const hasOauthToken = Boolean(data?.company?.efacturaOauthAccessToken)
+      const hasCompanyCertificate =
+        Boolean(data?.company?.efacturaCertHasFile) &&
+        Boolean(data?.company?.efacturaCertPasswordConfigured)
+      const connected = hasOauthToken && hasCompanyCertificate
 
       setOauthStatus({
         connected,
         connectedAt: data?.company?.efacturaOauthConnectedAt || "",
         expiresAt: data?.company?.efacturaOauthAccessTokenExpiresAt || "",
-        lastError: data?.company?.efacturaOauthLastError || "",
+        lastError:
+          !hasCompanyCertificate && hasOauthToken
+            ? "Exista un token ANAF salvat, dar firma activa nu are certificatul SPV configurat complet."
+            : data?.company?.efacturaOauthLastError || "",
       })
 
       if (connected) {
