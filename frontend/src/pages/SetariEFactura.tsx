@@ -209,6 +209,31 @@ function findCredentialById(credentials: AnafCredentialSummary[], credentialId: 
   return credentials.find((item) => item.id === targetId) || null
 }
 
+function readOauthFeedback() {
+  if (typeof window === "undefined") {
+    return { oauth: "", message: "" }
+  }
+
+  const params = new URLSearchParams(window.location.search)
+  return {
+    oauth: String(params.get("oauth") || "").trim(),
+    message: String(params.get("message") || "").trim(),
+  }
+}
+
+function clearOauthFeedbackFromUrl() {
+  if (typeof window === "undefined") return
+
+  const params = new URLSearchParams(window.location.search)
+  if (!params.has("oauth") && !params.has("message")) return
+
+  params.delete("oauth")
+  params.delete("message")
+  const qs = params.toString()
+  const nextUrl = `${window.location.pathname}${qs ? `?${qs}` : ""}`
+  window.history.replaceState({}, "", nextUrl)
+}
+
 export default function SetariEFacturaPage() {
   if (!hasModule("efactura")) {
     return <Navigate to="/setari" replace />
@@ -258,16 +283,21 @@ export default function SetariEFacturaPage() {
     new URLSearchParams(window.location.search).get("debugSpv") === "1"
 
   useEffect(() => {
-    loadSettings()
+    const oauthFeedback = readOauthFeedback()
+
+    if (oauthFeedback.oauth === "success") {
+      setMessage("Conectarea ANAF a fost realizata.")
+    }
+    if (oauthFeedback.oauth === "error") {
+      setError(oauthFeedback.message || "Conectarea ANAF nu a putut fi finalizata.")
+    }
+    if (oauthFeedback.oauth === "denied") {
+      setError(oauthFeedback.message || "Autorizarea ANAF a fost anulata sau refuzata.")
+    }
+
+    void loadSettings(oauthFeedback)
     void loadLocalAgentStatus()
     void loadAgentDownloadInfo()
-
-    const params = new URLSearchParams(window.location.search)
-    const oauth = params.get("oauth")
-
-    if (oauth === "success") setMessage("Conectarea ANAF a fost realizata.")
-    if (oauth === "error") setError("Conectarea ANAF nu a putut fi finalizata.")
-    if (oauth === "denied") setError("Autorizarea ANAF a fost anulata sau refuzata.")
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -340,7 +370,7 @@ export default function SetariEFacturaPage() {
     })
   }
 
-  async function loadSettings() {
+  async function loadSettings(oauthFeedback?: { oauth?: string; message?: string }) {
     if (!token) {
       setError("Nu exista token de autentificare. Fa login din nou.")
       setLoading(false)
@@ -348,8 +378,10 @@ export default function SetariEFacturaPage() {
     }
 
     setLoading(true)
-    setError("")
-    setMessage("")
+    if (!oauthFeedback?.oauth) {
+      setError("")
+      setMessage("")
+    }
 
     try {
       const res = await fetch(`${API}/api/v1/company`, {
@@ -400,18 +432,8 @@ export default function SetariEFacturaPage() {
         setError((prev) => (prev.includes("Selecteaza mai intai firma activa") ? "" : prev))
       }
 
-      if (preservedCredential?.connected || data?.company?.efacturaOauthAccessToken) {
-        setError("")
-
-        const params = new URLSearchParams(window.location.search)
-        const oauth = params.get("oauth")
-
-        if (oauth === "denied" || oauth === "error") {
-          params.delete("oauth")
-          const qs = params.toString()
-          const nextUrl = `${window.location.pathname}${qs ? `?${qs}` : ""}`
-          window.history.replaceState({}, "", nextUrl)
-        }
+      if (oauthFeedback?.oauth) {
+        clearOauthFeedbackFromUrl()
       }
     } catch (e: any) {
       setError(e?.message || "Nu am putut incarca setarile e-Factura.")
