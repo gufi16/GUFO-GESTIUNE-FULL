@@ -819,6 +819,33 @@ export default function SetariEFacturaPage() {
     }))
   }
 
+  function openFreshAnafSessionWindow() {
+    if (typeof window === "undefined") return null
+
+    const freshSessionWindow = window.open("", "gufo-anaf-fresh-session", "popup,width=560,height=720")
+    if (!freshSessionWindow) return null
+
+    try {
+      freshSessionWindow.document.title = "Pregatire autentificare ANAF"
+      freshSessionWindow.document.body.innerHTML =
+        '<div style="font-family:Arial,sans-serif;padding:24px;color:#17324D;line-height:1.5">Se inchide sesiunea ANAF curenta pentru a putea alege utilizatorul si certificatul SPV...</div>'
+    } catch {
+      // Browserul poate bloca scrierea in fereastra, dar navigarea ramane posibila.
+    }
+
+    return freshSessionWindow
+  }
+
+  function closeFreshAnafSessionWindow(freshSessionWindow: Window | null) {
+    try {
+      if (freshSessionWindow && !freshSessionWindow.closed) {
+        freshSessionWindow.close()
+      }
+    } catch {
+      // Fereastra este cross-origin dupa logout ANAF; ignoram inchiderea daca browserul refuza.
+    }
+  }
+
   async function startOauthConnect() {
     if (!token) {
       setError("Nu exista token de autentificare. Fa login din nou.")
@@ -833,6 +860,7 @@ export default function SetariEFacturaPage() {
     setConnecting(true)
     setError("")
     setMessage("")
+    const freshSessionWindow = openFreshAnafSessionWindow()
     try {
       const returnTo = `${window.location.origin}/setari/efactura`
       const search = new URLSearchParams({
@@ -840,6 +868,10 @@ export default function SetariEFacturaPage() {
       })
       if (form.companyId) {
         search.set("companyId", form.companyId)
+      }
+      const credentialId = currentCredential?.id || selectedCredentialId
+      if (credentialId) {
+        search.set("credentialId", credentialId)
       }
       
       const res = await fetch(`${API}/api/v1/company/efactura/oauth/start?${search.toString()}`, {
@@ -850,7 +882,26 @@ export default function SetariEFacturaPage() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data?.ok || !data?.url) {
+        closeFreshAnafSessionWindow(freshSessionWindow)
         throw new Error(normalizeAnafMessage(data?.error || "Nu am putut porni conectarea ANAF."))
+      }
+
+      const freshSessionUrl = String(data?.freshSessionUrl || data?.logoutUrl || "").trim()
+      if (freshSessionUrl && freshSessionWindow) {
+        try {
+          freshSessionWindow.location.href = freshSessionUrl
+        } catch {
+          closeFreshAnafSessionWindow(freshSessionWindow)
+        }
+        setMessage("Se pregateste o sesiune noua ANAF, apoi se deschide autentificarea pentru alegerea utilizatorului.")
+        window.setTimeout(() => {
+          window.location.href = data.url
+        }, 1800)
+        return
+      }
+
+      if (freshSessionUrl && !freshSessionWindow) {
+        setMessage("Se deschide autentificarea ANAF. Daca nu apare alegerea utilizatorului, permite fereastra de sesiune noua si reincearca.")
       }
       window.location.href = data.url
     } catch (e: any) {
