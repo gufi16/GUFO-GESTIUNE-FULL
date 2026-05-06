@@ -49,8 +49,6 @@ type IncomingInvoice = {
   items: IncomingInvoiceItem[]
 }
 
-type IncomingFilter = "all" | "needs-supplier" | "partial" | "ready" | "linked"
-
 type SpvClassicStatus = {
   mode: string
   authType: string
@@ -207,7 +205,6 @@ export default function FacturiPrimiteSPVPage() {
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [search, setSearch] = useState("")
-  const [filter, setFilter] = useState<IncomingFilter>("all")
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
   const [testingClassic, setTestingClassic] = useState(false)
@@ -874,11 +871,8 @@ export default function FacturiPrimiteSPVPage() {
         .map((value) => String(value || "").toLowerCase())
         .some((value) => value.includes(q))
     )
-    if (filter !== "all") {
-      next = next.filter((item) => getInvoiceState(item) === filter)
-    }
     return next
-  }, [items, search, filter, selectedMonth])
+  }, [items, search, selectedMonth])
 
   const totalMatched = filteredItems.reduce(
     (sum, item) => sum + item.items.filter((line) => Boolean(line.matchedProductId)).length,
@@ -918,7 +912,7 @@ export default function FacturiPrimiteSPVPage() {
 
   useEffect(() => {
     setImportedInvoicesPage(1)
-  }, [search, filter, items.length])
+  }, [search, items.length])
 
   useEffect(() => {
     if (bridgeMessagesPage > bridgeMessagesPageCount) {
@@ -971,6 +965,22 @@ export default function FacturiPrimiteSPVPage() {
         title="Facturi primite SPV"
         subtitle="Sincronizezi facturile furnizorilor din SPV si deschizi receptia direct din ele."
       />
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          className="inline-flex items-center gap-1.5 rounded-[14px] bg-slate-900 px-3 py-1.5 text-[13px] font-semibold text-white"
+        >
+          Facturi primite
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate("/documente?tab=invoice")}
+          className="inline-flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-semibold text-slate-700 transition hover:bg-slate-50"
+        >
+          Facturi trimise
+        </button>
+      </div>
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
         <DocumentMetric title="Facturi primite" value={String(filteredItems.length)} tone="blue" />
@@ -1110,29 +1120,6 @@ export default function FacturiPrimiteSPVPage() {
             </div>
           </div>
         ) : null}
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        {[
-          { value: "all", label: "Toate" },
-          { value: "needs-supplier", label: "Furnizor lipsa" },
-          { value: "partial", label: "Mapare partiala" },
-          { value: "ready", label: "Gata de receptie" },
-          { value: "linked", label: "Receptie creata" },
-        ].map((entry) => (
-          <button
-            key={entry.value}
-            type="button"
-            onClick={() => setFilter(entry.value as IncomingFilter)}
-            className={`inline-flex items-center gap-1.5 rounded-[14px] px-3 py-1.5 text-[13px] font-semibold transition ${
-              filter === entry.value
-                ? "bg-slate-900 text-white"
-                : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-            }`}
-          >
-            {entry.label}
-          </button>
-        ))}
       </div>
 
       {isDebugMode && bridgeMessages.length ? (
