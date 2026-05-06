@@ -6,12 +6,15 @@ import {
   Building2,
   CalendarCheck,
   ChevronLeft,
+  Factory,
   FilePlus2,
   FileSpreadsheet,
   FileText,
+  Inbox,
   LayoutDashboard,
   Receipt,
   Settings,
+  Truck,
   Warehouse,
 } from "lucide-react"
 import { hasModule } from "../lib/modules"
@@ -40,8 +43,21 @@ const sections: SidebarSection[] = [
   {
     title: "Gestiune",
     items: [
-      { to: "/gestiune", label: "Gestiune", icon: Warehouse, module: "inventory" },
+      { to: "/gestiune/stoc", label: "Stoc", icon: Warehouse, module: "inventory" },
+      { to: "/gestiune/productie", label: "Productie", icon: Factory, module: "inventory" },
       { to: "/documente", label: "Documente", icon: FileText, module: "documents" },
+    ],
+  },
+  {
+    title: "SPV si ANAF",
+    items: [
+      { to: "/documente/facturi-primite-spv", label: "Facturi primite SPV", icon: Inbox, module: "documents" },
+      { to: "/e-transport", label: "Registru e-Transport", icon: Truck, module: "documents" },
+    ],
+  },
+  {
+    title: "Rapoarte",
+    items: [
       { to: "/rapoarte", label: "Rapoarte", icon: BarChart3, module: "reports" },
       { to: "/rapoarte/export-contabilitate", label: "Export contabilitate", icon: FileSpreadsheet, module: "reports" },
     ],

@@ -15,7 +15,7 @@ export function hasModule(code: string) {
 export function firstAllowedRoute() {
   if (hasModule("dashboard")) return "/dashboard"
   if (hasModule("documents")) return "/inregistrare-document"
-  if (hasModule("inventory")) return "/gestiune"
+  if (hasModule("inventory")) return "/gestiune/stoc"
   if (hasModule("nomenclature")) return "/nomenclator"
   if (hasModule("settings")) return "/setari"
   if (hasModule("reports")) return "/rapoarte"

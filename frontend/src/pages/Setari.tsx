@@ -32,8 +32,8 @@ const items = [
     icon: FileDigit,
   },
   {
-    name: "Setari e-Factura",
-    desc: "Configurezi emitentul, mediul de lucru si baza pentru integrarea ANAF.",
+    name: "Setari SPV",
+    desc: "Configurezi firma, mediul de lucru si tokenul ANAF pentru SPV.",
     route: "/setari/efactura",
     icon: ReceiptText,
   },

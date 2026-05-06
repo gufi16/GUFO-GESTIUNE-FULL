@@ -10,7 +10,6 @@ import ResetPassword from "./pages/ResetPassword"
 import ControlPanelLogin from "./pages/control/ControlPanelLogin"
 import Dashboard from "./pages/Dashboard"
 import InregistrareDocument from "./pages/InregistrareDocument"
-import Gestiune from "./pages/Gestiune"
 import Documente from "./pages/Documente"
 import Nomenclator from "./pages/Nomenclator"
 import Setari from "./pages/Setari"
@@ -134,7 +133,7 @@ export default function App() {
         <Route path="/e-transport/new" element={<RequireModule code="documents"><ETransportPage /></RequireModule>} />
         <Route path="/e-transport/edit" element={<RequireModule code="documents"><ETransportPage /></RequireModule>} />
 
-        <Route path="/gestiune" element={<RequireModule code="inventory"><Gestiune /></RequireModule>} />
+        <Route path="/gestiune" element={<RequireModule code="inventory"><Navigate to="/gestiune/stoc" replace /></RequireModule>} />
         <Route path="/gestiune/stoc" element={<RequireModule code="inventory"><Stoc /></RequireModule>} />
         <Route path="/gestiune/productie" element={<RequireModule code="inventory"><Productie /></RequireModule>} />
         <Route path="/gestiune/inventare" element={<RequireModule code="inventory"><Inventare /></RequireModule>} />

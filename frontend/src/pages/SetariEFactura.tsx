@@ -1147,12 +1147,12 @@ export default function SetariEFacturaPage() {
     <div className="space-y-3">
       <PageHeader
         badge="configurare"
-        title="Setari e-Factura"
-        subtitle="Pastrezi aici ce conteaza pentru lucru direct din ERP: activare, mediul ANAF si tokenul OAuth ANAF."
+        title="Setari SPV"
+        subtitle="Pastrezi aici activarea, mediul ANAF si tokenul OAuth ANAF pentru comunicarea cu SPV."
       />
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
-        <DocumentMetric title="Flux e-Factura" value={form.efacturaEnabled ? "Activat" : "Oprit"} tone="amber" />
+        <DocumentMetric title="Flux SPV" value={form.efacturaEnabled ? "Activat" : "Oprit"} tone="amber" />
         <DocumentMetric title="Mediu" value={form.efacturaEnvironment === "prod" ? "Productie" : "Test"} tone="blue" />
         <DocumentMetric title="Token ANAF" value={oauthStatus.connected ? "Activ" : "Neactiv"} tone={oauthStatus.connected ? "emerald" : "slate"} />
       </div>
@@ -1170,42 +1170,6 @@ export default function SetariEFacturaPage() {
         <InlineNotice tone="success">Agentul local este conectat si certificatul este pregatit pentru SPV.</InlineNotice>
       ) : null}
 
-      <DocumentSection
-        title="Conectare pe firma curenta"
-        description="Tokenul ANAF este folosit separat pe fiecare firma. Cand schimbi firma, generezi sau regenerezi token doar pentru firma activa."
-      >
-        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.2fr_1fr]">
-          <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-            <div>
-              Firma activa: <span className="font-semibold text-slate-900">{form.companyName || "-"}</span>
-            </div>
-            <div className="mt-2">
-              Profil OAuth: <span className="font-semibold text-slate-900">{`${form.companyName || "Firma"} - SPV principal`}</span>
-            </div>
-            <div className="mt-2">
-              Regula de lucru: <span className="font-semibold text-slate-900">OAuth ANAF in browser, cu semnatura electronica activa pe calculatorul curent</span>
-            </div>
-            <div className="mt-2">
-              Daca folosesti alta semnatura pentru aceeasi firma, apesi din nou <span className="font-semibold text-slate-900">Genereaza token</span> si tokenul firmei se actualizeaza.
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-2 text-sm text-slate-600 md:grid-cols-2 xl:grid-cols-1">
-            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
-              Firma activa: <span className="font-semibold text-slate-900">{form.companyName || "-"}</span>
-            </div>
-            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
-              CUI: <span className="font-semibold text-slate-900">{form.companyCui || "-"}</span>
-            </div>
-            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
-              Token ANAF: <span className="font-semibold text-slate-900">{oauthStatus.connected ? "Conectat" : "Neconectat"}</span>
-            </div>
-            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
-              Generat la: <span className="font-semibold text-slate-900">{oauthStatus.connectedAt ? new Date(oauthStatus.connectedAt).toLocaleString("ro-RO") : "-"}</span>
-            </div>
-          </div>
-        </div>
-      </DocumentSection>
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
         <DocumentSection
           title="Flux firma"
@@ -1353,15 +1317,15 @@ export default function SetariEFacturaPage() {
       ) : null}
 
       {activeModal === "flow" ? (
-        <SettingsModal title="Configurare flux e-Factura" onClose={() => setActiveModal(null)}>
+        <SettingsModal title="Configurare flux SPV" onClose={() => setActiveModal(null)}>
           {loading ? (
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-              Se incarca setarile e-Factura...
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                Se incarca setarile SPV...
             </div>
           ) : (
             <div className="space-y-4">
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <DocumentField label="Activare flux e-Factura">
+                <DocumentField label="Activare flux SPV">
                   <label className="flex min-h-10 items-center gap-3 rounded-[14px] border border-slate-200 bg-slate-50 px-3 text-[13px] text-slate-700">
                     <input type="checkbox" checked={form.efacturaEnabled} onChange={(e) => updateField("efacturaEnabled", e.target.checked)} />
                     <span>Firma foloseste e-Factura</span>
