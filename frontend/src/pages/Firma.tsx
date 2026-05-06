@@ -172,14 +172,6 @@ export default function FirmaPage() {
     setMessage("")
 
     try {
-      const currentRes = await fetch(`${API}/api/v1/company`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-      const currentData = await currentRes.json().catch(() => ({}))
-      const currentCompany = currentData?.company || {}
-
       const res = await fetch(`${API}/api/v1/company`, {
         method: "POST",
         headers: {
@@ -187,8 +179,26 @@ export default function FirmaPage() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          ...currentCompany,
-          ...form,
+          name: form.name,
+          cui: form.cui,
+          regNo: form.regNo,
+          address: form.address,
+          city: form.city,
+          county: form.county,
+          postalCode: form.postalCode,
+          country: form.country,
+          bank: form.bank,
+          iban: form.iban,
+          email: form.email,
+          contactEmail: form.contactEmail,
+          phone: form.phone,
+          isVatPayer: form.isVatPayer,
+          efacturaSellerCity: form.efacturaSellerCity,
+          efacturaSellerCounty: form.efacturaSellerCounty,
+          efacturaSellerPostalCode: form.efacturaSellerPostalCode,
+          efacturaSellerCountryCode: form.efacturaSellerCountryCode,
+          efacturaContactEmail: form.efacturaContactEmail,
+          efacturaCertSerial: form.efacturaCertSerial,
           ...(certPassword.trim() ? { efacturaCertPassword: certPassword.trim() } : {}),
         }),
       })
@@ -208,6 +218,7 @@ export default function FirmaPage() {
       }
 
       setCertPassword("")
+      await loadCompany()
       setMessage("Datele firmei au fost salvate.")
     } catch {
       setError("Eroare la salvarea firmei.")
