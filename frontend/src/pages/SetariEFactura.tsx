@@ -122,6 +122,7 @@ type AgentPairingCodeState = {
 }
 
 const DEFAULT_LOCAL_AGENT_URL = "http://127.0.0.1:48521"
+const OAUTH_FEEDBACK_STORAGE_KEY = "gufo.efactura.oauthFeedback"
 
 type ActiveModal = null | "flow" | "agent" | "debug" | "pairing"
 
@@ -234,6 +235,41 @@ function clearOauthFeedbackFromUrl() {
   window.history.replaceState({}, "", nextUrl)
 }
 
+function persistOauthFeedback(feedback: { oauth?: string; message?: string }) {
+  if (typeof window === "undefined") return
+  const oauth = String(feedback.oauth || "").trim()
+  const message = String(feedback.message || "").trim()
+  if (!oauth) return
+  window.sessionStorage.setItem(
+    OAUTH_FEEDBACK_STORAGE_KEY,
+    JSON.stringify({
+      oauth,
+      message,
+      at: Date.now(),
+    }),
+  )
+}
+
+function readPersistedOauthFeedback() {
+  if (typeof window === "undefined") return { oauth: "", message: "" }
+  try {
+    const raw = window.sessionStorage.getItem(OAUTH_FEEDBACK_STORAGE_KEY)
+    if (!raw) return { oauth: "", message: "" }
+    const parsed = JSON.parse(raw) as { oauth?: string; message?: string }
+    return {
+      oauth: String(parsed?.oauth || "").trim(),
+      message: String(parsed?.message || "").trim(),
+    }
+  } catch {
+    return { oauth: "", message: "" }
+  }
+}
+
+function clearPersistedOauthFeedback() {
+  if (typeof window === "undefined") return
+  window.sessionStorage.removeItem(OAUTH_FEEDBACK_STORAGE_KEY)
+}
+
 export default function SetariEFacturaPage() {
   if (!hasModule("efactura")) {
     return <Navigate to="/setari" replace />
@@ -283,12 +319,17 @@ export default function SetariEFacturaPage() {
     new URLSearchParams(window.location.search).get("debugSpv") === "1"
 
   useEffect(() => {
-    const oauthFeedback = readOauthFeedback()
+    const urlOauthFeedback = readOauthFeedback()
+    const oauthFeedback = urlOauthFeedback.oauth ? urlOauthFeedback : readPersistedOauthFeedback()
+
+    if (urlOauthFeedback.oauth) {
+      persistOauthFeedback(urlOauthFeedback)
+    }
 
     if (oauthFeedback.oauth === "success") {
       setMessage("Conectarea ANAF a fost realizata.")
     }
-    if (oauthFeedback.oauth === "error") {
+      if (oauthFeedback.oauth === "error") {
       setError(oauthFeedback.message || "Conectarea ANAF nu a putut fi finalizata.")
     }
     if (oauthFeedback.oauth === "denied") {
@@ -434,6 +475,8 @@ export default function SetariEFacturaPage() {
 
       if (oauthFeedback?.oauth) {
         clearOauthFeedbackFromUrl()
+      } else {
+        clearPersistedOauthFeedback()
       }
     } catch (e: any) {
       setError(e?.message || "Nu am putut incarca setarile e-Factura.")
