@@ -123,6 +123,7 @@ type AgentPairingCodeState = {
 
 const DEFAULT_LOCAL_AGENT_URL = "http://127.0.0.1:48521"
 const OAUTH_FEEDBACK_STORAGE_KEY = "gufo.efactura.oauthFeedback"
+const OAUTH_POPUP_RESULT_STORAGE_KEY = "gufo.efactura.oauthPopupResult"
 
 type ActiveModal = null | "flow" | "agent" | "debug" | "pairing"
 
@@ -270,6 +271,21 @@ function clearPersistedOauthFeedback() {
   window.sessionStorage.removeItem(OAUTH_FEEDBACK_STORAGE_KEY)
 }
 
+function publishOauthPopupResult(feedback: { oauth?: string; message?: string }) {
+  if (typeof window === "undefined") return
+  const oauth = String(feedback.oauth || "").trim()
+  if (!oauth) return
+
+  window.localStorage.setItem(
+    OAUTH_POPUP_RESULT_STORAGE_KEY,
+    JSON.stringify({
+      oauth,
+      message: String(feedback.message || "").trim(),
+      at: Date.now(),
+    }),
+  )
+}
+
 export default function SetariEFacturaPage() {
   if (!hasModule("efactura")) {
     return <Navigate to="/setari" replace />
@@ -326,6 +342,13 @@ export default function SetariEFacturaPage() {
       persistOauthFeedback(urlOauthFeedback)
     }
 
+    if (oauthFeedback.oauth && typeof window !== "undefined" && window.opener) {
+      publishOauthPopupResult(oauthFeedback)
+      window.setTimeout(() => {
+        window.close()
+      }, 250)
+    }
+
     if (oauthFeedback.oauth === "success") {
       setMessage("Conectarea ANAF a fost realizata.")
     }
@@ -339,6 +362,35 @@ export default function SetariEFacturaPage() {
     void loadSettings(oauthFeedback)
     void loadLocalAgentStatus()
     void loadAgentDownloadInfo()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    function handleOauthPopupResult(event: StorageEvent) {
+      if (event.key !== OAUTH_POPUP_RESULT_STORAGE_KEY || !event.newValue) return
+
+      try {
+        const feedback = JSON.parse(event.newValue) as { oauth?: string; message?: string }
+        if (feedback.oauth === "success") {
+          setMessage("Conectarea ANAF a fost realizata.")
+          setError("")
+        } else if (feedback.oauth === "denied") {
+          setError(feedback.message || "Autorizarea ANAF a fost anulata sau refuzata.")
+        } else if (feedback.oauth === "error") {
+          setError(feedback.message || "Conectarea ANAF nu a putut fi finalizata.")
+        }
+        void loadSettings(feedback)
+        void loadDiagnostics()
+      } catch {
+        void loadSettings()
+      } finally {
+        window.localStorage.removeItem(OAUTH_POPUP_RESULT_STORAGE_KEY)
+        setConnecting(false)
+      }
+    }
+
+    window.addEventListener("storage", handleOauthPopupResult)
+    return () => window.removeEventListener("storage", handleOauthPopupResult)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -862,7 +914,7 @@ export default function SetariEFacturaPage() {
     setMessage("")
     const freshSessionWindow = openFreshAnafSessionWindow()
     try {
-      const returnTo = `${window.location.origin}/setari/efactura`
+      const returnTo = `${window.location.origin}/setari/efactura?oauthPopup=1`
       const search = new URLSearchParams({
         returnTo,
       })
@@ -895,6 +947,15 @@ export default function SetariEFacturaPage() {
         }
         setMessage("Se pregateste o sesiune noua ANAF, apoi se deschide autentificarea pentru alegerea utilizatorului.")
         window.setTimeout(() => {
+          try {
+            if (freshSessionWindow && !freshSessionWindow.closed) {
+              freshSessionWindow.location.href = data.url
+              freshSessionWindow.focus()
+              return
+            }
+          } catch {
+            // Daca browserul refuza navigarea popup-ului, continuam in pagina curenta.
+          }
           window.location.href = data.url
         }, 1800)
         return
