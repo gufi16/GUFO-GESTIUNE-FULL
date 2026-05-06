@@ -14,6 +14,7 @@ import { API_BASE as API, getToken } from "../lib/api"
 import { hasModule } from "../lib/modules"
 
 type EFacturaForm = {
+  companyId: string
   efacturaEnabled: boolean
   efacturaEnvironment: string
   efacturaPlatformConfigured: boolean
@@ -125,6 +126,7 @@ const DEFAULT_LOCAL_AGENT_URL = "http://127.0.0.1:48521"
 type ActiveModal = null | "flow" | "agent" | "debug" | "pairing"
 
 const emptyForm: EFacturaForm = {
+  companyId: "",
   efacturaEnabled: false,
   efacturaEnvironment: "test",
   efacturaPlatformConfigured: false,
@@ -378,6 +380,7 @@ export default function SetariEFacturaPage() {
       }
 
       setForm({
+        companyId: data?.company?.id || "",
         efacturaEnabled: data?.company?.efacturaEnabled ?? false,
         efacturaEnvironment: data?.company?.efacturaEnvironment || "test",
         efacturaPlatformConfigured: Boolean(data?.company?.efacturaPlatformConfigured),
@@ -768,6 +771,9 @@ export default function SetariEFacturaPage() {
       const search = new URLSearchParams({
         returnTo,
       })
+      if (form.companyId) {
+        search.set("companyId", form.companyId)
+      }
       if (currentCredential?.id) {
         search.set("credentialId", currentCredential.id)
       }

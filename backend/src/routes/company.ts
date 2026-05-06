@@ -228,7 +228,19 @@ function getRequestedCredentialId(req: AuthedRequest) {
   return null
 }
 
-async function requireExplicitAnafCompanyContext(tenantId: string, activeCompanyId?: string | null) {
+function getRequestedCompanyId(req: AuthedRequest) {
+  const bodyValue = String(req.body?.companyId || "").trim()
+  if (bodyValue) return bodyValue
+  const queryValue = String(req.query?.companyId || "").trim()
+  if (queryValue) return queryValue
+  return null
+}
+
+async function requireExplicitAnafCompanyContext(
+  tenantId: string,
+  activeCompanyId?: string | null,
+  requestedCompanyId?: string | null,
+) {
   const companies = await prisma.company.findMany({
     where: { tenantId },
     orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
@@ -243,14 +255,16 @@ async function requireExplicitAnafCompanyContext(tenantId: string, activeCompany
     throw new Error("Nu exista nicio firma configurata pentru acest tenant.")
   }
 
-  if (!activeCompanyId) {
+  const effectiveCompanyId = requestedCompanyId || activeCompanyId || null
+
+  if (!effectiveCompanyId) {
     if (companies.length > 1) {
       throw new Error("Selecteaza mai intai firma activa din ERP, apoi genereaza tokenul ANAF.")
     }
     return companies[0]
   }
 
-  const activeCompany = companies.find((company) => company.id === activeCompanyId)
+  const activeCompany = companies.find((company) => company.id === effectiveCompanyId)
   if (!activeCompany) {
     throw new Error("Firma activa selectata nu mai exista. Reincarca pagina si selecteaza firma din nou.")
   }
@@ -1193,6 +1207,7 @@ router.delete("/api/v1/company/efactura/certificate", requireAuth, async (req: A
 router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
   const activeCompanyId = getActiveCompanyId(req)
+  const requestedCompanyId = getRequestedCompanyId(req)
   const requestedCredentialId = getRequestedCredentialId(req)
   const returnTo = String(req.query.returnTo || "").trim() || "http://localhost:5173/setari/efactura"
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
@@ -1206,7 +1221,7 @@ router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, re
 
   let activeCompany: { id: string; name: string } | null = null
   try {
-    activeCompany = await requireExplicitAnafCompanyContext(tenantId, activeCompanyId)
+    activeCompany = await requireExplicitAnafCompanyContext(tenantId, activeCompanyId, requestedCompanyId)
   } catch (error: any) {
     return res.status(409).json({
       ok: false,
@@ -1214,9 +1229,13 @@ router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, re
     })
   }
 
-  await getRequestAnafCredential(req, requestedCredentialId)
+  if (requestedCredentialId) {
+    await getCompanyAnafCredentialById(prisma as any, tenantId, activeCompany.id, requestedCredentialId)
+  } else {
+    await getDefaultCompanyAnafCredential(prisma as any, tenantId, activeCompany.id)
+  }
 
-  const oauthConfig = await getEffectiveAnafOauthConfig(tenantId, activeCompanyId)
+  const oauthConfig = await getEffectiveAnafOauthConfig(tenantId, activeCompany.id)
 
   if (!oauthConfig.clientId || !oauthConfig.redirectUri) {
     return res.status(400).json({
@@ -1229,7 +1248,7 @@ router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, re
     {
       tenantId,
       returnTo,
-      activeCompanyId,
+      activeCompanyId: activeCompany.id,
       credentialId: requestedCredentialId,
     },
     JWT_SECRET,
@@ -1253,7 +1272,8 @@ router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, re
 
   console.log("ANAF OAUTH START", {
     tenantId,
-    activeCompanyId,
+    activeCompanyId: activeCompany.id,
+    requestedCompanyId,
     credentialId: requestedCredentialId,
     activeCompanyName: activeCompany?.name || null,
     usesPlatformConfig: oauthConfig.usesPlatformConfig,
