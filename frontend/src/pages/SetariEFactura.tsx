@@ -833,19 +833,6 @@ export default function SetariEFacturaPage() {
     setConnecting(true)
     setError("")
     setMessage("")
-    const logoutWindow =
-      typeof window !== "undefined"
-        ? window.open("", "_blank", "popup,width=560,height=720")
-        : null
-    if (logoutWindow) {
-      try {
-        logoutWindow.document.title = "Pregatire autentificare ANAF"
-        logoutWindow.document.body.innerHTML =
-          "<div style=\"font-family:Arial,sans-serif;padding:24px;color:#17324D;line-height:1.5\">Se pregateste o sesiune noua ANAF pentru selectarea certificatului digital...</div>"
-      } catch {
-        // Ignore popup rendering issues and continue with OAuth.
-      }
-    }
     try {
       const returnTo = `${window.location.origin}/setari/efactura`
       const search = new URLSearchParams({
@@ -860,35 +847,17 @@ export default function SetariEFacturaPage() {
         headers: {
           Authorization: `Bearer ${token}`,
         },
-        })
-        const data = await res.json().catch(() => ({}))
-        if (!res.ok || !data?.ok || !data?.url) {
-          if (logoutWindow && !logoutWindow.closed) {
-            logoutWindow.close()
-          }
-          throw new Error(normalizeAnafMessage(data?.error || "Nu am putut porni conectarea ANAF."))
-        }
-        const logoutUrl = String(data?.logoutUrl || "").trim()
-        if (logoutWindow && logoutUrl) {
-          try {
-            logoutWindow.location.href = logoutUrl
-          } catch {
-            // Ignore cross-origin popup assignment errors and continue.
-          }
-        }
-        if (logoutUrl) {
-          setMessage("Pregatim o sesiune noua ANAF, apoi se deschide selectia certificatului.")
-          window.setTimeout(() => {
-            window.location.href = data.url
-          }, logoutWindow ? 1200 : 250)
-          return
-        }
-        window.location.href = data.url
-      } catch (e: any) {
-        setError(normalizeAnafMessage(e?.message || "Nu am putut porni conectarea ANAF."))
-        setConnecting(false)
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok || !data?.url) {
+        throw new Error(normalizeAnafMessage(data?.error || "Nu am putut porni conectarea ANAF."))
       }
+      window.location.href = data.url
+    } catch (e: any) {
+      setError(normalizeAnafMessage(e?.message || "Nu am putut porni conectarea ANAF."))
+      setConnecting(false)
     }
+  }
 
   async function testOauthConnection() {
     if (!token) {
