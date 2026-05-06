@@ -396,6 +396,10 @@ export default function SetariEFacturaPage() {
       })
       applyCredentialState(preservedCredential, company)
 
+      if (company?.id) {
+        setError((prev) => (prev.includes("Selecteaza mai intai firma activa") ? "" : prev))
+      }
+
       if (preservedCredential?.connected || data?.company?.efacturaOauthAccessToken) {
         setError("")
 
@@ -522,9 +526,7 @@ export default function SetariEFacturaPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          credentialId: currentCredential?.id || null,
-        }),
+        body: JSON.stringify({}),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data?.ok || !data?.pairing?.code) {
@@ -774,9 +776,7 @@ export default function SetariEFacturaPage() {
       if (form.companyId) {
         search.set("companyId", form.companyId)
       }
-      if (currentCredential?.id) {
-        search.set("credentialId", currentCredential.id)
-      }
+      
       const res = await fetch(`${API}/api/v1/company/efactura/oauth/start?${search.toString()}`, {
         credentials: "include",
         headers: {
@@ -810,9 +810,7 @@ export default function SetariEFacturaPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          credentialId: currentCredential?.id || null,
-        }),
+        body: JSON.stringify({}),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data?.ok) {
@@ -837,9 +835,7 @@ export default function SetariEFacturaPage() {
     setLoadingDiagnostics(true)
     setError("")
     try {
-      const diagnosticsUrl = currentCredential?.id
-        ? `${API}/api/v1/company/efactura/diagnostics?credentialId=${encodeURIComponent(currentCredential.id)}`
-        : `${API}/api/v1/company/efactura/diagnostics`
+      const diagnosticsUrl = `${API}/api/v1/company/efactura/diagnostics`
       const res = await fetch(diagnosticsUrl, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -879,9 +875,7 @@ export default function SetariEFacturaPage() {
       const body = new FormData()
       body.append("certificate", certFile)
       body.append("efacturaCertPassword", certPassword.trim())
-      if (currentCredential?.id) {
-        body.append("credentialId", currentCredential.id)
-      }
+      
       if (form.efacturaCertSerial.trim()) {
         body.append("efacturaCertSerial", form.efacturaCertSerial.trim())
       }
@@ -921,9 +915,7 @@ export default function SetariEFacturaPage() {
     setMessage("")
 
     try {
-      const deleteUrl = currentCredential?.id
-        ? `${API}/api/v1/company/efactura/certificate?credentialId=${encodeURIComponent(currentCredential.id)}`
-        : `${API}/api/v1/company/efactura/certificate`
+      const deleteUrl = `${API}/api/v1/company/efactura/certificate`
       const res = await fetch(deleteUrl, {
         method: "DELETE",
         headers: {
@@ -1011,7 +1003,7 @@ export default function SetariEFacturaPage() {
               Firma activa: <span className="font-semibold text-slate-900">{form.companyName || "-"}</span>
             </div>
             <div className="mt-2">
-              Profil OAuth: <span className="font-semibold text-slate-900">{currentCredential?.label || `${form.companyName || "Firma"} - SPV principal`}</span>
+              Profil OAuth: <span className="font-semibold text-slate-900">{`${form.companyName || "Firma"} - SPV principal`}</span>
             </div>
             <div className="mt-2">
               Regula de lucru: <span className="font-semibold text-slate-900">OAuth ANAF in browser, cu semnatura electronica activa pe calculatorul curent</span>
@@ -1066,7 +1058,7 @@ export default function SetariEFacturaPage() {
               <button type="button" onClick={testOauthConnection} className={documentButtonSecondaryClass} disabled={testing || loading || !oauthStatus.connected}>
                 {testing ? "Testare..." : "Testeaza"}
               </button>
-              <button type="button" onClick={startOauthConnect} className={documentButtonPrimaryClass} disabled={connecting || loading || !currentCredential}>
+              <button type="button" onClick={startOauthConnect} className={documentButtonPrimaryClass} disabled={connecting || loading}>
                 {connecting ? "Se deschide..." : "Genereaza token"}
               </button>
             </div>
@@ -1407,3 +1399,4 @@ export default function SetariEFacturaPage() {
     </div>
   )
 }
+
