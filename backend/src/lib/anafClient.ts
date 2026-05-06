@@ -161,6 +161,14 @@ export function buildAnafAuthHeaders(accessToken: string, extraHeaders: Record<s
   }
 }
 
+function getEfacturaBaseUrls(environment: string | null | undefined) {
+  const env = String(environment || "test").toLowerCase() === "prod" ? "prod" : "test"
+  return [
+    `https://webserviceapl.anaf.ro/${env}/FCTEL/rest`,
+    `https://api.anaf.ro/${env}/FCTEL/rest`,
+  ]
+}
+
 function getEtransportBaseUrls(environment: string | null | undefined) {
   const env = String(environment || "test").toLowerCase() === "prod" ? "prod" : "test"
   return [
@@ -250,77 +258,118 @@ export async function anafListMessages(company: any, options: { days?: number; c
   const ready = requireAnafReadyCompany(company, "sincronizarea SPV")
   const cif = options.cif || ready.cif
   const days = Math.min(60, Math.max(1, Number(options.days || 30)))
-  const url = `${ready.baseUrl}/listaMesajeFactura?zile=${days}&cif=${encodeURIComponent(cif)}`
   const tokenDiagnostics = getAnafTokenDiagnostics(ready.accessToken)
-  logAnafRequestStart("listaMesajeFactura", {
-    tenantId: company?.tenantId || null,
-    environment: company?.efacturaEnvironment || "test",
-    cif,
-    days,
-    url,
-    hasCertificateFile: Boolean(company?.efacturaCertFilename),
-    usingClientCertificate: Boolean(ready.certOptions?.pfx),
-    certSerialConfigured: company?.efacturaCertSerial || null,
-    tokenSerial: tokenDiagnostics.tokenSerial,
-    tokenScopes: tokenDiagnostics.tokenScopes,
-    tokenRoles: tokenDiagnostics.tokenRoles,
-    tokenExp: tokenDiagnostics.tokenExp,
-  })
-  const response = await anafHttpRequest(url, {
-    headers: buildAnafAuthHeaders(ready.accessToken),
-    ...ready.certOptions,
-  })
-  const rawText = response.text
-  const payload = parseAnafPayload(rawText)
-  logAnafRequestFinish("listaMesajeFactura", {
-    tenantId: company?.tenantId || null,
-    status: response.status,
-    ok: response.ok,
-    summary: summarizeAnafResponse(payload, rawText),
-    itemCount: collectMessageItems(payload).length,
-  })
+  let lastResult: any = null
 
-  return {
-    url,
-    response,
-    rawText,
-    payload,
-    items: collectMessageItems(payload),
-    summary: summarizeAnafResponse(payload, rawText),
+  for (let index = 0; index < getEfacturaBaseUrls(company?.efacturaEnvironment).length; index += 1) {
+    const baseUrl = getEfacturaBaseUrls(company?.efacturaEnvironment)[index]
+    const url = `${baseUrl}/listaMesajeFactura?zile=${days}&cif=${encodeURIComponent(cif)}`
+    logAnafRequestStart("listaMesajeFactura", {
+      tenantId: company?.tenantId || null,
+      environment: company?.efacturaEnvironment || "test",
+      cif,
+      days,
+      url,
+      fallbackIndex: index,
+      hasCertificateFile: Boolean(company?.efacturaCertFilename),
+      usingClientCertificate: Boolean(ready.certOptions?.pfx),
+      certSerialConfigured: company?.efacturaCertSerial || null,
+      tokenSerial: tokenDiagnostics.tokenSerial,
+      tokenScopes: tokenDiagnostics.tokenScopes,
+      tokenRoles: tokenDiagnostics.tokenRoles,
+      tokenExp: tokenDiagnostics.tokenExp,
+    })
+    try {
+      const response = await anafHttpRequest(url, {
+        headers: buildAnafAuthHeaders(ready.accessToken),
+        ...ready.certOptions,
+      })
+      const rawText = response.text
+      const payload = parseAnafPayload(rawText)
+      const summary = summarizeAnafResponse(payload, rawText)
+      const itemCount = collectMessageItems(payload).length
+      logAnafRequestFinish("listaMesajeFactura", {
+        tenantId: company?.tenantId || null,
+        status: response.status,
+        ok: response.ok,
+        fallbackIndex: index,
+        summary,
+        itemCount,
+      })
+
+      lastResult = {
+        url,
+        response,
+        rawText,
+        payload,
+        items: collectMessageItems(payload),
+        summary,
+      }
+
+      if (response.ok && !String(summary || "").toLowerCase().includes("nu aveti drept in spv")) {
+        return lastResult
+      }
+    } catch (error) {
+      if (index === getEfacturaBaseUrls(company?.efacturaEnvironment).length - 1) {
+        throw error
+      }
+    }
   }
+
+  return lastResult
 }
 
 export async function anafDownloadById(company: any, downloadId: string) {
   const ready = requireAnafReadyCompany(company, "descarcarea documentului ANAF")
-  const url = `${ready.baseUrl}/descarcare?id=${encodeURIComponent(downloadId)}`
-  logAnafRequestStart("descarcare", {
-    tenantId: company?.tenantId || null,
-    environment: company?.efacturaEnvironment || "test",
-    downloadId,
-    url,
-    usingClientCertificate: Boolean(ready.certOptions?.pfx),
-  })
-  const response = await anafHttpRequest(url, {
-    headers: buildAnafAuthHeaders(ready.accessToken),
-    ...ready.certOptions,
-  })
-  const rawText = response.buffer.toString("utf8")
-  const payload = parseAnafPayload(rawText)
-  logAnafRequestFinish("descarcare", {
-    tenantId: company?.tenantId || null,
-    downloadId,
-    status: response.status,
-    ok: response.ok,
-    summary: summarizeAnafResponse(payload, rawText),
-  })
+  let lastResult: any = null
 
-  return {
-    url,
-    response,
-    rawText,
-    payload,
-    summary: summarizeAnafResponse(payload, rawText),
+  for (let index = 0; index < getEfacturaBaseUrls(company?.efacturaEnvironment).length; index += 1) {
+    const baseUrl = getEfacturaBaseUrls(company?.efacturaEnvironment)[index]
+    const url = `${baseUrl}/descarcare?id=${encodeURIComponent(downloadId)}`
+    logAnafRequestStart("descarcare", {
+      tenantId: company?.tenantId || null,
+      environment: company?.efacturaEnvironment || "test",
+      downloadId,
+      url,
+      fallbackIndex: index,
+      usingClientCertificate: Boolean(ready.certOptions?.pfx),
+    })
+    try {
+      const response = await anafHttpRequest(url, {
+        headers: buildAnafAuthHeaders(ready.accessToken),
+        ...ready.certOptions,
+      })
+      const rawText = response.buffer.toString("utf8")
+      const payload = parseAnafPayload(rawText)
+      const summary = summarizeAnafResponse(payload, rawText)
+      logAnafRequestFinish("descarcare", {
+        tenantId: company?.tenantId || null,
+        downloadId,
+        status: response.status,
+        ok: response.ok,
+        fallbackIndex: index,
+        summary,
+      })
+
+      lastResult = {
+        url,
+        response,
+        rawText,
+        payload,
+        summary,
+      }
+
+      if (response.ok) {
+        return lastResult
+      }
+    } catch (error) {
+      if (index === getEfacturaBaseUrls(company?.efacturaEnvironment).length - 1) {
+        throw error
+      }
+    }
   }
+
+  return lastResult
 }
 
 export async function anafUploadXml(company: any, xmlText: string) {
