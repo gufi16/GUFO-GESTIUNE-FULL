@@ -222,12 +222,20 @@ export async function resolveCompanyWithAnafCredential(
     includeCredentialList?: boolean
   } = {},
 ) {
-  const company = await resolveTenantCompany(prismaClient as any, tenantId, activeCompanyId, {
-    select: {
-      ...COMPANY_ANAF_LEGACY_FIELDS,
-      ...(options.select || {}),
-    },
-  })
+  const hasExplicitSelect = Boolean(options.select && Object.keys(options.select).length)
+  const company = await resolveTenantCompany(
+    prismaClient as any,
+    tenantId,
+    activeCompanyId,
+    hasExplicitSelect
+      ? {
+          select: {
+            ...COMPANY_ANAF_LEGACY_FIELDS,
+            ...(options.select || {}),
+          },
+        }
+      : {},
+  )
 
   if (!company) {
     return null
