@@ -34,15 +34,32 @@ const CHAT_HEIGHT = 680
 function routeLabel(pathname: string) {
   if (pathname.startsWith("/dashboard")) return "Panou principal"
   if (pathname.startsWith("/nomenclator/produse")) return "Produse"
+  if (pathname.startsWith("/nomenclator/clienti")) return "Clienti"
+  if (pathname.startsWith("/nomenclator/furnizori")) return "Furnizori"
   if (pathname.startsWith("/nomenclator/locatii")) return "Locatii"
+  if (pathname.startsWith("/nomenclator/uom")) return "Unitati de masura"
+  if (pathname.startsWith("/nomenclator/departamente")) return "Departamente"
+  if (pathname.startsWith("/nomenclator/categorii")) return "Categorii"
+  if (pathname.startsWith("/nomenclator")) return "Nomenclator"
+  if (pathname.startsWith("/gestiune/stoc")) return "Stoc"
   if (pathname.startsWith("/gestiune/inventare")) return "Inventare"
+  if (pathname.startsWith("/gestiune/productie")) return "Productie"
   if (pathname.startsWith("/inregistrare-document/inventar/new")) return "Inventar nou"
   if (pathname.startsWith("/transfer")) return "Transfer"
+  if (pathname.startsWith("/e-transport")) return "RO e-Transport"
+  if (pathname.startsWith("/documente/facturi-primite-spv")) return "Facturi SPV"
+  if (pathname.startsWith("/rapoarte/export-contabilitate")) return "Export contabilitate"
   if (pathname.startsWith("/rapoarte")) return "Rapoarte"
+  if (pathname.startsWith("/financiar/vanzari-bon")) return "Vanzari / Bon"
+  if (pathname.startsWith("/financiar/inchideri-zilnice")) return "Inchideri zilnice"
+  if (pathname.startsWith("/setari/efactura")) return "Setari SPV"
+  if (pathname.startsWith("/setari/firma")) return "Setari firma"
+  if (pathname.startsWith("/setari/tva")) return "Setari TVA"
+  if (pathname.startsWith("/setari/numerotare")) return "Numerotare"
+  if (pathname.startsWith("/setari/backup")) return "Backup"
   if (pathname.startsWith("/setari/istoric")) return "Istoric actiuni"
   if (pathname.startsWith("/setari/utilizatori")) return "Utilizatori ERP"
   if (pathname.startsWith("/setari")) return "Setari"
-  if (pathname.startsWith("/gestiune/productie")) return "Productie"
   if (pathname.startsWith("/documente") || pathname.startsWith("/inregistrare-document")) return "Documente"
   return "ERP"
 }
@@ -50,6 +67,27 @@ function routeLabel(pathname: string) {
 function defaultSuggestions(pathname: string) {
   if (pathname.startsWith("/nomenclator/produse")) {
     return ["Cum adaug un produs?", "Cum completez retetarul?", "De ce nu apare produsul in POS?"]
+  }
+  if (pathname.startsWith("/nomenclator/clienti") || pathname.startsWith("/nomenclator/furnizori")) {
+    return ["Cum adaug un partener?", "Ce date trebuie pentru e-Factura?", "De ce nu apare in document?"]
+  }
+  if (pathname.startsWith("/gestiune/stoc")) {
+    return ["Unde vad stocul pe locatie?", "De ce produsul are stoc zero?", "Cum corectez stocul?"]
+  }
+  if (pathname.startsWith("/documente/facturi-primite-spv")) {
+    return ["Cum aduc facturile din SPV?", "Unde vad facturile trimise?", "Cum descarc XML si raspuns ANAF?"]
+  }
+  if (pathname.startsWith("/e-transport")) {
+    return ["Cum trimit e-Transport la ANAF?", "De ce nu primesc UIT?", "Cum descarc XML si raspunsul?"]
+  }
+  if (pathname.startsWith("/setari/efactura")) {
+    return ["Cum generez token ANAF?", "De ce nu apare autentificarea ANAF?", "Ce verific daca SPV nu comunica?"]
+  }
+  if (pathname.startsWith("/financiar/vanzari-bon") || pathname.startsWith("/financiar/inchideri-zilnice")) {
+    return ["Unde vad bonurile POS?", "Cum generez inchiderea zilnica?", "De ce nu apar vanzari?"]
+  }
+  if (pathname.startsWith("/rapoarte/export-contabilitate")) {
+    return ["Cum fac export pentru contabil?", "De ce exportul este gol?", "Ce documente intra in export?"]
   }
   if (pathname.startsWith("/rapoarte")) {
     return ["Cum filtrez pe locatie?", "Cum aleg un device?", "De ce raportul este gol?"]
@@ -60,7 +98,10 @@ function defaultSuggestions(pathname: string) {
   if (pathname.startsWith("/setari/istoric")) {
     return ["Cum caut dupa utilizator?", "Cum filtrez pe perioada?", "De ce nu vad evenimente?"]
   }
-  return ["Cum adaug un produs?", "Cum fac un inventar nou?", "De ce nu vad date in dashboard?"]
+  if (pathname.startsWith("/setari")) {
+    return ["Unde schimb datele firmei?", "Unde schimb seria facturii?", "Cum verific setarea de TVA?"]
+  }
+  return ["Ce module are aplicatia?", "Cum lucrez cu SPV si ANAF?", "Cum fac un NIR?"]
 }
 
 export default function GufoAiWidget() {
@@ -126,7 +167,7 @@ export default function GufoAiWidget() {
         {
           id: "welcome",
           role: "assistant",
-          text: `Salut! Sunt Gufo AI.\n\nSunt aici sa te ajut cu ERP-ul, iar acum esti in zona ${pageLabel}. Poti sa vorbesti cu mine natural, exact cum ai vorbi cu un coleg: ma poti saluta, poti sa-mi spui ce vrei sa faci, unde te-ai blocat sau ce nu intelegi.`,
+          text: `Salut! Sunt Gufo AI.\n\nStiu zonele importante din aplicatie: documente, stoc, productie, SPV/ANAF, e-Transport, rapoarte, financiar, nomenclator si setari. Acum esti in zona ${pageLabel}. Vorbeste cu mine natural, exact cum ai vorbi cu un coleg: spune-mi ce vrei sa faci, unde te-ai blocat sau ce nu intelegi.`,
         },
       ])
     }

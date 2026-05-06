@@ -372,6 +372,300 @@ const GUIDES: GufoAiGuide[] = [
   },
 ]
 
+const EXTRA_GUIDES: GufoAiGuide[] = [
+  {
+    id: "overview",
+    title: "Gufo ERP",
+    routePrefixes: ["/"],
+    keywords: [
+      "gufo",
+      "erp",
+      "aplicatie",
+      "module",
+      "ce face",
+      "ce stie",
+      "cum functioneaza",
+      "client",
+      "clienti",
+    ],
+    summary:
+      "Gufo ERP acopera operatiunile zilnice din firma: vanzari, documente, stoc, productie, SPV/ANAF, rapoarte, financiar, nomenclator si setari.",
+    whereTo: [
+      "Dashboard iti arata rapid vanzari, incasari, alerte si indicatori.",
+      "Inregistrare documente este zona pentru NIR, factura, bon de consum, inventar nou si procese verbale.",
+      "Gestiune strange stocul, productia si inventarele.",
+      "SPV si ANAF este zona pentru facturi primite/trimise prin SPV si registrul RO e-Transport.",
+      "Rapoarte, Financiar, Nomenclator si Setari acopera analiza, inchiderile POS, partenerii, produsele si configurarea firmei.",
+    ],
+    howTo: [
+      "Spui natural ce vrei sa faci, de exemplu: cum emit o factura, unde vad stocul sau de ce nu merge ANAF.",
+      "Daca esti deja pe o pagina, Gufo AI tine cont de pagina curenta.",
+      "Pentru probleme, scrie mesajul exact sau pasul unde te-ai blocat si primesti verificari clare.",
+    ],
+    troubleshooting: [
+      "Daca raspunsul nu nimereste modulul, mentioneaza numele paginii sau documentului.",
+      "Daca lipsesc date, verifica perioada, locatia, firma activa si drepturile utilizatorului.",
+      "Pentru ANAF/SPV, verifica intai tokenul, mediul Productie/Test si firma activa.",
+    ],
+    suggestions: ["Ce module are aplicatia?", "Cum lucrez cu SPV si ANAF?", "Unde vad stocul si rapoartele?"],
+  },
+  {
+    id: "stoc",
+    title: "Stoc",
+    routePrefixes: ["/gestiune/stoc"],
+    keywords: ["stoc", "cantitate", "sold", "depozit", "gestiune", "valoare stoc", "miscari stoc", "stoc critic"],
+    summary: "Aici vezi stocul pe produse si locatii, cantitatile disponibile si zonele unde trebuie verificata marfa.",
+    keyFields: ["Locatie", "Produs", "Cod produs", "Cantitate", "Unitate de masura", "Valoare stoc"],
+    whereTo: [
+      "Mergi la Gestiune > Stoc.",
+      "Alege locatia daca vrei sa vezi stocul doar pentru un depozit sau punct de lucru.",
+    ],
+    howTo: [
+      "Filtreaza dupa locatie sau cauta produsul dupa nume/cod.",
+      "Verifica randul produsului pentru cantitate si valoare.",
+      "Pentru corectii foloseste documentele potrivite: NIR, bon de consum, transfer sau inventar.",
+    ],
+    troubleshooting: [
+      "Daca stocul pare gresit, verifica documentele salvate pentru produs si locatie.",
+      "Daca lipseste produsul, verifica daca produsul este activ si daca exista miscari pe locatia aleasa.",
+      "Daca vezi zero, verifica daca filtrul de locatie nu ascunde stocul din alta gestiune.",
+    ],
+    suggestions: ["Unde vad stocul pe locatie?", "De ce produsul are stoc zero?", "Cum corectez stocul?"],
+  },
+  {
+    id: "spv-settings",
+    title: "Setari SPV",
+    routePrefixes: ["/setari/efactura"],
+    keywords: [
+      "setari spv",
+      "setari e-factura",
+      "anaf",
+      "spv",
+      "token anaf",
+      "genereaza token",
+      "oauth",
+      "certificat",
+      "semnatura electronica",
+      "mediu productie",
+    ],
+    summary:
+      "Aici configurezi conectarea firmei la ANAF/SPV: mediul de lucru, tokenul OAuth si datele folosite pentru comunicarea cu e-Factura si e-Transport.",
+    keyFields: ["Firma activa", "Mediu", "Token ANAF", "Generat la", "Expira la", "Profil OAuth"],
+    whereTo: [
+      "Mergi la Setari > Setari SPV.",
+      "Verifica firma activa in partea de sus inainte sa generezi tokenul.",
+    ],
+    howTo: [
+      "Alege firma pentru care lucrezi.",
+      "Verifica mediul ANAF: Productie pentru live sau Test pentru probe.",
+      "Apasa Genereaza token si finalizeaza autentificarea ANAF in browser.",
+      "Dupa intoarcerea in ERP, verifica statusul Conectat si data expirarii.",
+    ],
+    troubleshooting: [
+      "Daca nu se deschide ANAF, verifica popup-urile/browserul si incearca din nou dupa logout ANAF.",
+      "Daca se foloseste certificatul gresit, browserul poate tine minte sesiunea ANAF; inchide sesiunea ANAF sau foloseste profil/browser separat.",
+      "Daca e-Transport sau e-Factura nu comunica, verifica tokenul, firma activa si mediul Productie/Test.",
+    ],
+    suggestions: ["Cum generez token ANAF?", "De ce nu apare autentificarea ANAF?", "Ce verific daca SPV nu comunica?"],
+  },
+  {
+    id: "facturi-spv",
+    title: "Facturi SPV",
+    routePrefixes: ["/documente/facturi-primite-spv"],
+    keywords: [
+      "facturi primite spv",
+      "facturi trimise spv",
+      "facturi spv",
+      "facturi din spv",
+      "facturile din spv",
+      "aduc facturi",
+      "descarc facturi",
+      "furnizor",
+      "client",
+      "xml",
+      "pdf",
+      "raspuns anaf",
+      "sincronizare spv",
+      "descarcare spv",
+    ],
+    summary:
+      "Aici verifici facturile din SPV: facturile primite de la furnizori si facturile trimise catre clienti prin ANAF, cu XML, PDF si raspunsuri disponibile cand exista in SPV.",
+    keyFields: ["Firma activa", "Perioada", "Tip facturi", "Status SPV", "XML", "PDF", "Raspuns ANAF"],
+    whereTo: [
+      "Mergi la SPV si ANAF > Facturi primite SPV.",
+      "Foloseste filtrele de perioada si tip pentru facturi primite sau trimise.",
+    ],
+    howTo: [
+      "Verifica firma activa si tokenul ANAF.",
+      "Sincronizeaza mesajele din SPV pentru perioada dorita.",
+      "Deschide factura si descarca XML, PDF sau raspunsul ANAF din actiunile disponibile.",
+    ],
+    troubleshooting: [
+      "Daca nu apar facturi, verifica perioada si firma activa.",
+      "Daca ANAF refuza accesul, verifica tokenul si certificatul folosit pentru firma respectiva.",
+      "Daca lipseste PDF-ul, descarca XML-ul si raspunsul ANAF; PDF-ul exista doar cand este generat/disponibil pentru document.",
+    ],
+    suggestions: ["Cum aduc facturile primite din SPV?", "Unde vad facturile trimise?", "Cum descarc XML si raspuns ANAF?"],
+  },
+  {
+    id: "etransport",
+    title: "RO e-Transport",
+    routePrefixes: ["/e-transport"],
+    keywords: [
+      "e-transport",
+      "etransport",
+      "transport",
+      "uit",
+      "vehicul",
+      "sofer",
+      "trimite anaf",
+      "verificare stare",
+      "verific stare",
+      "xml transport",
+      "raspuns transport",
+    ],
+    summary:
+      "Aici pregatesti si urmaresti transporturile raportate la ANAF, inclusiv generarea XML-ului, trimiterea la ANAF, verificarea starii si descarcarea raspunsului.",
+    keyFields: ["Tip operatiune", "Partener", "Loc incarcare", "Loc descarcare", "Vehicul", "Produse", "Greutati", "UIT"],
+    whereTo: [
+      "Mergi la SPV si ANAF > Registru e-Transport.",
+      "Deschide un transport existent sau creeaza unul nou.",
+    ],
+    howTo: [
+      "Completeaza datele transportului si produsele.",
+      "Apasa Verificare date ca sa vezi campurile lipsa sau gresite.",
+      "Dupa validare apasa Trimite ANAF.",
+      "Foloseste Verificare stare pentru status si descarca XML/raspuns din butonul de descarcare.",
+    ],
+    troubleshooting: [
+      "Daca verificarea da erori, completeaza campurile cerute: partener, adrese, vehicul, produse si greutati.",
+      "Daca trimiterea nu merge, verifica tokenul ANAF in Setari SPV si mediul Productie/Test.",
+      "Daca nu ai UIT, ruleaza Verificare stare dupa trimitere.",
+    ],
+    suggestions: ["Cum trimit e-Transport la ANAF?", "De ce nu primesc UIT?", "Cum descarc XML si raspunsul?"],
+  },
+  {
+    id: "financiar",
+    title: "Financiar",
+    routePrefixes: ["/financiar/vanzari-bon", "/financiar/inchideri-zilnice"],
+    keywords: ["financiar", "vanzari bon", "bonuri", "incasari", "pos", "inchideri zilnice", "z fiscal", "inchidere zi"],
+    summary: "Aici urmaresti vanzarile POS, bonurile si inchiderile zilnice generate din activitatea punctelor de lucru.",
+    keyFields: ["Perioada", "Locatie", "Device/POS", "Total vanzari", "Metode de plata", "Data inchiderii"],
+    whereTo: [
+      "Mergi la Financiar > Vanzari / Bon pentru bonurile si vanzarile POS.",
+      "Mergi la Financiar > Inchideri zilnice pentru inchiderile pe zile.",
+    ],
+    howTo: [
+      "Alege perioada si locatia.",
+      "Verifica vanzarile si metodele de plata.",
+      "Pentru inchideri, genereaza sau actualizeaza inchiderea zilnica din vanzarile POS.",
+    ],
+    troubleshooting: [
+      "Daca nu vezi vanzari, verifica perioada, locatia si device-ul.",
+      "Daca inchiderea nu se genereaza, verifica daca exista vanzari in ziua respectiva.",
+      "Daca totalurile nu corespund, compara vanzarile filtrate cu inchiderea zilnica.",
+    ],
+    suggestions: ["Unde vad bonurile POS?", "Cum generez inchiderea zilnica?", "De ce nu apar vanzari?"],
+  },
+  {
+    id: "export-contabilitate",
+    title: "Export contabilitate",
+    routePrefixes: ["/rapoarte/export-contabilitate"],
+    keywords: ["export contabilitate", "contabilitate", "contabil", "saga", "csv", "xml", "zip", "export facturi"],
+    summary: "Aici pregatesti fisierele de export pentru contabilitate pe perioada selectata.",
+    keyFields: ["Perioada", "Tip documente", "Facturi", "NIR", "Vanzari", "Format export"],
+    whereTo: [
+      "Mergi la Rapoarte > Export contabilitate.",
+      "Alege perioada si tipurile de date pe care vrei sa le predai contabilului.",
+    ],
+    howTo: [
+      "Selecteaza perioada de export.",
+      "Verifica documentele incluse.",
+      "Genereaza fisierul si trimite-l contabilului.",
+    ],
+    troubleshooting: [
+      "Daca exportul este gol, verifica perioada si documentele existente.",
+      "Daca lipseste o factura, verifica daca este salvata in ERP si intra in intervalul ales.",
+      "Daca fisierul nu se descarca, reincarca pagina si genereaza exportul din nou.",
+    ],
+    suggestions: ["Cum fac export pentru contabil?", "De ce exportul este gol?", "Ce documente intra in export?"],
+  },
+  {
+    id: "parteneri",
+    title: "Clienti si furnizori",
+    routePrefixes: ["/nomenclator/clienti", "/nomenclator/furnizori"],
+    keywords: ["client", "clienti", "furnizor", "furnizori", "partener", "cui", "cif", "adresa", "anaf date firma"],
+    summary: "Aici administrezi partenerii firmei: clienti si furnizori folositi in facturi, NIR si documente.",
+    keyFields: ["Denumire", "CUI/CIF", "Adresa", "Judet", "Localitate", "Email", "Telefon"],
+    whereTo: [
+      "Mergi la Nomenclator > Clienti pentru clienti.",
+      "Mergi la Nomenclator > Furnizori pentru furnizori.",
+    ],
+    howTo: [
+      "Apasa adaugare sau editeaza partenerul existent.",
+      "Completeaza datele fiscale si de contact.",
+      "Salveaza, apoi foloseste partenerul in documente.",
+    ],
+    troubleshooting: [
+      "Daca e-Factura da erori, verifica CUI-ul, adresa, localitatea si judetul clientului.",
+      "Daca partenerul nu apare in document, verifica daca a fost salvat si reincarca lista.",
+      "Daca ai dubluri, cauta dupa CUI inainte sa creezi unul nou.",
+    ],
+    suggestions: ["Cum adaug un client?", "Ce date trebuie la furnizor?", "De ce clientul nu apare in factura?"],
+  },
+  {
+    id: "nomenclator",
+    title: "Nomenclator",
+    routePrefixes: ["/nomenclator", "/nomenclator/uom", "/nomenclator/departamente", "/nomenclator/categorii"],
+    keywords: ["nomenclator", "unitate masura", "um", "departament", "categorie", "produse", "locatii"],
+    summary:
+      "Nomenclatorul tine datele de baza ale firmei: produse, clienti, furnizori, locatii, unitati de masura, departamente si categorii.",
+    keyFields: ["Produse", "Clienti", "Furnizori", "Locatii", "UM", "Departamente", "Categorii"],
+    whereTo: [
+      "Mergi la Nomenclator din sidebar.",
+      "Alege subsectiunea potrivita pentru datele pe care vrei sa le modifici.",
+    ],
+    howTo: [
+      "Intra in lista potrivita.",
+      "Adauga sau editeaza inregistrarea.",
+      "Salveaza, apoi foloseste datele in documente si rapoarte.",
+    ],
+    troubleshooting: [
+      "Daca o valoare nu apare in documente, verifica daca este salvata si activa.",
+      "Daca produsul nu apare in POS, verifica setarile produsului.",
+      "Daca ai date duplicate, cauta dupa cod/CUI/nume inainte de adaugare.",
+    ],
+    suggestions: ["Ce este nomenclatorul?", "Unde adaug unitati de masura?", "Unde adaug categorii?"],
+  },
+  {
+    id: "firma-setari",
+    title: "Setari firma",
+    routePrefixes: ["/setari/firma", "/setari/tva", "/setari/numerotare", "/setari/backup"],
+    keywords: ["firma", "date firma", "tva", "platitor tva", "numerotare", "serie factura", "backup", "restaurare"],
+    summary: "Aici configurezi datele firmei, TVA-ul, seriile de documente si backup-ul.",
+    keyFields: ["Date firma", "CUI", "Adresa", "TVA", "Serii documente", "Backup"],
+    whereTo: [
+      "Mergi la Setari > Firma pentru datele firmei.",
+      "Mergi la Setari > TVA pentru regimul TVA.",
+      "Mergi la Setari > Numerotare pentru serii si numere.",
+      "Mergi la Setari > Backup pentru export/restaurare date.",
+    ],
+    howTo: [
+      "Intra in sectiunea potrivita.",
+      "Completeaza sau modifica datele.",
+      "Salveaza si verifica apoi un document nou daca seria sau datele firmei s-au aplicat.",
+    ],
+    troubleshooting: [
+      "Daca datele nu apar pe factura, verifica Setari > Firma si reincarca pagina facturii.",
+      "Daca seria nu se aplica, verifica Setari > Numerotare.",
+      "Daca TVA-ul este gresit, verifica regimul firmei si TVA-ul produselor.",
+    ],
+    suggestions: ["Unde schimb datele firmei?", "Unde schimb seria facturii?", "Cum verific setarea de TVA?"],
+  },
+]
+
+const ALL_GUIDES = [...GUIDES, ...EXTRA_GUIDES]
+
 function normalize(value: string) {
   return value
     .normalize("NFKD")
@@ -396,7 +690,7 @@ function findGuideByPath(currentPath?: string | null) {
   const pathValue = String(currentPath || "").trim()
   if (!pathValue) return null
   return (
-    [...GUIDES]
+    [...ALL_GUIDES]
       .sort((a, b) => {
         const aLen = Math.max(...a.routePrefixes.map((prefix) => prefix.length))
         const bLen = Math.max(...b.routePrefixes.map((prefix) => prefix.length))
@@ -425,13 +719,23 @@ function scoreGuide(message: string, guide: GufoAiGuide, currentPath?: string | 
   if (guide.id === "rapoarte" && /profit|marja|top produse|evolutie/.test(normalized)) score += 3
   if (guide.id === "dashboard" && /incasari|indicatori|device|locatie/.test(normalized)) score += 3
   if (guide.id === "utilizatori" && /parola|rol|administrator|ospatar|manager/.test(normalized)) score += 3
+  if (guide.id === "overview" && /module|aplicatie|gufo|erp|ce stie|ce face|ajuta client/.test(normalized)) score += 5
+  if (guide.id === "stoc" && /stoc|cantitate|gestiune|depozit|sold|critic|valoare/.test(normalized)) score += 5
+  if (guide.id === "spv-settings" && /token|anaf|spv|oauth|certificat|semnatura|productie|test/.test(normalized)) score += 5
+  if (guide.id === "facturi-spv" && /factur.*spv|spv.*factur|furnizor|trimise|primite|xml|pdf|raspuns anaf/.test(normalized)) score += 6
+  if (guide.id === "etransport" && /transport|uit|vehicul|sofer|trimite anaf|verificare stare|raspuns/.test(normalized)) score += 5
+  if (guide.id === "financiar" && /bon|vanzari|incasari|inchideri|z fiscal|pos/.test(normalized)) score += 4
+  if (guide.id === "export-contabilitate" && /export|contabil|saga|csv|zip/.test(normalized)) score += 4
+  if (guide.id === "parteneri" && /client|furnizor|partener|cui|cif|adresa/.test(normalized)) score += 4
+  if (guide.id === "nomenclator" && /nomenclator|um|unitate|departament|categorie/.test(normalized)) score += 4
+  if (guide.id === "firma-setari" && /date firma|tva|numerotare|serie|backup|cui/.test(normalized)) score += 4
   if (currentPath && guide.routePrefixes.some((prefix) => String(currentPath).startsWith(prefix))) score += 2
 
   return score
 }
 
 function findGuideByMessage(message: string, currentPath?: string | null) {
-  const ranked = GUIDES
+  const ranked = ALL_GUIDES
     .map((guide) => ({ guide, score: scoreGuide(message, guide, currentPath) }))
     .sort((a, b) => b.score - a.score)
 
@@ -442,7 +746,7 @@ function findGuideByMessage(message: string, currentPath?: string | null) {
 function detectIntent(message: string) {
   const normalized = normalize(message)
   if (
-    ["nu pot", "nu merge", "de ce", "eroare", "problema", "nu vad"].some((term) =>
+    ["nu pot", "nu merge", "de ce", "eroare", "problema", "nu vad", "nu apare", "nu se deschide"].some((term) =>
       normalized.includes(term),
     )
   ) {
@@ -452,7 +756,7 @@ function detectIntent(message: string) {
     return "where"
   }
   if (
-    ["cum", "adaug", "cree", "fac", "modific", "salvez", "setez"].some((term) =>
+    ["cum", "adaug", "cree", "fac", "modific", "salvez", "setez", "trimit", "verific", "sincronizez", "descarc"].some((term) =>
       normalized.includes(term),
     )
   ) {
@@ -502,6 +806,26 @@ function isHelpPrompt(message: string) {
     "ce poti sa faci",
     "cu ce ma poti ajuta",
     "vreau ajutor",
+    "ce stii",
+    "ce stie",
+    "ce stii despre aplicatie",
+    "ce module are",
+    "ce face aplicatia",
+    "cum functioneaza aplicatia",
+  ].some((term) => normalized.includes(term))
+}
+
+function isAppOverviewPrompt(message: string) {
+  const normalized = normalize(message)
+  return [
+    "ce stii despre aplicatie",
+    "ce stie gufo",
+    "ce module are",
+    "ce face aplicatia",
+    "ce este gufo",
+    "cum functioneaza aplicatia",
+    "prezinta aplicatia",
+    "explica aplicatia",
   ].some((term) => normalized.includes(term))
 }
 
@@ -552,15 +876,27 @@ function buildClosingPrompt(guide?: GufoAiGuide | null, tone: ConversationTone =
   return prompts[2]
 }
 
+function buildOverviewReply(currentGuide?: GufoAiGuide | null): GufoAiReply {
+  const overview = EXTRA_GUIDES.find((guide) => guide.id === "overview")
+  return {
+    title: "Gufo ERP",
+    answer:
+      `Da. Gufo AI stie sa explice aplicatia pe limba clientului, nu doar sa arunce termeni tehnici.\n\n` +
+      `Pe scurt, poate ajuta cu Dashboard, Inregistrare documente, Gestiune, Stoc, Productie, SPV si ANAF, Facturi primite/trimise, RO e-Transport, Rapoarte, Export contabilitate, Financiar, Nomenclator si Setari.\n\n` +
+      `Clientul poate intreba normal: "cum fac un NIR?", "unde vad facturile din SPV?", "de ce nu primesc UIT?", "cum descarc XML-ul?", "unde schimb seria facturii?" sau "de ce nu vad vanzari?". Eu tin cont si de pagina curenta${currentGuide ? `, iar acum pagina curenta este ${currentGuide.title}` : ""}.`,
+    suggestions: overview?.suggestions || ["Ce module are aplicatia?", "Cum lucrez cu SPV si ANAF?", "Unde vad stocul?"],
+  }
+}
+
 function buildGreetingReply(currentGuide?: GufoAiGuide | null): GufoAiReply {
   return {
     title: "Gufo AI",
     answer: currentGuide
       ? `Salut! Ma bucur sa te ajut.\n\nEsti acum in zona ${currentGuide.title}. Spune-mi ce vrei sa faci, ce nu merge sau ce vrei sa intelegi mai bine, iar eu iti raspund ca intr-o conversatie normala, pas cu pas.\n\n${buildClosingPrompt(currentGuide, "supportive")}`
-      : `Salut! Sunt aici sa te ajut cu ERP-ul.\n\nPoti sa ma intrebi natural, de exemplu cum faci un document, de ce nu merge ceva, unde gasesti o setare sau cum rezolvi o problema. Iti raspund simplu si pe scurt, iar daca vrei continuam conversatia pana se clarifica.`,
+      : `Salut! Sunt aici sa te ajut cu ERP-ul.\n\nPoti sa ma intrebi natural, de exemplu cum faci un document, de ce nu merge ceva, unde gasesti o setare, cum lucrezi cu SPV/ANAF sau cum rezolvi o problema. Iti raspund simplu si pe scurt, iar daca vrei continuam conversatia pana se clarifica.`,
     suggestions: currentGuide
       ? currentGuide.suggestions
-      : ["Cum adaug un produs?", "Cum fac un NIR?", "De ce nu vad date in dashboard?"],
+      : ["Ce module are aplicatia?", "Cum fac un NIR?", "Cum lucrez cu SPV si ANAF?"],
   }
 }
 
@@ -736,11 +1072,11 @@ export function generateGufoAiReply(input: GufoAiInput): GufoAiReply {
     return {
       title: "Gufo AI",
       answer: pathGuide
-        ? `Salut! Sunt Gufo AI.\n\nTe pot ajuta cu tot ce tine de ERP, iar acum esti in zona ${pathGuide.title}. Poti sa ma intrebi natural, de exemplu ce vrei sa faci, ce nu merge sau ce vrei sa intelegi mai bine.`
+        ? `Salut! Sunt Gufo AI.\n\nTe pot ajuta cu tot ce tine de ERP, iar acum esti in zona ${pathGuide.title}. Poti sa ma intrebi natural: ce vrei sa faci, ce nu merge, unde gasesti ceva sau ce trebuie verificat.`
         : "Salut! Sunt Gufo AI. Spune-mi ce vrei sa faci in ERP, unde te-ai blocat sau ce vrei sa intelegi mai bine, iar eu iti raspund pas cu pas.",
       suggestions: pathGuide
         ? pathGuide.suggestions
-        : ["Cum adaug un produs?", "Cum fac un inventar nou?", "De ce nu vad vanzari in dashboard?"],
+        : ["Ce module are aplicatia?", "Cum lucrez cu SPV si ANAF?", "Cum fac un NIR?"],
     }
   }
 
@@ -758,15 +1094,16 @@ export function generateGufoAiReply(input: GufoAiInput): GufoAiReply {
   if (isGreeting(rawMessage)) return buildGreetingReply(pathGuide)
   if (isThanks(rawMessage)) return buildThanksReply(pathGuide)
   if (isFarewell(rawMessage)) return buildFarewellReply()
+  if (isAppOverviewPrompt(rawMessage)) return buildOverviewReply(pathGuide)
   if (isHelpPrompt(rawMessage)) {
     return {
       title: "Gufo AI",
       answer: pathGuide
-        ? `Da, sigur.\n\nPot sa te ajut pe pagina ${pathGuide.title} sau cu orice alta functie din ERP: produse, documente, stoc, inventare, rapoarte, utilizatori si setari.\n\nSpune-mi direct ce vrei sa faci sau unde te-ai blocat.`
-        : "Da, sigur.\n\nPot sa te ajut cu produse, documente, stoc, inventare, rapoarte, utilizatori si setari din ERP. Spune-mi direct ce vrei sa faci sau unde te-ai blocat.",
+        ? `Da, sigur.\n\nPot sa te ajut pe pagina ${pathGuide.title} sau cu orice alta functie din ERP: Dashboard, documente, stoc, productie, SPV/ANAF, e-Transport, facturi primite/trimise, rapoarte, export contabilitate, financiar, nomenclator si setari.\n\nSpune-mi direct ce vrei sa faci sau unde te-ai blocat.`
+        : "Da, sigur.\n\nPot sa te ajut cu Dashboard, documente, stoc, productie, SPV/ANAF, e-Transport, facturi primite/trimise, rapoarte, export contabilitate, financiar, nomenclator si setari. Spune-mi direct ce vrei sa faci sau unde te-ai blocat.",
       suggestions: pathGuide
         ? pathGuide.suggestions
-        : ["Cum fac un NIR?", "Cum schimb parola unui utilizator?", "De ce raportul este gol?"],
+        : ["Cum fac un NIR?", "Cum aduc facturile din SPV?", "Cum trimit e-Transport la ANAF?"],
     }
   }
 
@@ -809,11 +1146,11 @@ export function generateGufoAiReply(input: GufoAiInput): GufoAiReply {
   return {
     title: "Gufo AI",
     answer:
-      `Nu sunt sigur inca ce operatie vrei sa faci.\n\nSpune-mi mai direct, de exemplu:\n1. ce document sau modul folosesti\n2. ce vrei sa obtii\n3. unde te blochezi\n\nExemple bune: "cum fac un NIR cu 3 produse", "de ce nu vad vanzari pe locatie", "cum schimb parola unui utilizator".${pathGuide ? `\n\nDaca intrebi despre pagina curenta, esti acum in zona ${pathGuide.title}.` : ""}`,
+      `Nu sunt sigur inca ce operatie vrei sa faci.\n\nSpune-mi mai direct, de exemplu:\n1. ce document sau modul folosesti\n2. ce vrei sa obtii\n3. unde te blochezi\n\nExemple bune: "cum fac un NIR cu 3 produse", "cum aduc facturile din SPV", "cum trimit e-Transport la ANAF", "de ce nu vad vanzari pe locatie", "unde schimb seria facturii".${pathGuide ? `\n\nDaca intrebi despre pagina curenta, esti acum in zona ${pathGuide.title}.` : ""}`,
     suggestions: [
       "Cum fac un NIR?",
-      "Cum filtrez rapoartele pe locatie?",
-      "Cum schimb parola unui utilizator?",
+      "Cum aduc facturile din SPV?",
+      "Cum trimit e-Transport la ANAF?",
     ],
   }
 }
