@@ -49,6 +49,18 @@ type IncomingInvoice = {
   items: IncomingInvoiceItem[]
 }
 
+type OutgoingInvoice = {
+  id: string
+  docNo: string
+  docDate: string
+  customerName: string
+  customerCif?: string | null
+  currency: string
+  totalGrossFc: number
+  efacturaStatus?: string | null
+  efacturaUploadIndex?: string | null
+}
+
 type SpvClassicStatus = {
   mode: string
   authType: string
@@ -91,6 +103,7 @@ type EfacturaBridgeConfig = {
 }
 
 type BridgeMessageFilter = "all" | "invoice" | "receipt"
+type SpvInvoiceView = "incoming" | "outgoing"
 type LocalAgentPairing = {
   bridgeUrl: string
   bridgeToken: string
@@ -198,13 +211,24 @@ function getUnitPriceWithVat(line: IncomingInvoiceItem) {
   return net + (net * vatRate) / 100
 }
 
+function efacturaStatusClass(status?: string | null) {
+  const normalized = String(status || "").toUpperCase()
+  if (normalized === "ACCEPTED") return "bg-[#E5F3E8] text-[#215D2A]"
+  if (normalized === "SENT") return "bg-[#E8F0FB] text-[#244A7C]"
+  if (normalized === "PREPARED" || normalized === "READY_TO_SEND") return "bg-slate-100 text-slate-700"
+  if (normalized === "REJECTED" || normalized === "ERROR") return "bg-red-100 text-red-700"
+  return "bg-[#F8F5EF] text-[#17324D]"
+}
+
 export default function FacturiPrimiteSPVPage() {
   const navigate = useNavigate()
   const token = getToken() || ""
   const [items, setItems] = useState<IncomingInvoice[]>([])
+  const [outgoingItems, setOutgoingItems] = useState<OutgoingInvoice[]>([])
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [search, setSearch] = useState("")
+  const [activeView, setActiveView] = useState<SpvInvoiceView>("incoming")
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
   const [testingClassic, setTestingClassic] = useState(false)
@@ -229,6 +253,7 @@ export default function FacturiPrimiteSPVPage() {
     void discoverLocalAgent()
     void loadSpvStatus()
     void loadItems()
+    void loadOutgoingItems()
   }, [])
 
   async function discoverLocalAgent(preferredUrl?: string) {
@@ -322,6 +347,42 @@ export default function FacturiPrimiteSPVPage() {
       setError(err?.message || "Nu am putut incarca facturile primite din SPV.")
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function loadOutgoingItems() {
+    if (!token) return
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/sales-invoices`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Nu am putut incarca facturile trimise.")
+      }
+      const invoices = Array.isArray(data.invoices) ? data.invoices : []
+      setOutgoingItems(
+        invoices
+          .filter((entry: any) => {
+            const status = String(entry?.efacturaStatus || "").toUpperCase()
+            return Boolean(String(entry?.efacturaUploadIndex || "").trim()) || ["SENT", "ACCEPTED", "REJECTED", "ERROR"].includes(status)
+          })
+          .map((entry: any) => ({
+            id: String(entry?.id || ""),
+            docNo: String(entry?.docNo || ""),
+            docDate: String(entry?.docDate || ""),
+            customerName: String(entry?.customerName || ""),
+            customerCif: entry?.customerCif || null,
+            currency: String(entry?.currency || "RON"),
+            totalGrossFc: Number(entry?.totalGrossFc || 0),
+            efacturaStatus: entry?.efacturaStatus || null,
+            efacturaUploadIndex: entry?.efacturaUploadIndex || null,
+          }))
+      )
+    } catch {
+      setOutgoingItems([])
     }
   }
 
@@ -554,6 +615,7 @@ export default function FacturiPrimiteSPVPage() {
         }
 
         await loadItems()
+        await loadOutgoingItems()
         return
       }
 
@@ -619,6 +681,7 @@ export default function FacturiPrimiteSPVPage() {
       })
       setMessage(data?.message || "Sincronizarea e-Factura a fost finalizata.")
       await loadItems()
+      await loadOutgoingItems()
     } catch (err: any) {
       setError(err?.message || "Nu am putut sincroniza facturile primite direct din ANAF.")
     } finally {
@@ -874,6 +937,22 @@ export default function FacturiPrimiteSPVPage() {
     return next
   }, [items, search, selectedMonth])
 
+  const filteredOutgoingItems = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    let next = outgoingItems.filter((item) => {
+      if (!selectedMonth) return true
+      return parseInvoiceMonthKey(item.docDate) === selectedMonth
+    })
+    next = !q
+      ? next
+      : next.filter((item) =>
+          [item.docNo, item.customerName, item.customerCif, item.efacturaUploadIndex, item.efacturaStatus]
+            .map((value) => String(value || "").toLowerCase())
+            .some((value) => value.includes(q))
+        )
+    return next
+  }, [outgoingItems, search, selectedMonth])
+
   const totalMatched = filteredItems.reduce(
     (sum, item) => sum + item.items.filter((line) => Boolean(line.matchedProductId)).length,
     0
@@ -969,27 +1048,54 @@ export default function FacturiPrimiteSPVPage() {
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          className="inline-flex items-center gap-1.5 rounded-[14px] bg-slate-900 px-3 py-1.5 text-[13px] font-semibold text-white"
+          onClick={() => setActiveView("incoming")}
+          className={`inline-flex items-center gap-1.5 rounded-[14px] px-3 py-1.5 text-[13px] font-semibold transition ${
+            activeView === "incoming"
+              ? "bg-slate-900 text-white"
+              : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+          }`}
         >
           Facturi primite
         </button>
         <button
           type="button"
-          onClick={() => navigate("/documente?tab=invoice")}
-          className="inline-flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-semibold text-slate-700 transition hover:bg-slate-50"
+          onClick={() => setActiveView("outgoing")}
+          className={`inline-flex items-center gap-1.5 rounded-[14px] px-3 py-1.5 text-[13px] font-semibold transition ${
+            activeView === "outgoing"
+              ? "bg-slate-900 text-white"
+              : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+          }`}
         >
           Facturi trimise
         </button>
       </div>
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
-        <DocumentMetric title="Facturi primite" value={String(filteredItems.length)} tone="blue" />
-        <DocumentMetric title="Linii mapate" value={String(totalMatched)} tone="slate" />
-        <DocumentMetric
-          title="Receptii create"
-          value={String(filteredItems.filter((item) => item.linkedReceiptId).length)}
-          tone="emerald"
-        />
+        {activeView === "incoming" ? (
+          <>
+            <DocumentMetric title="Facturi primite" value={String(filteredItems.length)} tone="blue" />
+            <DocumentMetric title="Linii mapate" value={String(totalMatched)} tone="slate" />
+            <DocumentMetric
+              title="Receptii create"
+              value={String(filteredItems.filter((item) => item.linkedReceiptId).length)}
+              tone="emerald"
+            />
+          </>
+        ) : (
+          <>
+            <DocumentMetric title="Facturi trimise" value={String(filteredOutgoingItems.length)} tone="blue" />
+            <DocumentMetric
+              title="Trimise la ANAF"
+              value={String(filteredOutgoingItems.filter((item) => ["SENT", "ACCEPTED"].includes(String(item.efacturaStatus || "").toUpperCase())).length)}
+              tone="slate"
+            />
+            <DocumentMetric
+              title="Acceptate"
+              value={String(filteredOutgoingItems.filter((item) => String(item.efacturaStatus || "").toUpperCase() === "ACCEPTED").length)}
+              tone="emerald"
+            />
+          </>
+        )}
       </div>
 
       {isDebugMode ? <InlineNotice>Vizualizarea tehnica SPV este activa.</InlineNotice> : null}
@@ -1122,7 +1228,7 @@ export default function FacturiPrimiteSPVPage() {
         ) : null}
       </div>
 
-      {isDebugMode && bridgeMessages.length ? (
+      {isDebugMode && activeView === "incoming" && bridgeMessages.length ? (
         <div className="overflow-hidden rounded-[20px] border border-slate-200 bg-white">
           <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
             <div className="text-sm font-semibold text-slate-900">
@@ -1206,19 +1312,24 @@ export default function FacturiPrimiteSPVPage() {
         </div>
       ) : null}
 
+      {activeView === "incoming" ? (
       <div className="overflow-hidden rounded-[20px] border border-slate-200 bg-white">
         <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <div className="text-sm font-semibold text-slate-900">Facturi importate</div>
+              <div className="text-sm font-semibold text-slate-900">
+                {activeView === "incoming" ? "Facturi primite" : "Facturi trimise"}
+              </div>
               <div className="mt-1 text-xs text-slate-500">
-                Deschizi factura, vezi continutul complet si poti crea receptia direct din ea.
+                {activeView === "incoming"
+                  ? "Deschizi factura, vezi continutul complet si poti crea receptia direct din ea."
+                  : "Vezi facturile trimise catre clienti prin e-Factura, fara sa iesi din zona SPV."}
               </div>
             </div>
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Factura, furnizor, CIF, ID descarcare..."
+              placeholder={activeView === "incoming" ? "Factura, furnizor, CIF, ID descarcare..." : "Factura, client, CIF, ID incarcare..."}
               className={`${documentInputClass} md:max-w-md`}
             />
           </div>
@@ -1436,6 +1547,71 @@ export default function FacturiPrimiteSPVPage() {
           </div>
         ) : null}
       </div>
+      ) : (
+        <div className="overflow-hidden rounded-[20px] border border-slate-200 bg-white">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-slate-500">
+              <tr>
+                <th className="px-3 py-2.5 text-left font-medium">Factura</th>
+                <th className="px-3 py-2.5 text-left font-medium">Client</th>
+                <th className="px-3 py-2.5 text-left font-medium">Valoare</th>
+                <th className="px-3 py-2.5 text-left font-medium">SPV</th>
+                <th className="px-3 py-2.5 text-left font-medium">e-Factura</th>
+                <th className="px-3 py-2.5 text-left font-medium">Data</th>
+                <th className="px-3 py-2.5 text-right font-medium">Actiuni</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-10 text-center text-slate-500">
+                    Se incarca facturile trimise...
+                  </td>
+                </tr>
+              ) : filteredOutgoingItems.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-10 text-center text-slate-500">
+                    Nu exista facturi trimise catre clienti in SPV pentru filtrul selectat.
+                  </td>
+                </tr>
+              ) : (
+                filteredOutgoingItems.map((item) => (
+                  <tr key={item.id} className="border-t border-slate-200">
+                    <td className="px-3 py-2.5 text-slate-700">
+                      <div className="font-semibold text-slate-900">{item.docNo || "-"}</div>
+                    </td>
+                    <td className="px-3 py-2.5 text-slate-700">
+                      <div className="font-medium text-slate-900">{item.customerName || "-"}</div>
+                      <div className="text-xs text-slate-500">{item.customerCif || "-"}</div>
+                    </td>
+                    <td className="px-3 py-2.5 text-slate-700">
+                      <div className="font-semibold text-slate-900">{formatMoneyRo(item.totalGrossFc, item.currency)}</div>
+                    </td>
+                    <td className="px-3 py-2.5 text-slate-700">{item.efacturaUploadIndex || "-"}</td>
+                    <td className="px-3 py-2.5 text-slate-700">
+                      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${efacturaStatusClass(item.efacturaStatus)}`}>
+                        {item.efacturaStatus || "NOT_READY"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 text-slate-700">{formatDate(item.docDate)}</td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/inregistrare-document/factura/edit?id=${item.id}`)}
+                          className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-[#17324D] transition hover:bg-[#F4F7FB]"
+                        >
+                          Deschide
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {selectedInvoice ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4">
