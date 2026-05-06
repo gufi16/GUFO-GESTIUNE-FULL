@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { ArrowUpToLine, Building2, FileOutput, Plus, ReceiptText, RefreshCw, Send, UserRound, X } from "lucide-react"
+import { ArrowUpToLine, Building2, ChevronDown, FileOutput, Plus, ReceiptText, RefreshCw, Send, UserRound, X } from "lucide-react"
 import PageHeader from "../components/PageHeader"
 import {
   DocumentField,
@@ -727,7 +727,7 @@ export default function FacturaPage() {
                 disabled={efacturaBusy || saving || loadingMeta || loadingInvoice || !efacturaCanSend}
               >
                 <Send size={16} className="mr-2" />
-                {efacturaBusy ? "Se trimite..." : "Trimite in SPV"}
+                {efacturaBusy ? "Se trimite..." : "Trimite ANAF"}
               </button>
             ) : null}
           </div>
@@ -756,22 +756,37 @@ export default function FacturaPage() {
 
         {invoiceId && efacturaEnabled ? (
           <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
-            <button type="button" onClick={prepareEfactura} className={documentButtonSecondaryClass} disabled={efacturaBusy || saving || loadingMeta || loadingInvoice}>
-              <FileOutput size={16} className="mr-2" />
-              Genereaza XML
-            </button>
-            <button type="button" onClick={downloadEfacturaXml} className={documentButtonSecondaryClass} disabled={!efacturaPrepared}>
-              <ArrowUpToLine size={16} className="mr-2" />
-              XML
-            </button>
             <button type="button" onClick={checkEfacturaStatus} className={documentButtonSecondaryClass} disabled={efacturaBusy || !efacturaUploadIndex}>
               <RefreshCw size={16} className="mr-2" />
               Verifica stare
             </button>
-            <button type="button" onClick={downloadEfacturaReceipt} className={documentButtonSecondaryClass} disabled={efacturaBusy || !efacturaUploadIndex}>
-              <ReceiptText size={16} className="mr-2" />
-              Recipisa
-            </button>
+            <details className="relative">
+              <summary className={`${documentButtonSecondaryClass} cursor-pointer list-none`}>
+                <ArrowUpToLine size={16} className="mr-2" />
+                Descarca
+                <ChevronDown size={15} className="ml-1" />
+              </summary>
+              <div className="absolute right-0 z-30 mt-2 min-w-[190px] rounded-2xl border border-slate-200 bg-white p-1.5 shadow-[0_18px_50px_rgba(15,23,42,0.18)]">
+                <button
+                  type="button"
+                  onClick={downloadEfacturaXml}
+                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={!efacturaPrepared}
+                >
+                  <FileOutput size={16} />
+                  XML
+                </button>
+                <button
+                  type="button"
+                  onClick={downloadEfacturaReceipt}
+                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={efacturaBusy || !efacturaUploadIndex}
+                >
+                  <ReceiptText size={16} />
+                  Recipisa ANAF
+                </button>
+              </div>
+            </details>
             {!customerReadyForEfactura ? (
               <span className="text-xs font-medium text-amber-700">Completeaza adresa, orasul, judetul si tara clientului inainte de trimiterea SPV.</span>
             ) : null}

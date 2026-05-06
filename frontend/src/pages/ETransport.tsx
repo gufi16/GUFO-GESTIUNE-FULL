@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { ArrowLeft, FileText, PackagePlus, Plus, Search } from "lucide-react"
+import { ArrowLeft, ChevronDown, FileText, PackagePlus, Plus, Search } from "lucide-react"
 import { useLocation, useNavigate } from "react-router-dom"
 import PageHeader from "../components/PageHeader"
 import {
@@ -1085,22 +1085,37 @@ export default function ETransportPage() {
           <PackagePlus size={16} className="mr-2" />
           Salveaza
         </button>
-        <button type="button" onClick={prepareXml} disabled={!noticeId || saving} className={documentButtonSecondaryClass}>
-          <FileText size={16} className="mr-2" />
-          Genereaza XML
-        </button>
-        <button type="button" onClick={sendToAnaf} disabled={!noticeId || saving} className={documentButtonSecondaryClass}>
-          Trimite la ANAF
+        <button type="button" onClick={sendToAnaf} disabled={!noticeId || saving} className={documentButtonPrimaryClass}>
+          Trimite ANAF
         </button>
         <button type="button" onClick={checkStatus} disabled={!noticeId || saving || !header.uploadIndex} className={documentButtonSecondaryClass}>
           Verifica stare
         </button>
-        <button type="button" onClick={() => noticeId && downloadXml(noticeId)} disabled={!noticeId || !header.preparedXml} className={documentButtonSecondaryClass}>
-          XML
-        </button>
-        <button type="button" onClick={downloadReceipt} disabled={!noticeId || !header.uploadIndex} className={documentButtonSecondaryClass}>
-          Raspuns ANAF
-        </button>
+        <details className="relative">
+          <summary className={`${documentButtonSecondaryClass} cursor-pointer list-none`}>
+            <FileText size={16} className="mr-2" />
+            Descarca
+            <ChevronDown size={15} className="ml-1" />
+          </summary>
+          <div className="absolute right-0 z-30 mt-2 min-w-[190px] rounded-2xl border border-slate-200 bg-white p-1.5 shadow-[0_18px_50px_rgba(15,23,42,0.18)]">
+            <button
+              type="button"
+              onClick={() => noticeId && downloadXml(noticeId)}
+              disabled={!noticeId || !header.preparedXml}
+              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              XML
+            </button>
+            <button
+              type="button"
+              onClick={downloadReceipt}
+              disabled={!noticeId || !header.uploadIndex}
+              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Raspuns ANAF
+            </button>
+          </div>
+        </details>
       </div>
 
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}

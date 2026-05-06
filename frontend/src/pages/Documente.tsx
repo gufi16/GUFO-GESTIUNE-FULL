@@ -2,6 +2,7 @@
 import { useNavigate, useSearchParams } from "react-router-dom"
 import {
   ArrowRight,
+  ChevronDown,
   FileCheck2,
   FilePlus2,
   Filter,
@@ -1296,6 +1297,28 @@ export default function Documente() {
     }
   }
 
+  async function openInvoiceXml(id: string) {
+    if (!token) return
+
+    try {
+      const res = await fetch(`${API}/api/v1/sales-invoices/${id}/efactura/xml`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data?.error || "Nu am putut descarca XML-ul e-Factura.")
+      }
+
+      await openPdfInNewTab(res)
+      setMessage("XML-ul e-Factura a fost descarcat.")
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut descarca XML-ul e-Factura.")
+    }
+  }
+
   const filteredConsumptionDocs = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return consumptionDocs
@@ -2190,7 +2213,7 @@ export default function Documente() {
                               disabled={doc.status !== "ISSUED" || (doc.efacturaStatus !== "PREPARED" && doc.efacturaStatus !== "READY_TO_SEND" && doc.efacturaStatus !== "ERROR" && doc.efacturaStatus !== "REJECTED")}
                               className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                              ANAF
+                              Trimite ANAF
                             </button>
                           ) : null}
                           {efacturaEnabled ? (
@@ -2200,18 +2223,34 @@ export default function Documente() {
                               disabled={!doc.efacturaUploadIndex}
                               className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                              Status
+                              Verifica stare
                             </button>
                           ) : null}
                           {efacturaEnabled ? (
-                            <button
-                              type="button"
-                              onClick={() => openInvoiceReceipt(doc.id)}
-                              disabled={!doc.efacturaUploadIndex}
-                              className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              Recipisa
-                            </button>
+                            <details className="relative">
+                              <summary className="inline-flex cursor-pointer list-none items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
+                                Descarca
+                                <ChevronDown size={15} />
+                              </summary>
+                              <div className="absolute right-0 z-30 mt-2 min-w-[180px] rounded-2xl border border-slate-200 bg-white p-1.5 shadow-[0_18px_50px_rgba(15,23,42,0.18)]">
+                                <button
+                                  type="button"
+                                  onClick={() => openInvoiceXml(doc.id)}
+                                  disabled={doc.efacturaStatus === "NOT_READY"}
+                                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  XML
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openInvoiceReceipt(doc.id)}
+                                  disabled={!doc.efacturaUploadIndex}
+                                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  Recipisa ANAF
+                                </button>
+                              </div>
+                            </details>
                           ) : null}
                           <a
                             href={`/inregistrare-document/factura/edit?id=${doc.id}`}
@@ -2381,17 +2420,10 @@ export default function Documente() {
                             <>
                               <button
                                 type="button"
-                                onClick={() => generateTransferXml(doc.id)}
-                                className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-                              >
-                                Genereaza XML
-                              </button>
-                              <button
-                                type="button"
                                 onClick={() => sendTransferToAnaf(doc.id)}
                                 className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
                               >
-                                ANAF
+                                Trimite ANAF
                               </button>
                               <button
                                 type="button"
@@ -2399,24 +2431,32 @@ export default function Documente() {
                                 disabled={!doc.eTransportUploadIndex}
                                 className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
                               >
-                                Verifica
+                                Verifica stare
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => openTransferXml(doc.id)}
-                                disabled={!doc.eTransportPreparedXml}
-                                className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-                              >
-                                XML
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => openTransferAnafReceipt(doc.id)}
-                                disabled={!doc.eTransportUploadIndex}
-                                className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-                              >
-                                Raspuns ANAF
-                              </button>
+                              <details className="relative">
+                                <summary className="inline-flex cursor-pointer list-none items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
+                                  Descarca
+                                  <ChevronDown size={15} />
+                                </summary>
+                                <div className="absolute right-0 z-30 mt-2 min-w-[180px] rounded-2xl border border-slate-200 bg-white p-1.5 shadow-[0_18px_50px_rgba(15,23,42,0.18)]">
+                                  <button
+                                    type="button"
+                                    onClick={() => openTransferXml(doc.id)}
+                                    disabled={!doc.eTransportPreparedXml}
+                                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    XML
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => openTransferAnafReceipt(doc.id)}
+                                    disabled={!doc.eTransportUploadIndex}
+                                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    Raspuns ANAF
+                                  </button>
+                                </div>
+                              </details>
                             </>
                           )}
                         </div>
