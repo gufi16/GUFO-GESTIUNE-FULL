@@ -991,81 +991,41 @@ export default function SetariEFacturaPage() {
       ) : null}
 
       <DocumentSection
-        title="Credențiale ANAF pe firma curenta"
-        description="Fiecare firma isi poate avea propriile certificate si tokenuri SPV. Aici alegi semnatarul pe care lucrezi."
+        title="Conectare pe firma curenta"
+        description="Tokenul ANAF este folosit separat pe fiecare firma. Cand schimbi firma, generezi sau regenerezi token doar pentru firma activa."
       >
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.2fr_1fr]">
-          <div className="space-y-3">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-[1.3fr_1fr_auto]">
-              <DocumentField label="Credențiala selectata">
-                <select
-                  value={selectedCredentialId}
-                  onChange={(e) => setSelectedCredentialId(e.target.value)}
-                  className={documentInputClass}
-                >
-                  {credentials.length ? null : <option value="">Nu exista inca nicio credențiala</option>}
-                  {credentials.map((credential) => (
-                    <option key={credential.id} value={credential.id}>
-                      {credential.label}{credential.isDefault ? " (implicit)" : ""}
-                    </option>
-                  ))}
-                </select>
-              </DocumentField>
-              <DocumentField label="Eticheta / semnatar">
-                <input
-                  value={selectedCredentialLabel}
-                  onChange={(e) => setSelectedCredentialLabel(e.target.value)}
-                  className={documentInputClass}
-                  placeholder="Ex: Administrator SPV"
-                  disabled={!currentCredential}
-                />
-              </DocumentField>
-              <div className="flex items-end gap-2">
-                <button type="button" onClick={saveCredentialDetails} className={documentButtonSecondaryClass} disabled={credentialBusy || !currentCredential}>
-                  Salveaza
-                </button>
-              </div>
+          <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+            <div>
+              Firma activa: <span className="font-semibold text-slate-900">{form.companyName || "-"}</span>
             </div>
-
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto_auto]">
-              <DocumentField label="Adauga semnatar / certificat nou">
-                <input
-                  value={newCredentialLabel}
-                  onChange={(e) => setNewCredentialLabel(e.target.value)}
-                  className={documentInputClass}
-                  placeholder="Ex: Contabil firma 2"
-                />
-              </DocumentField>
-              <div className="flex items-end">
-                <button type="button" onClick={createCredential} className={documentButtonPrimaryClass} disabled={credentialBusy}>
-                  {credentialBusy ? "Se proceseaza..." : "Adauga credențiala"}
-                </button>
-              </div>
-              <div className="flex items-end">
-                <button type="button" onClick={makeCredentialDefault} className={documentButtonSecondaryClass} disabled={credentialBusy || !currentCredential || currentCredential.isDefault}>
-                  Seteaza implicita
-                </button>
-              </div>
+            <div className="mt-2">
+              Profil OAuth: <span className="font-semibold text-slate-900">{currentCredential?.label || `${form.companyName || "Firma"} - SPV principal`}</span>
+            </div>
+            <div className="mt-2">
+              Regula de lucru: <span className="font-semibold text-slate-900">OAuth ANAF in browser, cu semnatura electronica activa pe calculatorul curent</span>
+            </div>
+            <div className="mt-2">
+              Daca folosesti alta semnatura pentru aceeasi firma, apesi din nou <span className="font-semibold text-slate-900">Genereaza token</span> si tokenul firmei se actualizeaza.
             </div>
           </div>
 
           <div className="grid grid-cols-1 gap-2 text-sm text-slate-600 md:grid-cols-2 xl:grid-cols-1">
             <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
-              Semnatar activ: <span className="font-semibold text-slate-900">{currentCredential?.label || "-"}</span>
+              Firma activa: <span className="font-semibold text-slate-900">{form.companyName || "-"}</span>
             </div>
             <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
-              Credențiala implicita: <span className="font-semibold text-slate-900">{currentCredential?.isDefault ? "Da" : "Nu"}</span>
+              CUI: <span className="font-semibold text-slate-900">{form.companyCui || "-"}</span>
             </div>
             <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
-              Certificat: <span className="font-semibold text-slate-900">{certState.hasFile ? "Incarcat" : "Lipsa"}</span>
+              Token ANAF: <span className="font-semibold text-slate-900">{oauthStatus.connected ? "Conectat" : "Neconectat"}</span>
             </div>
             <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
-              Token: <span className="font-semibold text-slate-900">{oauthStatus.connected ? "Conectat" : "Neconectat"}</span>
+              Generat la: <span className="font-semibold text-slate-900">{oauthStatus.connectedAt ? new Date(oauthStatus.connectedAt).toLocaleString("ro-RO") : "-"}</span>
             </div>
           </div>
         </div>
       </DocumentSection>
-
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
         <DocumentSection
           title="Flux firma"
