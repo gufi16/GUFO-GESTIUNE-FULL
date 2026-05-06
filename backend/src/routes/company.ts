@@ -546,9 +546,18 @@ export async function handleAnafOauthCallback(req, res) {
 
   if (error) {
     const nextError =
-      error === "access_denied"
+      errorDescription ||
+      (error === "access_denied"
         ? "Autorizarea ANAF a fost anulata sau refuzata."
-        : errorDescription || error || "Autorizarea ANAF nu a putut fi finalizata."
+        : error || "Autorizarea ANAF nu a putut fi finalizata.")
+
+    console.log("ANAF OAUTH CALLBACK ERROR", {
+      error,
+      errorDescription: errorDescription || null,
+      codePresent: Boolean(code),
+      hasStateParam: Boolean(stateRaw),
+      hasStateCookie: Boolean(cookieStateRaw),
+    })
 
     const company = await resolveTenantCompany(prisma, state.tenantId, state.activeCompanyId || null, {
       select: { id: true, tenantId: true, name: true },
@@ -571,12 +580,12 @@ export async function handleAnafOauthCallback(req, res) {
           efacturaOauthLastError: nextError,
         })
       }
-    }
+      }
 
-    return res.redirect(
-      `${state.returnTo}${state.returnTo.includes("?") ? "&" : "?"}oauth=denied`,
-    )
-  }
+      return res.redirect(
+        `${state.returnTo}${state.returnTo.includes("?") ? "&" : "?"}oauth=denied&message=${encodeURIComponent(nextError)}`,
+      )
+    }
 
   if (!code) {
     return res.status(400).send("Lipsesc parametrii OAuth ANAF.")
