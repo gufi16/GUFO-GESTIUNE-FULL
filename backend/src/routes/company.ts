@@ -9,7 +9,7 @@ import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { getNextNumberPreview, getNumberingConfig, normalizeNumberingPayload } from "../lib/numbering"
 import { requireTenantModule } from "../lib/tenantModules"
 import { anafHttpRequest } from "../lib/anafHttp"
-import { getAnafCompanyDiagnostics } from "../lib/anafClient"
+import { getAnafCompanyDiagnostics, getAnafTokenDiagnostics } from "../lib/anafClient"
 import { ensureTenantCompany, resolveTenantCompany, updateOrCreateTenantCompany } from "../lib/companyResolver"
 import {
   ANAF_CREDENTIAL_SELECT,
@@ -447,6 +447,13 @@ function decodeTokenExpiry(token: string | null | undefined) {
   return new Date(decoded.exp * 1000)
 }
 
+function normalizeCertificateSerialForCompare(value: unknown) {
+  return String(value || "")
+    .trim()
+    .replace(/[:\s]/g, "")
+    .toUpperCase()
+}
+
 function normalizeRomanianCounty(value: unknown) {
   const text = String(value || "").trim()
   if (!text) return ""
@@ -651,6 +658,34 @@ export async function handleAnafOauthCallback(req, res) {
 
     if (!credential?.id) {
       throw new Error("Nu exista o credențiala ANAF disponibila pentru firma activa.")
+    }
+
+    const tokenDiagnostics = getAnafTokenDiagnostics(String(payload.access_token))
+    const configuredSerial = normalizeCertificateSerialForCompare(credential.certSerial)
+    const tokenSerial = normalizeCertificateSerialForCompare(tokenDiagnostics.tokenSerial)
+    if (configuredSerial && configuredSerial !== tokenSerial) {
+      const serialError = tokenSerial
+        ? `Tokenul ANAF a fost generat cu alt certificat (${tokenDiagnostics.tokenSerial}) decat cel salvat pentru firma activa (${credential.certSerial}). Alege certificatul corect si genereaza din nou tokenul.`
+        : `Tokenul ANAF nu contine serialul certificatului, deci nu poate fi verificat cu firma activa (${credential.certSerial}). Alege certificatul corect si genereaza din nou tokenul.`
+
+      const updated = await prisma.companyAnafCredential.update({
+        where: { id: credential.id },
+        data: {
+          efacturaOauthAccessToken: null,
+          efacturaOauthRefreshToken: null,
+          efacturaOauthAccessTokenExpiresAt: null,
+          efacturaOauthRefreshTokenExpiresAt: null,
+          efacturaOauthConnectedAt: null,
+          efacturaOauthLastError: serialError,
+        },
+        select: ANAF_CREDENTIAL_SELECT,
+      })
+
+      if (credential.isDefault) {
+        await syncDefaultAnafCredentialToCompany(prisma as any, company.id, updated)
+      }
+
+      return res.redirect(`${state.returnTo}${state.returnTo.includes("?") ? "&" : "?"}oauth=error&message=${encodeURIComponent(serialError)}`)
     }
 
     const updatedCredential = await prisma.companyAnafCredential.update({
