@@ -51,14 +51,19 @@ type IncomingInvoice = {
 
 type OutgoingInvoice = {
   id: string
-  docNo: string
-  docDate: string
+  invoiceNo?: string | null
+  invoiceDate?: string | null
+  spvCommunicationDate?: string | null
   customerName: string
   customerCif?: string | null
+  supplierName?: string | null
+  supplierCif?: string | null
   currency: string
-  totalGrossFc: number
-  efacturaStatus?: string | null
-  efacturaUploadIndex?: string | null
+  totalNet?: number
+  totalVat?: number
+  totalGross: number
+  spvDownloadId: string
+  spvUploadIndex?: string | null
 }
 
 type SpvClassicStatus = {
@@ -188,12 +193,11 @@ function getDaysNeededForMonth(monthValue: string) {
   return Math.max(1, Math.min(365, days))
 }
 
-function isIncomingEfacturaMessage(entry: any) {
+function isEfacturaInvoiceMessage(entry: any) {
   const tip = String(entry?.tip || "").trim().toUpperCase()
-  const details = String(entry?.detalii || "").trim().toLowerCase()
-  if (tip.includes("PRIMITA")) return true
-  if (tip === "RECIPISA") return false
-  return details.includes("cif_beneficiar")
+  const raw = JSON.stringify(entry || {}).toLowerCase()
+  if (tip.includes("RECIPISA")) return false
+  return Boolean(String(entry?.id || "").trim()) && (tip.includes("FACTURA") || raw.includes("id_descarcare") || raw.includes("download"))
 }
 
 function escapeHtml(value: string) {
@@ -353,34 +357,19 @@ export default function FacturiPrimiteSPVPage() {
   async function loadOutgoingItems() {
     if (!token) return
     try {
-      const res = await fetch(`${API_BASE}/api/v1/sales-invoices`, {
+      const res = await fetch(`${API_BASE}/api/v1/efactura/outgoing?_=${Date.now()}`, {
         headers: {
           Authorization: `Bearer ${token}`,
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
         },
+        cache: "no-store",
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data?.ok) {
-        throw new Error(data?.error || "Nu am putut incarca facturile trimise.")
+        throw new Error(data?.error || "Nu am putut incarca facturile trimise din SPV.")
       }
-      const invoices = Array.isArray(data.invoices) ? data.invoices : []
-      setOutgoingItems(
-        invoices
-          .filter((entry: any) => {
-            const status = String(entry?.efacturaStatus || "").toUpperCase()
-            return Boolean(String(entry?.efacturaUploadIndex || "").trim()) || ["SENT", "ACCEPTED", "REJECTED", "ERROR"].includes(status)
-          })
-          .map((entry: any) => ({
-            id: String(entry?.id || ""),
-            docNo: String(entry?.docNo || ""),
-            docDate: String(entry?.docDate || ""),
-            customerName: String(entry?.customerName || ""),
-            customerCif: entry?.customerCif || null,
-            currency: String(entry?.currency || "RON"),
-            totalGrossFc: Number(entry?.totalGrossFc || 0),
-            efacturaStatus: entry?.efacturaStatus || null,
-            efacturaUploadIndex: entry?.efacturaUploadIndex || null,
-          }))
-      )
+      setOutgoingItems(Array.isArray(data.items) ? data.items : [])
     } catch {
       setOutgoingItems([])
     }
@@ -400,7 +389,7 @@ export default function FacturiPrimiteSPVPage() {
         const requestedDays = getDaysNeededForMonth(selectedMonth)
         const bridgeConfig = await loadBridgeConfig()
         const existingDownloadIds = new Set(
-          items
+          [...items, ...outgoingItems]
             .map((entry) => String(entry.spvDownloadId || "").trim())
             .filter(Boolean)
         )
@@ -481,7 +470,7 @@ export default function FacturiPrimiteSPVPage() {
           }))
         )
 
-        const invoiceMessages = messages.filter((entry: any) => isIncomingEfacturaMessage(entry))
+        const invoiceMessages = messages.filter((entry: any) => isEfacturaInvoiceMessage(entry))
         const newInvoiceMessages = invoiceMessages.filter((entry: any) => !existingDownloadIds.has(String(entry?.id || "").trim()))
 
         if (!invoiceMessages.length) {
@@ -675,6 +664,8 @@ export default function FacturiPrimiteSPVPage() {
           `Mesaje factura: ${stats.invoiceMessages ?? 0}`,
           `Facturi descarcate: ${stats.downloaded ?? 0}`,
           `Facturi importate: ${stats.imported ?? 0}`,
+          `Facturi primite importate: ${stats.importedIncoming ?? 0}`,
+          `Facturi trimise importate: ${stats.importedOutgoing ?? 0}`,
           `Mesaje sarite: ${stats.skipped ?? 0}`,
           ...(Array.isArray(stats.errors) && stats.errors.length ? [`Prima eroare: ${stats.errors[0]}`] : []),
         ],
@@ -871,6 +862,22 @@ export default function FacturiPrimiteSPVPage() {
     }
   }
 
+  async function openOutgoingXml(id: string) {
+    if (!token) return
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/efactura/outgoing/${id}/xml`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) throw new Error()
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      window.open(url, "_blank", "noopener,noreferrer")
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch {
+      setError("Nu am putut deschide XML-ul facturii trimise din SPV.")
+    }
+  }
+
   async function createSupplier(id: string) {
     if (!token) return
     setError("")
@@ -941,12 +948,15 @@ export default function FacturiPrimiteSPVPage() {
     const q = search.trim().toLowerCase()
     let next = outgoingItems.filter((item) => {
       if (!selectedMonth) return true
-      return parseInvoiceMonthKey(item.docDate) === selectedMonth
+      return (
+        parseInvoiceMonthKey(item.spvCommunicationDate) ||
+        parseInvoiceMonthKey(item.invoiceDate)
+      ) === selectedMonth
     })
     next = !q
       ? next
       : next.filter((item) =>
-          [item.docNo, item.customerName, item.customerCif, item.efacturaUploadIndex, item.efacturaStatus]
+          [item.invoiceNo, item.customerName, item.customerCif, item.spvDownloadId, item.spvUploadIndex]
             .map((value) => String(value || "").toLowerCase())
             .some((value) => value.includes(q))
         )
@@ -962,7 +972,7 @@ export default function FacturiPrimiteSPVPage() {
   const filteredBridgeMessages = useMemo(() => {
     if (bridgeMessageFilter === "all") return bridgeMessages
     if (bridgeMessageFilter === "invoice") {
-      return bridgeMessages.filter((entry) => isIncomingEfacturaMessage(entry))
+      return bridgeMessages.filter((entry) => isEfacturaInvoiceMessage(entry))
     }
     return bridgeMessages.filter((entry) => String(entry.tip || "").toUpperCase() === "RECIPISA")
   }, [bridgeMessages, bridgeMessageFilter])
@@ -1033,6 +1043,21 @@ export default function FacturiPrimiteSPVPage() {
     }
   }
 
+  async function downloadOutgoingInvoicePdf(item: OutgoingInvoice) {
+    if (!token) return
+    try {
+      const fallbackRes = await fetch(`${API_BASE}/api/v1/efactura/outgoing/${item.id}/pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!fallbackRes.ok) {
+        throw new Error("Nu am putut genera PDF-ul facturii trimise din XML.")
+      }
+      await downloadPdfFile(fallbackRes, `factura-trimisa-spv-${item.invoiceNo || item.spvDownloadId}.pdf`)
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut descarca PDF-ul facturii trimise.")
+    }
+  }
+
   if (!hasModule("efactura")) {
     return <Navigate to="/documente" replace />
   }
@@ -1086,12 +1111,12 @@ export default function FacturiPrimiteSPVPage() {
             <DocumentMetric title="Facturi trimise" value={String(filteredOutgoingItems.length)} tone="blue" />
             <DocumentMetric
               title="Trimise la ANAF"
-              value={String(filteredOutgoingItems.filter((item) => ["SENT", "ACCEPTED"].includes(String(item.efacturaStatus || "").toUpperCase())).length)}
+              value={String(filteredOutgoingItems.length)}
               tone="slate"
             />
             <DocumentMetric
-              title="Acceptate"
-              value={String(filteredOutgoingItems.filter((item) => String(item.efacturaStatus || "").toUpperCase() === "ACCEPTED").length)}
+              title="Cu PDF/XML"
+              value={String(filteredOutgoingItems.filter((item) => item.spvDownloadId).length)}
               tone="emerald"
             />
           </>
@@ -1179,7 +1204,14 @@ export default function FacturiPrimiteSPVPage() {
             </div>
           </div>
           <div className="flex gap-2">
-            <button type="button" onClick={() => void loadItems()} className={documentButtonSecondaryClass}>
+            <button
+              type="button"
+              onClick={() => {
+                void loadItems()
+                void loadOutgoingItems()
+              }}
+              className={documentButtonSecondaryClass}
+            >
               Reincarca
             </button>
             {isDebugMode ? (
@@ -1578,30 +1610,46 @@ export default function FacturiPrimiteSPVPage() {
                 filteredOutgoingItems.map((item) => (
                   <tr key={item.id} className="border-t border-slate-200">
                     <td className="px-3 py-2.5 text-slate-700">
-                      <div className="font-semibold text-slate-900">{item.docNo || "-"}</div>
+                      <div className="font-semibold text-slate-900">{item.invoiceNo || "-"}</div>
+                      <div className="text-xs text-slate-500">{formatDate(item.invoiceDate)}</div>
                     </td>
                     <td className="px-3 py-2.5 text-slate-700">
                       <div className="font-medium text-slate-900">{item.customerName || "-"}</div>
                       <div className="text-xs text-slate-500">{item.customerCif || "-"}</div>
                     </td>
                     <td className="px-3 py-2.5 text-slate-700">
-                      <div className="font-semibold text-slate-900">{formatMoneyRo(item.totalGrossFc, item.currency)}</div>
+                      <div className="font-semibold text-slate-900">{formatMoneyRo(item.totalGross, item.currency)}</div>
+                      <div className="text-xs text-slate-500">
+                        Net {formatMoneyRo(item.totalNet || 0, item.currency)} - TVA {formatMoneyRo(item.totalVat || 0, item.currency)}
+                      </div>
                     </td>
-                    <td className="px-3 py-2.5 text-slate-700">{item.efacturaUploadIndex || "-"}</td>
                     <td className="px-3 py-2.5 text-slate-700">
-                      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${efacturaStatusClass(item.efacturaStatus)}`}>
-                        {item.efacturaStatus || "NOT_READY"}
+                      <div className="text-xs text-slate-600">Download: {item.spvDownloadId || "-"}</div>
+                      <div className="text-xs text-slate-500">Upload: {item.spvUploadIndex || "-"}</div>
+                    </td>
+                    <td className="px-3 py-2.5 text-slate-700">
+                      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${efacturaStatusClass("ACCEPTED")}`}>
+                        Sincronizat SPV
                       </span>
                     </td>
-                    <td className="px-3 py-2.5 text-slate-700">{formatDate(item.docDate)}</td>
+                    <td className="px-3 py-2.5 text-slate-700">{formatDate(item.spvCommunicationDate)}</td>
                     <td className="px-3 py-2.5">
                       <div className="flex justify-end gap-2">
                         <button
                           type="button"
-                          onClick={() => navigate(`/inregistrare-document/factura/edit?id=${item.id}`)}
+                          onClick={() => void downloadOutgoingInvoicePdf(item)}
                           className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-[#17324D] transition hover:bg-[#F4F7FB]"
                         >
-                          Deschide
+                          <FileText size={16} />
+                          PDF
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void openOutgoingXml(item.id)}
+                          className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-[#17324D] transition hover:bg-[#F4F7FB]"
+                        >
+                          <FileCode2 size={16} />
+                          XML
                         </button>
                       </div>
                     </td>

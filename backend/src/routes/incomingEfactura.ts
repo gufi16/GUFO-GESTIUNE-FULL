@@ -394,17 +394,63 @@ function serializeIncomingInvoice(entry: any) {
   }
 }
 
-function isIncomingEfacturaMessage(entry: any) {
+function isInvoiceEfacturaMessage(entry: any) {
   const tip = String(entry?.tip || "").trim().toUpperCase()
-  const details = String(entry?.detalii || "").trim().toLowerCase()
+  const raw = JSON.stringify(entry || {}).toLowerCase()
   const downloadId = String(
     extractDownloadId(entry, JSON.stringify(entry || {})) || readStringField(entry, ["id", "downloadId"])
   ).trim()
-  const raw = JSON.stringify(entry || {}).toLowerCase()
   if (tip.includes("RECIPISA")) return false
-  if (tip.includes("PRIMITA")) return true
-  if (details.includes("cif_beneficiar")) return true
-  return Boolean(downloadId) && (raw.includes("id_descarcare") || raw.includes("download") || raw.includes("cif_beneficiar"))
+  return Boolean(downloadId) && (tip.includes("FACTURA") || raw.includes("id_descarcare") || raw.includes("download"))
+}
+
+function normalizedCui(value: any) {
+  return normalizeCompanyCui(String(value || ""))
+}
+
+function invoiceBelongsToIncomingSide(entry: any, companyCui: string) {
+  const supplierCif = normalizedCui(entry?.supplierCif)
+  const customerCif = normalizedCui(entry?.customerCif)
+  if (!companyCui) return true
+  if (customerCif && customerCif === companyCui) return true
+  if (supplierCif && supplierCif === companyCui) return false
+  return true
+}
+
+function invoiceBelongsToOutgoingSide(entry: any, companyCui: string) {
+  const supplierCif = normalizedCui(entry?.supplierCif)
+  if (!companyCui) return false
+  return Boolean(supplierCif && supplierCif === companyCui)
+}
+
+async function loadCompanyCui(tenantId: string, companyId: string) {
+  const company = await prisma.company.findFirst({
+    where: { tenantId, id: companyId },
+    select: { cui: true },
+  })
+  return normalizedCui(company?.cui)
+}
+
+function serializeOutgoingInvoice(entry: any) {
+  const serialized = serializeIncomingInvoice(entry)
+  return {
+    id: serialized.id,
+    invoiceNo: serialized.invoiceNo,
+    invoiceDate: serialized.invoiceDate,
+    spvCommunicationDate: serialized.spvCommunicationDate,
+    customerName: serialized.customerName,
+    customerCif: serialized.customerCif,
+    supplierName: serialized.supplierName,
+    supplierCif: serialized.supplierCif,
+    currency: serialized.currency,
+    totalNet: serialized.totalNet,
+    totalVat: serialized.totalVat,
+    totalGross: serialized.totalGross,
+    spvDownloadId: serialized.spvDownloadId,
+    spvUploadIndex: serialized.spvUploadIndex,
+    spvMessageId: serialized.spvMessageId,
+    syncedAt: serialized.syncedAt,
+  }
 }
 
 function mapIncomingSyncError(error: any, company?: {
@@ -841,10 +887,40 @@ router.get("/api/v1/efactura/incoming", async (req: AuthedRequest, res) => {
     orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
   })
 
+  const companyCui = await loadCompanyCui(tenantId, companyId)
   const repairedItems = await Promise.all(items.map((entry) => repairIncomingInvoiceIfNeeded(tenantId, companyId, entry)))
-  const serializedItems = repairedItems.map((entry) => serializeIncomingInvoice(entry))
+  const serializedItems = repairedItems
+    .filter((entry) => invoiceBelongsToIncomingSide(entry, companyCui))
+    .map((entry) => serializeIncomingInvoice(entry))
 
   return res.json({ ok: true, items: serializedItems })
+})
+
+router.get("/api/v1/efactura/outgoing", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
+  const moduleCheck = await requireTenantModule(tenantId, "efactura")
+  if (!moduleCheck.enabled) {
+    return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
+  }
+
+  const companyCui = await loadCompanyCui(tenantId, companyId)
+  const items = await prisma.incomingEInvoice.findMany({
+    where: { tenantId, companyId },
+    include: {
+      items: {
+        orderBy: { lineIndex: "asc" },
+      },
+    },
+    orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
+  })
+
+  const repairedItems = await Promise.all(items.map((entry) => repairIncomingInvoiceIfNeeded(tenantId, companyId, entry)))
+  const outgoingItems = repairedItems
+    .filter((entry) => invoiceBelongsToOutgoingSide(entry, companyCui))
+    .map((entry) => serializeOutgoingInvoice(entry))
+
+  return res.json({ ok: true, items: outgoingItems })
 })
 
 router.get("/api/v1/efactura/incoming/bridge-config", async (req: AuthedRequest, res) => {
@@ -896,7 +972,7 @@ router.post("/api/v1/efactura/incoming/sync", async (req: AuthedRequest, res) =>
   try {
     const listResult = await anafListMessages(company, { days })
     const rawMessages = Array.isArray(listResult.items) ? listResult.items : []
-    const invoiceMessages = rawMessages.filter((entry: any) => isIncomingEfacturaMessage(entry))
+    const invoiceMessages = rawMessages.filter((entry: any) => isInvoiceEfacturaMessage(entry))
     const downloadIds = invoiceMessages
       .map((entry: any) => extractDownloadId(entry, JSON.stringify(entry || {})) || readStringField(entry, ["id", "downloadId"]))
       .map((entry: any) => String(entry || "").trim())
@@ -921,9 +997,12 @@ router.post("/api/v1/efactura/incoming/sync", async (req: AuthedRequest, res) =>
     )
 
     let imported = 0
+    let importedIncoming = 0
+    let importedOutgoing = 0
     let skipped = 0
     let downloaded = 0
     const errors: string[] = []
+    const companyCui = normalizedCui(company?.cui)
 
     for (const message of invoiceMessages) {
       const downloadId =
@@ -951,6 +1030,11 @@ router.post("/api/v1/efactura/incoming/sync", async (req: AuthedRequest, res) =>
         const item = await upsertIncomingInvoice(tenantId, companyId, message, extracted.xmlText, parsedInvoice)
         await ensureIncomingInvoicePdfSaved(item)
         imported += 1
+        if (invoiceBelongsToOutgoingSide(parsedInvoice, companyCui)) {
+          importedOutgoing += 1
+        } else {
+          importedIncoming += 1
+        }
       } catch (error: any) {
         skipped += 1
         if (errors.length < 3) {
@@ -973,6 +1057,8 @@ router.post("/api/v1/efactura/incoming/sync", async (req: AuthedRequest, res) =>
         invoiceMessages: invoiceMessages.length,
         downloaded,
         imported,
+        importedIncoming,
+        importedOutgoing,
         skipped,
         errors,
       },
@@ -984,6 +1070,68 @@ router.post("/api/v1/efactura/incoming/sync", async (req: AuthedRequest, res) =>
       error: mapIncomingSyncError(error, company),
     })
   }
+})
+
+router.get("/api/v1/efactura/outgoing/:id/pdf", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
+  const moduleCheck = await requireTenantModule(tenantId, "efactura")
+  if (!moduleCheck.enabled) {
+    return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
+  }
+
+  const item = await prisma.incomingEInvoice.findFirst({
+    where: { tenantId, companyId, id: req.params.id },
+    include: {
+      items: {
+        orderBy: { lineIndex: "asc" },
+      },
+    },
+  })
+
+  const companyCui = await loadCompanyCui(tenantId, companyId)
+  if (!item || !invoiceBelongsToOutgoingSide(item, companyCui)) {
+    return res.status(404).json({ ok: false, error: "Factura trimisa SPV nu a fost gasita." })
+  }
+
+  const parsed = item.xmlText ? parseIncomingEInvoiceXml(String(item.xmlText)) : null
+  const filename = `Factura_trimisa_SPV_${safeFilePart(String(parsed?.invoiceNo || item.invoiceNo || item.spvDownloadId || "document"))}.pdf`
+  const pdfPath = await ensureIncomingInvoicePdfSaved(item)
+  const buffer = fs.readFileSync(pdfPath)
+  res.setHeader("Content-Type", "application/pdf")
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`)
+  return res.send(buffer)
+})
+
+router.get("/api/v1/efactura/outgoing/:id/xml", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
+  const moduleCheck = await requireTenantModule(tenantId, "efactura")
+  if (!moduleCheck.enabled) {
+    return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
+  }
+
+  const item = await prisma.incomingEInvoice.findFirst({
+    where: { tenantId, companyId, id: req.params.id },
+    select: {
+      invoiceNo: true,
+      spvDownloadId: true,
+      supplierCif: true,
+      xmlText: true,
+    },
+  })
+
+  const companyCui = await loadCompanyCui(tenantId, companyId)
+  if (!item || !invoiceBelongsToOutgoingSide(item, companyCui)) {
+    return res.status(404).json({ ok: false, error: "Factura trimisa SPV nu a fost gasita." })
+  }
+
+  res.setHeader("Content-Type", "application/xml; charset=utf-8")
+  res.setHeader(
+    "Content-Disposition",
+    `inline; filename=\"factura-trimisa-spv-${String(item.invoiceNo || item.spvDownloadId || "document").replace(/[^a-zA-Z0-9._-]/g, "-")}.xml\"`
+  )
+  return res.send(item.xmlText)
 })
 
 router.get("/api/v1/efactura/incoming/:id", async (req: AuthedRequest, res) => {
