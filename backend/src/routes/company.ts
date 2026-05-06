@@ -362,21 +362,6 @@ async function getRequestAnafCredential(req: AuthedRequest, explicitCredentialId
   }
 }
 
-function ensureCompanyCertificateReady(company: any) {
-  if (!company?.id) {
-    throw new Error("Firma activa nu este disponibila.")
-  }
-  if (!company?.efacturaCertFilename) {
-    throw new Error("Incarca mai intai certificatul SPV pentru firma activa.")
-  }
-  if (!hasEfacturaCertificateFile(company?.tenantId, company?.id, company?.efacturaCertFilename, company?.anafCredentialId || null)) {
-    throw new Error("Fisierul certificatului SPV lipseste pentru firma activa. Reincarca certificatul.")
-  }
-  if (!company?.efacturaCertPasswordEnc) {
-    throw new Error("Salveaza parola certificatului SPV pentru firma activa.")
-  }
-}
-
 async function updateRequestCompany(
   req: AuthedRequest,
   updateData: Record<string, any>,
@@ -1229,15 +1214,7 @@ router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, re
     })
   }
 
-  try {
-    const { credential } = await getRequestAnafCredential(req, requestedCredentialId)
-    ensureCompanyCertificateReady(credential)
-  } catch (error: any) {
-    return res.status(409).json({
-      ok: false,
-      error: error?.message || "Firma activa nu are certificatul SPV configurat complet.",
-    })
-  }
+  await getRequestAnafCredential(req, requestedCredentialId)
 
   const oauthConfig = await getEffectiveAnafOauthConfig(tenantId, activeCompanyId)
 

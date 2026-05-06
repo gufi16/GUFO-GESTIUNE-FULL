@@ -119,7 +119,7 @@ export function mapAnafCredentialSummary(credential: any) {
     hasCertificateFile,
     hasCertificatePassword,
     hasEfacturaToken,
-    connected: hasCertificateFile && hasCertificatePassword && hasEfacturaToken,
+    connected: hasEfacturaToken,
   }
 }
 
@@ -168,15 +168,16 @@ export async function ensureLegacyCompanyCredential(
     return existing
   }
 
-  if (!companyHasLegacyAnafData(company)) {
-    return null
-  }
-
   return prismaClient.companyAnafCredential.create({
     data: {
       tenantId: company.tenantId,
       companyId: company.id,
-      ...buildCredentialPayloadFromCompany(company),
+      ...(companyHasLegacyAnafData(company)
+        ? buildCredentialPayloadFromCompany(company)
+        : {
+            label: buildCredentialLabel(company),
+            isDefault: true,
+          }),
     },
     select: ANAF_CREDENTIAL_SELECT,
   })

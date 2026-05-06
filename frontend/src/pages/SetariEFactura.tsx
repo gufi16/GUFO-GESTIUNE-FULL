@@ -164,7 +164,7 @@ function normalizeAnafMessage(message: string) {
     return "Aplicatia ANAF nu este configurata inca in Control Panel. Completeaza configurarea globala si apoi revino aici."
   }
   if (text.includes("Conecteaza mai intai aplicatia")) {
-    return "Nu exista token ANAF salvat pentru aceasta firma. Genereaza mai intai tokenul cu certificatul digital."
+    return "Nu exista token ANAF salvat pentru aceasta firma. Genereaza mai intai tokenul ANAF pentru firma activa."
   }
   if (text.includes("respinsa la nivel TLS")) {
     return text
@@ -310,7 +310,6 @@ export default function SetariEFacturaPage() {
     const fallbackHasFile = Boolean(company?.efacturaCertHasFile)
     const fallbackPassword = Boolean(company?.efacturaCertPasswordConfigured)
     const fallbackHasToken = Boolean(company?.efacturaOauthAccessToken)
-    const hasCompanyCertificate = fallbackHasFile && fallbackPassword
 
     setForm((prev) => ({
       ...prev,
@@ -325,12 +324,11 @@ export default function SetariEFacturaPage() {
       passwordConfigured: credential ? Boolean(credential.certPasswordConfigured) : fallbackPassword,
     })
 
-    const connected = credential ? Boolean(credential.connected) : fallbackHasToken && hasCompanyCertificate
-    const lastError = credential
+    const connected = credential ? Boolean(credential.hasEfacturaToken) : fallbackHasToken
+    const rawLastError = credential
       ? String(credential.efacturaLastError || "")
-      : !hasCompanyCertificate && fallbackHasToken
-        ? "Exista un token ANAF salvat, dar firma activa nu are certificatul SPV configurat complet."
-        : String(company?.efacturaOauthLastError || "")
+      : String(company?.efacturaOauthLastError || "")
+    const lastError = rawLastError.includes("certificatului SPV") ? "" : rawLastError
 
     setOauthStatus({
       connected,
