@@ -34,6 +34,7 @@ const router = Router()
 
 const ANAF_AUTH_URL = "https://logincert.anaf.ro/anaf-oauth2/v1/authorize"
 const ANAF_TOKEN_URL = "https://logincert.anaf.ro/anaf-oauth2/v1/token"
+const ANAF_LOGOUT_URL = "https://login.anaf.ro/my.logout.php3?errorcode=19"
 const ANAF_TEST_URL = "https://api.anaf.ro/TestOauth/jaxrs/hello?name=GuFo%20ERP"
 const ANAF_CUI_LOOKUP_URL = "https://webservicesp.anaf.ro/api/PlatitorTvaRest/v9/tva"
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret"
@@ -1291,10 +1292,11 @@ router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, re
   })
 
   return res.json({
-    ok: true,
-    url: `${ANAF_AUTH_URL}?${params.toString()}`,
+      ok: true,
+      url: `${ANAF_AUTH_URL}?${params.toString()}`,
+      logoutUrl: ANAF_LOGOUT_URL,
+    })
   })
-})
 
 router.post("/api/v1/company/efactura/oauth/test", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
