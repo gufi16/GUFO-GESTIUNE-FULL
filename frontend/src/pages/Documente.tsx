@@ -1757,7 +1757,7 @@ export default function Documente() {
           className={documentTypeButtonClass(activeTab === "invoice")}
         >
           <FileText size={15} />
-          Factura
+          Facturi
         </button>
 
         <button
@@ -1766,7 +1766,7 @@ export default function Documente() {
           className={documentTypeButtonClass(activeTab === "receipt")}
         >
           <PackageSearch size={15} />
-          Nota de receptie
+          Note de receptie
         </button>
 
         <button
@@ -1775,7 +1775,7 @@ export default function Documente() {
           className={documentTypeButtonClass(activeTab === "consumption")}
         >
           <Repeat2 size={15} />
-          Bon de consum
+          Bonuri de consum
         </button>
 
         <button
@@ -1784,7 +1784,7 @@ export default function Documente() {
           className={documentTypeButtonClass(activeTab === "transfer")}
         >
           <Truck size={15} />
-          Transfer intre gestiuni
+          Transferuri
         </button>
 
         <button
