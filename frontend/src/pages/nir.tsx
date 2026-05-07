@@ -176,6 +176,7 @@ export default function NirPage() {
   const [isMobileViewport, setIsMobileViewport] = useState(
     () => typeof window !== "undefined" && window.innerWidth < 768
   )
+  const [activePanel, setActivePanel] = useState<"header" | "lines" | "summary">("header")
 
   const [products, setProducts] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])
@@ -1131,6 +1132,26 @@ export default function NirPage() {
     isMobileViewport && lines.length === 1 && !lines[0].productId && !lines[0].search.trim()
       ? []
       : lines
+  const documentPanels = [
+    {
+      id: "header" as const,
+      title: "Date document",
+      description: "Furnizor, locatie, numar, data si moneda",
+      meta: header.supplierName || supplierSearch || "Furnizor neales",
+    },
+    {
+      id: "lines" as const,
+      title: "Produse",
+      description: "Produsele receptionate si cantitatile",
+      meta: `${visibleLines.length} ${visibleLines.length === 1 ? "linie" : "linii"}`,
+    },
+    {
+      id: "summary" as const,
+      title: "Verificare",
+      description: "Totaluri, SGR, TVA si observatii",
+      meta: `${formatNumber(totals.withSgrFc)} ${header.currency}`,
+    },
+  ]
 
   return (
     <div style={pageWrap}>
@@ -1251,8 +1272,34 @@ export default function NirPage() {
       {loadingReceipt ? (
         <div style={infoBox}>Se incarca documentul...</div>
       ) : (
-        <>
-          <Section title="Antet document">
+        <div style={isMobileViewport ? documentWorkspaceMobile : documentWorkspace}>
+          <aside style={isMobileViewport ? documentPanelNavMobile : documentPanelNav}>
+            <div style={documentPanelNavTitle}>Etape NIR</div>
+            <div style={documentPanelNavList}>
+              {documentPanels.map((panel, index) => {
+                const isActive = activePanel === panel.id
+                return (
+                  <button
+                    key={panel.id}
+                    type="button"
+                    onClick={() => setActivePanel(panel.id)}
+                    style={isActive ? documentPanelButtonActive : documentPanelButton}
+                  >
+                    <span style={isActive ? documentPanelIndexActive : documentPanelIndex}>{index + 1}</span>
+                    <span style={documentPanelText}>
+                      <span style={documentPanelTitle}>{panel.title}</span>
+                      <span style={documentPanelDescription}>{panel.description}</span>
+                      <span style={documentPanelMeta}>{panel.meta}</span>
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </aside>
+
+          <div style={documentPanelBody}>
+          {activePanel === "header" && (
+          <Section title="Date document">
             {isMobileViewport ? (
               <div style={mobileHeaderStack}>
                 <div style={mobileHeaderHeroCard}>
@@ -1579,8 +1626,10 @@ export default function NirPage() {
               </Field>
             </div>
           </Section>
+          )}
 
-          <Section title="Sumar receptie">
+          {activePanel === "summary" && (
+          <Section title="Verificare document">
             <div style={totalsGrid}>
               <Card title="Linii document" value={String(lines.length)} />
               <Card title="Produse valide" value={String(uniqueProductsCount)} />
@@ -1597,7 +1646,9 @@ export default function NirPage() {
               </div>
             )}
           </Section>
+          )}
 
+          {activePanel === "lines" && (
           <Section title="Produse receptionate">
             <div style={toolbarRow}>
               <div>
@@ -1945,8 +1996,10 @@ export default function NirPage() {
               </div>
             )}
           </Section>
+          )}
 
-          <Section title="Totaluri">
+          {activePanel === "summary" && (
+          <Section title="Totaluri finale">
             <div style={totalsGrid}>
               <Card title={`Net ${header.currency}`} value={`${formatNumber(totals.netFc)} ${header.currency}`} />
               <Card title={`TVA ${header.currency}`} value={`${formatNumber(totals.vatFc)} ${header.currency}`} />
@@ -1962,7 +2015,9 @@ export default function NirPage() {
               )}
             </div>
           </Section>
-        </>
+          )}
+          </div>
+        </div>
       )}
 
       {lineEditorOpen && lineDraft && (
@@ -2519,6 +2574,129 @@ const mobileHeaderCardGrid: CSSProperties = {
   display: "flex",
   flexDirection: "column",
   gap: 10,
+}
+
+const documentWorkspace: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "260px minmax(0, 1fr)",
+  gap: 12,
+  alignItems: "start",
+}
+
+const documentWorkspaceMobile: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 12,
+}
+
+const documentPanelNav: CSSProperties = {
+  position: "sticky",
+  top: 76,
+  display: "flex",
+  flexDirection: "column",
+  gap: 10,
+  padding: 12,
+  borderRadius: 8,
+  border: "1px solid #e2e8f0",
+  background: "#fff",
+  boxShadow: "0 1px 2px rgba(15,23,42,0.04)",
+}
+
+const documentPanelNavMobile: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 10,
+  padding: 10,
+  borderRadius: 8,
+  border: "1px solid #e2e8f0",
+  background: "#fff",
+  boxShadow: "0 1px 2px rgba(15,23,42,0.04)",
+}
+
+const documentPanelNavTitle: CSSProperties = {
+  fontSize: 11,
+  fontWeight: 800,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: 0.8,
+}
+
+const documentPanelNavList: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+}
+
+const documentPanelButton: CSSProperties = {
+  display: "flex",
+  gap: 10,
+  width: "100%",
+  padding: 10,
+  borderRadius: 8,
+  border: "1px solid transparent",
+  background: "transparent",
+  color: "#334155",
+  textAlign: "left",
+  cursor: "pointer",
+}
+
+const documentPanelButtonActive: CSSProperties = {
+  ...documentPanelButton,
+  border: "1px solid #17324d",
+  background: "#17324d",
+  color: "#fff",
+  boxShadow: "0 8px 20px rgba(23,50,77,0.16)",
+}
+
+const documentPanelIndex: CSSProperties = {
+  width: 28,
+  height: 28,
+  borderRadius: 8,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  flexShrink: 0,
+  background: "#f1f5f9",
+  color: "#17324d",
+  fontSize: 12,
+  fontWeight: 800,
+}
+
+const documentPanelIndexActive: CSSProperties = {
+  ...documentPanelIndex,
+  background: "rgba(255,255,255,0.14)",
+  color: "#fff",
+}
+
+const documentPanelText: CSSProperties = {
+  minWidth: 0,
+  display: "flex",
+  flexDirection: "column",
+  gap: 3,
+}
+
+const documentPanelTitle: CSSProperties = {
+  fontSize: 13,
+  fontWeight: 800,
+}
+
+const documentPanelDescription: CSSProperties = {
+  fontSize: 12,
+  lineHeight: 1.3,
+  opacity: 0.78,
+}
+
+const documentPanelMeta: CSSProperties = {
+  fontSize: 11,
+  lineHeight: 1.3,
+  opacity: 0.68,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+}
+
+const documentPanelBody: CSSProperties = {
+  minWidth: 0,
 }
 
 const sectionWrap: CSSProperties = {

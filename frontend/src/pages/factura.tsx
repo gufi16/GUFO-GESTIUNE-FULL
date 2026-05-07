@@ -142,6 +142,7 @@ export default function FacturaPage() {
   const [quickCustomerSaving, setQuickCustomerSaving] = useState(false)
   const [quickCustomerError, setQuickCustomerError] = useState("")
   const [quickCustomerForm, setQuickCustomerForm] = useState(emptyQuickCustomer())
+  const [activePanel, setActivePanel] = useState<"header" | "lines" | "summary">("header")
 
   const [header, setHeader] = useState({
     locationId: getActiveLocationId(),
@@ -688,6 +689,26 @@ export default function FacturaPage() {
   const efacturaPrepared = ["PREPARED", "READY_TO_SEND", "SENT", "ACCEPTED"].includes(efacturaStatus)
   const efacturaCanSend = status === "ISSUED" && customerReadyForEfactura
   const efacturaDownloadId = extractDownloadId(efacturaInfo)
+  const invoicePanels = [
+    {
+      id: "header" as const,
+      title: "Date factura",
+      description: "Client, locatie, scadenta, moneda si observatii",
+      meta: header.customerName || customerSearch || "Client neales",
+    },
+    {
+      id: "lines" as const,
+      title: "Produse",
+      description: "Pozitii, cantitati, preturi, TVA si discount",
+      meta: `${computedLines.length} ${computedLines.length === 1 ? "linie" : "linii"}`,
+    },
+    {
+      id: "summary" as const,
+      title: "Verificare",
+      description: "Totaluri si status SPV/ANAF",
+      meta: formatMoneyRo(totals.grossFc + totals.sgrFc, header.currency),
+    },
+  ]
 
   return (
     <div className="space-y-3">
@@ -799,7 +820,43 @@ export default function FacturaPage() {
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {efacturaEnabled && efacturaInfo && efacturaStatus === "REJECTED" ? <InlineNotice>{efacturaInfo}</InlineNotice> : null}
 
-      {invoiceId && efacturaEnabled ? (
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[260px_minmax(0,1fr)]">
+        <aside className="rounded-[8px] border border-slate-200 bg-white p-3 shadow-sm shadow-slate-900/[0.03] xl:sticky xl:top-[76px]">
+          <div className="mb-2 text-[11px] font-extrabold uppercase tracking-[0.18em] text-slate-500">Etape factura</div>
+          <div className="space-y-1.5">
+            {invoicePanels.map((panel, index) => {
+              const isActive = activePanel === panel.id
+              return (
+                <button
+                  key={panel.id}
+                  type="button"
+                  onClick={() => setActivePanel(panel.id)}
+                  className={[
+                    "flex w-full gap-2.5 rounded-[8px] border px-2.5 py-2 text-left transition",
+                    isActive
+                      ? "border-[#17324D] bg-[#17324D] text-white shadow-sm shadow-[#17324D]/20"
+                      : "border-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-50",
+                  ].join(" ")}
+                >
+                  <span className={[
+                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] text-xs font-extrabold",
+                    isActive ? "bg-white/15 text-white" : "bg-slate-100 text-[#17324D]",
+                  ].join(" ")}>
+                    {index + 1}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-extrabold">{panel.title}</span>
+                    <span className="mt-0.5 block text-xs leading-4 opacity-75">{panel.description}</span>
+                    <span className="mt-1 block truncate text-[11px] opacity-65">{panel.meta}</span>
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </aside>
+
+        <div className="min-w-0">
+      {activePanel === "summary" && invoiceId && efacturaEnabled ? (
         <DocumentSection title="Detalii SPV">
           <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
             <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
@@ -822,6 +879,8 @@ export default function FacturaPage() {
         </DocumentSection>
       ) : null}
 
+      {activePanel === "header" ? (
+      <>
       <DocumentSection title="Antet factura">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           <DocumentField label="Locatie">
@@ -956,7 +1015,10 @@ export default function FacturaPage() {
           </div>
         </div>
       </DocumentSection>
+      </>
+      ) : null}
 
+      {activePanel === "lines" ? (
       <DocumentSection
         title="Linii factura"
         description="Pastrez acelasi flux simplu: cauti produsul, alegi rapid si completezi cantitatea, pretul, discountul si TVA-ul."
@@ -1068,7 +1130,9 @@ export default function FacturaPage() {
           </div>
         </div>
       </DocumentSection>
+      ) : null}
 
+      {activePanel === "summary" ? (
       <DocumentSection title="Totaluri" description="Vezi imediat discountul, netul, TVA-ul, SGR-ul si totalul final al documentului.">
         <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-6">
           <DocumentMetric title={`Discount ${header.currency}`} value={formatMoneyRo(totals.discountFc, header.currency)} tone="amber" />
@@ -1079,6 +1143,9 @@ export default function FacturaPage() {
           {header.currency !== "RON" ? <DocumentMetric title="Total RON" value={formatMoneyRo(totals.grossRon + totals.sgrRon, "RON")} tone="blue" /> : null}
         </div>
       </DocumentSection>
+      ) : null}
+        </div>
+      </div>
 
       {quickCustomerOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
