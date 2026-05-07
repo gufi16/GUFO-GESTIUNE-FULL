@@ -1684,10 +1684,7 @@ export default function TransferPage() {
                             </button>
                             <button type="button" onClick={sendETransport} disabled={!transferId || loadingDoc || eTransportBusy || !isPosted} className={documentButtonPrimaryClass}>
                               <Truck size={16} className="mr-2" />
-                              {eTransportBusy ? "Se trimite..." : "Trimite ANAF"}
-                            </button>
-                            <button type="button" onClick={generateETransportXml} disabled={!transferId || loadingDoc || eTransportBusy || !isPosted} className={documentButtonSecondaryClass}>
-                              Verificare date
+                              {eTransportBusy ? "Se trimite..." : "Trimite SPV"}
                             </button>
                             <details className="relative">
                               <summary className={`${documentButtonSecondaryClass} cursor-pointer list-none`}>
@@ -1758,8 +1755,8 @@ export default function TransferPage() {
 
                       {activeETransportPanel === "date" ? (
                         <DocumentSection title="Date notificare">
-                          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                            <div className="space-y-1">
+                          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                            <div className="space-y-1 xl:col-span-2">
                               <label className="block text-xs font-medium text-[#17324D]">Tip document transport</label>
                               <select
                                 value={header.eTransportTransportDocType}
@@ -1795,7 +1792,7 @@ export default function TransferPage() {
                                 disabled={eTransportFieldDisabled}
                               />
                             </div>
-                            <div className="space-y-1">
+                            <div className="space-y-1 xl:col-span-2">
                               <label className="block text-xs font-medium text-[#17324D]">Tip operatiune</label>
                               <select
                                 value={header.eTransportOperationType}
@@ -1848,7 +1845,7 @@ export default function TransferPage() {
                                 placeholder="Optional"
                               />
                             </div>
-                            <div className="space-y-1 md:col-span-2 xl:col-span-2">
+                            <div className="space-y-1 md:col-span-2 xl:col-span-3">
                               <label className="block text-xs font-medium text-[#17324D]">Observatii document</label>
                               <input
                                 value={header.eTransportTransportDocNotes}
@@ -1857,7 +1854,7 @@ export default function TransferPage() {
                                 disabled={eTransportFieldDisabled}
                               />
                             </div>
-                            <div className="space-y-1 md:col-span-2 xl:col-span-2">
+                            <div className="space-y-1 md:col-span-2 xl:col-span-3">
                               <label className="block text-xs font-medium text-[#17324D]">Informatii suplimentare</label>
                               <input
                                 value={header.eTransportExtraInfo}
@@ -1882,8 +1879,8 @@ export default function TransferPage() {
 
                       {activeETransportPanel === "parties" ? (
                         <DocumentSection title="Organizator si partener">
-                          <div className="grid gap-4 xl:grid-cols-2">
-                            <div className="rounded-[16px] border border-slate-200 bg-white p-4">
+                          <div className="grid gap-4 2xl:grid-cols-2">
+                            <div className="min-w-0 rounded-[16px] border border-slate-200 bg-white p-4">
                               <div className="mb-3 text-sm font-semibold text-slate-900">Organizator transport</div>
                               <div className="grid gap-3 md:grid-cols-2">
                                 {labelValue("Tara", "Romania")}
@@ -1892,7 +1889,7 @@ export default function TransferPage() {
                               </div>
                             </div>
 
-                            <div className="rounded-[16px] border border-slate-200 bg-white p-4">
+                            <div className="min-w-0 rounded-[16px] border border-slate-200 bg-white p-4">
                               <div className="mb-3 text-sm font-semibold text-slate-900">Partener comercial</div>
                               <div className="grid gap-3 md:grid-cols-2">
                                 <div className="space-y-1">
@@ -1938,8 +1935,8 @@ export default function TransferPage() {
 
                       {activeETransportPanel === "route" ? (
                         <DocumentSection title="Loc start si loc final traseu">
-                          <div className="grid gap-4 xl:grid-cols-2">
-                            <div className="space-y-3 rounded-[16px] border border-slate-200 bg-white p-4">
+                          <div className="grid gap-4 2xl:grid-cols-2">
+                            <div className="min-w-0 space-y-3 rounded-[16px] border border-slate-200 bg-white p-4">
                               <div className="text-sm font-semibold text-slate-900">Loc start</div>
                               <div className="grid gap-3 md:grid-cols-2">
                                 <div className="space-y-1">
@@ -2051,7 +2048,7 @@ export default function TransferPage() {
                               ) : null}
                             </div>
 
-                            <div className="space-y-3 rounded-[16px] border border-slate-200 bg-white p-4">
+                            <div className="min-w-0 space-y-3 rounded-[16px] border border-slate-200 bg-white p-4">
                               <div className="text-sm font-semibold text-slate-900">Loc final</div>
                               <div className="grid gap-3 md:grid-cols-2">
                                 <div className="space-y-1">
@@ -2231,9 +2228,6 @@ export default function TransferPage() {
                               {labelValue("Raspuns", header.eTransportUploadIndex ? "Disponibil dupa verificare" : "-")}
                             </div>
                             <div className="mt-3 flex flex-wrap gap-2">
-                              <button type="button" onClick={generateETransportXml} disabled={!transferId || loadingDoc || eTransportBusy || !isPosted} className={documentButtonSecondaryClass}>
-                                Verificare date
-                              </button>
                               <button type="button" onClick={checkETransportStatus} disabled={!transferId || loadingDoc || eTransportBusy || !header.eTransportUploadIndex} className={documentButtonSecondaryClass}>
                                 Verifica stare
                               </button>
