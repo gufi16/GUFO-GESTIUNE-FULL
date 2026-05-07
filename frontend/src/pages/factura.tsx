@@ -884,60 +884,52 @@ export default function FacturaPage() {
           </DocumentField>
         </div>
 
-        <div className="mt-3">
-          <DocumentField label="Observatii">
-            <textarea value={header.note} onChange={(e) => setHeader((prev) => ({ ...prev, note: e.target.value }))} rows={3} className={documentTextareaClass} placeholder="Poti nota aici detalii comerciale sau observatii pentru livrare." />
-          </DocumentField>
-        </div>
-      </DocumentSection>
+        <div className="mt-3 rounded-[8px] border border-slate-200 bg-slate-50 p-3">
+          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm font-semibold text-slate-900">Client</div>
+            <button type="button" onClick={openQuickCustomer} className={documentButtonSecondaryClass}>
+              <Plus size={16} className="mr-2" />
+              Adauga client
+            </button>
+          </div>
 
-      <DocumentSection
-        title="Client"
-        description="Scrii cateva litere, alegi clientul din nomenclator sau il adaugi rapid din fereastra mica."
-        actions={
-          <button type="button" onClick={openQuickCustomer} className={documentButtonSecondaryClass}>
-            <Plus size={16} className="mr-2" />
-            Adauga client
-          </button>
-        }
-      >
-        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.4fr_0.8fr]">
-          <div>
-            <DocumentField label="Client">
-              <div className="relative">
-                <UserRound className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                <input
-                  value={customerSearch}
-                  onChange={(e) => {
-                    const value = e.target.value
-                    setCustomerSearch(value)
-                    setCustomerChosen(false)
-                    setHeader((prev) => ({
-                      ...prev,
-                      customerId: "",
-                      customerName: value,
-                      customerCode: "",
-                      customerCif: "",
-                      customerRegNo: "",
-                      customerAddress: "",
-                      customerEmail: "",
-                      customerPhone: "",
-                    }))
-                  }}
-                  placeholder="Scrie numele clientului sau cateva litere..."
-                  className={`${documentInputClass} pl-9`}
-                />
-              </div>
-            </DocumentField>
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.4fr_0.8fr]">
+            <div>
+              <DocumentField label="Client">
+                <div className="relative">
+                  <UserRound className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                  <input
+                    value={customerSearch}
+                    onChange={(e) => {
+                      const value = e.target.value
+                      setCustomerSearch(value)
+                      setCustomerChosen(false)
+                      setHeader((prev) => ({
+                        ...prev,
+                        customerId: "",
+                        customerName: value,
+                        customerCode: "",
+                        customerCif: "",
+                        customerRegNo: "",
+                        customerAddress: "",
+                        customerEmail: "",
+                        customerPhone: "",
+                      }))
+                    }}
+                    placeholder="Scrie numele clientului sau cateva litere..."
+                    className={`${documentInputClass} pl-9`}
+                  />
+                </div>
+              </DocumentField>
 
             {!customerChosen && customerMatches(customerSearch).length ? (
-              <div className="mt-2 space-y-1.5 rounded-[16px] border border-slate-200 bg-slate-50 p-2.5">
+              <div className="mt-2 space-y-1.5 rounded-[8px] border border-slate-200 bg-white p-2.5">
                 {customerMatches(customerSearch).map((customer) => (
                   <button
                     key={customer.id}
                     type="button"
                     onClick={() => chooseCustomer(customer)}
-                    className="w-full rounded-[14px] border border-slate-200 bg-white px-3 py-2.5 text-left transition hover:border-slate-300 hover:bg-slate-50"
+                    className="w-full rounded-[8px] border border-slate-200 bg-slate-50 px-3 py-2.5 text-left transition hover:border-slate-300 hover:bg-white"
                   >
                     <div className="font-semibold text-slate-900">{customer.name}</div>
                     <div className="mt-0.5 text-[12px] text-slate-500">{[customer.code, customer.cif, customer.phone].filter(Boolean).join(" • ")}</div>
@@ -947,7 +939,7 @@ export default function FacturaPage() {
             ) : null}
           </div>
 
-          <div className="rounded-[18px] border border-blue-100 bg-gradient-to-br from-blue-50 via-white to-slate-50 p-3.5">
+          <div className="rounded-[8px] border border-slate-200 bg-white p-3">
             {header.customerName ? (
               <div className="space-y-2">
                 <div className="text-[15px] font-semibold text-slate-900">{header.customerName}</div>
@@ -958,7 +950,7 @@ export default function FacturaPage() {
                     {customerReadyForEfactura ? "e-Factura ok" : "date incomplete"}
                   </div>
                 ) : null}
-                <button type="button" onClick={clearCustomer} className="mt-2 inline-flex items-center rounded-[14px] border border-blue-200 bg-white px-3 py-1.5 text-[13px] font-semibold text-blue-700 transition hover:bg-blue-50">
+                <button type="button" onClick={clearCustomer} className="mt-2 inline-flex items-center rounded-[8px] border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-semibold text-slate-700 transition hover:bg-slate-50">
                   Schimba clientul
                 </button>
               </div>
@@ -966,6 +958,13 @@ export default function FacturaPage() {
               <div className="text-[13px] text-slate-500">-</div>
             )}
           </div>
+        </div>
+        </div>
+
+        <div className="mt-3">
+          <DocumentField label="Observatii">
+            <textarea value={header.note} onChange={(e) => setHeader((prev) => ({ ...prev, note: e.target.value }))} rows={3} className={documentTextareaClass} placeholder="Poti nota aici detalii comerciale sau observatii pentru livrare." />
+          </DocumentField>
         </div>
       </DocumentSection>
       </>
