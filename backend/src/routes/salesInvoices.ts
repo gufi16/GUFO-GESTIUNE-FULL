@@ -1174,7 +1174,37 @@ router.post("/api/v1/sales-invoices/:id/efactura/send", async (req: AuthedReques
   }
 
   try {
-    const uploadResult = await anafUploadXml(company, invoice.efacturaXmlText)
+    let xmlText = String(invoice.efacturaXmlText || "")
+    const isCreditNote = String(invoice.invoiceTypeCode || "") === "381" || toNumber(invoice.totalGrossFc) < 0
+    const hasLegacyInvoiceXml = /<Invoice[\s>]/.test(xmlText) && !/<CreditNote[\s>]/.test(xmlText)
+
+    if (isCreditNote && hasLegacyInvoiceXml) {
+      const fullCompany = await resolveTenantCompany(prisma, tenantId, req.auth?.activeCompanyId)
+      const validation = validateInvoiceForEFactura(invoice, fullCompany)
+      if (!validation.ok) {
+        const errorText = validation.errors.map((issue) => issue.message).join(" ")
+        return res.status(400).json({
+          ok: false,
+          error: errorText || "Factura storno nu a trecut validarea locala pentru e-Factura.",
+          validation,
+        })
+      }
+
+      xmlText = generateInvoiceEFacturaXml(invoice, fullCompany)
+      await prisma.salesInvoice.update({
+        where: { id },
+        data: {
+          efacturaStatus: "PREPARED",
+          efacturaXmlText: xmlText,
+          efacturaErrorText: validation.warnings.map((issue) => issue.message).join(" ") || null,
+          efacturaPreparedAt: new Date(),
+          efacturaValidatedAt: new Date(),
+          efacturaLastCheckAt: new Date(),
+        },
+      })
+    }
+
+    const uploadResult = await anafUploadXml(company, xmlText)
     const uploadIndex = uploadResult.uploadIndex
     const summary = uploadResult.summary
 
