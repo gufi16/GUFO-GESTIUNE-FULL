@@ -16,7 +16,9 @@ import {
   Factory,
   ClipboardList,
   FileText,
+  Tags,
   Truck,
+  TriangleAlert,
 } from "lucide-react"
 import PageHeader from "../components/PageHeader"
 import { DocumentMetric, InlineNotice, documentInputClass } from "../components/DocumentUi"
@@ -447,7 +449,7 @@ export default function Documente() {
               ? "minutes"
               : searchParams.get("tab") === "transfer"
                 ? "transfer"
-          : "consumption"
+          : "invoice"
   ) as ActiveTab
   const token =
     getToken() || ""
@@ -1734,6 +1736,13 @@ export default function Documente() {
             },
           ]
 
+  const documentTypeButtonClass = (active: boolean) =>
+    `inline-flex h-10 items-center gap-2 rounded-[14px] px-3 text-[13px] font-semibold transition ${
+      active
+        ? "bg-slate-900 text-white"
+        : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+    }`
+
   return (
     <div className="space-y-3">
       <PageHeader
@@ -1744,91 +1753,62 @@ export default function Documente() {
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          onClick={() => setActiveTab("consumption")}
-          className={`inline-flex items-center gap-1.5 rounded-[14px] px-3 py-1.5 text-[13px] font-semibold transition ${
-            activeTab === "consumption"
-              ? "bg-slate-900 text-white"
-              : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-          }`}
-        >
-          <Repeat2 size={15} />
-          Bonuri de consum
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("production")}
-          className={`inline-flex items-center gap-1.5 rounded-[14px] px-3 py-1.5 text-[13px] font-semibold transition ${
-            activeTab === "production"
-              ? "bg-slate-900 text-white"
-              : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-          }`}
-        >
-          <Factory size={15} />
-                Productie
-        </button>
-
-        <button
-          type="button"
           onClick={() => setActiveTab("invoice")}
-          className={`inline-flex items-center gap-1.5 rounded-[14px] px-3 py-1.5 text-[13px] font-semibold transition ${
-            activeTab === "invoice"
-              ? "bg-slate-900 text-white"
-              : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-          }`}
+          className={documentTypeButtonClass(activeTab === "invoice")}
         >
           <FileText size={15} />
-          Facturi
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("inventory")}
-          className={`inline-flex items-center gap-1.5 rounded-[14px] px-3 py-1.5 text-[13px] font-semibold transition ${
-            activeTab === "inventory"
-              ? "bg-slate-900 text-white"
-              : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-          }`}
-        >
-          <ClipboardList size={15} />
-          Inventare
+          Factura
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab("receipt")}
-          className={`inline-flex items-center gap-1.5 rounded-[14px] px-3 py-1.5 text-[13px] font-semibold transition ${
-            activeTab === "receipt"
-              ? "bg-slate-900 text-white"
-              : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-          }`}
+          className={documentTypeButtonClass(activeTab === "receipt")}
         >
           <PackageSearch size={15} />
-                Note de receptie
+          Nota de receptie
         </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("consumption")}
+          className={documentTypeButtonClass(activeTab === "consumption")}
+        >
+          <Repeat2 size={15} />
+          Bon de consum
+        </button>
+
         <button
           type="button"
           onClick={() => setActiveTab("transfer")}
-          className={`inline-flex items-center gap-1.5 rounded-[14px] px-3 py-1.5 text-[13px] font-semibold transition ${
-            activeTab === "transfer"
-              ? "bg-slate-900 text-white"
-              : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-          }`}
+          className={documentTypeButtonClass(activeTab === "transfer")}
         >
           <Truck size={15} />
-          Transferuri
+          Transfer intre gestiuni
         </button>
+
         <button
           type="button"
-          onClick={() => setActiveTab("minutes")}
-          className={`inline-flex items-center gap-1.5 rounded-[14px] px-3 py-1.5 text-[13px] font-semibold transition ${
-            activeTab === "minutes"
-              ? "bg-slate-900 text-white"
-              : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-          }`}
+          onClick={() => {
+            setActiveTab("minutes")
+            setMinutesFilter("DETERIORATION")
+          }}
+          className={documentTypeButtonClass(activeTab === "minutes" && minutesFilter === "DETERIORATION")}
         >
-          <FileText size={15} />
-          Procese verbale
+          <TriangleAlert size={15} />
+          PV deteriorare
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab("minutes")
+            setMinutesFilter("PRICE_CHANGE")
+          }}
+          className={documentTypeButtonClass(activeTab === "minutes" && minutesFilter === "PRICE_CHANGE")}
+        >
+          <Tags size={15} />
+          PV schimbare pret
         </button>
 
       </div>
@@ -1872,6 +1852,8 @@ export default function Documente() {
                   loadReceiptDocs()
                 } else if (activeTab === "minutes") {
                   loadMinutesDocs()
+                } else if (activeTab === "transfer") {
+                  loadTransferDocs()
                 } else {
                   loadInventoryDocs()
                 }

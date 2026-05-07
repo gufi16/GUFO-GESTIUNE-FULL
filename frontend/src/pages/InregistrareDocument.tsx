@@ -1,4 +1,4 @@
-﻿import { FilePlus2, PackageMinus, PackagePlus, ReceiptText, ScrollText, Tags, TriangleAlert } from "lucide-react"
+import { FilePlus2, PackageMinus, ReceiptText, ScrollText, Tags, TriangleAlert } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import PageHeader from "../components/PageHeader"
 
@@ -10,15 +10,15 @@ const cards: Array<{
   disabled?: boolean
 }> = [
   {
-    title: "Nota de receptie",
-    path: "/inregistrare-document/nir/new",
-    icon: ReceiptText,
+    title: "Factura",
+    path: "/inregistrare-document/factura/new",
+    icon: ScrollText,
     tone: "bg-slate-100 text-slate-700",
   },
   {
-    title: "Inventar",
-    path: "/inregistrare-document/inventar/new",
-    icon: PackagePlus,
+    title: "Nota de receptie",
+    path: "/inregistrare-document/nir/new",
+    icon: ReceiptText,
     tone: "bg-slate-100 text-slate-700",
   },
   {
@@ -31,12 +31,6 @@ const cards: Array<{
     title: "Transfer intre gestiuni",
     path: "/transfer/new",
     icon: FilePlus2,
-    tone: "bg-slate-100 text-slate-700",
-  },
-  {
-    title: "Factura",
-    path: "/inregistrare-document/factura/new",
-    icon: ScrollText,
     tone: "bg-slate-100 text-slate-700",
   },
   {
@@ -60,7 +54,7 @@ export default function InregistrareDocument() {
     <div className="space-y-6">
       <PageHeader badge="operatiuni" title="Inregistrare documente" />
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className="flex flex-wrap gap-2">
         {cards.map((card) => {
           const Icon = card.icon
           const disabled = !!card.disabled
@@ -72,18 +66,14 @@ export default function InregistrareDocument() {
               disabled={disabled}
               onClick={() => !disabled && navigate(card.path)}
               className={[
-                "rounded-2xl border border-slate-200 bg-white p-3.5 text-left shadow-sm transition",
-                disabled
-                  ? "cursor-not-allowed opacity-70"
-                  : "hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md",
+                "inline-flex h-10 items-center gap-2 rounded-[14px] border border-slate-200 bg-white px-3 text-[13px] font-semibold text-slate-700 shadow-sm transition",
+                disabled ? "cursor-not-allowed opacity-70" : "hover:border-slate-300 hover:bg-slate-50",
               ].join(" ")}
             >
-              <span className={`mb-3 flex h-10 w-10 items-center justify-center rounded-xl ${card.tone}`}>
-                <Icon size={20} />
+              <span className={`flex h-7 w-7 items-center justify-center rounded-[10px] ${card.tone}`}>
+                <Icon size={15} />
               </span>
-
-              <div className="text-base font-semibold text-slate-900">{card.title}</div>
-              {disabled ? <div className="mt-3 text-xs font-semibold text-slate-400">In curand</div> : null}
+              {card.title}
             </button>
           )
         })}
@@ -91,5 +81,3 @@ export default function InregistrareDocument() {
     </div>
   )
 }
-
-
