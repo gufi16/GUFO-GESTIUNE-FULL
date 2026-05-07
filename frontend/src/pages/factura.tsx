@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from "react"
 import { ArrowUpToLine, Building2, ChevronDown, FileOutput, Plus, ReceiptText, RefreshCw, RotateCcw, Send, UserRound, X } from "lucide-react"
+import { useNavigate } from "react-router-dom"
 import {
   DocumentField,
   DocumentMetric,
+  DocumentPageHeader,
   DocumentSection,
   DocumentStatusPill,
+  DocumentTabs,
   InlineNotice,
   documentButtonDangerClass,
   documentButtonPrimaryClass,
@@ -109,6 +112,7 @@ const invoiceLineInputClass =
   "h-10 w-full rounded-[12px] border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-[#17324D] focus:ring-2 focus:ring-[#17324D]/10"
 
 export default function FacturaPage() {
+  const navigate = useNavigate()
   const efacturaEnabled = hasModule("efactura")
   const token = rawToken()
   const invoiceId = getInvoiceIdFromUrl()
@@ -729,18 +733,17 @@ export default function FacturaPage() {
 
   return (
     <div className="space-y-3">
-      <div className="rounded-[8px] border border-slate-200 bg-white px-4 py-3 shadow-sm shadow-slate-900/[0.03]">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-600">
-              Operatiuni
-            </div>
-            <h1 className="mt-1 text-[22px] font-semibold tracking-tight text-[#17324D]">
-              {invoiceId ? "Editare factura" : "Factura noua"}
-            </h1>
-          </div>
-
-          <div className="flex flex-wrap justify-end gap-2">
+      <DocumentPageHeader
+        title={invoiceId ? "Editare factura" : "Factura noua"}
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={() => navigate(invoiceId ? "/documente?tab=invoice" : "/inregistrare-document")}
+              className={documentButtonSecondaryClass}
+            >
+              Inapoi
+            </button>
             {invoiceId ? (
               <button type="button" onClick={printInvoicePdf} className={documentButtonSecondaryClass}>
                 <FileOutput size={16} className="mr-2" />
@@ -769,11 +772,12 @@ export default function FacturaPage() {
                 {efacturaBusy ? "Se trimite..." : "Trimite ANAF"}
               </button>
             ) : null}
-          </div>
-        </div>
-
-        {invoiceId && efacturaEnabled ? (
-          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+          </>
+        }
+      />
+      {invoiceId && efacturaEnabled ? (
+        <div className="rounded-[8px] border border-slate-200 bg-white px-4 py-3 shadow-sm shadow-slate-900/[0.03]">
+          <div className="flex flex-wrap items-center gap-2">
             <button type="button" onClick={checkEfacturaStatus} className={documentButtonSecondaryClass} disabled={efacturaBusy || !efacturaUploadIndex}>
               <RefreshCw size={16} className="mr-2" />
               Verifica stare
@@ -809,8 +813,8 @@ export default function FacturaPage() {
               <span className="text-xs font-medium text-amber-700">Completeaza adresa, orasul, judetul si tara clientului inainte de trimiterea SPV.</span>
             ) : null}
           </div>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
       {loadingMeta ? <InlineNotice>Se incarca nomenclatoarele pentru factura.</InlineNotice> : null}
       {loadingInvoice ? <InlineNotice>Se incarca factura selectata.</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
@@ -818,32 +822,7 @@ export default function FacturaPage() {
       {efacturaEnabled && efacturaInfo && efacturaStatus === "REJECTED" ? <InlineNotice>{efacturaInfo}</InlineNotice> : null}
 
       <div className="space-y-3">
-        <div className="flex flex-wrap gap-2 rounded-[8px] border border-slate-200 bg-white p-2 shadow-sm shadow-slate-900/[0.03]">
-            {invoicePanels.map((panel, index) => {
-              const isActive = activePanel === panel.id
-              return (
-                <button
-                  key={panel.id}
-                  type="button"
-                  onClick={() => setActivePanel(panel.id)}
-                  className={[
-                    "inline-flex items-center gap-2 rounded-[8px] border px-3 py-2 text-sm font-extrabold transition",
-                    isActive
-                      ? "border-[#17324D] bg-[#17324D] text-white shadow-sm shadow-[#17324D]/20"
-                      : "border-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-50",
-                  ].join(" ")}
-                >
-                  <span className={[
-                    "flex h-6 w-6 shrink-0 items-center justify-center rounded-[8px] text-xs font-extrabold",
-                    isActive ? "bg-white/15 text-white" : "bg-slate-100 text-[#17324D]",
-                  ].join(" ")}>
-                    {index + 1}
-                  </span>
-                  {panel.title}
-                </button>
-              )
-            })}
-        </div>
+        <DocumentTabs items={invoicePanels} activeId={activePanel} onChange={setActivePanel} />
 
         <div className="min-w-0">
       {activePanel === "summary" && invoiceId && efacturaEnabled ? (

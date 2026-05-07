@@ -4,7 +4,9 @@ import { useNavigate } from "react-router-dom"
 import {
   DocumentField,
   DocumentMetric,
+  DocumentPageHeader,
   DocumentSection,
+  DocumentTabs,
   InlineNotice,
   documentButtonDangerClass,
   documentButtonPrimaryClass,
@@ -299,16 +301,10 @@ export default function BonConsumNou() {
 
   return (
     <div className="w-full space-y-3">
-      <div className="rounded-[8px] border border-slate-200 bg-white px-4 py-3 shadow-sm shadow-slate-900/[0.03]">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-600">
-              Operatiuni
-            </div>
-            <h1 className="mt-1 text-[22px] font-semibold tracking-tight text-[#17324D]">Bon de consum</h1>
-          </div>
-
-          <div className="flex flex-wrap justify-end gap-2">
+      <DocumentPageHeader
+        title="Bon de consum"
+        actions={
+          <>
             <button type="button" onClick={() => navigate("/inregistrare-document")} className={documentButtonSecondaryClass}>
               <ArrowLeft size={16} className="mr-2" />
               Inapoi
@@ -317,36 +313,14 @@ export default function BonConsumNou() {
               <Check size={16} className="mr-2" />
               {saving ? "Se salveaza..." : "Finalizeaza"}
             </button>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
 
-      <div className="rounded-[8px] border border-slate-200 bg-white p-2 shadow-sm shadow-slate-900/[0.03]">
-        <div className="flex flex-wrap gap-2">
-          {panels.map((panel, index) => {
-            const isActive = activePanel === panel.key
-            return (
-              <button
-                key={panel.key}
-                type="button"
-                onClick={() => setActivePanel(panel.key)}
-                className={[
-                  "inline-flex h-10 items-center gap-2 rounded-[8px] px-3 text-sm font-semibold transition",
-                  isActive ? "bg-[#17324D] text-white" : "bg-slate-50 text-[#17324D] hover:bg-slate-100",
-                ].join(" ")}
-              >
-                <span className={["inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold", isActive ? "bg-white/15 text-white" : "bg-slate-100 text-[#17324D]"].join(" ")}>
-                  {index + 1}
-                </span>
-                {panel.title}
-              </button>
-            )
-          })}
-        </div>
-      </div>
+      <DocumentTabs items={panels.map((panel) => ({ id: panel.key, title: panel.title }))} activeId={activePanel} onChange={setActivePanel} />
 
       {activePanel === "produse" ? (
         <div className="space-y-3">

@@ -1,5 +1,8 @@
 ﻿import { useEffect, useMemo, useState } from "react"
 import type { CSSProperties, KeyboardEvent, ReactNode } from "react"
+import { ArrowLeft, FileOutput, Printer } from "lucide-react"
+import { useNavigate } from "react-router-dom"
+import { DocumentPageHeader, DocumentTabs, documentButtonPrimaryClass, documentButtonSecondaryClass } from "../components/DocumentUi"
 import { API_BASE, getToken } from "../lib/api"
 import { getActiveLocationId, setActiveLocationId, subscribeToActiveLocation } from "../lib/location"
 import { downloadPdfFile } from "../lib/pdf"
@@ -169,6 +172,7 @@ function getLineComputed(line: NirLine, fxRate: string) {
 }
 
 export default function NirPage() {
+  const navigate = useNavigate()
   const token = rawToken()
   const receiptId = getReceiptIdFromUrl()
   const incomingInvoiceId = getIncomingInvoiceIdFromUrl()
@@ -1149,43 +1153,31 @@ export default function NirPage() {
 
   return (
     <div style={pageWrap}>
-      <div className="no-print" style={documentTopBar}>
-        <div>
-          <div style={documentTopBadge}>Operatiuni</div>
-          <h1 style={documentTopTitle}>{pageTitle}</h1>
-        </div>
-
-        <div style={isMobileViewport ? documentTopActionsMobile : documentTopActions}>
-          <a href="/inregistrare-document/nir" style={{ textDecoration: "none" }}>
-            <button style={isMobileViewport ? btnGhostMobile : btnSecondary}>Inapoi</button>
-          </a>
-
-          <button
-            style={isMobileViewport ? btnGhostMobile : btnSecondary}
-            onClick={handlePrint}
-            disabled={!receiptId || loadingReceipt}
-          >
-            Print
-          </button>
-
-          <button
-            style={isMobileViewport ? btnGhostMobile : btnSecondary}
-            onClick={exportPdf}
-            disabled={!receiptId || loadingReceipt}
-          >
-            PDF
-          </button>
-
-          {!isPosted && (
-            <button
-              style={isMobileViewport ? { ...btnPrimary, width: "100%" } : btnPrimary}
-              onClick={() => saveNir(false)}
-              disabled={saving || loadingReceipt}
-            >
-              {saving ? "Se salveaza..." : "Finalizeaza"}
-            </button>
-          )}
-        </div>
+      <div className="no-print">
+        <DocumentPageHeader
+          title={pageTitle}
+          actions={
+            <>
+              <button type="button" onClick={() => navigate(receiptId ? "/documente?tab=receipt" : "/inregistrare-document")} className={documentButtonSecondaryClass}>
+                <ArrowLeft size={16} className="mr-2" />
+                Inapoi
+              </button>
+              <button type="button" onClick={handlePrint} disabled={!receiptId || loadingReceipt} className={documentButtonSecondaryClass}>
+                <Printer size={16} className="mr-2" />
+                Print
+              </button>
+              <button type="button" onClick={exportPdf} disabled={!receiptId || loadingReceipt} className={documentButtonSecondaryClass}>
+                <FileOutput size={16} className="mr-2" />
+                PDF
+              </button>
+              {!isPosted && (
+                <button type="button" onClick={() => saveNir(false)} disabled={saving || loadingReceipt} className={documentButtonPrimaryClass}>
+                  {saving ? "Se salveaza..." : "Finalizeaza"}
+                </button>
+              )}
+            </>
+          }
+        />
       </div>
 
       {status && (
@@ -1206,21 +1198,8 @@ export default function NirPage() {
         <div style={infoBox}>Se incarca documentul...</div>
       ) : (
         <div style={documentWorkspace}>
-          <div style={documentTabs}>
-              {documentPanels.map((panel, index) => {
-                const isActive = activePanel === panel.id
-                return (
-                  <button
-                    key={panel.id}
-                    type="button"
-                    onClick={() => setActivePanel(panel.id)}
-                    style={isActive ? documentTabActive : documentTab}
-                  >
-                    <span style={isActive ? documentTabIndexActive : documentTabIndex}>{index + 1}</span>
-                    {panel.title}
-                  </button>
-                )
-              })}
+          <div className="no-print">
+            <DocumentTabs items={documentPanels} activeId={activePanel} onChange={setActivePanel} />
           </div>
 
           <div style={documentPanelBody}>
