@@ -1176,9 +1176,12 @@ router.post("/api/v1/sales-invoices/:id/efactura/send", async (req: AuthedReques
   try {
     let xmlText = String(invoice.efacturaXmlText || "")
     const isCreditNote = String(invoice.invoiceTypeCode || "") === "381" || toNumber(invoice.totalGrossFc) < 0
-    const hasLegacyInvoiceXml = /<Invoice[\s>]/.test(xmlText) && !/<CreditNote[\s>]/.test(xmlText)
+    const hasStaleStornoXml =
+      /<CreditNote[\s>]/.test(xmlText) ||
+      /<cbc:CreditNoteTypeCode>/.test(xmlText) ||
+      /<cbc:InvoiceTypeCode>\s*381\s*<\/cbc:InvoiceTypeCode>/.test(xmlText)
 
-    if (isCreditNote && hasLegacyInvoiceXml) {
+    if (isCreditNote && hasStaleStornoXml) {
       const fullCompany = await resolveTenantCompany(prisma, tenantId, req.auth?.activeCompanyId)
       const validation = validateInvoiceForEFactura(invoice, fullCompany)
       if (!validation.ok) {

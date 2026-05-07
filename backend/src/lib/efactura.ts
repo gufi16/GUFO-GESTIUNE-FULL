@@ -61,13 +61,13 @@ function effectiveUnitPrice(line: any) {
   return toNumber(line?.lineNetFc) / qty
 }
 
-function creditNoteUnitPrice(line: any) {
+function stornoUnitPrice(line: any) {
   const qty = Math.abs(toNumber(line?.qty))
   if (qty <= 0) return Math.abs(toNumber(line?.unitPriceFc))
   return Math.abs(toNumber(line?.lineNetFc)) / qty
 }
 
-function resolveCreditNoteSourceDocNo(invoice: any) {
+function resolveStornoSourceDocNo(invoice: any) {
   const explicit = invoice?.sourceDocNo || invoice?.stornoSourceDocNo || invoice?.sourceInvoice?.docNo
   if (explicit) return String(explicit).trim()
   const match = String(invoice?.note || "").match(/Factura storno pentru\s+([^\r\n]+)/i)
@@ -414,34 +414,25 @@ export function generateInvoiceEFacturaXml(invoice: any, company: any) {
   const supplierLegalId = normalizeLegalId(company?.cui)
   const buyerLegalId = normalizeLegalId(invoice?.customerCif)
   const requestedInvoiceTypeCode = String(invoice?.invoiceTypeCode || "").trim()
-  const isCreditNote = requestedInvoiceTypeCode === "381" || toNumber(invoice?.totalGrossFc) < 0
-  const invoiceTypeCode = isCreditNote ? "381" : requestedInvoiceTypeCode || "380"
-  const rootElement = isCreditNote ? "CreditNote" : "Invoice"
-  const rootNamespace = isCreditNote
-    ? "urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2"
-    : "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
-  const typeCodeElement = isCreditNote ? "CreditNoteTypeCode" : "InvoiceTypeCode"
-  const lineElement = isCreditNote ? "CreditNoteLine" : "InvoiceLine"
-  const quantityElement = isCreditNote ? "CreditedQuantity" : "InvoicedQuantity"
-  const amountValue = (value: unknown) => (isCreditNote ? Math.abs(toNumber(value)) : toNumber(value))
-  const quantityValue = (value: unknown) => (isCreditNote ? Math.abs(toNumber(value)) : toNumber(value))
-  const sourceDocNo = isCreditNote ? resolveCreditNoteSourceDocNo(invoice) : ""
+  const isStorno = requestedInvoiceTypeCode === "381" || toNumber(invoice?.totalGrossFc) < 0
+  const invoiceTypeCode = isStorno ? "380" : requestedInvoiceTypeCode || "380"
+  const sourceDocNo = isStorno ? resolveStornoSourceDocNo(invoice) : ""
   const endpointSchemeId = "9947"
   const expandedLines = expandInvoiceLinesForEfactura(invoice)
   const legalLineExtensionAmount =
-    amountValue(toNumber(invoice?.totalNetFc) + toNumber(invoice?.totalSgrFc))
+    toNumber(invoice?.totalNetFc) + toNumber(invoice?.totalSgrFc)
   const legalTaxExclusiveAmount =
-    amountValue(toNumber(invoice?.totalNetFc) + toNumber(invoice?.totalSgrFc))
+    toNumber(invoice?.totalNetFc) + toNumber(invoice?.totalSgrFc)
   const legalTaxInclusiveAmount =
-    legalTaxExclusiveAmount + amountValue(invoice?.totalVatFc)
+    legalTaxExclusiveAmount + toNumber(invoice?.totalVatFc)
 
   const taxSubtotals = new Map<string, { taxable: number; tax: number; percent: number }>()
   for (const line of expandedLines) {
     const percent = toNumber(line?.vatRateValue)
     const key = `${normalizeVatCategory(line)}:${percent}`
     const current = taxSubtotals.get(key) || { taxable: 0, tax: 0, percent }
-    current.taxable += amountValue(line?.lineNetFc)
-    current.tax += amountValue(line?.lineVatFc)
+    current.taxable += toNumber(line?.lineNetFc)
+    current.tax += toNumber(line?.lineVatFc)
     taxSubtotals.set(key, current)
   }
 
@@ -466,10 +457,10 @@ export function generateInvoiceEFacturaXml(invoice: any, company: any) {
     .map((line: any, index: number) => {
       const category = normalizeVatCategory(line)
       return [
-        `<cac:${lineElement}>`,
+        "<cac:InvoiceLine>",
         `<cbc:ID>${index + 1}</cbc:ID>`,
-        `<cbc:${quantityElement} unitCode="${xmlEscape(normalizeUomCode(resolveInvoiceLineUomCode(line)))}">${decimal(quantityValue(line?.qty), 3)}</cbc:${quantityElement}>`,
-        `<cbc:LineExtensionAmount currencyID="${xmlEscape(currency)}">${decimal(amountValue(line?.lineNetFc))}</cbc:LineExtensionAmount>`,
+        `<cbc:InvoicedQuantity unitCode="${xmlEscape(normalizeUomCode(resolveInvoiceLineUomCode(line)))}">${decimal(line?.qty, 3)}</cbc:InvoicedQuantity>`,
+        `<cbc:LineExtensionAmount currencyID="${xmlEscape(currency)}">${decimal(line?.lineNetFc)}</cbc:LineExtensionAmount>`,
         "<cac:Item>",
         `<cbc:Name>${xmlEscape(line?.productName || "")}</cbc:Name>`,
         line?.productCode ? `<cac:SellersItemIdentification><cbc:ID>${xmlEscape(line.productCode)}</cbc:ID></cac:SellersItemIdentification>` : "",
@@ -480,23 +471,23 @@ export function generateInvoiceEFacturaXml(invoice: any, company: any) {
         "</cac:ClassifiedTaxCategory>",
         "</cac:Item>",
         "<cac:Price>",
-        `<cbc:PriceAmount currencyID="${xmlEscape(currency)}">${decimal(isCreditNote ? creditNoteUnitPrice(line) : effectiveUnitPrice(line))}</cbc:PriceAmount>`,
+        `<cbc:PriceAmount currencyID="${xmlEscape(currency)}">${decimal(isStorno ? stornoUnitPrice(line) : effectiveUnitPrice(line))}</cbc:PriceAmount>`,
         "</cac:Price>",
-        `</cac:${lineElement}>`,
+        "</cac:InvoiceLine>",
       ].join("")
     })
     .join("")
 
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
-    `<${rootElement} xmlns="${rootNamespace}" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">`,
+    '<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">',
     `<cbc:CustomizationID>urn:cen.eu:en16931:2017#compliant#urn:efactura.mfinante.ro:CIUS-RO:1.0.1</cbc:CustomizationID>`,
     `<cbc:ID>${xmlEscape(invoice?.docNo || "")}</cbc:ID>`,
     `<cbc:IssueDate>${xmlEscape(issueDate)}</cbc:IssueDate>`,
-    dueDate && !isCreditNote ? `<cbc:DueDate>${xmlEscape(dueDate)}</cbc:DueDate>` : "",
-    `<cbc:${typeCodeElement}>${xmlEscape(invoiceTypeCode)}</cbc:${typeCodeElement}>`,
+    dueDate ? `<cbc:DueDate>${xmlEscape(dueDate)}</cbc:DueDate>` : "",
+    `<cbc:InvoiceTypeCode>${xmlEscape(invoiceTypeCode)}</cbc:InvoiceTypeCode>`,
     `<cbc:DocumentCurrencyCode>${xmlEscape(currency)}</cbc:DocumentCurrencyCode>`,
-    isCreditNote && sourceDocNo
+    isStorno && sourceDocNo
       ? `<cac:BillingReference><cac:InvoiceDocumentReference><cbc:ID>${xmlEscape(sourceDocNo)}</cbc:ID></cac:InvoiceDocumentReference></cac:BillingReference>`
       : "",
     "<cac:AccountingSupplierParty><cac:Party>",
@@ -528,7 +519,7 @@ export function generateInvoiceEFacturaXml(invoice: any, company: any) {
     `<cac:PartyLegalEntity><cbc:RegistrationName>${xmlEscape(invoice?.customerName || "")}</cbc:RegistrationName></cac:PartyLegalEntity>`,
     "</cac:Party></cac:AccountingCustomerParty>",
     "<cac:TaxTotal>",
-    `<cbc:TaxAmount currencyID="${xmlEscape(currency)}">${decimal(amountValue(invoice?.totalVatFc))}</cbc:TaxAmount>`,
+    `<cbc:TaxAmount currencyID="${xmlEscape(currency)}">${decimal(invoice?.totalVatFc)}</cbc:TaxAmount>`,
     taxSubtotalXml,
     "</cac:TaxTotal>",
     "<cac:LegalMonetaryTotal>",
@@ -538,6 +529,6 @@ export function generateInvoiceEFacturaXml(invoice: any, company: any) {
     `<cbc:PayableAmount currencyID="${xmlEscape(currency)}">${decimal(legalTaxInclusiveAmount)}</cbc:PayableAmount>`,
     "</cac:LegalMonetaryTotal>",
     lineXml,
-    `</${rootElement}>`,
+    "</Invoice>",
   ].join("")
 }
