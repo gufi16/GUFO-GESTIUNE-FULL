@@ -178,7 +178,9 @@ function getEtransportBaseUrls(environment: string | null | undefined) {
 }
 
 function isTlsHandshakeError(error: unknown) {
-  return /SSL\/TLS|handshake/i.test(String((error as any)?.message || ""))
+  return /SSL\/TLS|EPROTO|ECONNRESET|handshake|tls alert|SSL routines|wrong version number/i.test(
+    String((error as any)?.message || "")
+  )
 }
 
 function isEtransportSchemaDeclarationError(summary: unknown, rawText: unknown) {
@@ -236,6 +238,50 @@ async function anafEtransportRequest(
   }
 
   throw lastError || new Error("Nu am putut comunica cu ANAF pentru RO e-Transport.")
+}
+
+async function anafEfacturaRequest(
+  company: any,
+  pathBuilder: (baseUrl: string, ready: ReturnType<typeof requireAnafReadyCompany>) => string,
+  requestOptions: (url: string, ready: ReturnType<typeof requireAnafReadyCompany>) => any,
+  logLabel: string,
+  startDetails: Record<string, unknown>,
+) {
+  const ready = requireAnafReadyCompany(company, "operatiunea e-Factura")
+  const baseUrls = getEfacturaBaseUrls(company?.efacturaEnvironment)
+  let lastError: any = null
+
+  for (let index = 0; index < baseUrls.length; index += 1) {
+    const baseUrl = baseUrls[index]
+    const url = pathBuilder(baseUrl, ready)
+    try {
+      logAnafRequestStart(logLabel, {
+        ...startDetails,
+        tenantId: company?.tenantId || null,
+        environment: company?.efacturaEnvironment || "test",
+        url,
+        fallbackIndex: index,
+        hasCertificateFile: Boolean(company?.efacturaCertFilename),
+        usingClientCertificate: Boolean(ready.certOptions?.pfx),
+      })
+      const response = await anafHttpRequest(url, requestOptions(url, ready))
+      return { response, url, fallbackIndex: index }
+    } catch (error) {
+      lastError = error
+      logAnafRouteError("EFACTURA HTTP ERROR", {
+        tenantId: company?.tenantId || null,
+        label: logLabel,
+        url,
+        fallbackIndex: index,
+        message: (error as any)?.message || String(error),
+      })
+      if (!isTlsHandshakeError(error) || index === baseUrls.length - 1) {
+        throw error
+      }
+    }
+  }
+
+  throw lastError || new Error("Nu am putut comunica cu ANAF pentru e-Factura.")
 }
 
 function logAnafRequestStart(label: string, details: Record<string, unknown>) {
@@ -373,24 +419,23 @@ export async function anafDownloadById(company: any, downloadId: string) {
 }
 
 export async function anafUploadXml(company: any, xmlText: string) {
-  const ready = requireAnafReadyCompany(company, "trimiterea e-Facturii")
-  const url = `${ready.baseUrl}/upload?standard=UBL&cif=${encodeURIComponent(ready.cif)}`
-  logAnafRequestStart("upload", {
-    tenantId: company?.tenantId || null,
-    environment: company?.efacturaEnvironment || "test",
-    cif: ready.cif,
-    url,
-    xmlSize: Buffer.byteLength(xmlText, "utf8"),
-    usingClientCertificate: Boolean(ready.certOptions?.pfx),
-  })
-  const response = await anafHttpRequest(url, {
-    method: "POST",
-    headers: buildAnafAuthHeaders(ready.accessToken, {
-      "Content-Type": "application/xml; charset=utf-8",
+  const { response, url, fallbackIndex } = await anafEfacturaRequest(
+    company,
+    (baseUrl, ready) => `${baseUrl}/upload?standard=UBL&cif=${encodeURIComponent(ready.cif)}`,
+    (_url, ready) => ({
+      method: "POST",
+      headers: buildAnafAuthHeaders(ready.accessToken, {
+        "Content-Type": "application/xml; charset=utf-8",
+      }),
+      body: xmlText,
+      ...ready.certOptions,
     }),
-    body: xmlText,
-    ...ready.certOptions,
-  })
+    "upload",
+    {
+      cif: normalizeCompanyCui(company?.cui),
+      xmlSize: Buffer.byteLength(xmlText, "utf8"),
+    },
+  )
   const rawText = response.text
   const payload = parseAnafPayload(rawText)
   const uploadIndex = extractUploadIndex(payload, rawText)
@@ -398,6 +443,8 @@ export async function anafUploadXml(company: any, xmlText: string) {
     tenantId: company?.tenantId || null,
     status: response.status,
     ok: response.ok,
+    url,
+    fallbackIndex,
     uploadIndex,
     summary: summarizeAnafResponse(payload, rawText),
   })
@@ -413,19 +460,18 @@ export async function anafUploadXml(company: any, xmlText: string) {
 }
 
 export async function anafCheckUploadStatus(company: any, uploadIndex: string) {
-  const ready = requireAnafReadyCompany(company, "verificarea starii la ANAF")
-  const url = `${ready.baseUrl}/stareMesaj?id_incarcare=${encodeURIComponent(uploadIndex)}`
-  logAnafRequestStart("stareMesaj", {
-    tenantId: company?.tenantId || null,
-    environment: company?.efacturaEnvironment || "test",
-    uploadIndex,
-    url,
-    usingClientCertificate: Boolean(ready.certOptions?.pfx),
-  })
-  const response = await anafHttpRequest(url, {
-    headers: buildAnafAuthHeaders(ready.accessToken),
-    ...ready.certOptions,
-  })
+  const { response, url, fallbackIndex } = await anafEfacturaRequest(
+    company,
+    (baseUrl) => `${baseUrl}/stareMesaj?id_incarcare=${encodeURIComponent(uploadIndex)}`,
+    (_url, ready) => ({
+      headers: buildAnafAuthHeaders(ready.accessToken),
+      ...ready.certOptions,
+    }),
+    "stareMesaj",
+    {
+      uploadIndex,
+    },
+  )
   const rawText = response.text
   const payload = parseAnafPayload(rawText)
   const downloadId = extractDownloadId(payload, rawText)
@@ -434,6 +480,8 @@ export async function anafCheckUploadStatus(company: any, uploadIndex: string) {
     uploadIndex,
     status: response.status,
     ok: response.ok,
+    url,
+    fallbackIndex,
     downloadId,
     summary: summarizeAnafResponse(payload, rawText),
   })

@@ -33,12 +33,12 @@ export function readAnafHeader(
 
 function shouldRetryWithCurl(error: unknown) {
   const message = String((error as any)?.message || "")
-  return /EPROTO|handshake failure|tls alert/i.test(message)
+  return /EPROTO|ECONNRESET|handshake failure|tls alert|SSL routines|wrong version number/i.test(message)
 }
 
 function toFriendlyAnafHttpError(error: unknown) {
   const message = String((error as any)?.message || "")
-  if (/EPROTO|handshake failure|tls alert|SSL routines/i.test(message)) {
+  if (/EPROTO|ECONNRESET|handshake failure|tls alert|SSL routines|wrong version number/i.test(message)) {
     return new Error("Conexiunea securizata cu ANAF a esuat in timpul handshake-ului SSL/TLS.")
   }
   return error instanceof Error ? error : new Error(message || "Eroare de comunicare cu ANAF.")
