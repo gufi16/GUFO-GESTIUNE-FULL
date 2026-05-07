@@ -58,6 +58,8 @@ function sourceBadge(row: any) {
   }
 }
 
+const PAGE_SIZE = 10
+
 export default function NirListPage() {
   const navigate = useNavigate()
   const token = getToken() || ""
@@ -70,6 +72,7 @@ export default function NirListPage() {
   const [supplierFilter, setSupplierFilter] = useState("ALL")
   const [locationFilter, setLocationFilter] = useState("ALL")
   const [activeLocationId, setActiveLocationIdState] = useState(getActiveLocationId())
+  const [page, setPage] = useState(1)
 
   useEffect(() => {
     loadRows()
@@ -188,6 +191,17 @@ export default function NirListPage() {
       return matchesSearch && matchesStatus && matchesSupplier && matchesLocation
     })
   }, [rows, search, statusFilter, supplierFilter, locationFilter, activeLocationId])
+
+  useEffect(() => {
+    setPage(1)
+  }, [search, statusFilter, supplierFilter, locationFilter, activeLocationId])
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE))
+  const safePage = Math.min(page, totalPages)
+  const paginatedRows = useMemo(() => {
+    const start = (safePage - 1) * PAGE_SIZE
+    return filteredRows.slice(start, start + PAGE_SIZE)
+  }, [filteredRows, safePage])
 
   const stats = useMemo(() => {
     return filteredRows.reduce(
@@ -314,7 +328,7 @@ export default function NirListPage() {
                 </td>
               </tr>
             ) : (
-              filteredRows.map((row) => {
+              paginatedRows.map((row) => {
                 const supplier =
                   row?.supplier?.name ||
                   row?.supplierName ||
@@ -396,6 +410,33 @@ export default function NirListPage() {
           </tbody>
         </table>
       </div>
+
+      {filteredRows.length > PAGE_SIZE ? (
+        <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-sm text-slate-500">
+            Pagina <span className="font-semibold text-slate-700">{safePage}</span> din{" "}
+            <span className="font-semibold text-slate-700">{totalPages}</span> · {filteredRows.length} rezultate
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              disabled={safePage <= 1}
+              className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Inapoi
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+              disabled={safePage >= totalPages}
+              className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Urmator
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

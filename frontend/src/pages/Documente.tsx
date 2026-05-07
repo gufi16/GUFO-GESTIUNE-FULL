@@ -349,6 +349,8 @@ type TransferDocListItem = {
 
 type ActiveTab = "consumption" | "production" | "inventory" | "invoice" | "receipt" | "minutes" | "transfer"
 
+const DOCUMENTS_PAGE_SIZE = 10
+
 function formatDate(value?: string | null) {
   if (!value) return "-"
   const d = new Date(value)
@@ -433,6 +435,61 @@ function MobileTable({
   )
 }
 
+function paginateRows<T>(items: T[], page: number, pageSize: number) {
+  const safePageSize = Math.max(1, pageSize)
+  const totalPages = Math.max(1, Math.ceil(items.length / safePageSize))
+  const safePage = Math.min(Math.max(1, page), totalPages)
+  const start = (safePage - 1) * safePageSize
+
+  return {
+    page: safePage,
+    totalPages,
+    items: items.slice(start, start + safePageSize),
+  }
+}
+
+function PaginationBar({
+  page,
+  totalPages,
+  totalItems,
+  onPageChange,
+}: {
+  page: number
+  totalPages: number
+  totalItems: number
+  onPageChange: (page: number) => void
+}) {
+  if (totalItems <= DOCUMENTS_PAGE_SIZE) return null
+
+  return (
+    <div className="flex flex-col gap-2 border-t border-slate-200 bg-white px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="text-sm text-slate-500">
+        Pagina <span className="font-semibold text-slate-700">{page}</span> din{" "}
+        <span className="font-semibold text-slate-700">{totalPages}</span> · {totalItems} rezultate
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onPageChange(page - 1)}
+          disabled={page <= 1}
+          className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Inapoi
+        </button>
+        <button
+          type="button"
+          onClick={() => onPageChange(page + 1)}
+          disabled={page >= totalPages}
+          className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Urmator
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function Documente() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -473,6 +530,15 @@ export default function Documente() {
   const [message, setMessage] = useState("")
   const [locations] = useState<Array<{ id: string; name: string; code?: string }>>([])
   const [selectedLocationId, setSelectedLocationId] = useState(getActiveLocationId())
+  const [pageByTab, setPageByTab] = useState<Record<ActiveTab, number>>({
+    consumption: 1,
+    production: 1,
+    inventory: 1,
+    invoice: 1,
+    receipt: 1,
+    minutes: 1,
+    transfer: 1,
+  })
 
   const [consumptionDocs, setConsumptionDocs] = useState<ConsumptionDocListItem[]>([])
   const [productionDocs, setProductionDocs] = useState<ProductionDocListItem[]>([])
@@ -523,6 +589,13 @@ export default function Documente() {
       loadInventoryDocs()
     }
   }, [activeTab, dateFrom, dateTo, selectedLocationId])
+
+  useEffect(() => {
+    setPageByTab((prev) => ({
+      ...prev,
+      [activeTab]: 1,
+    }))
+  }, [activeTab, search, efacturaFilter, minutesFilter, dateFrom, dateTo, selectedLocationId])
 
   async function loadMinutesDocs() {
     if (!token) {
@@ -1506,6 +1579,35 @@ export default function Documente() {
     })
   }, [transferDocs, search])
 
+  const pagedConsumption = useMemo(
+    () => paginateRows(filteredConsumptionDocs, pageByTab.consumption, DOCUMENTS_PAGE_SIZE),
+    [filteredConsumptionDocs, pageByTab.consumption]
+  )
+  const pagedProduction = useMemo(
+    () => paginateRows(filteredProductionDocs, pageByTab.production, DOCUMENTS_PAGE_SIZE),
+    [filteredProductionDocs, pageByTab.production]
+  )
+  const pagedInventory = useMemo(
+    () => paginateRows(filteredInventoryDocs, pageByTab.inventory, DOCUMENTS_PAGE_SIZE),
+    [filteredInventoryDocs, pageByTab.inventory]
+  )
+  const pagedInvoices = useMemo(
+    () => paginateRows(filteredInvoiceDocs, pageByTab.invoice, DOCUMENTS_PAGE_SIZE),
+    [filteredInvoiceDocs, pageByTab.invoice]
+  )
+  const pagedReceipts = useMemo(
+    () => paginateRows(filteredReceiptDocs, pageByTab.receipt, DOCUMENTS_PAGE_SIZE),
+    [filteredReceiptDocs, pageByTab.receipt]
+  )
+  const pagedMinutes = useMemo(
+    () => paginateRows(filteredMinutesDocs, pageByTab.minutes, DOCUMENTS_PAGE_SIZE),
+    [filteredMinutesDocs, pageByTab.minutes]
+  )
+  const pagedTransfers = useMemo(
+    () => paginateRows(filteredTransferDocs, pageByTab.transfer, DOCUMENTS_PAGE_SIZE),
+    [filteredTransferDocs, pageByTab.transfer]
+  )
+
   const activeTabMeta =
     activeTab === "consumption"
       ? {
@@ -2023,7 +2125,7 @@ export default function Documente() {
                     </td>
                   </tr>
                 ) : (
-                  filteredConsumptionDocs.map((doc) => (
+                  pagedConsumption.items.map((doc) => (
                     <tr key={doc.id} className="border-t border-slate-200">
                       <td className="px-3 py-2.5 text-slate-700">Consum</td>
                       <td className="px-3 py-2.5 font-semibold text-slate-900">{doc.docNo}</td>
@@ -2066,6 +2168,12 @@ export default function Documente() {
                 )}
               </tbody>
             </table>
+            <PaginationBar
+              page={pagedConsumption.page}
+              totalPages={pagedConsumption.totalPages}
+              totalItems={filteredConsumptionDocs.length}
+              onPageChange={(page) => setPageByTab((prev) => ({ ...prev, consumption: page }))}
+            />
           </div>
         ) : activeTab === "production" ? (
           <div className="overflow-x-auto rounded-[22px] border border-slate-200">
@@ -2097,7 +2205,7 @@ export default function Documente() {
                     </td>
                   </tr>
                 ) : (
-                  filteredProductionDocs.map((doc) => (
+                  pagedProduction.items.map((doc) => (
                     <tr key={doc.id} className="border-t border-slate-200">
                     <td className="px-3 py-2.5 text-slate-700">Productie</td>
                       <td className="px-3 py-2.5 font-semibold text-slate-900">{doc.docNo}</td>
@@ -2139,6 +2247,12 @@ export default function Documente() {
                 )}
               </tbody>
             </table>
+            <PaginationBar
+              page={pagedProduction.page}
+              totalPages={pagedProduction.totalPages}
+              totalItems={filteredProductionDocs.length}
+              onPageChange={(page) => setPageByTab((prev) => ({ ...prev, production: page }))}
+            />
           </div>
         ) : activeTab === "invoice" ? (
           <div className="overflow-x-auto rounded-[22px] border border-slate-200">
@@ -2171,7 +2285,7 @@ export default function Documente() {
                     </td>
                   </tr>
                 ) : (
-                  filteredInvoiceDocs.map((doc) => {
+                  pagedInvoices.items.map((doc) => {
                     const isStornoInvoice = String(doc.invoiceTypeCode || "") === "381" || Number(doc.totalGrossFc || 0) < 0
 
                     return (
@@ -2293,6 +2407,12 @@ export default function Documente() {
                 )}
               </tbody>
             </table>
+            <PaginationBar
+              page={pagedInvoices.page}
+              totalPages={pagedInvoices.totalPages}
+              totalItems={filteredInvoiceDocs.length}
+              onPageChange={(page) => setPageByTab((prev) => ({ ...prev, invoice: page }))}
+            />
           </div>
         ) : activeTab === "receipt" ? (
           <div className="overflow-x-auto rounded-[22px] border border-slate-200">
@@ -2323,7 +2443,7 @@ export default function Documente() {
                     </td>
                   </tr>
                 ) : (
-                  filteredReceiptDocs.map((doc) => (
+                  pagedReceipts.items.map((doc) => (
                     <tr key={doc.id} className="border-t border-slate-200">
                       <td className="px-3 py-2.5 font-semibold text-slate-900">{doc.docNo || doc.number || "-"}</td>
                       <td className="px-3 py-2.5 text-slate-600">{formatDate(doc.docDate || doc.date)}</td>
@@ -2362,6 +2482,12 @@ export default function Documente() {
                 )}
               </tbody>
             </table>
+            <PaginationBar
+              page={pagedReceipts.page}
+              totalPages={pagedReceipts.totalPages}
+              totalItems={filteredReceiptDocs.length}
+              onPageChange={(page) => setPageByTab((prev) => ({ ...prev, receipt: page }))}
+            />
           </div>
         ) : activeTab === "transfer" ? (
           <div className="overflow-x-auto rounded-[22px] border border-slate-200">
@@ -2388,7 +2514,7 @@ export default function Documente() {
                     <td colSpan={9} className="px-4 py-8 text-center text-slate-500">Nu exista transferuri in intervalul selectat.</td>
                   </tr>
                 ) : (
-                  filteredTransferDocs.map((doc) => (
+                  pagedTransfers.items.map((doc) => (
                     <tr key={doc.id} className="border-t border-slate-200">
                       <td className="px-3 py-2.5 font-semibold text-slate-900">{doc.docNo}</td>
                       <td className="px-3 py-2.5 text-slate-600">{formatDate(doc.docDate)}</td>
@@ -2492,6 +2618,12 @@ export default function Documente() {
                 )}
               </tbody>
             </table>
+            <PaginationBar
+              page={pagedTransfers.page}
+              totalPages={pagedTransfers.totalPages}
+              totalItems={filteredTransferDocs.length}
+              onPageChange={(page) => setPageByTab((prev) => ({ ...prev, transfer: page }))}
+            />
           </div>
         ) : activeTab === "minutes" ? (
           <div className="overflow-x-auto rounded-[22px] border border-slate-200">
@@ -2523,7 +2655,7 @@ export default function Documente() {
                     </td>
                   </tr>
                 ) : (
-                  filteredMinutesDocs.map((doc) => (
+                  pagedMinutes.items.map((doc) => (
                     <tr key={doc.id} className="border-t border-slate-200">
                       <td className="px-3 py-2.5 text-slate-600">{minutesTypeLabel(doc.type)}</td>
                       <td className="px-3 py-2.5 font-semibold text-slate-900">{doc.docNo}</td>
@@ -2567,6 +2699,12 @@ export default function Documente() {
                 )}
               </tbody>
             </table>
+            <PaginationBar
+              page={pagedMinutes.page}
+              totalPages={pagedMinutes.totalPages}
+              totalItems={filteredMinutesDocs.length}
+              onPageChange={(page) => setPageByTab((prev) => ({ ...prev, minutes: page }))}
+            />
           </div>
         ) : (
           <div className="overflow-x-auto rounded-[22px] border border-slate-200">
@@ -2598,7 +2736,7 @@ export default function Documente() {
                     </td>
                   </tr>
                 ) : (
-                  filteredInventoryDocs.map((doc) => (
+                  pagedInventory.items.map((doc) => (
                     <tr key={doc.id} className="border-t border-slate-200">
                       <td className="px-3 py-2.5 text-slate-700">Inventar</td>
                       <td className="px-3 py-2.5 font-semibold text-slate-900">{doc.docNo}</td>
@@ -2638,6 +2776,12 @@ export default function Documente() {
                 )}
               </tbody>
             </table>
+            <PaginationBar
+              page={pagedInventory.page}
+              totalPages={pagedInventory.totalPages}
+              totalItems={filteredInventoryDocs.length}
+              onPageChange={(page) => setPageByTab((prev) => ({ ...prev, inventory: page }))}
+            />
           </div>
         )}
       </div>
