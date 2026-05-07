@@ -1,4 +1,4 @@
-import { FilePlus2, PackageMinus, ReceiptText, ScrollText, Tags, TriangleAlert } from "lucide-react"
+import { FilePlus2, PackageMinus, PackagePlus, ReceiptText, ScrollText, Tags, TriangleAlert } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import PageHeader from "../components/PageHeader"
 
@@ -45,6 +45,12 @@ const cards: Array<{
     icon: Tags,
     tone: "bg-slate-100 text-slate-700",
   },
+  {
+    title: "Inventar",
+    path: "/inregistrare-document/inventar/new",
+    icon: PackagePlus,
+    tone: "bg-slate-100 text-slate-700",
+  },
 ]
 
 export default function InregistrareDocument() {
@@ -54,7 +60,7 @@ export default function InregistrareDocument() {
     <div className="space-y-6">
       <PageHeader badge="operatiuni" title="Inregistrare documente" />
 
-      <div className="flex flex-wrap gap-2">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
         {cards.map((card) => {
           const Icon = card.icon
           const disabled = !!card.disabled
@@ -66,14 +72,18 @@ export default function InregistrareDocument() {
               disabled={disabled}
               onClick={() => !disabled && navigate(card.path)}
               className={[
-                "inline-flex h-10 items-center gap-2 rounded-[14px] border border-slate-200 bg-white px-3 text-[13px] font-semibold text-slate-700 shadow-sm transition",
-                disabled ? "cursor-not-allowed opacity-70" : "hover:border-slate-300 hover:bg-slate-50",
+                "rounded-2xl border border-slate-200 bg-white p-3.5 text-left shadow-sm transition",
+                disabled
+                  ? "cursor-not-allowed opacity-70"
+                  : "hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md",
               ].join(" ")}
             >
-              <span className={`flex h-7 w-7 items-center justify-center rounded-[10px] ${card.tone}`}>
-                <Icon size={15} />
+              <span className={`mb-3 flex h-10 w-10 items-center justify-center rounded-xl ${card.tone}`}>
+                <Icon size={20} />
               </span>
-              {card.title}
+
+              <div className="text-base font-semibold text-slate-900">{card.title}</div>
+              {disabled ? <div className="mt-3 text-xs font-semibold text-slate-400">In curand</div> : null}
             </button>
           )
         })}

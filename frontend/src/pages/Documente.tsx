@@ -1811,6 +1811,24 @@ export default function Documente() {
           PV schimbare pret
         </button>
 
+        <button
+          type="button"
+          onClick={() => setActiveTab("production")}
+          className={documentTypeButtonClass(activeTab === "production")}
+        >
+          <Factory size={15} />
+          Productie
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("inventory")}
+          className={documentTypeButtonClass(activeTab === "inventory")}
+        >
+          <ClipboardList size={15} />
+          Inventare
+        </button>
+
       </div>
 
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
