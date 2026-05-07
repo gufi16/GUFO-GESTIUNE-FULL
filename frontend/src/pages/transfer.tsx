@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useState } from "react"
-import { ArrowLeft, ArrowRightLeft, FileOutput, Plus, Search, Trash2, Truck, Warehouse } from "lucide-react"
+import { ArrowLeft, ArrowRightLeft, ChevronDown, FileOutput, FileText, PackagePlus, Plus, Search, Trash2, Truck, Warehouse } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import {
   DocumentMetric,
@@ -423,6 +423,15 @@ function parsePositive(value: any) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
 }
 
+function labelValue(label: string, value: string) {
+  return (
+    <div className="rounded-[10px] border border-slate-200 bg-slate-50 px-3 py-2">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</div>
+      <div className="mt-1 text-sm font-medium text-slate-800">{value || "-"}</div>
+    </div>
+  )
+}
+
 export default function TransferPage() {
   const navigate = useNavigate()
   const token = getToken() || ""
@@ -440,6 +449,7 @@ export default function TransferPage() {
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
   const [activePanel, setActivePanel] = useState<"date" | "produse">("date")
+  const [activeETransportPanel, setActiveETransportPanel] = useState<"date" | "parties" | "route" | "items" | "check">("date")
   const [partnerLookupBusy, setPartnerLookupBusy] = useState(false)
   const [showETransportModal, setShowETransportModal] = useState(false)
   const [startAdr, setStartAdr] = useState<ETransportAdrForm>(createEmptyAdrForm())
@@ -1295,6 +1305,13 @@ export default function TransferPage() {
     { key: "date", title: "Date" },
     { key: "produse", title: "Produse" },
   ] as const
+  const eTransportPanels = [
+    { key: "date", title: "Date" },
+    { key: "parties", title: "Parti" },
+    { key: "route", title: "Traseu" },
+    { key: "items", title: "Bunuri" },
+    { key: "check", title: "Verificare" },
+  ] as const
 
   return (
     <div className="w-full space-y-3">
@@ -1314,7 +1331,14 @@ export default function TransferPage() {
               <ArrowLeft size={16} className="mr-2" />
               Inapoi
             </button>
-            <button type="button" className={documentButtonSecondaryClass} onClick={() => setShowETransportModal(true)}>
+            <button
+              type="button"
+              className={documentButtonSecondaryClass}
+              onClick={() => {
+                setActiveETransportPanel("date")
+                setShowETransportModal(true)
+              }}
+            >
               <Truck size={16} className="mr-2" />
               E-Transport
             </button>
@@ -1614,7 +1638,14 @@ export default function TransferPage() {
                     <div className="text-sm font-semibold text-slate-900">Rezumat RO e-Transport</div>
                     <div className="mt-1 text-xs text-slate-500">Completezi doar cand documentul chiar necesita raportare.</div>
                   </div>
-                  <button type="button" className={documentButtonSecondaryClass} onClick={() => setShowETransportModal(true)}>
+                  <button
+                    type="button"
+                    className={documentButtonSecondaryClass}
+                    onClick={() => {
+                      setActiveETransportPanel("date")
+                      setShowETransportModal(true)
+                    }}
+                  >
                     <Truck size={16} className="mr-2" />
                     Deschide e-Transport
                   </button>
@@ -1629,593 +1660,587 @@ export default function TransferPage() {
 
               {showETransportModal ? (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
-                  <div className="max-h-[94vh] w-full max-w-7xl overflow-auto rounded-[28px] border border-slate-200 bg-white p-6 shadow-2xl">
-                    <div className="mb-4 flex items-start justify-between gap-4">
-                        <div>
-                          <div className="text-lg font-semibold text-slate-900">RO e-Transport</div>
-                          <div className="mt-1 text-sm text-slate-500">Completezi clar datele de traseu, document transport si bunuri. Salvarea trebuie sa ramana legata de transferul curent, iar dupa finalizare poti genera XML si trimite la ANAF.</div>
-                        </div>
-                      <button type="button" className={documentButtonSecondaryClass} onClick={() => setShowETransportModal(false)}>
-                        <ArrowLeft size={16} className="mr-2" />
-                        Inchide
-                      </button>
-                    </div>
+                  <div className="max-h-[94vh] w-full max-w-7xl overflow-auto rounded-[28px] border border-slate-200 bg-slate-50 p-4 shadow-2xl">
+                    <div className="space-y-3">
+                      <div className="rounded-[8px] border border-slate-200 bg-white px-4 py-3 shadow-sm shadow-slate-900/[0.03]">
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                          <div>
+                            <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-600">
+                              e-Transport
+                            </div>
+                            <h2 className="mt-1 text-[22px] font-semibold tracking-tight text-[#17324D]">
+                              Notificare noua
+                            </h2>
+                          </div>
 
-                    <div className="space-y-4">
-                      {isPosted ? (
+                          <div className="flex flex-wrap justify-end gap-2">
+                            <button type="button" onClick={() => setShowETransportModal(false)} className={documentButtonSecondaryClass}>
+                              <ArrowLeft size={16} className="mr-2" />
+                              Inapoi
+                            </button>
+                            <button type="button" onClick={saveETransportDetails} disabled={loadingDoc || eTransportBusy} className={documentButtonPrimaryClass}>
+                              <PackagePlus size={16} className="mr-2" />
+                              {eTransportBusy ? "Se salveaza..." : "Finalizeaza"}
+                            </button>
+                            <button type="button" onClick={sendETransport} disabled={!transferId || loadingDoc || eTransportBusy || !isPosted} className={documentButtonPrimaryClass}>
+                              <Truck size={16} className="mr-2" />
+                              {eTransportBusy ? "Se trimite..." : "Trimite ANAF"}
+                            </button>
+                            <button type="button" onClick={generateETransportXml} disabled={!transferId || loadingDoc || eTransportBusy || !isPosted} className={documentButtonSecondaryClass}>
+                              Verificare date
+                            </button>
+                            <details className="relative">
+                              <summary className={`${documentButtonSecondaryClass} cursor-pointer list-none`}>
+                                <FileText size={16} className="mr-2" />
+                                Descarca
+                                <ChevronDown size={15} className="ml-1" />
+                              </summary>
+                              <div className="absolute right-0 z-30 mt-2 min-w-[190px] rounded-[8px] border border-slate-200 bg-white p-1.5 shadow-[0_18px_50px_rgba(15,23,42,0.18)]">
+                                <button
+                                  type="button"
+                                  onClick={downloadETransportXml}
+                                  disabled={!transferId || !eTransportPrepared || loadingDoc}
+                                  className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  XML
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={downloadETransportReceipt}
+                                  disabled={!transferId || loadingDoc || !header.eTransportUploadIndex}
+                                  className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  Raspuns ANAF
+                                </button>
+                              </div>
+                            </details>
+                          </div>
+                        </div>
+                      </div>
+
+                      {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
+                      {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
+                      {header.eTransportErrorText ? <InlineNotice tone="info">{header.eTransportErrorText}</InlineNotice> : null}
+                      {!isPosted ? (
+                        <InlineNotice tone="info">
+                          Completeaza datele aici si finalizeaza transferul. Dupa ce documentul este postat apar trimiterea ANAF si descarcarea XML / raspuns.
+                        </InlineNotice>
+                      ) : null}
+
+                      <div className="rounded-[8px] border border-slate-200 bg-white p-2 shadow-sm shadow-slate-900/[0.03]">
                         <div className="flex flex-wrap gap-2">
-                          <button type="button" className={documentButtonSecondaryClass} onClick={saveETransportDetails} disabled={loadingDoc || eTransportBusy}>
-                            <Truck size={16} className="mr-2" />
-                            {eTransportBusy ? "Se salveaza..." : "Salveaza date"}
-                          </button>
-                          <button type="button" className={documentButtonSecondaryClass} onClick={generateETransportXml} disabled={!transferId || loadingDoc || eTransportBusy}>
-                            <Truck size={16} className="mr-2" />
-                            {eTransportBusy ? "Se genereaza..." : "Genereaza XML"}
-                          </button>
-                          <button type="button" className={documentButtonSecondaryClass} onClick={sendETransport} disabled={!transferId || loadingDoc || eTransportBusy}>
-                            <Truck size={16} className="mr-2" />
-                            {eTransportBusy ? "Se trimite..." : "Trimite la ANAF"}
-                          </button>
-                          <button type="button" className={documentButtonSecondaryClass} onClick={checkETransportStatus} disabled={!transferId || loadingDoc || eTransportBusy || !header.eTransportUploadIndex}>
-                            <Truck size={16} className="mr-2" />
-                            Verifica stare
-                          </button>
-                          <button type="button" className={documentButtonSecondaryClass} onClick={downloadETransportXml} disabled={!transferId || !eTransportPrepared || loadingDoc}>
-                            <Truck size={16} className="mr-2" />
-                            XML
-                          </button>
-                          <button type="button" className={documentButtonSecondaryClass} onClick={downloadETransportReceipt} disabled={!transferId || loadingDoc || !header.eTransportUploadIndex}>
-                            <Truck size={16} className="mr-2" />
-                            Raspuns ANAF
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex flex-wrap items-center gap-2">
-                          <button type="button" className={documentButtonSecondaryClass} onClick={saveETransportDetails} disabled={loadingDoc || eTransportBusy}>
-                            <Truck size={16} className="mr-2" />
-                            {eTransportBusy ? "Se salveaza..." : "Salveaza date"}
-                          </button>
-                          <InlineNotice tone="info">
-                            Completeaza datele necesare aici, salveaza documentul, apoi il finalizezi din documentul de transfer. Dupa finalizare apar aici actiunile pentru XML si ANAF.
-                          </InlineNotice>
-                        </div>
-                      )}
-
-                      <div className="rounded-[18px] border border-slate-200 bg-slate-50 p-4">
-                <div className="mb-3 text-sm font-semibold text-slate-900">RO e-Transport</div>
-                <div className="space-y-3">
-                  <div className="grid grid-cols-1 gap-2 lg:grid-cols-4">
-                    <DocumentMetric title="Candidat" value={header.eTransportCandidate ? "Da" : "Nu"} tone={header.eTransportCandidate ? "amber" : "slate"} />
-                    <DocumentMetric title="XML" value={eTransportPrepared ? "Generat" : "Negenerat"} tone={eTransportPrepared ? "emerald" : "slate"} />
-                    <DocumentMetric title="Status UIT" value={header.eTransportStatus || "-"} tone="emerald" />
-                    <DocumentMetric title="Greutate bruta" value={`${formatNumber(eTransportSummary.totalGrossWeightKg)} kg`} tone="blue" />
-                  </div>
-                  <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
-                    <div className="xl:col-span-2">
-                      <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Tara organizator</div>
-                      <input value="Romania" readOnly className={documentInputClass} style={readonlyInputStyle} />
-                    </div>
-                    <div className="xl:col-span-3">
-                      <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Cod organizator</div>
-                      <input value={String(activeCompany?.cui || "")} readOnly className={documentInputClass} style={readonlyInputStyle} />
-                    </div>
-                    <div className="xl:col-span-4">
-                      <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Denumire organizator</div>
-                      <input value={header.eTransportOrganizer} readOnly className={documentInputClass} style={readonlyInputStyle} />
-                    </div>
-                    <div className="xl:col-span-3">
-                      <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Data transport</div>
-                      <input
-                        type="datetime-local"
-                        value={header.eTransportDeclaredStart}
-                        onChange={(e) => setHeader((prev) => ({ ...prev, eTransportDeclaredStart: e.target.value }))}
-                        className={documentInputClass}
-                        disabled={eTransportFieldDisabled}
-                      />
-                    </div>
-
-                    <div className="xl:col-span-4">
-                      <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Tip operatiune</div>
-                      <select
-                        value={header.eTransportOperationType}
-                        onChange={(e) => setHeader((prev) => ({ ...prev, eTransportOperationType: e.target.value }))}
-                        className={documentInputClass}
-                        disabled={eTransportFieldDisabled}
-                      >
-                        {ETRANSPORT_OPERATION_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>{option.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="xl:col-span-5">
-                      <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Referinta interna operatiune</div>
-                      <input
-                        value={header.eTransportInternalRef}
-                        onChange={(e) => setHeader((prev) => ({ ...prev, eTransportInternalRef: e.target.value }))}
-                        className={documentInputClass}
-                        disabled={eTransportFieldDisabled}
-                        placeholder="Referinta interna operatiune"
-                      />
-                    </div>
-                    <div className="xl:col-span-3">
-                      <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Masa maxima vehicul (kg)</div>
-                      <input
-                        value={header.eTransportVehicleMaxMassKg}
-                        onChange={(e) => setHeader((prev) => ({ ...prev, eTransportVehicleMaxMassKg: e.target.value }))}
-                        className={documentInputClass}
-                        disabled={eTransportFieldDisabled}
-                        placeholder="Ex: 3500"
-                      />
-                    </div>
-
-                    <div className="xl:col-span-2">
-                      <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">CUI partener</div>
-                      <input
-                        value={header.eTransportPartnerCui}
-                        onChange={(e) => setHeader((prev) => ({ ...prev, eTransportPartnerCui: e.target.value.replace(/\D/g, "") }))}
-                        className={documentInputClass}
-                        disabled={eTransportFieldDisabled || partnerLookupBusy}
-                        placeholder="Scrie CUI-ul"
-                      />
-                    </div>
-                    <div className="xl:col-span-2">
-                      <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Partener</div>
-                      <button type="button" className={`${documentButtonSecondaryClass} w-full justify-center`} onClick={lookupPartnerByCui} disabled={eTransportFieldDisabled || partnerLookupBusy}>
-                        {partnerLookupBusy ? "Se cauta..." : "Cauta CUI"}
-                      </button>
-                    </div>
-                    <div className="xl:col-span-4">
-                      <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Denumire partener</div>
-                      <input
-                        value={header.eTransportPartnerName}
-                        className={documentInputClass}
-                        readOnly
-                        style={readonlyInputStyle}
-                        placeholder="Denumire partener"
-                      />
-                    </div>
-                    <div className="xl:col-span-2">
-                      <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Nr. vehicul</div>
-                      <input
-                        value={header.vehicleNo}
-                        onChange={(e) => setHeader((prev) => ({ ...prev, vehicleNo: e.target.value.toUpperCase() }))}
-                        className={documentInputClass}
-                        disabled={eTransportFieldDisabled}
-                        placeholder="CJ13POS"
-                      />
-                    </div>
-                    <div className="xl:col-span-2">
-                      <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Nr. remorca</div>
-                      <input
-                        value={header.trailerNo}
-                        onChange={(e) => setHeader((prev) => ({ ...prev, trailerNo: e.target.value.toUpperCase() }))}
-                        className={documentInputClass}
-                        disabled={eTransportFieldDisabled}
-                        placeholder="Optional"
-                      />
-                    </div>
-                    <div className="xl:col-span-2">
-                      <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">UIT</div>
-                      <input value={header.eTransportUit} readOnly className={documentInputClass} style={readonlyInputStyle} />
-                    </div>
-                    <div className="xl:col-span-2">
-                      <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">ID incarcare</div>
-                      <input value={header.eTransportUploadIndex} readOnly className={documentInputClass} style={readonlyInputStyle} />
-                    </div>
-                    <div className="xl:col-span-2">
-                      <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">ID descarcare</div>
-                      <input value={header.eTransportDownloadId} readOnly className={documentInputClass} style={readonlyInputStyle} />
-                    </div>
-                  </div>
-
-                  <div className="rounded-[16px] border border-slate-200 bg-white p-3">
-                    <div className="mb-2 text-sm font-semibold text-slate-900">Bunuri preluate din transfer</div>
-                    <div className="mb-3 text-xs text-slate-500">Produsele pentru RO e-Transport vin direct din liniile transferului. Daca vrei sa schimbi un produs, il modifici in documentul de transfer.</div>
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-slate-200 text-left text-slate-500">
-                            <th className="px-2 py-2">Produs</th>
-                            <th className="px-2 py-2">SKU</th>
-                            <th className="px-2 py-2">Cod NC</th>
-                            <th className="px-2 py-2">UM</th>
-                            <th className="px-2 py-2">Cantitate</th>
-                            <th className="px-2 py-2">Valoare fara TVA</th>
-                            <th className="px-2 py-2">Greutate bruta</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {validLines.map((line) => {
-                            const product = products.find((item) => item.id === line.productId)
-                            const qty = parsePositive(line.qty)
-                            const gross = qty * Math.max(0, Number(product?.grossWeightKg || 0))
+                          {eTransportPanels.map((panel, index) => {
+                            const isActive = activeETransportPanel === panel.key
                             return (
-                              <tr key={`etr-${line.id}`} className="border-b border-slate-100">
-                                <td className="px-2 py-2 text-slate-700">{line.search || "-"}</td>
-                                <td className="px-2 py-2 text-slate-600">{line.sku || "-"}</td>
-                                <td className="px-2 py-2 text-slate-600">{product?.ncCode || "-"}</td>
-                                <td className="px-2 py-2 text-slate-600">{formatUomOption(product?.uom)}</td>
-                                <td className="px-2 py-2 text-slate-600">{formatNumber(qty)}</td>
-                                <td className="px-2 py-2 text-slate-600">{formatNumber(qty * Math.max(0, Number(line.unitPrice || 0)))}</td>
-                                <td className="px-2 py-2 text-slate-600">{formatNumber(gross)}</td>
-                              </tr>
+                              <button
+                                key={panel.key}
+                                type="button"
+                                onClick={() => setActiveETransportPanel(panel.key)}
+                                className={[
+                                  "inline-flex h-10 items-center gap-2 rounded-[8px] px-3 text-sm font-semibold transition",
+                                  isActive ? "bg-[#17324D] text-white" : "bg-slate-50 text-[#17324D] hover:bg-slate-100",
+                                ].join(" ")}
+                              >
+                                <span
+                                  className={[
+                                    "inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold",
+                                    isActive ? "bg-white/15 text-white" : "bg-slate-100 text-[#17324D]",
+                                  ].join(" ")}
+                                >
+                                  {index + 1}
+                                </span>
+                                {panel.title}
+                              </button>
                             )
                           })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-
-                  <div className="rounded-[16px] border border-slate-200 bg-white p-3">
-                    <div className="mb-3 text-sm font-semibold text-slate-900">Document de transport si detalii declaratie</div>
-                    <div className="grid grid-cols-1 gap-2 xl:grid-cols-12">
-                      <div className="xl:col-span-3">
-                        <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Tip document</div>
-                        <select
-                          value={header.eTransportTransportDocType}
-                          onChange={(e) => setHeader((prev) => ({ ...prev, eTransportTransportDocType: e.target.value }))}
-                          className={documentInputClass}
-                          disabled={eTransportFieldDisabled}
-                        >
-                          <option value="TRANSFER">Transfer intre gestiuni</option>
-                          <option value="FACTURA">Factura</option>
-                          <option value="AVIZ">Aviz de insotire</option>
-                          <option value="CMR">CMR</option>
-                          <option value="COMANDA">Comanda</option>
-                          <option value="ALTELE">Alt document</option>
-                        </select>
-                      </div>
-                      <div className="xl:col-span-3">
-                        <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Numar document</div>
-                        <input
-                          value={header.eTransportTransportDocNo}
-                          onChange={(e) => setHeader((prev) => ({ ...prev, eTransportTransportDocNo: e.target.value }))}
-                          className={documentInputClass}
-                          disabled={eTransportFieldDisabled}
-                          placeholder="TRF-00006 / CMR / Factura"
-                        />
-                      </div>
-                      <div className="xl:col-span-2">
-                        <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Data document</div>
-                        <input
-                          type="date"
-                          value={header.eTransportTransportDocDate}
-                          onChange={(e) => setHeader((prev) => ({ ...prev, eTransportTransportDocDate: e.target.value }))}
-                          className={documentInputClass}
-                          disabled={eTransportFieldDisabled}
-                        />
-                      </div>
-                      <div className="xl:col-span-4">
-                        <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Observatii document</div>
-                        <input
-                          value={header.eTransportTransportDocNotes}
-                          onChange={(e) => setHeader((prev) => ({ ...prev, eTransportTransportDocNotes: e.target.value }))}
-                          className={documentInputClass}
-                          disabled={eTransportFieldDisabled}
-                          placeholder="Observatii despre documentul de transport"
-                        />
-                      </div>
-                      <div className="xl:col-span-12">
-                        <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Informatii suplimentare</div>
-                        <input
-                          value={header.eTransportExtraInfo}
-                          onChange={(e) => setHeader((prev) => ({ ...prev, eTransportExtraInfo: e.target.value }))}
-                          className={documentInputClass}
-                          disabled={eTransportFieldDisabled}
-                          placeholder="Alte mentiuni utile pentru declaratia e-Transport"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-[16px] border border-slate-200 bg-white p-3">
-                    <div className="mb-3 text-sm font-semibold text-slate-900">Locuri start / final traseu</div>
-                    <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
-                      <div className="rounded-[14px] border border-slate-200 bg-slate-50 p-2.5">
-                        <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Loc start</div>
-                        <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-[240px_minmax(0,1fr)]">
-                        <select
-                          value={header.eTransportStartScope}
-                          onChange={(e) =>
-                            setHeader((prev) => ({
-                              ...prev,
-                              eTransportStartScope: e.target.value,
-                            }))
-                          }
-                          className={documentInputClass}
-                          disabled={eTransportFieldDisabled}
-                          >
-                            {ETRANSPORT_SCOPE_OPTIONS.map((option) => (
-                              <option key={`start-${option.value}`} value={option.value}>{option.label}</option>
-                            ))}
-                          </select>
-
-                          {startScopeIsBorder ? (
-                            <select
-                              value={header.eTransportStartBorderPoint}
-                              onChange={(e) => setHeader((prev) => ({ ...prev, eTransportStartBorderPoint: e.target.value }))}
-                              className={documentInputClass}
-                              disabled={eTransportFieldDisabled}
-                            >
-                              <option value="">Alege punctul de frontiera</option>
-                              {ETRANSPORT_BORDER_POINTS.map((point) => (
-                                <option key={`start-point-${point}`} value={point}>{point}</option>
-                              ))}
-                            </select>
-                          ) : (
-                            <select
-                              value={selectedStartAddressOption}
-                              onChange={(e) => {
-                                if (e.target.value === "__manual__") {
-                                  setStartAdr((prev) => ({ ...prev, sourceLocationId: "" }))
-                                  return
-                                }
-                                const option = addressOptions.find((item) => item.id === e.target.value)
-                                const location = locations.find((item) => item.id === e.target.value) || null
-                                if (!option) return
-                                setStartAdr(buildOrganizerStartAdr(activeCompany, location))
-                              }}
-                              className={documentInputClass}
-                              disabled={eTransportFieldDisabled}
-                            >
-                              <option value="__manual__">Completare manuala</option>
-                              {addressOptions.map((option) => (
-                                <option key={`start-addr-${option.id}`} value={option.id}>{option.name}</option>
-                              ))}
-                            </select>
-                          )}
                         </div>
+                      </div>
 
-                        {!startScopeIsBorder ? (
-                          <div className="mt-1.5 space-y-1.5">
-                            <div className="rounded-[10px] border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
-                              Locul de start foloseste automat datele organizatorului / gestiunii de plecare. Aici ajustezi doar adresa.
+                      {activeETransportPanel === "date" ? (
+                        <DocumentSection title="Date notificare">
+                          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                            <div className="space-y-1">
+                              <label className="block text-xs font-medium text-[#17324D]">Tip document transport</label>
+                              <select
+                                value={header.eTransportTransportDocType}
+                                onChange={(e) => setHeader((prev) => ({ ...prev, eTransportTransportDocType: e.target.value }))}
+                                className={documentInputClass}
+                                disabled={eTransportFieldDisabled}
+                              >
+                                <option value="TRANSFER">Transfer intre gestiuni</option>
+                                <option value="FACTURA">Factura</option>
+                                <option value="AVIZ">Aviz de insotire</option>
+                                <option value="CMR">CMR</option>
+                                <option value="COMANDA">Comanda</option>
+                                <option value="ALTELE">Alt document</option>
+                              </select>
                             </div>
-                            <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-[140px_minmax(0,1fr)_110px]">
+                            <div className="space-y-1">
+                              <label className="block text-xs font-medium text-[#17324D]">Nr. document transport</label>
                               <input
-                                value={startAdr.country}
-                                onChange={(e) => setStartAdr((prev) => ({ ...prev, country: e.target.value, sourceLocationId: "" }))}
+                                value={header.eTransportTransportDocNo}
+                                onChange={(e) => setHeader((prev) => ({ ...prev, eTransportTransportDocNo: e.target.value }))}
                                 className={documentInputClass}
                                 disabled={eTransportFieldDisabled}
-                                placeholder="Tara"
-                              />
-                              <input
-                                value={startAdr.county}
-                                onChange={(e) => setStartAdr((prev) => ({ ...prev, county: e.target.value, sourceLocationId: "" }))}
-                                className={documentInputClass}
-                                disabled={eTransportFieldDisabled}
-                                placeholder="Judet"
-                              />
-                              <input
-                                value={startAdr.city}
-                                onChange={(e) => setStartAdr((prev) => ({ ...prev, city: e.target.value, sourceLocationId: "" }))}
-                                className={documentInputClass}
-                                disabled={eTransportFieldDisabled}
-                                placeholder="Localitate"
-                              />
-                              <input
-                                value={startAdr.postalCode}
-                                onChange={(e) => setStartAdr((prev) => ({ ...prev, postalCode: e.target.value, sourceLocationId: "" }))}
-                                className={documentInputClass}
-                                disabled={eTransportFieldDisabled}
-                                placeholder="Cod post."
+                                placeholder="TRF-00006 / CMR / Factura"
                               />
                             </div>
-                            <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-[minmax(0,1fr)_110px_90px_90px_90px_90px]">
+                            <div className="space-y-1">
+                              <label className="block text-xs font-medium text-[#17324D]">Data document transport</label>
                               <input
-                                value={startAdr.street}
-                                onChange={(e) => setStartAdr((prev) => ({ ...prev, street: e.target.value, sourceLocationId: "" }))}
+                                type="date"
+                                value={header.eTransportTransportDocDate}
+                                onChange={(e) => setHeader((prev) => ({ ...prev, eTransportTransportDocDate: e.target.value }))}
                                 className={documentInputClass}
                                 disabled={eTransportFieldDisabled}
-                                placeholder="Strada"
-                              />
-                              <input
-                                value={startAdr.streetNo}
-                                onChange={(e) => setStartAdr((prev) => ({ ...prev, streetNo: e.target.value, sourceLocationId: "" }))}
-                                className={documentInputClass}
-                                disabled={eTransportFieldDisabled}
-                                placeholder="Numar"
-                              />
-                              <input
-                                value={startAdr.building}
-                                onChange={(e) => setStartAdr((prev) => ({ ...prev, building: e.target.value, sourceLocationId: "" }))}
-                                className={documentInputClass}
-                                disabled={eTransportFieldDisabled}
-                                placeholder="Bl."
-                              />
-                              <input
-                                value={startAdr.staircase}
-                                onChange={(e) => setStartAdr((prev) => ({ ...prev, staircase: e.target.value, sourceLocationId: "" }))}
-                                className={documentInputClass}
-                                disabled={eTransportFieldDisabled}
-                                placeholder="Sc."
-                              />
-                              <input
-                                value={startAdr.floor}
-                                onChange={(e) => setStartAdr((prev) => ({ ...prev, floor: e.target.value, sourceLocationId: "" }))}
-                                className={documentInputClass}
-                                disabled={eTransportFieldDisabled}
-                                placeholder="Et."
-                              />
-                              <input
-                                value={startAdr.apartment}
-                                onChange={(e) => setStartAdr((prev) => ({ ...prev, apartment: e.target.value, sourceLocationId: "" }))}
-                                className={documentInputClass}
-                                disabled={eTransportFieldDisabled}
-                                placeholder="Ap."
                               />
                             </div>
-                            <div className="grid grid-cols-1 gap-1.5">
-                              <input
-                                value={startAdr.details}
-                                onChange={(e) => setStartAdr((prev) => ({ ...prev, details: e.target.value, sourceLocationId: "" }))}
+                            <div className="space-y-1">
+                              <label className="block text-xs font-medium text-[#17324D]">Tip operatiune</label>
+                              <select
+                                value={header.eTransportOperationType}
+                                onChange={(e) => setHeader((prev) => ({ ...prev, eTransportOperationType: e.target.value }))}
                                 className={documentInputClass}
                                 disabled={eTransportFieldDisabled}
-                                placeholder="Detalii suplimentare"
+                              >
+                                {ETRANSPORT_OPERATION_OPTIONS.map((option) => (
+                                  <option key={option.value} value={option.value}>{option.label}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="space-y-1">
+                              <label className="block text-xs font-medium text-[#17324D]">Data transport</label>
+                              <input
+                                type="datetime-local"
+                                value={header.eTransportDeclaredStart}
+                                onChange={(e) => setHeader((prev) => ({ ...prev, eTransportDeclaredStart: e.target.value }))}
+                                className={documentInputClass}
+                                disabled={eTransportFieldDisabled}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="block text-xs font-medium text-[#17324D]">Referinta interna</label>
+                              <input
+                                value={header.eTransportInternalRef}
+                                onChange={(e) => setHeader((prev) => ({ ...prev, eTransportInternalRef: e.target.value }))}
+                                className={documentInputClass}
+                                disabled={eTransportFieldDisabled}
+                                placeholder="Referinta interna operatiune"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="block text-xs font-medium text-[#17324D]">Nr. vehicul</label>
+                              <input
+                                value={header.vehicleNo}
+                                onChange={(e) => setHeader((prev) => ({ ...prev, vehicleNo: e.target.value.toUpperCase() }))}
+                                className={documentInputClass}
+                                disabled={eTransportFieldDisabled}
+                                placeholder="CJ13POS"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="block text-xs font-medium text-[#17324D]">Nr. remorca</label>
+                              <input
+                                value={header.trailerNo}
+                                onChange={(e) => setHeader((prev) => ({ ...prev, trailerNo: e.target.value.toUpperCase() }))}
+                                className={documentInputClass}
+                                disabled={eTransportFieldDisabled}
+                                placeholder="Optional"
+                              />
+                            </div>
+                            <div className="space-y-1 md:col-span-2 xl:col-span-2">
+                              <label className="block text-xs font-medium text-[#17324D]">Observatii document</label>
+                              <input
+                                value={header.eTransportTransportDocNotes}
+                                onChange={(e) => setHeader((prev) => ({ ...prev, eTransportTransportDocNotes: e.target.value }))}
+                                className={documentInputClass}
+                                disabled={eTransportFieldDisabled}
+                              />
+                            </div>
+                            <div className="space-y-1 md:col-span-2 xl:col-span-2">
+                              <label className="block text-xs font-medium text-[#17324D]">Informatii suplimentare</label>
+                              <input
+                                value={header.eTransportExtraInfo}
+                                onChange={(e) => setHeader((prev) => ({ ...prev, eTransportExtraInfo: e.target.value }))}
+                                className={documentInputClass}
+                                disabled={eTransportFieldDisabled}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="block text-xs font-medium text-[#17324D]">Masa maxima vehicul (kg)</label>
+                              <input
+                                value={header.eTransportVehicleMaxMassKg}
+                                onChange={(e) => setHeader((prev) => ({ ...prev, eTransportVehicleMaxMassKg: e.target.value }))}
+                                className={documentInputClass}
+                                disabled={eTransportFieldDisabled}
+                                placeholder="Ex: 3500"
                               />
                             </div>
                           </div>
-                        ) : null}
-                      </div>
+                        </DocumentSection>
+                      ) : null}
 
-                      <div className="rounded-[14px] border border-slate-200 bg-slate-50 p-2.5">
-                        <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Loc final</div>
-                        <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-[240px_minmax(0,1fr)]">
-                        <select
-                          value={header.eTransportEndScope}
-                          onChange={(e) =>
-                            setHeader((prev) => ({
-                              ...prev,
-                              eTransportEndScope: e.target.value,
-                            }))
-                          }
-                          className={documentInputClass}
-                          disabled={eTransportFieldDisabled}
-                          >
-                            {ETRANSPORT_SCOPE_OPTIONS.map((option) => (
-                              <option key={`end-${option.value}`} value={option.value}>{option.label}</option>
-                            ))}
-                          </select>
+                      {activeETransportPanel === "parties" ? (
+                        <DocumentSection title="Organizator si partener">
+                          <div className="grid gap-4 xl:grid-cols-2">
+                            <div className="rounded-[16px] border border-slate-200 bg-white p-4">
+                              <div className="mb-3 text-sm font-semibold text-slate-900">Organizator transport</div>
+                              <div className="grid gap-3 md:grid-cols-2">
+                                {labelValue("Tara", "Romania")}
+                                {labelValue("Cod organizator", String(activeCompany?.cui || ""))}
+                                <div className="md:col-span-2">{labelValue("Denumire organizator", header.eTransportOrganizer)}</div>
+                              </div>
+                            </div>
 
-                          {endScopeIsBorder ? (
-                            <select
-                              value={header.eTransportEndBorderPoint}
-                              onChange={(e) => setHeader((prev) => ({ ...prev, eTransportEndBorderPoint: e.target.value }))}
-                              className={documentInputClass}
-                              disabled={eTransportFieldDisabled}
-                            >
-                              <option value="">Alege punctul de frontiera</option>
-                              {ETRANSPORT_BORDER_POINTS.map((point) => (
-                                <option key={`end-point-${point}`} value={point}>{point}</option>
-                              ))}
-                            </select>
-                          ) : (
-                            <select
-                              value={selectedEndAddressOption}
-                              onChange={(e) => {
-                                if (e.target.value === "__manual__") {
-                                  setEndAdr((prev) => ({ ...prev, sourceLocationId: "" }))
-                                  return
-                                }
-                                const option = addressOptions.find((item) => item.id === e.target.value)
-                                const location = locations.find((item) => item.id === e.target.value) || null
-                                if (!option) return
-                                setEndAdr(buildAdrFormFromLocation(location))
-                              }}
-                              className={documentInputClass}
-                              disabled={eTransportFieldDisabled}
-                            >
-                              <option value="__manual__">Completare manuala</option>
-                              {addressOptions.map((option) => (
-                                <option key={`end-addr-${option.id}`} value={option.id}>{option.name}</option>
-                              ))}
-                            </select>
-                          )}
-                        </div>
-
-                        {!endScopeIsBorder ? (
-                          <div className="mt-1.5 space-y-1.5">
-                            <div className="rounded-[10px] border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
-                              Locul final foloseste automat datele partenerului selectat. Aici ajustezi doar adresa finala, fara cautare dubla dupa CUI.
-                            </div>
-                            <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-[140px_minmax(0,1fr)_110px]">
-                              <input
-                                value={endAdr.country}
-                                onChange={(e) => setEndAdr((prev) => ({ ...prev, country: e.target.value, sourceLocationId: "" }))}
-                                className={documentInputClass}
-                                disabled={eTransportFieldDisabled}
-                                placeholder="Tara"
-                              />
-                              <input
-                                value={endAdr.county}
-                                onChange={(e) => setEndAdr((prev) => ({ ...prev, county: e.target.value, sourceLocationId: "" }))}
-                                className={documentInputClass}
-                                disabled={eTransportFieldDisabled}
-                                placeholder="Judet"
-                              />
-                              <input
-                                value={endAdr.city}
-                                onChange={(e) => setEndAdr((prev) => ({ ...prev, city: e.target.value, sourceLocationId: "" }))}
-                                className={documentInputClass}
-                                disabled={eTransportFieldDisabled}
-                                placeholder="Localitate"
-                              />
-                              <input
-                                value={endAdr.postalCode}
-                                onChange={(e) => setEndAdr((prev) => ({ ...prev, postalCode: e.target.value, sourceLocationId: "" }))}
-                                className={documentInputClass}
-                                disabled={eTransportFieldDisabled}
-                                placeholder="Cod post."
-                              />
-                            </div>
-                            <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-[minmax(0,1fr)_110px_90px_90px_90px_90px]">
-                              <input
-                                value={endAdr.street}
-                                onChange={(e) => setEndAdr((prev) => ({ ...prev, street: e.target.value, sourceLocationId: "" }))}
-                                className={documentInputClass}
-                                disabled={eTransportFieldDisabled}
-                                placeholder="Strada"
-                              />
-                              <input
-                                value={endAdr.streetNo}
-                                onChange={(e) => setEndAdr((prev) => ({ ...prev, streetNo: e.target.value, sourceLocationId: "" }))}
-                                className={documentInputClass}
-                                disabled={eTransportFieldDisabled}
-                                placeholder="Numar"
-                              />
-                              <input
-                                value={endAdr.building}
-                                onChange={(e) => setEndAdr((prev) => ({ ...prev, building: e.target.value, sourceLocationId: "" }))}
-                                className={documentInputClass}
-                                disabled={eTransportFieldDisabled}
-                                placeholder="Bl."
-                              />
-                              <input
-                                value={endAdr.staircase}
-                                onChange={(e) => setEndAdr((prev) => ({ ...prev, staircase: e.target.value, sourceLocationId: "" }))}
-                                className={documentInputClass}
-                                disabled={eTransportFieldDisabled}
-                                placeholder="Sc."
-                              />
-                              <input
-                                value={endAdr.floor}
-                                onChange={(e) => setEndAdr((prev) => ({ ...prev, floor: e.target.value, sourceLocationId: "" }))}
-                                className={documentInputClass}
-                                disabled={eTransportFieldDisabled}
-                                placeholder="Et."
-                              />
-                              <input
-                                value={endAdr.apartment}
-                                onChange={(e) => setEndAdr((prev) => ({ ...prev, apartment: e.target.value, sourceLocationId: "" }))}
-                                className={documentInputClass}
-                                disabled={eTransportFieldDisabled}
-                                placeholder="Ap."
-                              />
-                            </div>
-                            <div className="grid grid-cols-1 gap-1.5">
-                              <input
-                                value={endAdr.details}
-                                onChange={(e) => setEndAdr((prev) => ({ ...prev, details: e.target.value, sourceLocationId: "" }))}
-                                className={documentInputClass}
-                                disabled={eTransportFieldDisabled}
-                                placeholder="Detalii suplimentare"
-                              />
+                            <div className="rounded-[16px] border border-slate-200 bg-white p-4">
+                              <div className="mb-3 text-sm font-semibold text-slate-900">Partener comercial</div>
+                              <div className="grid gap-3 md:grid-cols-2">
+                                <div className="space-y-1">
+                                  <label className="block text-xs font-medium text-[#17324D]">CUI partener</label>
+                                  <input
+                                    value={header.eTransportPartnerCui}
+                                    onChange={(e) => setHeader((prev) => ({ ...prev, eTransportPartnerCui: e.target.value.replace(/\D/g, "") }))}
+                                    className={documentInputClass}
+                                    disabled={eTransportFieldDisabled || partnerLookupBusy}
+                                    placeholder="Scrie CUI-ul"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="block text-xs font-medium text-[#17324D]">Partener</label>
+                                  <button
+                                    type="button"
+                                    className={`${documentButtonSecondaryClass} w-full justify-center`}
+                                    onClick={lookupPartnerByCui}
+                                    disabled={eTransportFieldDisabled || partnerLookupBusy}
+                                  >
+                                    {partnerLookupBusy ? "Se cauta..." : "Cauta CUI"}
+                                  </button>
+                                </div>
+                                <div className="md:col-span-2 space-y-1">
+                                  <label className="block text-xs font-medium text-[#17324D]">Denumire partener</label>
+                                  <input value={header.eTransportPartnerName} className={documentInputClass} readOnly style={readonlyInputStyle} placeholder="Denumire partener" />
+                                </div>
+                                <div className="md:col-span-2 space-y-1">
+                                  <label className="block text-xs font-medium text-[#17324D]">Transportator / operator</label>
+                                  <input
+                                    value={header.eTransportOperator}
+                                    onChange={(e) => setHeader((prev) => ({ ...prev, eTransportOperator: e.target.value }))}
+                                    className={documentInputClass}
+                                    disabled={eTransportFieldDisabled}
+                                    placeholder="Nume sofer / transportator / operator"
+                                  />
+                                </div>
+                              </div>
                             </div>
                           </div>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
+                        </DocumentSection>
+                      ) : null}
 
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                    <input value={header.eTransportUit} readOnly className={documentInputClass} style={readonlyInputStyle} placeholder="UIT" />
-                    <input value={header.eTransportUploadIndex} readOnly className={documentInputClass} style={readonlyInputStyle} placeholder="ID incarcare" />
-                    <input value={header.eTransportDownloadId} readOnly className={documentInputClass} style={readonlyInputStyle} placeholder="ID descarcare" />
-                  </div>
+                      {activeETransportPanel === "route" ? (
+                        <DocumentSection title="Loc start si loc final traseu">
+                          <div className="grid gap-4 xl:grid-cols-2">
+                            <div className="space-y-3 rounded-[16px] border border-slate-200 bg-white p-4">
+                              <div className="text-sm font-semibold text-slate-900">Loc start</div>
+                              <div className="grid gap-3 md:grid-cols-2">
+                                <div className="space-y-1">
+                                  <label className="block text-xs font-medium text-[#17324D]">Tip start</label>
+                                  <select
+                                    value={header.eTransportStartScope}
+                                    onChange={(e) => setHeader((prev) => ({ ...prev, eTransportStartScope: e.target.value }))}
+                                    className={documentInputClass}
+                                    disabled={eTransportFieldDisabled}
+                                  >
+                                    {ETRANSPORT_SCOPE_OPTIONS.map((option) => (
+                                      <option key={`start-${option.value}`} value={option.value}>{option.label}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                                {startScopeIsBorder ? (
+                                  <div className="space-y-1">
+                                    <label className="block text-xs font-medium text-[#17324D]">Punct frontiera</label>
+                                    <select
+                                      value={header.eTransportStartBorderPoint}
+                                      onChange={(e) => setHeader((prev) => ({ ...prev, eTransportStartBorderPoint: e.target.value }))}
+                                      className={documentInputClass}
+                                      disabled={eTransportFieldDisabled}
+                                    >
+                                      <option value="">Alege punctul de frontiera</option>
+                                      {ETRANSPORT_BORDER_POINTS.map((point) => (
+                                        <option key={`start-point-${point}`} value={point}>{point}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                ) : (
+                                  <div className="space-y-1">
+                                    <label className="block text-xs font-medium text-[#17324D]">Locatie</label>
+                                    <select
+                                      value={selectedStartAddressOption}
+                                      onChange={(e) => {
+                                        if (e.target.value === "__manual__") {
+                                          setStartAdr((prev) => ({ ...prev, sourceLocationId: "" }))
+                                          return
+                                        }
+                                        const option = addressOptions.find((item) => item.id === e.target.value)
+                                        const location = locations.find((item) => item.id === e.target.value) || null
+                                        if (!option) return
+                                        setStartAdr(buildOrganizerStartAdr(activeCompany, location))
+                                      }}
+                                      className={documentInputClass}
+                                      disabled={eTransportFieldDisabled}
+                                    >
+                                      <option value="__manual__">Completare manuala</option>
+                                      {addressOptions.map((option) => (
+                                        <option key={`start-addr-${option.id}`} value={option.id}>{option.name}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                )}
+                              </div>
+                              {!startScopeIsBorder ? (
+                                <>
+                                  <div className="rounded-[10px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                                    Locul de start foloseste automat datele organizatorului si ale gestiunii de plecare.
+                                  </div>
+                                  <div className="grid gap-3 md:grid-cols-2">
+                                    <div className="space-y-1">
+                                      <label className="block text-xs font-medium text-[#17324D]">Tara</label>
+                                      <input value={startAdr.country} onChange={(e) => setStartAdr((prev) => ({ ...prev, country: e.target.value, sourceLocationId: "" }))} className={documentInputClass} disabled={eTransportFieldDisabled} />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <label className="block text-xs font-medium text-[#17324D]">Judet</label>
+                                      <input value={startAdr.county} onChange={(e) => setStartAdr((prev) => ({ ...prev, county: e.target.value, sourceLocationId: "" }))} className={documentInputClass} disabled={eTransportFieldDisabled} />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <label className="block text-xs font-medium text-[#17324D]">Localitate</label>
+                                      <input value={startAdr.city} onChange={(e) => setStartAdr((prev) => ({ ...prev, city: e.target.value, sourceLocationId: "" }))} className={documentInputClass} disabled={eTransportFieldDisabled} />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <label className="block text-xs font-medium text-[#17324D]">Cod postal</label>
+                                      <input value={startAdr.postalCode} onChange={(e) => setStartAdr((prev) => ({ ...prev, postalCode: e.target.value, sourceLocationId: "" }))} className={documentInputClass} disabled={eTransportFieldDisabled} />
+                                    </div>
+                                    <div className="space-y-1 md:col-span-2">
+                                      <label className="block text-xs font-medium text-[#17324D]">Strada</label>
+                                      <input value={startAdr.street} onChange={(e) => setStartAdr((prev) => ({ ...prev, street: e.target.value, sourceLocationId: "" }))} className={documentInputClass} disabled={eTransportFieldDisabled} />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <label className="block text-xs font-medium text-[#17324D]">Numar</label>
+                                      <input value={startAdr.streetNo} onChange={(e) => setStartAdr((prev) => ({ ...prev, streetNo: e.target.value, sourceLocationId: "" }))} className={documentInputClass} disabled={eTransportFieldDisabled} />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <label className="block text-xs font-medium text-[#17324D]">Bloc</label>
+                                      <input value={startAdr.building} onChange={(e) => setStartAdr((prev) => ({ ...prev, building: e.target.value, sourceLocationId: "" }))} className={documentInputClass} disabled={eTransportFieldDisabled} />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <label className="block text-xs font-medium text-[#17324D]">Scara</label>
+                                      <input value={startAdr.staircase} onChange={(e) => setStartAdr((prev) => ({ ...prev, staircase: e.target.value, sourceLocationId: "" }))} className={documentInputClass} disabled={eTransportFieldDisabled} />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <label className="block text-xs font-medium text-[#17324D]">Etaj</label>
+                                      <input value={startAdr.floor} onChange={(e) => setStartAdr((prev) => ({ ...prev, floor: e.target.value, sourceLocationId: "" }))} className={documentInputClass} disabled={eTransportFieldDisabled} />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <label className="block text-xs font-medium text-[#17324D]">Apartament</label>
+                                      <input value={startAdr.apartment} onChange={(e) => setStartAdr((prev) => ({ ...prev, apartment: e.target.value, sourceLocationId: "" }))} className={documentInputClass} disabled={eTransportFieldDisabled} />
+                                    </div>
+                                    <div className="space-y-1 md:col-span-2">
+                                      <label className="block text-xs font-medium text-[#17324D]">Detalii suplimentare</label>
+                                      <input value={startAdr.details} onChange={(e) => setStartAdr((prev) => ({ ...prev, details: e.target.value, sourceLocationId: "" }))} className={documentInputClass} disabled={eTransportFieldDisabled} />
+                                    </div>
+                                  </div>
+                                </>
+                              ) : null}
+                            </div>
 
-                  {header.eTransportErrorText ? <InlineNotice tone="info">{header.eTransportErrorText}</InlineNotice> : null}
-                </div>
-              </div>
+                            <div className="space-y-3 rounded-[16px] border border-slate-200 bg-white p-4">
+                              <div className="text-sm font-semibold text-slate-900">Loc final</div>
+                              <div className="grid gap-3 md:grid-cols-2">
+                                <div className="space-y-1">
+                                  <label className="block text-xs font-medium text-[#17324D]">Tip final</label>
+                                  <select
+                                    value={header.eTransportEndScope}
+                                    onChange={(e) => setHeader((prev) => ({ ...prev, eTransportEndScope: e.target.value }))}
+                                    className={documentInputClass}
+                                    disabled={eTransportFieldDisabled}
+                                  >
+                                    {ETRANSPORT_SCOPE_OPTIONS.map((option) => (
+                                      <option key={`end-${option.value}`} value={option.value}>{option.label}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                                {endScopeIsBorder ? (
+                                  <div className="space-y-1">
+                                    <label className="block text-xs font-medium text-[#17324D]">Punct frontiera</label>
+                                    <select
+                                      value={header.eTransportEndBorderPoint}
+                                      onChange={(e) => setHeader((prev) => ({ ...prev, eTransportEndBorderPoint: e.target.value }))}
+                                      className={documentInputClass}
+                                      disabled={eTransportFieldDisabled}
+                                    >
+                                      <option value="">Alege punctul de frontiera</option>
+                                      {ETRANSPORT_BORDER_POINTS.map((point) => (
+                                        <option key={`end-point-${point}`} value={point}>{point}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                ) : (
+                                  <div className="space-y-1">
+                                    <label className="block text-xs font-medium text-[#17324D]">Locatie</label>
+                                    <select
+                                      value={selectedEndAddressOption}
+                                      onChange={(e) => {
+                                        if (e.target.value === "__manual__") {
+                                          setEndAdr((prev) => ({ ...prev, sourceLocationId: "" }))
+                                          return
+                                        }
+                                        const option = addressOptions.find((item) => item.id === e.target.value)
+                                        const location = locations.find((item) => item.id === e.target.value) || null
+                                        if (!option) return
+                                        setEndAdr(buildAdrFormFromLocation(location))
+                                      }}
+                                      className={documentInputClass}
+                                      disabled={eTransportFieldDisabled}
+                                    >
+                                      <option value="__manual__">Completare manuala</option>
+                                      {addressOptions.map((option) => (
+                                        <option key={`end-addr-${option.id}`} value={option.id}>{option.name}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                )}
+                              </div>
+                              {!endScopeIsBorder ? (
+                                <>
+                                  <div className="rounded-[10px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                                    Locul final foloseste automat datele partenerului selectat.
+                                  </div>
+                                  <div className="grid gap-3 md:grid-cols-2">
+                                    <div className="space-y-1">
+                                      <label className="block text-xs font-medium text-[#17324D]">Tara</label>
+                                      <input value={endAdr.country} onChange={(e) => setEndAdr((prev) => ({ ...prev, country: e.target.value, sourceLocationId: "" }))} className={documentInputClass} disabled={eTransportFieldDisabled} />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <label className="block text-xs font-medium text-[#17324D]">Judet</label>
+                                      <input value={endAdr.county} onChange={(e) => setEndAdr((prev) => ({ ...prev, county: e.target.value, sourceLocationId: "" }))} className={documentInputClass} disabled={eTransportFieldDisabled} />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <label className="block text-xs font-medium text-[#17324D]">Localitate</label>
+                                      <input value={endAdr.city} onChange={(e) => setEndAdr((prev) => ({ ...prev, city: e.target.value, sourceLocationId: "" }))} className={documentInputClass} disabled={eTransportFieldDisabled} />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <label className="block text-xs font-medium text-[#17324D]">Cod postal</label>
+                                      <input value={endAdr.postalCode} onChange={(e) => setEndAdr((prev) => ({ ...prev, postalCode: e.target.value, sourceLocationId: "" }))} className={documentInputClass} disabled={eTransportFieldDisabled} />
+                                    </div>
+                                    <div className="space-y-1 md:col-span-2">
+                                      <label className="block text-xs font-medium text-[#17324D]">Strada</label>
+                                      <input value={endAdr.street} onChange={(e) => setEndAdr((prev) => ({ ...prev, street: e.target.value, sourceLocationId: "" }))} className={documentInputClass} disabled={eTransportFieldDisabled} />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <label className="block text-xs font-medium text-[#17324D]">Numar</label>
+                                      <input value={endAdr.streetNo} onChange={(e) => setEndAdr((prev) => ({ ...prev, streetNo: e.target.value, sourceLocationId: "" }))} className={documentInputClass} disabled={eTransportFieldDisabled} />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <label className="block text-xs font-medium text-[#17324D]">Bloc</label>
+                                      <input value={endAdr.building} onChange={(e) => setEndAdr((prev) => ({ ...prev, building: e.target.value, sourceLocationId: "" }))} className={documentInputClass} disabled={eTransportFieldDisabled} />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <label className="block text-xs font-medium text-[#17324D]">Scara</label>
+                                      <input value={endAdr.staircase} onChange={(e) => setEndAdr((prev) => ({ ...prev, staircase: e.target.value, sourceLocationId: "" }))} className={documentInputClass} disabled={eTransportFieldDisabled} />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <label className="block text-xs font-medium text-[#17324D]">Etaj</label>
+                                      <input value={endAdr.floor} onChange={(e) => setEndAdr((prev) => ({ ...prev, floor: e.target.value, sourceLocationId: "" }))} className={documentInputClass} disabled={eTransportFieldDisabled} />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <label className="block text-xs font-medium text-[#17324D]">Apartament</label>
+                                      <input value={endAdr.apartment} onChange={(e) => setEndAdr((prev) => ({ ...prev, apartment: e.target.value, sourceLocationId: "" }))} className={documentInputClass} disabled={eTransportFieldDisabled} />
+                                    </div>
+                                    <div className="space-y-1 md:col-span-2">
+                                      <label className="block text-xs font-medium text-[#17324D]">Detalii suplimentare</label>
+                                      <input value={endAdr.details} onChange={(e) => setEndAdr((prev) => ({ ...prev, details: e.target.value, sourceLocationId: "" }))} className={documentInputClass} disabled={eTransportFieldDisabled} />
+                                    </div>
+                                  </div>
+                                </>
+                              ) : null}
+                            </div>
+                          </div>
+                        </DocumentSection>
+                      ) : null}
+
+                      {activeETransportPanel === "items" ? (
+                        <DocumentSection title="Bunuri transportate">
+                          <div className="mb-3 grid gap-3 md:grid-cols-3">
+                            <DocumentMetric title="Bunuri" value={String(validLines.length)} tone="blue" />
+                            <DocumentMetric title="Valoare fara TVA" value={`${formatNumber(eTransportSummary.totalValueRon)} RON`} tone="emerald" />
+                            <DocumentMetric title="Greutate bruta" value={`${formatNumber(eTransportSummary.totalGrossWeightKg)} kg`} tone="slate" />
+                          </div>
+                          <div className="rounded-[16px] border border-slate-200 bg-white p-4">
+                            <div className="mb-2 text-sm font-semibold text-slate-900">Bunuri preluate din transfer</div>
+                            <div className="mb-3 text-xs text-slate-500">Produsele pentru e-Transport vin direct din liniile transferului. Daca vrei sa schimbi un produs, il modifici in documentul de transfer.</div>
+                            <div className="overflow-x-auto">
+                              <table className="min-w-full text-sm">
+                                <thead>
+                                  <tr className="border-b border-slate-200 text-left text-slate-500">
+                                    <th className="px-2 py-2">Produs</th>
+                                    <th className="px-2 py-2">SKU</th>
+                                    <th className="px-2 py-2">Cod NC</th>
+                                    <th className="px-2 py-2">UM</th>
+                                    <th className="px-2 py-2">Cantitate</th>
+                                    <th className="px-2 py-2">Valoare fara TVA</th>
+                                    <th className="px-2 py-2">Greutate bruta</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {validLines.map((line) => {
+                                    const product = products.find((item) => item.id === line.productId)
+                                    const qty = parsePositive(line.qty)
+                                    const gross = qty * Math.max(0, Number(product?.grossWeightKg || 0))
+                                    return (
+                                      <tr key={`etr-${line.id}`} className="border-b border-slate-100">
+                                        <td className="px-2 py-2 text-slate-700">{line.search || "-"}</td>
+                                        <td className="px-2 py-2 text-slate-600">{line.sku || "-"}</td>
+                                        <td className="px-2 py-2 text-slate-600">{product?.ncCode || "-"}</td>
+                                        <td className="px-2 py-2 text-slate-600">{formatUomOption(product?.uom)}</td>
+                                        <td className="px-2 py-2 text-slate-600">{formatNumber(qty)}</td>
+                                        <td className="px-2 py-2 text-slate-600">{formatNumber(qty * Math.max(0, Number(line.unitPrice || 0)))}</td>
+                                        <td className="px-2 py-2 text-slate-600">{formatNumber(gross)}</td>
+                                      </tr>
+                                    )
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </DocumentSection>
+                      ) : null}
+
+                      {activeETransportPanel === "check" ? (
+                        <>
+                          <div className="grid gap-3 xl:grid-cols-5">
+                            <DocumentMetric title="Candidat" value={header.eTransportCandidate ? "Da" : "Nu"} tone={header.eTransportCandidate ? "amber" : "slate"} />
+                            <DocumentMetric title="Status" value={header.eTransportStatus || "-"} tone="slate" />
+                            <DocumentMetric title="UIT" value={header.eTransportUit || "-"} tone="emerald" />
+                            <DocumentMetric title="Greutate bruta" value={`${formatNumber(eTransportSummary.totalGrossWeightKg)} kg`} tone="emerald" />
+                            <DocumentMetric title="Valoare fara TVA" value={`${formatNumber(eTransportSummary.totalValueRon)} RON`} tone="amber" />
+                          </div>
+
+                          <DocumentSection title="Verificare ANAF">
+                            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                              {labelValue("Upload index", header.eTransportUploadIndex)}
+                              {labelValue("Download ID", header.eTransportDownloadId)}
+                              {labelValue("XML", eTransportPrepared ? "Generat" : "-")}
+                              {labelValue("Raspuns", header.eTransportUploadIndex ? "Disponibil dupa verificare" : "-")}
+                            </div>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <button type="button" onClick={generateETransportXml} disabled={!transferId || loadingDoc || eTransportBusy || !isPosted} className={documentButtonSecondaryClass}>
+                                Verificare date
+                              </button>
+                              <button type="button" onClick={checkETransportStatus} disabled={!transferId || loadingDoc || eTransportBusy || !header.eTransportUploadIndex} className={documentButtonSecondaryClass}>
+                                Verifica stare
+                              </button>
+                            </div>
+                          </DocumentSection>
+                        </>
+                      ) : null}
                     </div>
                   </div>
                 </div>
