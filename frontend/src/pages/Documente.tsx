@@ -1805,25 +1805,6 @@ export default function Documente() {
           Procese verbale
         </button>
 
-        {efacturaEnabled ? (
-          <button
-            type="button"
-            onClick={() => navigate("/documente/facturi-primite-spv")}
-            className="inline-flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-semibold text-slate-700 transition hover:bg-slate-50"
-          >
-            <FileText size={15} />
-            Facturi primite SPV
-          </button>
-        ) : null}
-
-        <button
-          type="button"
-          onClick={() => navigate("/e-transport")}
-          className="inline-flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-semibold text-slate-700 transition hover:bg-slate-50"
-        >
-          <Truck size={15} />
-          Registru e-Transport
-        </button>
       </div>
 
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}

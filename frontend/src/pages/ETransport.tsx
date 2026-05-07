@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
-import { ArrowLeft, ChevronDown, FileText, PackagePlus, Plus, Search } from "lucide-react"
+import { ArrowLeft, ChevronDown, FileText, PackagePlus, Plus, Search, Truck } from "lucide-react"
 import { useLocation, useNavigate } from "react-router-dom"
-import PageHeader from "../components/PageHeader"
 import {
   DocumentMetric,
   DocumentSection,
@@ -509,6 +508,7 @@ export default function ETransportPage() {
   const [endLookupBusy, setEndLookupBusy] = useState(false)
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
+  const [activePanel, setActivePanel] = useState<"date" | "parties" | "route" | "items" | "check">("date")
 
   const totals = useMemo(() => {
     const totalGrossWeightKg = items.reduce((sum, item) => sum + toNumber(item.grossWeightTotalKg || toNumber(item.qty) * toNumber(item.grossWeightPerUnitKg)), 0)
@@ -516,6 +516,14 @@ export default function ETransportPage() {
     const totalNetWeightKg = items.reduce((sum, item) => sum + toNumber(item.netWeightTotalKg || toNumber(item.qty) * toNumber(item.netWeightPerUnitKg)), 0)
     return { totalGrossWeightKg, totalValueRon, totalNetWeightKg }
   }, [items])
+
+  const formPanels = [
+    { key: "date", title: "Date" },
+    { key: "parties", title: "Parti" },
+    { key: "route", title: "Traseu" },
+    { key: "items", title: "Bunuri" },
+    { key: "check", title: "Verificare" },
+  ] as const
 
   useEffect(() => {
     if (!isListMode) {
@@ -992,21 +1000,27 @@ export default function ETransportPage() {
 
   if (isListMode) {
     return (
-      <div className="space-y-4">
-        <PageHeader
-          title="Registru RO e-Transport"
-          subtitle="Notificari salvate separat fata de transferuri, pentru livrari, exporturi sau completare manuala."
-          badge="Transport"
-        />
-        <div className="flex gap-2">
-          <button type="button" onClick={() => navigate("/documente")} className={documentButtonSecondaryClass}>
-            <ArrowLeft size={16} className="mr-2" />
-            Inapoi
-          </button>
-          <button type="button" onClick={() => navigate("/e-transport/new")} className={documentButtonPrimaryClass}>
-            <Plus size={16} className="mr-2" />
-            Notificare noua
-          </button>
+      <div className="space-y-3">
+        <div className="rounded-[8px] border border-slate-200 bg-white px-4 py-3 shadow-sm shadow-slate-900/[0.03]">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-600">
+                SPV
+              </div>
+              <h1 className="mt-1 text-[22px] font-semibold tracking-tight text-[#17324D]">Registru e-Transport</h1>
+            </div>
+
+            <div className="flex flex-wrap justify-end gap-2">
+              <button type="button" onClick={() => navigate("/documente")} className={documentButtonSecondaryClass}>
+                <ArrowLeft size={16} className="mr-2" />
+                Inapoi
+              </button>
+              <button type="button" onClick={() => navigate("/e-transport/new")} className={documentButtonPrimaryClass}>
+                <Plus size={16} className="mr-2" />
+                Notificare noua
+              </button>
+            </div>
+          </div>
         </div>
 
         {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
@@ -1070,66 +1084,97 @@ export default function ETransportPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title={noticeId ? "Editare notificare RO e-Transport" : "Notificare noua RO e-Transport"}
-        subtitle="Formular separat pentru livrare, export, import sau orice transport care nu vine din transferuri."
-        badge="Transport"
-      />
-      <div className="flex flex-wrap gap-2">
-        <button type="button" onClick={() => navigate("/e-transport")} className={documentButtonSecondaryClass}>
-          <ArrowLeft size={16} className="mr-2" />
-          Inapoi
-        </button>
-        <button type="button" onClick={saveNotice} disabled={saving} className={documentButtonPrimaryClass}>
-          <PackagePlus size={16} className="mr-2" />
-          Salveaza
-        </button>
-        <button type="button" onClick={sendToAnaf} disabled={!noticeId || saving} className={documentButtonPrimaryClass}>
-          Trimite ANAF
-        </button>
-        <button type="button" onClick={checkStatus} disabled={!noticeId || saving || !header.uploadIndex} className={documentButtonSecondaryClass}>
-          Verifica stare
-        </button>
-        <details className="relative">
-          <summary className={`${documentButtonSecondaryClass} cursor-pointer list-none`}>
-            <FileText size={16} className="mr-2" />
-            Descarca
-            <ChevronDown size={15} className="ml-1" />
-          </summary>
-          <div className="absolute right-0 z-30 mt-2 min-w-[190px] rounded-2xl border border-slate-200 bg-white p-1.5 shadow-[0_18px_50px_rgba(15,23,42,0.18)]">
-            <button
-              type="button"
-              onClick={() => noticeId && downloadXml(noticeId)}
-              disabled={!noticeId || !header.preparedXml}
-              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              XML
-            </button>
-            <button
-              type="button"
-              onClick={downloadReceipt}
-              disabled={!noticeId || !header.uploadIndex}
-              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Raspuns ANAF
-            </button>
+    <div className="space-y-3">
+      <div className="rounded-[8px] border border-slate-200 bg-white px-4 py-3 shadow-sm shadow-slate-900/[0.03]">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-600">
+              e-Transport
+            </div>
+            <h1 className="mt-1 text-[22px] font-semibold tracking-tight text-[#17324D]">
+              {noticeId ? "Editare notificare" : "Notificare noua"}
+            </h1>
           </div>
-        </details>
+
+          <div className="flex flex-wrap justify-end gap-2">
+            <button type="button" onClick={() => navigate("/e-transport")} className={documentButtonSecondaryClass}>
+              <ArrowLeft size={16} className="mr-2" />
+              Inapoi
+            </button>
+            <button type="button" onClick={saveNotice} disabled={saving} className={documentButtonPrimaryClass}>
+              <PackagePlus size={16} className="mr-2" />
+              Finalizeaza
+            </button>
+            <button type="button" onClick={sendToAnaf} disabled={!noticeId || saving} className={documentButtonPrimaryClass}>
+              <Truck size={16} className="mr-2" />
+              Trimite ANAF
+            </button>
+            <button type="button" onClick={prepareXml} disabled={!noticeId || saving} className={documentButtonSecondaryClass}>
+              Verificare date
+            </button>
+            <details className="relative">
+              <summary className={`${documentButtonSecondaryClass} cursor-pointer list-none`}>
+                <FileText size={16} className="mr-2" />
+                Descarca
+                <ChevronDown size={15} className="ml-1" />
+              </summary>
+              <div className="absolute right-0 z-30 mt-2 min-w-[190px] rounded-[8px] border border-slate-200 bg-white p-1.5 shadow-[0_18px_50px_rgba(15,23,42,0.18)]">
+                <button
+                  type="button"
+                  onClick={() => noticeId && downloadXml(noticeId)}
+                  disabled={!noticeId || !header.preparedXml}
+                  className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  XML
+                </button>
+                <button
+                  type="button"
+                  onClick={downloadReceipt}
+                  disabled={!noticeId || !header.uploadIndex}
+                  className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Raspuns ANAF
+                </button>
+              </div>
+            </details>
+          </div>
+        </div>
       </div>
 
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
       {header.errorText ? <InlineNotice tone="info">{header.errorText}</InlineNotice> : null}
 
-      <div className="grid gap-3 xl:grid-cols-5">
-        <DocumentMetric title="Notificare" value={header.noticeNo || "-"} tone="blue" />
-        <DocumentMetric title="Status" value={header.status || "DRAFT"} tone="slate" />
-        <DocumentMetric title="UIT" value={header.uit || "-"} tone="emerald" />
-        <DocumentMetric title="Greutate bruta" value={`${totals.totalGrossWeightKg.toLocaleString("ro-RO", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg`} tone="emerald" />
-        <DocumentMetric title="Valoare fara TVA" value={`${totals.totalValueRon.toLocaleString("ro-RO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON`} tone="amber" />
+      <div className="rounded-[8px] border border-slate-200 bg-white p-2 shadow-sm shadow-slate-900/[0.03]">
+        <div className="flex flex-wrap gap-2">
+          {formPanels.map((panel, index) => {
+            const isActive = activePanel === panel.key
+            return (
+              <button
+                key={panel.key}
+                type="button"
+                onClick={() => setActivePanel(panel.key)}
+                className={[
+                  "inline-flex h-10 items-center gap-2 rounded-[8px] px-3 text-sm font-semibold transition",
+                  isActive ? "bg-[#17324D] text-white" : "bg-slate-50 text-[#17324D] hover:bg-slate-100",
+                ].join(" ")}
+              >
+                <span
+                  className={[
+                    "inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold",
+                    isActive ? "bg-white/15 text-white" : "bg-slate-100 text-[#17324D]",
+                  ].join(" ")}
+                >
+                  {index + 1}
+                </span>
+                {panel.title}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
+      {activePanel === "date" ? (
       <DocumentSection title="Date notificare">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <div className="space-y-1">
@@ -1182,7 +1227,9 @@ export default function ETransportPage() {
           </div>
         </div>
       </DocumentSection>
+      ) : null}
 
+      {activePanel === "parties" ? (
       <DocumentSection title="Organizator si partener">
         <div className="grid gap-4 xl:grid-cols-2">
           <AddressEditor
@@ -1235,7 +1282,9 @@ export default function ETransportPage() {
           </div>
         </div>
       </DocumentSection>
+      ) : null}
 
+      {activePanel === "route" ? (
       <DocumentSection title="Loc start si loc final traseu">
         <div className="grid gap-4 xl:grid-cols-2">
           <div className="space-y-3 rounded-[16px] border border-slate-200 bg-white p-4">
@@ -1297,7 +1346,9 @@ export default function ETransportPage() {
           </div>
         </div>
       </DocumentSection>
+      ) : null}
 
+      {activePanel === "items" ? (
       <DocumentSection
         title="Bunuri transportate"
         actions={
@@ -1307,6 +1358,11 @@ export default function ETransportPage() {
           </button>
         }
       >
+        <div className="mb-3 grid gap-3 md:grid-cols-3">
+          <DocumentMetric title="Bunuri" value={String(items.length)} tone="blue" />
+          <DocumentMetric title="Valoare fara TVA" value={`${totals.totalValueRon.toLocaleString("ro-RO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON`} tone="emerald" />
+          <DocumentMetric title="Greutate bruta" value={`${totals.totalGrossWeightKg.toLocaleString("ro-RO", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg`} tone="slate" />
+        </div>
         <div className="space-y-3">
           {items.map((line, index) => (
             <div key={line.id || `${line.lineNo}-${index}`} className="rounded-[16px] border border-slate-200 bg-white p-4">
@@ -1396,6 +1452,36 @@ export default function ETransportPage() {
           ))}
         </div>
       </DocumentSection>
+      ) : null}
+
+      {activePanel === "check" ? (
+        <>
+          <div className="grid gap-3 xl:grid-cols-5">
+            <DocumentMetric title="Notificare" value={header.noticeNo || "-"} tone="blue" />
+            <DocumentMetric title="Status" value={header.status || "DRAFT"} tone="slate" />
+            <DocumentMetric title="UIT" value={header.uit || "-"} tone="emerald" />
+            <DocumentMetric title="Greutate bruta" value={`${totals.totalGrossWeightKg.toLocaleString("ro-RO", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg`} tone="emerald" />
+            <DocumentMetric title="Valoare fara TVA" value={`${totals.totalValueRon.toLocaleString("ro-RO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON`} tone="amber" />
+          </div>
+
+          <DocumentSection title="Verificare ANAF">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {labelValue("Upload index", header.uploadIndex)}
+              {labelValue("Download ID", header.downloadId)}
+              {labelValue("XML", header.preparedXml ? "Generat" : "-")}
+              {labelValue("Raspuns", header.uploadIndex ? "Disponibil dupa verificare" : "-")}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="button" onClick={prepareXml} disabled={!noticeId || saving} className={documentButtonSecondaryClass}>
+                Verificare date
+              </button>
+              <button type="button" onClick={checkStatus} disabled={!noticeId || saving || !header.uploadIndex} className={documentButtonSecondaryClass}>
+                Verifica stare
+              </button>
+            </div>
+          </DocumentSection>
+        </>
+      ) : null}
     </div>
   )
 }
