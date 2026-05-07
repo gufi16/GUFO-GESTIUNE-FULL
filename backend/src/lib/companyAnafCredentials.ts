@@ -1,6 +1,6 @@
 // @ts-nocheck
 import type { PrismaClient } from "@prisma/client"
-import { resolveTenantCompany } from "./companyResolver"
+import { resolveTenantCompany, resolveTenantCompanyForAuth, type CompanyAuthContext } from "./companyResolver"
 
 export const COMPANY_ANAF_LEGACY_FIELDS = {
   id: true,
@@ -220,22 +220,35 @@ export async function resolveCompanyWithAnafCredential(
   options: {
     select?: Record<string, boolean>
     includeCredentialList?: boolean
+    auth?: CompanyAuthContext | null
   } = {},
 ) {
   const hasExplicitSelect = Boolean(options.select && Object.keys(options.select).length)
-  const company = await resolveTenantCompany(
-    prismaClient as any,
-    tenantId,
-    activeCompanyId,
-    hasExplicitSelect
-      ? {
-          select: {
-            ...COMPANY_ANAF_LEGACY_FIELDS,
-            ...(options.select || {}),
-          },
-        }
-      : {},
-  )
+  const companyQuery = hasExplicitSelect
+    ? {
+        select: {
+          ...COMPANY_ANAF_LEGACY_FIELDS,
+          ...(options.select || {}),
+        },
+      }
+    : {}
+
+  const company = options.auth?.userId
+    ? await resolveTenantCompanyForAuth(
+        prismaClient as any,
+        {
+          ...options.auth,
+          tenantId,
+          activeCompanyId: activeCompanyId ?? options.auth?.activeCompanyId ?? null,
+        },
+        companyQuery,
+      )
+    : await resolveTenantCompany(
+        prismaClient as any,
+        tenantId,
+        activeCompanyId,
+        companyQuery,
+      )
 
   if (!company) {
     return null

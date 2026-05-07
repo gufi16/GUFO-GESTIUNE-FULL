@@ -6,8 +6,7 @@ import multer from "multer"
 import { Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
-import { resolveTenantCompany } from "../lib/companyResolver"
-import { requireRequestCompanyId } from "../lib/companyScope"
+import { requireRequestCompanyId, resolveRequestCompany } from "../lib/companyScope"
 import { suggestNcCodes } from "../lib/ncSuggest"
 
 const router = Router()
@@ -312,7 +311,7 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
   const companyId = await requireRequestCompanyId(req)
 
-  const company = await resolveTenantCompany(prisma, tenantId, req.auth?.activeCompanyId, {
+  const company = await resolveRequestCompany(req, {
     select: {
       isVatPayer: true
     }
@@ -580,7 +579,7 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   const companyId = await requireRequestCompanyId(req)
   const id = String(req.params.id)
 
-  const company = await resolveTenantCompany(prisma, tenantId, req.auth?.activeCompanyId, {
+  const company = await resolveRequestCompany(req, {
     select: {
       isVatPayer: true
     }

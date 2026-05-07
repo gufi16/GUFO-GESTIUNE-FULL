@@ -3,6 +3,13 @@ import { prisma } from "./prisma"
 
 const DEFAULT_COMPANY_CODE = "FIRMA-1"
 
+export type CompanyAuthContext = {
+  userId?: string | null
+  tenantId?: string | null
+  role?: string | null
+  activeCompanyId?: string | null
+}
+
 function defaultOrderBy() {
   return [{ isDefault: "desc" }, { createdAt: "asc" }]
 }
@@ -47,6 +54,92 @@ export async function resolveTenantCompany(
   extra: Record<string, any> = {}
 ) {
   return findCompanyByTenant(client, tenantId, activeCompanyId, extra)
+}
+
+export async function listTenantCompaniesForAuth(
+  client: any,
+  auth: CompanyAuthContext,
+  extra: Record<string, any> = {}
+) {
+  const tenantId = String(auth?.tenantId || "").trim()
+  if (!tenantId) {
+    return []
+  }
+
+  const { where = {}, ...rest } = extra || {}
+
+  if (auth?.role === "OWNER" || auth?.role === "ADMIN") {
+    return client.company.findMany({
+      ...rest,
+      where: {
+        tenantId,
+        ...where,
+      },
+      orderBy: rest.orderBy || defaultOrderBy(),
+    })
+  }
+
+  const userId = String(auth?.userId || "").trim()
+  if (!userId) {
+    return []
+  }
+
+  const accessRows = await client.userCompanyAccess.findMany({
+    where: { userId },
+    select: { companyId: true },
+  })
+
+  if (!accessRows.length) {
+    return []
+  }
+
+  const allowedCompanyIds = Array.from(new Set(accessRows.map((row: any) => String(row.companyId || "").trim()).filter(Boolean)))
+  if (!allowedCompanyIds.length) {
+    return []
+  }
+
+  return client.company.findMany({
+    ...rest,
+    where: {
+      tenantId,
+      id: { in: allowedCompanyIds },
+      ...where,
+    },
+    orderBy: rest.orderBy || defaultOrderBy(),
+  })
+}
+
+export async function resolveTenantCompanyForAuth(
+  client: any,
+  auth: CompanyAuthContext,
+  extra: Record<string, any> = {}
+) {
+  const companies = await listTenantCompaniesForAuth(client, auth, extra)
+  if (!companies.length) {
+    return null
+  }
+
+  const activeCompanyId = String(auth?.activeCompanyId || "").trim()
+  if (activeCompanyId) {
+    const activeCompany = companies.find((company: any) => company.id === activeCompanyId)
+    if (activeCompany) {
+      return activeCompany
+    }
+
+    if (auth?.role !== "OWNER" && auth?.role !== "ADMIN") {
+      return null
+    }
+  }
+
+  if (companies.length === 1) {
+    return companies[0]
+  }
+
+  if (auth?.role === "OWNER" || auth?.role === "ADMIN") {
+    return companies.find((company: any) => company.isDefault) || companies[0]
+  }
+
+  return null
 }
 
 export async function ensureTenantCompany(

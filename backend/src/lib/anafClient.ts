@@ -26,9 +26,26 @@ const COMPANY_ANAF_SELECT = {
   efacturaCertPasswordEnc: true,
 }
 
-export async function loadAnafCompanyContext(tenantId: string, activeCompanyId?: string | null) {
-  const company = await resolveCompanyWithAnafCredential(prisma as any, tenantId, activeCompanyId, {
+type AnafCompanyAuthContext = {
+  userId?: string | null
+  tenantId?: string | null
+  role?: string | null
+  activeCompanyId?: string | null
+}
+
+export async function loadAnafCompanyContext(
+  tenantOrAuth: string | AnafCompanyAuthContext,
+  activeCompanyId?: string | null
+) {
+  const auth = typeof tenantOrAuth === "string" ? null : tenantOrAuth
+  const tenantId = typeof tenantOrAuth === "string" ? tenantOrAuth : String(tenantOrAuth?.tenantId || "")
+  if (!tenantId) {
+    return null
+  }
+
+  const company = await resolveCompanyWithAnafCredential(prisma as any, tenantId, activeCompanyId ?? auth?.activeCompanyId, {
     select: COMPANY_ANAF_SELECT,
+    auth,
   })
 
   if (!company) return company

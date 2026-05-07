@@ -10,7 +10,7 @@ import { reserveNextNumber } from "../lib/numbering"
 import { resolveTenantCompany } from "../lib/companyResolver"
 import { readAnafHeader } from "../lib/anafHttp"
 import { drawDocumentHero, drawInfoCards, drawSimpleTable, drawSignatureRow, drawTotalsBox, ensurePdfPage, pdfDate, pdfFmt, pdfText, registerPdfFonts } from "../lib/professionalPdf"
-import { requireRequestCompanyId } from "../lib/companyScope"
+import { requireRequestCompanyId, resolveRequestCompany } from "../lib/companyScope"
 import { generateTransferETransportXml, validateTransferForETransport } from "../lib/etransport"
 import {
   anafCheckEtransportStatus,
@@ -528,7 +528,7 @@ router.post("/api/v1/transfers/:id/etransport/send", async (req: AuthedRequest, 
     return res.status(404).json({ ok: false, error: "Transferul nu a fost gasit." })
   }
 
-  const company = await loadAnafCompanyContext(tenantId, req.auth?.activeCompanyId)
+  const company = await loadAnafCompanyContext(req.auth)
   const cif = normalizeCompanyCui(company?.cui)
   if (!cif) {
     return res.status(400).json({ ok: false, error: "Firma nu are CUI valid pentru transmiterea la ANAF." })
@@ -662,7 +662,7 @@ router.get("/api/v1/transfers/:id/etransport/status", async (req: AuthedRequest,
     return res.status(400).json({ ok: false, error: "Documentul nu a fost trimis inca la ANAF." })
   }
 
-  const company = await loadAnafCompanyContext(tenantId, req.auth?.activeCompanyId)
+  const company = await loadAnafCompanyContext(req.auth)
   if (!company?.efacturaOauthAccessToken) {
     return res.status(400).json({ ok: false, error: "Nu exista token ANAF salvat pentru aceasta firma." })
   }
@@ -749,7 +749,7 @@ router.get("/api/v1/transfers/:id/etransport/receipt", async (req: AuthedRequest
     return res.status(404).json({ ok: false, error: "Transferul nu a fost gasit." })
   }
 
-  const company = await loadAnafCompanyContext(tenantId, req.auth?.activeCompanyId)
+  const company = await loadAnafCompanyContext(req.auth)
   if (!company?.efacturaOauthAccessToken) {
     return res.status(400).json({ ok: false, error: "Nu exista token ANAF salvat pentru aceasta firma." })
   }
@@ -1342,7 +1342,7 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
     return res.status(404).json({ ok: false, error: "Documentul nu a fost gasit." })
   }
 
-  const company = await resolveTenantCompany(prisma, tenantId, req.auth?.activeCompanyId)
+  const company = await resolveRequestCompany(req)
   const filename = `TRANSFER_${safeFilePart(docData.docNo)}_${safeFilePart(docData.fromLocation.name)}_${safeFilePart(docData.toLocation.name)}.pdf`
   res.setHeader("Content-Type", "application/pdf")
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`)

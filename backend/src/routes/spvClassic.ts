@@ -5,7 +5,7 @@ import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { requireTenantModule } from "../lib/tenantModules"
 import { getSpvClassicStatus } from "../lib/spvClassic"
 import { getSpvClassicCompanyDiagnostics, spvClassicListMessages } from "../lib/spvClassicClient"
-import { resolveTenantCompany } from "../lib/companyResolver"
+import { resolveRequestCompany } from "../lib/companyScope"
 
 const router = Router()
 
@@ -18,7 +18,7 @@ router.get("/api/v1/spv-classic/status", async (req: AuthedRequest, res) => {
     return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
   }
 
-  const company = await resolveTenantCompany(prisma, tenantId, req.auth?.activeCompanyId, {
+  const company = await resolveRequestCompany(req, {
     select: {
       tenantId: true,
       cui: true,
@@ -57,7 +57,7 @@ router.post("/api/v1/spv-classic/test-list-messages", async (req: AuthedRequest,
     return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
   }
 
-  const company = await resolveTenantCompany(prisma, tenantId, req.auth?.activeCompanyId, {
+  const company = await resolveRequestCompany(req, {
     select: {
       tenantId: true,
       cui: true,

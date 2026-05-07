@@ -7,8 +7,7 @@ import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { getNextNumberPreview, reserveNextNumber } from "../lib/numbering"
 import { assertSufficientStock, decrementStockBalanceStrict } from "../lib/stock"
-import { resolveTenantCompany } from "../lib/companyResolver"
-import { requireRequestCompanyId } from "../lib/companyScope"
+import { requireRequestCompanyId, resolveRequestCompany } from "../lib/companyScope"
 import { drawDocumentHero, drawInfoCards, drawSimpleTable, drawSignatureRow, drawTotalsBox, ensurePdfPage, pdfDate, pdfFmt, pdfText, registerPdfFonts } from "../lib/professionalPdf"
 
 const router = Router()
@@ -490,7 +489,7 @@ router.get("/api/v1/minutes-docs/:id/pdf", async (req: AuthedRequest, res) => {
     return res.status(404).json({ ok: false, error: "Documentul nu a fost gasit." })
   }
 
-  const company = await resolveTenantCompany(prisma, tenantId, req.auth?.activeCompanyId)
+  const company = await resolveRequestCompany(req)
   const filename = `${safeFilePart(docData.docNo)}.pdf`
   res.setHeader("Content-Type", "application/pdf")
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`)

@@ -10,7 +10,7 @@ import { requireTenantModule } from "../lib/tenantModules"
 import { readAnafHeader } from "../lib/anafHttp"
 import { resolveTenantCompany } from "../lib/companyResolver"
 import { drawDocumentHero, drawInfoCards, drawSimpleTable, drawSignatureRow, drawTotalsBox, ensurePdfPage, pdfDate, pdfFmt, pdfNum, pdfText, registerPdfFonts } from "../lib/professionalPdf"
-import { buildCompanyScopedTenantWhere, requireRequestCompanyId } from "../lib/companyScope"
+import { buildCompanyScopedTenantWhere, requireRequestCompanyId, resolveRequestCompany } from "../lib/companyScope"
 import {
   anafCheckUploadStatus,
   anafDownloadById,
@@ -759,7 +759,7 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
     return res.status(404).json({ ok: false, error: "Factura nu a fost gasita." })
   }
 
-  const company = await resolveTenantCompany(prisma, tenantId, req.auth?.activeCompanyId)
+  const company = await resolveRequestCompany(req)
   const filename = `Factura_${safeFilePart(invoice.docNo)}_${safeFilePart(invoice.customerName)}.pdf`
   res.setHeader("Content-Type", "application/pdf")
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`)
@@ -957,7 +957,7 @@ router.post("/api/v1/sales-invoices/:id/efactura/prepare", async (req: AuthedReq
     return res.status(404).json({ ok: false, error: "Factura nu a fost gasita." })
   }
 
-  const company = await resolveTenantCompany(prisma, tenantId, req.auth?.activeCompanyId)
+  const company = await resolveRequestCompany(req)
 
   const validation = validateInvoiceForEFactura(invoice, company)
   const now = new Date()
@@ -1162,7 +1162,7 @@ router.post("/api/v1/sales-invoices/:id/efactura/send", async (req: AuthedReques
     return res.status(400).json({ ok: false, error: "Factura nu are inca XML e-Factura pregatit. Ruleaza mai intai Pregateste e-Factura." })
   }
 
-  const company = await loadAnafCompanyContext(tenantId, req.auth?.activeCompanyId)
+  const company = await loadAnafCompanyContext(req.auth)
 
   const cif = normalizeCompanyCui(company?.cui)
   if (!cif) {
@@ -1182,7 +1182,7 @@ router.post("/api/v1/sales-invoices/:id/efactura/send", async (req: AuthedReques
       /<cbc:InvoiceTypeCode>\s*381\s*<\/cbc:InvoiceTypeCode>/.test(xmlText)
 
     if (isCreditNote && hasStaleStornoXml) {
-      const fullCompany = await resolveTenantCompany(prisma, tenantId, req.auth?.activeCompanyId)
+      const fullCompany = await resolveRequestCompany(req)
       const validation = validateInvoiceForEFactura(invoice, fullCompany)
       if (!validation.ok) {
         const errorText = validation.errors.map((issue) => issue.message).join(" ")
@@ -1354,7 +1354,7 @@ router.get("/api/v1/sales-invoices/:id/efactura/status", async (req: AuthedReque
     return res.status(400).json({ ok: false, error: "Factura nu a fost transmisa inca la ANAF." })
   }
 
-  const company = await loadAnafCompanyContext(tenantId, req.auth?.activeCompanyId)
+  const company = await loadAnafCompanyContext(req.auth)
 
   if (!company?.efacturaOauthAccessToken) {
     return res.status(400).json({ ok: false, error: "Nu exista token ANAF salvat pentru aceasta firma." })
@@ -1479,7 +1479,7 @@ router.get("/api/v1/sales-invoices/:id/efactura/receipt", async (req: AuthedRequ
     return res.status(404).json({ ok: false, error: "Factura nu a fost gasita." })
   }
 
-  const company = await loadAnafCompanyContext(tenantId, req.auth?.activeCompanyId)
+  const company = await loadAnafCompanyContext(req.auth)
 
   if (!company?.efacturaOauthAccessToken) {
     return res.status(400).json({ ok: false, error: "Nu exista token ANAF salvat pentru aceasta firma." })

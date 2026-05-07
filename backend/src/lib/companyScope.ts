@@ -1,18 +1,17 @@
 import { prisma } from "./prisma"
 import { AuthedRequest } from "../middleware/requireAuth"
-import { resolveTenantCompany } from "./companyResolver"
+import { resolveTenantCompanyForAuth } from "./companyResolver"
 
-export async function resolveRequestCompany(req: AuthedRequest) {
-  const tenantId = req.auth?.tenantId ?? null
-  if (!tenantId) {
+export async function resolveRequestCompany(req: AuthedRequest, extra: Record<string, any> = {}) {
+  if (!req.auth?.tenantId) {
     return null
   }
 
-  return resolveTenantCompany(prisma, tenantId, req.auth?.activeCompanyId)
+  return resolveTenantCompanyForAuth(prisma, req.auth, extra)
 }
 
-export async function requireRequestCompany(req: AuthedRequest) {
-  const company = await resolveRequestCompany(req)
+export async function requireRequestCompany(req: AuthedRequest, extra: Record<string, any> = {}) {
+  const company = await resolveRequestCompany(req, extra)
 
   if (!company) {
     throw new Error("Nu exista nicio firma activa pentru acest cont.")

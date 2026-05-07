@@ -1718,7 +1718,7 @@ model ExternalOrder {
   saleDraft     SaleDraft?
   sale          Sale?
 
-  @@unique([platform, externalOrderId])
+  @@unique([tenantId, platform, externalOrderId])
   @@index([tenantId])
   @@index([locationId])
   @@index([integrationId])

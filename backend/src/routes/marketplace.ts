@@ -267,7 +267,8 @@ router.post("/api/v1/marketplace/orders/import", async (req: AuthedRequest, res)
 
     const order = await tx.externalOrder.upsert({
       where: {
-        platform_externalOrderId: {
+        tenantId_platform_externalOrderId: {
+          tenantId,
           platform: payload.platform,
           externalOrderId: payload.externalOrderId,
         },

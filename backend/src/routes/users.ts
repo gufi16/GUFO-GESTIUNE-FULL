@@ -174,6 +174,10 @@ router.patch("/api/v1/users/:id", requireAuth, async (req: AuthedRequest, res) =
     return res.status(400).json({ ok: false, error: "Una sau mai multe firme selectate nu exista." })
   }
 
+  if (requestedRole !== UserRole.OWNER && requestedRole !== UserRole.ADMIN && !requestedCompanyIds.length) {
+    return res.status(400).json({ ok: false, error: "Selecteaza cel putin o firma pentru utilizator." })
+  }
+
   const normalizedEmail = parsed.data.email.trim().toLowerCase()
   const existing = await prisma.user.findFirst({
     where: {
@@ -256,6 +260,10 @@ router.post("/api/v1/users", requireAuth, async (req: AuthedRequest, res) => {
   const invalidCompanyIds = requestedCompanyIds.filter((companyId) => !availableCompanies.some((company) => company.id === companyId))
   if (invalidCompanyIds.length) {
     return res.status(400).json({ ok: false, error: "Una sau mai multe firme selectate nu exista." })
+  }
+
+  if (requestedRole !== UserRole.OWNER && requestedRole !== UserRole.ADMIN && !requestedCompanyIds.length) {
+    return res.status(400).json({ ok: false, error: "Selecteaza cel putin o firma pentru utilizator." })
   }
 
   const existing = await prisma.user.findFirst({
@@ -393,6 +401,10 @@ router.patch("/api/v1/users/:id/companies", requireAuth, async (req: AuthedReque
 
   if (invalidCompanyIds.length) {
     return res.status(400).json({ ok: false, error: "Una sau mai multe firme selectate nu exista." })
+  }
+
+  if (!requestedCompanyIds.length) {
+    return res.status(400).json({ ok: false, error: "Selecteaza cel putin o firma pentru utilizator." })
   }
 
   await syncUserCompanyAccess(user.id, requestedCompanyIds)

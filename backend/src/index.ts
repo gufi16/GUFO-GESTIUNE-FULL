@@ -224,7 +224,7 @@ async function listAccessibleCompaniesForUser(user: {
   })
 
   if (!accessRows.length) {
-    return companies
+    return []
   }
 
   const allowedIds = new Set(accessRows.map((row) => row.companyId))

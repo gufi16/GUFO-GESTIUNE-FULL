@@ -930,7 +930,7 @@ router.get("/api/v1/efactura/incoming/bridge-config", async (req: AuthedRequest,
     return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
   }
 
-  const company = await loadAnafCompanyContext(tenantId, req.auth?.activeCompanyId)
+  const company = await loadAnafCompanyContext(req.auth)
 
   const cif = normalizeCompanyCui(company?.cui)
   if (!cif) {

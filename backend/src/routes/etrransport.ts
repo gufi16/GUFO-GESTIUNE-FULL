@@ -475,7 +475,7 @@ router.post("/api/v1/etransport/notices/:id/send", async (req: AuthedRequest, re
     return res.status(404).json({ ok: false, error: "Notificarea nu a fost gasita." })
   }
 
-  const company = await loadAnafCompanyContext(tenantId, req.auth?.activeCompanyId)
+  const company = await loadAnafCompanyContext(req.auth)
   const cif = normalizeCompanyCui(company?.cui)
   if (!cif) {
     return res.status(400).json({ ok: false, error: "Firma nu are CUI valid pentru transmiterea la ANAF." })
@@ -588,7 +588,7 @@ router.get("/api/v1/etransport/notices/:id/status", async (req: AuthedRequest, r
     return res.status(400).json({ ok: false, error: "Notificarea nu a fost trimisa inca la ANAF." })
   }
 
-  const company = await loadAnafCompanyContext(tenantId, req.auth?.activeCompanyId)
+  const company = await loadAnafCompanyContext(req.auth)
   if (!company?.efacturaOauthAccessToken) {
     return res.status(400).json({ ok: false, error: "Nu exista token ANAF salvat pentru aceasta firma." })
   }
@@ -682,7 +682,7 @@ router.get("/api/v1/etransport/notices/:id/receipt", async (req: AuthedRequest, 
     return res.status(404).json({ ok: false, error: "Notificarea nu a fost gasita." })
   }
 
-  const company = await loadAnafCompanyContext(tenantId, req.auth?.activeCompanyId)
+  const company = await loadAnafCompanyContext(req.auth)
   if (!company?.efacturaOauthAccessToken) {
     return res.status(400).json({ ok: false, error: "Nu exista token ANAF salvat pentru aceasta firma." })
   }

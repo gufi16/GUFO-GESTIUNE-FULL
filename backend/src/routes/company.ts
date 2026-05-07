@@ -10,7 +10,8 @@ import { getNextNumberPreview, getNumberingConfig, normalizeNumberingPayload } f
 import { requireTenantModule } from "../lib/tenantModules"
 import { anafHttpRequest } from "../lib/anafHttp"
 import { getAnafCompanyDiagnostics, getAnafTokenDiagnostics } from "../lib/anafClient"
-import { ensureTenantCompany, resolveTenantCompany, updateOrCreateTenantCompany } from "../lib/companyResolver"
+import { ensureTenantCompany, listTenantCompaniesForAuth, resolveTenantCompany, resolveTenantCompanyForAuth, updateOrCreateTenantCompany } from "../lib/companyResolver"
+import { resolveRequestCompany } from "../lib/companyScope"
 import {
   ANAF_CREDENTIAL_SELECT,
   getCompanyAnafCredentialById,
@@ -273,6 +274,39 @@ async function requireExplicitAnafCompanyContext(
   return activeCompany
 }
 
+async function requireExplicitAnafCompanyContextForAuth(
+  req: AuthedRequest,
+  requestedCompanyId?: string | null,
+) {
+  const companies = await listTenantCompaniesForAuth(prisma, req.auth, {
+    select: {
+      id: true,
+      name: true,
+      isDefault: true,
+    },
+  })
+
+  if (!companies.length) {
+    throw new Error("Nu exista nicio firma accesibila pentru acest cont.")
+  }
+
+  const effectiveCompanyId = requestedCompanyId || getActiveCompanyId(req) || null
+
+  if (!effectiveCompanyId) {
+    if (companies.length > 1) {
+      throw new Error("Selecteaza mai intai firma activa din ERP, apoi genereaza tokenul ANAF.")
+    }
+    return companies[0]
+  }
+
+  const company = companies.find((item) => item.id === effectiveCompanyId)
+  if (!company) {
+    throw new Error("Firma selectata nu este accesibila pentru acest cont.")
+  }
+
+  return company
+}
+
 async function getRequestCompany(req: AuthedRequest, extra: Record<string, any> = {}) {
   const includeCredentialList = Boolean(extra?.includeCredentialList)
   const select =
@@ -285,6 +319,7 @@ async function getRequestCompany(req: AuthedRequest, extra: Record<string, any> 
   return resolveCompanyWithAnafCredential(prisma as any, req.auth!.tenantId, getActiveCompanyId(req), {
     select,
     includeCredentialList,
+    auth: req.auth,
   })
 }
 
@@ -308,7 +343,7 @@ async function getRequestCompanyCertificateState(req: AuthedRequest) {
 }
 
 async function getRequestAnafCredential(req: AuthedRequest, explicitCredentialId?: string | null) {
-  const company = await resolveTenantCompany(prisma, req.auth!.tenantId, getActiveCompanyId(req), {
+  const company = await resolveTenantCompanyForAuth(prisma, req.auth, {
     select: {
       id: true,
       tenantId: true,
@@ -1120,7 +1155,7 @@ router.post(
         })
       }
 
-      const existingCompany = await resolveTenantCompany(prisma, tenantId, getActiveCompanyId(req), {
+      const existingCompany = await resolveRequestCompany(req, {
         select: {
           id: true,
           tenantId: true,
@@ -1193,7 +1228,7 @@ router.delete("/api/v1/company/efactura/certificate", requireAuth, async (req: A
   const requestedCredentialId = getRequestedCredentialId(req)
 
   try {
-    const company = await resolveTenantCompany(prisma, tenantId, getActiveCompanyId(req), {
+    const company = await resolveRequestCompany(req, {
       select: {
         id: true,
       },
@@ -1266,7 +1301,7 @@ router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, re
 
   let activeCompany: { id: string; name: string } | null = null
   try {
-    activeCompany = await requireExplicitAnafCompanyContext(tenantId, activeCompanyId, requestedCompanyId)
+    activeCompany = await requireExplicitAnafCompanyContextForAuth(req, requestedCompanyId)
   } catch (error: any) {
     return res.status(409).json({
       ok: false,
