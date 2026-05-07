@@ -1993,8 +1993,8 @@ export default function Documente() {
         </div>
 
         {activeTab === "consumption" ? (
-          <div className="overflow-hidden rounded-[16px] border border-slate-200">
-            <table className="w-full text-[13px]">
+          <div className="overflow-x-auto rounded-[16px] border border-slate-200">
+            <table className="min-w-[1120px] w-full text-[13px]">
               <thead className="bg-slate-50 text-slate-500">
                 <tr>
                   <th className="px-3 py-2.5 text-left font-medium">Tip</th>
@@ -2042,16 +2042,7 @@ export default function Documente() {
                         </span>
                       </td>
                       <td className="px-3 py-2.5 text-right">
-                        <div className="flex justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => openPdf(doc.id)}
-                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-                          >
-                            <Printer size={16} />
-                            PDF
-                          </button>
-
+                        <div className="flex min-w-max flex-nowrap justify-end gap-2">
                           <button
                             type="button"
                             onClick={() => openConsumptionDetail(doc.id)}
@@ -2059,6 +2050,14 @@ export default function Documente() {
                           >
                             Deschide
                             <ArrowRight size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openPdf(doc.id)}
+                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                          >
+                            <Printer size={16} />
+                            PDF
                           </button>
                         </div>
                       </td>
@@ -2069,8 +2068,8 @@ export default function Documente() {
             </table>
           </div>
         ) : activeTab === "production" ? (
-          <div className="overflow-hidden rounded-[22px] border border-slate-200">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto rounded-[22px] border border-slate-200">
+            <table className="min-w-[1080px] w-full text-sm">
               <thead className="bg-slate-50 text-slate-500">
                 <tr>
                   <th className="px-3 py-2.5 text-left font-medium">Tip</th>
@@ -2116,16 +2115,7 @@ export default function Documente() {
                         </span>
                       </td>
                       <td className="px-3 py-2.5 text-right">
-                        <div className="flex justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => openProductionPdf(doc.id)}
-                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-                          >
-                            <Printer size={16} />
-                            PDF
-                          </button>
-
+                        <div className="flex min-w-max flex-nowrap justify-end gap-2">
                           <button
                             type="button"
                             onClick={() => openProductionDetail(doc.id)}
@@ -2133,6 +2123,14 @@ export default function Documente() {
                           >
                             Deschide
                             <ArrowRight size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openProductionPdf(doc.id)}
+                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                          >
+                            <Printer size={16} />
+                            PDF
                           </button>
                         </div>
                       </td>
@@ -2143,8 +2141,8 @@ export default function Documente() {
             </table>
           </div>
         ) : activeTab === "invoice" ? (
-          <div className="overflow-hidden rounded-[22px] border border-slate-200">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto rounded-[22px] border border-slate-200">
+            <table className="min-w-[1460px] w-full text-sm">
               <thead className="bg-slate-50 text-slate-500">
                 <tr>
                   <th className="px-3 py-2.5 text-left font-medium">Numar</th>
@@ -2214,7 +2212,14 @@ export default function Documente() {
                       ) : null}
                       <td className="px-3 py-2.5 text-slate-600">{formatNumber(doc.totalGrossFc)} {doc.currency}</td>
                       <td className="px-3 py-2.5">
-                        <div className="flex flex-wrap items-center justify-end gap-2">
+                        <div className="flex min-w-max flex-nowrap items-center justify-end gap-2">
+                          <a
+                            href={`/inregistrare-document/factura/edit?id=${doc.id}`}
+                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-[#17324D] transition hover:bg-[#F4F7FB]"
+                          >
+                            Deschide
+                            <ArrowRight size={16} />
+                          </a>
                           <button
                             type="button"
                             onClick={() => openInvoicePdf(doc.id)}
@@ -2280,13 +2285,6 @@ export default function Documente() {
                               </div>
                             </details>
                           ) : null}
-                          <a
-                            href={`/inregistrare-document/factura/edit?id=${doc.id}`}
-                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-[#17324D] transition hover:bg-[#F4F7FB]"
-                          >
-                            Deschide
-                            <ArrowRight size={16} />
-                          </a>
                         </div>
                       </td>
                     </tr>
@@ -2297,8 +2295,8 @@ export default function Documente() {
             </table>
           </div>
         ) : activeTab === "receipt" ? (
-          <div className="overflow-hidden rounded-[22px] border border-slate-200">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto rounded-[22px] border border-slate-200">
+            <table className="min-w-[1040px] w-full text-sm">
               <thead className="bg-slate-50 text-slate-500">
                 <tr>
                   <th className="px-3 py-2.5 text-left font-medium">Numar</th>
@@ -2340,16 +2338,7 @@ export default function Documente() {
                         {formatRon(Number(doc.totalGrossRon || doc.totalRon || doc.grandTotal || doc.total || 0))}
                       </td>
                       <td className="px-3 py-2.5 text-right">
-                        <div className="flex justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => openReceiptPdf(doc.id)}
-                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-                          >
-                            <Printer size={16} />
-                            PDF
-                          </button>
-
+                        <div className="flex min-w-max flex-nowrap justify-end gap-2">
                           <button
                             type="button"
                             onClick={() => navigate(`/inregistrare-document/nir/edit?id=${doc.id}`)}
@@ -2357,6 +2346,14 @@ export default function Documente() {
                           >
                             Deschide
                             <ArrowRight size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openReceiptPdf(doc.id)}
+                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                          >
+                            <Printer size={16} />
+                            PDF
                           </button>
                         </div>
                       </td>
@@ -2367,8 +2364,8 @@ export default function Documente() {
             </table>
           </div>
         ) : activeTab === "transfer" ? (
-          <div className="overflow-hidden rounded-[22px] border border-slate-200">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto rounded-[22px] border border-slate-200">
+            <table className="min-w-[1380px] w-full text-sm">
               <thead className="bg-slate-50 text-slate-500">
                 <tr>
                   <th className="px-3 py-2 text-left font-medium">Nr.</th>
@@ -2401,7 +2398,7 @@ export default function Documente() {
                       <td className="px-3 py-2.5 text-slate-600">{doc.eTransportStatus || (doc.eTransportCandidate ? "Candidat" : "-")}</td>
                       <td className="px-3 py-2.5 text-slate-600">{formatRon(doc.totalValue || 0)}</td>
                       <td className="px-3 py-2.5">
-                        <div className="flex justify-end gap-2">
+                        <div className="flex min-w-max flex-nowrap justify-end gap-2">
                           <button
                             type="button"
                             onClick={() => navigate(`/transfer/edit?id=${doc.id}`)}
@@ -2497,8 +2494,8 @@ export default function Documente() {
             </table>
           </div>
         ) : activeTab === "minutes" ? (
-          <div className="overflow-hidden rounded-[22px] border border-slate-200">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto rounded-[22px] border border-slate-200">
+            <table className="min-w-[1100px] w-full text-sm">
               <thead className="bg-slate-50 text-slate-500">
                 <tr>
                   <th className="px-3 py-2.5 text-left font-medium">Tip</th>
@@ -2540,15 +2537,7 @@ export default function Documente() {
                       </td>
                       <td className="px-3 py-2.5 text-slate-600">{formatRon(Number(doc.totalValue || 0))}</td>
                       <td className="px-3 py-2.5 text-right">
-                        <div className="flex justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => openMinutesPdf(doc.id)}
-                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-                          >
-                            <Printer size={15} />
-                            PDF
-                          </button>
+                        <div className="flex min-w-max flex-nowrap justify-end gap-2">
                           <button
                             type="button"
                             onClick={() =>
@@ -2563,6 +2552,14 @@ export default function Documente() {
                             Deschide
                             <ArrowRight size={15} />
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => openMinutesPdf(doc.id)}
+                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                          >
+                            <Printer size={15} />
+                            PDF
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -2572,8 +2569,8 @@ export default function Documente() {
             </table>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-[22px] border border-slate-200">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto rounded-[22px] border border-slate-200">
+            <table className="min-w-[1080px] w-full text-sm">
               <thead className="bg-slate-50 text-slate-500">
                 <tr>
                   <th className="px-3 py-2.5 text-left font-medium">Tip</th>
@@ -2617,16 +2614,7 @@ export default function Documente() {
                         </span>
                       </td>
                       <td className="px-3 py-2.5 text-right">
-                        <div className="flex justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => openInventoryPdf(doc.id)}
-                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-                          >
-                            <Printer size={16} />
-                            PDF
-                          </button>
-
+                        <div className="flex min-w-max flex-nowrap justify-end gap-2">
                           <button
                             type="button"
                             onClick={() => openInventoryDetail(doc.id)}
@@ -2634,6 +2622,14 @@ export default function Documente() {
                           >
                             Deschide
                             <ArrowRight size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openInventoryPdf(doc.id)}
+                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                          >
+                            <Printer size={16} />
+                            PDF
                           </button>
                         </div>
                       </td>

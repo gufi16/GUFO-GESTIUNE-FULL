@@ -286,8 +286,8 @@ export default function NirListPage() {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        <table className="w-full text-[13px]">
+      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+        <table className="min-w-[1040px] w-full text-[13px]">
           <thead className="bg-slate-50 text-slate-500">
             <tr>
               <th className="px-3 py-2.5 text-left font-medium">Numar</th>
@@ -370,15 +370,7 @@ export default function NirListPage() {
                       </div>
                     </td>
                     <td className="px-3 py-3">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => openReceiptPdf(row?.id)}
-                          className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-                        >
-                          <Printer size={16} />
-                          PDF
-                        </button>
+                      <div className="flex min-w-max flex-nowrap items-center justify-end gap-2">
                         <button
                           type="button"
                           onClick={() => navigate(`/inregistrare-document/nir/edit?id=${row?.id}`)}
@@ -386,6 +378,14 @@ export default function NirListPage() {
                         >
                           Deschide
                           <ArrowRight size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openReceiptPdf(row?.id)}
+                          className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                        >
+                          <Printer size={16} />
+                          PDF
                         </button>
                       </div>
                     </td>
