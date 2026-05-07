@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
 import { ArrowUpToLine, Building2, ChevronDown, FileOutput, Plus, ReceiptText, RefreshCw, Send, UserRound, X } from "lucide-react"
-import PageHeader from "../components/PageHeader"
 import {
   DocumentField,
   DocumentMetric,
@@ -96,11 +95,6 @@ function isCustomerReadyForEfactura(customer: {
       String(customer.county || "").trim() &&
       String(customer.country || "").trim(),
   )
-}
-
-function extractDownloadId(value: string) {
-  const match = String(value || "").match(/id_descarcare="([^"]+)"/i)
-  return match?.[1] || ""
 }
 
 function shortEfacturaMessage(status: string) {
@@ -662,7 +656,7 @@ export default function FacturaPage() {
       if (!res.ok || !data?.ok || !data?.invoice) throw new Error(data?.error || "Nu am putut salva factura.")
       const savedId = data.invoice.id
       setStatus(data.invoice.status || (issueNow ? "ISSUED" : "DRAFT"))
-      setMessage(issueNow ? "Factura emisa." : "Draft salvat.")
+      setMessage(issueNow ? "Factura finalizata si salvata in documente." : "Factura finalizata si salvata in documente.")
       if (!invoiceId) {
         window.location.href = `/inregistrare-document/factura/edit?id=${savedId}`
         return
@@ -688,7 +682,7 @@ export default function FacturaPage() {
   })
   const efacturaPrepared = ["PREPARED", "READY_TO_SEND", "SENT", "ACCEPTED"].includes(efacturaStatus)
   const efacturaCanSend = status === "ISSUED" && customerReadyForEfactura
-  const efacturaDownloadId = extractDownloadId(efacturaInfo)
+  const hasSgr = totals.sgrFc > 0 || computedLines.some((line) => line.sgrTotalFc > 0)
   const invoicePanels = [
     {
       id: "header" as const,
@@ -706,33 +700,26 @@ export default function FacturaPage() {
 
   return (
     <div className="space-y-3">
-      <PageHeader
-        badge="operatiuni"
-        title={invoiceId ? "Editare factura" : "Factura noua"}
-      />
-
-      <div className={`grid grid-cols-1 gap-2.5 ${efacturaEnabled ? "md:grid-cols-5" : "md:grid-cols-4"}`}>
-        <DocumentMetric title="Status" value={<DocumentStatusPill status={status} />} tone="amber" />
-        <DocumentMetric title={`Total ${header.currency}`} value={formatMoneyRo(totals.grossFc + totals.sgrFc, header.currency)} tone="emerald" />
-        <DocumentMetric title="Pozitii" value={computedLines.filter((line) => line.productId && line.qty > 0).length} tone="blue" />
-        <DocumentMetric title="Client" value={header.customerName || "Nealocat"} tone="slate" />
-        {efacturaEnabled ? <DocumentMetric title="e-Factura" value={<DocumentStatusPill status={efacturaStatus} />} tone="slate" /> : null}
-      </div>
-
-      <div className="rounded-[22px] border border-slate-200 bg-white px-4 py-4 shadow-sm">
+      <div className="rounded-[8px] border border-slate-200 bg-white px-4 py-3 shadow-sm shadow-slate-900/[0.03]">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-wrap gap-2">
+          <div>
+            <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-600">
+              Operatiuni
+            </div>
+            <h1 className="mt-1 text-[22px] font-semibold tracking-tight text-[#17324D]">
+              {invoiceId ? "Editare factura" : "Factura noua"}
+            </h1>
+          </div>
+
+          <div className="flex flex-wrap justify-end gap-2">
             {invoiceId ? (
               <button type="button" onClick={printInvoicePdf} className={documentButtonSecondaryClass}>
                 <FileOutput size={16} className="mr-2" />
                 PDF
               </button>
             ) : null}
-            <button type="button" onClick={() => saveInvoice(false)} className={documentButtonSecondaryClass} disabled={saving || loadingMeta || loadingInvoice}>
-              {saving ? "Se salveaza..." : "Salveaza draft"}
-            </button>
             <button type="button" onClick={() => saveInvoice(true)} className={documentButtonPrimaryClass} disabled={saving || loadingMeta || loadingInvoice}>
-              {saving ? "Se salveaza..." : "Emite factura"}
+              {saving ? "Se salveaza..." : "Finalizeaza"}
             </button>
             {invoiceId && efacturaEnabled ? (
               <button
@@ -746,27 +733,6 @@ export default function FacturaPage() {
               </button>
             ) : null}
           </div>
-
-          {invoiceId && efacturaEnabled ? (
-            <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-2 xl:max-w-[760px] xl:grid-cols-4">
-              <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3 py-2">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Status SPV</div>
-                <div className="mt-1 flex items-center gap-2 text-sm font-semibold text-slate-900"><DocumentStatusPill status={efacturaStatus} /></div>
-              </div>
-              <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3 py-2">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">ID incarcare</div>
-                <div className="mt-1 text-sm font-semibold text-slate-900">{efacturaUploadIndex || "-"}</div>
-              </div>
-              <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3 py-2">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">ID descarcare</div>
-                <div className="mt-1 text-sm font-semibold text-slate-900">{efacturaDownloadId || "-"}</div>
-              </div>
-              <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3 py-2">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">XML</div>
-                <div className="mt-1 text-sm font-semibold text-slate-900">{efacturaPrepared ? "Generat" : "Negenerat"}</div>
-              </div>
-            </div>
-          ) : null}
         </div>
 
         {invoiceId && efacturaEnabled ? (
@@ -1020,7 +986,7 @@ export default function FacturaPage() {
           <DocumentMetric title="Linii" value={computedLines.length} tone="blue" />
           <DocumentMetric title={`Net ${header.currency}`} value={formatMoneyRo(totals.netFc, header.currency)} tone="slate" />
           <DocumentMetric title={`TVA ${header.currency}`} value={formatMoneyRo(totals.vatFc, header.currency)} tone="blue" />
-          <DocumentMetric title={`SGR ${header.currency}`} value={formatMoneyRo(totals.sgrFc, header.currency)} tone="slate" />
+          {hasSgr ? <DocumentMetric title={`SGR ${header.currency}`} value={formatMoneyRo(totals.sgrFc, header.currency)} tone="slate" /> : null}
           <DocumentMetric title={`Total ${header.currency}`} value={formatMoneyRo(totals.grossFc + totals.sgrFc, header.currency)} tone="emerald" />
         </div>
 
@@ -1133,7 +1099,7 @@ export default function FacturaPage() {
           <DocumentMetric title={`Discount ${header.currency}`} value={formatMoneyRo(totals.discountFc, header.currency)} tone="amber" />
           <DocumentMetric title={`Net ${header.currency}`} value={formatMoneyRo(totals.netFc, header.currency)} tone="slate" />
           <DocumentMetric title={`TVA ${header.currency}`} value={formatMoneyRo(totals.vatFc, header.currency)} tone="blue" />
-          <DocumentMetric title={`SGR ${header.currency}`} value={formatMoneyRo(totals.sgrFc, header.currency)} tone="slate" />
+          {hasSgr ? <DocumentMetric title={`SGR ${header.currency}`} value={formatMoneyRo(totals.sgrFc, header.currency)} tone="slate" /> : null}
           <DocumentMetric title={`Total ${header.currency}`} value={formatMoneyRo(totals.grossFc + totals.sgrFc, header.currency)} tone="emerald" />
           {header.currency !== "RON" ? <DocumentMetric title="Total RON" value={formatMoneyRo(totals.grossRon + totals.sgrRon, "RON")} tone="blue" /> : null}
         </div>

@@ -1,6 +1,5 @@
 ﻿import { useEffect, useMemo, useState } from "react"
 import type { CSSProperties, KeyboardEvent, ReactNode } from "react"
-import PageHeader from "../components/PageHeader"
 import { API_BASE, getToken } from "../lib/api"
 import { getActiveLocationId, setActiveLocationId, subscribeToActiveLocation } from "../lib/location"
 import { downloadPdfFile } from "../lib/pdf"
@@ -1062,7 +1061,7 @@ export default function NirPage() {
       }
 
       setStatus(data.receipt?.status || (postNow ? "POSTED" : "DRAFT"))
-      alert(postNow ? "NIR salvat si postat in stoc." : "NIR salvat.")
+      alert(postNow ? "NIR salvat si postat in stoc." : "NIR finalizat si salvat in documente.")
 
       if (receiptId) {
         await loadReceipt(receiptId)
@@ -1132,6 +1131,7 @@ export default function NirPage() {
     isMobileViewport && lines.length === 1 && !lines[0].productId && !lines[0].search.trim()
       ? []
       : lines
+  const hasSgr = totals.sgrFc > 0 || lines.some((line) => line.isSgr)
   const documentPanels = [
     {
       id: "header" as const,
@@ -1149,78 +1149,27 @@ export default function NirPage() {
 
   return (
     <div style={pageWrap}>
-      <div className="no-print" style={{ marginBottom: 20 }}>
-        <PageHeader badge="operatiuni" title={pageTitle} />
-      </div>
+      <div className="no-print" style={documentTopBar}>
+        <div>
+          <div style={documentTopBadge}>Operatiuni</div>
+          <h1 style={documentTopTitle}>{pageTitle}</h1>
+        </div>
 
-      <div className="no-print" style={isMobileViewport ? topActionsMobile : topActions}>
-        {isMobileViewport ? (
-          <>
-            <div style={topActionsPrimaryMobile}>
-              {!isPosted ? (
-                <>
-                  <button
-                    style={{ ...btnPrimary, width: "100%" }}
-                    onClick={() => saveNir(true)}
-                    disabled={saving || loadingReceipt}
-                  >
-                    {saving ? "Se salveaza..." : "Salveaza si posteaza"}
-                  </button>
-                  <button
-                    style={{ ...btnSecondary, width: "100%" }}
-                    onClick={() => saveNir(false)}
-                    disabled={saving || loadingReceipt}
-                  >
-                    {saving ? "Se salveaza..." : "Salveaza draft"}
-                  </button>
-                </>
-              ) : (
-                <button
-                  style={{ ...btnSecondary, width: "100%" }}
-                  onClick={handlePrint}
-                  disabled={!receiptId || loadingReceipt}
-                >
-                  Printeaza document
-                </button>
-              )}
-            </div>
-
-            <div style={topActionsCompactRowMobile}>
-              <a href="/inregistrare-document/nir" style={{ textDecoration: "none" }}>
-                <button style={btnGhostMobile}>Inapoi</button>
-              </a>
-              <button
-                style={btnGhostMobile}
-                onClick={handlePrint}
-                disabled={!receiptId || loadingReceipt}
-              >
-                Print
-              </button>
-              <button
-                style={btnGhostMobile}
-                onClick={exportPdf}
-                disabled={!receiptId || loadingReceipt}
-              >
-                PDF
-              </button>
-            </div>
-          </>
-        ) : null}
-        <div style={isMobileViewport ? { display: "none" } : { display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div style={isMobileViewport ? documentTopActionsMobile : documentTopActions}>
           <a href="/inregistrare-document/nir" style={{ textDecoration: "none" }}>
-            <button style={btnSecondary}>Inapoi la lista</button>
+            <button style={isMobileViewport ? btnGhostMobile : btnSecondary}>Inapoi</button>
           </a>
 
           <button
-            style={btnSecondary}
+            style={isMobileViewport ? btnGhostMobile : btnSecondary}
             onClick={handlePrint}
             disabled={!receiptId || loadingReceipt}
           >
-            Printeaza
+            Print
           </button>
 
           <button
-            style={btnSecondary}
+            style={isMobileViewport ? btnGhostMobile : btnSecondary}
             onClick={exportPdf}
             disabled={!receiptId || loadingReceipt}
           >
@@ -1228,23 +1177,13 @@ export default function NirPage() {
           </button>
 
           {!isPosted && (
-            <>
-              <button
-                style={btnSecondary}
-                onClick={() => saveNir(false)}
-                disabled={saving || loadingReceipt}
-              >
-                {saving ? "Se salveaza..." : "Salveaza draft"}
-              </button>
-
-              <button
-                style={btnPrimary}
-                onClick={() => saveNir(true)}
-                disabled={saving || loadingReceipt}
-              >
-                {saving ? "Se salveaza..." : "Salveaza si posteaza"}
-              </button>
-            </>
+            <button
+              style={isMobileViewport ? { ...btnPrimary, width: "100%" } : btnPrimary}
+              onClick={() => saveNir(false)}
+              disabled={saving || loadingReceipt}
+            >
+              {saving ? "Se salveaza..." : "Finalizeaza"}
+            </button>
           )}
         </div>
       </div>
@@ -1622,7 +1561,7 @@ export default function NirPage() {
               <Card title="Produse valide" value={String(uniqueProductsCount)} />
               <Card title="Cantitate reala" value={`${formatNumber(totals.stockQty)} buc`} />
               <Card
-                title={`Total cu SGR ${header.currency}`}
+                title={hasSgr ? `Total cu SGR ${header.currency}` : `Total ${header.currency}`}
                 value={`${formatNumber(totals.withSgrFc)} ${header.currency}`}
               />
             </div>
@@ -1641,6 +1580,7 @@ export default function NirPage() {
               <Card title="Linii" value={String(lines.length)} />
               <Card title={`Net ${header.currency}`} value={`${formatNumber(totals.netFc)} ${header.currency}`} />
               <Card title={`TVA ${header.currency}`} value={`${formatNumber(totals.vatFc)} ${header.currency}`} />
+              {hasSgr ? <Card title={`SGR ${header.currency}`} value={`${formatNumber(totals.sgrFc)} ${header.currency}`} /> : null}
               <Card title={`Total ${header.currency}`} value={`${formatNumber(totals.withSgrFc)} ${header.currency}`} />
             </div>
 
@@ -1997,13 +1937,13 @@ export default function NirPage() {
             <div style={totalsGrid}>
               <Card title={`Net ${header.currency}`} value={`${formatNumber(totals.netFc)} ${header.currency}`} />
               <Card title={`TVA ${header.currency}`} value={`${formatNumber(totals.vatFc)} ${header.currency}`} />
-              <Card title={`SGR ${header.currency}`} value={`${formatNumber(totals.sgrFc)} ${header.currency}`} />
-              <Card title={`Total fara SGR ${header.currency}`} value={`${formatNumber(totals.grossFc)} ${header.currency}`} />
-              <Card title={`Total cu SGR ${header.currency}`} value={`${formatNumber(totals.withSgrFc)} ${header.currency}`} />
+              {hasSgr ? <Card title={`SGR ${header.currency}`} value={`${formatNumber(totals.sgrFc)} ${header.currency}`} /> : null}
+              {hasSgr ? <Card title={`Total fara SGR ${header.currency}`} value={`${formatNumber(totals.grossFc)} ${header.currency}`} /> : null}
+              <Card title={hasSgr ? `Total cu SGR ${header.currency}` : `Total ${header.currency}`} value={`${formatNumber(totals.withSgrFc)} ${header.currency}`} />
               {header.currency !== "RON" && (
                 <>
                   <Card title="Total RON fara SGR" value={`${formatNumber(totals.grossRon)} RON`} />
-                  <Card title="SGR RON" value={`${formatNumber(totals.sgrRon)} RON`} />
+                  {hasSgr ? <Card title="SGR RON" value={`${formatNumber(totals.sgrRon)} RON`} /> : null}
                   <Card title="Total RON cu SGR" value={`${formatNumber(totals.withSgrRon)} RON`} />
                 </>
               )}
@@ -2505,6 +2445,56 @@ function StatusBadge({ status }: { status: string }) {
 
 const pageWrap: CSSProperties = {
   padding: 0,
+}
+
+const documentTopBar: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  flexWrap: "wrap",
+  padding: "12px 14px",
+  marginBottom: 12,
+  borderRadius: 8,
+  border: "1px solid #e2e8f0",
+  background: "#fff",
+  boxShadow: "0 1px 2px rgba(15,23,42,0.04)",
+}
+
+const documentTopBadge: CSSProperties = {
+  display: "inline-flex",
+  padding: "2px 8px",
+  borderRadius: 999,
+  border: "1px solid #e2e8f0",
+  background: "#f8fafc",
+  color: "#475569",
+  fontSize: 10,
+  fontWeight: 700,
+  textTransform: "uppercase",
+  letterSpacing: 1.2,
+}
+
+const documentTopTitle: CSSProperties = {
+  margin: "4px 0 0",
+  color: "#17324d",
+  fontSize: 22,
+  lineHeight: 1.2,
+  fontWeight: 700,
+}
+
+const documentTopActions: CSSProperties = {
+  display: "flex",
+  justifyContent: "flex-end",
+  alignItems: "center",
+  gap: 8,
+  flexWrap: "wrap",
+}
+
+const documentTopActionsMobile: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 8,
+  width: "100%",
 }
 
 const topActions: CSSProperties = {
