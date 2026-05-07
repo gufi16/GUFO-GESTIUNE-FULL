@@ -4,8 +4,9 @@ import path from "path"
 import AdmZip from "adm-zip"
 import { prisma } from "./prisma"
 import { getEfacturaCertPath } from "./efacturaCertificate"
+import { getUploadsRoot } from "./uploads"
 
-const uploadsDir = path.join(process.cwd(), "uploads")
+const uploadsDir = getUploadsRoot()
 const backupsDir = path.join(uploadsDir, "tenant-backups")
 
 function sanitizeSegment(value: string) {

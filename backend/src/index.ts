@@ -10,6 +10,7 @@ import { z } from "zod"
 import fs from "fs"
 import path from "path"
 import crypto from "crypto"
+import { ensureUploadSubdir, getUploadsRoot } from "./lib/uploads"
 
 import { prisma } from "./lib/prisma"
 import { getPrimaryTenantCompany } from "./lib/companyResolver"
@@ -60,12 +61,9 @@ const CORS_ORIGINS = CORS_ORIGIN.split(",").map((value) => value.trim()).filter(
 const JWT_SECRET =
   process.env.JWT_SECRET || (process.env.NODE_ENV !== "production" ? "dev_secret" : "")
 
-const uploadsDir = path.join(process.cwd(), "uploads")
-const productUploadsDir = path.join(uploadsDir, "products")
-const categoryUploadsDir = path.join(uploadsDir, "categories")
-
-fs.mkdirSync(productUploadsDir, { recursive: true })
-fs.mkdirSync(categoryUploadsDir, { recursive: true })
+const uploadsDir = getUploadsRoot()
+ensureUploadSubdir("products")
+ensureUploadSubdir("categories")
 
 app.disable("etag")
 

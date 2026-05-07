@@ -1,8 +1,9 @@
 import crypto from "crypto"
 import fs from "fs"
 import path from "path"
+import { ensureUploadSubdir } from "./uploads"
 
-const CERT_DIR = path.join(process.cwd(), "uploads", "efactura-certificates")
+const CERT_DIR = ensureUploadSubdir("efactura-certificates")
 
 function getCryptoSecret() {
   const seed =

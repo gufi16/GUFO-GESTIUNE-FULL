@@ -7,6 +7,7 @@ import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { reserveNextNumber } from "../lib/numbering"
 import { requireRequestCompanyId } from "../lib/companyScope"
+import { buildPublicUploadUrl, ensureUploadSubdir, normalizeStoredUploadUrl } from "../lib/uploads"
 
 const router = Router()
 
@@ -111,8 +112,7 @@ async function ensureDefaultUoms(tenantId: string, companyId: string) {
 }
 
 
-const uploadsDir = path.join(process.cwd(), "uploads", "categories")
-fs.mkdirSync(uploadsDir, { recursive: true })
+const uploadsDir = ensureUploadSubdir("categories")
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
@@ -149,31 +149,14 @@ const upload = multer({
 router.use(requireAuth)
 
 function normalizeImageUrl(value: any) {
-  const text = String(value || "").trim()
-  if (!text) return null
-
-  const lowered = text.toLowerCase()
-  if (
-    lowered === "null" ||
-    lowered === "undefined" ||
-    lowered === "false" ||
-    lowered === "about:blank" ||
-    lowered === "n/a" ||
-    lowered === "na" ||
-    lowered === "-"
-  ) {
-    return null
-  }
-
-  return text
+  return normalizeStoredUploadUrl(value)
 }
 
 function mergeImageUrl(requestedImageUrl: string | null, currentImageUrl: string | null) {
   if (!requestedImageUrl) return currentImageUrl || null
 
-  if (/^https?:\/\//i.test(requestedImageUrl) || requestedImageUrl.startsWith("/uploads/")) {
-    return requestedImageUrl
-  }
+  const normalized = normalizeStoredUploadUrl(requestedImageUrl)
+  if (normalized) return normalized
 
   return currentImageUrl || null
 }
@@ -181,10 +164,6 @@ function mergeImageUrl(requestedImageUrl: string | null, currentImageUrl: string
 function toNullableText(value: any) {
   const text = String(value || "").trim()
   return text || null
-}
-
-function buildPublicImageUrl(req: any, folder: "products" | "categories", filename: string) {
-  return `${req.protocol}://${req.get("host")}/uploads/${folder}/${filename}`
 }
 
 router.post(
@@ -197,7 +176,7 @@ router.post(
 
     return res.json({
       ok: true,
-      imageUrl: buildPublicImageUrl(req, "categories", req.file.filename)
+      imageUrl: buildPublicUploadUrl("categories", req.file.filename)
     })
   }
 )

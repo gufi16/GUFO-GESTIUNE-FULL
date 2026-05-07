@@ -8,11 +8,11 @@ import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { requireRequestCompanyId, resolveRequestCompany } from "../lib/companyScope"
 import { suggestNcCodes } from "../lib/ncSuggest"
+import { buildPublicUploadUrl, ensureUploadSubdir, normalizeStoredUploadUrl } from "../lib/uploads"
 
 const router = Router()
 
-const uploadsDir = path.join(process.cwd(), "uploads", "products")
-fs.mkdirSync(uploadsDir, { recursive: true })
+const uploadsDir = ensureUploadSubdir("products")
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
@@ -174,56 +174,16 @@ async function getNextAvailableProductSkuValue(
 }
 
 function normalizeImageUrl(value: any) {
-  const text = String(value || "").trim()
-  if (!text) return null
-
-  const lowered = text.toLowerCase()
-  if (
-    lowered === "null" ||
-    lowered === "undefined" ||
-    lowered === "false" ||
-    lowered === "about:blank" ||
-    lowered === "n/a" ||
-    lowered === "na" ||
-    lowered === "-"
-  ) {
-    return null
-  }
-
-  return text
+  return normalizeStoredUploadUrl(value)
 }
 
 function mergeImageUrl(requestedImageUrl: string | null, currentImageUrl: string | null) {
   if (!requestedImageUrl) return currentImageUrl || null
 
-  if (/^https?:\/\//i.test(requestedImageUrl) || requestedImageUrl.startsWith("/uploads/")) {
-    return requestedImageUrl
-  }
+  const normalized = normalizeStoredUploadUrl(requestedImageUrl)
+  if (normalized) return normalized
 
   return currentImageUrl || null
-}
-
-function buildPublicBaseUrl(req: any) {
-  const explicitBase = String(
-    process.env.PUBLIC_API_URL || process.env.API_PUBLIC_URL || process.env.APP_PUBLIC_API_URL || ""
-  )
-    .trim()
-    .replace(/\/+$/, "")
-
-  if (explicitBase) return explicitBase
-
-  const forwardedProto = String(req.headers["x-forwarded-proto"] || req.protocol || "http")
-    .split(",")[0]
-    .trim()
-  const forwardedHost = String(req.headers["x-forwarded-host"] || req.get("host") || "")
-    .split(",")[0]
-    .trim()
-
-  return `${forwardedProto}://${forwardedHost}`
-}
-
-function buildPublicImageUrl(req: any, folder: "products" | "categories", filename: string) {
-  return `${buildPublicBaseUrl(req)}/uploads/${folder}/${filename}`
 }
 
 router.post(
@@ -236,7 +196,7 @@ router.post(
 
     return res.json({
       ok: true,
-      imageUrl: buildPublicImageUrl(req, "products", req.file.filename)
+      imageUrl: buildPublicUploadUrl("products", req.file.filename)
     })
   }
 )
