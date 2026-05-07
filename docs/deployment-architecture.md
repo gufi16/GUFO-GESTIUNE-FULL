@@ -59,6 +59,7 @@ Recommended services:
 - `PORT`
 - `CORS_ORIGIN`
 - `NODE_ENV=production`
+- `UPLOADS_DIR` -> absolute path mounted persistently for product/category images and certificates
 
 Optional but recommended:
 
@@ -75,14 +76,30 @@ Optional but recommended:
 ## Storage Strategy
 
 Short term:
-- keep uploads working as they do now
-- but plan migration away from ephemeral local filesystem
+- keep uploads on persistent disk, never only inside a disposable container layer
+- set `UPLOADS_DIR` to the mounted path used by the API container
+- mount the same host folder back into the container on every deploy
 
 Safer target:
 - object storage or CDN-backed storage for:
   - product images
   - category images
   - saved XML/PDF artifacts
+
+### Docker Rule
+
+If API runs in Docker, uploaded files must be on a persistent volume. Example:
+
+```yaml
+services:
+  api:
+    volumes:
+      - /opt/poshard/gufo-gestiune-full/uploads:/app/uploads
+    environment:
+      UPLOADS_DIR: /app/uploads
+```
+
+Without this, image files can disappear after rebuilds even if `imageUrl` remains saved in the database.
 
 ## Database Stability
 

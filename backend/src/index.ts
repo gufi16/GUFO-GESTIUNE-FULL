@@ -65,6 +65,13 @@ const uploadsDir = getUploadsRoot()
 ensureUploadSubdir("products")
 ensureUploadSubdir("categories")
 
+if (!String(process.env.UPLOADS_DIR || "").trim()) {
+  console.warn(
+    `[uploads] UPLOADS_DIR is not set. Files are stored in ${uploadsDir}. ` +
+      `In Docker production you should mount this path persistently, otherwise rebuilds can remove uploaded files.`
+  )
+}
+
 app.disable("etag")
 
 function getHostnameFromUrl(value: string) {
