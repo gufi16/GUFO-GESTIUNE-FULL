@@ -30,6 +30,7 @@ import {
   getEfacturaCertPath,
   hasEfacturaCertificateFile,
 } from "../lib/efacturaCertificate"
+import { ensureUploadSubdir } from "../lib/uploads"
 
 const router = Router()
 
@@ -40,13 +41,13 @@ const ANAF_TEST_URL = "https://api.anaf.ro/TestOauth/jaxrs/hello?name=GuFo%20ERP
 const ANAF_CUI_LOOKUP_URL = "https://webservicesp.anaf.ro/api/PlatitorTvaRest/v9/tva"
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret"
 const ANAF_OAUTH_CTX_COOKIE = "gufo_anaf_oauth_ctx"
+const efacturaAgentUploadsDir = ensureUploadSubdir("efactura-agent")
 const certUploadsDir = ensureEfacturaCertDir()
-const efacturaAgentDownloadDirs = [
+const efacturaAgentDownloadDirs = Array.from(new Set([
   String(process.env.GUFO_EFACTURA_AGENT_DOWNLOAD_DIR || "").trim(),
-  path.join(process.cwd(), "uploads", "efactura-agent"),
+  efacturaAgentUploadsDir,
   path.join(process.cwd(), "..", "uploads", "efactura-agent"),
-  "/opt/poshard/gufo-gestiune-full/uploads/efactura-agent",
-].filter(Boolean)
+].filter(Boolean)))
 
 const certStorage = multer.diskStorage({
   destination: (_req, _file, cb) => {

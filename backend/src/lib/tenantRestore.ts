@@ -3,6 +3,7 @@ import fs from "fs"
 import path from "path"
 import AdmZip from "adm-zip"
 import { prisma } from "./prisma"
+import { ensureUploadsRoot } from "./uploads"
 
 function toDateIfPossible(value: any) {
   if (typeof value !== "string") return value
@@ -62,7 +63,7 @@ function restoreUploadFilesFromZip(
     overwriteExisting?: boolean
   },
 ) {
-  const uploadsRoot = path.resolve(process.cwd(), "uploads")
+  const uploadsRoot = ensureUploadsRoot()
   let restoredFiles = 0
   let skippedExistingFiles = 0
 

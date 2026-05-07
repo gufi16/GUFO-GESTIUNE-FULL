@@ -12,6 +12,7 @@ import { requireTenantModule } from "../lib/tenantModules"
 import { reserveNextNumber } from "../lib/numbering"
 import { resolveTenantCompany } from "../lib/companyResolver"
 import { requireRequestCompanyId } from "../lib/companyScope"
+import { ensureUploadSubdir } from "../lib/uploads"
 import {
   extractDownloadId,
   extractUploadIndex,
@@ -27,8 +28,7 @@ const execFileAsync = promisify(execFile)
 
 router.use(requireAuth)
 
-const incomingEfacturaPdfDir = path.join(process.cwd(), "uploads", "incoming-efactura-pdfs")
-fs.mkdirSync(incomingEfacturaPdfDir, { recursive: true })
+const incomingEfacturaPdfDir = ensureUploadSubdir("incoming-efactura-pdfs")
 
 function registerFonts(doc: PDFKit.PDFDocument) {
   const regularCandidates = [
