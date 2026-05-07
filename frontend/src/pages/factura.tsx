@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { ArrowUpToLine, Building2, ChevronDown, FileOutput, Plus, ReceiptText, RefreshCw, Send, UserRound, X } from "lucide-react"
+import { ArrowUpToLine, Building2, ChevronDown, FileOutput, Plus, ReceiptText, RefreshCw, RotateCcw, Send, UserRound, X } from "lucide-react"
 import {
   DocumentField,
   DocumentMetric,
@@ -130,6 +130,7 @@ export default function FacturaPage() {
   const [efacturaUploadIndex, setEfacturaUploadIndex] = useState("")
   const [efacturaSentAt, setEfacturaSentAt] = useState("")
   const [efacturaDownloadedAt, setEfacturaDownloadedAt] = useState("")
+  const [invoiceTypeCode, setInvoiceTypeCode] = useState("380")
   const [customerSearch, setCustomerSearch] = useState("")
   const [customerChosen, setCustomerChosen] = useState(false)
   const [quickCustomerOpen, setQuickCustomerOpen] = useState(false)
@@ -231,7 +232,8 @@ export default function FacturaPage() {
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data?.ok || !data?.invoice) throw new Error(data?.error || "Nu am putut incarca factura.")
       const invoice = data.invoice
-      setStatus(invoice.status || "DRAFT")
+    setStatus(invoice.status || "DRAFT")
+    setInvoiceTypeCode(invoice.invoiceTypeCode || "380")
       setEfacturaStatus(invoice.efacturaStatus || "NOT_READY")
       setEfacturaInfo(invoice.efacturaErrorText || "")
       setEfacturaIssues([])
@@ -357,6 +359,32 @@ export default function FacturaPage() {
     }
 
     await downloadPdfFile(res, `Factura-${header.docNo || "draft"}.pdf`)
+  }
+
+  async function createStornoInvoice() {
+    if (!invoiceId || !token) return
+    const ok = window.confirm("Creezi factura storno? Se va genera o factura noua cu pozitii negative.")
+    if (!ok) return
+
+    setSaving(true)
+    setError("")
+    setMessage("")
+
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/sales-invoices/${invoiceId}/storno`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok || !data?.invoice?.id) {
+        throw new Error(data?.error || "Nu am putut crea factura storno.")
+      }
+      window.location.href = `/inregistrare-document/factura/edit?id=${data.invoice.id}`
+    } catch (e: any) {
+      setError(e?.message || "Nu am putut crea factura storno.")
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function prepareEfactura() {
@@ -566,7 +594,7 @@ export default function FacturaPage() {
     const fxRate = header.currency === "RON" ? 1 : Math.max(0.000001, toNumber(header.fxRate))
     return lines.map((line) => {
       const product = products.find((item) => item.id === line.productId)
-      const qty = Math.max(0, toNumber(line.qty))
+      const qty = invoiceTypeCode === "381" ? toNumber(line.qty) : Math.max(0, toNumber(line.qty))
       const unitPriceFc = Math.max(0, toNumber(line.unitPriceFc))
       const vatRateValue = Math.max(0, toNumber(line.vatRateValue))
       const discountPercent = Math.min(100, Math.max(0, toNumber(line.discountPercent)))
@@ -597,7 +625,7 @@ export default function FacturaPage() {
         sgrTotalRon: sgrTotalFc * fxRate,
       }
     })
-  }, [header.currency, header.fxRate, lines, products])
+  }, [header.currency, header.fxRate, invoiceTypeCode, lines, products])
 
   const totals = useMemo(
     () =>
@@ -682,7 +710,8 @@ export default function FacturaPage() {
   })
   const efacturaPrepared = ["PREPARED", "READY_TO_SEND", "SENT", "ACCEPTED"].includes(efacturaStatus)
   const efacturaCanSend = status === "ISSUED" && customerReadyForEfactura
-  const hasSgr = totals.sgrFc > 0 || computedLines.some((line) => line.sgrTotalFc > 0)
+  const hasSgr = Math.abs(totals.sgrFc) > 0 || computedLines.some((line) => Math.abs(line.sgrTotalFc) > 0)
+  const isStornoInvoice = invoiceTypeCode === "381" || totals.grossFc + totals.sgrFc < 0
   const invoicePanels = [
     {
       id: "header" as const,
@@ -718,9 +747,17 @@ export default function FacturaPage() {
                 PDF
               </button>
             ) : null}
-            <button type="button" onClick={() => saveInvoice(true)} className={documentButtonPrimaryClass} disabled={saving || loadingMeta || loadingInvoice}>
-              {saving ? "Se salveaza..." : "Finalizeaza"}
-            </button>
+            {!isStornoInvoice ? (
+              <button type="button" onClick={() => saveInvoice(true)} className={documentButtonPrimaryClass} disabled={saving || loadingMeta || loadingInvoice}>
+                {saving ? "Se salveaza..." : "Finalizeaza"}
+              </button>
+            ) : null}
+            {invoiceId && status === "ISSUED" && !isStornoInvoice ? (
+              <button type="button" onClick={createStornoInvoice} className={documentButtonSecondaryClass} disabled={saving || loadingInvoice}>
+                <RotateCcw size={16} className="mr-2" />
+                Storneaza
+              </button>
+            ) : null}
             {invoiceId && efacturaEnabled ? (
               <button
                 type="button"

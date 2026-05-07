@@ -207,6 +207,93 @@ async function replaceInvoiceItems(
   await recalcInvoice(invoiceId)
 }
 
+async function createStornoInvoice(tenantId: string, companyId: string, sourceInvoice: any) {
+  const docNo = await prisma.$transaction((tx) => reserveNextNumber(tx, tenantId, "invoice"))
+  const now = new Date()
+
+  const created = await prisma.salesInvoice.create({
+    data: {
+      tenantId,
+      companyId,
+      locationId: sourceInvoice.locationId,
+      customerId: sourceInvoice.customerId || null,
+      docNo,
+      docDate: now,
+      dueDate: now,
+      customerName: sourceInvoice.customerName,
+      customerCode: sourceInvoice.customerCode || null,
+      customerCif: sourceInvoice.customerCif || null,
+      customerRegNo: sourceInvoice.customerRegNo || null,
+      customerAddress: sourceInvoice.customerAddress || null,
+      customerEmail: sourceInvoice.customerEmail || null,
+      customerPhone: sourceInvoice.customerPhone || null,
+      currency: sourceInvoice.currency || "RON",
+      fxRate: sourceInvoice.fxRate || 1,
+      invoiceTypeCode: "381",
+      efacturaStatus: "NOT_READY",
+      efacturaXmlText: null,
+      efacturaErrorText: null,
+      efacturaPreparedAt: null,
+      efacturaValidatedAt: null,
+      efacturaLastCheckAt: null,
+      note: `Factura storno pentru ${sourceInvoice.docNo}${sourceInvoice.note ? `\n${sourceInvoice.note}` : ""}`,
+      status: "ISSUED",
+    },
+  })
+
+  for (const sourceItem of sourceInvoice.items || []) {
+    const qty = -Math.abs(toNumber(sourceItem.qty))
+
+    await prisma.salesInvoiceItem.create({
+      data: {
+        invoiceId: created.id,
+        productId: sourceItem.productId,
+        productName: sourceItem.productName || sourceItem.product?.name || "",
+        productCode: sourceItem.productCode || null,
+        uomCode: sourceItem.uomCode || null,
+        uomStandardCode: sourceItem.uomStandardCode || null,
+        vatCategoryCode: sourceItem.vatCategoryCode || null,
+        qty,
+        unitPriceFc: toNumber(sourceItem.unitPriceFc),
+        vatRateValue: toNumber(sourceItem.vatRateValue),
+        discountPercent: toNumber(sourceItem.discountPercent),
+        discountAmountFc: -Math.abs(toNumber(sourceItem.discountAmountFc)),
+        lineNetFc: -Math.abs(toNumber(sourceItem.lineNetFc)),
+        lineVatFc: -Math.abs(toNumber(sourceItem.lineVatFc)),
+        lineGrossFc: -Math.abs(toNumber(sourceItem.lineGrossFc)),
+        sgrUnitFc: toNumber(sourceItem.sgrUnitFc),
+        sgrTotalFc: -Math.abs(toNumber(sourceItem.sgrTotalFc)),
+        discountAmountRon: -Math.abs(toNumber(sourceItem.discountAmountRon)),
+        lineNetRon: -Math.abs(toNumber(sourceItem.lineNetRon)),
+        lineVatRon: -Math.abs(toNumber(sourceItem.lineVatRon)),
+        lineGrossRon: -Math.abs(toNumber(sourceItem.lineGrossRon)),
+        sgrTotalRon: -Math.abs(toNumber(sourceItem.sgrTotalRon)),
+      },
+    })
+  }
+
+  await recalcInvoice(created.id)
+
+  return prisma.salesInvoice.findFirst({
+    where: { id: created.id, tenantId, companyId },
+    include: {
+      location: true,
+      customer: true,
+      items: {
+        include: {
+          product: {
+            include: {
+              uom: true,
+              vatRate: true,
+            },
+          },
+        },
+        orderBy: { createdAt: "asc" },
+      },
+    },
+  })
+}
+
 function enrichInvoice(invoice: any) {
   invoice = serializeInvoice(invoice)
   if (!invoice) return invoice
@@ -367,6 +454,62 @@ router.get("/api/v1/sales-invoices/:id", async (req: AuthedRequest, res) => {
     ok: true,
     invoice: enrichInvoice(invoice),
   })
+})
+
+router.post("/api/v1/sales-invoices/:id/storno", async (req: AuthedRequest, res) => {
+  const tenantId = getTenantId(req)
+  if (!tenantId) {
+    return res.status(401).json({ ok: false, error: "Tenant invalid." })
+  }
+  const companyId = await requireRequestCompanyId(req)
+  const id = req.params.id
+
+  try {
+    const sourceInvoice = await prisma.salesInvoice.findFirst({
+      where: { id, tenantId, companyId },
+      include: {
+        location: true,
+        customer: true,
+        items: {
+          include: {
+            product: {
+              include: {
+                uom: true,
+                vatRate: true,
+              },
+            },
+          },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    })
+
+    if (!sourceInvoice) {
+      return res.status(404).json({ ok: false, error: "Factura nu a fost gasita." })
+    }
+
+    if (sourceInvoice.status !== "ISSUED") {
+      return res.status(400).json({ ok: false, error: "Se poate storna doar o factura finalizata." })
+    }
+
+    if (String(sourceInvoice.invoiceTypeCode || "") === "381" || toNumber(sourceInvoice.totalGrossFc) < 0) {
+      return res.status(400).json({ ok: false, error: "Factura selectata este deja o factura storno." })
+    }
+
+    if (!sourceInvoice.items?.length) {
+      return res.status(400).json({ ok: false, error: "Factura nu are pozitii de stornat." })
+    }
+
+    const stornoInvoice = await createStornoInvoice(tenantId, companyId, sourceInvoice)
+
+    return res.json({
+      ok: true,
+      message: `Factura storno ${stornoInvoice?.docNo || ""} a fost creata.`,
+      invoice: enrichInvoice(stornoInvoice),
+    })
+  } catch (error: any) {
+    return res.status(500).json({ ok: false, error: error?.message || "Nu am putut storna factura." })
+  }
 })
 
 router.post("/api/v1/sales-invoices/full", async (req: AuthedRequest, res) => {

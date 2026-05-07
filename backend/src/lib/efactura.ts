@@ -261,9 +261,9 @@ function expandInvoiceLinesForEfactura(invoice: any) {
     expanded.push(line)
 
     const sgrTotalFc = toNumber(line?.sgrTotalFc)
-    if (sgrTotalFc <= 0) continue
+    if (sgrTotalFc === 0) continue
 
-    const qty = Math.max(toNumber(line?.qty), 1)
+    const qty = toNumber(line?.qty) || (sgrTotalFc < 0 ? -1 : 1)
     const sgrUnitFc = toNumber(line?.sgrUnitFc) > 0 ? toNumber(line?.sgrUnitFc) : sgrTotalFc / qty
 
     expanded.push({
@@ -361,10 +361,13 @@ export function validateInvoiceForEFactura(invoice: any, company: any) {
     issues.push({ severity: "error", field: "invoice.customer.county", message: "Judetul clientului trebuie mapat la cod ISO 3166-2:RO, de tip RO-B sau RO-CJ." })
   }
 
+  const allowsNegativeLines = String(invoice?.invoiceTypeCode || "") === "381" || toNumber(invoice?.totalGrossFc) < 0
+
   for (const [index, line] of Array.isArray(invoice?.items) ? invoice.items.entries() : []) {
     const row = index + 1
+    const qty = toNumber(line?.qty)
     if (!line?.productName) issues.push({ severity: "error", field: `items.${index}.productName`, message: `Linia ${row} nu are denumirea produsului.` })
-    if (toNumber(line?.qty) <= 0) issues.push({ severity: "error", field: `items.${index}.qty`, message: `Linia ${row} are cantitate invalida.` })
+    if (allowsNegativeLines ? qty === 0 : qty <= 0) issues.push({ severity: "error", field: `items.${index}.qty`, message: `Linia ${row} are cantitate invalida.` })
     if (toNumber(line?.unitPriceFc) < 0) issues.push({ severity: "error", field: `items.${index}.unitPriceFc`, message: `Linia ${row} are pret invalid.` })
     if (!resolveInvoiceLineUomCode(line)) issues.push({ severity: "warning", field: `items.${index}.uomCode`, message: `Linia ${row} nu are UM completata pe snapshot.` })
     if (!normalizeUomCode(resolveInvoiceLineUomCode(line))) {

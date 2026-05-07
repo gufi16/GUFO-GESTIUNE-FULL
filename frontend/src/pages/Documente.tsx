@@ -8,6 +8,7 @@ import {
   Filter,
   PackageSearch,
   Repeat2,
+  RotateCcw,
   Search,
   X,
   Printer,
@@ -259,6 +260,7 @@ type SalesInvoiceListItem = {
     name: string
   } | null
   currency: string
+  invoiceTypeCode?: string | null
   totalGrossFc: number
   status: string
   efacturaStatus?: string
@@ -1229,6 +1231,30 @@ export default function Documente() {
     }
   }
 
+  async function createInvoiceStorno(id: string) {
+    if (!token) return
+    const ok = window.confirm("Creezi factura storno pentru factura selectata? Se va genera o factura noua cu valori negative.")
+    if (!ok) return
+
+    setError("")
+    setMessage("")
+
+    try {
+      const res = await fetch(`${API}/api/v1/sales-invoices/${id}/storno`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok || !data?.invoice) {
+        throw new Error(data?.error || "Nu am putut crea factura storno.")
+      }
+      setMessage(data?.message || `Factura storno ${data.invoice.docNo || ""} a fost creata.`)
+      await loadInvoiceDocs()
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut crea factura storno.")
+    }
+  }
+
   async function sendInvoiceEfactura(id: string) {
     if (!token) return
 
@@ -2147,16 +2173,26 @@ export default function Documente() {
                     </td>
                   </tr>
                 ) : (
-                  filteredInvoiceDocs.map((doc) => (
+                  filteredInvoiceDocs.map((doc) => {
+                    const isStornoInvoice = String(doc.invoiceTypeCode || "") === "381" || Number(doc.totalGrossFc || 0) < 0
+
+                    return (
                     <tr
                       key={doc.id}
                       className={
                         isInvoiceSpvOverdue(doc.docDate, doc.efacturaStatus)
                           ? "border-t border-red-200 bg-red-50/60"
-                          : "border-t border-slate-200"
+                          : isStornoInvoice
+                            ? "border-t border-amber-200 bg-amber-50/35"
+                            : "border-t border-slate-200"
                       }
                     >
-                      <td className="px-3 py-2.5 font-semibold text-slate-900">{doc.docNo}</td>
+                      <td className="px-3 py-2.5 font-semibold text-slate-900">
+                        <div className="flex flex-col gap-1">
+                          <span>{doc.docNo}</span>
+                          {isStornoInvoice ? <span className="w-fit rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">STORNO</span> : null}
+                        </div>
+                      </td>
                       <td className="px-3 py-2.5 text-slate-600">{formatDate(doc.docDate)}</td>
                       <td className="px-3 py-2.5 text-slate-600">{doc.customerName || "-"}</td>
                       <td className="px-3 py-2.5 text-slate-600">{doc.customerCif || "-"}</td>
@@ -2187,6 +2223,17 @@ export default function Documente() {
                             <Printer size={16} />
                             PDF
                           </button>
+                          {!isStornoInvoice ? (
+                            <button
+                              type="button"
+                              onClick={() => createInvoiceStorno(doc.id)}
+                              disabled={doc.status !== "ISSUED"}
+                              className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              <RotateCcw size={16} />
+                              Storneaza
+                            </button>
+                          ) : null}
                           {efacturaEnabled ? (
                             <button
                               type="button"
@@ -2243,7 +2290,8 @@ export default function Documente() {
                         </div>
                       </td>
                     </tr>
-                  ))
+                    )
+                  })
                 )}
               </tbody>
             </table>
