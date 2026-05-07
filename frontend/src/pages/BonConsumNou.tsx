@@ -1,7 +1,6 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react"
-import { Check, Search, Trash2 } from "lucide-react"
+import { ArrowLeft, Check, Search, Trash2 } from "lucide-react"
 import { useNavigate } from "react-router-dom"
-import PageHeader from "../components/PageHeader"
 import {
   DocumentField,
   DocumentMetric,
@@ -108,6 +107,7 @@ function buildStockMap(payload: any) {
 
 export default function BonConsumNou() {
   const navigate = useNavigate()
+  const [activePanel, setActivePanel] = useState<"date" | "produse">("date")
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [locationId, setLocationIdState] = useState(getActiveLocationId())
   const [note, setNote] = useState("")
@@ -292,22 +292,70 @@ export default function BonConsumNou() {
   const totalProducts = items.length
   const totalQty = items.reduce((sum, item) => sum + item.qty, 0)
   const lowStockItems = items.filter((item) => item.qty > item.stock).length
+  const panels = [
+    { key: "date", title: "Date" },
+    { key: "produse", title: "Produse" },
+  ] as const
 
   return (
-    <div className="w-full space-y-4">
-      <PageHeader badge="document" title="Bon de consum" subtitle="Consum manual rapid, fara retetar." />
+    <div className="w-full space-y-3">
+      <div className="rounded-[8px] border border-slate-200 bg-white px-4 py-3 shadow-sm shadow-slate-900/[0.03]">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-600">
+              Operatiuni
+            </div>
+            <h1 className="mt-1 text-[22px] font-semibold tracking-tight text-[#17324D]">Bon de consum</h1>
+          </div>
+
+          <div className="flex flex-wrap justify-end gap-2">
+            <button type="button" onClick={() => navigate("/inregistrare-document")} className={documentButtonSecondaryClass}>
+              <ArrowLeft size={16} className="mr-2" />
+              Inapoi
+            </button>
+            <button type="button" onClick={saveDoc} disabled={saving} className={documentButtonPrimaryClass}>
+              <Check size={16} className="mr-2" />
+              {saving ? "Se salveaza..." : "Finalizeaza"}
+            </button>
+          </div>
+        </div>
+      </div>
 
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-        <DocumentMetric title="Pozitii" value={totalProducts} tone="slate" />
-        <DocumentMetric title="Cantitate" value={totalQty.toLocaleString("ro-RO")} tone="blue" />
-        <DocumentMetric title="Peste stoc" value={lowStockItems} tone="amber" />
+      <div className="rounded-[8px] border border-slate-200 bg-white p-2 shadow-sm shadow-slate-900/[0.03]">
+        <div className="flex flex-wrap gap-2">
+          {panels.map((panel, index) => {
+            const isActive = activePanel === panel.key
+            return (
+              <button
+                key={panel.key}
+                type="button"
+                onClick={() => setActivePanel(panel.key)}
+                className={[
+                  "inline-flex h-10 items-center gap-2 rounded-[8px] px-3 text-sm font-semibold transition",
+                  isActive ? "bg-[#17324D] text-white" : "bg-slate-50 text-[#17324D] hover:bg-slate-100",
+                ].join(" ")}
+              >
+                <span className={["inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold", isActive ? "bg-white/15 text-white" : "bg-slate-100 text-[#17324D]"].join(" ")}>
+                  {index + 1}
+                </span>
+                {panel.title}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-3 2xl:grid-cols-[minmax(0,1fr)_320px]">
+      {activePanel === "produse" ? (
         <div className="space-y-3">
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
+            <DocumentMetric title="Pozitii" value={totalProducts} tone="slate" />
+            <DocumentMetric title="Cantitate" value={totalQty.toLocaleString("ro-RO")} tone="blue" />
+            <DocumentMetric title="Peste stoc" value={lowStockItems} tone="amber" />
+          </div>
+
           <DocumentSection title="Adauga produse">
             <div className="relative">
               <Search size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -422,7 +470,9 @@ export default function BonConsumNou() {
             </div>
           </DocumentSection>
         </div>
+      ) : null}
 
+      {activePanel === "date" ? (
         <DocumentSection title="Detalii document">
           <div className="space-y-3">
             <DocumentField label="Locatie">
@@ -447,18 +497,9 @@ export default function BonConsumNou() {
               Locatie activa: <span className="font-semibold">{selectedLocationName}</span>
             </InlineNotice>
 
-            <div className="flex flex-col gap-2">
-              <button type="button" onClick={saveDoc} disabled={saving} className={documentButtonPrimaryClass}>
-                <Check size={16} className="mr-2" />
-                {saving ? "Se salveaza..." : "Salveaza bonul de consum"}
-              </button>
-              <button type="button" onClick={() => navigate("/inregistrare-document")} className={documentButtonSecondaryClass}>
-                Inapoi la documente
-              </button>
-            </div>
           </div>
         </DocumentSection>
-      </div>
+      ) : null}
     </div>
   )
 }

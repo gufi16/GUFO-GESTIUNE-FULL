@@ -1,6 +1,5 @@
 ﻿import { useEffect, useMemo, useState } from "react"
 import { ArrowLeft, ArrowRightLeft, FileOutput, Plus, Search, Trash2, Truck, Warehouse } from "lucide-react"
-import PageHeader from "../components/PageHeader"
 import { useNavigate } from "react-router-dom"
 import {
   DocumentMetric,
@@ -440,6 +439,7 @@ export default function TransferPage() {
   const [status, setStatus] = useState("DRAFT")
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
+  const [activePanel, setActivePanel] = useState<"date" | "produse">("date")
   const [partnerLookupBusy, setPartnerLookupBusy] = useState(false)
   const [showETransportModal, setShowETransportModal] = useState(false)
   const [startAdr, setStartAdr] = useState<ETransportAdrForm>(createEmptyAdrForm())
@@ -1291,22 +1291,51 @@ export default function TransferPage() {
   }
 
   const eTransportPrepared = ["PREPARED", "READY_TO_REVIEW", "SENT", "ACCEPTED"].includes(header.eTransportStatus || "")
+  const panels = [
+    { key: "date", title: "Date" },
+    { key: "produse", title: "Produse" },
+  ] as const
 
   return (
-    <div className="w-full space-y-4">
-      <PageHeader badge="document" title={!transferId ? "Transfer nou" : isPosted ? "Transfer postat" : "Editare transfer"} />
+    <div className="w-full space-y-3">
+      <div className="rounded-[8px] border border-slate-200 bg-white px-4 py-3 shadow-sm shadow-slate-900/[0.03]">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-600">
+              Operatiuni
+            </div>
+            <h1 className="mt-1 text-[22px] font-semibold tracking-tight text-[#17324D]">
+              {!transferId ? "Transfer nou" : isPosted ? "Transfer postat" : "Editare transfer"}
+            </h1>
+          </div>
+
+          <div className="flex flex-wrap justify-end gap-2">
+            <button type="button" onClick={() => navigate("/transfer")} className={documentButtonSecondaryClass}>
+              <ArrowLeft size={16} className="mr-2" />
+              Inapoi
+            </button>
+            <button type="button" className={documentButtonSecondaryClass} onClick={() => setShowETransportModal(true)}>
+              <Truck size={16} className="mr-2" />
+              E-Transport
+            </button>
+            <button type="button" className={documentButtonSecondaryClass} onClick={exportPdf} disabled={!transferId || loadingDoc}>
+              <FileOutput size={16} className="mr-2" />
+              PDF
+            </button>
+            {!isPosted ? (
+              <button type="button" className={documentButtonPrimaryClass} onClick={() => saveDoc(true)} disabled={saving || loadingDoc}>
+                {saving ? "Se salveaza..." : "Finalizeaza"}
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
 
       {loadingMeta ? <InlineNotice>Se incarca nomenclatoarele pentru transfer.</InlineNotice> : null}
       {loadingDoc ? <InlineNotice>Se incarca documentul selectat.</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {isPosted ? <InlineNotice>Documentul este postat si ramane doar in regim de vizualizare si export PDF.</InlineNotice> : null}
-
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-        <DocumentMetric title="Status" value={<DocumentStatusPill status={status || "DRAFT"} />} tone="amber" />
-        <DocumentMetric title="Cantitate totala" value={formatNumber(totals.totalQty)} tone="blue" />
-        <DocumentMetric title="Valoare estimata" value={`${formatNumber(totals.totalValue)} RON`} tone="emerald" />
-      </div>
 
       {eTransportSummary.candidate ? (
         <InlineNotice tone={eTransportSummary.required ? "success" : "info"}>
@@ -1316,29 +1345,39 @@ export default function TransferPage() {
         </InlineNotice>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        <button type="button" onClick={() => navigate("/transfer")} className={documentButtonSecondaryClass}>
-          <ArrowLeft size={16} className="mr-2" />
-          Inapoi la lista
-        </button>
-        <button type="button" className={documentButtonSecondaryClass} onClick={() => setShowETransportModal(true)}>
-          <Truck size={16} className="mr-2" />
-          E-Transport
-        </button>
-        <button type="button" className={documentButtonSecondaryClass} onClick={exportPdf} disabled={!transferId || loadingDoc}>
-          <FileOutput size={16} className="mr-2" />
-          PDF
-        </button>
-        {!isPosted && transferId ? (
-          <button type="button" className={documentButtonDangerClass} onClick={deleteTransfer}>
-            <Trash2 size={16} className="mr-2" />
-            Sterge
-          </button>
-        ) : null}
+      <div className="rounded-[8px] border border-slate-200 bg-white p-2 shadow-sm shadow-slate-900/[0.03]">
+        <div className="flex flex-wrap gap-2">
+          {panels.map((panel, index) => {
+            const isActive = activePanel === panel.key
+            return (
+              <button
+                key={panel.key}
+                type="button"
+                onClick={() => setActivePanel(panel.key)}
+                className={[
+                  "inline-flex h-10 items-center gap-2 rounded-[8px] px-3 text-sm font-semibold transition",
+                  isActive ? "bg-[#17324D] text-white" : "bg-slate-50 text-[#17324D] hover:bg-slate-100",
+                ].join(" ")}
+              >
+                <span className={["inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold", isActive ? "bg-white/15 text-white" : "bg-slate-100 text-[#17324D]"].join(" ")}>
+                  {index + 1}
+                </span>
+                {panel.title}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       <div className="flex flex-col gap-3">
+        {activePanel === "produse" ? (
         <div className="space-y-3 order-2">
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
+            <DocumentMetric title="Status" value={<DocumentStatusPill status={status || "DRAFT"} />} tone="amber" />
+            <DocumentMetric title="Cantitate totala" value={formatNumber(totals.totalQty)} tone="blue" />
+            <DocumentMetric title="Valoare estimata" value={`${formatNumber(totals.totalValue)} RON`} tone="emerald" />
+          </div>
+
           <DocumentSection title="Linii transfer" actions={!isPosted ? (
             <button type="button" className={documentButtonPrimaryClass} onClick={addLine}>
               <Plus size={16} className="mr-2" />
@@ -1454,26 +1493,16 @@ export default function TransferPage() {
             </div>
           </DocumentSection>
         </div>
+        ) : null}
 
+        {activePanel === "date" ? (
         <div className="space-y-3 order-1">
           <DocumentSection
             title="Detalii transfer"
-            actions={!isPosted ? (
-              <div className="flex flex-wrap gap-2">
-                <button type="button" className={documentButtonSecondaryClass} onClick={() => saveDoc(false)} disabled={saving || loadingDoc}>
-                  {saving ? "Se salveaza..." : "Salveaza draft"}
-                </button>
-                {transferId ? (
-                  <>
-                    <button type="button" className={documentButtonPrimaryClass} onClick={() => saveDoc(true)} disabled={saving || loadingDoc}>
-                      {saving ? "Se salveaza..." : "Finalizeaza"}
-                    </button>
-                    <button type="button" className={documentButtonDangerClass} onClick={deleteTransfer} disabled={saving || loadingDoc}>
-                      Anuleaza
-                    </button>
-                  </>
-                ) : null}
-              </div>
+            actions={!isPosted && transferId ? (
+              <button type="button" className={documentButtonDangerClass} onClick={deleteTransfer} disabled={saving || loadingDoc}>
+                Anuleaza
+              </button>
             ) : null}
           >
             <div className="space-y-3">
@@ -2194,6 +2223,7 @@ export default function TransferPage() {
             </div>
           </DocumentSection>
         </div>
+        ) : null}
       </div>
     </div>
   )
