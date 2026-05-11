@@ -657,7 +657,7 @@ async function resolveDailyClosureAuth(req: PosAuthRequest, body: z.infer<typeof
     body.licenseKey,
   ]);
 
-  if (hintedTerminalIds.isNotEmpty() || hintedDeviceIds.isNotEmpty()) {
+  if (hintedTerminalIds.length > 0 || hintedDeviceIds.length > 0) {
     const hintedTerminal = await prisma.terminal.findFirst({
       where: {
         OR: [
@@ -2969,4 +2969,5 @@ router.post("/api/v1/pos/sales", requirePosAuth, handlePosSale);
 router.post("/api/v1/pos/receipts", requirePosAuth, handlePosSale);
 
 export default router;
+
 
