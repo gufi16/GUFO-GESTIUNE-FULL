@@ -1304,6 +1304,26 @@ const PosSaleSchema = z.object({
   receiptNo: z.string().optional(),
   soldAt: z.string().optional(),
   total: z.number(),
+  licenseKey: z.string().optional().nullable(),
+  license_key: z.string().optional().nullable(),
+  deviceId: z.string().optional().nullable(),
+  device_id: z.string().optional().nullable(),
+  androidDeviceId: z.string().optional().nullable(),
+  terminalId: z.string().optional().nullable(),
+  terminal_id: z.string().optional().nullable(),
+  terminalDeviceId: z.string().optional().nullable(),
+  terminal_device_id: z.string().optional().nullable(),
+  terminal: z
+    .object({
+      id: z.string().optional().nullable(),
+      deviceId: z.string().optional().nullable(),
+      device_id: z.string().optional().nullable(),
+      label: z.string().optional().nullable(),
+      locationId: z.string().optional().nullable(),
+      location_id: z.string().optional().nullable(),
+    })
+    .optional()
+    .nullable(),
 
   paymentType: z.enum(["CASH", "CARD", "MIXED"]).optional(),
   cashAmount: z.number().optional(),
@@ -1338,6 +1358,152 @@ const PosOperatorLoginSchema = z.object({
 });
 
 const POS_OPERATOR_ROLES = [UserRole.OWNER, UserRole.ADMIN, UserRole.MANAGER, UserRole.CASHIER];
+
+type ResolvedPosTerminalAuth = {
+  tenantId: string;
+  terminalId: string;
+  deviceId: string;
+};
+
+function dedupeNonEmpty(values: Array<unknown>) {
+  return Array.from(
+    new Set(
+      values
+        .map((value) => normalizeText(value))
+        .filter(Boolean)
+    )
+  );
+}
+
+async function lookupTerminalAuthByHints(
+  hints: z.infer<typeof PosSaleSchema>,
+  tenantId?: string | null
+): Promise<ResolvedPosTerminalAuth | null> {
+  const terminalIds = dedupeNonEmpty([
+    hints.terminalId,
+    hints.terminal_id,
+    hints.terminal?.id,
+  ]);
+  const deviceIds = dedupeNonEmpty([
+    hints.terminalDeviceId,
+    hints.terminal_device_id,
+    hints.deviceId,
+    hints.device_id,
+    hints.androidDeviceId,
+    hints.licenseKey,
+    hints.license_key,
+    hints.terminal?.deviceId,
+    hints.terminal?.device_id,
+  ]);
+
+  if (!terminalIds.length && !deviceIds.length) {
+    return null;
+  }
+
+  const terminal = await prisma.terminal.findFirst({
+    where: {
+      ...(tenantId ? { tenantId } : {}),
+      OR: [
+        ...(terminalIds.length ? [{ id: { in: terminalIds } }] : []),
+        ...(deviceIds.length ? [{ deviceId: { in: deviceIds } }] : []),
+      ],
+    },
+    include: {
+      tenant: {
+        include: {
+          licenses: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
+        },
+      },
+    },
+  });
+
+  const license = terminal?.tenant.licenses[0];
+  if (
+    !terminal ||
+    !license ||
+    license.isSuspended ||
+    license.expiresAt <= new Date() ||
+    !license.modPos
+  ) {
+    return null;
+  }
+
+  return {
+    tenantId: terminal.tenantId,
+    terminalId: terminal.id,
+    deviceId: terminal.deviceId,
+  };
+}
+
+async function resolveSaleAuthContext(
+  req: PosAuthRequest,
+  hints: z.infer<typeof PosSaleSchema>
+): Promise<ResolvedPosTerminalAuth | null> {
+  const explicitAuth =
+    (await lookupTerminalAuthByHints(hints, req.auth?.tenantId || null)) ||
+    (await lookupTerminalAuthByHints(hints));
+
+  if (req.auth?.tenantId && req.auth.terminalId && req.auth.deviceId) {
+    if (
+      explicitAuth &&
+      (explicitAuth.terminalId !== req.auth.terminalId || explicitAuth.deviceId !== req.auth.deviceId)
+    ) {
+      console.warn("POS SALE TERMINAL OVERRIDE FROM PAYLOAD", {
+        authTerminalId: req.auth.terminalId,
+        authDeviceId: req.auth.deviceId,
+        payloadTerminalId: explicitAuth.terminalId,
+        payloadDeviceId: explicitAuth.deviceId,
+      });
+      return explicitAuth;
+    }
+
+    return {
+      tenantId: req.auth.tenantId,
+      terminalId: req.auth.terminalId,
+      deviceId: req.auth.deviceId,
+    };
+  }
+
+  const scopedSession = resolvePairedPosSession(req);
+  if (scopedSession) {
+    if (
+      explicitAuth &&
+      (explicitAuth.terminalId !== scopedSession.terminalId || explicitAuth.deviceId !== scopedSession.deviceId)
+    ) {
+      console.warn("POS SALE SCOPED SESSION OVERRIDE FROM PAYLOAD", {
+        scopedTerminalId: scopedSession.terminalId,
+        scopedDeviceId: scopedSession.deviceId,
+        payloadTerminalId: explicitAuth.terminalId,
+        payloadDeviceId: explicitAuth.deviceId,
+      });
+      return explicitAuth;
+    }
+
+    return {
+      tenantId: scopedSession.tenantId,
+      terminalId: scopedSession.terminalId,
+      deviceId: scopedSession.deviceId,
+    };
+  }
+
+  if (explicitAuth) {
+    return explicitAuth;
+  }
+
+  const latestSession = resolveLatestPairedPosSession();
+  if (latestSession) {
+    return {
+      tenantId: latestSession.tenantId,
+      terminalId: latestSession.terminalId,
+      deviceId: latestSession.deviceId,
+    };
+  }
+
+  return null;
+}
 
 export async function handlePosOperatorsList(req: PosAuthRequest, res: Response) {
   const auth = await resolvePosAuthContext(req);
@@ -2362,7 +2528,7 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
     return res.status(400).json({ ok: false, error: parsed.error.flatten() });
   }
 
-  const auth = await resolvePosAuthContext(req);
+  const auth = await resolveSaleAuthContext(req, parsed.data);
   if (!auth?.tenantId || !auth?.terminalId) {
     return res.status(401).json({
       ok: false,

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react"
 import { API_BASE as API, authHeaders } from "../lib/api"
 import { formatMoneyRo, formatQtyRo } from "../lib/format"
+import { getActiveLocationId, subscribeToActiveLocation } from "../lib/location"
+import { getActiveTerminalId, subscribeToActiveTerminal } from "../lib/terminal"
 
 type PosReceiptLine = {
   id: string
@@ -69,6 +71,8 @@ export default function PosReceiptsView({ compact = false }: Props) {
   const today = useMemo(() => toInputDate(new Date()), [])
   const [dateFrom, setDateFrom] = useState(today)
   const [dateTo, setDateTo] = useState(today)
+  const [activeLocationId, setActiveLocationId] = useState(getActiveLocationId())
+  const [activeTerminalId, setActiveTerminalId] = useState(getActiveTerminalId())
   const [items, setItems] = useState<PosReceipt[]>([])
   const [totals, setTotals] = useState({ total: 0, cash: 0, card: 0, count: 0 })
   const [loading, setLoading] = useState(false)
@@ -91,6 +95,8 @@ export default function PosReceiptsView({ compact = false }: Props) {
         dateFrom: startIso(dateFrom),
         dateTo: endIso(dateTo),
       })
+      if (activeLocationId) params.set("locationId", activeLocationId)
+      if (activeTerminalId) params.set("terminalId", activeTerminalId)
       const res = await fetch(`${API}/api/v1/finance/pos-receipts?${params.toString()}`, {
         headers: authHeaders(),
         cache: "no-store",
@@ -112,6 +118,22 @@ export default function PosReceiptsView({ compact = false }: Props) {
   useEffect(() => {
     void loadReceipts()
   }, [])
+
+  useEffect(() => {
+    return subscribeToActiveLocation((nextLocationId) => {
+      setActiveLocationId(nextLocationId)
+    })
+  }, [])
+
+  useEffect(() => {
+    return subscribeToActiveTerminal((nextTerminalId) => {
+      setActiveTerminalId(nextTerminalId)
+    })
+  }, [])
+
+  useEffect(() => {
+    void loadReceipts()
+  }, [activeLocationId, activeTerminalId])
 
   return (
     <div className={compact ? "space-y-4" : "rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm"}>
