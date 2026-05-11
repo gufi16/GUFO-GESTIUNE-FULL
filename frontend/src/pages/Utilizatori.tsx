@@ -340,7 +340,7 @@ export default function Utilizatori() {
                 <th className="px-3 py-2">Utilizator</th>
                 <th className="px-3 py-2">Rol</th>
                 <th className="px-3 py-2">Status</th>
-                <th className="px-3 py-2">PIN POS</th>
+                <th className="px-3 py-2">PIN acces POS / KDS</th>
                 <th className="px-3 py-2">Firme</th>
                 <th className="px-3 py-2">Creat</th>
                 <th className="px-3 py-2 text-right">Actiuni</th>
@@ -437,7 +437,7 @@ export default function Utilizatori() {
                       </button>
                       <button className={documentButtonSecondaryClass} onClick={() => configurePosPin(item)} type="button">
                         <KeyRound size={16} className="mr-2" />
-                        {item.hasPosPin ? "Schimba PIN POS" : "Seteaza PIN POS"}
+                        {item.hasPosPin ? "Schimba PIN POS / KDS" : "Seteaza PIN POS / KDS"}
                       </button>
                       <button className={documentButtonSecondaryClass} onClick={() => resetPassword(item)} type="button">
                         <KeyRound size={16} className="mr-2" />
@@ -475,7 +475,7 @@ export default function Utilizatori() {
                 <h2 className="text-lg font-semibold text-[#17324D]">{editingUserId ? "Editeaza utilizator" : "Adauga utilizator"}</h2>
                 <p className="mt-1 text-sm text-slate-500">
                   {editingUserId
-                    ? "Modifici nume, email, rol, parola, PIN POS si accesul pe firme."
+                    ? "Modifici nume, email, rol, parola, PIN-ul de acces POS / KDS si accesul pe firme."
                     : "Completezi utilizatorul si il salvezi direct in lista."}
                 </p>
               </div>
@@ -549,7 +549,7 @@ export default function Utilizatori() {
               </div>
 
               <div>
-                <label className="mb-1 block text-xs font-medium text-slate-700">PIN POS</label>
+                <label className="mb-1 block text-xs font-medium text-slate-700">PIN acces POS / KDS</label>
                 <input
                   type="password"
                   name={editingUserId ? "edit-user-pos-pin" : "create-user-pos-pin"}
@@ -559,7 +559,7 @@ export default function Utilizatori() {
                   onChange={(e) => setForm((current) => ({ ...current, posPin: e.target.value }))}
                   placeholder={editingUserId ? "Lasa gol pentru stergere sau neschimbat prin butonul dedicat" : "Ex: 1234"}
                 />
-                <div className="mt-1 text-xs text-slate-500">La Android POS loginul se face pe numele utilizatorului si PIN-ul de aici.</div>
+                <div className="mt-1 text-xs text-slate-500">Atat GuFo POS, cat si GuFo KDS folosesc numele utilizatorului din ERP si PIN-ul de aici.</div>
               </div>
 
               <div>

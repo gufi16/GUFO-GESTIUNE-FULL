@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import PageHeader from "../components/PageHeader"
 import { useNavigate } from "react-router-dom"
-import { Archive, ArrowRight, Building2, FileDigit, History, MonitorSmartphone, Percent, ReceiptText, RefreshCcw, Settings2, Users } from "lucide-react"
+import { Archive, ArrowRight, Building2, FileDigit, History, Percent, ReceiptText, RefreshCcw, Settings2, Users } from "lucide-react"
 import {
   DocumentMetric,
   InlineNotice,
@@ -39,15 +39,9 @@ const items = [
   },
   {
     name: "Utilizatori ERP",
-    desc: "Administrezi administratorii, managerii, ospatarii si restul echipei.",
+    desc: "Administrezi echipa si setezi PIN-ul de acces folosit in GuFo POS si GuFo KDS.",
     route: "/setari/utilizatori",
     icon: Users,
-  },
-  {
-    name: "Setari KDS",
-    desc: "Vezi device-urile GuFo KDS, pairing-ul ERP si operatorii care se autentifica prin PIN.",
-    route: "/setari/kds",
-    icon: MonitorSmartphone,
   },
   {
     name: "Backup client",
