@@ -90,6 +90,40 @@ export async function decrementStockBalanceStrict(
   })
 }
 
+export async function decrementStockBalanceAllowNegative(
+  tx: Prisma.TransactionClient,
+  params: {
+    tenantId: string
+    companyId: string
+    locationId: string
+    productId: string
+    qty: Prisma.Decimal | number
+  }
+) {
+  return tx.stockBalance.upsert({
+    where: {
+      tenantId_companyId_locationId_productId: {
+        tenantId: params.tenantId,
+        companyId: params.companyId,
+        locationId: params.locationId,
+        productId: params.productId,
+      },
+    },
+    update: {
+      qty: {
+        decrement: params.qty,
+      },
+    },
+    create: {
+      tenantId: params.tenantId,
+      companyId: params.companyId,
+      locationId: params.locationId,
+      productId: params.productId,
+      qty: new Prisma.Decimal(0).minus(params.qty),
+    },
+  })
+}
+
 export async function incrementStockBalance(
   tx: Prisma.TransactionClient,
   params: {

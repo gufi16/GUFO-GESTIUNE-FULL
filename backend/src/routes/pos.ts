@@ -4,7 +4,7 @@ import { z } from "zod";
 import jwt from "jsonwebtoken";
 import { Prisma, UserRole } from "@prisma/client";
 import { prisma } from "../lib/prisma";
-import { decrementStockBalanceStrict } from "../lib/stock";
+import { decrementStockBalanceAllowNegative, decrementStockBalanceStrict } from "../lib/stock";
 import { getPrimaryTenantCompany } from "../lib/companyResolver";
 import { reserveNextNumber } from "../lib/numbering";
 import { verifySecret } from "../lib/auth";
@@ -2832,13 +2832,12 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
 
           const ingredientQty = new Prisma.Decimal(ingredientQtyNumber);
 
-          await decrementStockBalanceStrict(tx, {
+          await decrementStockBalanceAllowNegative(tx, {
               tenantId,
               companyId: company?.id || null,
               locationId,
             productId: recipeItem.ingredientId,
             qty: ingredientQty,
-            productName: recipeItem.ingredient?.name || `ingredient ${recipeItem.ingredientId}`,
           });
 
           await tx.consumptionDocItem.create({
@@ -2867,14 +2866,12 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
 
         }
       } else {
-        await decrementStockBalanceStrict(tx, {
+        await decrementStockBalanceAllowNegative(tx, {
             tenantId,
             companyId: company?.id || null,
             locationId,
           productId: line.productId,
           qty: qtyDecimal,
-          productName: product.name,
-          uomCode: product.uom?.code || null,
         });
 
         await tx.stockMove.create({
