@@ -1540,15 +1540,9 @@ async function resolveSaleAuthContext(
     return explicitAuth;
   }
 
-  const latestSession = resolveLatestPairedPosSession();
-  if (latestSession) {
-    return {
-      tenantId: latestSession.tenantId,
-      terminalId: latestSession.terminalId,
-      deviceId: latestSession.deviceId,
-    };
-  }
-
+  // Do not fall back to the latest paired session for POS sales.
+  // If a sale reaches this point without explicit terminal hints or a scoped/auth session,
+  // attributing it globally can leak sales across devices and break device-specific dashboards.
   return null;
 }
 
@@ -2969,5 +2963,6 @@ router.post("/api/v1/pos/sales", requirePosAuth, handlePosSale);
 router.post("/api/v1/pos/receipts", requirePosAuth, handlePosSale);
 
 export default router;
+
 
 
