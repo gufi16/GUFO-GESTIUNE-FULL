@@ -625,6 +625,10 @@ const PosDailyClosureSchema = z.object({
   reportText: z.string().optional().nullable(),
   licenseKey: z.string().optional().nullable(),
   deviceId: z.string().optional().nullable(),
+  androidDeviceId: z.string().optional().nullable(),
+  terminalId: z.string().optional().nullable(),
+  terminalDeviceId: z.string().optional().nullable(),
+  terminalLabel: z.string().optional().nullable(),
   locationId: z.string().optional().nullable(),
   payload: z.any().optional(),
 });
@@ -646,6 +650,49 @@ const PosBackofficeReceiptSchema = z.object({
 });
 
 async function resolveDailyClosureAuth(req: PosAuthRequest, body: z.infer<typeof PosDailyClosureSchema>) {
+  const hintedTerminalIds = dedupeNonEmpty([body.terminalId]);
+  const hintedDeviceIds = dedupeNonEmpty([
+    body.terminalDeviceId,
+    body.deviceId,
+    body.licenseKey,
+  ]);
+
+  if (hintedTerminalIds.isNotEmpty() || hintedDeviceIds.isNotEmpty()) {
+    const hintedTerminal = await prisma.terminal.findFirst({
+      where: {
+        OR: [
+          ...(hintedTerminalIds.length ? [{ id: { in: hintedTerminalIds } }] : []),
+          ...(hintedDeviceIds.length ? [{ deviceId: { in: hintedDeviceIds } }] : []),
+        ],
+      },
+      include: {
+        tenant: {
+          include: {
+            licenses: {
+              orderBy: { createdAt: "desc" },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+
+    const hintedLicense = hintedTerminal?.tenant.licenses[0];
+    if (
+      hintedTerminal &&
+      hintedLicense &&
+      !hintedLicense.isSuspended &&
+      hintedLicense.expiresAt > new Date() &&
+      hintedLicense.modPos
+    ) {
+      return {
+        tenantId: hintedTerminal.tenantId,
+        terminalId: hintedTerminal.id,
+        deviceId: hintedTerminal.deviceId,
+      };
+    }
+  }
+
   const auth = await resolvePosAuthContext(req);
   if (auth?.tenantId && auth.terminalId) {
     return auth;
@@ -1106,7 +1153,7 @@ export async function handlePosDailyClosure(req: PosAuthRequest, res: Response) 
     }
 }
 
-router.post("/api/v1/pos/daily-closures", handlePosDailyClosure);
+router.post("/api/v1/pos/daily-closures", requirePosAuth, handlePosDailyClosure);
 
 /* ======================================================
    3) POS CONFIG
@@ -2921,8 +2968,8 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
   });
 }
 
-router.post("/api/v1/pos/sales", handlePosSale);
-router.post("/api/v1/pos/receipts", handlePosSale);
+router.post("/api/v1/pos/sales", requirePosAuth, handlePosSale);
+router.post("/api/v1/pos/receipts", requirePosAuth, handlePosSale);
 
 export default router;
 
