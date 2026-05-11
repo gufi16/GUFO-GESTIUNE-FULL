@@ -13,6 +13,9 @@ enum UserRole {
   MANAGER
   CASHIER
   WAREHOUSE
+  CHEF
+  KITCHEN_HELPER
+  KITCHEN_OPERATOR
 }
 
 enum ProductClass {

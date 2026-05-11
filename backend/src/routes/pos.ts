@@ -1404,7 +1404,15 @@ const PosOperatorLoginSchema = z.object({
   pin: z.string().trim().min(4, "PIN-ul trebuie sa aiba cel putin 4 caractere.").max(8, "PIN-ul poate avea maximum 8 caractere."),
 });
 
-const POS_OPERATOR_ROLES = [UserRole.OWNER, UserRole.ADMIN, UserRole.MANAGER, UserRole.CASHIER];
+const POS_OPERATOR_ROLES = [
+  UserRole.OWNER,
+  UserRole.ADMIN,
+  UserRole.MANAGER,
+  UserRole.CASHIER,
+  UserRole.CHEF,
+  UserRole.KITCHEN_HELPER,
+  UserRole.KITCHEN_OPERATOR,
+];
 
 type ResolvedPosTerminalAuth = {
   tenantId: string;

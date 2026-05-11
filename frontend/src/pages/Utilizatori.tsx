@@ -37,6 +37,9 @@ const roleLabels: Record<string, string> = {
   MANAGER: "Manager",
   CASHIER: "Ospatar / Casier",
   WAREHOUSE: "Magazioner",
+  CHEF: "Bucatar",
+  KITCHEN_HELPER: "Ajutor bucatar",
+  KITCHEN_OPERATOR: "Operator bucatarie",
 }
 
 const roleOptions = [
@@ -44,6 +47,9 @@ const roleOptions = [
   { value: "MANAGER", label: "Manager" },
   { value: "CASHIER", label: "Ospatar / Casier" },
   { value: "WAREHOUSE", label: "Magazioner" },
+  { value: "CHEF", label: "Bucatar" },
+  { value: "KITCHEN_HELPER", label: "Ajutor bucatar" },
+  { value: "KITCHEN_OPERATOR", label: "Operator bucatarie" },
 ]
 
 type UserFormState = {
@@ -105,6 +111,7 @@ export default function Utilizatori() {
       active: items.filter((item) => item.isActive).length,
       waiters: items.filter((item) => item.role === "CASHIER").length,
       managers: items.filter((item) => item.role === "MANAGER" || item.role === "ADMIN").length,
+      kitchen: items.filter((item) => ["CHEF", "KITCHEN_HELPER", "KITCHEN_OPERATOR"].includes(item.role)).length,
     }),
     [items]
   )
@@ -295,11 +302,12 @@ export default function Utilizatori() {
     <div className="space-y-3">
       <PageHeader badge="configurare" title="Utilizatori ERP" />
 
-      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-5">
         <DocumentMetric title="Total" value={summary.total} tone="slate" />
         <DocumentMetric title="Activi" value={summary.active} tone="emerald" />
         <DocumentMetric title="Ospatari" value={summary.waiters} tone="blue" />
         <DocumentMetric title="Admini / manageri" value={summary.managers} tone="amber" />
+        <DocumentMetric title="Roluri KDS" value={summary.kitchen} tone="emerald" />
       </div>
 
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
