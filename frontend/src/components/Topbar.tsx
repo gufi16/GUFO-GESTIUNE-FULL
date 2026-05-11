@@ -33,7 +33,9 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
 
   const isDashboard = location.pathname === "/dashboard"
   const isReports = location.pathname === "/rapoarte"
-  const showSalesFilters = isDashboard || isReports
+  const isFinanceReceipts = location.pathname === "/financiar/vanzari-bon"
+  const isFinanceClosures = location.pathname === "/financiar/inchideri-zilnice"
+  const showSalesFilters = isDashboard || isReports || isFinanceReceipts || isFinanceClosures
   const today = new Date()
   const defaultDateTo = toInputDate(today)
   const defaultDateFrom = toInputDate(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 6))

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { useSearchParams } from "react-router-dom"
 import { API_BASE as API, authHeaders } from "../lib/api"
 import { formatMoneyRo, formatQtyRo } from "../lib/format"
 import { getActiveLocationId, subscribeToActiveLocation } from "../lib/location"
@@ -69,8 +70,9 @@ function receiptTitle(item: PosReceipt) {
 
 export default function PosReceiptsView({ compact = false }: Props) {
   const today = useMemo(() => toInputDate(new Date()), [])
-  const [dateFrom, setDateFrom] = useState(today)
-  const [dateTo, setDateTo] = useState(today)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const dateFrom = searchParams.get("dateFrom") || today
+  const dateTo = searchParams.get("dateTo") || today
   const [activeLocationId, setActiveLocationId] = useState(getActiveLocationId())
   const [activeTerminalId, setActiveTerminalId] = useState(getActiveTerminalId())
   const [items, setItems] = useState<PosReceipt[]>([])
@@ -86,6 +88,13 @@ export default function PosReceiptsView({ compact = false }: Props) {
     const start = (page - 1) * pageSize
     return items.slice(start, start + pageSize)
   }, [items, page, pageSize])
+
+  function updateDateRange(next: { dateFrom?: string; dateTo?: string }) {
+    const nextParams = new URLSearchParams(searchParams)
+    if (typeof next.dateFrom === "string") nextParams.set("dateFrom", next.dateFrom)
+    if (typeof next.dateTo === "string") nextParams.set("dateTo", next.dateTo)
+    setSearchParams(nextParams, { replace: true })
+  }
 
   async function loadReceipts() {
     setLoading(true)
@@ -116,10 +125,6 @@ export default function PosReceiptsView({ compact = false }: Props) {
   }
 
   useEffect(() => {
-    void loadReceipts()
-  }, [])
-
-  useEffect(() => {
     return subscribeToActiveLocation((nextLocationId) => {
       setActiveLocationId(nextLocationId)
     })
@@ -133,7 +138,7 @@ export default function PosReceiptsView({ compact = false }: Props) {
 
   useEffect(() => {
     void loadReceipts()
-  }, [activeLocationId, activeTerminalId])
+  }, [dateFrom, dateTo, activeLocationId, activeTerminalId])
 
   return (
     <div className={compact ? "space-y-4" : "rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm"}>
@@ -151,7 +156,7 @@ export default function PosReceiptsView({ compact = false }: Props) {
             <input
               type="date"
               value={dateFrom}
-              onChange={(event) => setDateFrom(event.target.value)}
+              onChange={(event) => updateDateRange({ dateFrom: event.target.value })}
               className="mt-1 block rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-800"
             />
           </label>
@@ -160,7 +165,7 @@ export default function PosReceiptsView({ compact = false }: Props) {
             <input
               type="date"
               value={dateTo}
-              onChange={(event) => setDateTo(event.target.value)}
+              onChange={(event) => updateDateRange({ dateTo: event.target.value })}
               className="mt-1 block rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-800"
             />
           </label>
