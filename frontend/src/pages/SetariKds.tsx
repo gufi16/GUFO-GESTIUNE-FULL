@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react"
 import { MonitorSmartphone, RefreshCw, ShieldCheck, Store, UserRound } from "lucide-react"
+import { useNavigate } from "react-router-dom"
 import PageHeader from "../components/PageHeader"
 import {
   DocumentMetric,
   DocumentSection,
   InlineNotice,
+  documentButtonPrimaryClass,
   documentButtonSecondaryClass,
 } from "../components/DocumentUi"
 import { api } from "../lib/api"
@@ -48,6 +50,7 @@ function isKdsTerminal(item: TerminalItem) {
 }
 
 export default function SetariKds() {
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
@@ -115,10 +118,15 @@ export default function SetariKds() {
       <DocumentSection
         title="Flux GuFo KDS"
         actions={
-          <button className={documentButtonSecondaryClass} onClick={loadData} disabled={loading}>
-            <RefreshCw size={16} className="mr-2" />
-            Reincarca
-          </button>
+          <>
+            <button className={documentButtonPrimaryClass} onClick={() => navigate("/setari/utilizatori")}>
+              Editeaza utilizatori KDS
+            </button>
+            <button className={documentButtonSecondaryClass} onClick={loadData} disabled={loading}>
+              <RefreshCw size={16} className="mr-2" />
+              Reincarca
+            </button>
+          </>
         }
       >
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
@@ -184,7 +192,19 @@ export default function SetariKds() {
         )}
       </DocumentSection>
 
-      <DocumentSection title="Operatori care pot intra in KDS">
+      <DocumentSection
+        title="Operatori care pot intra in KDS"
+        actions={
+          <>
+            <button className={documentButtonPrimaryClass} onClick={() => navigate("/setari/utilizatori")}>
+              Deschide Utilizatori ERP
+            </button>
+            <button className={documentButtonSecondaryClass} onClick={() => navigate("/setari/utilizatori")}>
+              Adauga utilizator KDS
+            </button>
+          </>
+        }
+      >
         {kdsOperators.length ? (
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
@@ -194,6 +214,7 @@ export default function SetariKds() {
                   <th className="px-3 py-2">Rol</th>
                   <th className="px-3 py-2">Email</th>
                   <th className="px-3 py-2">PIN POS</th>
+                  <th className="px-3 py-2 text-right">Actiune</th>
                 </tr>
               </thead>
               <tbody>
@@ -206,6 +227,11 @@ export default function SetariKds() {
                       <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-blue-700">
                         setat
                       </span>
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      <button className={documentButtonSecondaryClass} onClick={() => navigate("/setari/utilizatori")}>
+                        Editeaza
+                      </button>
                     </td>
                   </tr>
                 ))}
