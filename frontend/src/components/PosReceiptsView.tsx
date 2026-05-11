@@ -42,11 +42,11 @@ function toInputDate(date: Date) {
 }
 
 function startIso(date: string) {
-  return new Date(`${date}T00:00:00`).toISOString()
+  return date
 }
 
 function endIso(date: string) {
-  return new Date(`${date}T23:59:59.999`).toISOString()
+  return date
 }
 
 function formatDateTime(value: string) {

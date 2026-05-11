@@ -16,7 +16,9 @@ function parseDateStart(value: unknown) {
   if (!text) return null
   const d = new Date(text)
   if (Number.isNaN(d.getTime())) return null
-  d.setHours(0, 0, 0, 0)
+  if (!text.includes("T")) {
+    d.setHours(0, 0, 0, 0)
+  }
   return d
 }
 
@@ -25,7 +27,9 @@ function parseDateEnd(value: unknown) {
   if (!text) return null
   const d = new Date(text)
   if (Number.isNaN(d.getTime())) return null
-  d.setHours(23, 59, 59, 999)
+  if (!text.includes("T")) {
+    d.setHours(23, 59, 59, 999)
+  }
   return d
 }
 

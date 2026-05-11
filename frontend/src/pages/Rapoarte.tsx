@@ -383,8 +383,8 @@ export default function RapoartePage() {
       const params = new URLSearchParams()
       if (locationId && locationId !== "ALL") params.set("locationId", locationId)
       if (terminalId && terminalId !== "ALL") params.set("terminalId", terminalId)
-      if (from) params.set("dateFrom", `${from}T00:00:00.000Z`)
-      if (to) params.set("dateTo", `${to}T23:59:59.999Z`)
+      if (from) params.set("dateFrom", from)
+      if (to) params.set("dateTo", to)
 
       const res = await fetch(
         `${API}/api/v1/reports/advanced${params.toString() ? `?${params.toString()}` : ""}`,

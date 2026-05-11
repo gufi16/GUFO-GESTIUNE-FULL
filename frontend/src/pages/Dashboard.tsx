@@ -509,8 +509,8 @@ export default function Dashboard() {
       const tenantId = await getTenantIdFromSession(token)
 
       const params = new URLSearchParams()
-      if (dateFrom) params.set("dateFrom", `${dateFrom}T00:00:00.000Z`)
-      if (dateTo) params.set("dateTo", `${dateTo}T23:59:59.999Z`)
+      if (dateFrom) params.set("dateFrom", dateFrom)
+      if (dateTo) params.set("dateTo", dateTo)
       if (selectedLocationId) params.set("locationId", selectedLocationId)
       if (selectedTerminalId) params.set("terminalId", selectedTerminalId)
 

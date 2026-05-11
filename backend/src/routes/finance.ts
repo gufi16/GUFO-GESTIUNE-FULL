@@ -5,10 +5,15 @@ import { requireRequestCompany } from "../lib/companyScope"
 
 const router = Router()
 
-function asDate(value: unknown, fallback: Date) {
+function asDate(value: unknown, fallback: Date, endOfDay = false) {
   if (typeof value !== "string" || !value.trim()) return fallback
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? fallback : date
+  const text = value.trim()
+  const date = new Date(text)
+  if (Number.isNaN(date.getTime())) return fallback
+  if (!text.includes("T")) {
+    date.setHours(endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0)
+  }
+  return date
 }
 
 function dayStart(date: Date) {
@@ -56,8 +61,8 @@ router.get("/api/v1/finance/pos-receipts", requireAuth, async (req: AuthedReques
 
     const company = await requireRequestCompany(req)
     const now = new Date()
-    const dateFrom = asDate(req.query.dateFrom, dayStart(now))
-    const dateTo = asDate(req.query.dateTo, dayEnd(now))
+    const dateFrom = asDate(req.query.dateFrom, dayStart(now), false)
+    const dateTo = asDate(req.query.dateTo, dayEnd(now), true)
     const locationId = typeof req.query.locationId === "string" ? req.query.locationId.trim() : ""
     const terminalId = typeof req.query.terminalId === "string" ? req.query.terminalId.trim() : ""
 
@@ -148,8 +153,8 @@ router.get("/api/v1/finance/daily-closures", requireAuth, async (req: AuthedRequ
 
     const company = await requireRequestCompany(req)
     const now = new Date()
-    const dateFrom = asDate(req.query.dateFrom, dayStart(now))
-    const dateTo = asDate(req.query.dateTo, dayEnd(now))
+    const dateFrom = asDate(req.query.dateFrom, dayStart(now), false)
+    const dateTo = asDate(req.query.dateTo, dayEnd(now), true)
     const locationId = typeof req.query.locationId === "string" ? req.query.locationId.trim() : ""
     const terminalId = typeof req.query.terminalId === "string" ? req.query.terminalId.trim() : ""
     const companyLocations = await prisma.location.findMany({
@@ -221,8 +226,8 @@ router.post("/api/v1/finance/daily-closures/generate-from-sales", requireAuth, a
 
     const company = await requireRequestCompany(req)
     const now = new Date()
-    const dateFrom = asDate(req.body?.dateFrom, dayStart(now))
-    const dateTo = asDate(req.body?.dateTo, dayEnd(now))
+    const dateFrom = asDate(req.body?.dateFrom, dayStart(now), false)
+    const dateTo = asDate(req.body?.dateTo, dayEnd(now), true)
     const locationId = normalizeText(req.body?.locationId)
     const terminalId = normalizeText(req.body?.terminalId)
 

@@ -22,9 +22,19 @@ type RecentActivityItem = {
   at: string
 }
 
-function safeDate(value: unknown, fallback: Date) {
-  const date = value ? new Date(String(value)) : fallback
-  return Number.isNaN(date.getTime()) ? fallback : date
+function parseBoundaryDate(value: unknown, fallback: Date, endOfDay = false) {
+  const text = String(value || "").trim()
+  if (!text) return fallback
+
+  const hasExplicitTime = text.includes("T")
+  const date = new Date(text)
+  if (Number.isNaN(date.getTime())) return fallback
+
+  if (!hasExplicitTime) {
+    date.setHours(endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0)
+  }
+
+  return date
 }
 
 function buildLocationWhere(locationId: string | null) {
@@ -47,8 +57,8 @@ router.get("/api/v1/dashboard", requireAuth, async (req: AuthedRequest, res: Res
     }
 
     const now = new Date()
-    const dateFrom = safeDate(req.query.dateFrom, new Date(new Date().setHours(0, 0, 0, 0)))
-    const dateTo = safeDate(req.query.dateTo, now)
+    const dateFrom = parseBoundaryDate(req.query.dateFrom, new Date(new Date().setHours(0, 0, 0, 0)), false)
+    const dateTo = parseBoundaryDate(req.query.dateTo, new Date(now.setHours(23, 59, 59, 999)), true)
 
     const saleWhere = {
       tenantId,

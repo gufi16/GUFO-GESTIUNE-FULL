@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react"
 import { API_BASE as API, authHeaders } from "../lib/api"
 import { formatMoneyRo } from "../lib/format"
+import { getActiveLocationId, subscribeToActiveLocation } from "../lib/location"
+import { getActiveTerminalId, subscribeToActiveTerminal } from "../lib/terminal"
 
 type DailyClosure = {
   id: string
@@ -25,11 +27,11 @@ function toInputDate(date: Date) {
 }
 
 function startIso(date: string) {
-  return new Date(`${date}T00:00:00`).toISOString()
+  return date
 }
 
 function endIso(date: string) {
-  return new Date(`${date}T23:59:59.999`).toISOString()
+  return date
 }
 
 function formatDateTime(value: string) {
@@ -55,6 +57,8 @@ export default function PosClosuresView() {
   const today = useMemo(() => toInputDate(new Date()), [])
   const [dateFrom, setDateFrom] = useState(today)
   const [dateTo, setDateTo] = useState(today)
+  const [activeLocationId, setActiveLocationId] = useState(getActiveLocationId())
+  const [activeTerminalId, setActiveTerminalId] = useState(getActiveTerminalId())
   const [items, setItems] = useState<DailyClosure[]>([])
   const [totals, setTotals] = useState({ total: 0, cash: 0, card: 0, other: 0, count: 0 })
   const [loading, setLoading] = useState(false)
@@ -70,6 +74,8 @@ export default function PosClosuresView() {
         dateFrom: startIso(dateFrom),
         dateTo: endIso(dateTo),
       })
+      if (activeLocationId) params.set("locationId", activeLocationId)
+      if (activeTerminalId) params.set("terminalId", activeTerminalId)
       const res = await fetch(`${API}/api/v1/finance/daily-closures?${params.toString()}`, {
         headers: authHeaders(),
         cache: "no-store",
@@ -98,6 +104,8 @@ export default function PosClosuresView() {
         body: JSON.stringify({
           dateFrom: startIso(dateFrom),
           dateTo: endIso(dateTo),
+          locationId: activeLocationId || undefined,
+          terminalId: activeTerminalId || undefined,
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -116,6 +124,22 @@ export default function PosClosuresView() {
   useEffect(() => {
     void loadClosures()
   }, [])
+
+  useEffect(() => {
+    return subscribeToActiveLocation((nextLocationId) => {
+      setActiveLocationId(nextLocationId)
+    })
+  }, [])
+
+  useEffect(() => {
+    return subscribeToActiveTerminal((nextTerminalId) => {
+      setActiveTerminalId(nextTerminalId)
+    })
+  }, [])
+
+  useEffect(() => {
+    void loadClosures()
+  }, [activeLocationId, activeTerminalId])
 
   return (
     <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
