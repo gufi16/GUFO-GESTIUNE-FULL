@@ -169,6 +169,8 @@ type LicenseModules = {
   reports: boolean
 }
 
+type ClientTab = "overview" | "license" | "locations" | "users"
+
 const defaultModules: LicenseModules = {
   dashboard: false,
   documents: false,
@@ -344,6 +346,35 @@ function metricCard(label: string, value: string | number) {
   )
 }
 
+function tabButton(label: string, selected: boolean, onClick: () => void, badge?: string | number) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm font-semibold transition ${
+        selected
+          ? "border-[#17324D] bg-[#17324D] text-white"
+          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+      }`}
+    >
+      <span>{label}</span>
+      {badge !== undefined ? (
+        <span
+          className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+            selected ? "bg-white/15 text-white" : "bg-slate-100 text-slate-600"
+          }`}
+        >
+          {badge}
+        </span>
+      ) : null}
+    </button>
+  )
+}
+
+function moduleLabelsCount(modules: LicenseModules) {
+  return Object.values(modules).filter(Boolean).length
+}
+
 export default function ControlPanelClientDetails() {
   const { id } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -377,6 +408,8 @@ export default function ControlPanelClientDetails() {
   const [creatingCompany, setCreatingCompany] = useState(false)
   const [showCompanyForm, setShowCompanyForm] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [licenseModalOpen, setLicenseModalOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState<ClientTab>("overview")
   const [historyQuery, setHistoryQuery] = useState("")
   const [historyDateFrom, setHistoryDateFrom] = useState("")
   const [historyDateTo, setHistoryDateTo] = useState("")
@@ -412,8 +445,8 @@ export default function ControlPanelClientDetails() {
       const data = await api<ClientDetailsResponse>(`/api/v1/admin/clients/${id}`)
       const item = data?.item || null
       setClient(item)
-        setLicenseForm({
-          expiresAt: toInputDate(item?.license?.expiresAt),
+      setLicenseForm({
+        expiresAt: toInputDate(item?.license?.expiresAt),
         limitLocations: Number(item?.license?.limits?.locations ?? 1),
         limitTerminals: Number(item?.license?.limits?.terminals ?? 1),
         limitKdsDevices: Number(item?.license?.limits?.kdsDevices ?? 1),
@@ -425,11 +458,11 @@ export default function ControlPanelClientDetails() {
           settings: Boolean(item?.license?.modules?.settings),
           pos: Boolean(item?.license?.modules?.pos),
           kds: Boolean(item?.license?.modules?.kds),
-            reports: Boolean(item?.license?.modules?.reports),
-          },
-        })
-        setNewLocationCompanyId((item?.companies || []).find((company: any) => company?.isDefault)?.id || item?.companies?.[0]?.id || "")
-      } catch (err: any) {
+          reports: Boolean(item?.license?.modules?.reports),
+        },
+      })
+      setNewLocationCompanyId((item?.companies || []).find((company: any) => company?.isDefault)?.id || item?.companies?.[0]?.id || "")
+    } catch (err: any) {
       setError(err?.message || "Nu am putut incarca detaliile clientului.")
     } finally {
       setLoading(false)
@@ -453,6 +486,9 @@ export default function ControlPanelClientDetails() {
   const auditLogs = Array.isArray(client?.auditLogs) ? (client.auditLogs as AuditLogItem[]) : []
   const companies = Array.isArray(client?.companies) ? client.companies : []
   const activeModules = Array.isArray(client?.activeModules) ? client.activeModules : []
+  const devices = locations.flatMap((location) => (Array.isArray(location.devices) ? location.devices : []))
+  const posDevicesCount = devices.filter((device) => (device.deviceType || "POS") === "POS").length
+  const kdsDevicesCount = devices.filter((device) => (device.deviceType || "POS") === "KDS").length
   const erpEnabled = Boolean(
     licenseForm.modules.dashboard ||
       licenseForm.modules.documents ||
@@ -479,6 +515,7 @@ export default function ControlPanelClientDetails() {
     })
   }, [companies, users])
   const efacturaModuleEnabled = activeModules.some((module: any) => module.code === "efactura")
+  const enabledLicenseModules = moduleLabelsCount(licenseForm.modules) + (efacturaModuleEnabled ? 1 : 0)
   const filteredAuditLogs = useMemo(() => {
     return auditLogs.filter((entry) => {
       const normalized = historyQuery.trim().toLowerCase()
@@ -659,8 +696,10 @@ export default function ControlPanelClientDetails() {
       })
       setMessage("Licenta a fost actualizata.")
       await load()
+      return true
     } catch (err: any) {
       setError(err?.message || "Nu am putut actualiza licenta.")
+      return false
     } finally {
       setLicenseBusy(false)
     }
@@ -737,7 +776,6 @@ export default function ControlPanelClientDetails() {
         }),
       })
       setLocationForm(emptyLocationForm())
-      setMessage("Locatia a fost adaugata.")
       setMessage("Locatia a fost adaugata.")
       await load()
     } catch (err: any) {
@@ -994,7 +1032,23 @@ export default function ControlPanelClientDetails() {
       {userError ? <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{userError}</div> : null}
       {companyError ? <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{companyError}</div> : null}
 
-      <section ref={companySectionRef} className="rounded-[24px] border border-blue-200 bg-gradient-to-r from-blue-50 via-white to-slate-50 p-4 shadow-sm">
+      <section className="rounded-[24px] border border-slate-200 bg-white px-4 py-4 shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Control panel client</div>
+            <div className="mt-1 text-sm font-semibold text-[#17324D]">Navighezi rapid intre overview, licenta, locatii si utilizatori</div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {tabButton("Overview", activeTab === "overview", () => setActiveTab("overview"))}
+            {tabButton("Licenta", activeTab === "license", () => setActiveTab("license"), enabledLicenseModules)}
+            {tabButton("Locatii", activeTab === "locations", () => setActiveTab("locations"), locations.length)}
+            {tabButton("Utilizatori", activeTab === "users", () => setActiveTab("users"), users.length)}
+          </div>
+        </div>
+      </section>
+
+      {activeTab === "overview" ? (
+        <section ref={companySectionRef} className="rounded-[24px] border border-blue-200 bg-gradient-to-r from-blue-50 via-white to-slate-50 p-4 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <div className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600">Multi-firma</div>
@@ -1083,21 +1137,9 @@ export default function ControlPanelClientDetails() {
           </div>
         )}
       </section>
-
-      {resetPassword ? (
-        <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-          <div className="font-semibold">{resetForUser || "Credentiale"}</div>
-          <div className="mt-1 font-mono">{resetPassword}</div>
-          <button
-            onClick={() => copy(resetPassword, "Valoare")}
-            className="mt-2 inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700"
-          >
-            <Copy size={13} />
-            Copiaza
-          </button>
-        </div>
       ) : null}
 
+      {activeTab === "overview" ? (
       <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
         <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
@@ -1108,10 +1150,11 @@ export default function ControlPanelClientDetails() {
             <div className="text-xs text-slate-500">Vizual compact</div>
           </div>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {metricCard("Utilizatori", client?.usersCount ?? users.length)}
             {metricCard("Locatii", client?.locationsCount ?? locations.length)}
-            {metricCard("POS", client?.terminalsCount ?? 0)}
+            {metricCard("POS", posDevicesCount)}
+            {metricCard("KDS", kdsDevicesCount)}
           </div>
 
           <div className="mt-4 grid gap-x-4 gap-y-2 text-sm">
@@ -1205,7 +1248,7 @@ export default function ControlPanelClientDetails() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Licenta si module</div>
-              <div className="mt-1 text-sm font-semibold text-[#17324D]">Limite, expirare si activare module</div>
+              <div className="mt-1 text-sm font-semibold text-[#17324D]">Rezumat rapid si acces la configurarea detaliata</div>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-right text-xs text-slate-500">
               <div>{erpEnabled ? "ERP activ" : "ERP inactiv"}</div>
@@ -1213,51 +1256,21 @@ export default function ControlPanelClientDetails() {
             </div>
           </div>
 
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <label className="block">
-              <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Expirare</div>
-              <input
-                type="date"
-                value={licenseForm.expiresAt}
-                onChange={(e) => setLicenseForm((prev) => ({ ...prev, expiresAt: e.target.value }))}
-                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
-              />
-            </label>
-            <label className="block">
-              <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Limita locatii</div>
-              <input
-                type="number"
-                min={1}
-                value={licenseForm.limitLocations}
-                onChange={(e) => setLicenseForm((prev) => ({ ...prev, limitLocations: Number(e.target.value || 1) }))}
-                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
-              />
-            </label>
-            <label className="block">
-              <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Limita POS</div>
-              <input
-                type="number"
-                min={1}
-                value={licenseForm.limitTerminals}
-                onChange={(e) => setLicenseForm((prev) => ({ ...prev, limitTerminals: Number(e.target.value || 1) }))}
-                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
-              />
-            </label>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {metricCard("Expira", licenseForm.expiresAt || "-")}
+            {metricCard("Module active", enabledLicenseModules)}
+            {metricCard("Locatii incluse", licenseForm.limitLocations)}
+            {metricCard("POS incluse", licenseForm.limitTerminals)}
+            {metricCard("KDS incluse", licenseForm.limitKdsDevices)}
+            {metricCard("e-Factura", efacturaModuleEnabled ? "ON" : "OFF")}
           </div>
 
           <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
             {moduleLabels.map(([key, label]) => {
               const enabled = Boolean(licenseForm.modules[key])
               return (
-                <button
+                <div
                   key={key}
-                  type="button"
-                  onClick={() =>
-                    setLicenseForm((prev) => ({
-                      ...prev,
-                      modules: { ...prev.modules, [key]: !prev.modules[key] },
-                    }))
-                  }
                   className={`rounded-2xl border px-3 py-3 text-left text-sm font-medium transition ${
                     enabled
                       ? "border-[#17324D] bg-[#17324D] text-white"
@@ -1265,38 +1278,120 @@ export default function ControlPanelClientDetails() {
                   }`}
                 >
                   {label}
-                </button>
+                </div>
               )
             })}
-
-            <button
-              type="button"
-              onClick={handleToggleEfactura}
-              disabled={efacturaBusy}
-              className={`rounded-2xl border px-3 py-3 text-left text-sm font-medium transition ${
+            <div
+              className={`rounded-2xl border px-3 py-3 text-left text-sm font-medium ${
                 efacturaModuleEnabled
                   ? "border-[#F39C12]/40 bg-[#FFF1D6] text-[#B56800]"
                   : "border-slate-200 bg-slate-50 text-slate-600"
-              } disabled:cursor-not-allowed disabled:opacity-60`}
+              }`}
             >
-              {efacturaBusy ? "Se actualizeaza..." : "e-Factura"}
-            </button>
+              e-Factura
+            </div>
           </div>
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
-            <div className="text-sm text-slate-500">Salveaza imediat dupa orice modificare de licenta sau modul.</div>
+            <div className="text-sm text-slate-500">Editeaza modulele si limitele din popup-ul dedicat, fara sa aglomerezi pagina.</div>
             <button
-              onClick={handleSaveLicense}
-              disabled={licenseBusy}
+              type="button"
+              onClick={() => {
+                setActiveTab("license")
+                setLicenseModalOpen(true)
+              }}
               className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <Save size={15} />
-              {licenseBusy ? "Se salveaza..." : "Salveaza"}
+              <Pencil size={15} />
+              Configureaza licenta
             </button>
           </div>
         </section>
       </div>
+      ) : null}
 
+      {activeTab === "license" ? (
+        <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+          <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Licenta</div>
+            <div className="mt-1 text-sm font-semibold text-[#17324D]">Stare curenta pentru ERP, POS, KDS si module</div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {metricCard("Expirare", formatDate(client?.license?.expiresAt))}
+              {metricCard("Status", client?.license?.isSuspended ? "Suspendat" : "Activ")}
+              {metricCard("Locatii", licenseForm.limitLocations)}
+              {metricCard("POS", licenseForm.limitTerminals)}
+              {metricCard("KDS", licenseForm.limitKdsDevices)}
+              {metricCard("Module", enabledLicenseModules)}
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Actiuni rapide</div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setLicenseModalOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2.5 text-sm font-semibold text-white"
+                >
+                  <Pencil size={15} />
+                  Editeaza licenta
+                </button>
+                <button
+                  type="button"
+                  onClick={handleToggleLicenseSuspended}
+                  disabled={!client?.license?.id || licenseBusy}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <PauseCircle size={15} />
+                  {client?.license?.isSuspended ? "Reactiveaza" : "Suspenda licenta"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleToggleEfactura}
+                  disabled={efacturaBusy}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {efacturaBusy ? "Se actualizeaza..." : efacturaModuleEnabled ? "Dezactiveaza e-Factura" : "Activeaza e-Factura"}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Module active</div>
+            <div className="mt-1 text-sm font-semibold text-[#17324D]">Vizibilitate rapida pe ceea ce este vandut si ce este inca oprit</div>
+
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              {moduleLabels.map(([key, label]) => {
+                const enabled = Boolean(licenseForm.modules[key])
+                return (
+                  <div
+                    key={key}
+                    className={`rounded-2xl border px-3 py-3 text-sm font-medium ${
+                      enabled
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border-slate-200 bg-slate-50 text-slate-500"
+                    }`}
+                  >
+                    {label}
+                  </div>
+                )
+              })}
+              <div
+                className={`rounded-2xl border px-3 py-3 text-sm font-medium ${
+                  efacturaModuleEnabled
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : "border-slate-200 bg-slate-50 text-slate-500"
+                }`}
+              >
+                e-Factura
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {activeTab === "locations" ? (
       <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div><div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Locatii si device-uri</div><div className="mt-1 text-sm font-semibold text-[#17324D]">Administrare locatii, device-uri POS / KDS si chei de licenta</div></div>
@@ -1457,7 +1552,9 @@ export default function ControlPanelClientDetails() {
           )}
         </div>
       </section>
+      ) : null}
 
+      {activeTab === "users" ? (
       <section className="grid gap-4 xl:grid-cols-[0.95fr_0.75fr_1.3fr]">
         <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-4">
@@ -1656,6 +1753,181 @@ export default function ControlPanelClientDetails() {
           </div>
         </div>
       </section>
+      ) : null}
+
+      {resetPassword ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-[28px] border border-blue-200 bg-white p-5 shadow-xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600">Credentiale</div>
+                <div className="mt-1 text-lg font-semibold text-[#17324D]">{resetForUser || "Credentiale generate"}</div>
+                <div className="mt-1 text-sm text-slate-500">Parola sau cheia generata este afisata o singura data. Copiaz-o acum.</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setResetPassword(null)
+                  setResetForUser(null)
+                }}
+                className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600"
+              >
+                Inchide
+              </button>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4">
+              <div className="font-mono text-sm text-blue-900 break-all">{resetPassword}</div>
+            </div>
+
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={() => copy(resetPassword, "Valoare")}
+                className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2.5 text-sm font-semibold text-white"
+              >
+                <Copy size={14} />
+                Copiaza
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {licenseModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
+          <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-[28px] border border-slate-200 bg-white p-5 shadow-xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Licenta si module</div>
+                <div className="mt-1 text-xl font-semibold text-[#17324D]">Configurezi ERP, POS, KDS si limitele clientului</div>
+                <div className="mt-1 text-sm text-slate-500">Pastrez logica existenta, doar o mut intr-un popup mai usor de folosit.</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLicenseModalOpen(false)}
+                className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600"
+              >
+                Inchide
+              </button>
+            </div>
+
+            <div className="mt-5 grid gap-3 md:grid-cols-4">
+              <label className="block">
+                <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Expirare</div>
+                <input
+                  type="date"
+                  value={licenseForm.expiresAt}
+                  onChange={(e) => setLicenseForm((prev) => ({ ...prev, expiresAt: e.target.value }))}
+                  className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+                />
+              </label>
+              <label className="block">
+                <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Locatii</div>
+                <input
+                  type="number"
+                  min={1}
+                  value={licenseForm.limitLocations}
+                  onChange={(e) => setLicenseForm((prev) => ({ ...prev, limitLocations: Number(e.target.value || 1) }))}
+                  className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+                />
+              </label>
+              <label className="block">
+                <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">POS</div>
+                <input
+                  type="number"
+                  min={1}
+                  value={licenseForm.limitTerminals}
+                  onChange={(e) => setLicenseForm((prev) => ({ ...prev, limitTerminals: Number(e.target.value || 1) }))}
+                  className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+                />
+              </label>
+              <label className="block">
+                <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">KDS</div>
+                <input
+                  type="number"
+                  min={1}
+                  value={licenseForm.limitKdsDevices}
+                  onChange={(e) => setLicenseForm((prev) => ({ ...prev, limitKdsDevices: Number(e.target.value || 1) }))}
+                  className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+                />
+              </label>
+            </div>
+
+            <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              {moduleLabels.map(([key, label]) => {
+                const enabled = Boolean(licenseForm.modules[key])
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() =>
+                      setLicenseForm((prev) => ({
+                        ...prev,
+                        modules: { ...prev.modules, [key]: !prev.modules[key] },
+                      }))
+                    }
+                    className={`rounded-2xl border px-3 py-3 text-left text-sm font-medium transition ${
+                      enabled
+                        ? "border-[#17324D] bg-[#17324D] text-white"
+                        : "border-slate-200 bg-slate-50 text-slate-600"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                )
+              })}
+
+              <button
+                type="button"
+                onClick={handleToggleEfactura}
+                disabled={efacturaBusy}
+                className={`rounded-2xl border px-3 py-3 text-left text-sm font-medium transition ${
+                  efacturaModuleEnabled
+                    ? "border-[#F39C12]/40 bg-[#FFF1D6] text-[#B56800]"
+                    : "border-slate-200 bg-slate-50 text-slate-600"
+                } disabled:cursor-not-allowed disabled:opacity-60`}
+              >
+                {efacturaBusy ? "Se actualizeaza..." : "e-Factura"}
+              </button>
+            </div>
+
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+              <button
+                type="button"
+                onClick={handleToggleLicenseSuspended}
+                disabled={!client?.license?.id || licenseBusy}
+                className="inline-flex items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <PauseCircle size={15} />
+                {client?.license?.isSuspended ? "Reactiveaza licenta" : "Suspenda licenta"}
+              </button>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setLicenseModalOpen(false)}
+                  className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700"
+                >
+                  Renunta
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const ok = await handleSaveLicense()
+                    if (ok) setLicenseModalOpen(false)
+                  }}
+                  disabled={licenseBusy}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Save size={15} />
+                  {licenseBusy ? "Se salveaza..." : "Salveaza licenta"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {locationModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 py-6">
