@@ -605,6 +605,9 @@ const PairSchema = z.object({
   license_key: z.string().optional(),
   deviceId: z.string().optional(),
   device_id: z.string().optional(),
+  deviceType: z.string().optional(),
+  device_type: z.string().optional(),
+  source: z.string().optional(),
   terminalLabel: z.string().optional(),
   terminal_label: z.string().optional(),
 });
@@ -813,11 +816,12 @@ router.post("/api/v1/pos/validate", async (req: Request, res: Response) => {
       });
     }
 
-    if (!license.modPos) {
+    const terminalModuleEnabled = terminal.deviceType === "KDS" ? license.modKds : license.modPos;
+    if (!terminalModuleEnabled) {
       return res.status(403).json({
         ok: false,
         allowed: false,
-        error: "POS nu este activ",
+        error: terminal.deviceType === "KDS" ? "KDS nu este activ" : "POS nu este activ",
       });
     }
 
@@ -834,6 +838,7 @@ router.post("/api/v1/pos/validate", async (req: Request, res: Response) => {
       terminal: {
         id: terminal.id,
         deviceId: terminal.deviceId,
+        deviceType: terminal.deviceType,
         label: terminal.label,
         locationId: terminal.locationId,
         locationName: terminal.location?.name || null,
@@ -841,6 +846,7 @@ router.post("/api/v1/pos/validate", async (req: Request, res: Response) => {
       license: {
         expiresAt: license.expiresAt,
         posEnabled: license.modPos,
+        kdsEnabled: license.modKds,
         licenseKey,
       },
     });
@@ -864,10 +870,14 @@ router.post("/api/v1/pos/pair", async (req: Request, res: Response) => {
     }
 
     const body = parsed.data;
+    const requestedDeviceType =
+      normalizeText(body.deviceType ?? body.device_type)?.toUpperCase() === "KDS" || normalizeText(body.source)?.toLowerCase() === "gufo-kds"
+        ? "KDS"
+        : "POS";
     const licenseKey = normalizeText(body.licenseKey ?? body.license_key);
     const incomingDeviceId = normalizeText(body.deviceId ?? body.device_id);
     const terminalLabel =
-      normalizeText(body.terminalLabel ?? body.terminal_label) || "Android POS";
+      normalizeText(body.terminalLabel ?? body.terminal_label) || (requestedDeviceType === "KDS" ? "GuFo KDS" : "Android POS");
 
     if (!licenseKey || licenseKey.length < 3) {
       return res.status(400).json({
@@ -923,10 +933,18 @@ router.post("/api/v1/pos/pair", async (req: Request, res: Response) => {
       });
     }
 
-    if (!license.modPos) {
+    if (terminal.deviceType !== requestedDeviceType) {
+      return res.status(409).json({
+        ok: false,
+        error: requestedDeviceType === "KDS" ? "Licenta KDS invalida" : "Licenta POS invalida",
+      });
+    }
+
+    const terminalModuleEnabled = terminal.deviceType === "KDS" ? license.modKds : license.modPos;
+    if (!terminalModuleEnabled) {
       return res.status(403).json({
         ok: false,
-        error: "POS nu este activ",
+        error: terminal.deviceType === "KDS" ? "KDS nu este activ" : "POS nu este activ",
       });
     }
 
@@ -978,6 +996,7 @@ router.post("/api/v1/pos/pair", async (req: Request, res: Response) => {
         id: terminal.id,
         label: terminalLabel || terminal.label,
         deviceId: terminal.deviceId,
+        deviceType: terminal.deviceType,
         locationId: terminal.locationId,
       },
       locations,

@@ -41,6 +41,7 @@ type User = {
 type LocationDevice = {
   id: string
   deviceId?: string
+  deviceType?: string | null
   label?: string | null
   createdAt?: string
   licenseKey?: string
@@ -136,6 +137,7 @@ type CreateDeviceResponse = {
   item?: {
     label?: string | null
     deviceId: string
+    deviceType?: string | null
     licenseKey: string
     companyId?: string | null
   }
@@ -163,6 +165,7 @@ type LicenseModules = {
   nomenclature: boolean
   settings: boolean
   pos: boolean
+  kds: boolean
   reports: boolean
 }
 
@@ -173,6 +176,7 @@ const defaultModules: LicenseModules = {
   nomenclature: false,
   settings: false,
   pos: false,
+  kds: false,
   reports: false,
 }
 
@@ -364,7 +368,7 @@ export default function ControlPanelClientDetails() {
   const [locationForm, setLocationForm] = useState<LocationFormState>(emptyLocationForm())
   const [locationModalOpen, setLocationModalOpen] = useState(false)
   const [editingLocationId, setEditingLocationId] = useState<string | null>(null)
-  const [deviceForms, setDeviceForms] = useState<Record<string, { label: string }>>({})
+  const [deviceForms, setDeviceForms] = useState<Record<string, { label: string; deviceType: "POS" | "KDS" }>>({})
   const [openDeviceLocationId, setOpenDeviceLocationId] = useState<string | null>(null)
   const [locationError, setLocationError] = useState<string | null>(null)
   const [deviceError, setDeviceError] = useState<string | null>(null)
@@ -379,8 +383,9 @@ export default function ControlPanelClientDetails() {
   const [userForm, setUserForm] = useState({
     name: "",
     email: "",
-            role: "CASHIER",
+    role: "CASHIER",
     password: "",
+    posPin: "",
     isActive: true,
   })
   const [companyForm, setCompanyForm] = useState({
@@ -395,6 +400,7 @@ export default function ControlPanelClientDetails() {
     expiresAt: "",
     limitLocations: 1,
     limitTerminals: 1,
+    limitKdsDevices: 1,
     modules: defaultModules,
   })
   const companySectionRef = useRef<HTMLElement | null>(null)
@@ -410,6 +416,7 @@ export default function ControlPanelClientDetails() {
           expiresAt: toInputDate(item?.license?.expiresAt),
         limitLocations: Number(item?.license?.limits?.locations ?? 1),
         limitTerminals: Number(item?.license?.limits?.terminals ?? 1),
+        limitKdsDevices: Number(item?.license?.limits?.kdsDevices ?? 1),
         modules: {
           dashboard: Boolean(item?.license?.modules?.dashboard),
           documents: Boolean(item?.license?.modules?.documents),
@@ -417,6 +424,7 @@ export default function ControlPanelClientDetails() {
           nomenclature: Boolean(item?.license?.modules?.nomenclature),
           settings: Boolean(item?.license?.modules?.settings),
           pos: Boolean(item?.license?.modules?.pos),
+          kds: Boolean(item?.license?.modules?.kds),
             reports: Boolean(item?.license?.modules?.reports),
           },
         })
@@ -526,8 +534,9 @@ export default function ControlPanelClientDetails() {
     setUserForm({
       name: "",
       email: "",
-            role: "CASHIER",
+      role: "CASHIER",
       password: "",
+      posPin: "",
       isActive: true,
     })
   }
@@ -540,6 +549,7 @@ export default function ControlPanelClientDetails() {
       email: user.email || "",
       role: user.role || "CASHIER",
       password: "",
+      posPin: "",
       isActive: true,
     })
   }
@@ -565,6 +575,7 @@ export default function ControlPanelClientDetails() {
             role: userForm.role,
             isActive: userForm.isActive,
             password: userForm.password || undefined,
+            posPin: userForm.posPin.trim() || undefined,
           }),
         })
         setMessage("Utilizatorul a fost actualizat.")
@@ -576,6 +587,7 @@ export default function ControlPanelClientDetails() {
             email: userForm.email,
             role: userForm.role,
             password: userForm.password || undefined,
+            posPin: userForm.posPin.trim() || undefined,
           }),
         })
         setResetPassword(res?.temporaryPassword || userForm.password || null)
@@ -641,6 +653,7 @@ export default function ControlPanelClientDetails() {
           expiresAt: licenseForm.expiresAt || null,
           limitLocations: licenseForm.limitLocations,
           limitTerminals: licenseForm.limitTerminals,
+          limitKdsDevices: licenseForm.limitKdsDevices,
           modules: licenseForm.modules,
         }),
       })
@@ -725,6 +738,7 @@ export default function ControlPanelClientDetails() {
       })
       setLocationForm(emptyLocationForm())
       setMessage("Locatia a fost adaugata.")
+      setMessage("Locatia a fost adaugata.")
       await load()
     } catch (err: any) {
       setLocationError(err?.message || "Nu am putut crea locatia.")
@@ -735,6 +749,7 @@ export default function ControlPanelClientDetails() {
 
   async function handleCreateDevice(locationId: string, locationName: string) {
     const label = (deviceForms[locationId]?.label || "").trim()
+    const deviceType = deviceForms[locationId]?.deviceType || "POS"
     if (!label) {
       setDeviceError("Introdu label-ul device-ului.")
       return
@@ -744,32 +759,32 @@ export default function ControlPanelClientDetails() {
       setDeviceError(null)
       const res = await api<CreateDeviceResponse>(`/api/v1/admin/locations/${locationId}/devices`, {
         method: "POST",
-        body: JSON.stringify({ label }),
+        body: JSON.stringify({ label, deviceType }),
       })
-      setMessage(`Device generat pentru ${locationName}.`)
+      setMessage(`Device-ul ${deviceType} a fost generat pentru ${locationName}.`)
       setCopyMessage(null)
       setResetPassword(res?.item?.licenseKey || res?.item?.deviceId || null)
       setResetForUser(res?.item?.label || label)
-      setDeviceForms((prev) => ({ ...prev, [locationId]: { label: "" } }))
+      setDeviceForms((prev) => ({ ...prev, [locationId]: { label: "", deviceType: "POS" } }))
       setOpenDeviceLocationId(null)
       await load()
     } catch (err: any) {
-      setDeviceError(err?.message || "Nu am putut crea device-ul POS.")
+      setDeviceError(err?.message || "Nu am putut crea device-ul.")
     } finally {
       setCreatingDeviceFor(null)
     }
   }
 
   async function handleDeleteTerminal(terminalId: string, terminalLabel: string) {
-    if (!window.confirm(`Stergi device-ul POS "${terminalLabel}"?`)) return
+    if (!window.confirm(`Stergi device-ul "${terminalLabel}"?`)) return
     try {
       setDeletingTerminalId(terminalId)
       setError(null)
       await api(`/api/v1/admin/terminals/${terminalId}`, { method: "DELETE" })
-      setMessage("Device-ul POS a fost sters.")
+      setMessage("Device-ul a fost sters.")
       await load()
     } catch (err: any) {
-      setError(err?.message || "Nu am putut sterge device-ul POS.")
+      setError(err?.message || "Nu am putut sterge device-ul.")
     } finally {
       setDeletingTerminalId(null)
     }
@@ -839,6 +854,7 @@ export default function ControlPanelClientDetails() {
     ["nomenclature", "Nomenclator"],
     ["settings", "Setari"],
     ["pos", "POS"],
+    ["kds", "KDS"],
     ["reports", "Rapoarte"],
   ]
 
@@ -1283,7 +1299,7 @@ export default function ControlPanelClientDetails() {
 
       <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div><div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Locatii si POS</div><div className="mt-1 text-sm font-semibold text-[#17324D]">Administrare locatii, terminale si chei de licenta</div></div>
+          <div><div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Locatii si device-uri</div><div className="mt-1 text-sm font-semibold text-[#17324D]">Administrare locatii, device-uri POS / KDS si chei de licenta</div></div>
             <div className="flex flex-col gap-2 sm:flex-row">
             <button
               onClick={openCreateLocationModal}
@@ -1330,7 +1346,10 @@ export default function ControlPanelClientDetails() {
                       Edit
                     </button>
                     <button
-                      onClick={() => setOpenDeviceLocationId(openDeviceLocationId === location.id ? null : location.id)}
+                      onClick={() => {
+                        setOpenDeviceLocationId(openDeviceLocationId === location.id ? null : location.id)
+                        setDeviceForms((prev) => ({ ...prev, [location.id]: prev[location.id] || { label: "", deviceType: "POS" } }))
+                      }}
                       className="inline-flex items-center gap-2 rounded-2xl border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700"
                     >
                       <Plus size={13} />
@@ -1352,11 +1371,24 @@ export default function ControlPanelClientDetails() {
                     <input
                       value={deviceForms[location.id]?.label || ""}
                       onChange={(e) =>
-                        setDeviceForms((prev) => ({ ...prev, [location.id]: { label: e.target.value } }))
+                        setDeviceForms((prev) => ({ ...prev, [location.id]: { ...(prev[location.id] || { deviceType: "POS" }), label: e.target.value } }))
                       }
                       placeholder="Label device"
                       className="h-10 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
                     />
+                    <select
+                      value={deviceForms[location.id]?.deviceType || "POS"}
+                      onChange={(e) =>
+                        setDeviceForms((prev) => ({
+                          ...prev,
+                          [location.id]: { ...(prev[location.id] || { label: "" }), deviceType: e.target.value as "POS" | "KDS" },
+                        }))
+                      }
+                      className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+                    >
+                      <option value="POS">POS</option>
+                      <option value="KDS">KDS</option>
+                    </select>
                     <button
                       onClick={() => handleCreateDevice(location.id, location.name)}
                       disabled={creatingDeviceFor === location.id}
@@ -1374,6 +1406,7 @@ export default function ControlPanelClientDetails() {
                       <thead className="text-xs uppercase text-slate-400">
                         <tr>
                           <th className="px-2 py-2 text-left font-semibold">Device</th>
+                          <th className="px-2 py-2 text-left font-semibold">Tip</th>
                           <th className="px-2 py-2 text-left font-semibold">Licenta</th>
                           <th className="px-2 py-2 text-left font-semibold">Creat</th>
                           <th className="px-2 py-2 text-left font-semibold">Actiuni</th>
@@ -1384,8 +1417,14 @@ export default function ControlPanelClientDetails() {
                             <tr key={device.id} className="border-t border-slate-200">
                               <td className="px-2 py-2 text-slate-800">
                                 <div className="font-medium">{device.label || device.deviceId || "-"}</div>
-                                {device.company?.name ? <div className="mt-0.5 text-xs text-slate-500">{device.company.name}</div> : null}
+                                <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                                  <span>{device.company?.name || "Device activ"}</span>
+                                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+                                    {device.deviceType || "POS"}
+                                  </span>
+                                </div>
                               </td>
+                            <td className="px-2 py-2 text-slate-600">{device.deviceType || "POS"}</td>
                             <td className="px-2 py-2 font-mono text-slate-600">{device.licenseKey || device.deviceId || "-"}</td>
                             <td className="px-2 py-2 text-slate-500">{formatDate(device.createdAt)}</td>
                             <td className="px-2 py-2">
@@ -1492,6 +1531,16 @@ export default function ControlPanelClientDetails() {
               />
             </label>
 
+            <label className="block">
+              <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">PIN acces POS / KDS</div>
+              <input
+                value={userForm.posPin}
+                onChange={(e) => setUserForm((prev) => ({ ...prev, posPin: e.target.value }))}
+                placeholder={editingUserId ? "Lasa gol daca il pastrezi" : "Ex: 1234"}
+                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+              />
+            </label>
+
             {editingUserId ? (
               <label className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
                 <input
@@ -1561,7 +1610,7 @@ export default function ControlPanelClientDetails() {
                       <td className="px-4 py-3 text-slate-700">{user.email}</td>
                       <td className="px-4 py-3 font-medium text-slate-900">{user.fullName}</td>
                       <td className="px-4 py-3 text-slate-600">
-                        <div>{user.role}</div>
+                        <div>{({ OWNER: "Proprietar", ADMIN: "Administrator", MANAGER: "Manager", CASHIER: "Ospatar / Casier", WAREHOUSE: "Magazioner", CHEF: "Bucatar", KITCHEN_HELPER: "Ajutor bucatar", KITCHEN_OPERATOR: "Operator bucatarie" } as Record<string, string>)[user.role] || user.role}</div>
                         <div className="mt-1 flex flex-wrap gap-1.5">
                           {user.role === "OWNER" || user.role === "ADMIN" ? (
                             <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600">

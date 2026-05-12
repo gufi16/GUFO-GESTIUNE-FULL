@@ -18,6 +18,11 @@ enum UserRole {
   KITCHEN_OPERATOR
 }
 
+enum TerminalDeviceType {
+  POS
+  KDS
+}
+
 enum ProductClass {
   PRODUS_FIN
   MATERIE_PRIMA
@@ -506,10 +511,12 @@ model License {
   modNomenclature Boolean @default(true)
   modSettings     Boolean @default(true)
   modPos          Boolean @default(true)
+  modKds          Boolean @default(false)
   modReports      Boolean @default(false)
 
-  limitLocations Int @default(1)
-  limitTerminals Int @default(1)
+  limitLocations  Int @default(1)
+  limitTerminals  Int @default(1)
+  limitKdsDevices Int @default(1)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -565,6 +572,7 @@ model Terminal {
   companyId          String?
   locationId         String?
   deviceId           String
+  deviceType         TerminalDeviceType @default(POS)
   label              String?
   isLockedToLocation Boolean @default(true)
 

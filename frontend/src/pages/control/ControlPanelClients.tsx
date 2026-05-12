@@ -28,6 +28,7 @@ type AdminClientItem = {
     limits?: {
       locations?: number
       terminals?: number
+      kdsDevices?: number
     }
     modules?: Record<string, boolean>
   } | null
@@ -63,6 +64,7 @@ type CreateClientPayload = {
   licenseKey: string
   limitLocations: number
   limitTerminals: number
+  limitKdsDevices: number
   modules: {
     dashboard: boolean
     documents: boolean
@@ -70,6 +72,7 @@ type CreateClientPayload = {
     nomenclature: boolean
     settings: boolean
     pos: boolean
+    kds: boolean
     reports: boolean
   }
 }
@@ -101,6 +104,7 @@ const defaultModules = {
   nomenclature: true,
   settings: true,
   pos: true,
+  kds: false,
   reports: false,
 }
 
@@ -180,6 +184,7 @@ function normalizeClient(raw: any): AdminClientItem {
           limits: {
             locations: Number(raw.license?.limits?.locations ?? 0),
             terminals: Number(raw.license?.limits?.terminals ?? 0),
+            kdsDevices: Number(raw.license?.limits?.kdsDevices ?? 0),
           },
           modules: raw.license.modules || {},
         }
@@ -235,6 +240,7 @@ export default function ControlPanelClients() {
     licenseKey: "",
     limitLocations: 1,
     limitTerminals: 1,
+    limitKdsDevices: 1,
     modules: defaultModules,
   })
 
@@ -356,6 +362,7 @@ export default function ControlPanelClients() {
         licenseKey: "",
         limitLocations: 1,
         limitTerminals: 1,
+        limitKdsDevices: 1,
         modules: defaultModules,
       })
       await loadClients()
@@ -706,6 +713,16 @@ export default function ControlPanelClients() {
                     className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
                   />
                 </label>
+                <label className="block">
+                  <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">KDS</div>
+                  <input
+                    type="number"
+                    min={1}
+                    value={form.limitKdsDevices}
+                    onChange={(e) => setForm((prev) => ({ ...prev, limitKdsDevices: Number(e.target.value || 1) }))}
+                    className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+                  />
+                </label>
               </div>
 
               <label className="block">
@@ -727,7 +744,7 @@ export default function ControlPanelClients() {
                       value ? "border-[#17324D] bg-[#17324D] text-white" : "border-slate-200 bg-slate-50 text-slate-600"
                     }`}
                   >
-                    {key}
+                    {key === "kds" ? "KDS" : key}
                   </button>
                 ))}
               </div>

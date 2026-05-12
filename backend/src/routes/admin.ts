@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { Router } from "express"
 import bcrypt from "bcryptjs"
-import { UserRole } from "@prisma/client"
+import { TerminalDeviceType, UserRole } from "@prisma/client"
 import { z } from "zod"
 
 import { prisma } from "../lib/prisma"
@@ -146,6 +146,7 @@ function moduleMapFromLicense(license: {
   modNomenclature: boolean
   modSettings: boolean
   modPos: boolean
+  modKds: boolean
   modReports: boolean
 }) {
   return {
@@ -155,6 +156,7 @@ function moduleMapFromLicense(license: {
     nomenclature: Boolean(license.modNomenclature),
     settings: Boolean(license.modSettings),
     pos: Boolean(license.modPos),
+    kds: Boolean(license.modKds),
     reports: Boolean(license.modReports),
   }
 }
@@ -224,11 +226,16 @@ async function generateUniqueLocationCode(tenantId: string, companyId: string | 
   return code
 }
 
-async function generateUniqueDeviceId(tenantId: string, companyId: string | null | undefined) {
-  let deviceId = `POS-${randomChunk(4)}-${randomChunk(4)}`
+async function generateUniqueDeviceId(
+  tenantId: string,
+  companyId: string | null | undefined,
+  deviceType: TerminalDeviceType = TerminalDeviceType.POS,
+) {
+  const prefix = deviceType === TerminalDeviceType.KDS ? "KDS" : "POS"
+  let deviceId = `${prefix}-${randomChunk(4)}-${randomChunk(4)}`
 
   while (await prisma.terminal.findFirst({ where: { tenantId, companyId: companyId ?? null, deviceId } })) {
-    deviceId = `POS-${randomChunk(4)}-${randomChunk(4)}`
+    deviceId = `${prefix}-${randomChunk(4)}-${randomChunk(4)}`
   }
 
   return deviceId
@@ -247,6 +254,7 @@ const CreateClientSchema = z.object({
   expiresAt: z.string().optional(),
   limitLocations: z.coerce.number().int().min(1).default(1),
   limitTerminals: z.coerce.number().int().min(1).default(1),
+  limitKdsDevices: z.coerce.number().int().min(1).default(1),
   modules: z
     .object({
       dashboard: z.boolean().default(true),
@@ -255,6 +263,7 @@ const CreateClientSchema = z.object({
       nomenclature: z.boolean().default(true),
       settings: z.boolean().default(true),
       pos: z.boolean().default(true),
+      kds: z.boolean().default(false),
       reports: z.boolean().default(false),
     })
     .default({
@@ -264,6 +273,7 @@ const CreateClientSchema = z.object({
       nomenclature: true,
       settings: true,
       pos: true,
+      kds: false,
       reports: false,
     }),
 })
@@ -272,6 +282,7 @@ const UpdateLicenseSchema = z.object({
   expiresAt: z.string().nullable().optional(),
   limitLocations: z.coerce.number().int().min(1).optional(),
   limitTerminals: z.coerce.number().int().min(1).optional(),
+  limitKdsDevices: z.coerce.number().int().min(1).optional(),
   isSuspended: z.boolean().optional(),
   modules: z
     .object({
@@ -281,6 +292,7 @@ const UpdateLicenseSchema = z.object({
       nomenclature: z.boolean().optional(),
       settings: z.boolean().optional(),
       pos: z.boolean().optional(),
+      kds: z.boolean().optional(),
       reports: z.boolean().optional(),
     })
     .optional(),
@@ -295,6 +307,7 @@ const AdminCreateUserSchema = z.object({
   name: z.string().min(2),
   role: z.nativeEnum(UserRole),
   password: z.string().min(6).optional(),
+  posPin: z.string().trim().min(4).max(8).optional(),
 })
 
 const AdminUpdateUserSchema = z.object({
@@ -303,6 +316,7 @@ const AdminUpdateUserSchema = z.object({
   role: z.nativeEnum(UserRole).optional(),
   isActive: z.boolean().optional(),
   password: z.string().min(6).optional(),
+  posPin: z.string().trim().min(4).max(8).optional(),
 })
 
 const CreateLocationSchema = z.object({
@@ -323,6 +337,7 @@ const CreateLocationSchema = z.object({
 
 const CreateDeviceSchema = z.object({
   label: z.string().min(2),
+  deviceType: z.nativeEnum(TerminalDeviceType).default(TerminalDeviceType.POS),
 })
 
 const PosLicenseValidateSchema = z.object({
@@ -592,6 +607,7 @@ router.get("/api/v1/admin/clients", requireAuth, requireOwner, async (_req, res)
               limits: {
                 locations: latestLicense.limitLocations,
                 terminals: latestLicense.limitTerminals,
+                kdsDevices: latestLicense.limitKdsDevices,
               },
               modules: moduleMapFromLicense(latestLicense),
             }
@@ -844,6 +860,7 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
             label: device.label,
             createdAt: device.createdAt,
             isLockedToLocation: device.isLockedToLocation,
+            deviceType: device.deviceType,
             licenseKey: device.deviceId,
             companyId: device.companyId,
             company: serializeCompanySummary(device.company),
@@ -854,6 +871,7 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
         id: terminal.id,
         deviceId: terminal.deviceId,
         label: terminal.label,
+        deviceType: terminal.deviceType,
         isLockedToLocation: terminal.isLockedToLocation,
         createdAt: terminal.createdAt,
         companyId: terminal.companyId,
@@ -866,9 +884,10 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
             expiresAt: latestLicense.expiresAt,
             isSuspended: latestLicense.isSuspended,
             limits: {
-              locations: latestLicense.limitLocations,
-              terminals: latestLicense.limitTerminals,
-            },
+                locations: latestLicense.limitLocations,
+                terminals: latestLicense.limitTerminals,
+                kdsDevices: latestLicense.limitKdsDevices,
+              },
             modules: moduleMapFromLicense(latestLicense),
           }
         : null,
@@ -1059,9 +1078,11 @@ router.post("/api/v1/admin/clients", requireAuth, requireOwner, async (req: Auth
               modNomenclature: data.modules.nomenclature,
               modSettings: data.modules.settings,
               modPos: data.modules.pos,
+              modKds: data.modules.kds,
               modReports: data.modules.reports,
               limitLocations: data.limitLocations,
               limitTerminals: data.limitTerminals,
+              limitKdsDevices: data.limitKdsDevices,
             },
           },
         },
@@ -1107,7 +1128,8 @@ router.post("/api/v1/admin/clients", requireAuth, requireOwner, async (req: Auth
             modules: data.modules,
             limits: {
               locations: data.limitLocations,
-              terminals: data.limitTerminals,
+                terminals: data.limitTerminals,
+                kdsDevices: data.limitKdsDevices,
             },
             erpUser: {
               email: erpUser.email,
@@ -1268,6 +1290,7 @@ router.post("/api/v1/admin/clients/:id/users", requireAuth, requireOwner, async 
           role: parsed.data.role,
           isActive: true,
           passwordHash: await hashSecret(rawPassword),
+          posPinHash: parsed.data.posPin?.trim() ? await hashSecret(parsed.data.posPin.trim()) : null,
         },
         select: {
           id: true,
@@ -1372,6 +1395,9 @@ router.patch("/api/v1/admin/users/:userId", requireAuth, requireOwner, async (re
           isActive: parsed.data.isActive,
           ...(parsed.data.password?.trim()
             ? { passwordHash: await hashSecret(parsed.data.password.trim()) }
+            : {}),
+          ...(parsed.data.posPin !== undefined
+            ? { posPinHash: parsed.data.posPin.trim() ? await hashSecret(parsed.data.posPin.trim()) : null }
             : {}),
         },
         select: {
@@ -1741,19 +1767,29 @@ router.post("/api/v1/admin/locations/:id/devices", requireAuth, requireOwner, as
     return res.status(404).json({ ok: false, error: "Licenta ERP inexistenta" })
   }
 
-  if (!license.modPos) {
-    return res.status(400).json({ ok: false, error: "POS nu este activ pe licenta clientului" })
-  }
+  const deviceType = parsed.data.deviceType || TerminalDeviceType.POS
+  const isKds = deviceType === TerminalDeviceType.KDS
 
-  if (location.tenant.terminals.length >= license.limitTerminals) {
+  if (isKds ? !license.modKds : !license.modPos) {
     return res.status(400).json({
       ok: false,
-      error: `Clientul a atins limita de device-uri POS (${license.limitTerminals})`,
+      error: isKds ? "KDS nu este activ pe licenta clientului" : "POS nu este activ pe licenta clientului",
+    })
+  }
+
+  const sameTypeDevices = location.tenant.terminals.filter((terminal) => terminal.deviceType === deviceType)
+  const maxDevices = isKds ? license.limitKdsDevices : license.limitTerminals
+  if (sameTypeDevices.length >= maxDevices) {
+    return res.status(400).json({
+      ok: false,
+      error: isKds
+        ? `Clientul a atins limita de device-uri KDS (${license.limitKdsDevices})`
+        : `Clientul a atins limita de device-uri POS (${license.limitTerminals})`,
     })
   }
 
   try {
-    const deviceId = await generateUniqueDeviceId(location.tenantId, location.companyId)
+    const deviceId = await generateUniqueDeviceId(location.tenantId, location.companyId, deviceType)
 
     const terminal = await prisma.$transaction(async (tx) => {
       const created = await tx.terminal.create({
@@ -1762,6 +1798,7 @@ router.post("/api/v1/admin/locations/:id/devices", requireAuth, requireOwner, as
           companyId: location.companyId,
           locationId: location.id,
           deviceId,
+          deviceType,
           label: parsed.data.label.trim(),
           isLockedToLocation: true,
         },
@@ -1772,7 +1809,7 @@ router.post("/api/v1/admin/locations/:id/devices", requireAuth, requireOwner, as
           tenantId: location.tenantId,
           actorType: "OWNER",
           actorId: req.auth?.userId,
-          action: "POS_DEVICE_CREATED",
+          action: isKds ? "KDS_DEVICE_CREATED" : "POS_DEVICE_CREATED",
           entityType: "Terminal",
           entityId: created.id,
           payload: {
@@ -1781,6 +1818,7 @@ router.post("/api/v1/admin/locations/:id/devices", requireAuth, requireOwner, as
             locationId: location.id,
             locationName: location.name,
             deviceId: created.deviceId,
+            deviceType: created.deviceType,
             label: created.label,
           },
         },
@@ -1795,6 +1833,7 @@ router.post("/api/v1/admin/locations/:id/devices", requireAuth, requireOwner, as
         id: terminal.id,
         label: terminal.label,
         deviceId: terminal.deviceId,
+        deviceType: terminal.deviceType,
         licenseKey: terminal.deviceId,
         locationId: location.id,
         locationName: location.name,
@@ -1806,7 +1845,7 @@ router.post("/api/v1/admin/locations/:id/devices", requireAuth, requireOwner, as
   } catch (error: any) {
     return res.status(500).json({
       ok: false,
-      error: error?.message || "Nu am putut crea device-ul POS",
+      error: error?.message || (isKds ? "Nu am putut crea device-ul KDS" : "Nu am putut crea device-ul POS"),
     })
   }
 })
@@ -1846,6 +1885,7 @@ router.patch("/api/v1/admin/clients/:id/license", requireAuth, requireOwner, asy
         expiresAt: data.expiresAt === undefined ? undefined : expiresAt,
         limitLocations: data.limitLocations,
         limitTerminals: data.limitTerminals,
+        limitKdsDevices: data.limitKdsDevices,
         isSuspended: data.isSuspended,
         modDashboard: data.modules?.dashboard,
         modDocuments: data.modules?.documents,
@@ -1853,6 +1893,7 @@ router.patch("/api/v1/admin/clients/:id/license", requireAuth, requireOwner, asy
         modNomenclature: data.modules?.nomenclature,
         modSettings: data.modules?.settings,
         modPos: data.modules?.pos,
+        modKds: data.modules?.kds,
         modReports: data.modules?.reports,
       },
     })
@@ -1884,11 +1925,13 @@ router.patch("/api/v1/admin/clients/:id/license", requireAuth, requireOwner, asy
       limits: {
         locations: updated.limitLocations,
         terminals: updated.limitTerminals,
+        kdsDevices: updated.limitKdsDevices,
       },
       modules: moduleMapFromLicense(updated),
     },
   })
 })
+
 
 router.post(
   "/api/v1/admin/users/:userId/reset-password",
@@ -1998,6 +2041,7 @@ router.get("/api/v1/license/validate", requireAuth, async (req: AuthedRequest, r
     limits: {
       locations: license.limitLocations,
       terminals: license.limitTerminals,
+      kdsDevices: license.limitKdsDevices,
     },
     modules: {
       ...moduleMapFromLicense(license),
