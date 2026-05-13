@@ -2548,7 +2548,7 @@ router.get("/api/v1/pos/customers", requirePosAuth, async (req: PosAuthRequest, 
   return handlePosCustomersSearch(req, res);
 });
 
-router.get("/api/v1/pos/cui-lookup", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
+router.get("/api/v1/pos/cui-lookup", async (req: PosAuthRequest, res: Response) => {
   return handlePosCompanyLookupByCui(req, res);
 });
 
