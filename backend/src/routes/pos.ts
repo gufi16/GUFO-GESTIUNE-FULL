@@ -1813,32 +1813,6 @@ export async function handlePosReceiptInvoice(req: PosAuthRequest, res: Response
     return res.status(404).json({ ok: false, error: "Bonul nu a fost gasit in ERP." });
   }
 
-  const duplicateMarker = `[POS-SALE:${sale.id}]`;
-  const existingInvoice = await prisma.salesInvoice.findFirst({
-    where: {
-      tenantId,
-      companyId: sale.companyId || company?.id || null,
-      note: {
-        contains: duplicateMarker,
-      },
-    },
-    select: {
-      id: true,
-      docNo: true,
-      status: true,
-    },
-  });
-
-  if (existingInvoice) {
-    return res.json({
-      ok: true,
-      duplicated: true,
-      invoiceId: existingInvoice.id,
-      docNo: existingInvoice.docNo,
-      status: existingInvoice.status,
-    });
-  }
-
   const realLines = sale.items.filter((line) => !isSyntheticSgrSaleLine(line));
   const sgrLines = sale.items.filter((line) => isSyntheticSgrSaleLine(line));
   if (!realLines.length) {

@@ -83,21 +83,41 @@ async function getExistingMaxNumber(
   key: NumberingKey,
   prefix: string
 ) {
-  if (key !== "customer" && key !== "supplier") return 0
+  const normalizedPrefix = normalizePrefix(prefix, "")
+  if (!normalizedPrefix) return 0
 
-  const where = {
-    tenantId,
-    code: {
-      startsWith: `${normalizePrefix(prefix, "")}-`,
-      mode: "insensitive" as const,
-    },
+  if (key === "customer" || key === "supplier") {
+    const where = {
+      tenantId,
+      code: {
+        startsWith: `${normalizedPrefix}-`,
+        mode: "insensitive" as const,
+      },
+    }
+    const rows =
+      key === "customer"
+        ? await client.customer.findMany({ where, select: { code: true } })
+        : await client.supplier.findMany({ where, select: { code: true } })
+
+    return rows.reduce((max, row) => Math.max(max, extractFormattedNumber(row.code, prefix)), 0)
   }
-  const rows =
-    key === "customer"
-      ? await client.customer.findMany({ where, select: { code: true } })
-      : await client.supplier.findMany({ where, select: { code: true } })
 
-  return rows.reduce((max, row) => Math.max(max, extractFormattedNumber(row.code, prefix)), 0)
+  if (key === "invoice") {
+    const rows = await client.salesInvoice.findMany({
+      where: {
+        tenantId,
+        docNo: {
+          startsWith: `${normalizedPrefix}-`,
+          mode: "insensitive" as const,
+        },
+      },
+      select: { docNo: true },
+    })
+
+    return rows.reduce((max, row) => Math.max(max, extractFormattedNumber(row.docNo, prefix)), 0)
+  }
+
+  return 0
 }
 
 async function ensureCompany(tenantId: string) {
