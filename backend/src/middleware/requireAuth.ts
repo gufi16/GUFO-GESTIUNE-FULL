@@ -24,6 +24,10 @@ export function requireAuth(req: AuthedRequest, res: Response, next: NextFunctio
     return next()
   }
 
+  if (req.path === "/api/v1/company/cui-lookup") {
+    return next()
+  }
+
   const authHeader = req.headers.authorization
 
   if (!authHeader?.startsWith("Bearer ")) {
