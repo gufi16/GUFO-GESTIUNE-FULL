@@ -1370,6 +1370,13 @@ const PosSaleSchema = z.object({
   receiptNo: z.string().optional(),
   soldAt: z.string().optional(),
   total: z.number(),
+  subtotal: z.number().optional(),
+  merchandiseSubtotal: z.number().optional(),
+  sgrTotal: z.number().optional(),
+  discountTotal: z.number().optional(),
+  lineDiscountTotal: z.number().optional(),
+  cartDiscountTotal: z.number().optional(),
+  cartDiscountPercent: z.number().optional(),
   licenseKey: z.string().optional().nullable(),
   license_key: z.string().optional().nullable(),
   deviceId: z.string().optional().nullable(),
@@ -1402,6 +1409,11 @@ const PosSaleSchema = z.object({
       qty: z.number(),
       unitPrice: z.number(),
       vatRate: z.number(),
+      lineTotalBeforeDiscount: z.number().optional(),
+      discountPercent: z.number().optional(),
+      lineDiscountTotal: z.number().optional(),
+      lineTotalAfterDiscount: z.number().optional(),
+      isSgr: z.boolean().optional(),
     })
   ),
 });
@@ -1877,6 +1889,7 @@ export async function handlePosReceiptInvoice(req: PosAuthRequest, res: Response
       });
 
       let totalNetFc = 0;
+      let totalDiscountFc = 0;
       let totalVatFc = 0;
       let totalGrossFc = 0;
 
@@ -1884,13 +1897,21 @@ export async function handlePosReceiptInvoice(req: PosAuthRequest, res: Response
         const qty = toNumber(line.qty);
         const unitPriceGross = toNumber(line.unitPrice);
         const vatRate = toNumber(line.vatRate);
-        const unitPriceNet = vatRate > 0 ? unitPriceGross / (1 + vatRate / 100) : unitPriceGross;
-        const lineNetFc = qty * unitPriceNet;
-        const lineVatFc = lineNetFc * vatRate / 100;
-        const lineGrossFc = lineNetFc + lineVatFc;
+        const lineGrossBeforeDiscount = toNumber((line as any).lineTotalBeforeDiscount) || qty * unitPriceGross;
+        const discountAmountFc = Math.max(0, toNumber((line as any).lineDiscountTotal));
+        const lineGrossFc = Math.max(0, toNumber((line as any).lineTotalAfterDiscount) || (lineGrossBeforeDiscount - discountAmountFc));
+        const discountPercent =
+          lineGrossBeforeDiscount > 0
+            ? Math.min(100, Math.max(0, toNumber((line as any).discountPercent) || (discountAmountFc * 100) / lineGrossBeforeDiscount))
+            : 0;
+        const unitPriceGrossAfterDiscount = qty > 0 ? lineGrossFc / qty : unitPriceGross;
+        const lineNetFc = vatRate > 0 ? lineGrossFc / (1 + vatRate / 100) : lineGrossFc;
+        const unitPriceNet = qty > 0 ? lineNetFc / qty : (vatRate > 0 ? unitPriceGrossAfterDiscount / (1 + vatRate / 100) : unitPriceGrossAfterDiscount);
+        const lineVatFc = lineGrossFc - lineNetFc;
         const vatCategoryCode = vatRate > 0 ? "S" : "Z";
 
         totalNetFc += lineNetFc;
+        totalDiscountFc += discountAmountFc;
         totalVatFc += lineVatFc;
         totalGrossFc += lineGrossFc;
 
@@ -1905,14 +1926,14 @@ export async function handlePosReceiptInvoice(req: PosAuthRequest, res: Response
             qty,
             unitPriceFc: unitPriceNet,
             vatRateValue: vatRate,
-            discountPercent: 0,
-            discountAmountFc: 0,
+            discountPercent,
+            discountAmountFc,
             lineNetFc,
             lineVatFc,
             lineGrossFc,
             sgrUnitFc: 0,
             sgrTotalFc: 0,
-            discountAmountRon: 0,
+            discountAmountRon: discountAmountFc,
             lineNetRon: lineNetFc,
             lineVatRon: lineVatFc,
             lineGrossRon: lineGrossFc,
@@ -1962,13 +1983,13 @@ export async function handlePosReceiptInvoice(req: PosAuthRequest, res: Response
         where: { id: invoice.id },
         data: {
           totalNetFc,
-          totalDiscountFc: 0,
+          totalDiscountFc,
           totalVatFc,
           totalGrossFc,
           totalSgrFc: 0,
           totalWithSgrFc: totalGrossFc,
           totalNetRon: totalNetFc,
-          totalDiscountRon: 0,
+          totalDiscountRon: totalDiscountFc,
           totalVatRon: totalVatFc,
           totalGrossRon: totalGrossFc,
           totalSgrRon: 0,
@@ -2044,37 +2065,89 @@ export async function handlePosReceiptsList(req: PosAuthRequest, res: Response) 
       take: 100,
     });
 
-    const items = sales.map((sale) => ({
-      id: sale.id,
-      receiptNo: sale.receiptNo,
-      clientSaleId: sale.clientSaleId,
-      soldAt: sale.soldAt,
-      total: toNumber(sale.total),
-      paymentType: sale.paymentType,
-      cashAmount: toNumber(sale.cashAmount),
-      cardAmount: toNumber(sale.cardAmount),
-      operatorName: sale.operatorName,
-      location: sale.location,
-      terminal: sale.terminal,
-      lines: sale.items
-        .filter((line) => !isSyntheticSgrSaleLine(line))
-        .map((line) => {
-          const qty = toNumber(line.qty);
-          const unitPrice = toNumber(line.unitPrice);
-          return {
-            id: line.id,
-            productId: line.productId,
-            sku: line.product?.sku || "",
-            name: line.product?.name || "Produs",
-            uom: line.product?.uom?.code || line.product?.uom?.name || "",
-            qty,
-            unitPrice,
-            vatRate: line.vatRate,
-            total: qty * unitPrice,
-            isSgr: false,
-          };
-        }),
-    }));
+    const saleIds = sales.map((sale) => sale.id);
+    const invoices = saleIds.length
+      ? await prisma.salesInvoice.findMany({
+          where: {
+            tenantId,
+            companyId: company?.id || null,
+            OR: saleIds.map((saleId) => ({
+              note: {
+                contains: `[POS-SALE:${saleId}]`,
+              },
+            })),
+          },
+          select: {
+            id: true,
+            docNo: true,
+            status: true,
+            note: true,
+            createdAt: true,
+          },
+          orderBy: [{ createdAt: "desc" }],
+        })
+      : [];
+
+    const invoiceBySaleId = new Map<string, { id: string; docNo: string; status: string }>();
+    for (const invoice of invoices) {
+      const match = String(invoice.note || "").match(/\[POS-SALE:([^\]]+)\]/);
+      const saleId = match?.[1]?.trim();
+      if (!saleId || invoiceBySaleId.has(saleId)) continue;
+      invoiceBySaleId.set(saleId, {
+        id: invoice.id,
+        docNo: invoice.docNo,
+        status: invoice.status,
+      });
+    }
+
+    const items = sales.map((sale) => {
+      const linkedInvoice = invoiceBySaleId.get(sale.id);
+      return {
+        id: sale.id,
+        receiptNo: sale.receiptNo,
+        clientSaleId: sale.clientSaleId,
+        soldAt: sale.soldAt,
+        total: toNumber(sale.total),
+        subtotal: toNumber((sale as any).subtotal),
+        merchandiseSubtotal: toNumber((sale as any).merchandiseSubtotal),
+        sgrTotal: toNumber((sale as any).sgrTotal),
+        discountTotal: toNumber((sale as any).discountTotal),
+        lineDiscountTotal: toNumber((sale as any).lineDiscountTotal),
+        cartDiscountTotal: toNumber((sale as any).cartDiscountTotal),
+        cartDiscountPercent: toNumber((sale as any).cartDiscountPercent),
+        paymentType: sale.paymentType,
+        cashAmount: toNumber(sale.cashAmount),
+        cardAmount: toNumber(sale.cardAmount),
+        operatorName: sale.operatorName,
+        invoiceId: linkedInvoice?.id || null,
+        invoiceDocNo: linkedInvoice?.docNo || null,
+        invoiceStatus: linkedInvoice?.status || null,
+        invoiced: Boolean(linkedInvoice?.id),
+        location: sale.location,
+        terminal: sale.terminal,
+        lines: sale.items
+          .filter((line) => !isSyntheticSgrSaleLine(line))
+          .map((line) => {
+            const qty = toNumber(line.qty);
+            const unitPrice = toNumber(line.unitPrice);
+            return {
+              id: line.id,
+              productId: line.productId,
+              sku: line.product?.sku || "",
+              name: line.product?.name || "Produs",
+              uom: line.product?.uom?.code || line.product?.uom?.name || "",
+              qty,
+              unitPrice,
+              vatRate: line.vatRate,
+              total: toNumber((line as any).lineTotalAfterDiscount) || qty * unitPrice,
+              lineTotalBeforeDiscount: toNumber((line as any).lineTotalBeforeDiscount) || qty * unitPrice,
+              discountPercent: toNumber((line as any).discountPercent),
+              lineDiscountTotal: toNumber((line as any).lineDiscountTotal),
+              isSgr: false,
+            };
+          }),
+      };
+    });
 
     const totals = items.reduce(
       (acc, sale) => {
@@ -2690,6 +2763,13 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
     const product = productMap.get(line.productId)!;
     const qty = toNumber(line.qty);
     const effectiveVatRate = isVatPayer ? toNumber(line.vatRate) : 0;
+    const lineTotalBeforeDiscount = toNumber(line.lineTotalBeforeDiscount) || qty * toNumber(line.unitPrice);
+    const lineDiscountTotal = Math.max(0, toNumber(line.lineDiscountTotal));
+    const lineTotalAfterDiscount = Math.max(0, toNumber(line.lineTotalAfterDiscount) || (lineTotalBeforeDiscount - lineDiscountTotal));
+    const discountPercent =
+      lineTotalBeforeDiscount > 0
+        ? Math.min(100, Math.max(0, toNumber(line.discountPercent) || (lineDiscountTotal * 100) / lineTotalBeforeDiscount))
+        : 0;
 
     const productLine = {
       type: "PRODUCT",
@@ -2699,7 +2779,10 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
       qty,
       unitPrice: toNumber(line.unitPrice),
       vatRate: effectiveVatRate,
-      total: qty * toNumber(line.unitPrice),
+      total: lineTotalAfterDiscount,
+      lineTotalBeforeDiscount,
+      discountPercent,
+      lineDiscountTotal,
       isSgr: false,
     };
 
@@ -2722,6 +2805,22 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
   const totalWithoutSgr = Math.max(0, totalWithSgr - totalSgr);
 
   const normalizedPaymentType = payload.paymentType ?? "CASH";
+  const normalizedSubtotal = toNumber(payload.subtotal) || totalProductLines + totalSgr;
+  const normalizedMerchandiseSubtotal = toNumber(payload.merchandiseSubtotal) || totalProductLines;
+  const normalizedSgrTotal = toNumber(payload.sgrTotal) || totalSgr;
+  const normalizedLineDiscountTotal = Math.max(
+    0,
+    toNumber(payload.lineDiscountTotal) ||
+      receiptLines
+        .filter((line) => line.type === "PRODUCT")
+        .reduce((sum, line) => sum + toNumber((line as any).lineDiscountTotal), 0)
+  );
+  const normalizedCartDiscountTotal = Math.max(0, toNumber(payload.cartDiscountTotal));
+  const normalizedDiscountTotal = Math.max(
+    0,
+    toNumber(payload.discountTotal) || normalizedLineDiscountTotal + normalizedCartDiscountTotal
+  );
+  const normalizedCartDiscountPercent = Math.max(0, toNumber(payload.cartDiscountPercent));
   const normalizedCashAmount =
     payload.cashAmount !== undefined
       ? toNumber(payload.cashAmount)
@@ -2754,6 +2853,13 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
         receiptNo: payload.receiptNo ? payload.receiptNo.trim() : null,
         soldAt: payload.soldAt ? new Date(payload.soldAt) : new Date(),
         total: new Prisma.Decimal(totalWithSgr),
+        subtotal: new Prisma.Decimal(normalizedSubtotal),
+        merchandiseSubtotal: new Prisma.Decimal(normalizedMerchandiseSubtotal),
+        sgrTotal: new Prisma.Decimal(normalizedSgrTotal),
+        discountTotal: new Prisma.Decimal(normalizedDiscountTotal),
+        lineDiscountTotal: new Prisma.Decimal(normalizedLineDiscountTotal),
+        cartDiscountTotal: new Prisma.Decimal(normalizedCartDiscountTotal),
+        cartDiscountPercent: new Prisma.Decimal(normalizedCartDiscountPercent),
         paymentType: normalizedPaymentType,
         cashAmount: new Prisma.Decimal(normalizedCashAmount),
         cardAmount: new Prisma.Decimal(normalizedCardAmount),
@@ -2770,6 +2876,13 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
       const qtyDecimal = new Prisma.Decimal(line.qty);
       const unitPriceDecimal = new Prisma.Decimal(line.unitPrice);
       const effectiveVatRate = isVatPayer ? toNumber(line.vatRate) : 0;
+      const lineTotalBeforeDiscount = toNumber(line.lineTotalBeforeDiscount) || toNumber(line.qty) * toNumber(line.unitPrice);
+      const lineDiscountTotal = Math.max(0, toNumber(line.lineDiscountTotal));
+      const lineTotalAfterDiscount = Math.max(0, toNumber(line.lineTotalAfterDiscount) || (lineTotalBeforeDiscount - lineDiscountTotal));
+      const lineDiscountPercent =
+        lineTotalBeforeDiscount > 0
+          ? Math.min(100, Math.max(0, toNumber(line.discountPercent) || (lineDiscountTotal * 100) / lineTotalBeforeDiscount))
+          : 0;
 
       await tx.saleItem.create({
         data: {
@@ -2778,6 +2891,10 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
           qty: qtyDecimal,
           unitPrice: unitPriceDecimal,
           vatRate: effectiveVatRate,
+          lineTotalBeforeDiscount: new Prisma.Decimal(lineTotalBeforeDiscount),
+          discountPercent: new Prisma.Decimal(lineDiscountPercent),
+          lineDiscountTotal: new Prisma.Decimal(lineDiscountTotal),
+          lineTotalAfterDiscount: new Prisma.Decimal(lineTotalAfterDiscount),
         },
       });
 
@@ -2791,6 +2908,10 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
             qty: qtyDecimal,
             unitPrice: sgrValue,
             vatRate: 0,
+            lineTotalBeforeDiscount: new Prisma.Decimal(toNumber(line.qty) * toNumber(product.sgrValue || 0.5)),
+            discountPercent: new Prisma.Decimal(0),
+            lineDiscountTotal: new Prisma.Decimal(0),
+            lineTotalAfterDiscount: new Prisma.Decimal(toNumber(line.qty) * toNumber(product.sgrValue || 0.5)),
           },
         });
       }

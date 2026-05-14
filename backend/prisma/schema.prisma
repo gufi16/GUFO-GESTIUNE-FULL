@@ -901,7 +901,14 @@ model Sale {
   receiptNo    String?
   soldAt       DateTime
 
-  total Decimal @default(0)
+  total               Decimal @default(0)
+  subtotal            Decimal @default(0)
+  merchandiseSubtotal Decimal @default(0)
+  sgrTotal            Decimal @default(0)
+  discountTotal       Decimal @default(0)
+  lineDiscountTotal   Decimal @default(0)
+  cartDiscountTotal   Decimal @default(0)
+  cartDiscountPercent Decimal @default(0)
 
   paymentType  PaymentType @default(CASH)
   cashAmount   Decimal?    @db.Decimal(12, 2)
@@ -933,9 +940,13 @@ model SaleItem {
   saleId    String
   productId String
 
-  qty       Decimal
-  unitPrice Decimal
-  vatRate   Int
+  qty                     Decimal
+  unitPrice               Decimal
+  vatRate                 Int
+  lineTotalBeforeDiscount Decimal @default(0)
+  discountPercent         Decimal @default(0)
+  lineDiscountTotal       Decimal @default(0)
+  lineTotalAfterDiscount  Decimal @default(0)
 
   sale    Sale    @relation(fields: [saleId], references: [id])
   product Product @relation(fields: [productId], references: [id])

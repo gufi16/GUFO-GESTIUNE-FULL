@@ -856,6 +856,9 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
     const subline = [
       item.productName === "SGR" ? null : item.product?.serialNo ? `Serie: ${pdfText(item.product.serialNo)}` : null,
       item.productName === "SGR" ? null : item.product?.ncCode ? `Cod NC: ${pdfText(item.product.ncCode)}` : null,
+      toNumber(item.discountAmountFc) > 0
+        ? `Discount: ${pdfFmt(item.discountPercent)}% (-${pdfFmt(item.discountAmountFc)})`
+        : null,
     ].filter(Boolean).join('   ')
     const titleHeight = doc.heightOfString(productTitle, { width: cols[1] - 8 })
     const subHeight = subline ? doc.heightOfString(subline, { width: cols[1] - 8 }) + 3 : 0
@@ -907,15 +910,17 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
   }
 
   doc.save()
-  doc.roundedRect(totalsX, y, totalsBoxW, 80, 10).fillAndStroke('#ffffff', line)
+  doc.roundedRect(totalsX, y, totalsBoxW, 100, 10).fillAndStroke('#ffffff', line)
   doc.restore()
   doc.font(fonts.regular).fontSize(9.5).fillColor(dark).text('Total fara TVA', totalsX + 12, y + 12, { width: 110 })
   doc.text(pdfFmt(invoice.totalNetFc), totalsX + 120, y + 12, { width: 82, align: 'right' })
-  doc.text('TVA', totalsX + 12, y + 30, { width: 110 })
-  doc.text(pdfFmt(invoice.totalVatFc), totalsX + 120, y + 30, { width: 82, align: 'right' })
-  doc.font(fonts.bold).fontSize(10.5).text('Total factura', totalsX + 12, y + 52, { width: 110 })
-  doc.font(fonts.bold).fontSize(15).fillColor(dark).text(pdfFmt(invoice.totalWithSgrFc || invoice.totalGrossFc), totalsX + 120, y + 48, { width: 82, align: 'right' })
-  y += 106
+  doc.text('Discount', totalsX + 12, y + 30, { width: 110 })
+  doc.text(`-${pdfFmt(invoice.totalDiscountFc)}`, totalsX + 120, y + 30, { width: 82, align: 'right' })
+  doc.text('TVA', totalsX + 12, y + 48, { width: 110 })
+  doc.text(pdfFmt(invoice.totalVatFc), totalsX + 120, y + 48, { width: 82, align: 'right' })
+  doc.font(fonts.bold).fontSize(10.5).text('Total factura', totalsX + 12, y + 70, { width: 110 })
+  doc.font(fonts.bold).fontSize(15).fillColor(dark).text(pdfFmt(invoice.totalWithSgrFc || invoice.totalGrossFc), totalsX + 120, y + 66, { width: 82, align: 'right' })
+  y += 126
 
   doc.end()
 })

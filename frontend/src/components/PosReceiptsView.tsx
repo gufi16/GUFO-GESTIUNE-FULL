@@ -14,6 +14,9 @@ type PosReceiptLine = {
   unitPrice: number
   vatRate: number
   total: number
+  lineTotalBeforeDiscount?: number
+  discountPercent?: number
+  lineDiscountTotal?: number
   isSgr?: boolean
 }
 
@@ -22,6 +25,13 @@ type PosReceipt = {
   receiptNo?: string | null
   soldAt: string
   total: number
+  subtotal?: number
+  merchandiseSubtotal?: number
+  sgrTotal?: number
+  discountTotal?: number
+  lineDiscountTotal?: number
+  cartDiscountTotal?: number
+  cartDiscountPercent?: number
   paymentType: string
   cashAmount: number
   cardAmount: number
@@ -214,6 +224,11 @@ export default function PosReceiptsView({ compact = false }: Props) {
                   <div>
                     <div className="font-semibold text-slate-900">{receiptTitle(item)}</div>
                     <div className="text-xs text-slate-500">{formatDateTime(item.soldAt)}</div>
+                    {Number(item.discountTotal || 0) > 0 ? (
+                      <div className="mt-1 inline-flex rounded-full bg-violet-50 px-2.5 py-1 text-[11px] font-semibold text-violet-700">
+                        Discount -{formatMoneyRo(Number(item.discountTotal || 0))}
+                      </div>
+                    ) : null}
                   </div>
                   <div className="text-slate-600">
                     {item.location?.name || "Locatie"} / {item.terminal?.label || item.terminal?.deviceId || "Terminal"}
@@ -223,6 +238,20 @@ export default function PosReceiptsView({ compact = false }: Props) {
                 </summary>
 
                 <div className="border-t border-slate-100 bg-slate-50 px-4 py-3">
+                  {(Number(item.discountTotal || 0) > 0 || Number(item.sgrTotal || 0) > 0) ? (
+                    <div className="mb-3 flex flex-wrap gap-2 text-xs font-semibold">
+                      {Number(item.discountTotal || 0) > 0 ? (
+                        <span className="rounded-full bg-violet-100 px-3 py-1 text-violet-700">
+                          Discount: -{formatMoneyRo(Number(item.discountTotal || 0))}
+                        </span>
+                      ) : null}
+                      {Number(item.sgrTotal || 0) > 0 ? (
+                        <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-700">
+                          SGR: {formatMoneyRo(Number(item.sgrTotal || 0))}
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <div className="overflow-x-auto">
                     <table className="min-w-full text-sm">
                       <thead className="text-xs uppercase tracking-[0.14em] text-slate-400">
@@ -239,7 +268,14 @@ export default function PosReceiptsView({ compact = false }: Props) {
                         {item.lines.map((line) => (
                           <tr key={line.id}>
                             <td className="px-2 py-2 text-slate-500">{line.sku || "-"}</td>
-                            <td className="px-2 py-2 font-medium text-slate-800">{line.name}</td>
+                            <td className="px-2 py-2 font-medium text-slate-800">
+                              <div>{line.name}</div>
+                              {Number(line.lineDiscountTotal || 0) > 0 ? (
+                                <div className="mt-0.5 text-xs font-semibold text-violet-700">
+                                  Discount {formatQtyRo(Number(line.discountPercent || 0))}%: -{formatMoneyRo(Number(line.lineDiscountTotal || 0))}
+                                </div>
+                              ) : null}
+                            </td>
                             <td className="px-2 py-2 text-right text-slate-600">
                               {formatQtyRo(line.qty)} {line.uom}
                             </td>
