@@ -1892,6 +1892,7 @@ export async function handlePosReceiptInvoice(req: PosAuthRequest, res: Response
       let totalDiscountFc = 0;
       let totalVatFc = 0;
       let totalGrossFc = 0;
+      let totalSgrFc = 0;
 
       for (const line of realLines) {
         const qty = toNumber(line.qty);
@@ -1942,38 +1943,41 @@ export async function handlePosReceiptInvoice(req: PosAuthRequest, res: Response
         });
       }
 
-      for (const line of sgrLines) {
+      const aggregatedSgrQty = sgrLines.reduce((sum, line) => sum + toNumber(line.qty), 0);
+      const aggregatedSgrTotalFc = sgrLines.reduce((sum, line) => {
         const qty = toNumber(line.qty);
         const unitPriceFc = toNumber(line.unitPrice);
-        const lineNetFc = qty * unitPriceFc;
+        return sum + qty * unitPriceFc;
+      }, 0);
 
-        if (qty <= 0 || unitPriceFc <= 0 || lineNetFc <= 0) continue;
-
-        totalNetFc += lineNetFc;
-        totalGrossFc += lineNetFc;
+      if (aggregatedSgrQty > 0 && aggregatedSgrTotalFc > 0) {
+        const aggregatedSgrUnitFc = aggregatedSgrTotalFc / aggregatedSgrQty;
+        totalNetFc += aggregatedSgrTotalFc;
+        totalGrossFc += aggregatedSgrTotalFc;
+        totalSgrFc += aggregatedSgrTotalFc;
 
         await tx.salesInvoiceItem.create({
           data: {
             invoiceId: invoice.id,
-            productId: line.productId,
+            productId: sgrLines[0]?.productId || null,
             productName: "SGR",
             productCode: "SGR",
-            uomCode: normalizeText(line.product?.uom?.code || line.product?.uom?.name) || "BUC",
+            uomCode: "BUC",
             vatCategoryCode: "Z",
-            qty,
-            unitPriceFc,
+            qty: aggregatedSgrQty,
+            unitPriceFc: aggregatedSgrUnitFc,
             vatRateValue: 0,
             discountPercent: 0,
             discountAmountFc: 0,
-            lineNetFc,
+            lineNetFc: aggregatedSgrTotalFc,
             lineVatFc: 0,
-            lineGrossFc: lineNetFc,
+            lineGrossFc: aggregatedSgrTotalFc,
             sgrUnitFc: 0,
             sgrTotalFc: 0,
             discountAmountRon: 0,
-            lineNetRon: lineNetFc,
+            lineNetRon: aggregatedSgrTotalFc,
             lineVatRon: 0,
-            lineGrossRon: lineNetFc,
+            lineGrossRon: aggregatedSgrTotalFc,
             sgrTotalRon: 0,
           },
         });
@@ -1986,13 +1990,13 @@ export async function handlePosReceiptInvoice(req: PosAuthRequest, res: Response
           totalDiscountFc,
           totalVatFc,
           totalGrossFc,
-          totalSgrFc: 0,
+          totalSgrFc,
           totalWithSgrFc: totalGrossFc,
           totalNetRon: totalNetFc,
           totalDiscountRon: totalDiscountFc,
           totalVatRon: totalVatFc,
           totalGrossRon: totalGrossFc,
-          totalSgrRon: 0,
+          totalSgrRon: totalSgrFc,
           totalWithSgrRon: totalGrossFc,
         },
       });
