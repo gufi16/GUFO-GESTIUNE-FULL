@@ -221,6 +221,7 @@ router.get("/api/v1/dashboard", requireAuth, async (req: AuthedRequest, res: Res
         where: {
           tenantId,
           companyId,
+          status: "VALIDATED",
           ...buildLocationWhere(locationId),
         },
         select: {

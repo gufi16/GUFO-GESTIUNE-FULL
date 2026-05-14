@@ -24,6 +24,8 @@ export default function StocPage() {
 
   const [locations, setLocations] = useState<any[]>([])
   const [locationId, setLocationId] = useState(getActiveLocationId())
+  const [warehouses, setWarehouses] = useState<any[]>([])
+  const [warehouseId, setWarehouseId] = useState("")
 
   const [stock, setStock] = useState<any[]>([])
   const [globalStock, setGlobalStock] = useState<any[]>([])
@@ -64,6 +66,20 @@ export default function StocPage() {
     setLocations(Array.isArray(data.locations) ? data.locations : [])
   }
 
+  async function loadWarehouses(selectedLocationId: string) {
+    if (!selectedLocationId) {
+      setWarehouses([])
+      setWarehouseId("")
+      return
+    }
+    const res = await fetch(`${API}/api/v1/meta/warehouses?locationId=${encodeURIComponent(selectedLocationId)}`, { headers })
+    const data = await res.json().catch(() => ({}))
+    if (res.status === 401) throw new Error("Token expirat sau invalid. Fa login din nou.")
+    const items = Array.isArray(data.items) ? data.items : []
+    setWarehouses(items)
+    setWarehouseId((current) => (current && items.some((item: any) => item.id === current) ? current : ""))
+  }
+
   async function loadGlobalStock() {
     const qs = new URLSearchParams()
     if (globalSearch.trim()) qs.set("q", globalSearch.trim())
@@ -80,6 +96,7 @@ export default function StocPage() {
     try {
       const qs = new URLSearchParams()
       if (selectedLocationId) qs.set("locationId", selectedLocationId)
+      if (warehouseId) qs.set("warehouseId", warehouseId)
       if (movesSearch.trim()) qs.set("q", movesSearch.trim())
       if (fromDate) qs.set("fromDate", fromDate)
       if (toDate) qs.set("toDate", toDate)
@@ -112,6 +129,7 @@ export default function StocPage() {
 
     const qs = new URLSearchParams()
     qs.set("locationId", id)
+    if (warehouseId) qs.set("warehouseId", warehouseId)
     if (stockSearch.trim()) qs.set("q", stockSearch.trim())
 
     const res = await fetch(`${API}/api/v1/stock/by-location?${qs.toString()}`, { headers })
@@ -130,7 +148,7 @@ export default function StocPage() {
     setError("")
 
     try {
-      await Promise.all([loadLocations(), loadGlobalStock(), loadMoves(selectedLocationId, selectedPage)])
+      await Promise.all([loadLocations(), loadGlobalStock(), loadMoves(selectedLocationId, selectedPage), loadWarehouses(selectedLocationId)])
 
       if (selectedLocationId) {
         await loadLocationStock(selectedLocationId)
@@ -165,7 +183,7 @@ export default function StocPage() {
     setLoading(true)
     setError("")
 
-    Promise.all([loadMoves(locationId, 1), locationId ? loadLocationStock(locationId) : Promise.resolve(setStock([]))])
+    Promise.all([loadMoves(locationId, 1), locationId ? loadLocationStock(locationId) : Promise.resolve(setStock([])), loadWarehouses(locationId)])
       .then(() => {
         setPagination((prev) => ({ ...prev, page: 1 }))
       })
@@ -185,7 +203,7 @@ export default function StocPage() {
   useEffect(() => {
     if (!token || !locationId) return
     loadLocationStock(locationId).catch((e: any) => setError(e?.message || "Nu pot incarca stocul pe locatie."))
-  }, [stockSearch])
+  }, [stockSearch, warehouseId])
 
   useEffect(() => {
     if (!token) return
@@ -195,7 +213,7 @@ export default function StocPage() {
     }, 250)
 
     return () => clearTimeout(timeout)
-  }, [movesSearch, fromDate, toDate])
+  }, [movesSearch, fromDate, toDate, warehouseId])
 
   const filteredGlobalStock = useMemo(() => globalStock, [globalStock])
   const filteredLocationStock = useMemo(() => stock, [stock])
@@ -311,6 +329,14 @@ export default function StocPage() {
         >
           <div style={filterBar}>
             <span style={infoChip}>{locationId ? "Locatia activa din topbar" : "Alege o locatie din topbar"}</span>
+            {locationId ? (
+              <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} style={compactSelect}>
+                <option value="">Toate gestiunile</option>
+                {warehouses.map((warehouse) => (
+                  <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>
+                ))}
+              </select>
+            ) : null}
             <span style={infoChip}>{filteredLocationStock.length} produse</span>
           </div>
 
@@ -321,11 +347,12 @@ export default function StocPage() {
           ) : (
             <>
               <Table
-                headers={["Produs", "SKU", "UM", "Stoc", "Status"]}
+                headers={["Produs", "SKU", "UM", "Gestiune", "Stoc", "Status"]}
                 rows={pagedLocationStock.map((s) => [
                   s.name,
                   s.sku,
                   s.uom,
+                  s.warehouseName || "-",
                   formatQtyRo(Number(s.qty || 0), 3),
                   <span style={{ ...typeBadge, ...(Number(s.qty || 0) > 0 ? typeIn : typeOut) }}>
                     {Number(s.qty || 0) > 0 ? "In stoc" : "Fara stoc"}
@@ -414,6 +441,16 @@ export default function StocPage() {
                 <label style={filterLabel}>Pana la</label>
                 <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} style={filterInput} />
               </div>
+
+              <div style={filterField}>
+                <label style={filterLabel}>Gestiune</label>
+                <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} style={filterInput}>
+                  <option value="">Toate gestiunile</option>
+                  {warehouses.map((warehouse) => (
+                    <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 
@@ -430,6 +467,7 @@ export default function StocPage() {
                       <th style={th}>SKU</th>
                       <th style={th}>UM</th>
                       <th style={th}>Locatie</th>
+                      <th style={th}>Gestiune</th>
                       <th style={th}>Tip</th>
                       <th style={th}>Cantitate</th>
                       <th style={th}>Document</th>
@@ -443,6 +481,7 @@ export default function StocPage() {
                         <td style={td}>{m.sku}</td>
                         <td style={td}>{m.uom}</td>
                         <td style={td}>{m.locationName}</td>
+                        <td style={td}>{m.warehouseName || "-"}</td>
                         <td style={td}>
                           <span style={{ ...typeBadge, ...(m.type === "IN" ? typeIn : m.type === "OUT" ? typeOut : typeNeutral) }}>
                             {m.type}
@@ -644,13 +683,23 @@ const filterInput = {
   boxSizing: "border-box" as const,
 }
 
+const compactSelect = {
+  padding: "8px 12px",
+  borderRadius: 12,
+  border: "1px solid #cbd5e1",
+  background: "#ffffff",
+  outline: "none",
+  fontSize: 13,
+  color: "#0f172a",
+}
+
 const movesFiltersWrap = {
   marginBottom: 12,
 }
 
 const movesFiltersGrid = {
   display: "grid",
-  gridTemplateColumns: "2fr 1fr 1fr",
+  gridTemplateColumns: "2fr 1fr 1fr 1fr",
   gap: 10,
 }
 

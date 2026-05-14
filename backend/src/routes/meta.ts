@@ -8,6 +8,7 @@ import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { reserveNextNumber } from "../lib/numbering"
 import { requireRequestCompanyId } from "../lib/companyScope"
 import { buildPublicUploadUrl, ensureUploadSubdir, normalizeStoredUploadUrl } from "../lib/uploads"
+import { ensureDefaultWarehouseForLocation, ensureDefaultWarehousesForCompany } from "../lib/warehouse"
 
 const router = Router()
 
@@ -190,6 +191,10 @@ router.get("/api/v1/meta/locations", async (req: AuthedRequest, res) => {
   const companyId = await requireRequestCompanyId(req)
   const companyFilter = await buildPreferredCompanyFilter("location", tenantId, companyId)
 
+  await prisma.$transaction(async (tx) => {
+    await ensureDefaultWarehousesForCompany(tx, tenantId, companyId)
+  })
+
   const locations = await prisma.location.findMany({
     where: {
       tenantId,
@@ -199,6 +204,41 @@ router.get("/api/v1/meta/locations", async (req: AuthedRequest, res) => {
   })
 
   res.json({ ok: true, locations })
+})
+
+router.get("/api/v1/meta/warehouses", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
+  const locationId = String(req.query.locationId || "").trim()
+
+  await prisma.$transaction(async (tx) => {
+    if (locationId) {
+      await ensureDefaultWarehouseForLocation(tx, { tenantId, companyId, locationId })
+    } else {
+      await ensureDefaultWarehousesForCompany(tx, tenantId, companyId)
+    }
+  })
+
+  const warehouses = await prisma.warehouse.findMany({
+    where: {
+      tenantId,
+      OR: buildCompanyScope(companyId),
+      ...(locationId ? { locationId } : {}),
+      isActive: true,
+    },
+    include: {
+      location: {
+        select: {
+          id: true,
+          name: true,
+          code: true,
+        },
+      },
+    },
+    orderBy: [{ locationId: "asc" }, { isDefault: "desc" }, { name: "asc" }],
+  })
+
+  res.json({ ok: true, warehouses })
 })
 
 router.get("/api/v1/meta/terminals", async (req: AuthedRequest, res) => {
@@ -289,6 +329,16 @@ router.post("/api/v1/meta/locations", async (req: AuthedRequest, res) => {
         postalCode,
         isActive: true
       }
+    })
+
+    await prisma.$transaction(async (tx) => {
+      await ensureDefaultWarehouseForLocation(tx, {
+        tenantId,
+        companyId,
+        locationId: location.id,
+        locationName: location.name,
+        locationCode: location.code,
+      })
     })
 
     res.json({ ok: true, location })

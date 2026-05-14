@@ -1,6 +1,6 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react"
 import { ArrowLeft, Check, Search, Trash2 } from "lucide-react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
 import {
   DocumentField,
   DocumentMetric,
@@ -20,6 +20,13 @@ import { getActiveLocationId, setActiveLocationId, subscribeToActiveLocation } f
 type LocationOption = {
   id: string
   name: string
+}
+
+type WarehouseOption = {
+  id: string
+  name: string
+  code?: string
+  locationId?: string
 }
 
 type ProductOption = {
@@ -91,6 +98,23 @@ function normalizeLocations(payload: any): LocationOption[] {
   }))
 }
 
+function normalizeWarehouses(payload: any): WarehouseOption[] {
+  const rows = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload?.items)
+      ? payload.items
+      : Array.isArray(payload?.warehouses)
+        ? payload.warehouses
+        : []
+
+  return rows.map((item: any) => ({
+    id: String(item.id || ""),
+    name: String(item.name || item.label || "Gestiune"),
+    code: item.code ? String(item.code) : "",
+    locationId: item.locationId ? String(item.locationId) : item.location?.id ? String(item.location.id) : "",
+  }))
+}
+
 function buildStockMap(payload: any) {
   const rows = Array.isArray(payload)
     ? payload
@@ -109,9 +133,16 @@ function buildStockMap(payload: any) {
 
 export default function BonConsumNou() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const editingId = searchParams.get("id") || ""
   const [activePanel, setActivePanel] = useState<"date" | "produse">("date")
   const [locations, setLocations] = useState<LocationOption[]>([])
+  const [warehouses, setWarehouses] = useState<WarehouseOption[]>([])
   const [locationId, setLocationIdState] = useState(getActiveLocationId())
+  const [warehouseId, setWarehouseId] = useState("")
+  const [docNo, setDocNo] = useState("")
+  const [docStatus, setDocStatus] = useState("DRAFT")
+  const [docDate, setDocDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [note, setNote] = useState("")
   const [query, setQuery] = useState("")
   const [products, setProducts] = useState<ProductOption[]>([])
@@ -128,14 +159,24 @@ export default function BonConsumNou() {
   useEffect(() => {
     loadLocations()
     loadProducts()
+    if (editingId) loadDraft(editingId)
     const unsubscribe = subscribeToActiveLocation((nextLocationId) => {
       setLocationIdState((current) => current || nextLocationId)
     })
     return unsubscribe
-  }, [])
+  }, [editingId])
 
   useEffect(() => {
     if (locationId) loadStockForLocation(locationId)
+  }, [locationId])
+
+  useEffect(() => {
+    if (locationId) {
+      loadWarehouses(locationId)
+    } else {
+      setWarehouses([])
+      setWarehouseId("")
+    }
   }, [locationId])
 
   async function loadLocations() {
@@ -169,6 +210,61 @@ export default function BonConsumNou() {
       setProducts([])
     } finally {
       setLoadingProducts(false)
+    }
+  }
+
+  async function loadWarehouses(selectedLocationId: string) {
+    try {
+      const token = getToken() || ""
+      const res = await fetch(`${API}/api/v1/meta/warehouses?locationId=${encodeURIComponent(selectedLocationId)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      const json = await res.json().catch(() => ({}))
+      const normalized = normalizeWarehouses(json)
+      setWarehouses(normalized)
+      setWarehouseId((current) => {
+        if (current && normalized.some((warehouse) => warehouse.id === current)) return current
+        return normalized[0]?.id || ""
+      })
+    } catch {
+      setWarehouses([])
+      setWarehouseId("")
+    }
+  }
+
+  async function loadDraft(id: string) {
+    try {
+      const token = getToken() || ""
+      const res = await fetch(`${API}/api/v1/consumption-docs/${encodeURIComponent(id)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json?.ok || !json?.item) return
+      const item = json.item
+      setDocNo(item.docNo || "")
+      setDocStatus(item.status || "DRAFT")
+      setDocDate(String(item.docDate || "").slice(0, 10) || new Date().toISOString().slice(0, 10))
+      setNote(item.note || "")
+      if (item.location?.id) {
+        setLocationIdState(item.location.id)
+        setActiveLocationId(item.location.id)
+      }
+      if (item.warehouse?.id) {
+        setWarehouseId(item.warehouse.id)
+      }
+      const nextItems = Array.isArray(item.items)
+        ? item.items.map((row: any) => ({
+            productId: String(row.ingredientId || row.ingredient?.id || ""),
+            name: String(row.ingredient?.name || "Produs"),
+            code: String(row.ingredient?.sku || row.ingredient?.barcode || ""),
+            stock: toNumber(row.currentStock),
+            qty: toNumber(row.qty),
+            um: String(row.ingredient?.uom?.code || "buc"),
+          }))
+        : []
+      setItems(nextItems.filter((row: any) => row.productId))
+    } catch {
+      // noop
     }
   }
 
@@ -256,20 +352,22 @@ export default function BonConsumNou() {
       setError("")
       setMessage("")
       const token = getToken() || ""
-      const res = await fetch(`${API}/api/v1/consumption-docs`, {
-        method: "POST",
+      const res = await fetch(`${API}/api/v1/consumption-docs${editingId ? `/${encodeURIComponent(editingId)}` : ""}`, {
+        method: editingId ? "PUT" : "POST",
         headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ locationId, note, items: lines }),
+        body: JSON.stringify({ locationId, warehouseId: warehouseId || null, docDate, note, items: lines }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
         setError(json?.error || "Nu am putut salva bonul de consum.")
         return
       }
-      setMessage(`Bon de consum salvat: ${json?.item?.docNo || "OK"}`)
+      setMessage(`${editingId ? "Draft actualizat" : "Bon de consum salvat"}: ${json?.item?.docNo || docNo || "OK"}`)
+      setDocNo(json?.item?.docNo || docNo)
+      setDocStatus(json?.item?.status || docStatus)
       setItems([])
       setQuery("")
       setNote("")
@@ -291,6 +389,7 @@ export default function BonConsumNou() {
   }, [products, query])
 
   const selectedLocationName = locations.find((location) => location.id === locationId)?.name || "Locatia selectata"
+  const selectedWarehouseName = warehouses.find((warehouse) => warehouse.id === warehouseId)?.name || "Gestiunea selectata"
   const totalProducts = items.length
   const totalQty = items.reduce((sum, item) => sum + item.qty, 0)
   const lowStockItems = items.filter((item) => item.qty > item.stock).length
@@ -302,7 +401,7 @@ export default function BonConsumNou() {
   return (
     <div className="w-full space-y-3">
       <DocumentPageHeader
-        title="Bon de consum"
+        title={editingId ? `Bon de consum ${docNo || ""}`.trim() : "Bon de consum"}
         actions={
           <>
             <button type="button" onClick={() => navigate("/inregistrare-document")} className={documentButtonSecondaryClass}>
@@ -311,7 +410,7 @@ export default function BonConsumNou() {
             </button>
             <button type="button" onClick={saveDoc} disabled={saving} className={documentButtonPrimaryClass}>
               <Check size={16} className="mr-2" />
-              {saving ? "Se salveaza..." : "Finalizeaza"}
+              {saving ? "Se salveaza..." : editingId ? "Actualizeaza draft" : "Salveaza draft"}
             </button>
           </>
         }
@@ -457,6 +556,26 @@ export default function BonConsumNou() {
               </select>
             </DocumentField>
 
+            <DocumentField label="Gestiune">
+              <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} className={documentInputClass}>
+                {warehouses.length === 0 ? <option value="">Se incarca gestiunile...</option> : null}
+                {warehouses.map((warehouse) => (
+                  <option key={warehouse.id} value={warehouse.id}>
+                    {warehouse.name}{warehouse.code ? ` (${warehouse.code})` : ""}
+                  </option>
+                ))}
+              </select>
+            </DocumentField>
+
+            <DocumentField label="Data document">
+              <input
+                type="date"
+                value={docDate}
+                onChange={(e) => setDocDate(e.target.value)}
+                className={documentInputClass}
+              />
+            </DocumentField>
+
             <DocumentField label="Observatii">
               <textarea
                 value={note}
@@ -469,6 +588,8 @@ export default function BonConsumNou() {
 
             <InlineNotice>
               Locatie activa: <span className="font-semibold">{selectedLocationName}</span>
+              <span className="ml-3">Gestiune: <span className="font-semibold">{selectedWarehouseName}</span></span>
+              <span className="ml-3">Status: <span className="font-semibold">{docStatus}</span></span>
             </InlineNotice>
 
           </div>

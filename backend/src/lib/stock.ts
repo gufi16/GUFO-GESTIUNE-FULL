@@ -10,16 +10,16 @@ export async function getAvailableStockQty(
   tenantId: string,
   companyId: string,
   locationId: string,
-  productId: string
+  productId: string,
+  warehouseId?: string
 ) {
-  const balance = await tx.stockBalance.findUnique({
+  const balance = await tx.stockBalance.findFirst({
     where: {
-      tenantId_companyId_locationId_productId: {
-        tenantId,
-        companyId,
-        locationId,
-        productId,
-      },
+      tenantId,
+      companyId,
+      locationId,
+      productId,
+      ...(warehouseId ? { warehouseId } : {}),
     },
   })
 
@@ -35,6 +35,7 @@ export async function assertSufficientStock(
     tenantId: string
     companyId: string
     locationId: string
+    warehouseId?: string
     productId: string
     requiredQty: Prisma.Decimal | number
     productName: string
@@ -42,7 +43,7 @@ export async function assertSufficientStock(
   }
 ) {
   const requiredQty = toNumber(params.requiredQty)
-  const { qty } = await getAvailableStockQty(tx, params.tenantId, params.companyId, params.locationId, params.productId)
+  const { qty } = await getAvailableStockQty(tx, params.tenantId, params.companyId, params.locationId, params.productId, params.warehouseId)
 
   if (qty < requiredQty) {
     throw new Error(
@@ -57,6 +58,7 @@ export async function decrementStockBalanceStrict(
     tenantId: string
     companyId: string
     locationId: string
+    warehouseId?: string
     productId: string
     qty: Prisma.Decimal | number
     productName: string
@@ -79,6 +81,7 @@ export async function decrementStockBalanceStrict(
         tenantId: params.tenantId,
         companyId: params.companyId,
         locationId: params.locationId,
+        warehouseId: params.warehouseId,
         productId: params.productId,
       },
     },
@@ -86,6 +89,7 @@ export async function decrementStockBalanceStrict(
       qty: {
         decrement: params.qty,
       },
+      ...(params.warehouseId ? { warehouseId: params.warehouseId } : {}),
     },
   })
 }
@@ -96,6 +100,7 @@ export async function decrementStockBalanceAllowNegative(
     tenantId: string
     companyId: string
     locationId: string
+    warehouseId?: string
     productId: string
     qty: Prisma.Decimal | number
   }
@@ -113,11 +118,13 @@ export async function decrementStockBalanceAllowNegative(
       qty: {
         decrement: params.qty,
       },
+      ...(params.warehouseId ? { warehouseId: params.warehouseId } : {}),
     },
     create: {
       tenantId: params.tenantId,
       companyId: params.companyId,
       locationId: params.locationId,
+      warehouseId: params.warehouseId || null,
       productId: params.productId,
       qty: new Prisma.Decimal(0).minus(params.qty),
     },
@@ -130,6 +137,7 @@ export async function incrementStockBalance(
     tenantId: string
     companyId: string
     locationId: string
+    warehouseId?: string
     productId: string
     qty: Prisma.Decimal | number
   }
@@ -147,11 +155,13 @@ export async function incrementStockBalance(
       qty: {
         increment: params.qty,
       },
+      ...(params.warehouseId ? { warehouseId: params.warehouseId } : {}),
     },
     create: {
       tenantId: params.tenantId,
       companyId: params.companyId,
       locationId: params.locationId,
+      warehouseId: params.warehouseId || null,
       productId: params.productId,
       qty: new Prisma.Decimal(params.qty),
     },

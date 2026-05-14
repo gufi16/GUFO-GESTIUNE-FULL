@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { reserveNextNumber } from "../lib/numbering"
 import { buildCompanyScopedTenantWhere, requireRequestCompanyId } from "../lib/companyScope"
+import { resolveWarehouseForLocation } from "../lib/warehouse"
 
 const router = Router()
 
@@ -306,7 +307,8 @@ async function postReceiptToStock(tenantId: string, companyId: string, receiptId
         companyId
       },
       include: {
-        items: true
+        items: true,
+        warehouse: true
       }
     })
 
@@ -337,12 +339,14 @@ async function postReceiptToStock(tenantId: string, companyId: string, receiptId
         update: {
           qty: {
             increment: stockQty
-          }
+          },
+          warehouseId: receipt.warehouseId || null
         },
         create: {
           tenantId,
           companyId,
           locationId: receipt.locationId,
+          warehouseId: receipt.warehouseId || null,
           productId: item.productId,
           qty: stockQty
         }
@@ -353,6 +357,7 @@ async function postReceiptToStock(tenantId: string, companyId: string, receiptId
           tenantId,
           companyId,
           locationId: receipt.locationId,
+          warehouseId: receipt.warehouseId || null,
           productId: item.productId,
           type: "IN",
           qty: stockQty,
@@ -418,6 +423,7 @@ router.get("/api/v1/purchase-receipts", async (req: AuthedRequest, res) => {
     where,
     include: {
       location: true,
+      warehouse: true,
       supplier: true,
       items: true
     },
@@ -442,6 +448,7 @@ router.get("/api/v1/purchase-receipts/:id", async (req: AuthedRequest, res) => {
     },
     include: {
       location: true,
+      warehouse: true,
       supplier: true,
       items: {
         include: {
@@ -482,6 +489,7 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
 
   try {
     const locationId = header?.locationId
+    const requestedWarehouseId = header?.warehouseId
     const supplierId = header?.supplierId || null
     const supplierName = header?.supplierName || null
     const supplierCode = header?.supplierCode || null
@@ -519,6 +527,15 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
     if (!location) {
       return res.status(404).json({ ok: false, error: "Location not found" })
     }
+
+    const warehouse = await prisma.$transaction((tx) =>
+      resolveWarehouseForLocation(tx, {
+        tenantId,
+        companyId,
+        locationId,
+        warehouseId: requestedWarehouseId,
+      })
+    )
 
     let supplier: any = null
     if (supplierId) {
@@ -573,6 +590,7 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
           tenantId,
           companyId,
           locationId,
+          warehouseId: warehouse.id,
           supplierId: supplier?.id || null,
           supplierName: supplier?.name || (supplierName ? String(supplierName).trim() : null),
           supplierCode: supplier?.code || (supplierCode ? String(supplierCode).trim() : null),
@@ -633,6 +651,7 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
         data: {
           companyId,
           locationId,
+          warehouseId: warehouse.id,
           supplierId: supplier?.id || null,
           supplierName: supplier?.name || (supplierName ? String(supplierName).trim() : null),
           supplierCode: supplier?.code || (supplierCode ? String(supplierCode).trim() : null),
@@ -662,6 +681,7 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
       },
       include: {
         location: true,
+        warehouse: true,
         supplier: true,
         items: {
           include: {
@@ -725,6 +745,7 @@ router.post("/api/v1/purchase-receipts/:id/post", async (req: AuthedRequest, res
       },
       include: {
         location: true,
+        warehouse: true,
         supplier: true,
         items: {
           include: {

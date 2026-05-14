@@ -440,6 +440,8 @@ export default function TransferPage() {
   const transferId = getTransferIdFromUrl()
 
   const [locations, setLocations] = useState<LocationOption[]>([])
+  const [fromWarehouses, setFromWarehouses] = useState<LocationOption[]>([])
+  const [toWarehouses, setToWarehouses] = useState<LocationOption[]>([])
   const [products, setProducts] = useState<ProductOption[]>([])
   const [activeCompany, setActiveCompany] = useState<ActiveCompany | null>(null)
   const [numbering, setNumbering] = useState<NumberingPayload["previews"] | null>(null)
@@ -461,7 +463,9 @@ export default function TransferPage() {
 
   const [header, setHeader] = useState({
     fromLocationId: getActiveLocationId(),
+    fromWarehouseId: "",
     toLocationId: "",
+    toWarehouseId: "",
     docNo: "",
     docDate: new Date().toISOString().slice(0, 10),
     reason: "",
@@ -509,14 +513,16 @@ export default function TransferPage() {
     loadMeta()
     const unsubscribe = subscribeToActiveLocation((locationId) => {
       if (transferId) return
-      setHeader((prev) => {
-        if (!locationId || prev.fromLocationId === locationId) return prev
-        return {
-          ...prev,
-          fromLocationId: locationId,
-          toLocationId: prev.toLocationId === locationId ? "" : prev.toLocationId,
-        }
-      })
+        setHeader((prev) => {
+          if (!locationId || prev.fromLocationId === locationId) return prev
+          return {
+            ...prev,
+            fromLocationId: locationId,
+            fromWarehouseId: "",
+            toLocationId: prev.toLocationId === locationId ? "" : prev.toLocationId,
+            toWarehouseId: prev.toLocationId === locationId ? "" : prev.toWarehouseId,
+          }
+        })
     })
     return unsubscribe
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -526,6 +532,24 @@ export default function TransferPage() {
     if (transferId) loadDoc()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transferId])
+
+  useEffect(() => {
+    if (!token || !header.fromLocationId) {
+      setFromWarehouses([])
+      return
+    }
+    void loadWarehouses(header.fromLocationId, "from")
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [header.fromLocationId])
+
+  useEffect(() => {
+    if (!token || !header.toLocationId) {
+      setToWarehouses([])
+      return
+    }
+    void loadWarehouses(header.toLocationId, "to")
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [header.toLocationId])
 
   async function loadMeta() {
     if (!token) return
@@ -569,6 +593,7 @@ export default function TransferPage() {
         setHeader((prev) => ({
           ...prev,
           fromLocationId: prev.fromLocationId || fallbackFrom,
+          fromWarehouseId: prev.fromWarehouseId || "",
           docNo: prev.docNo || getPreviewValue(numberingData?.previews, "transfer"),
           eTransportOrganizer: prev.eTransportOrganizer || String(nextActiveCompany?.name || "").trim(),
           eTransportPartnerCountry: prev.eTransportPartnerCountry || "RO",
@@ -578,6 +603,7 @@ export default function TransferPage() {
             prev.toLocationId && prev.toLocationId !== (prev.fromLocationId || fallbackFrom)
               ? prev.toLocationId
               : nextLocations.find((location) => location.id !== (prev.fromLocationId || fallbackFrom))?.id || "",
+          toWarehouseId: prev.toWarehouseId || "",
         }))
         setStartAdr(buildOrganizerStartAdr(nextActiveCompany, fallbackFromLocation))
         setEndAdr(buildAdrFormFromLocation(fallbackToLocation))
@@ -586,6 +612,37 @@ export default function TransferPage() {
       setError("Nu am putut incarca datele pentru transfer.")
     } finally {
       setLoadingMeta(false)
+    }
+  }
+
+  async function loadWarehouses(locationId: string, kind: "from" | "to") {
+    try {
+      const headers = { Authorization: `Bearer ${token}` }
+      const res = await fetch(`${API}/api/v1/meta/warehouses?locationId=${encodeURIComponent(locationId)}`, { headers })
+      const data = await res.json().catch(() => ({}))
+      const items = ensureArray<LocationOption>(data.items)
+      if (kind === "from") {
+        setFromWarehouses(items)
+        setHeader((prev) => ({
+          ...prev,
+          fromWarehouseId:
+            prev.fromWarehouseId && items.some((warehouse) => warehouse.id === prev.fromWarehouseId)
+              ? prev.fromWarehouseId
+              : items[0]?.id || "",
+        }))
+      } else {
+        setToWarehouses(items)
+        setHeader((prev) => ({
+          ...prev,
+          toWarehouseId:
+            prev.toWarehouseId && items.some((warehouse) => warehouse.id === prev.toWarehouseId)
+              ? prev.toWarehouseId
+              : items[0]?.id || "",
+        }))
+      }
+    } catch {
+      if (kind === "from") setFromWarehouses([])
+      else setToWarehouses([])
     }
   }
 
@@ -617,7 +674,9 @@ export default function TransferPage() {
       setStatus(doc.status || "DRAFT")
       setHeader({
         fromLocationId: doc.fromLocationId || "",
+        fromWarehouseId: doc.fromWarehouseId || doc.fromWarehouse?.id || "",
         toLocationId: doc.toLocationId || "",
+        toWarehouseId: doc.toWarehouseId || doc.toWarehouse?.id || "",
         docNo: doc.docNo || "",
         docDate: String(doc.docDate || "").slice(0, 10),
         reason: doc.reason || "",
@@ -1517,7 +1576,9 @@ export default function TransferPage() {
                           setHeader((prev) => ({
                             ...prev,
                             fromLocationId: nextId,
+                            fromWarehouseId: "",
                             toLocationId: prev.toLocationId === nextId ? "" : prev.toLocationId,
+                            toWarehouseId: prev.toLocationId === nextId ? "" : prev.toWarehouseId,
                           }))
                           setStartAdr((prev) => {
                             if (!prev.sourceLocationId || prev.sourceLocationId === header.fromLocationId || !adrFormHasContent(prev)) {
@@ -1536,6 +1597,19 @@ export default function TransferPage() {
                         ))}
                       </select>
                     </div>
+                    <div className="mt-2">
+                      <select
+                        value={header.fromWarehouseId}
+                        onChange={(e) => setHeader((prev) => ({ ...prev, fromWarehouseId: e.target.value }))}
+                        className={documentInputClass}
+                        disabled={isPosted}
+                      >
+                        <option value="">Gestiune interna sursa</option>
+                        {fromWarehouses.map((warehouse) => (
+                          <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                   <div className="xl:col-span-4">
                     <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Gestiune sosire</div>
@@ -1549,6 +1623,7 @@ export default function TransferPage() {
                           setHeader((prev) => ({
                             ...prev,
                             toLocationId: nextId,
+                            toWarehouseId: "",
                           }))
                           setEndAdr((prev) => {
                             if (!prev.sourceLocationId || prev.sourceLocationId === header.toLocationId || !adrFormHasContent(prev)) {
@@ -1563,6 +1638,19 @@ export default function TransferPage() {
                         <option value="">Gestiune primitoare</option>
                         {toLocationOptions.map((location) => (
                           <option key={location.id} value={location.id}>{location.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="mt-2">
+                      <select
+                        value={header.toWarehouseId}
+                        onChange={(e) => setHeader((prev) => ({ ...prev, toWarehouseId: e.target.value }))}
+                        className={documentInputClass}
+                        disabled={isPosted}
+                      >
+                        <option value="">Gestiune interna destinatie</option>
+                        {toWarehouses.map((warehouse) => (
+                          <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>
                         ))}
                       </select>
                     </div>

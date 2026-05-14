@@ -4,10 +4,11 @@ import { z } from "zod";
 import jwt from "jsonwebtoken";
 import { Prisma, UserRole } from "@prisma/client";
 import { prisma } from "../lib/prisma";
-import { decrementStockBalanceAllowNegative, decrementStockBalanceStrict } from "../lib/stock";
+import { decrementStockBalanceAllowNegative } from "../lib/stock";
 import { getPrimaryTenantCompany } from "../lib/companyResolver";
 import { reserveNextNumber } from "../lib/numbering";
 import { verifySecret } from "../lib/auth";
+import { createConsumptionDraft, validateConsumptionDoc } from "../lib/consumptionDocs";
 
 console.log("POS ROUTES FILE LOADED");
 
@@ -581,19 +582,6 @@ export async function buildCatalogPayload(req: Request, tenantId: string) {
       deletedIds: [],
     },
   };
-}
-
-function createConsumptionDocNo() {
-  const now = new Date();
-  const yyyy = `${now.getFullYear()}`;
-  const mm = `${now.getMonth() + 1}`.padStart(2, "0");
-  const dd = `${now.getDate()}`.padStart(2, "0");
-  const hh = `${now.getHours()}`.padStart(2, "0");
-  const mi = `${now.getMinutes()}`.padStart(2, "0");
-  const ss = `${now.getSeconds()}`.padStart(2, "0");
-  const rnd = `${Math.floor(Math.random() * 10000)}`.padStart(4, "0");
-
-  return `BC-${yyyy}${mm}${dd}-${hh}${mi}${ss}-${rnd}`;
 }
 
 /* ======================================================
@@ -2872,6 +2860,12 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
     });
 
     let consumptionDocId: string | null = null;
+    const consumptionDraftLines: Array<{
+      finishedProductId?: string | null;
+      ingredientId: string;
+      qty: Prisma.Decimal;
+      note?: string | null;
+    }> = [];
 
     for (const line of payload.lines) {
       const product = productMap.get(line.productId)!;
@@ -2926,22 +2920,6 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
       const shouldConsumeRecipeAutomatically = recipe && recipe.items.length > 0;
 
       if (shouldConsumeRecipeAutomatically) {
-        if (!consumptionDocId) {
-          const consumptionDoc = await tx.consumptionDoc.create({
-              data: {
-                tenantId,
-                companyId: company?.id || null,
-                locationId,
-              saleId: sale.id,
-              docNo: createConsumptionDocNo(),
-              docDate: payload.soldAt ? new Date(payload.soldAt) : new Date(),
-              note: `Generat automat din vanzare POS ${payload.receiptNo || sale.id}`,
-            },
-          });
-
-          consumptionDocId = consumptionDoc.id;
-        }
-
         const lineQty = toNumber(line.qty);
         const recipeYield = Math.max(toNumber(recipe.yieldQty), 0.000001);
 
@@ -2949,41 +2927,12 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
           const recipeQty = toNumber(recipeItem.qty);
           const lossPercent = toNumber(recipeItem.lossPercent);
           const ingredientQtyNumber = (lineQty * recipeQty / recipeYield) * (1 + lossPercent / 100);
-
-          const ingredientQty = new Prisma.Decimal(ingredientQtyNumber);
-
-          await decrementStockBalanceAllowNegative(tx, {
-              tenantId,
-              companyId: company?.id || null,
-              locationId,
-            productId: recipeItem.ingredientId,
-            qty: ingredientQty,
+          consumptionDraftLines.push({
+            finishedProductId: product.id,
+            ingredientId: recipeItem.ingredientId,
+            qty: new Prisma.Decimal(ingredientQtyNumber),
+            note: recipeItem.notes ? recipeItem.notes.trim() : null,
           });
-
-          await tx.consumptionDocItem.create({
-            data: {
-              consumptionDocId,
-              finishedProductId: product.id,
-              ingredientId: recipeItem.ingredientId,
-              qty: ingredientQty,
-              note: recipeItem.notes ? recipeItem.notes.trim() : null,
-            },
-          });
-
-          await tx.stockMove.create({
-              data: {
-                tenantId,
-                companyId: company?.id || null,
-                locationId,
-              productId: recipeItem.ingredientId,
-              type: "OUT",
-              qty: ingredientQty,
-              refType: "CONSUMPTION",
-              refId: consumptionDocId,
-              note: `Consum automat retetar pentru ${product.name}`,
-            },
-          });
-
         }
       } else {
         await decrementStockBalanceAllowNegative(tx, {
@@ -3011,6 +2960,29 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
         });
 
       }
+    }
+
+    if (consumptionDraftLines.length) {
+      const consumptionDoc = await createConsumptionDraft(tx, {
+        tenantId,
+        companyId: company?.id || null,
+        locationId,
+        saleId: sale.id,
+        source: "POS_RECIPE",
+        docDate: payload.soldAt ? new Date(payload.soldAt) : new Date(),
+        note: `Generat automat din vanzare POS ${payload.receiptNo || sale.id}`,
+        lines: consumptionDraftLines,
+      });
+
+      await validateConsumptionDoc(tx, {
+        tenantId,
+        companyId: company?.id || null,
+        docId: consumptionDoc.id,
+        actorId: null,
+        allowNegativeStock: true,
+      });
+
+      consumptionDocId = consumptionDoc.id;
     }
 
     if (externalOrder) {

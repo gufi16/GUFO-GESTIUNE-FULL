@@ -183,6 +183,7 @@ export default function NirPage() {
 
   const [products, setProducts] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])
+  const [warehouses, setWarehouses] = useState<any[]>([])
   const [suppliers, setSuppliers] = useState<any[]>([])
   const [uoms, setUoms] = useState<any[]>([])
   const [vatRates, setVatRates] = useState<any[]>([])
@@ -200,6 +201,7 @@ export default function NirPage() {
 
   const [header, setHeader] = useState({
     locationId: getActiveLocationId(),
+    warehouseId: "",
     supplierId: "",
     supplierName: "",
     supplierCode: "",
@@ -276,6 +278,15 @@ export default function NirPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [receiptId])
+
+  useEffect(() => {
+    if (!header.locationId || !token) {
+      setWarehouses([])
+      return
+    }
+    void loadWarehouses(header.locationId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [header.locationId])
 
   useEffect(() => {
     if (!receiptId && incomingInvoiceId && products.length && locations.length) {
@@ -362,6 +373,28 @@ export default function NirPage() {
     }
   }
 
+  async function loadWarehouses(locationId: string) {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/meta/warehouses?locationId=${encodeURIComponent(locationId)}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      const data = await res.json().catch(() => ({}))
+      const items = Array.isArray(data?.items) ? data.items : []
+      setWarehouses(items)
+      setHeader((prev) => {
+        const nextWarehouseId =
+          prev.warehouseId && items.some((warehouse: AnyObj) => warehouse.id === prev.warehouseId)
+            ? prev.warehouseId
+            : items[0]?.id || ""
+        return { ...prev, warehouseId: nextWarehouseId }
+      })
+    } catch {
+      setWarehouses([])
+    }
+  }
+
   async function loadReceipt(id: string) {
     if (!token) return
 
@@ -393,6 +426,7 @@ export default function NirPage() {
 
       setHeader({
         locationId: r.locationId || "",
+        warehouseId: r.warehouseId || r.warehouse?.id || "",
         supplierId: r.supplierId || "",
         supplierName: r.supplier?.name || r.supplierName || "",
         supplierCode: r.supplier?.code || r.supplierCode || "",
@@ -1010,6 +1044,7 @@ export default function NirPage() {
       id: receiptId || null,
       header: {
         locationId: header.locationId,
+        warehouseId: header.warehouseId || null,
         supplierId: header.supplierId || null,
         supplierName: header.supplierName || supplierSearch || "",
         supplierCode: header.supplierCode || "",
@@ -1275,7 +1310,7 @@ export default function NirPage() {
                       value={header.locationId}
                       onChange={(e) => {
                         const nextLocationId = e.target.value
-                        setHeader({ ...header, locationId: nextLocationId })
+                        setHeader({ ...header, locationId: nextLocationId, warehouseId: "" })
                         setActiveLocationId(nextLocationId)
                       }}
                       style={input}
@@ -1285,6 +1320,22 @@ export default function NirPage() {
                       {ensureArray(locations).map((l: AnyObj) => (
                         <option key={l.id} value={l.id}>
                           {l.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+
+                  <Field label="Gestiune">
+                    <select
+                      value={header.warehouseId}
+                      onChange={(e) => setHeader({ ...header, warehouseId: e.target.value })}
+                      style={input}
+                      disabled={isPosted}
+                    >
+                      <option value="">Selecteaza gestiunea</option>
+                      {ensureArray(warehouses).map((warehouse: AnyObj) => (
+                        <option key={warehouse.id} value={warehouse.id}>
+                          {warehouse.name}{warehouse.code ? ` (${warehouse.code})` : ""}
                         </option>
                       ))}
                     </select>
@@ -1377,7 +1428,7 @@ export default function NirPage() {
                   value={header.locationId}
                   onChange={(e) => {
                     const nextLocationId = e.target.value
-                    setHeader({ ...header, locationId: nextLocationId })
+                    setHeader({ ...header, locationId: nextLocationId, warehouseId: "" })
                     setActiveLocationId(nextLocationId)
                   }}
                   style={input}
@@ -1387,6 +1438,24 @@ export default function NirPage() {
                   {ensureArray(locations).map((l: AnyObj) => (
                     <option key={l.id} value={l.id}>
                       {l.name}
+                    </option>
+                  ))}
+                </select>
+                </Field>
+              </div>
+
+              <div>
+                <Field label="Gestiune">
+                <select
+                  value={header.warehouseId}
+                  onChange={(e) => setHeader({ ...header, warehouseId: e.target.value })}
+                  style={input}
+                  disabled={isPosted}
+                >
+                  <option value="">Selecteaza gestiunea</option>
+                  {ensureArray(warehouses).map((warehouse: AnyObj) => (
+                    <option key={warehouse.id} value={warehouse.id}>
+                      {warehouse.name}{warehouse.code ? ` (${warehouse.code})` : ""}
                     </option>
                   ))}
                 </select>

@@ -34,6 +34,13 @@ type ConsumptionDocListItem = {
   docNo: string
   docDate: string
   note: string | null
+  source: "MANUAL" | "POS_RECIPE"
+  sourceLabel: string
+  status: "DRAFT" | "VALIDATED" | "CANCELLED"
+  statusLabel: string
+  totalValue: number
+  validatedAt?: string | null
+  cancelledAt?: string | null
   createdAt: string
   updatedAt: string
   location: {
@@ -41,6 +48,11 @@ type ConsumptionDocListItem = {
     name: string
     code: string
   }
+  warehouse?: {
+    id: string
+    name: string
+    code?: string
+  } | null
   sale: {
     id: string
     receiptNo: string | null
@@ -63,6 +75,15 @@ type ConsumptionDocDetail = {
   docNo: string
   docDate: string
   note: string | null
+  source: "MANUAL" | "POS_RECIPE"
+  sourceLabel: string
+  status: "DRAFT" | "VALIDATED" | "CANCELLED"
+  statusLabel: string
+  totalValue: number
+  validatedAt?: string | null
+  validatedBy?: string | null
+  cancelledAt?: string | null
+  cancelledBy?: string | null
   createdAt: string
   updatedAt: string
   location: {
@@ -70,6 +91,11 @@ type ConsumptionDocDetail = {
     name: string
     code: string
   }
+  warehouse?: {
+    id: string
+    name: string
+    code?: string
+  } | null
   sale: {
     id: string
     receiptNo: string | null
@@ -98,6 +124,10 @@ type ConsumptionDocDetail = {
     id: string
     qty: number
     note: string | null
+    unitCost: number
+    totalCost: number
+    costMethod?: string | null
+    currentStock: number
     createdAt: string
     updatedAt: string
     finishedProduct: {
@@ -378,6 +408,9 @@ function statusClass(status: string) {
   if (status === "Produs") return "bg-slate-100 text-slate-700"
   if (status === "Finalizat") return "bg-[#E5F3E8] text-[#215D2A]"
   if (status === "Anulat") return "bg-red-100 text-red-700"
+  if (status === "DRAFT") return "bg-amber-100 text-amber-800"
+  if (status === "VALIDATED") return "bg-[#E5F3E8] text-[#215D2A]"
+  if (status === "CANCELLED") return "bg-red-100 text-red-700"
   return "bg-[#F8F5EF] text-[#17324D]"
 }
 
@@ -1168,6 +1201,54 @@ export default function Documente() {
     }
   }
 
+  async function validateConsumptionDoc(id: string) {
+    if (!token) return
+    try {
+      setDetailLoading(true)
+      const res = await fetch(`${API}/api/v1/consumption-docs/${id}/validate`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Nu am putut valida bonul de consum.")
+      }
+      setMessage(data?.message || "Bonul de consum a fost validat.")
+      await loadConsumptionDocs()
+      await openConsumptionDetail(id)
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut valida bonul de consum.")
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
+  async function cancelConsumptionDoc(id: string) {
+    if (!token) return
+    try {
+      setDetailLoading(true)
+      const res = await fetch(`${API}/api/v1/consumption-docs/${id}/cancel`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Nu am putut anula bonul de consum.")
+      }
+      setMessage(data?.message || "Bonul de consum a fost anulat.")
+      await loadConsumptionDocs()
+      await openConsumptionDetail(id)
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut anula bonul de consum.")
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
   async function generateTransferXml(id: string) {
     if (!token) return
     try {
@@ -1612,7 +1693,7 @@ export default function Documente() {
     activeTab === "consumption"
       ? {
           title: "Istoric bonuri de consum",
-          subtitle: "Vizualizezi documentele generate automat la consumul din retetar.",
+          subtitle: "Vizualizezi drafturile, validarile si anularile pentru bonurile de consum.",
           placeholder: "Nr document, bon POS, produs, nota...",
           resultCount: filteredConsumptionDocs.length,
         }
@@ -1664,7 +1745,7 @@ export default function Documente() {
           {
             title: "Bonuri de consum",
             value: String(filteredConsumptionDocs.length),
-      hint: "Documente generate automat din vanzari",
+      hint: "Drafturi, bonuri validate si anulate",
             icon: FilePlus2,
             tone: "blue",
           },
@@ -1676,9 +1757,9 @@ export default function Documente() {
             tone: "slate",
           },
           {
-            title: "Cantitate totala",
-            value: formatNumber(filteredConsumptionDocs.reduce((sum, doc) => sum + doc.totalQty, 0)),
-      hint: "Total cantitati consumate",
+            title: "Valoare totala",
+            value: formatRon(filteredConsumptionDocs.reduce((sum, doc) => sum + Number(doc.totalValue || 0), 0)),
+      hint: "Valoarea documentelor din filtrul curent",
             icon: FileCheck2,
             tone: "emerald",
           },
@@ -2102,10 +2183,12 @@ export default function Documente() {
                   <th className="px-3 py-2.5 text-left font-medium">Tip</th>
                   <th className="px-3 py-2.5 text-left font-medium">Numar</th>
                   <th className="px-3 py-2.5 text-left font-medium">Data</th>
-                  <th className="px-3 py-2.5 text-left font-medium">Locatie</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Locatie / gestiune</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Sursa</th>
                   <th className="px-3 py-2.5 text-left font-medium">Bon POS</th>
                   <th className="px-3 py-2.5 text-left font-medium">Produse</th>
                   <th className="px-3 py-2.5 text-left font-medium">Cantitate</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Valoare</th>
                   <th className="px-3 py-2.5 text-left font-medium">Status</th>
                   <th className="px-3 py-2.5 text-right font-medium">Actiune</th>
                 </tr>
@@ -2114,13 +2197,13 @@ export default function Documente() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
+                    <td colSpan={11} className="px-4 py-8 text-center text-slate-500">
                       Se incarca bonurile de consum...
                     </td>
                   </tr>
                 ) : filteredConsumptionDocs.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
+                    <td colSpan={11} className="px-4 py-8 text-center text-slate-500">
                       Nu exista bonuri de consum in intervalul selectat.
                     </td>
                   </tr>
@@ -2130,7 +2213,11 @@ export default function Documente() {
                       <td className="px-3 py-2.5 text-slate-700">Consum</td>
                       <td className="px-3 py-2.5 font-semibold text-slate-900">{doc.docNo}</td>
                       <td className="px-3 py-2.5 text-slate-600">{formatDate(doc.docDate)}</td>
-                      <td className="px-3 py-2.5 text-slate-600">{doc.location?.name || "-"}</td>
+                      <td className="px-3 py-2.5 text-slate-600">
+                        <div>{doc.location?.name || "-"}</div>
+                        <div className="text-xs text-slate-400">{doc.warehouse?.name || "-"}</div>
+                      </td>
+                      <td className="px-3 py-2.5 text-slate-600">{doc.sourceLabel || doc.source}</td>
                       <td className="px-3 py-2.5 text-slate-600">{doc.sale?.receiptNo || "-"}</td>
                       <td className="px-3 py-2.5 text-slate-600">
                         {doc.finishedProducts.length > 0
@@ -2138,13 +2225,23 @@ export default function Documente() {
                           : "-"}
                       </td>
                       <td className="px-3 py-2.5 text-slate-600">{formatNumber(doc.totalQty)}</td>
+                      <td className="px-3 py-2.5 text-slate-600">{formatRon(doc.totalValue)}</td>
                       <td className="px-3 py-2.5">
-                        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass("Generat")}`}>
-                          Generat
+                        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass(doc.status)}`}>
+                          {doc.statusLabel || doc.status}
                         </span>
                       </td>
                       <td className="px-3 py-2.5 text-right">
                         <div className="flex min-w-max flex-nowrap justify-end gap-2">
+                          {doc.status === "DRAFT" ? (
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/bon-consum-nou?id=${encodeURIComponent(doc.id)}`)}
+                              className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-50"
+                            >
+                              Editeaza
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             onClick={() => openConsumptionDetail(doc.id)}
@@ -2795,11 +2892,38 @@ export default function Documente() {
                   {selectedConsumptionDoc ? `Detaliu bon de consum ${selectedConsumptionDoc.docNo}` : "Detaliu bon de consum"}
                 </div>
                 <div className="mt-1 text-sm text-slate-500">
-                Vizualizezi consumul generat automat din vanzare si retetar.
+                Vizualizezi documentul, starea lui, costurile validate si legatura cu vanzarea sursa.
                 </div>
               </div>
 
               <div className="flex flex-wrap gap-2">
+                {selectedConsumptionDoc?.status === "DRAFT" ? (
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/bon-consum-nou?id=${encodeURIComponent(selectedConsumptionDoc.id)}`)}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 text-[13px] font-semibold text-amber-800 hover:bg-amber-100"
+                  >
+                    Editeaza draft
+                  </button>
+                ) : null}
+                {selectedConsumptionDoc?.status === "DRAFT" ? (
+                  <button
+                    type="button"
+                    onClick={() => validateConsumptionDoc(selectedConsumptionDoc.id)}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[13px] font-semibold text-emerald-800 hover:bg-emerald-100"
+                  >
+                    Valideaza
+                  </button>
+                ) : null}
+                {selectedConsumptionDoc && selectedConsumptionDoc.status !== "CANCELLED" ? (
+                  <button
+                    type="button"
+                    onClick={() => cancelConsumptionDoc(selectedConsumptionDoc.id)}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-3 py-1.5 text-[13px] font-semibold text-red-700 hover:bg-red-100"
+                  >
+                    Anuleaza
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => selectedConsumptionDoc && openPdf(selectedConsumptionDoc.id)}
@@ -2829,7 +2953,7 @@ export default function Documente() {
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
                   <div className="rounded-[16px] border border-slate-200 bg-slate-50 p-3">
                     <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Numar</div>
                     <div className="mt-2 text-base font-semibold text-slate-900">{selectedConsumptionDoc.docNo}</div>
@@ -2846,8 +2970,41 @@ export default function Documente() {
                   </div>
 
                   <div className="rounded-[16px] border border-slate-200 bg-slate-50 p-3">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Gestiune</div>
+                    <div className="mt-2 text-base font-semibold text-slate-900">{selectedConsumptionDoc.warehouse?.name || "-"}</div>
+                  </div>
+
+                  <div className="rounded-[16px] border border-slate-200 bg-slate-50 p-3">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Status</div>
+                    <div className="mt-2">
+                      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass(selectedConsumptionDoc.status)}`}>
+                        {selectedConsumptionDoc.statusLabel || selectedConsumptionDoc.status}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[16px] border border-slate-200 bg-slate-50 p-3">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Valoare</div>
+                    <div className="mt-2 text-base font-semibold text-slate-900">{formatRon(selectedConsumptionDoc.totalValue)}</div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                  <div className="rounded-[16px] border border-slate-200 bg-white p-3">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Sursa</div>
+                    <div className="mt-2 text-sm font-semibold text-slate-900">{selectedConsumptionDoc.sourceLabel || selectedConsumptionDoc.source}</div>
+                  </div>
+                  <div className="rounded-[16px] border border-slate-200 bg-white p-3">
                     <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Cantitate totala</div>
-                    <div className="mt-2 text-base font-semibold text-slate-900">{formatNumber(selectedConsumptionDoc.totalQty)}</div>
+                    <div className="mt-2 text-sm font-semibold text-slate-900">{formatNumber(selectedConsumptionDoc.totalQty)}</div>
+                  </div>
+                  <div className="rounded-[16px] border border-slate-200 bg-white p-3">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Validat la</div>
+                    <div className="mt-2 text-sm font-semibold text-slate-900">{formatDateTime(selectedConsumptionDoc.validatedAt)}</div>
+                  </div>
+                  <div className="rounded-[16px] border border-slate-200 bg-white p-3">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Anulat la</div>
+                    <div className="mt-2 text-sm font-semibold text-slate-900">{formatDateTime(selectedConsumptionDoc.cancelledAt)}</div>
                   </div>
                 </div>
 
@@ -2891,7 +3048,10 @@ export default function Documente() {
                         <tr>
                           <th className="px-3 py-2.5 text-left font-medium">Produs finit</th>
                           <th className="px-3 py-2.5 text-left font-medium">Ingredient</th>
+                          <th className="px-3 py-2.5 text-left font-medium">Stoc curent</th>
                           <th className="px-3 py-2.5 text-left font-medium">Cantitate</th>
+                          <th className="px-3 py-2.5 text-left font-medium">Cost unitar</th>
+                          <th className="px-3 py-2.5 text-left font-medium">Valoare</th>
                           <th className="px-3 py-2.5 text-left font-medium">Nota</th>
                         </tr>
                       </thead>
@@ -2904,7 +3064,10 @@ export default function Documente() {
                             <td className="px-3 py-2.5 font-semibold text-slate-900">
                               {item.ingredient.name}
                             </td>
+                            <td className="px-3 py-2.5 text-slate-600">{formatNumber(item.currentStock)}</td>
                             <td className="px-3 py-2.5 text-slate-600">{formatNumber(item.qty)}</td>
+                            <td className="px-3 py-2.5 text-slate-600">{formatRon(item.unitCost)}</td>
+                            <td className="px-3 py-2.5 text-slate-600">{formatRon(item.totalCost)}</td>
                             <td className="px-3 py-2.5 text-slate-600">{item.note || "-"}</td>
                           </tr>
                         ))}

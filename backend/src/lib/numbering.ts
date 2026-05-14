@@ -7,6 +7,7 @@ type NumberingKey =
   | "purchaseReceipt"
   | "transfer"
   | "inventory"
+  | "consumption"
   | "production"
   | "deterioration"
   | "priceChange"
@@ -18,6 +19,7 @@ type NumberingConfig = {
   purchaseSeries: string
   transferSeries: string
   inventorySeries: string
+  consumptionSeries: string
   productionSeries: string
   deteriorationSeries: string
   priceChangeSeries: string
@@ -30,6 +32,7 @@ const defaults: NumberingConfig = {
   purchaseSeries: "NIR",
   transferSeries: "TRF",
   inventorySeries: "INV",
+  consumptionSeries: "BC",
   productionSeries: "PROD",
   deteriorationSeries: "PVD",
   priceChangeSeries: "PVP",
@@ -42,6 +45,7 @@ const keyMap: Record<NumberingKey, keyof NumberingConfig> = {
   purchaseReceipt: "purchaseSeries",
   transfer: "transferSeries",
   inventory: "inventorySeries",
+  consumption: "consumptionSeries",
   production: "productionSeries",
   deterioration: "deteriorationSeries",
   priceChange: "priceChangeSeries",
@@ -117,6 +121,21 @@ async function getExistingMaxNumber(
     return rows.reduce((max, row) => Math.max(max, extractFormattedNumber(row.docNo, prefix)), 0)
   }
 
+  if (key === "consumption") {
+    const rows = await client.consumptionDoc.findMany({
+      where: {
+        tenantId,
+        docNo: {
+          startsWith: `${normalizedPrefix}-`,
+          mode: "insensitive" as const,
+        },
+      },
+      select: { docNo: true },
+    })
+
+    return rows.reduce((max, row) => Math.max(max, extractFormattedNumber(row.docNo, prefix)), 0)
+  }
+
   return 0
 }
 
@@ -132,6 +151,7 @@ export async function getNumberingConfig(tenantId: string) {
     purchaseSeries: normalizePrefix(company.purchaseSeries, defaults.purchaseSeries),
     transferSeries: normalizePrefix(company.transferSeries, defaults.transferSeries),
     inventorySeries: normalizePrefix(company.inventorySeries, defaults.inventorySeries),
+    consumptionSeries: normalizePrefix(company.consumptionSeries, defaults.consumptionSeries),
     productionSeries: normalizePrefix(company.productionSeries, defaults.productionSeries),
     deteriorationSeries: normalizePrefix(company.deteriorationSeries, defaults.deteriorationSeries),
     priceChangeSeries: normalizePrefix(company.priceChangeSeries, defaults.priceChangeSeries),
@@ -173,6 +193,7 @@ export async function reserveNextNumber(
     purchaseSeries: normalizePrefix(company?.purchaseSeries, defaults.purchaseSeries),
     transferSeries: normalizePrefix(company?.transferSeries, defaults.transferSeries),
     inventorySeries: normalizePrefix(company?.inventorySeries, defaults.inventorySeries),
+    consumptionSeries: normalizePrefix(company?.consumptionSeries, defaults.consumptionSeries),
     productionSeries: normalizePrefix(company?.productionSeries, defaults.productionSeries),
     deteriorationSeries: normalizePrefix(company?.deteriorationSeries, defaults.deteriorationSeries),
     priceChangeSeries: normalizePrefix(company?.priceChangeSeries, defaults.priceChangeSeries),
@@ -224,6 +245,7 @@ export function normalizeNumberingPayload(body: any) {
     purchaseSeries: normalizePrefix(body?.purchaseSeries, defaults.purchaseSeries),
     transferSeries: normalizePrefix(body?.transferSeries, defaults.transferSeries),
     inventorySeries: normalizePrefix(body?.inventorySeries, defaults.inventorySeries),
+    consumptionSeries: normalizePrefix(body?.consumptionSeries, defaults.consumptionSeries),
     productionSeries: normalizePrefix(body?.productionSeries, defaults.productionSeries),
     deteriorationSeries: normalizePrefix(body?.deteriorationSeries, defaults.deteriorationSeries),
     priceChangeSeries: normalizePrefix(body?.priceChangeSeries, defaults.priceChangeSeries),

@@ -84,10 +84,12 @@ router.get("/api/v1/stock/by-location", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
   const companyId = await requireRequestCompanyId(req)
   const locationId = String(req.query.locationId || "").trim()
+  const warehouseId = String(req.query.warehouseId || "").trim()
   const q = String(req.query.q || "").trim()
 
   const whereBalance: any = { tenantId, companyId }
   if (locationId) whereBalance.locationId = locationId
+  if (warehouseId) whereBalance.warehouseId = warehouseId
 
   const balances = await prisma.stockBalance.findMany({
     where: whereBalance,
@@ -99,7 +101,8 @@ router.get("/api/v1/stock/by-location", async (req: AuthedRequest, res) => {
           uom: true
         }
       },
-      location: true
+      location: true,
+      warehouse: true
     },
     orderBy: [{ locationId: "asc" }, { productId: "asc" }]
   })
@@ -118,6 +121,8 @@ router.get("/api/v1/stock/by-location", async (req: AuthedRequest, res) => {
     id: row.id,
     locationId: row.locationId,
     locationName: row.location?.name ?? "",
+    warehouseId: row.warehouseId ?? "",
+    warehouseName: row.warehouse?.name ?? "",
     productId: row.productId,
     sku: row.product?.sku ?? "",
     name: row.product?.name ?? "",
@@ -136,6 +141,7 @@ router.get("/api/v1/stock/moves", async (req: AuthedRequest, res) => {
   const companyId = await requireRequestCompanyId(req)
   const productId = String(req.query.productId || "").trim()
   const locationId = String(req.query.locationId || "").trim()
+  const warehouseId = String(req.query.warehouseId || "").trim()
   const q = String(req.query.q || "").trim()
   const fromDate = String(req.query.fromDate || "").trim()
   const toDate = String(req.query.toDate || "").trim()
@@ -148,6 +154,7 @@ router.get("/api/v1/stock/moves", async (req: AuthedRequest, res) => {
 
   if (productId) where.productId = productId
   if (locationId) where.locationId = locationId
+  if (warehouseId) where.warehouseId = warehouseId
 
   if (fromDate || toDate) {
     where.createdAt = {}
@@ -180,7 +187,8 @@ router.get("/api/v1/stock/moves", async (req: AuthedRequest, res) => {
             uom: true
           }
         },
-        location: true
+        location: true,
+        warehouse: true
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       skip,
@@ -201,7 +209,9 @@ router.get("/api/v1/stock/moves", async (req: AuthedRequest, res) => {
     productName: m.product?.name ?? "",
     uom: m.product?.uom?.code ?? "",
     locationId: m.locationId,
-    locationName: m.location?.name ?? ""
+    locationName: m.location?.name ?? "",
+    warehouseId: m.warehouseId ?? "",
+    warehouseName: m.warehouse?.name ?? ""
   }))
 
   return res.json({

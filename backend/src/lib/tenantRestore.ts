@@ -118,6 +118,7 @@ export async function restoreTenantBackupFromFile(tenantId: string, filePath: st
       "efacturaOauthClientSecret", "efacturaOauthRedirectUri", "efacturaOauthAccessToken", "efacturaOauthRefreshToken",
       "efacturaOauthAccessTokenExpiresAt", "efacturaOauthRefreshTokenExpiresAt", "efacturaOauthConnectedAt",
       "efacturaOauthLastError", "invoiceSeries", "purchaseSeries", "transferSeries", "inventorySeries",
+      "consumptionSeries",
       "productionSeries", "deteriorationSeries", "priceChangeSeries", "customerCodePrefix", "supplierCodePrefix",
       "createdAt", "updatedAt",
     ]),

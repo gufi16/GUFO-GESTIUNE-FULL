@@ -202,21 +202,23 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
     const metaCols = [96, 170, 90, 120, 90, 154]
     const metaRowHeight = 22
 
-    const columns = [34, 170, 170, 60, 60, 160]
+    const columns = [30, 130, 130, 58, 60, 70, 80, 128]
     const headers = [
       "Nr.",
       "Produs finit",
       "Ingredient",
       "UM",
       "Cant.",
-      "Observatii",
+      "Stoc",
+      "Cost unitar",
+      "Valoare / Observatii",
     ]
 
     const headerTitleHeight = 48
     const introHeight = 70
     const topHeaderHeight = 128
     const headerBlockHeight = Math.max(topHeaderHeight, headerTitleHeight + 10 + introHeight)
-    const metaBlockHeight = metaRowHeight * 3
+    const metaBlockHeight = metaRowHeight * 4
     const tableHeaderHeight = 28
     const rowHeight = 24
     const footerBlockHeight = 120
@@ -228,7 +230,9 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
       ingredient: string
       uom: string
       qty: string
-      note: string
+      stock: string
+      unitCost: string
+      valueNote: string
     }
 
     const rows: RowData[] = docData.items.map((item, index) => ({
@@ -237,7 +241,9 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
       ingredient: text(item.ingredient?.name),
       uom: text(item.ingredient?.uom?.code),
       qty: fmt(item.qty, 3),
-      note: text(item.note),
+      stock: fmt(num(item.currentStock), 3),
+      unitCost: fmt(num(item.unitCost)),
+      valueNote: `${fmt(num(item.totalCost))} lei${item.note ? ` / ${item.note}` : ""}`,
     }))
 
     const totalQty = rows.reduce((sum, row) => sum + num(row.qty), 0)
@@ -403,6 +409,23 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
           width: 90,
           align: "right",
         })
+
+      if (consumptionDoc.status && consumptionDoc.status !== "VALIDATED") {
+        doc.save()
+        doc.rotate(-18, { origin: [pageWidth / 2, pageHeight / 2] })
+        doc
+          .font(fonts.bold)
+          .fontSize(32)
+          .fillColor(consumptionDoc.status === "DRAFT" ? "#b45309" : "#b91c1c")
+          .opacity(0.16)
+          .text(
+            consumptionDoc.status === "DRAFT" ? "NEVALIDAT - NU A SCAZUT STOCUL" : "ANULAT",
+            80,
+            pageHeight / 2 - 20,
+            { width: pageWidth - 160, align: "center" }
+          )
+        doc.restore()
+      }
     }
 
     function drawMetaBlock() {
@@ -420,6 +443,14 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
           fmtDateTime(consumptionDoc.docDate),
           "Locatie",
           text(consumptionDoc.location?.name),
+        ],
+        [
+          "Status",
+          text(consumptionDoc.status),
+          "Sursa",
+          text(consumptionDoc.source === "POS_RECIPE" ? "POS / Retetar" : "Manual"),
+          "Valoare",
+          `${fmt(num(consumptionDoc.totalValue))} lei`,
         ],
         [
           "Bon POS",
@@ -481,7 +512,9 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
         row.ingredient,
         row.uom,
         row.qty,
-        row.note,
+        row.stock,
+        row.unitCost,
+        row.valueNote,
       ]
 
       let x = margin
@@ -492,7 +525,7 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
           align:
             cellIndex === 0 || cellIndex === 3
               ? "center"
-              : cellIndex === 4
+              : cellIndex === 4 || cellIndex === 5 || cellIndex === 6
                 ? "right"
                 : "left",
         })
@@ -548,15 +581,17 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
         totalsY += bold ? 17 : 14
       }
 
+      totalLine("Status document", text(consumptionDoc.status))
       totalLine("Nr. pozitii consum", String(consumptionDoc.items.length))
-      totalLine("Cantitate totala consum", fmt(totalQty, 3), true)
+      totalLine("Cantitate totala consum", fmt(totalQty, 3))
+      totalLine("Total valoare consum", `${fmt(num(consumptionDoc.totalValue))} lei`, true)
 
       if (consumptionDoc.sale) {
         totalsY += 6
         doc.moveTo(rightX + 8, totalsY).lineTo(rightX + rightWidthBox - 8, totalsY).stroke("#111111")
         totalsY += 8
         totalLine("Bon POS", text(consumptionDoc.sale.receiptNo))
-        totalLine("Total vanzare", fmt(num(consumptionDoc.sale.total)), true)
+        totalLine("Total vanzare", `${fmt(num(consumptionDoc.sale.total))} lei`, true)
       }
     }
 
@@ -567,11 +602,11 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
 
       doc.font(fonts.bold).fontSize(9)
       doc.text("Intocmit", leftX, startY, { width: 120, align: "center" })
-      doc.text("Verificat", midX, startY, { width: 120, align: "center" })
-      doc.text("Gestionar", rightX, startY, { width: 120, align: "center" })
+      doc.text("Predat / Scazut din gestiune", midX - 25, startY, { width: 170, align: "center" })
+      doc.text("Aprobat", rightX, startY, { width: 120, align: "center" })
 
       doc.moveTo(leftX, startY + 28).lineTo(leftX + 120, startY + 28).stroke("#111111")
-      doc.moveTo(midX, startY + 28).lineTo(midX + 120, startY + 28).stroke("#111111")
+      doc.moveTo(midX - 25, startY + 28).lineTo(midX + 145, startY + 28).stroke("#111111")
       doc.moveTo(rightX, startY + 28).lineTo(rightX + 120, startY + 28).stroke("#111111")
     }
 

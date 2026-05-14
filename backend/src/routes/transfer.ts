@@ -12,6 +12,7 @@ import { readAnafHeader } from "../lib/anafHttp"
 import { drawDocumentHero, drawInfoCards, drawSimpleTable, drawSignatureRow, drawTotalsBox, ensurePdfPage, pdfDate, pdfFmt, pdfText, registerPdfFonts } from "../lib/professionalPdf"
 import { requireRequestCompanyId, resolveRequestCompany } from "../lib/companyScope"
 import { generateTransferETransportXml, validateTransferForETransport } from "../lib/etransport"
+import { resolveWarehouseForLocation } from "../lib/warehouse"
 import {
   anafCheckEtransportStatus,
   anafDownloadEtransportById,
@@ -260,7 +261,9 @@ router.get("/api/v1/transfers", async (req: AuthedRequest, res) => {
     where,
     include: {
       fromLocation: true,
+      fromWarehouse: true,
       toLocation: true,
+      toWarehouse: true,
       items: true
     },
     orderBy: [{ docDate: "desc" }, { createdAt: "desc" }]
@@ -315,7 +318,9 @@ router.post("/api/v1/transfers/:id/etransport/prepare", async (req: AuthedReques
     where: { id, tenantId, companyId },
     include: {
       fromLocation: true,
+      fromWarehouse: true,
       toLocation: true,
+      toWarehouse: true,
       items: {
         include: {
           product: {
@@ -507,7 +512,9 @@ router.post("/api/v1/transfers/:id/etransport/send", async (req: AuthedRequest, 
     where: { id, tenantId, companyId },
     include: {
       fromLocation: true,
+      fromWarehouse: true,
       toLocation: true,
+      toWarehouse: true,
       items: {
         include: {
           product: {
@@ -818,7 +825,9 @@ router.post("/api/v1/transfers/:id/post", async (req: AuthedRequest, res) => {
     where: { id, tenantId, companyId },
     include: {
       fromLocation: true,
+      fromWarehouse: true,
       toLocation: true,
+      toWarehouse: true,
       items: true,
     },
   })
@@ -844,6 +853,7 @@ router.post("/api/v1/transfers/:id/post", async (req: AuthedRequest, res) => {
         tenantId,
         companyId,
         locationId: existing.fromLocationId,
+        warehouseId: existing.fromWarehouseId || undefined,
         productId: item.productId,
         qty: new Prisma.Decimal(qty),
         productName: product?.name || "produs",
@@ -854,6 +864,7 @@ router.post("/api/v1/transfers/:id/post", async (req: AuthedRequest, res) => {
         tenantId,
         companyId,
         locationId: existing.toLocationId,
+        warehouseId: existing.toWarehouseId || undefined,
         productId: item.productId,
         qty: new Prisma.Decimal(qty),
       })
@@ -863,6 +874,7 @@ router.post("/api/v1/transfers/:id/post", async (req: AuthedRequest, res) => {
           tenantId,
           companyId,
           locationId: existing.fromLocationId,
+          warehouseId: existing.fromWarehouseId || null,
           productId: item.productId,
           type: "OUT",
           qty: new Prisma.Decimal(qty),
@@ -877,6 +889,7 @@ router.post("/api/v1/transfers/:id/post", async (req: AuthedRequest, res) => {
           tenantId,
           companyId,
           locationId: existing.toLocationId,
+          warehouseId: existing.toWarehouseId || null,
           productId: item.productId,
           type: "IN",
           qty: new Prisma.Decimal(qty),
@@ -897,7 +910,9 @@ router.post("/api/v1/transfers/:id/post", async (req: AuthedRequest, res) => {
     where: { id, tenantId, companyId },
     include: {
       fromLocation: true,
+      fromWarehouse: true,
       toLocation: true,
+      toWarehouse: true,
       items: {
         include: {
           product: { include: { uom: true, vatRate: true } },
@@ -956,7 +971,9 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
   const { id, header, items, postNow } = req.body || {}
 
   const fromLocationId = String(header?.fromLocationId || "").trim()
+  const requestedFromWarehouseId = String(header?.fromWarehouseId || "").trim()
   const toLocationId = String(header?.toLocationId || "").trim()
+  const requestedToWarehouseId = String(header?.toWarehouseId || "").trim()
   const rawDocNo = String(header?.docNo || "").trim()
   const docDate = String(header?.docDate || "").trim()
   const trailerNo = String(header?.trailerNo || "").trim()
@@ -1016,6 +1033,22 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
   }
 
   try {
+    const [fromWarehouse, toWarehouse] = await prisma.$transaction(async (tx) => {
+      const sourceWarehouse = await resolveWarehouseForLocation(tx, {
+        tenantId,
+        companyId,
+        locationId: fromLocationId,
+        warehouseId: requestedFromWarehouseId,
+      })
+      const destinationWarehouse = await resolveWarehouseForLocation(tx, {
+        tenantId,
+        companyId,
+        locationId: toLocationId,
+        warehouseId: requestedToWarehouseId,
+      })
+      return [sourceWarehouse, destinationWarehouse]
+    })
+
     let transferId = id ? String(id) : ""
     const docNo = !transferId
       ? await prisma.$transaction((tx) => reserveNextNumber(tx, tenantId, "transfer"))
@@ -1035,7 +1068,9 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
           tenantId,
           companyId,
           fromLocationId,
+          fromWarehouseId: fromWarehouse.id,
           toLocationId,
+          toWarehouseId: toWarehouse.id,
           docNo,
           docDate: new Date(docDate),
           reason: header?.reason ? String(header.reason).trim() : null,
@@ -1104,7 +1139,9 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
         where: { id: transferId },
         data: {
           fromLocationId,
+          fromWarehouseId: fromWarehouse.id,
           toLocationId,
+          toWarehouseId: toWarehouse.id,
           docNo,
           docDate: new Date(docDate),
           reason: header?.reason ? String(header.reason).trim() : null,
@@ -1175,6 +1212,7 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
           tenantId,
           companyId,
           locationId: fromLocationId,
+          warehouseId: fromWarehouse.id,
         productId,
         requiredQty: qty,
         productName: product.name,
@@ -1243,6 +1281,7 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
             tenantId,
             companyId,
             locationId: doc.fromLocationId,
+            warehouseId: doc.fromWarehouseId || undefined,
             productId: item.productId,
             qty: new Prisma.Decimal(qty),
             productName: product?.name || "produs",
@@ -1253,6 +1292,7 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
             tenantId,
             companyId,
             locationId: doc.toLocationId,
+            warehouseId: doc.toWarehouseId || undefined,
             productId: item.productId,
             qty: new Prisma.Decimal(qty)
           })
@@ -1262,6 +1302,7 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
               tenantId,
               companyId,
               locationId: doc.fromLocationId,
+              warehouseId: doc.fromWarehouseId || null,
               productId: item.productId,
               type: "OUT",
               qty: new Prisma.Decimal(qty),
@@ -1276,6 +1317,7 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
               tenantId,
               companyId,
               locationId: doc.toLocationId,
+              warehouseId: doc.toWarehouseId || null,
               productId: item.productId,
               type: "IN",
               qty: new Prisma.Decimal(qty),
@@ -1297,7 +1339,9 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
       where: { id: transferId, tenantId, companyId },
       include: {
         fromLocation: true,
+        fromWarehouse: true,
         toLocation: true,
+        toWarehouse: true,
         items: {
           include: {
             product: { include: { uom: true, vatRate: true } },

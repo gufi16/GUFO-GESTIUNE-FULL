@@ -307,7 +307,7 @@ export default function NirListPage() {
               <th className="px-3 py-2.5 text-left font-medium">Numar</th>
               <th className="px-3 py-2.5 text-left font-medium">Data</th>
               <th className="px-3 py-2.5 text-left font-medium">Furnizor</th>
-              <th className="px-3 py-2.5 text-left font-medium">Locatie</th>
+              <th className="px-3 py-2.5 text-left font-medium">Locatie / gestiune</th>
               <th className="px-3 py-2.5 text-left font-medium">Status</th>
               <th className="px-3 py-2.5 text-left font-medium">Valoare</th>
               <th className="px-3 py-2.5 text-right font-medium">Actiune</th>
@@ -335,10 +335,8 @@ export default function NirListPage() {
                   row?.vendor?.name ||
                   "Furnizor necunoscut"
 
-                const location =
-                  row?.location?.name ||
-                  row?.warehouse?.name ||
-                  "Fara locatie"
+                const location = row?.location?.name || "Fara locatie"
+                const warehouse = row?.warehouse?.name || "-"
 
                 const status = row?.status || "DRAFT"
 
@@ -371,7 +369,10 @@ export default function NirListPage() {
                         {row?.supplier?.code || row?.supplierCode || row?.supplier?.cif || "-"}
                       </div>
                     </td>
-                    <td className="px-3 py-3 text-slate-600">{location}</td>
+                    <td className="px-3 py-3 text-slate-600">
+                      <div>{location}</div>
+                      <div className="mt-1 text-xs text-slate-500">{warehouse}</div>
+                    </td>
                     <td className="px-3 py-3">
                       <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass(status)}`}>
                         {status}

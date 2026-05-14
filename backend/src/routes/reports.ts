@@ -216,6 +216,7 @@ router.get("/api/v1/reports/advanced", requireAuth, async (req: AuthedRequest, r
           where: {
             tenantId,
             companyId,
+            status: "VALIDATED",
             docDate: {
               gte: from,
               lte: to,
