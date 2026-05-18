@@ -59,6 +59,9 @@ function serializeReceipt(receipt: any) {
       costPrice: toNumber(product.costPrice),
       purchaseFactor: toNumber(product.purchaseFactor || 1),
       sgrValue: toNumber(product.sgrValue),
+      trackLot: Boolean(product.trackLot),
+      trackExpiry: Boolean(product.trackExpiry),
+      costMethod: product.costMethod || "AVG",
       vatRate: product.vatRate
         ? {
             ...product.vatRate,
@@ -83,10 +86,12 @@ function serializeReceipt(receipt: any) {
         lineVatRon: toNumber(item.lineVatRon),
         lineGrossRon: toNumber(item.lineGrossRon),
         vatRateValue: toNumber(item.vatRateValue),
+        lotNo: item.lotNo || null,
+        expiryDate: item.expiryDate || null,
         product: serializeProduct(item.product),
         vatRate: item.vatRate
           ? {
-              ...item.vatRate,
+            ...item.vatRate,
               rate: toNumber(item.vatRate.rate)
             }
           : item.vatRate
@@ -136,7 +141,9 @@ function enrichReceipt(receipt: any) {
       vatRate: toNumber(item.vatRateValue),
       totalFc: toNumber(item.lineNetFc),
       totalRon: toNumber(item.lineNetRon),
-      isSgr: false
+      isSgr: false,
+      lotNo: item.lotNo || null,
+      expiryDate: item.expiryDate || null
     }
 
     const sgrLine = buildReceiptSgrLine({ ...item, receipt })
@@ -204,6 +211,8 @@ async function createOrReplaceReceiptItems(
     let conversionFactor = requestedConversionFactor || 1
     const unitCostNetFc = toNumber(raw.unitCostNetFc)
     const vatRateValue = toNumber(raw.vatRateValue)
+    const lotNo = String(raw.lotNo || "").trim() || null
+    const expiryDateRaw = String(raw.expiryDate || "").trim()
 
     if (!productId) {
       throw new Error("Fiecare linie trebuie sa aiba produs.")
@@ -236,6 +245,20 @@ async function createOrReplaceReceiptItems(
 
     if (!product) {
       throw new Error("Produs inexistent in una dintre linii.")
+    }
+
+    if (product.trackLot && !lotNo) {
+      throw new Error(`Produsul ${product.name} necesita lot pe receptie.`)
+    }
+
+    if (product.trackExpiry && !expiryDateRaw) {
+      throw new Error(`Produsul ${product.name} necesita data expirarii pe receptie.`)
+    }
+
+    const expiryDate = expiryDateRaw.length > 0 ? new Date(`${expiryDateRaw}T00:00:00`) : null
+
+    if (expiryDateRaw && (!expiryDate || Number.isNaN(expiryDate.getTime()))) {
+      throw new Error(`Data expirarii nu este valida pentru produsul ${product.name}.`)
     }
 
     const usedUomId = raw.uomId || product.purchaseUomId || product.uomId
@@ -290,7 +313,9 @@ async function createOrReplaceReceiptItems(
         lineVatRon,
         lineGrossRon,
         vatRateId: raw.vatRateId || product.vatRateId || null,
-        vatRateValue
+        vatRateValue,
+        lotNo,
+        expiryDate
       }
     })
   }
@@ -307,7 +332,11 @@ async function postReceiptToStock(tenantId: string, companyId: string, receiptId
         companyId
       },
       include: {
-        items: true,
+        items: {
+          include: {
+            product: true
+          }
+        },
         warehouse: true
       }
     })
@@ -326,6 +355,36 @@ async function postReceiptToStock(tenantId: string, companyId: string, receiptId
 
     for (const item of receipt.items) {
       const stockQty = toNumber(item.stockQty)
+      const unitCostNetRon = toNumber(item.unitCostNetRon)
+      const lineNetRon = toNumber(item.lineNetRon)
+      const shouldCreateLot = Boolean(item.product?.trackLot || item.product?.trackExpiry)
+      const lotNo =
+        String(item.lotNo || "").trim() ||
+        (shouldCreateLot ? `${receipt.docNo}-${String(item.product?.sku || item.productId).trim()}` : "")
+
+      let lotId: string | null = null
+
+      if (shouldCreateLot) {
+        const lot = await tx.stockLot.create({
+          data: {
+            tenantId,
+            companyId,
+            locationId: receipt.locationId,
+            warehouseId: receipt.warehouseId || null,
+            productId: item.productId,
+            sourceReceiptId: receipt.id,
+            sourceReceiptItemId: item.id,
+            lotNo,
+            expiryDate: item.expiryDate || null,
+            receivedAt: receipt.docDate,
+            initialQty: stockQty,
+            remainingQty: stockQty,
+            unitCostNetRon,
+            totalRemainingValue: lineNetRon
+          }
+        })
+        lotId = lot.id
+      }
 
       await tx.stockBalance.upsert({
         where: {
@@ -359,10 +418,14 @@ async function postReceiptToStock(tenantId: string, companyId: string, receiptId
           locationId: receipt.locationId,
           warehouseId: receipt.warehouseId || null,
           productId: item.productId,
+          lotId,
           type: "IN",
           qty: stockQty,
+          unitCost: unitCostNetRon,
+          totalValue: lineNetRon,
           refType: "PURCHASE",
           refId: receipt.id,
+          refItemId: item.id,
           note: `NIR ${receipt.docNo}`
         }
       })

@@ -23,6 +23,11 @@ type NirLine = {
   qty: string
   price: string
   vat: string
+  lotNo: string
+  expiryDate: string
+  trackLot: boolean
+  trackExpiry: boolean
+  costMethod: string
   isSgr: boolean
   sgrValue: string
   autoFactor: boolean
@@ -59,6 +64,11 @@ function makeLine(): NirLine {
     qty: "1",
     price: "0",
     vat: "19",
+    lotNo: "",
+    expiryDate: "",
+    trackLot: false,
+    trackExpiry: false,
+    costMethod: "AVG",
     isSgr: false,
     sgrValue: "0.50",
     autoFactor: true,
@@ -488,6 +498,11 @@ export default function NirPage() {
         qty: String(item.qty ?? 1),
         price: String(item.unitCostNetFc ?? 0),
         vat: String(item.vatRateValue ?? 19),
+        lotNo: String(item.lotNo || ""),
+        expiryDate: item.expiryDate ? String(item.expiryDate).slice(0, 10) : "",
+        trackLot: Boolean(item.product?.trackLot),
+        trackExpiry: Boolean(item.product?.trackExpiry),
+        costMethod: String(item.product?.costMethod || "AVG"),
         isSgr: Boolean(item.product?.isSgr),
         sgrValue: String(
           item.product?.isSgr ? Number(item.product?.sgrValue || 0.5) : 0
@@ -561,6 +576,11 @@ export default function NirPage() {
           qty: String(line.qty ?? 0),
           price: String(line.unitPrice ?? 0),
           vat: String(line.vatRate ?? matched?.vatRate?.rate ?? 19),
+          lotNo: "",
+          expiryDate: "",
+          trackLot: Boolean(matched?.trackLot),
+          trackExpiry: Boolean(matched?.trackExpiry),
+          costMethod: String(matched?.costMethod || "AVG"),
           isSgr: Boolean(matched?.isSgr),
           sgrValue: String(matched?.isSgr ? Number(matched?.sgrValue || 0.5) : 0),
           autoFactor: true,
@@ -595,6 +615,11 @@ export default function NirPage() {
       factor: String(productFactor),
       vat: String(product.vatRate?.rate || 19),
       price: String(product.costPrice ?? line.price ?? "0"),
+      lotNo: line.productId === product.id ? line.lotNo : "",
+      expiryDate: line.productId === product.id ? line.expiryDate : "",
+      trackLot: Boolean(product.trackLot),
+      trackExpiry: Boolean(product.trackExpiry),
+      costMethod: String(product.costMethod || "AVG"),
       isSgr: Boolean(product.isSgr),
       sgrValue: String(product.isSgr ? Number(product.sgrValue || 0.5) : 0),
       autoFactor: true,
@@ -760,7 +785,19 @@ export default function NirPage() {
       price: clampPositiveString(lineDraft.price, "0"),
       vat: clampPositiveString(lineDraft.vat, "19"),
       factor: clampStrictPositiveString(lineDraft.factor, "1"),
+      lotNo: String(lineDraft.lotNo || "").trim(),
+      expiryDate: String(lineDraft.expiryDate || "").trim(),
       sgrValue: clampPositiveString(lineDraft.sgrValue, "0.50"),
+    }
+
+    if (normalized.trackLot && !normalized.lotNo) {
+      setLineEditorError("Completeaza lotul pentru produsul selectat.")
+      return
+    }
+
+    if (normalized.trackExpiry && !normalized.expiryDate) {
+      setLineEditorError("Completeaza data expirarii pentru produsul selectat.")
+      return
     }
 
     setLines((prev) => {
@@ -1100,6 +1137,8 @@ export default function NirPage() {
         conversionFactor: Math.max(0.000001, toNumberSafe(l.factor) || 1),
         unitCostNetFc: Math.max(0, toNumberSafe(l.price)),
         vatRateValue: Math.max(0, toNumberSafe(l.vat)),
+        lotNo: l.lotNo.trim() || null,
+        expiryDate: l.expiryDate || null,
       })),
       postNow,
     }
@@ -1741,6 +1780,7 @@ export default function NirPage() {
                               <div style={mobileLineMeta}>
                                 Ambalaj {line.uomCode || "-"} · {line.autoFactor ? "factor auto" : "factor manual"}
                                 {line.isSgr ? " · SGR" : ""}
+                                {line.trackLot ? ` · lot ${line.lotNo || "-"}` : ""}
                               </div>
                             </div>
 
@@ -1937,6 +1977,24 @@ export default function NirPage() {
                             <div style={insightChip}>
                               <strong>TVA:</strong> {computed.vatFc.toFixed(2)} {header.currency}
                             </div>
+
+                            {line.trackLot && (
+                              <div style={insightChip}>
+                                <strong>Lot:</strong> {line.lotNo || "-"}
+                              </div>
+                            )}
+
+                            {line.trackExpiry && (
+                              <div style={insightChip}>
+                                <strong>Expira:</strong> {line.expiryDate || "-"}
+                              </div>
+                            )}
+
+                            {(line.trackLot || line.trackExpiry) && (
+                              <div style={insightChip}>
+                                <strong>Cost:</strong> {line.costMethod || "AVG"}
+                              </div>
+                            )}
 
                             {line.isSgr && (
                               <div style={sgrInlineBox}>
@@ -2135,6 +2193,40 @@ export default function NirPage() {
                   disabled={isPosted || Boolean(lineDraft.productId && lineDraft.autoFactor)}
                 />
               </Field>
+
+              {(lineDraft.trackLot || lineDraft.trackExpiry) && (
+                <Field label="Metoda cost">
+                  <input
+                    value={lineDraft.costMethod || "AVG"}
+                    readOnly
+                    style={{ ...input, background: "#f8fafc" }}
+                  />
+                </Field>
+              )}
+
+              {lineDraft.trackLot && (
+                <Field label="Lot">
+                  <input
+                    type="text"
+                    value={lineDraft.lotNo}
+                    onChange={(e) => setDraftLineValue({ lotNo: e.target.value })}
+                    style={input}
+                    disabled={isPosted}
+                  />
+                </Field>
+              )}
+
+              {lineDraft.trackExpiry && (
+                <Field label="Expira la">
+                  <input
+                    type="date"
+                    value={lineDraft.expiryDate}
+                    onChange={(e) => setDraftLineValue({ expiryDate: e.target.value })}
+                    style={input}
+                    disabled={isPosted}
+                  />
+                </Field>
+              )}
             </div>
 
             <div style={{ ...rowExtra, marginTop: 14 }}>

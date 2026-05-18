@@ -53,6 +53,12 @@ enum WarehouseType {
   PACKAGING
 }
 
+enum StockCostMethod {
+  AVG
+  FIFO
+  FEFO
+}
+
 enum StockMoveType {
   IN
   OUT
@@ -241,6 +247,7 @@ model Tenant {
   sales                  Sale[]
   warehouses             Warehouse[]
   stockBalances          StockBalance[]
+  stockLots              StockLot[]
   stockMoves             StockMove[]
   purchaseReceipts       PurchaseReceipt[]
   transferDocs           TransferDoc[]
@@ -370,6 +377,7 @@ model Company {
   categories Category[]
   sales Sale[]
     stockBalances StockBalance[]
+    stockLots StockLot[]
     stockMoves StockMove[]
   consumptionDocs ConsumptionDoc[]
   productionDocs ProductionDoc[]
@@ -575,6 +583,7 @@ model Location {
   sales                Sale[]
   warehouses           Warehouse[]
   stockBalances        StockBalance[]
+  stockLots            StockLot[]
   stockMoves           StockMove[]
   purchaseReceipts     PurchaseReceipt[]
   transferDocsFrom     TransferDoc[]         @relation("TransferFromLocation")
@@ -613,6 +622,7 @@ model Warehouse {
   location Location @relation(fields: [locationId], references: [id])
 
   stockBalances    StockBalance[]
+  stockLots        StockLot[]
   stockMoves       StockMove[]
   purchaseReceipts PurchaseReceipt[]
   consumptionDocs  ConsumptionDoc[]
@@ -780,6 +790,9 @@ model Product {
 
   price          Decimal        @default(0)
   costPrice      Decimal        @default(0)
+  trackLot       Boolean        @default(false)
+  trackExpiry    Boolean        @default(false)
+  costMethod     StockCostMethod @default(AVG)
   isActive       Boolean        @default(true)
   isVisibleInPos Boolean        @default(true)
   isSgr          Boolean        @default(false)
@@ -801,6 +814,7 @@ model Product {
   barcodes                 ProductBarcode[]
   saleItems                SaleItem[]
   stockBalances            StockBalance[]
+  stockLots                StockLot[]
   stockMoves               StockMove[]
   receiptItems             PurchaseReceiptItem[]
   transferItems            TransferDocItem[]
@@ -1070,6 +1084,46 @@ model StockBalance {
     @@index([productId])
   }
 
+model StockLot {
+    id                   String   @id @default(cuid())
+    tenantId             String
+    companyId            String?
+    locationId           String
+    warehouseId          String?
+    productId            String
+    sourceReceiptId      String?
+    sourceReceiptItemId  String?
+    lotNo                String
+    expiryDate           DateTime?
+    receivedAt           DateTime @default(now())
+    initialQty           Decimal  @default(0)
+    remainingQty         Decimal  @default(0)
+    unitCostNetRon       Decimal  @default(0)
+    totalRemainingValue  Decimal  @default(0)
+    createdAt            DateTime @default(now())
+    updatedAt            DateTime @updatedAt
+
+    tenant            Tenant               @relation(fields: [tenantId], references: [id])
+    company           Company?             @relation(fields: [companyId], references: [id])
+    location          Location             @relation(fields: [locationId], references: [id])
+    warehouse         Warehouse?           @relation(fields: [warehouseId], references: [id])
+    product           Product              @relation(fields: [productId], references: [id])
+    sourceReceipt     PurchaseReceipt?     @relation(fields: [sourceReceiptId], references: [id])
+    sourceReceiptItem PurchaseReceiptItem? @relation(fields: [sourceReceiptItemId], references: [id])
+    stockMoves        StockMove[]
+
+    @@index([tenantId])
+    @@index([tenantId, companyId])
+    @@index([companyId])
+    @@index([locationId])
+    @@index([warehouseId])
+    @@index([productId])
+    @@index([sourceReceiptId])
+    @@index([sourceReceiptItemId])
+    @@index([productId, receivedAt])
+    @@index([productId, expiryDate])
+  }
+
 model StockMove {
     id         String @id @default(cuid())
     tenantId   String
@@ -1077,12 +1131,16 @@ model StockMove {
     locationId String
     warehouseId String?
     productId  String
+    lotId      String?
 
   type StockMoveType
   qty  Decimal
+  unitCost   Decimal @default(0)
+  totalValue Decimal @default(0)
 
   refType RefType?
   refId   String?
+  refItemId String?
   note    String?
 
   createdAt DateTime @default(now())
@@ -1092,6 +1150,7 @@ model StockMove {
     location Location @relation(fields: [locationId], references: [id])
     warehouse Warehouse? @relation(fields: [warehouseId], references: [id])
     product  Product  @relation(fields: [productId], references: [id])
+    lot      StockLot? @relation(fields: [lotId], references: [id])
 
     @@index([tenantId])
     @@index([tenantId, companyId])
@@ -1099,7 +1158,9 @@ model StockMove {
     @@index([locationId])
   @@index([warehouseId])
   @@index([productId])
+  @@index([lotId])
   @@index([refType, refId])
+  @@index([refItemId])
 }
 
 model ConsumptionDoc {
@@ -1243,6 +1304,7 @@ model PurchaseReceipt {
   supplier Supplier?             @relation(fields: [supplierId], references: [id])
   sourceIncomingEInvoice IncomingEInvoice? @relation(fields: [sourceIncomingEInvoiceId], references: [id])
   items    PurchaseReceiptItem[]
+  stockLots StockLot[]
 
     @@unique([tenantId, companyId, docNo])
     @@index([tenantId])
@@ -1261,6 +1323,8 @@ model PurchaseReceiptItem {
   receiptId String
   productId String
   uomId     String
+  lotNo     String?
+  expiryDate DateTime?
 
   qty              Decimal @default(0)
   conversionFactor Decimal @default(1)
@@ -1286,11 +1350,14 @@ model PurchaseReceiptItem {
   product Product         @relation(fields: [productId], references: [id])
   uom     Uom             @relation(fields: [uomId], references: [id])
   vatRate VatRate?        @relation(fields: [vatRateId], references: [id])
+  stockLots StockLot[]
 
   @@index([receiptId])
   @@index([productId])
   @@index([uomId])
   @@index([vatRateId])
+  @@index([lotNo])
+  @@index([expiryDate])
 }
 
 model IncomingEInvoice {
