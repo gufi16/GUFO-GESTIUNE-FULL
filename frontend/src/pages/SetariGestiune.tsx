@@ -1,4 +1,4 @@
-import { Building2, CheckCircle2, Pencil, Plus, RefreshCcw, Save, Trash2, Warehouse } from "lucide-react"
+import { Building2, CheckCircle2, Eye, Filter, Pencil, Plus, RefreshCcw, Save, Trash2, Warehouse } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import PageHeader from "../components/PageHeader"
 import {
@@ -52,6 +52,8 @@ type WarehouseEditorForm = {
   isActive: boolean
 }
 
+type ActiveTab = "warehouses" | "general" | "display"
+
 const warehouseTypeOptions = [
   { value: "GENERAL", label: "General" },
   { value: "RAW_MATERIALS", label: "Materii prime" },
@@ -104,13 +106,39 @@ function ToggleRow({
   )
 }
 
+function SettingsModal({
+  title,
+  onClose,
+  children,
+}: {
+  title: string
+  onClose: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6">
+      <div className="max-h-[92vh] w-full max-w-3xl overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-2xl shadow-slate-950/20">
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+          <h2 className="text-lg font-semibold text-[#17324D]">{title}</h2>
+          <button type="button" onClick={onClose} className={documentButtonSecondaryClass}>
+            Inchide
+          </button>
+        </div>
+        <div className="max-h-[calc(92vh-84px)] overflow-y-auto px-5 py-4">{children}</div>
+      </div>
+    </div>
+  )
+}
+
 export default function SetariGestiunePage() {
   const token = getToken() || ""
+  const [activeTab, setActiveTab] = useState<ActiveTab>("warehouses")
   const [configForm, setConfigForm] = useState<WarehouseConfigForm>(emptyConfigForm)
   const [locations, setLocations] = useState<LocationItem[]>([])
   const [selectedLocationId, setSelectedLocationId] = useState("")
   const [warehouses, setWarehouses] = useState<WarehouseItem[]>([])
   const [warehouseForm, setWarehouseForm] = useState<WarehouseEditorForm>(emptyWarehouseForm())
+  const [warehouseModalOpen, setWarehouseModalOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [savingConfig, setSavingConfig] = useState(false)
   const [savingWarehouse, setSavingWarehouse] = useState(false)
@@ -125,7 +153,6 @@ export default function SetariGestiunePage() {
   useEffect(() => {
     if (!selectedLocationId) {
       setWarehouses([])
-      setWarehouseForm(emptyWarehouseForm())
       return
     }
     void loadWarehouses(selectedLocationId)
@@ -176,9 +203,6 @@ export default function SetariGestiunePage() {
       persistWarehouseConfig(nextConfig)
       setLocations(nextLocations)
       setSelectedLocationId((current) => current || nextLocations[0]?.id || "")
-      if (!nextLocations.length) {
-        setWarehouseForm(emptyWarehouseForm())
-      }
     } catch (e: any) {
       setError(e?.message || "Nu am putut incarca configurarea.")
     } finally {
@@ -198,14 +222,7 @@ export default function SetariGestiunePage() {
         throw new Error(data?.error || "Nu am putut incarca gestiunile.")
       }
 
-      const items = Array.isArray(data?.warehouses) ? data.warehouses : []
-      setWarehouses(items)
-      setWarehouseForm((current) => {
-        if (!current.locationId || current.locationId !== locationId) {
-          return emptyWarehouseForm(locationId)
-        }
-        return current
-      })
+      setWarehouses(Array.isArray(data?.warehouses) ? data.warehouses : [])
     } catch (e: any) {
       setWarehouses([])
       setError(e?.message || "Nu am putut incarca gestiunile.")
@@ -303,7 +320,7 @@ export default function SetariGestiunePage() {
 
       setMessage(warehouseForm.id ? "Gestiunea a fost actualizata." : "Gestiunea a fost creata.")
       await loadWarehouses(warehouseForm.locationId)
-      setWarehouseForm(emptyWarehouseForm(warehouseForm.locationId))
+      closeWarehouseModal()
     } catch (e: any) {
       setError(e?.message || "Nu am putut salva gestiunea.")
     } finally {
@@ -334,7 +351,6 @@ export default function SetariGestiunePage() {
 
       setMessage("Gestiunea a fost stearsa.")
       await loadWarehouses(warehouse.locationId)
-      setWarehouseForm((current) => (current.id === warehouse.id ? emptyWarehouseForm(warehouse.locationId) : current))
     } catch (e: any) {
       setError(e?.message || "Nu am putut sterge gestiunea.")
     } finally {
@@ -342,7 +358,12 @@ export default function SetariGestiunePage() {
     }
   }
 
-  function editWarehouse(warehouse: WarehouseItem) {
+  function openCreateWarehouseModal() {
+    setWarehouseForm(emptyWarehouseForm(selectedLocationId))
+    setWarehouseModalOpen(true)
+  }
+
+  function openEditWarehouseModal(warehouse: WarehouseItem) {
     setWarehouseForm({
       id: warehouse.id,
       locationId: warehouse.locationId,
@@ -352,9 +373,11 @@ export default function SetariGestiunePage() {
       isDefault: Boolean(warehouse.isDefault),
       isActive: Boolean(warehouse.isActive),
     })
+    setWarehouseModalOpen(true)
   }
 
-  function resetWarehouseEditor() {
+  function closeWarehouseModal() {
+    setWarehouseModalOpen(false)
     setWarehouseForm(emptyWarehouseForm(selectedLocationId))
   }
 
@@ -365,6 +388,12 @@ export default function SetariGestiunePage() {
 
   const defaultWarehouse = warehouses.find((warehouse) => warehouse.isDefault)
 
+  const tabs: Array<{ key: ActiveTab; label: string; icon: any }> = [
+    { key: "warehouses", label: "Gestiuni si locatii", icon: Warehouse },
+    { key: "general", label: "Setari generale", icon: CheckCircle2 },
+    { key: "display", label: "Filtre si afisare", icon: Eye },
+  ]
+
   return (
     <div className="space-y-3">
       <PageHeader badge="configurare" title="Configurare gestiune" />
@@ -372,33 +401,171 @@ export default function SetariGestiunePage() {
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
 
-      <DocumentSection
-        title="Setari generale"
-        actions={
-          <>
-            <button type="button" className={documentButtonSecondaryClass} onClick={loadAll} disabled={loading || savingConfig}>
-              <RefreshCcw size={14} className="mr-1.5" />
-              Reincarca
+      <div className="flex flex-wrap gap-2 rounded-[18px] border border-slate-200 bg-white p-2 shadow-sm">
+        {tabs.map((tab) => {
+          const Icon = tab.icon
+          const active = activeTab === tab.key
+          return (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setActiveTab(tab.key)}
+              className={`inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold transition ${
+                active ? "bg-[#17324D] text-white" : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              <Icon size={15} />
+              {tab.label}
             </button>
-            <button type="button" className={documentButtonPrimaryClass} onClick={saveConfig} disabled={loading || savingConfig}>
-              <Save size={14} className="mr-1.5" />
-              {savingConfig ? "Se salveaza..." : "Salveaza"}
-            </button>
-          </>
-        }
-      >
-        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_280px]">
+          )
+        })}
+      </div>
+
+      {activeTab === "warehouses" ? (
+        <div className="space-y-3">
+          <DocumentSection title="Locatii">
+            <div className="flex flex-wrap gap-2">
+              {locations.map((location) => {
+                const active = location.id === selectedLocationId
+                return (
+                  <button
+                    key={location.id}
+                    type="button"
+                    onClick={() => setSelectedLocationId(location.id)}
+                    className={`inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-semibold transition ${
+                      active ? "bg-[#17324D] text-white" : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    <Building2 size={14} />
+                    {location.code ? `${location.name} (${location.code})` : location.name}
+                  </button>
+                )
+              })}
+              {!locations.length ? (
+                <div className="rounded-[16px] border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+                  Nu exista locatii disponibile.
+                </div>
+              ) : null}
+            </div>
+          </DocumentSection>
+
+          <DocumentSection
+            title={`Gestiuni - ${locationName}`}
+            actions={
+              <>
+                <button type="button" className={documentButtonSecondaryClass} onClick={() => selectedLocationId && loadWarehouses(selectedLocationId)} disabled={!selectedLocationId}>
+                  <RefreshCcw size={14} className="mr-1.5" />
+                  Reincarca
+                </button>
+                <button type="button" className={documentButtonPrimaryClass} onClick={openCreateWarehouseModal} disabled={!selectedLocationId}>
+                  <Plus size={14} className="mr-1.5" />
+                  Adauga gestiune
+                </button>
+              </>
+            }
+          >
+            <div className="mb-3 grid grid-cols-1 gap-2.5 md:grid-cols-3">
+              <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Locatie activa</div>
+                <div className="mt-1 text-sm font-semibold text-[#17324D]">{locationName}</div>
+              </div>
+              <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Total gestiuni</div>
+                <div className="mt-1 text-sm font-semibold text-[#17324D]">{warehouses.length}</div>
+              </div>
+              <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Default</div>
+                <div className="mt-1 text-sm font-semibold text-[#17324D]">{defaultWarehouse?.name || "-"}</div>
+              </div>
+            </div>
+
+            <div className="space-y-2.5">
+              {!warehouses.length ? (
+                <div className="rounded-[18px] border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                  Nu exista gestiuni pe locatia selectata.
+                </div>
+              ) : (
+                warehouses.map((warehouse) => (
+                  <div key={warehouse.id} className="rounded-[18px] border border-slate-200 bg-white p-4 shadow-sm">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="text-[15px] font-semibold text-slate-900">{warehouse.name}</div>
+                          {warehouse.isDefault ? (
+                            <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">
+                              Default
+                            </span>
+                          ) : null}
+                          {!warehouse.isActive ? (
+                            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600">
+                              Inactiva
+                            </span>
+                          ) : null}
+                        </div>
+
+                        <div className="mt-2 grid grid-cols-1 gap-2 text-sm text-slate-500 md:grid-cols-3">
+                          <div className="rounded-[14px] bg-slate-50 px-3 py-2">
+                            <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Cod</div>
+                            <div className="mt-1 font-semibold text-slate-700">{warehouse.code}</div>
+                          </div>
+                          <div className="rounded-[14px] bg-slate-50 px-3 py-2">
+                            <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Tip</div>
+                            <div className="mt-1 font-semibold text-slate-700">
+                              {warehouseTypeOptions.find((option) => option.value === warehouse.type)?.label || warehouse.type}
+                            </div>
+                          </div>
+                          <div className="rounded-[14px] bg-slate-50 px-3 py-2">
+                            <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Status</div>
+                            <div className="mt-1 font-semibold text-slate-700">{warehouse.isActive ? "Activa" : "Inactiva"}</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        <button type="button" className={documentButtonSecondaryClass} onClick={() => openEditWarehouseModal(warehouse)}>
+                          <Pencil size={14} className="mr-1.5" />
+                          Editeaza
+                        </button>
+                        <button
+                          type="button"
+                          className={documentButtonDangerClass}
+                          onClick={() => deleteWarehouse(warehouse)}
+                          disabled={deletingWarehouseId === warehouse.id}
+                        >
+                          <Trash2 size={14} className="mr-1.5" />
+                          {deletingWarehouseId === warehouse.id ? "Se sterge..." : "Sterge"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </DocumentSection>
+        </div>
+      ) : null}
+
+      {activeTab === "general" ? (
+        <DocumentSection
+          title="Setari generale"
+          actions={
+            <>
+              <button type="button" className={documentButtonSecondaryClass} onClick={loadAll} disabled={loading || savingConfig}>
+                <RefreshCcw size={14} className="mr-1.5" />
+                Reincarca
+              </button>
+              <button type="button" className={documentButtonPrimaryClass} onClick={saveConfig} disabled={loading || savingConfig}>
+                <Save size={14} className="mr-1.5" />
+                {savingConfig ? "Se salveaza..." : "Salveaza"}
+              </button>
+            </>
+          }
+        >
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <ToggleRow
               label="Multi-gestiune"
               checked={configForm.multiWarehouseEnabled}
               onChange={(checked) => setConfigForm((prev) => ({ ...prev, multiWarehouseEnabled: checked }))}
-            />
-            <ToggleRow
-              label="Selector in topbar"
-              checked={configForm.warehouseFilterEnabled}
-              disabled={!configForm.multiWarehouseEnabled}
-              onChange={(checked) => setConfigForm((prev) => ({ ...prev, warehouseFilterEnabled: checked }))}
             />
             <ToggleRow
               label="Gestiune obligatorie pe documente"
@@ -413,174 +580,73 @@ export default function SetariGestiunePage() {
               onChange={(checked) => setConfigForm((prev) => ({ ...prev, autoSelectSingleWarehouse: checked }))}
             />
           </div>
-
-          <div className="rounded-[18px] border border-slate-200 bg-slate-50 p-4">
-            <DocumentField label="Eticheta">
-              <input
-                value={configForm.warehouseLabel}
-                onChange={(e) => setConfigForm((prev) => ({ ...prev, warehouseLabel: e.target.value }))}
-                className={documentInputClass}
-                placeholder="Gestiune"
-                maxLength={32}
-              />
-            </DocumentField>
-
-            <div className="mt-4 grid grid-cols-1 gap-2">
-              <div className="rounded-[14px] border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700">
-                Mod: <span className="text-[#17324D]">{configForm.multiWarehouseEnabled ? "Multi-gestiune" : "Simplu"}</span>
-              </div>
-              <div className="rounded-[14px] border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700">
-                Filtru global: <span className="text-[#17324D]">{configForm.warehouseFilterEnabled ? "Activ" : "Oprit"}</span>
-              </div>
-              <div className="rounded-[14px] border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700">
-                Eticheta: <span className="text-[#17324D]">{configForm.warehouseLabel || "Gestiune"}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </DocumentSection>
-
-      <DocumentSection title="Locatii">
-        <div className="flex flex-wrap gap-2">
-          {locations.map((location) => {
-            const active = location.id === selectedLocationId
-            return (
-              <button
-                key={location.id}
-                type="button"
-                onClick={() => {
-                  setSelectedLocationId(location.id)
-                  setWarehouseForm(emptyWarehouseForm(location.id))
-                }}
-                className={`inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-semibold transition ${
-                  active ? "bg-[#17324D] text-white" : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                }`}
-              >
-                <Building2 size={14} />
-                {location.code ? `${location.name} (${location.code})` : location.name}
-              </button>
-            )
-          })}
-          {!locations.length ? (
-            <div className="rounded-[16px] border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-              Nu exista locatii disponibile.
-            </div>
-          ) : null}
-        </div>
-      </DocumentSection>
-
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.4fr)_380px]">
-        <DocumentSection
-          title={`Gestiuni - ${locationName}`}
-          actions={
-            <>
-              <button type="button" className={documentButtonSecondaryClass} onClick={() => selectedLocationId && loadWarehouses(selectedLocationId)} disabled={!selectedLocationId}>
-                <RefreshCcw size={14} className="mr-1.5" />
-                Reincarca
-              </button>
-              <button type="button" className={documentButtonPrimaryClass} onClick={resetWarehouseEditor} disabled={!selectedLocationId}>
-                <Plus size={14} className="mr-1.5" />
-                Adauga gestiune
-              </button>
-            </>
-          }
-        >
-          <div className="space-y-2.5">
-            {!warehouses.length ? (
-              <div className="rounded-[18px] border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-                Nu exista gestiuni pe locatia selectata.
-              </div>
-            ) : (
-              warehouses.map((warehouse) => (
-                <div key={warehouse.id} className="rounded-[18px] border border-slate-200 bg-white p-4 shadow-sm">
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="text-[15px] font-semibold text-slate-900">{warehouse.name}</div>
-                        {warehouse.isDefault ? (
-                          <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">
-                            Default
-                          </span>
-                        ) : null}
-                        {!warehouse.isActive ? (
-                          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600">
-                            Inactiva
-                          </span>
-                        ) : null}
-                      </div>
-
-                      <div className="mt-2 grid grid-cols-1 gap-2 text-sm text-slate-500 md:grid-cols-3">
-                        <div className="rounded-[14px] bg-slate-50 px-3 py-2">
-                          <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Cod</div>
-                          <div className="mt-1 font-semibold text-slate-700">{warehouse.code}</div>
-                        </div>
-                        <div className="rounded-[14px] bg-slate-50 px-3 py-2">
-                          <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Tip</div>
-                          <div className="mt-1 font-semibold text-slate-700">
-                            {warehouseTypeOptions.find((option) => option.value === warehouse.type)?.label || warehouse.type}
-                          </div>
-                        </div>
-                        <div className="rounded-[14px] bg-slate-50 px-3 py-2">
-                          <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Status</div>
-                          <div className="mt-1 font-semibold text-slate-700">{warehouse.isActive ? "Activa" : "Inactiva"}</div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      <button type="button" className={documentButtonSecondaryClass} onClick={() => editWarehouse(warehouse)}>
-                        <Pencil size={14} className="mr-1.5" />
-                        Editeaza
-                      </button>
-                      <button
-                        type="button"
-                        className={documentButtonDangerClass}
-                        onClick={() => deleteWarehouse(warehouse)}
-                        disabled={deletingWarehouseId === warehouse.id}
-                      >
-                        <Trash2 size={14} className="mr-1.5" />
-                        {deletingWarehouseId === warehouse.id ? "Se sterge..." : "Sterge"}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
         </DocumentSection>
+      ) : null}
 
+      {activeTab === "display" ? (
         <DocumentSection
-          title={warehouseForm.id ? "Editare gestiune" : "Gestiune noua"}
+          title="Filtre si afisare"
           actions={
-            <button type="button" className={documentButtonSecondaryClass} onClick={resetWarehouseEditor} disabled={!selectedLocationId}>
-              Reset
+            <button type="button" className={documentButtonPrimaryClass} onClick={saveConfig} disabled={loading || savingConfig}>
+              <Save size={14} className="mr-1.5" />
+              {savingConfig ? "Se salveaza..." : "Salveaza"}
             </button>
           }
         >
-          <div className="space-y-3">
-            <DocumentField label="Locatie">
-              <select
-                value={warehouseForm.locationId}
-                onChange={(e) => setWarehouseForm((prev) => ({ ...prev, locationId: e.target.value }))}
-                className={documentInputClass}
-              >
-                <option value="">Selecteaza locatia</option>
-                {locations.map((location) => (
-                  <option key={location.id} value={location.id}>
-                    {location.code ? `${location.name} (${location.code})` : location.name}
-                  </option>
-                ))}
-              </select>
-            </DocumentField>
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_280px]">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <ToggleRow
+                label="Selector in topbar"
+                checked={configForm.warehouseFilterEnabled}
+                disabled={!configForm.multiWarehouseEnabled}
+                onChange={(checked) => setConfigForm((prev) => ({ ...prev, warehouseFilterEnabled: checked }))}
+              />
+            </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <DocumentField label="Cod">
+            <div className="rounded-[18px] border border-slate-200 bg-slate-50 p-4">
+              <DocumentField label="Eticheta">
                 <input
-                  value={warehouseForm.code}
-                  onChange={(e) => setWarehouseForm((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
+                  value={configForm.warehouseLabel}
+                  onChange={(e) => setConfigForm((prev) => ({ ...prev, warehouseLabel: e.target.value }))}
                   className={documentInputClass}
-                  placeholder="DEP-MP"
+                  placeholder="Gestiune"
+                  maxLength={32}
                 />
+              </DocumentField>
+
+              <div className="mt-4 grid grid-cols-1 gap-2">
+                <div className="rounded-[14px] border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700">
+                  <div className="flex items-center gap-2">
+                    <Filter size={14} className="text-slate-400" />
+                    Filtru global: <span className="text-[#17324D]">{configForm.warehouseFilterEnabled ? "Activ" : "Oprit"}</span>
+                  </div>
+                </div>
+                <div className="rounded-[14px] border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700">
+                  Eticheta: <span className="text-[#17324D]">{configForm.warehouseLabel || "Gestiune"}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </DocumentSection>
+      ) : null}
+
+      {warehouseModalOpen ? (
+        <SettingsModal title={warehouseForm.id ? "Editeaza gestiune" : "Adauga gestiune"} onClose={closeWarehouseModal}>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <DocumentField label="Locatie">
+                <select
+                  value={warehouseForm.locationId}
+                  onChange={(e) => setWarehouseForm((prev) => ({ ...prev, locationId: e.target.value }))}
+                  className={documentInputClass}
+                >
+                  <option value="">Selecteaza locatia</option>
+                  {locations.map((location) => (
+                    <option key={location.id} value={location.id}>
+                      {location.code ? `${location.name} (${location.code})` : location.name}
+                    </option>
+                  ))}
+                </select>
               </DocumentField>
 
               <DocumentField label="Tip">
@@ -598,14 +664,25 @@ export default function SetariGestiunePage() {
               </DocumentField>
             </div>
 
-            <DocumentField label="Nume">
-              <input
-                value={warehouseForm.name}
-                onChange={(e) => setWarehouseForm((prev) => ({ ...prev, name: e.target.value }))}
-                className={documentInputClass}
-                placeholder="Depozit materii prime"
-              />
-            </DocumentField>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <DocumentField label="Cod">
+                <input
+                  value={warehouseForm.code}
+                  onChange={(e) => setWarehouseForm((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
+                  className={documentInputClass}
+                  placeholder="DEP-MP"
+                />
+              </DocumentField>
+
+              <DocumentField label="Nume">
+                <input
+                  value={warehouseForm.name}
+                  onChange={(e) => setWarehouseForm((prev) => ({ ...prev, name: e.target.value }))}
+                  className={documentInputClass}
+                  placeholder="Depozit materii prime"
+                />
+              </DocumentField>
+            </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <ToggleRow
@@ -627,13 +704,18 @@ export default function SetariGestiunePage() {
               </div>
             </div>
 
-            <button type="button" className={documentButtonPrimaryClass} onClick={saveWarehouse} disabled={savingWarehouse || !selectedLocationId}>
-              <Save size={14} className="mr-1.5" />
-              {savingWarehouse ? "Se salveaza..." : warehouseForm.id ? "Actualizeaza gestiunea" : "Creeaza gestiunea"}
-            </button>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={closeWarehouseModal} className={documentButtonSecondaryClass}>
+                Renunta
+              </button>
+              <button type="button" className={documentButtonPrimaryClass} onClick={saveWarehouse} disabled={savingWarehouse}>
+                <Save size={14} className="mr-1.5" />
+                {savingWarehouse ? "Se salveaza..." : warehouseForm.id ? "Salveaza modificarile" : "Creeaza gestiunea"}
+              </button>
+            </div>
           </div>
-        </DocumentSection>
-      </div>
+        </SettingsModal>
+      ) : null}
     </div>
   )
 }
