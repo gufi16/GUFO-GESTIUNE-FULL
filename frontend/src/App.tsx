@@ -41,6 +41,7 @@ import SetariGestiunePage from "./pages/SetariGestiune"
 import UtilizatoriPage from "./pages/Utilizatori"
 import IstoricActiuniPage from "./pages/IstoricActiuni"
 import Productie from "./pages/Productie"
+import GestiuniPage from "./pages/Gestiuni"
 import Rapoarte from "./pages/Rapoarte"
 import ExportContabilitatePage from "./pages/ExportContabilitate"
 import FinanceReceipts from "./pages/FinanceReceipts"
@@ -136,6 +137,7 @@ export default function App() {
 
         <Route path="/gestiune" element={<RequireModule code="inventory"><Navigate to="/gestiune/stoc" replace /></RequireModule>} />
         <Route path="/gestiune/stoc" element={<RequireModule code="inventory"><Stoc /></RequireModule>} />
+        <Route path="/gestiune/gestiuni" element={<RequireModule code="inventory"><GestiuniPage /></RequireModule>} />
         <Route path="/gestiune/productie" element={<RequireModule code="inventory"><Productie /></RequireModule>} />
         <Route path="/gestiune/inventare" element={<RequireModule code="inventory"><Inventare /></RequireModule>} />
         <Route path="/inregistrare-document/inventar/new" element={<RequireModule code="inventory"><InventarNou /></RequireModule>} />

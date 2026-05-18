@@ -44,6 +44,12 @@ const items = [
     icon: Warehouse,
   },
   {
+    name: "Administrare gestiuni",
+    desc: "Adaugi, editezi si organizezi gestiunile pe fiecare locatie.",
+    route: "/gestiune/gestiuni",
+    icon: Building2,
+  },
+  {
     name: "Utilizatori ERP",
     desc: "Administrezi echipa si setezi PIN-ul de acces folosit in GuFo POS si GuFo KDS.",
     route: "/setari/utilizatori",

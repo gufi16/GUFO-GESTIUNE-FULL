@@ -45,6 +45,7 @@ const sections: SidebarSection[] = [
     title: "Gestiune",
     items: [
       { to: "/gestiune/stoc", label: "Stoc", icon: Warehouse, module: "inventory" },
+      { to: "/gestiune/gestiuni", label: "Gestiuni", icon: Building2, module: "inventory" },
       { to: "/gestiune/productie", label: "Productie", icon: Factory, module: "inventory" },
       { to: "/documente", label: "Documente", icon: FileText, module: "documents" },
     ],
