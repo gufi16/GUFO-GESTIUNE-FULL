@@ -6,6 +6,7 @@ import { Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { assertSufficientStock, decrementStockBalanceStrict, incrementStockBalance } from "../lib/stock"
+import { allocateProductLots } from "../lib/stockLots"
 import { reserveNextNumber } from "../lib/numbering"
 import { resolveTenantCompany } from "../lib/companyResolver"
 import { readAnafHeader } from "../lib/anafHttp"
@@ -133,6 +134,18 @@ function serializeTransferDoc(doc: any) {
         unitPrice: toNumber(item.unitPrice),
         lineValue: toNumber(item.lineValue),
         vatRateValue: toNumber(item.vatRateValue),
+        lotAllocations: Array.isArray(item.lotAllocations)
+          ? item.lotAllocations.map((allocation: any) => ({
+              id: allocation.id,
+              qty: toNumber(allocation.qty),
+              unitCost: toNumber(allocation.unitCost),
+              totalValue: toNumber(allocation.totalValue),
+              lotNo: allocation.lotNo || "-",
+              expiryDate: allocation.expiryDate || null,
+              sourceStockLotId: allocation.sourceStockLotId,
+              destinationStockLotId: allocation.destinationStockLotId || null,
+            }))
+          : [],
         product: serializeProduct(item.product),
         vatRate: item.vatRate
           ? {
@@ -225,6 +238,192 @@ async function recalcTransfer(transferId: string) {
       totalQty: new Prisma.Decimal(totalQty),
       totalValue: new Prisma.Decimal(totalValue)
     }
+  })
+}
+
+async function postTransferDocument(
+  tx: Prisma.TransactionClient,
+  params: {
+    tenantId: string
+    companyId: string
+    doc: any
+    fromLocationName?: string
+    toLocationName?: string
+  }
+) {
+  for (const item of params.doc.items) {
+    const qty = Number(item.qty || 0)
+    const qtyDecimal = new Prisma.Decimal(qty)
+    const product = await tx.product.findFirst({
+      where: { id: item.productId, tenantId: params.tenantId, companyId: params.companyId },
+      include: { uom: true },
+    })
+    const trackLots = Boolean(product?.trackLot || product?.trackExpiry)
+
+    if (trackLots) {
+      const allocations = await allocateProductLots(tx, {
+        tenantId: params.tenantId,
+        companyId: params.companyId,
+        locationId: params.doc.fromLocationId,
+        warehouseId: params.doc.fromWarehouseId || undefined,
+        productId: item.productId,
+        qty: qtyDecimal,
+        costMethod: product?.costMethod || "FIFO",
+        productName: product?.name || "produs",
+        uomCode: product?.uom?.code || null,
+      })
+
+      await decrementStockBalanceStrict(tx, {
+        tenantId: params.tenantId,
+        companyId: params.companyId,
+        locationId: params.doc.fromLocationId,
+        warehouseId: params.doc.fromWarehouseId || undefined,
+        productId: item.productId,
+        qty: qtyDecimal,
+        productName: product?.name || "produs",
+        uomCode: product?.uom?.code || null,
+      })
+
+      await incrementStockBalance(tx, {
+        tenantId: params.tenantId,
+        companyId: params.companyId,
+        locationId: params.doc.toLocationId,
+        warehouseId: params.doc.toWarehouseId || undefined,
+        productId: item.productId,
+        qty: qtyDecimal,
+      })
+
+      for (const allocation of allocations) {
+        const destinationLot = await tx.stockLot.create({
+          data: {
+            tenantId: params.tenantId,
+            companyId: params.companyId,
+            locationId: params.doc.toLocationId,
+            warehouseId: params.doc.toWarehouseId || null,
+            productId: item.productId,
+            lotNo: allocation.lotNo,
+            expiryDate: allocation.expiryDate || null,
+            receivedAt: new Date(),
+            initialQty: allocation.qty,
+            remainingQty: allocation.qty,
+            unitCostNetRon: allocation.unitCost,
+            totalRemainingValue: allocation.totalCost,
+          },
+        })
+
+        await tx.transferDocItemLot.create({
+          data: {
+            transferDocItemId: item.id,
+            sourceStockLotId: allocation.stockLotId,
+            destinationStockLotId: destinationLot.id,
+            qty: allocation.qty,
+            unitCost: allocation.unitCost,
+            totalValue: allocation.totalCost,
+            lotNo: allocation.lotNo,
+            expiryDate: allocation.expiryDate || null,
+          },
+        })
+
+        await tx.stockMove.create({
+          data: {
+            tenantId: params.tenantId,
+            companyId: params.companyId,
+            locationId: params.doc.fromLocationId,
+            warehouseId: params.doc.fromWarehouseId || null,
+            productId: item.productId,
+            lotId: allocation.stockLotId,
+            type: "OUT",
+            qty: allocation.qty,
+            unitCost: allocation.unitCost,
+            totalValue: allocation.totalCost,
+            refType: "TRANSFER",
+            refId: params.doc.id,
+            refItemId: item.id,
+            note: `Nota transfer ${params.doc.docNo} catre ${params.toLocationName || "-"}`,
+          },
+        })
+
+        await tx.stockMove.create({
+          data: {
+            tenantId: params.tenantId,
+            companyId: params.companyId,
+            locationId: params.doc.toLocationId,
+            warehouseId: params.doc.toWarehouseId || null,
+            productId: item.productId,
+            lotId: destinationLot.id,
+            type: "IN",
+            qty: allocation.qty,
+            unitCost: allocation.unitCost,
+            totalValue: allocation.totalCost,
+            refType: "TRANSFER",
+            refId: params.doc.id,
+            refItemId: item.id,
+            note: `Nota transfer ${params.doc.docNo} din ${params.fromLocationName || "-"}`,
+          },
+        })
+      }
+    } else {
+      await decrementStockBalanceStrict(tx, {
+        tenantId: params.tenantId,
+        companyId: params.companyId,
+        locationId: params.doc.fromLocationId,
+        warehouseId: params.doc.fromWarehouseId || undefined,
+        productId: item.productId,
+        qty: qtyDecimal,
+        productName: product?.name || "produs",
+        uomCode: product?.uom?.code || null,
+      })
+
+      await incrementStockBalance(tx, {
+        tenantId: params.tenantId,
+        companyId: params.companyId,
+        locationId: params.doc.toLocationId,
+        warehouseId: params.doc.toWarehouseId || undefined,
+        productId: item.productId,
+        qty: qtyDecimal,
+      })
+
+      await tx.stockMove.create({
+        data: {
+          tenantId: params.tenantId,
+          companyId: params.companyId,
+          locationId: params.doc.fromLocationId,
+          warehouseId: params.doc.fromWarehouseId || null,
+          productId: item.productId,
+          type: "OUT",
+          qty: qtyDecimal,
+          unitCost: new Prisma.Decimal(item.unitPrice || 0),
+          totalValue: new Prisma.Decimal(item.lineValue || 0),
+          refType: "TRANSFER",
+          refId: params.doc.id,
+          refItemId: item.id,
+          note: `Nota transfer ${params.doc.docNo} catre ${params.toLocationName || "-"}`,
+        },
+      })
+
+      await tx.stockMove.create({
+        data: {
+          tenantId: params.tenantId,
+          companyId: params.companyId,
+          locationId: params.doc.toLocationId,
+          warehouseId: params.doc.toWarehouseId || null,
+          productId: item.productId,
+          type: "IN",
+          qty: qtyDecimal,
+          unitCost: new Prisma.Decimal(item.unitPrice || 0),
+          totalValue: new Prisma.Decimal(item.lineValue || 0),
+          refType: "TRANSFER",
+          refId: params.doc.id,
+          refItemId: item.id,
+          note: `Nota transfer ${params.doc.docNo} din ${params.fromLocationName || "-"}`,
+        },
+      })
+    }
+  }
+
+  await tx.transferDoc.update({
+    where: { id: params.doc.id },
+    data: { status: "POSTED" },
   })
 }
 
@@ -841,68 +1040,12 @@ router.post("/api/v1/transfers/:id/post", async (req: AuthedRequest, res) => {
   }
 
   await prisma.$transaction(async (tx) => {
-    for (const item of existing.items) {
-      const qty = Number(item.qty || 0)
-
-      const product = await tx.product.findFirst({
-        where: { id: item.productId, tenantId, companyId },
-        include: { uom: true },
-      })
-
-      await decrementStockBalanceStrict(tx, {
-        tenantId,
-        companyId,
-        locationId: existing.fromLocationId,
-        warehouseId: existing.fromWarehouseId || undefined,
-        productId: item.productId,
-        qty: new Prisma.Decimal(qty),
-        productName: product?.name || "produs",
-        uomCode: product?.uom?.code || null,
-      })
-
-      await incrementStockBalance(tx, {
-        tenantId,
-        companyId,
-        locationId: existing.toLocationId,
-        warehouseId: existing.toWarehouseId || undefined,
-        productId: item.productId,
-        qty: new Prisma.Decimal(qty),
-      })
-
-      await tx.stockMove.create({
-        data: {
-          tenantId,
-          companyId,
-          locationId: existing.fromLocationId,
-          warehouseId: existing.fromWarehouseId || null,
-          productId: item.productId,
-          type: "OUT",
-          qty: new Prisma.Decimal(qty),
-          refType: "TRANSFER",
-          refId: existing.id,
-          note: `Nota transfer ${existing.docNo} catre ${existing.toLocation?.name || "-"}`,
-        },
-      })
-
-      await tx.stockMove.create({
-        data: {
-          tenantId,
-          companyId,
-          locationId: existing.toLocationId,
-          warehouseId: existing.toWarehouseId || null,
-          productId: item.productId,
-          type: "IN",
-          qty: new Prisma.Decimal(qty),
-          refType: "TRANSFER",
-          refId: existing.id,
-          note: `Nota transfer ${existing.docNo} din ${existing.fromLocation?.name || "-"}`,
-        },
-      })
-    }
-
-    await tx.transferDoc.update({
-      where: { id: existing.id },
-      data: { status: "POSTED" },
+    await postTransferDocument(tx, {
+      tenantId,
+      companyId,
+      doc: existing,
+      fromLocationName: existing.fromLocation?.name || "-",
+      toLocationName: existing.toLocation?.name || "-",
     })
   })
 
@@ -918,6 +1061,7 @@ router.post("/api/v1/transfers/:id/post", async (req: AuthedRequest, res) => {
           product: { include: { uom: true, vatRate: true } },
           uom: true,
           vatRate: true,
+          lotAllocations: true,
         },
         orderBy: { createdAt: "asc" },
       },
@@ -1262,75 +1406,19 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
     if (postNow === true) {
       await prisma.$transaction(async (tx) => {
         const doc = await tx.transferDoc.findFirst({
-        where: { id: transferId, tenantId, companyId },
+          where: { id: transferId, tenantId, companyId },
           include: { items: true }
         })
 
         if (!doc) throw new Error("Transferul nu a fost gasit.")
         if (doc.status !== "DRAFT") throw new Error("Doar documentele DRAFT pot fi postate.")
 
-        for (const item of doc.items) {
-          const qty = Number(item.qty || 0)
-
-          const product = await tx.product.findFirst({
-            where: { id: item.productId, tenantId, companyId },
-            include: { uom: true }
-          })
-
-          await decrementStockBalanceStrict(tx, {
-            tenantId,
-            companyId,
-            locationId: doc.fromLocationId,
-            warehouseId: doc.fromWarehouseId || undefined,
-            productId: item.productId,
-            qty: new Prisma.Decimal(qty),
-            productName: product?.name || "produs",
-            uomCode: product?.uom?.code || null
-          })
-
-          await incrementStockBalance(tx, {
-            tenantId,
-            companyId,
-            locationId: doc.toLocationId,
-            warehouseId: doc.toWarehouseId || undefined,
-            productId: item.productId,
-            qty: new Prisma.Decimal(qty)
-          })
-
-          await tx.stockMove.create({
-            data: {
-              tenantId,
-              companyId,
-              locationId: doc.fromLocationId,
-              warehouseId: doc.fromWarehouseId || null,
-              productId: item.productId,
-              type: "OUT",
-              qty: new Prisma.Decimal(qty),
-              refType: "TRANSFER",
-              refId: doc.id,
-              note: `Nota transfer ${doc.docNo} catre ${toLocation.name}`
-            }
-          })
-
-          await tx.stockMove.create({
-            data: {
-              tenantId,
-              companyId,
-              locationId: doc.toLocationId,
-              warehouseId: doc.toWarehouseId || null,
-              productId: item.productId,
-              type: "IN",
-              qty: new Prisma.Decimal(qty),
-              refType: "TRANSFER",
-              refId: doc.id,
-              note: `Nota transfer ${doc.docNo} din ${fromLocation.name}`
-            }
-          })
-        }
-
-        await tx.transferDoc.update({
-          where: { id: doc.id },
-          data: { status: "POSTED" }
+        await postTransferDocument(tx, {
+          tenantId,
+          companyId,
+          doc,
+          fromLocationName: fromLocation.name,
+          toLocationName: toLocation.name,
         })
       })
     }
@@ -1346,7 +1434,8 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
           include: {
             product: { include: { uom: true, vatRate: true } },
             uom: true,
-            vatRate: true
+            vatRate: true,
+            lotAllocations: true,
           },
           orderBy: { createdAt: "asc" }
         }

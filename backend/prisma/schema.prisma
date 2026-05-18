@@ -1111,6 +1111,9 @@ model StockLot {
     sourceReceipt     PurchaseReceipt?     @relation(fields: [sourceReceiptId], references: [id])
     sourceReceiptItem PurchaseReceiptItem? @relation(fields: [sourceReceiptItemId], references: [id])
     stockMoves        StockMove[]
+    consumptionAllocations ConsumptionDocItemLot[] @relation("ConsumptionDocItemLotStockLot")
+    transferSourceAllocations TransferDocItemLot[] @relation("TransferDocItemLotSourceStockLot")
+    transferDestinationAllocations TransferDocItemLot[] @relation("TransferDocItemLotDestinationStockLot")
 
     @@index([tenantId])
     @@index([tenantId, companyId])
@@ -1217,10 +1220,27 @@ model ConsumptionDocItem {
   consumptionDoc  ConsumptionDoc @relation(fields: [consumptionDocId], references: [id], onDelete: Cascade)
   finishedProduct Product?       @relation("ConsumptionFinishedProduct", fields: [finishedProductId], references: [id])
   ingredient      Product        @relation("ConsumptionIngredientProduct", fields: [ingredientId], references: [id])
+  lotAllocations  ConsumptionDocItemLot[]
 
   @@index([consumptionDocId])
   @@index([finishedProductId])
   @@index([ingredientId])
+}
+
+model ConsumptionDocItemLot {
+  id                   String   @id @default(cuid())
+  consumptionDocItemId String
+  stockLotId           String
+  qty                  Decimal
+  unitCost             Decimal  @default(0)
+  totalCost            Decimal  @default(0)
+  createdAt            DateTime @default(now())
+
+  consumptionDocItem ConsumptionDocItem @relation(fields: [consumptionDocItemId], references: [id], onDelete: Cascade)
+  stockLot           StockLot           @relation("ConsumptionDocItemLotStockLot", fields: [stockLotId], references: [id])
+
+  @@index([consumptionDocItemId])
+  @@index([stockLotId])
 }
 
 model ProductionDoc {
@@ -1609,11 +1629,33 @@ model TransferDocItem {
   product  Product     @relation(fields: [productId], references: [id])
   uom      Uom         @relation(fields: [uomId], references: [id])
   vatRate  VatRate?    @relation(fields: [vatRateId], references: [id])
+  lotAllocations TransferDocItemLot[]
 
   @@index([transferId])
   @@index([productId])
   @@index([uomId])
   @@index([vatRateId])
+}
+
+model TransferDocItemLot {
+  id                    String   @id @default(cuid())
+  transferDocItemId     String
+  sourceStockLotId      String
+  destinationStockLotId String?
+  qty                   Decimal
+  unitCost              Decimal  @default(0)
+  totalValue            Decimal  @default(0)
+  lotNo                 String
+  expiryDate            DateTime?
+  createdAt             DateTime @default(now())
+
+  transferDocItem     TransferDocItem @relation(fields: [transferDocItemId], references: [id], onDelete: Cascade)
+  sourceStockLot      StockLot        @relation("TransferDocItemLotSourceStockLot", fields: [sourceStockLotId], references: [id])
+  destinationStockLot StockLot?       @relation("TransferDocItemLotDestinationStockLot", fields: [destinationStockLotId], references: [id])
+
+  @@index([transferDocItemId])
+  @@index([sourceStockLotId])
+  @@index([destinationStockLotId])
 }
 
 model InventoryDoc {

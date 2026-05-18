@@ -15,7 +15,16 @@ type PaginationState = {
   totalPages: number
 }
 
-type StockSection = "location" | "global" | "moves"
+type StockSection = "location" | "global" | "lots" | "moves"
+
+function formatRon(value: number) {
+  return new Intl.NumberFormat("ro-RO", {
+    style: "currency",
+    currency: "RON",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number.isFinite(value) ? value : 0)
+}
 
 export default function StocPage() {
   const navigate = useNavigate()
@@ -32,6 +41,7 @@ export default function StocPage() {
 
   const [stock, setStock] = useState<any[]>([])
   const [globalStock, setGlobalStock] = useState<any[]>([])
+  const [lots, setLots] = useState<any[]>([])
   const [moves, setMoves] = useState<any[]>([])
 
   const [loading, setLoading] = useState(false)
@@ -41,9 +51,11 @@ export default function StocPage() {
   const [movesSearch, setMovesSearch] = useState("")
   const [stockSearch, setStockSearch] = useState("")
   const [globalSearch, setGlobalSearch] = useState("")
+  const [lotSearch, setLotSearch] = useState("")
   const [activeSection, setActiveSection] = useState<StockSection>("location")
   const [locationPage, setLocationPage] = useState(1)
   const [globalPage, setGlobalPage] = useState(1)
+  const [lotPage, setLotPage] = useState(1)
 
   const [fromDate, setFromDate] = useState(
     `${monthStart.getFullYear()}-${`${monthStart.getMonth() + 1}`.padStart(2, "0")}-${`${monthStart.getDate()}`.padStart(2, "0")}`
@@ -105,6 +117,18 @@ export default function StocPage() {
     setGlobalStock(Array.isArray(data.items) ? data.items : [])
   }
 
+  async function loadLots(selectedLocationId?: string) {
+    const qs = new URLSearchParams()
+    if (selectedLocationId) qs.set("locationId", selectedLocationId)
+    if (activeWarehouseId) qs.set("warehouseId", activeWarehouseId)
+    if (lotSearch.trim()) qs.set("q", lotSearch.trim())
+
+    const res = await fetch(`${API}/api/v1/stock/lots${qs.toString() ? `?${qs.toString()}` : ""}`, { headers })
+    const data = await res.json().catch(() => ({}))
+    if (res.status === 401) throw new Error("Token expirat sau invalid. Fa login din nou.")
+    setLots(Array.isArray(data.items) ? data.items : [])
+  }
+
   async function loadMoves(selectedLocationId?: string, selectedPage = pagination.page) {
     setMovesLoading(true)
 
@@ -163,7 +187,7 @@ export default function StocPage() {
     setError("")
 
     try {
-      await Promise.all([loadLocations(), loadGlobalStock(), loadMoves(selectedLocationId, selectedPage), loadWarehouses(selectedLocationId)])
+      await Promise.all([loadLocations(), loadGlobalStock(), loadMoves(selectedLocationId, selectedPage), loadWarehouses(selectedLocationId), loadLots(selectedLocationId)])
 
       if (selectedLocationId) {
         await loadLocationStock(selectedLocationId)
@@ -174,6 +198,7 @@ export default function StocPage() {
       setError(e?.message || "Nu pot incarca stocul.")
       setLocations([])
       setGlobalStock([])
+      setLots([])
       setMoves([])
       setStock([])
       setPagination({ page: 1, limit: 20, total: 0, totalPages: 1 })
@@ -210,13 +235,14 @@ export default function StocPage() {
     setLoading(true)
     setError("")
 
-    Promise.all([loadMoves(locationId, 1), locationId ? loadLocationStock(locationId) : Promise.resolve(setStock([])), loadWarehouses(locationId)])
+    Promise.all([loadMoves(locationId, 1), locationId ? loadLocationStock(locationId) : Promise.resolve(setStock([])), loadWarehouses(locationId), loadLots(locationId)])
       .then(() => {
         setPagination((prev) => ({ ...prev, page: 1 }))
       })
       .catch((e: any) => {
         setError(e?.message || "Nu pot incarca stocul.")
         setMoves([])
+        setLots([])
         setStock([])
       })
       .finally(() => setLoading(false))
@@ -231,6 +257,11 @@ export default function StocPage() {
     if (!token || !locationId) return
     loadLocationStock(locationId).catch((e: any) => setError(e?.message || "Nu pot incarca stocul pe locatie."))
   }, [stockSearch, activeWarehouseId, warehouseEnabled])
+
+  useEffect(() => {
+    if (!token) return
+    loadLots(locationId).catch((e: any) => setError(e?.message || "Nu pot incarca loturile."))
+  }, [lotSearch, locationId, activeWarehouseId, warehouseEnabled])
 
   useEffect(() => {
     if (!token) return
@@ -250,6 +281,7 @@ export default function StocPage() {
 
   const filteredGlobalStock = useMemo(() => globalStock, [globalStock])
   const filteredLocationStock = useMemo(() => stock, [stock])
+  const filteredLots = useMemo(() => lots, [lots])
   const lowStockCount = useMemo(
     () => filteredLocationStock.filter((item) => Number(item?.qty || 0) <= 0).length,
     [filteredLocationStock]
@@ -257,6 +289,7 @@ export default function StocPage() {
 
   const locationTotalPages = Math.max(1, Math.ceil(filteredLocationStock.length / pageSize))
   const globalTotalPages = Math.max(1, Math.ceil(filteredGlobalStock.length / pageSize))
+  const lotTotalPages = Math.max(1, Math.ceil(filteredLots.length / pageSize))
 
   const pagedLocationStock = useMemo(
     () => filteredLocationStock.slice((locationPage - 1) * pageSize, locationPage * pageSize),
@@ -268,6 +301,11 @@ export default function StocPage() {
     [filteredGlobalStock, globalPage]
   )
 
+  const pagedLots = useMemo(
+    () => filteredLots.slice((lotPage - 1) * pageSize, lotPage * pageSize),
+    [filteredLots, lotPage]
+  )
+
   useEffect(() => {
     setLocationPage(1)
   }, [locationId, stockSearch, filteredLocationStock.length])
@@ -275,6 +313,10 @@ export default function StocPage() {
   useEffect(() => {
     setGlobalPage(1)
   }, [globalSearch, filteredGlobalStock.length])
+
+  useEffect(() => {
+    setLotPage(1)
+  }, [lotSearch, filteredLots.length, locationId, activeWarehouseId])
 
   function goToPage(nextPage: number) {
     if (nextPage < 1 || nextPage > pagination.totalPages) return
@@ -336,6 +378,17 @@ export default function StocPage() {
           }`}
         >
           Stoc global
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveSection("lots")}
+          className={`inline-flex items-center gap-1.5 rounded-[14px] px-3 py-1.5 text-[13px] font-semibold transition ${
+            activeSection === "lots"
+              ? "bg-slate-900 text-white"
+              : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+          }`}
+        >
+          Loturi
         </button>
         <button
           type="button"
@@ -456,6 +509,67 @@ export default function StocPage() {
             </>
           )}
         </Section>
+      ) : activeSection === "lots" ? (
+        <Section
+          title="Loturi disponibile"
+          actions={
+            <div className="min-w-[220px] md:w-[320px]">
+              <input
+                value={lotSearch}
+                onChange={(e) => setLotSearch(e.target.value)}
+                placeholder="Cauta dupa produs, SKU sau lot..."
+                style={filterInput}
+              />
+            </div>
+          }
+        >
+          <div style={filterBar}>
+            <span style={infoChip}>{filteredLots.length} loturi</span>
+            {warehouseEnabled ? (
+              <select value={warehouseId} onChange={(e) => handleWarehouseChange(e.target.value)} style={compactSelect}>
+                <option value="">Toate gestiunile</option>
+                {warehouses.map((warehouse) => (
+                  <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>
+                ))}
+              </select>
+            ) : null}
+          </div>
+
+          {filteredLots.length === 0 ? (
+            <Empty text="Nu exista loturi disponibile pentru filtrele selectate." />
+          ) : (
+            <>
+              <Table
+                headers={["Produs", "Lot", "Expira", "Locatie", "Gestiune", "Cant. initiala", "Cant. ramasa", "Cost unitar", "Valoare ramasa"]}
+                rows={pagedLots.map((lot) => [
+                  <div>
+                    <div style={{ fontWeight: 700 }}>{lot.productName}</div>
+                    <div style={{ color: "#64748b", fontSize: 12 }}>{lot.sku || "-"}</div>
+                  </div>,
+                  lot.lotNo,
+                  lot.expiryDate ? new Date(lot.expiryDate).toLocaleDateString("ro-RO") : "-",
+                  lot.locationName || "-",
+                  lot.warehouseName || "-",
+                  `${formatQtyRo(Number(lot.initialQty || 0), 3)} ${lot.uom || ""}`.trim(),
+                  `${formatQtyRo(Number(lot.remainingQty || 0), 3)} ${lot.uom || ""}`.trim(),
+                  formatRon(Number(lot.unitCost || 0)),
+                  formatRon(Number(lot.totalRemainingValue || 0)),
+                ])}
+              />
+              <div style={paginationBar}>
+                <div style={paginationInfo}>
+                  Pagina {lotPage} din {lotTotalPages} • total loturi: {filteredLots.length}
+                </div>
+                <div style={paginationActions}>
+                  <button onClick={() => setLotPage(1)} style={btnSecondarySmall} disabled={lotPage <= 1}>Prima</button>
+                  <button onClick={() => setLotPage((prev) => Math.max(1, prev - 1))} style={btnSecondarySmall} disabled={lotPage <= 1}>Anterioara</button>
+                  <button onClick={() => setLotPage((prev) => Math.min(lotTotalPages, prev + 1))} style={btnSecondarySmall} disabled={lotPage >= lotTotalPages}>Urmatoarea</button>
+                  <button onClick={() => setLotPage(lotTotalPages)} style={btnSecondarySmall} disabled={lotPage >= lotTotalPages}>Ultima</button>
+                </div>
+              </div>
+            </>
+          )}
+        </Section>
       ) : (
         <Section title="Miscari stoc">
           <div style={movesFiltersWrap}>
@@ -506,8 +620,11 @@ export default function StocPage() {
                       <th style={th}>UM</th>
                       <th style={th}>Locatie</th>
                       <th style={th}>Gestiune</th>
+                      <th style={th}>Lot</th>
                       <th style={th}>Tip</th>
                       <th style={th}>Cantitate</th>
+                      <th style={th}>Cost</th>
+                      <th style={th}>Valoare</th>
                       <th style={th}>Document</th>
                     </tr>
                   </thead>
@@ -521,11 +638,23 @@ export default function StocPage() {
                         <td style={td}>{m.locationName}</td>
                         <td style={td}>{m.warehouseName || "-"}</td>
                         <td style={td}>
+                          {m.lotNo ? (
+                            <div>
+                              <div>{m.lotNo}</div>
+                              <div style={{ color: "#64748b", fontSize: 12 }}>
+                                {m.expiryDate ? new Date(m.expiryDate).toLocaleDateString("ro-RO") : "fara expirare"}
+                              </div>
+                            </div>
+                          ) : "-"}
+                        </td>
+                        <td style={td}>
                           <span style={{ ...typeBadge, ...(m.type === "IN" ? typeIn : m.type === "OUT" ? typeOut : typeNeutral) }}>
                             {m.type}
                           </span>
                         </td>
                         <td style={td}>{formatQtyRo(Number(m.qty || 0), 3)}</td>
+                        <td style={td}>{formatRon(Number(m.unitCost || 0))}</td>
+                        <td style={td}>{formatRon(Number(m.totalValue || 0))}</td>
                         <td style={td}>{m.note || `${m.refType || "-"} ${m.refId || ""}`.trim()}</td>
                       </tr>
                     ))}

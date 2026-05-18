@@ -22,6 +22,9 @@ type Product = {
   isSgr?: boolean
   sgrValue?: number
   productionMode?: "AUTO" | "MANUAL"
+  trackLot?: boolean
+  trackExpiry?: boolean
+  costMethod?: "AVG" | "FIFO" | "FEFO"
   forcedInactiveBecauseMissingRecipe?: boolean
   recipe?: {
     id: string
@@ -69,6 +72,9 @@ type FormState = {
   isSgr: boolean
   isFiscalRiskProduct: boolean
   productionMode: "AUTO" | "MANUAL"
+  trackLot: boolean
+  trackExpiry: boolean
+  costMethod: "AVG" | "FIFO" | "FEFO"
 }
 
 type RecipeLine = {
@@ -128,6 +134,12 @@ const PRODUCTION_MODE_LABEL_MAP: Record<string, string> = {
   MANUAL: "Manuala"
 }
 
+const STOCK_COST_METHOD_OPTIONS = [
+  { value: "AVG", label: "Cost mediu" },
+  { value: "FIFO", label: "FIFO" },
+  { value: "FEFO", label: "FEFO" }
+] as const
+
 const emptyForm: FormState = {
   sku: "",
   name: "",
@@ -147,7 +159,10 @@ const emptyForm: FormState = {
   isVisibleInPos: true,
   isSgr: false,
   isFiscalRiskProduct: false,
-  productionMode: "AUTO"
+  productionMode: "AUTO",
+  trackLot: false,
+  trackExpiry: false,
+  costMethod: "AVG"
 }
 
 const emptyRecipeForm: RecipeForm = {
@@ -323,6 +338,9 @@ export default function ProdusePage() {
             costPrice: toNumberSafe(item?.costPrice),
             purchaseFactor: toNumberSafe(item?.purchaseFactor || 1),
             sgrValue: toNumberSafe(item?.sgrValue || 0),
+            trackLot: item?.trackLot === true,
+            trackExpiry: item?.trackExpiry === true,
+            costMethod: item?.costMethod || "AVG",
           }))
         : []
 
@@ -392,7 +410,10 @@ function getDefaultVat(list = vatRates) {
       isVisibleInPos: true,
       isSgr: false,
       isFiscalRiskProduct: false,
-      productionMode: "AUTO"
+      productionMode: "AUTO",
+      trackLot: false,
+      trackExpiry: false,
+      costMethod: "AVG"
     })
     setError("")
     setMessage("")
@@ -423,7 +444,10 @@ function getDefaultVat(list = vatRates) {
       isVisibleInPos: item.isVisibleInPos !== false,
       isSgr: item.isSgr === true,
       isFiscalRiskProduct: item.isFiscalRiskProduct === true,
-      productionMode: item.productionMode === "MANUAL" ? "MANUAL" : "AUTO"
+      productionMode: item.productionMode === "MANUAL" ? "MANUAL" : "AUTO",
+      trackLot: item.trackLot === true,
+      trackExpiry: item.trackExpiry === true,
+      costMethod: item.costMethod === "FEFO" ? "FEFO" : item.costMethod === "FIFO" ? "FIFO" : "AVG"
     })
     setError("")
     setMessage("")
@@ -552,7 +576,10 @@ function getDefaultVat(list = vatRates) {
           isVisibleInPos: form.isVisibleInPos,
           isSgr: form.isSgr,
           isFiscalRiskProduct: form.isFiscalRiskProduct,
-          productionMode: form.productionMode
+          productionMode: form.productionMode,
+          trackLot: form.trackLot,
+          trackExpiry: form.trackExpiry,
+          costMethod: form.costMethod
         })
       })
 
@@ -1024,6 +1051,7 @@ function getDefaultVat(list = vatRates) {
                     <th style={th}>TVA</th>
                     <th style={th}>Pret</th>
                     <th style={th}>Cost / UM</th>
+                    <th style={th}>Lot / FIFO</th>
                     <th style={th}>POS</th>
                     <th style={th}>SGR</th>
                     <th style={th}>Activ</th>
@@ -1065,6 +1093,16 @@ function getDefaultVat(list = vatRates) {
                       </td>
                       <td style={td}>{formatMoney(item.price || 0)}</td>
                       <td style={td}>{formatMoney(item.costPrice || 0)}</td>
+                      <td style={td}>
+                        {item.trackLot ? (
+                          <div style={{ display: "grid", gap: 2 }}>
+                            <span>{item.trackExpiry ? "Lot + expirare" : "Lot"}</span>
+                            <span style={{ color: "#64748b", fontSize: 12 }}>{item.costMethod || "AVG"}</span>
+                          </div>
+                        ) : (
+                          <span style={{ color: "#94a3b8" }}>Standard</span>
+                        )}
+                      </td>
                       <td style={td}>{item.isVisibleInPos !== false ? "Da" : "Nu"}</td>
                       <td style={td}>{item.isSgr ? "Da" : "Nu"}</td>
                       <td style={td}>{item.isActive ? "Da" : "Nu"}</td>
@@ -1450,6 +1488,69 @@ function getDefaultVat(list = vatRates) {
               </div>
 
               <div style={modalSideColumn}>
+                <SectionCard title="Loturi si cost">
+                  <div style={sideStack}>
+                    <div style={checkBlock}>
+                      <label style={checkLabel}>
+                        <input
+                          type="checkbox"
+                          checked={form.trackLot}
+                          onChange={(e) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              trackLot: e.target.checked,
+                              trackExpiry: e.target.checked ? prev.trackExpiry : false,
+                              costMethod: e.target.checked ? prev.costMethod : "AVG",
+                            }))
+                          }
+                        />
+                        <span>Urmareste lot</span>
+                      </label>
+                      <div style={checkHint}>Activeaza loturi distincte pe intrari, consum si transfer.</div>
+                    </div>
+
+                    <div style={checkBlock}>
+                      <label style={checkLabel}>
+                        <input
+                          type="checkbox"
+                          checked={form.trackExpiry}
+                          onChange={(e) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              trackLot: e.target.checked ? true : prev.trackLot,
+                              trackExpiry: e.target.checked,
+                              costMethod: e.target.checked && prev.costMethod === "AVG" ? "FEFO" : prev.costMethod,
+                            }))
+                          }
+                        />
+                        <span>Urmareste expirare</span>
+                      </label>
+                      <div style={checkHint}>Pentru produse cu expirare, sistemul poate consuma FEFO.</div>
+                    </div>
+
+                    <Field label="Metoda cost">
+                      <select
+                        value={form.costMethod}
+                        onChange={(e) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            costMethod: e.target.value as "AVG" | "FIFO" | "FEFO",
+                            trackLot: e.target.value === "AVG" ? prev.trackLot : true,
+                            trackExpiry: e.target.value === "FEFO" ? true : prev.trackExpiry,
+                          }))
+                        }
+                        style={input}
+                      >
+                        {STOCK_COST_METHOD_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                  </div>
+                </SectionCard>
+
                 <SectionCard title="Setari rapide">
                   <div style={sideStack}>
                     <div style={checkBlock}>

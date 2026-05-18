@@ -129,6 +129,15 @@ type ConsumptionDocDetail = {
     unitCost: number
     totalCost: number
     costMethod?: string | null
+    lotAllocations?: Array<{
+      id: string
+      qty: number
+      unitCost: number
+      totalCost: number
+      lotId: string
+      lotNo: string
+      expiryDate?: string | null
+    }>
     currentStock: number
     createdAt: string
     updatedAt: string
@@ -3072,6 +3081,7 @@ export default function Documente() {
                         <tr>
                           <th className="px-3 py-2.5 text-left font-medium">Produs finit</th>
                           <th className="px-3 py-2.5 text-left font-medium">Ingredient</th>
+                          <th className="px-3 py-2.5 text-left font-medium">Loturi</th>
                           <th className="px-3 py-2.5 text-left font-medium">Stoc curent</th>
                           <th className="px-3 py-2.5 text-left font-medium">Cantitate</th>
                           <th className="px-3 py-2.5 text-left font-medium">Cost unitar</th>
@@ -3087,6 +3097,23 @@ export default function Documente() {
                             </td>
                             <td className="px-3 py-2.5 font-semibold text-slate-900">
                               {item.ingredient.name}
+                            </td>
+                            <td className="px-3 py-2.5 text-slate-600">
+                              {item.lotAllocations?.length ? (
+                                <div className="space-y-1">
+                                  {item.lotAllocations.map((allocation) => (
+                                    <div key={allocation.id} className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-1 text-xs">
+                                      <div className="font-semibold text-slate-700">{allocation.lotNo}</div>
+                                      <div className="text-slate-500">
+                                        {formatNumber(allocation.qty)} / {formatRon(allocation.totalCost)}
+                                        {allocation.expiryDate ? ` / exp. ${formatDate(allocation.expiryDate)}` : ""}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                "-"
+                              )}
                             </td>
                             <td className="px-3 py-2.5 text-slate-600">{formatNumber(item.currentStock)}</td>
                             <td className="px-3 py-2.5 text-slate-600">{formatNumber(item.qty)}</td>

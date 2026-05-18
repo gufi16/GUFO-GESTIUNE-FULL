@@ -135,6 +135,68 @@ router.get("/api/v1/stock/by-location", async (req: AuthedRequest, res) => {
   res.json({ ok: true, items })
 })
 
+router.get("/api/v1/stock/lots", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
+  const locationId = String(req.query.locationId || "").trim()
+  const warehouseId = String(req.query.warehouseId || "").trim()
+  const q = String(req.query.q || "").trim().toLowerCase()
+
+  const where: any = { tenantId, companyId }
+  if (locationId) where.locationId = locationId
+  if (warehouseId) where.warehouseId = warehouseId
+
+  const lots = await prisma.stockLot.findMany({
+    where,
+    include: {
+      product: {
+        include: {
+          uom: true,
+        },
+      },
+      location: true,
+      warehouse: true,
+    },
+    orderBy: [{ expiryDate: "asc" }, { receivedAt: "asc" }],
+  })
+
+  const items = lots
+    .filter((lot) => {
+      if (!q) return true
+      const searchBlob = [
+        lot.lotNo,
+        lot.product?.name,
+        lot.product?.sku,
+        lot.location?.name,
+        lot.warehouse?.name,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+      return searchBlob.includes(q)
+    })
+    .map((lot) => ({
+      id: lot.id,
+      productId: lot.productId,
+      productName: lot.product?.name || "",
+      sku: lot.product?.sku || "",
+      uom: lot.product?.uom?.code || "",
+      locationId: lot.locationId,
+      locationName: lot.location?.name || "",
+      warehouseId: lot.warehouseId || "",
+      warehouseName: lot.warehouse?.name || "",
+      lotNo: lot.lotNo,
+      expiryDate: lot.expiryDate,
+      receivedAt: lot.receivedAt,
+      initialQty: Number(lot.initialQty || 0),
+      remainingQty: Number(lot.remainingQty || 0),
+      unitCost: Number(lot.unitCostNetRon || 0),
+      totalRemainingValue: Number(lot.totalRemainingValue || 0),
+    }))
+
+  res.json({ ok: true, items })
+})
+
 // miscari de stoc cu filtru data + paginare
 router.get("/api/v1/stock/moves", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
@@ -188,7 +250,8 @@ router.get("/api/v1/stock/moves", async (req: AuthedRequest, res) => {
           }
         },
         location: true,
-        warehouse: true
+        warehouse: true,
+        lot: true,
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       skip,
@@ -211,7 +274,12 @@ router.get("/api/v1/stock/moves", async (req: AuthedRequest, res) => {
     locationId: m.locationId,
     locationName: m.location?.name ?? "",
     warehouseId: m.warehouseId ?? "",
-    warehouseName: m.warehouse?.name ?? ""
+    warehouseName: m.warehouse?.name ?? "",
+    lotId: m.lotId ?? "",
+    lotNo: m.lot?.lotNo ?? "",
+    expiryDate: m.lot?.expiryDate ?? null,
+    unitCost: Number(m.unitCost ?? 0),
+    totalValue: Number(m.totalValue ?? 0),
   }))
 
   return res.json({

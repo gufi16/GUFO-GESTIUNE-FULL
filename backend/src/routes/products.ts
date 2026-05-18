@@ -51,6 +51,7 @@ router.use(requireAuth)
 const RECIPE_REQUIRED_CLASSES = ["PRODUS_FIN", "SEMIFABRICATE"]
 const RECIPE_INGREDIENT_CLASSES = ["MATERIE_PRIMA", "MARFA", "SEMIFABRICATE"]
 const PRODUCTION_MODE_VALUES = ["AUTO", "MANUAL"]
+const STOCK_COST_METHOD_VALUES = ["AVG", "FIFO", "FEFO"]
 
 const PRODUCT_CLASS_RULES: Record<
   string,
@@ -99,6 +100,11 @@ function normalizeProductionMode(value: any) {
   return PRODUCTION_MODE_VALUES.includes(mode) ? mode : null
 }
 
+function normalizeStockCostMethod(value: any) {
+  const method = String(value || "AVG").trim().toUpperCase()
+  return STOCK_COST_METHOD_VALUES.includes(method) ? method : null
+}
+
 function toNumber(value: any) {
   const normalized = String(value ?? "").replace(/\s/g, "").replace(",", ".").trim()
   if (!normalized) return 0
@@ -117,6 +123,9 @@ function serializeProduct(item: any) {
     netWeightKg: toNumber(item.netWeightKg || 0),
     grossWeightKg: toNumber(item.grossWeightKg || 0),
     sgrValue: toNumber(item.sgrValue || 0),
+    trackLot: item.trackLot === true,
+    trackExpiry: item.trackExpiry === true,
+    costMethod: item.costMethod || "AVG",
     vatRate: item.vatRate
       ? {
           ...item.vatRate,
@@ -299,6 +308,9 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
   const normalizedPurchaseUomId = classValue === "PRODUS_FIN" ? uomId : purchaseUomId
   const normalizedPurchaseFactor = classValue === "PRODUS_FIN" ? 1 : purchaseFactor
   let productionMode = normalizeProductionMode(req.body?.productionMode || "AUTO")
+  const trackLot = Boolean(req.body?.trackLot)
+  const trackExpiry = Boolean(req.body?.trackExpiry)
+  let costMethod = normalizeStockCostMethod(req.body?.costMethod || "AVG")
   const requestedIsActive = req.body?.isActive === undefined ? true : Boolean(req.body?.isActive)
   const requestedVisibleInPos =
     req.body?.isVisibleInPos === undefined ? true : Boolean(req.body?.isVisibleInPos)
@@ -312,6 +324,18 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
 
   if (!productionMode) {
     return res.status(400).json({ ok: false, error: "Mod de productie invalid." })
+  }
+
+  if (!costMethod) {
+    return res.status(400).json({ ok: false, error: "Metoda de cost este invalida." })
+  }
+
+  if (trackExpiry && !trackLot) {
+    return res.status(400).json({ ok: false, error: "Pentru urmarirea expirarii trebuie activata si urmarirea pe lot." })
+  }
+
+  if (costMethod === "FEFO" && !trackExpiry) {
+    return res.status(400).json({ ok: false, error: "FEFO necesita urmarire expirare activa pe produs." })
   }
 
   const { price: normalizedPrice, isVisibleInPos, isSgr } = normalizeProductFlags(classValue, {
@@ -487,6 +511,9 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
           grossWeightKg: requestedIsFiscalRiskProduct ? grossWeightKg : 0,
           price: normalizedPrice,
           costPrice,
+          trackLot,
+          trackExpiry,
+          costMethod: costMethod as any,
           isActive: forcedInactiveBecauseMissingRecipe ? false : requestedIsActive,
           isVisibleInPos,
           isSgr,
@@ -566,6 +593,9 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   const normalizedPurchaseUomId = classValue === "PRODUS_FIN" ? uomId : purchaseUomId
   const normalizedPurchaseFactor = classValue === "PRODUS_FIN" ? 1 : purchaseFactor
   let productionMode = normalizeProductionMode(req.body?.productionMode || "AUTO")
+  const trackLot = Boolean(req.body?.trackLot)
+  const trackExpiry = Boolean(req.body?.trackExpiry)
+  let costMethod = normalizeStockCostMethod(req.body?.costMethod ?? "AVG")
   const requestedIsActive = req.body?.isActive === undefined ? true : Boolean(req.body?.isActive)
   const requestedVisibleInPos =
     req.body?.isVisibleInPos === undefined ? true : Boolean(req.body?.isVisibleInPos)
@@ -579,6 +609,18 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
 
   if (!productionMode) {
     return res.status(400).json({ ok: false, error: "Mod de productie invalid." })
+  }
+
+  if (!costMethod) {
+    return res.status(400).json({ ok: false, error: "Metoda de cost este invalida." })
+  }
+
+  if (trackExpiry && !trackLot) {
+    return res.status(400).json({ ok: false, error: "Pentru urmarirea expirarii trebuie activata si urmarirea pe lot." })
+  }
+
+  if (costMethod === "FEFO" && !trackExpiry) {
+    return res.status(400).json({ ok: false, error: "FEFO necesita urmarire expirare activa pe produs." })
   }
 
   const { price: normalizedPrice, isVisibleInPos, isSgr } = normalizeProductFlags(classValue, {
@@ -632,6 +674,7 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   productionMode = normalizeProductionMode(
     req.body?.productionMode ?? current.productionMode ?? "AUTO"
   )
+  costMethod = normalizeStockCostMethod(req.body?.costMethod ?? current.costMethod ?? "AVG")
 
   const [vatRate, fallbackVatRate, uom, purchaseUom, category, existingRecipe] = await Promise.all([
     vatRateId
@@ -723,6 +766,9 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
         grossWeightKg: requestedIsFiscalRiskProduct ? grossWeightKg : 0,
         price: normalizedPrice,
         costPrice,
+        trackLot,
+        trackExpiry,
+        costMethod: costMethod as any,
         isActive: forcedInactiveBecauseMissingRecipe ? false : requestedIsActive,
         isVisibleInPos,
         isSgr,

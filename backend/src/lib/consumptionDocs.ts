@@ -6,6 +6,7 @@ import {
   decrementStockBalanceStrict,
   incrementStockBalance,
 } from "./stock"
+import { allocateProductLots, restoreLotAllocations } from "./stockLots"
 import { ensureDefaultWarehouseForLocation } from "./warehouse"
 
 function toNumber(value: Prisma.Decimal | number | string | null | undefined) {
@@ -103,6 +104,7 @@ export async function validateConsumptionDoc(
               uom: true,
             },
           },
+          lotAllocations: true,
         },
         orderBy: { createdAt: "asc" },
       },
@@ -118,29 +120,48 @@ export async function validateConsumptionDoc(
   for (const item of doc.items) {
     const qty = new Prisma.Decimal(item.qty)
     const qtyNumber = toNumber(item.qty)
-    const unitCost = Math.max(0, toNumber(item.ingredient?.costPrice))
-    const totalCost = qtyNumber * unitCost
+    const trackLots = Boolean(item.ingredient?.trackLot || item.ingredient?.trackExpiry)
+    const costMethod = trackLots ? item.ingredient?.costMethod || "FIFO" : "AVG"
+    let unitCost = Math.max(0, toNumber(item.ingredient?.costPrice))
+    let totalCost = qtyNumber * unitCost
+    let lotAllocations: any[] = []
 
     if (params.allowNegativeStock) {
       await decrementStockBalanceAllowNegative(tx, {
-        tenantId: params.tenantId,
-      companyId: params.companyId || "",
-      locationId: doc.locationId,
-      warehouseId: doc.warehouseId || undefined,
-      productId: item.ingredientId,
-        qty,
-      })
-    } else {
-      await assertSufficientStock(tx, {
         tenantId: params.tenantId,
         companyId: params.companyId || "",
         locationId: doc.locationId,
         warehouseId: doc.warehouseId || undefined,
         productId: item.ingredientId,
-        requiredQty: qty,
-        productName: item.ingredient?.name || `produs ${item.ingredientId}`,
-        uomCode: item.ingredient?.uom?.code || item.ingredient?.uom?.name || "",
+        qty,
       })
+    } else {
+      if (trackLots) {
+        lotAllocations = await allocateProductLots(tx, {
+          tenantId: params.tenantId,
+          companyId: params.companyId,
+          locationId: doc.locationId,
+          warehouseId: doc.warehouseId || undefined,
+          productId: item.ingredientId,
+          qty,
+          costMethod,
+          productName: item.ingredient?.name || `produs ${item.ingredientId}`,
+          uomCode: item.ingredient?.uom?.code || item.ingredient?.uom?.name || "",
+        })
+        totalCost = lotAllocations.reduce((sum, allocation) => sum + toNumber(allocation.totalCost), 0)
+        unitCost = qtyNumber > 0 ? totalCost / qtyNumber : 0
+      } else {
+        await assertSufficientStock(tx, {
+          tenantId: params.tenantId,
+          companyId: params.companyId || "",
+          locationId: doc.locationId,
+          warehouseId: doc.warehouseId || undefined,
+          productId: item.ingredientId,
+          requiredQty: qty,
+          productName: item.ingredient?.name || `produs ${item.ingredientId}`,
+          uomCode: item.ingredient?.uom?.code || item.ingredient?.uom?.name || "",
+        })
+      }
 
       await decrementStockBalanceStrict(tx, {
         tenantId: params.tenantId,
@@ -159,24 +180,60 @@ export async function validateConsumptionDoc(
       data: {
         unitCost: new Prisma.Decimal(unitCost),
         totalCost: new Prisma.Decimal(totalCost),
-        costMethod: "AVG",
+        costMethod,
       } as any,
     })
 
-    await tx.stockMove.create({
-      data: {
-        tenantId: params.tenantId,
-        companyId: params.companyId,
-        locationId: doc.locationId,
-        warehouseId: doc.warehouseId || null,
-        productId: item.ingredientId,
-        type: "OUT",
-        qty,
-        refType: "CONSUMPTION",
-        refId: doc.id,
-        note: doc.note || `Consum ${doc.docNo}`,
-      } as any,
-    })
+    if (lotAllocations.length) {
+      for (const allocation of lotAllocations) {
+        await tx.consumptionDocItemLot.create({
+          data: {
+            consumptionDocItemId: item.id,
+            stockLotId: allocation.stockLotId,
+            qty: allocation.qty,
+            unitCost: allocation.unitCost,
+            totalCost: allocation.totalCost,
+          },
+        })
+
+        await tx.stockMove.create({
+          data: {
+            tenantId: params.tenantId,
+            companyId: params.companyId,
+            locationId: doc.locationId,
+            warehouseId: doc.warehouseId || null,
+            productId: item.ingredientId,
+            lotId: allocation.stockLotId,
+            type: "OUT",
+            qty: allocation.qty,
+            unitCost: allocation.unitCost,
+            totalValue: allocation.totalCost,
+            refType: "CONSUMPTION",
+            refId: doc.id,
+            refItemId: item.id,
+            note: doc.note || `Consum ${doc.docNo}`,
+          } as any,
+        })
+      }
+    } else {
+      await tx.stockMove.create({
+        data: {
+          tenantId: params.tenantId,
+          companyId: params.companyId,
+          locationId: doc.locationId,
+          warehouseId: doc.warehouseId || null,
+          productId: item.ingredientId,
+          type: "OUT",
+          qty,
+          unitCost: new Prisma.Decimal(unitCost),
+          totalValue: new Prisma.Decimal(totalCost),
+          refType: "CONSUMPTION",
+          refId: doc.id,
+          refItemId: item.id,
+          note: doc.note || `Consum ${doc.docNo}`,
+        } as any,
+      })
+    }
 
     totalValue += totalCost
   }
@@ -215,6 +272,7 @@ export async function cancelConsumptionDoc(
               uom: true,
             },
           },
+          lotAllocations: true,
         },
       },
     },
@@ -235,20 +293,55 @@ export async function cancelConsumptionDoc(
         qty,
       })
 
-      await tx.stockMove.create({
-        data: {
-          tenantId: params.tenantId,
-          companyId: params.companyId,
-          locationId: doc.locationId,
-          warehouseId: doc.warehouseId || null,
-          productId: item.ingredientId,
-          type: "IN",
-          qty,
-          refType: "CONSUMPTION",
-          refId: doc.id,
-          note: `Anulare ${doc.docNo}`,
-        } as any,
-      })
+      if (Array.isArray(item.lotAllocations) && item.lotAllocations.length) {
+        await restoreLotAllocations(
+          tx,
+          item.lotAllocations.map((allocation: any) => ({
+            stockLotId: allocation.stockLotId,
+            qty: allocation.qty,
+            totalCost: allocation.totalCost,
+          }))
+        )
+
+        for (const allocation of item.lotAllocations) {
+          await tx.stockMove.create({
+            data: {
+              tenantId: params.tenantId,
+              companyId: params.companyId,
+              locationId: doc.locationId,
+              warehouseId: doc.warehouseId || null,
+              productId: item.ingredientId,
+              lotId: allocation.stockLotId,
+              type: "IN",
+              qty: allocation.qty,
+              unitCost: allocation.unitCost,
+              totalValue: allocation.totalCost,
+              refType: "CONSUMPTION",
+              refId: doc.id,
+              refItemId: item.id,
+              note: `Anulare ${doc.docNo}`,
+            } as any,
+          })
+        }
+      } else {
+        await tx.stockMove.create({
+          data: {
+            tenantId: params.tenantId,
+            companyId: params.companyId,
+            locationId: doc.locationId,
+            warehouseId: doc.warehouseId || null,
+            productId: item.ingredientId,
+            type: "IN",
+            qty,
+            unitCost: item.unitCost || new Prisma.Decimal(0),
+            totalValue: item.totalCost || new Prisma.Decimal(0),
+            refType: "CONSUMPTION",
+            refId: doc.id,
+            refItemId: item.id,
+            note: `Anulare ${doc.docNo}`,
+          } as any,
+        })
+      }
     }
   }
 
