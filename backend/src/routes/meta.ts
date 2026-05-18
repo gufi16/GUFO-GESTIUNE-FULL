@@ -12,6 +12,8 @@ import { ensureDefaultWarehouseForLocation, ensureDefaultWarehousesForCompany } 
 
 const router = Router()
 
+const WAREHOUSE_TYPES = ["GENERAL", "RAW_MATERIALS", "FINISHED_GOODS", "BAR", "KITCHEN", "PACKAGING"] as const
+
 
 const DEFAULT_UOMS = [
   { code: "buc", name: "Bucata", standardCode: "C62" },
@@ -38,6 +40,11 @@ function buildCompanyScope(companyId: string) {
 function normalizeStandardUomCode(value: any) {
   const text = String(value || "").trim().toUpperCase()
   return text || null
+}
+
+function normalizeWarehouseType(value: any) {
+  const text = String(value || "").trim().toUpperCase()
+  return WAREHOUSE_TYPES.includes(text as (typeof WAREHOUSE_TYPES)[number]) ? text : "GENERAL"
 }
 
 async function buildPreferredCompanyFilter(
@@ -239,6 +246,276 @@ router.get("/api/v1/meta/warehouses", async (req: AuthedRequest, res) => {
   })
 
   res.json({ ok: true, warehouses })
+})
+
+router.post("/api/v1/meta/warehouses", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
+  const locationId = String(req.body?.locationId || "").trim()
+  const code = String(req.body?.code || "").trim().toUpperCase()
+  const name = String(req.body?.name || "").trim()
+  const type = normalizeWarehouseType(req.body?.type)
+  const isDefaultRequested = Boolean(req.body?.isDefault)
+  const isActive = req.body?.isActive === undefined ? true : Boolean(req.body?.isActive)
+
+  if (!locationId) {
+    return res.status(400).json({ ok: false, error: "Locatia este obligatorie." })
+  }
+  if (!code) {
+    return res.status(400).json({ ok: false, error: "Codul gestiunii este obligatoriu." })
+  }
+  if (!name) {
+    return res.status(400).json({ ok: false, error: "Numele gestiunii este obligatoriu." })
+  }
+
+  try {
+    const warehouse = await prisma.$transaction(async (tx) => {
+      const location = await tx.location.findFirst({
+        where: {
+          id: locationId,
+          tenantId,
+          OR: buildCompanyScope(companyId),
+        },
+      })
+
+      if (!location) throw new Error("Locatia selectata nu exista.")
+
+      const duplicate = await tx.warehouse.findFirst({
+        where: {
+          tenantId,
+          locationId,
+          OR: buildCompanyScope(companyId),
+          code,
+        },
+        select: { id: true },
+      })
+
+      if (duplicate) throw new Error("Exista deja o gestiune cu acest cod in locatia aleasa.")
+
+      const existingCount = await tx.warehouse.count({
+        where: {
+          tenantId,
+          locationId,
+          OR: buildCompanyScope(companyId),
+        },
+      })
+
+      const isDefault = isDefaultRequested || existingCount === 0
+
+      if (isDefault) {
+        await tx.warehouse.updateMany({
+          where: {
+            tenantId,
+            locationId,
+            OR: buildCompanyScope(companyId),
+          },
+          data: {
+            isDefault: false,
+          },
+        })
+      }
+
+      return tx.warehouse.create({
+        data: {
+          tenantId,
+          companyId,
+          locationId,
+          code,
+          name,
+          type,
+          isDefault,
+          isActive,
+        },
+        include: {
+          location: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+            },
+          },
+        },
+      })
+    })
+
+    res.json({ ok: true, warehouse })
+  } catch (error: any) {
+    res.status(400).json({
+      ok: false,
+      error: error?.message || "Nu am putut salva gestiunea.",
+    })
+  }
+})
+
+router.put("/api/v1/meta/warehouses/:id", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
+  const id = String(req.params.id || "").trim()
+  const locationId = String(req.body?.locationId || "").trim()
+  const code = String(req.body?.code || "").trim().toUpperCase()
+  const name = String(req.body?.name || "").trim()
+  const type = normalizeWarehouseType(req.body?.type)
+  const isDefaultRequested = Boolean(req.body?.isDefault)
+  const isActive = req.body?.isActive === undefined ? true : Boolean(req.body?.isActive)
+
+  if (!locationId) {
+    return res.status(400).json({ ok: false, error: "Locatia este obligatorie." })
+  }
+  if (!code) {
+    return res.status(400).json({ ok: false, error: "Codul gestiunii este obligatoriu." })
+  }
+  if (!name) {
+    return res.status(400).json({ ok: false, error: "Numele gestiunii este obligatoriu." })
+  }
+
+  try {
+    const warehouse = await prisma.$transaction(async (tx) => {
+      const current = await tx.warehouse.findFirst({
+        where: {
+          id,
+          tenantId,
+          OR: buildCompanyScope(companyId),
+        },
+      })
+
+      if (!current) throw new Error("Gestiunea nu exista.")
+
+      const location = await tx.location.findFirst({
+        where: {
+          id: locationId,
+          tenantId,
+          OR: buildCompanyScope(companyId),
+        },
+      })
+
+      if (!location) throw new Error("Locatia selectata nu exista.")
+
+      const duplicate = await tx.warehouse.findFirst({
+        where: {
+          tenantId,
+          locationId,
+          OR: buildCompanyScope(companyId),
+          code,
+          NOT: { id },
+        },
+        select: { id: true },
+      })
+
+      if (duplicate) throw new Error("Exista deja o gestiune cu acest cod in locatia aleasa.")
+
+      if (isDefaultRequested) {
+        await tx.warehouse.updateMany({
+          where: {
+            tenantId,
+            locationId,
+            OR: buildCompanyScope(companyId),
+          },
+          data: {
+            isDefault: false,
+          },
+        })
+      }
+
+      const updated = await tx.warehouse.update({
+        where: { id },
+        data: {
+          locationId,
+          code,
+          name,
+          type,
+          isDefault: isDefaultRequested,
+          isActive,
+        },
+        include: {
+          location: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+            },
+          },
+        },
+      })
+
+      if (!isDefaultRequested) {
+        const hasDefault = await tx.warehouse.findFirst({
+          where: {
+            tenantId,
+            locationId,
+            OR: buildCompanyScope(companyId),
+            isDefault: true,
+          },
+          select: { id: true },
+        })
+
+        if (!hasDefault) {
+          await tx.warehouse.update({
+            where: { id: updated.id },
+            data: { isDefault: true },
+          })
+          updated.isDefault = true
+        }
+      }
+
+      return updated
+    })
+
+    res.json({ ok: true, warehouse })
+  } catch (error: any) {
+    res.status(400).json({
+      ok: false,
+      error: error?.message || "Nu am putut actualiza gestiunea.",
+    })
+  }
+})
+
+router.delete("/api/v1/meta/warehouses/:id", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
+  const id = String(req.params.id || "").trim()
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      const current = await tx.warehouse.findFirst({
+        where: {
+          id,
+          tenantId,
+          OR: buildCompanyScope(companyId),
+        },
+      })
+
+      if (!current) throw new Error("Gestiunea nu exista.")
+
+      await tx.warehouse.delete({
+        where: { id },
+      })
+
+      if (current.isDefault) {
+        const fallback = await tx.warehouse.findFirst({
+          where: {
+            tenantId,
+            locationId: current.locationId,
+            OR: buildCompanyScope(companyId),
+          },
+          orderBy: [{ isActive: "desc" }, { createdAt: "asc" }],
+        })
+
+        if (fallback) {
+          await tx.warehouse.update({
+            where: { id: fallback.id },
+            data: { isDefault: true },
+          })
+        }
+      }
+    })
+
+    res.json({ ok: true })
+  } catch (error: any) {
+    res.status(400).json({
+      ok: false,
+      error: error?.message || "Gestiunea este folosita si nu poate fi stearsa.",
+    })
+  }
 })
 
 router.get("/api/v1/meta/terminals", async (req: AuthedRequest, res) => {

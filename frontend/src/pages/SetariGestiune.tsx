@@ -1,11 +1,11 @@
-import { LayoutPanelTop, MapPin, RefreshCcw, Save, ScanSearch, ShieldCheck, Warehouse } from "lucide-react"
+import { Building2, CheckCircle2, Pencil, Plus, RefreshCcw, Save, Trash2, Warehouse } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import PageHeader from "../components/PageHeader"
 import {
   DocumentField,
-  DocumentMetric,
   DocumentSection,
   InlineNotice,
+  documentButtonDangerClass,
   documentButtonPrimaryClass,
   documentButtonSecondaryClass,
   documentInputClass,
@@ -21,7 +21,47 @@ type WarehouseConfigForm = {
   warehouseLabel: string
 }
 
-const emptyForm: WarehouseConfigForm = {
+type LocationItem = {
+  id: string
+  name: string
+  code?: string
+}
+
+type WarehouseItem = {
+  id: string
+  locationId: string
+  name: string
+  code: string
+  type: string
+  isDefault: boolean
+  isActive: boolean
+  location?: {
+    id: string
+    name: string
+    code?: string
+  } | null
+}
+
+type WarehouseEditorForm = {
+  id: string
+  locationId: string
+  code: string
+  name: string
+  type: string
+  isDefault: boolean
+  isActive: boolean
+}
+
+const warehouseTypeOptions = [
+  { value: "GENERAL", label: "General" },
+  { value: "RAW_MATERIALS", label: "Materii prime" },
+  { value: "FINISHED_GOODS", label: "Produse finite" },
+  { value: "BAR", label: "Bar" },
+  { value: "KITCHEN", label: "Bucatarie" },
+  { value: "PACKAGING", label: "Ambalaje" },
+]
+
+const emptyConfigForm: WarehouseConfigForm = {
   multiWarehouseEnabled: false,
   warehouseFilterEnabled: false,
   requireWarehouseOnDocuments: false,
@@ -29,73 +69,69 @@ const emptyForm: WarehouseConfigForm = {
   warehouseLabel: "Gestiune",
 }
 
-function ConfigCard({
-  icon,
-  title,
-  description,
+function emptyWarehouseForm(locationId = ""): WarehouseEditorForm {
+  return {
+    id: "",
+    locationId,
+    code: "",
+    name: "",
+    type: "GENERAL",
+    isDefault: false,
+    isActive: true,
+  }
+}
+
+function ToggleRow({
+  label,
   checked,
   disabled,
   onChange,
 }: {
-  icon: React.ReactNode
-  title: string
-  description: string
+  label: string
   checked: boolean
   disabled?: boolean
   onChange: (checked: boolean) => void
 }) {
   return (
     <label
-      className={`rounded-[20px] border bg-white p-4 shadow-sm transition ${
-        disabled ? "cursor-not-allowed border-slate-200 opacity-60" : "cursor-pointer border-slate-200 hover:-translate-y-0.5 hover:shadow-md"
+      className={`flex items-center justify-between gap-4 rounded-[16px] border px-4 py-3 ${
+        disabled ? "border-slate-200 bg-slate-50 opacity-60" : "border-slate-200 bg-white"
       }`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <span className="flex h-10 w-10 items-center justify-center rounded-[14px] bg-blue-50 text-blue-700">
-          {icon}
-        </span>
-
-        <span className="pt-0.5">
-          <input
-            type="checkbox"
-            checked={checked}
-            disabled={disabled}
-            onChange={(e) => onChange(e.target.checked)}
-            className="h-4 w-4"
-          />
-        </span>
-      </div>
-
-      <div className="mt-4">
-        <div className="text-[15px] font-semibold text-slate-900">{title}</div>
-        <div className="mt-2 text-sm leading-6 text-slate-500">{description}</div>
-      </div>
+      <span className="text-sm font-semibold text-slate-800">{label}</span>
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} className="h-4 w-4" />
     </label>
-  )
-}
-
-function PreviewChip({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-[16px] border border-[#E8E3DA] bg-[#FCFBF8] px-3.5 py-3">
-      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</div>
-      <div className="mt-2 text-sm font-semibold text-[#17324D]">{value}</div>
-    </div>
   )
 }
 
 export default function SetariGestiunePage() {
   const token = getToken() || ""
-  const [form, setForm] = useState<WarehouseConfigForm>(emptyForm)
+  const [configForm, setConfigForm] = useState<WarehouseConfigForm>(emptyConfigForm)
+  const [locations, setLocations] = useState<LocationItem[]>([])
+  const [selectedLocationId, setSelectedLocationId] = useState("")
+  const [warehouses, setWarehouses] = useState<WarehouseItem[]>([])
+  const [warehouseForm, setWarehouseForm] = useState<WarehouseEditorForm>(emptyWarehouseForm())
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
+  const [savingConfig, setSavingConfig] = useState(false)
+  const [savingWarehouse, setSavingWarehouse] = useState(false)
+  const [deletingWarehouseId, setDeletingWarehouseId] = useState("")
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
 
   useEffect(() => {
-    void loadSettings()
+    void loadAll()
   }, [])
 
-  async function loadSettings() {
+  useEffect(() => {
+    if (!selectedLocationId) {
+      setWarehouses([])
+      setWarehouseForm(emptyWarehouseForm())
+      return
+    }
+    void loadWarehouses(selectedLocationId)
+  }, [selectedLocationId])
+
+  async function loadAll() {
     if (!token) {
       setError("Nu exista token de autentificare. Fa login din nou.")
       setLoading(false)
@@ -107,48 +143,86 @@ export default function SetariGestiunePage() {
     setMessage("")
 
     try {
-      const res = await fetch(`${API}/api/v1/company/warehouse-config`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok || !data?.ok) {
-        setError(data?.error || "Nu am putut incarca setarile de gestiune.")
-        return
+      const [configRes, locationsRes] = await Promise.all([
+        fetch(`${API}/api/v1/company/warehouse-config`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`${API}/api/v1/meta/locations`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ])
+
+      const configData = await configRes.json().catch(() => ({}))
+      const locationsData = await locationsRes.json().catch(() => ({}))
+
+      if (!configRes.ok || !configData?.ok) {
+        throw new Error(configData?.error || "Nu am putut incarca configurarea.")
+      }
+      if (!locationsRes.ok) {
+        throw new Error(locationsData?.error || "Nu am putut incarca locatiile.")
       }
 
-      const nextForm = {
-        multiWarehouseEnabled: Boolean(data?.settings?.multiWarehouseEnabled),
-        warehouseFilterEnabled: Boolean(data?.settings?.warehouseFilterEnabled),
-        requireWarehouseOnDocuments: Boolean(data?.settings?.requireWarehouseOnDocuments),
-        autoSelectSingleWarehouse: data?.settings?.autoSelectSingleWarehouse !== false,
-        warehouseLabel: String(data?.settings?.warehouseLabel || "Gestiune"),
+      const nextConfig = {
+        multiWarehouseEnabled: Boolean(configData?.settings?.multiWarehouseEnabled),
+        warehouseFilterEnabled: Boolean(configData?.settings?.warehouseFilterEnabled),
+        requireWarehouseOnDocuments: Boolean(configData?.settings?.requireWarehouseOnDocuments),
+        autoSelectSingleWarehouse: configData?.settings?.autoSelectSingleWarehouse !== false,
+        warehouseLabel: String(configData?.settings?.warehouseLabel || "Gestiune"),
       }
 
-      setForm(nextForm)
-      persistWarehouseConfig(nextForm)
-    } catch {
-      setError("Nu am putut incarca setarile de gestiune.")
+      const nextLocations = Array.isArray(locationsData?.locations) ? locationsData.locations : []
+
+      setConfigForm(nextConfig)
+      persistWarehouseConfig(nextConfig)
+      setLocations(nextLocations)
+      setSelectedLocationId((current) => current || nextLocations[0]?.id || "")
+      if (!nextLocations.length) {
+        setWarehouseForm(emptyWarehouseForm())
+      }
+    } catch (e: any) {
+      setError(e?.message || "Nu am putut incarca configurarea.")
     } finally {
       setLoading(false)
     }
   }
 
-  async function saveSettings() {
-    if (!token) {
-      setError("Nu exista token de autentificare. Fa login din nou.")
-      return
-    }
+  async function loadWarehouses(locationId: string) {
+    if (!token || !locationId) return
 
-    setSaving(true)
+    try {
+      const res = await fetch(`${API}/api/v1/meta/warehouses?locationId=${encodeURIComponent(locationId)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Nu am putut incarca gestiunile.")
+      }
+
+      const items = Array.isArray(data?.warehouses) ? data.warehouses : []
+      setWarehouses(items)
+      setWarehouseForm((current) => {
+        if (!current.locationId || current.locationId !== locationId) {
+          return emptyWarehouseForm(locationId)
+        }
+        return current
+      })
+    } catch (e: any) {
+      setWarehouses([])
+      setError(e?.message || "Nu am putut incarca gestiunile.")
+    }
+  }
+
+  async function saveConfig() {
+    if (!token) return
+
+    setSavingConfig(true)
     setError("")
     setMessage("")
 
     try {
       const payload = {
-        ...form,
-        warehouseLabel: String(form.warehouseLabel || "Gestiune").trim() || "Gestiune",
+        ...configForm,
+        warehouseLabel: String(configForm.warehouseLabel || "Gestiune").trim() || "Gestiune",
       }
 
       const res = await fetch(`${API}/api/v1/company/warehouse-config`, {
@@ -161,11 +235,10 @@ export default function SetariGestiunePage() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data?.ok) {
-        setError(data?.error || "Nu am putut salva setarile de gestiune.")
-        return
+        throw new Error(data?.error || "Nu am putut salva configurarea.")
       }
 
-      const nextForm = {
+      const nextConfig = {
         multiWarehouseEnabled: Boolean(data?.settings?.multiWarehouseEnabled),
         warehouseFilterEnabled: Boolean(data?.settings?.warehouseFilterEnabled),
         requireWarehouseOnDocuments: Boolean(data?.settings?.requireWarehouseOnDocuments),
@@ -173,175 +246,394 @@ export default function SetariGestiunePage() {
         warehouseLabel: String(data?.settings?.warehouseLabel || "Gestiune"),
       }
 
-      setForm(nextForm)
-      persistWarehouseConfig(nextForm)
-      setMessage("Configurarea de gestiune a fost salvata.")
-    } catch {
-      setError("Nu am putut salva setarile de gestiune.")
+      setConfigForm(nextConfig)
+      persistWarehouseConfig(nextConfig)
+      setMessage("Configurarea a fost salvata.")
+    } catch (e: any) {
+      setError(e?.message || "Nu am putut salva configurarea.")
     } finally {
-      setSaving(false)
+      setSavingConfig(false)
     }
   }
 
-  function update<K extends keyof WarehouseConfigForm>(key: K, value: WarehouseConfigForm[K]) {
-    setForm((current) => ({ ...current, [key]: value }))
+  async function saveWarehouse() {
+    if (!token) return
+    if (!warehouseForm.locationId) {
+      setError("Selecteaza locatia.")
+      return
+    }
+    if (!warehouseForm.code.trim()) {
+      setError("Codul gestiunii este obligatoriu.")
+      return
+    }
+    if (!warehouseForm.name.trim()) {
+      setError("Numele gestiunii este obligatoriu.")
+      return
+    }
+
+    setSavingWarehouse(true)
+    setError("")
+    setMessage("")
+
+    try {
+      const method = warehouseForm.id ? "PUT" : "POST"
+      const path = warehouseForm.id
+        ? `${API}/api/v1/meta/warehouses/${encodeURIComponent(warehouseForm.id)}`
+        : `${API}/api/v1/meta/warehouses`
+
+      const res = await fetch(path, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          locationId: warehouseForm.locationId,
+          code: warehouseForm.code.trim().toUpperCase(),
+          name: warehouseForm.name.trim(),
+          type: warehouseForm.type,
+          isDefault: warehouseForm.isDefault,
+          isActive: warehouseForm.isActive,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Nu am putut salva gestiunea.")
+      }
+
+      setMessage(warehouseForm.id ? "Gestiunea a fost actualizata." : "Gestiunea a fost creata.")
+      await loadWarehouses(warehouseForm.locationId)
+      setWarehouseForm(emptyWarehouseForm(warehouseForm.locationId))
+    } catch (e: any) {
+      setError(e?.message || "Nu am putut salva gestiunea.")
+    } finally {
+      setSavingWarehouse(false)
+    }
   }
 
-  const previewMode = form.multiWarehouseEnabled ? "Multi-gestiune" : "Gestiune simpla"
-  const previewTopbar = form.multiWarehouseEnabled && form.warehouseFilterEnabled ? "Selector activ in topbar" : "Fara selector global"
-  const previewDocuments = form.multiWarehouseEnabled
-    ? form.requireWarehouseOnDocuments
-      ? `${form.warehouseLabel} obligatorie pe documente`
-      : `${form.warehouseLabel} optionala pe documente`
-    : "Documente fara selectie de gestiune"
+  async function deleteWarehouse(warehouse: WarehouseItem) {
+    if (!token) return
+    const confirmed = typeof window === "undefined" ? true : window.confirm(`Stergi gestiunea ${warehouse.name}?`)
+    if (!confirmed) return
 
-  const operationalSummary = useMemo(() => {
-    if (!form.multiWarehouseEnabled) {
-      return "Clientul lucreaza simplu: o singura structura per locatie, fara selectie suplimentara in documente."
+    setDeletingWarehouseId(warehouse.id)
+    setError("")
+    setMessage("")
+
+    try {
+      const res = await fetch(`${API}/api/v1/meta/warehouses/${encodeURIComponent(warehouse.id)}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Nu am putut sterge gestiunea.")
+      }
+
+      setMessage("Gestiunea a fost stearsa.")
+      await loadWarehouses(warehouse.locationId)
+      setWarehouseForm((current) => (current.id === warehouse.id ? emptyWarehouseForm(warehouse.locationId) : current))
+    } catch (e: any) {
+      setError(e?.message || "Nu am putut sterge gestiunea.")
+    } finally {
+      setDeletingWarehouseId("")
     }
+  }
 
-    if (form.requireWarehouseOnDocuments) {
-      return `Clientul lucreaza controlat: selecteaza explicit ${form.warehouseLabel.toLowerCase()}a pe documente, iar filtrul global poate ghida intreaga navigare.`
-    }
+  function editWarehouse(warehouse: WarehouseItem) {
+    setWarehouseForm({
+      id: warehouse.id,
+      locationId: warehouse.locationId,
+      code: warehouse.code || "",
+      name: warehouse.name || "",
+      type: warehouse.type || "GENERAL",
+      isDefault: Boolean(warehouse.isDefault),
+      isActive: Boolean(warehouse.isActive),
+    })
+  }
 
-    return `Clientul lucreaza flexibil: foloseste ${form.warehouseLabel.toLowerCase()}a unde are nevoie, dar fara sa blochezi fluxurile simple.`
-  }, [form])
+  function resetWarehouseEditor() {
+    setWarehouseForm(emptyWarehouseForm(selectedLocationId))
+  }
+
+  const locationName = useMemo(
+    () => locations.find((location) => location.id === selectedLocationId)?.name || "Locatie",
+    [locations, selectedLocationId],
+  )
+
+  const defaultWarehouse = warehouses.find((warehouse) => warehouse.isDefault)
 
   return (
     <div className="space-y-3">
-      <PageHeader
-        badge="configurare"
-        title="Configurare gestiune"
-        subtitle="Activezi modul de lucru cu gestiuni si controlezi cum se vede in ERP pentru client."
-      />
-
-      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-4">
-        <DocumentMetric title="Mod de lucru" value={previewMode} tone="blue" />
-        <DocumentMetric title="Filtru global" value={form.warehouseFilterEnabled ? "Activ" : "Oprit"} tone="slate" />
-        <DocumentMetric title="Regula documente" value={form.requireWarehouseOnDocuments ? "Obligatorie" : "Flexibila"} tone="emerald" />
-        <DocumentMetric title="Eticheta ERP" value={form.warehouseLabel || "Gestiune"} tone="amber" />
-      </div>
+      <PageHeader badge="configurare" title="Configurare gestiune" />
 
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
 
       <DocumentSection
-        title="Mod de lucru"
-        description="Alegi daca firma lucreaza simplu, doar pe locatie, sau cu gestiuni separate in interiorul fiecarei locatii."
+        title="Setari generale"
         actions={
           <>
-            <button type="button" className={documentButtonSecondaryClass} onClick={loadSettings} disabled={loading || saving}>
+            <button type="button" className={documentButtonSecondaryClass} onClick={loadAll} disabled={loading || savingConfig}>
               <RefreshCcw size={14} className="mr-1.5" />
               Reincarca
             </button>
-            <button type="button" className={documentButtonPrimaryClass} onClick={saveSettings} disabled={loading || saving}>
+            <button type="button" className={documentButtonPrimaryClass} onClick={saveConfig} disabled={loading || savingConfig}>
               <Save size={14} className="mr-1.5" />
-              {saving ? "Se salveaza..." : "Salveaza"}
+              {savingConfig ? "Se salveaza..." : "Salveaza"}
             </button>
           </>
         }
       >
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-          <ConfigCard
-            icon={<Warehouse size={20} />}
-            title="Activeaza multi-gestiune"
-            description="Fiecare locatie poate avea mai multe gestiuni: depozit, bar, bucatarie, marfa POS sau alte zone interne."
-            checked={form.multiWarehouseEnabled}
-            onChange={(checked) => update("multiWarehouseEnabled", checked)}
-          />
-
-          <ConfigCard
-            icon={<LayoutPanelTop size={20} />}
-            title="Arata selector global in topbar"
-            description="Pune selectorul de gestiune sus, langa locatia activa, pentru filtrare rapida in ecranele importante."
-            checked={form.warehouseFilterEnabled}
-            disabled={!form.multiWarehouseEnabled}
-            onChange={(checked) => update("warehouseFilterEnabled", checked)}
-          />
-
-          <ConfigCard
-            icon={<ShieldCheck size={20} />}
-            title="Fa gestiunea obligatorie pe documente"
-            description="Cere selectie explicita pe NIR, bon consum si alte documente unde este important sa stii clar din ce gestiune intri sau scazi."
-            checked={form.requireWarehouseOnDocuments}
-            disabled={!form.multiWarehouseEnabled}
-            onChange={(checked) => update("requireWarehouseOnDocuments", checked)}
-          />
-
-          <ConfigCard
-            icon={<ScanSearch size={20} />}
-            title="Auto-selecteaza singura gestiune disponibila"
-            description="Daca o locatie are o singura gestiune, sistemul o selecteaza automat ca sa pastreze fluxul rapid si curat."
-            checked={form.autoSelectSingleWarehouse}
-            disabled={!form.multiWarehouseEnabled}
-            onChange={(checked) => update("autoSelectSingleWarehouse", checked)}
-          />
-        </div>
-      </DocumentSection>
-
-      <DocumentSection
-        title="Afisare in ERP"
-        description="Poti folosi o eticheta mai potrivita pentru client, fara sa schimbi logica interna."
-      >
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,280px)_1fr]">
-          <DocumentField label="Eticheta folosita in ERP">
-            <input
-              value={form.warehouseLabel}
-              onChange={(e) => update("warehouseLabel", e.target.value)}
-              className={documentInputClass}
-              placeholder="Gestiune"
-              maxLength={32}
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_280px]">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <ToggleRow
+              label="Multi-gestiune"
+              checked={configForm.multiWarehouseEnabled}
+              onChange={(checked) => setConfigForm((prev) => ({ ...prev, multiWarehouseEnabled: checked }))}
             />
-          </DocumentField>
+            <ToggleRow
+              label="Selector in topbar"
+              checked={configForm.warehouseFilterEnabled}
+              disabled={!configForm.multiWarehouseEnabled}
+              onChange={(checked) => setConfigForm((prev) => ({ ...prev, warehouseFilterEnabled: checked }))}
+            />
+            <ToggleRow
+              label="Gestiune obligatorie pe documente"
+              checked={configForm.requireWarehouseOnDocuments}
+              disabled={!configForm.multiWarehouseEnabled}
+              onChange={(checked) => setConfigForm((prev) => ({ ...prev, requireWarehouseOnDocuments: checked }))}
+            />
+            <ToggleRow
+              label="Auto-select pentru gestiune unica"
+              checked={configForm.autoSelectSingleWarehouse}
+              disabled={!configForm.multiWarehouseEnabled}
+              onChange={(checked) => setConfigForm((prev) => ({ ...prev, autoSelectSingleWarehouse: checked }))}
+            />
+          </div>
 
-          <div className="rounded-[20px] border border-[#E8E3DA] bg-[#FCFBF8] p-4">
-            <div className="flex items-start gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-[14px] bg-white text-[#17324D] shadow-sm">
-                <MapPin size={18} />
-              </span>
-              <div>
-                <div className="text-[15px] font-semibold text-slate-900">Cum se vede pentru client</div>
-                <div className="mt-2 text-sm leading-6 text-slate-500">
-                  Locatie = punctul mare de lucru. {form.warehouseLabel || "Gestiune"} = zona interna din locatie.
-                </div>
-                <div className="mt-3 text-sm text-slate-700">
-                  Exemple bune: <span className="font-semibold">Gestiune</span>, <span className="font-semibold">Depozit</span>, <span className="font-semibold">Sectie</span>, <span className="font-semibold">Flux intern</span>.
-                </div>
+          <div className="rounded-[18px] border border-slate-200 bg-slate-50 p-4">
+            <DocumentField label="Eticheta">
+              <input
+                value={configForm.warehouseLabel}
+                onChange={(e) => setConfigForm((prev) => ({ ...prev, warehouseLabel: e.target.value }))}
+                className={documentInputClass}
+                placeholder="Gestiune"
+                maxLength={32}
+              />
+            </DocumentField>
+
+            <div className="mt-4 grid grid-cols-1 gap-2">
+              <div className="rounded-[14px] border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700">
+                Mod: <span className="text-[#17324D]">{configForm.multiWarehouseEnabled ? "Multi-gestiune" : "Simplu"}</span>
+              </div>
+              <div className="rounded-[14px] border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700">
+                Filtru global: <span className="text-[#17324D]">{configForm.warehouseFilterEnabled ? "Activ" : "Oprit"}</span>
+              </div>
+              <div className="rounded-[14px] border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700">
+                Eticheta: <span className="text-[#17324D]">{configForm.warehouseLabel || "Gestiune"}</span>
               </div>
             </div>
           </div>
         </div>
       </DocumentSection>
 
-      <DocumentSection
-        title="Preview operational"
-        description="Rezumatul de mai jos il ajuta pe client sa inteleaga imediat cum va lucra dupa salvare."
-      >
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-          <PreviewChip label="Topbar" value={previewTopbar} />
-          <PreviewChip label="Documente" value={previewDocuments} />
-          <PreviewChip label="Comportament" value={form.autoSelectSingleWarehouse ? "Selectie automata cand exista una singura" : "Selectie manuala in toate cazurile"} />
-        </div>
-
-        <div className="mt-4 rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="text-[15px] font-semibold text-slate-900">Recomandare practica</div>
-          <div className="mt-2 text-sm leading-6 text-slate-600">{operationalSummary}</div>
-          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-            <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-600">
-              <div className="font-semibold text-slate-900">Locatie</div>
-              <div className="mt-1">Restaurant, magazin, punct de lucru.</div>
+      <DocumentSection title="Locatii">
+        <div className="flex flex-wrap gap-2">
+          {locations.map((location) => {
+            const active = location.id === selectedLocationId
+            return (
+              <button
+                key={location.id}
+                type="button"
+                onClick={() => {
+                  setSelectedLocationId(location.id)
+                  setWarehouseForm(emptyWarehouseForm(location.id))
+                }}
+                className={`inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-semibold transition ${
+                  active ? "bg-[#17324D] text-white" : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                <Building2 size={14} />
+                {location.code ? `${location.name} (${location.code})` : location.name}
+              </button>
+            )
+          })}
+          {!locations.length ? (
+            <div className="rounded-[16px] border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+              Nu exista locatii disponibile.
             </div>
-            <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-600">
-              <div className="font-semibold text-slate-900">{form.warehouseLabel || "Gestiune"}</div>
-              <div className="mt-1">Depozit materii prime, bar, bucatarie, marfa POS.</div>
-            </div>
-            <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-600">
-              <div className="font-semibold text-slate-900">Produs</div>
-              <div className="mt-1">Nu se leaga de o singura gestiune. Stocul exista pe documente si pe gestiuni.</div>
-            </div>
-          </div>
+          ) : null}
         </div>
       </DocumentSection>
+
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.4fr)_380px]">
+        <DocumentSection
+          title={`Gestiuni - ${locationName}`}
+          actions={
+            <>
+              <button type="button" className={documentButtonSecondaryClass} onClick={() => selectedLocationId && loadWarehouses(selectedLocationId)} disabled={!selectedLocationId}>
+                <RefreshCcw size={14} className="mr-1.5" />
+                Reincarca
+              </button>
+              <button type="button" className={documentButtonPrimaryClass} onClick={resetWarehouseEditor} disabled={!selectedLocationId}>
+                <Plus size={14} className="mr-1.5" />
+                Adauga gestiune
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-2.5">
+            {!warehouses.length ? (
+              <div className="rounded-[18px] border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                Nu exista gestiuni pe locatia selectata.
+              </div>
+            ) : (
+              warehouses.map((warehouse) => (
+                <div key={warehouse.id} className="rounded-[18px] border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="text-[15px] font-semibold text-slate-900">{warehouse.name}</div>
+                        {warehouse.isDefault ? (
+                          <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">
+                            Default
+                          </span>
+                        ) : null}
+                        {!warehouse.isActive ? (
+                          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600">
+                            Inactiva
+                          </span>
+                        ) : null}
+                      </div>
+
+                      <div className="mt-2 grid grid-cols-1 gap-2 text-sm text-slate-500 md:grid-cols-3">
+                        <div className="rounded-[14px] bg-slate-50 px-3 py-2">
+                          <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Cod</div>
+                          <div className="mt-1 font-semibold text-slate-700">{warehouse.code}</div>
+                        </div>
+                        <div className="rounded-[14px] bg-slate-50 px-3 py-2">
+                          <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Tip</div>
+                          <div className="mt-1 font-semibold text-slate-700">
+                            {warehouseTypeOptions.find((option) => option.value === warehouse.type)?.label || warehouse.type}
+                          </div>
+                        </div>
+                        <div className="rounded-[14px] bg-slate-50 px-3 py-2">
+                          <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Status</div>
+                          <div className="mt-1 font-semibold text-slate-700">{warehouse.isActive ? "Activa" : "Inactiva"}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" className={documentButtonSecondaryClass} onClick={() => editWarehouse(warehouse)}>
+                        <Pencil size={14} className="mr-1.5" />
+                        Editeaza
+                      </button>
+                      <button
+                        type="button"
+                        className={documentButtonDangerClass}
+                        onClick={() => deleteWarehouse(warehouse)}
+                        disabled={deletingWarehouseId === warehouse.id}
+                      >
+                        <Trash2 size={14} className="mr-1.5" />
+                        {deletingWarehouseId === warehouse.id ? "Se sterge..." : "Sterge"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </DocumentSection>
+
+        <DocumentSection
+          title={warehouseForm.id ? "Editare gestiune" : "Gestiune noua"}
+          actions={
+            <button type="button" className={documentButtonSecondaryClass} onClick={resetWarehouseEditor} disabled={!selectedLocationId}>
+              Reset
+            </button>
+          }
+        >
+          <div className="space-y-3">
+            <DocumentField label="Locatie">
+              <select
+                value={warehouseForm.locationId}
+                onChange={(e) => setWarehouseForm((prev) => ({ ...prev, locationId: e.target.value }))}
+                className={documentInputClass}
+              >
+                <option value="">Selecteaza locatia</option>
+                {locations.map((location) => (
+                  <option key={location.id} value={location.id}>
+                    {location.code ? `${location.name} (${location.code})` : location.name}
+                  </option>
+                ))}
+              </select>
+            </DocumentField>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <DocumentField label="Cod">
+                <input
+                  value={warehouseForm.code}
+                  onChange={(e) => setWarehouseForm((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
+                  className={documentInputClass}
+                  placeholder="DEP-MP"
+                />
+              </DocumentField>
+
+              <DocumentField label="Tip">
+                <select
+                  value={warehouseForm.type}
+                  onChange={(e) => setWarehouseForm((prev) => ({ ...prev, type: e.target.value }))}
+                  className={documentInputClass}
+                >
+                  {warehouseTypeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </DocumentField>
+            </div>
+
+            <DocumentField label="Nume">
+              <input
+                value={warehouseForm.name}
+                onChange={(e) => setWarehouseForm((prev) => ({ ...prev, name: e.target.value }))}
+                className={documentInputClass}
+                placeholder="Depozit materii prime"
+              />
+            </DocumentField>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <ToggleRow
+                label="Seteaza ca default"
+                checked={warehouseForm.isDefault}
+                onChange={(checked) => setWarehouseForm((prev) => ({ ...prev, isDefault: checked }))}
+              />
+              <ToggleRow
+                label="Gestiune activa"
+                checked={warehouseForm.isActive}
+                onChange={(checked) => setWarehouseForm((prev) => ({ ...prev, isActive: checked }))}
+              />
+            </div>
+
+            <div className="rounded-[18px] border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                <CheckCircle2 size={16} className="text-emerald-600" />
+                Default curent: {defaultWarehouse?.name || "-"}
+              </div>
+            </div>
+
+            <button type="button" className={documentButtonPrimaryClass} onClick={saveWarehouse} disabled={savingWarehouse || !selectedLocationId}>
+              <Save size={14} className="mr-1.5" />
+              {savingWarehouse ? "Se salveaza..." : warehouseForm.id ? "Actualizeaza gestiunea" : "Creeaza gestiunea"}
+            </button>
+          </div>
+        </DocumentSection>
+      </div>
     </div>
   )
 }
