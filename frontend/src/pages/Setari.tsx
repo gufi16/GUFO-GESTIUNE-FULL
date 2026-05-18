@@ -39,13 +39,13 @@ const items = [
   },
   {
     name: "Configurare gestiune",
-    desc: "Activezi multi-gestiune, filtrele globale si regulile de lucru pentru documente si stoc.",
+    desc: "Setezi regulile de lucru, filtrele si etichetele folosite pentru gestiune in ERP.",
     route: "/setari/gestiune",
     icon: Warehouse,
   },
   {
-    name: "Administrare gestiuni",
-    desc: "Adaugi, editezi si organizezi gestiunile pe fiecare locatie.",
+    name: "Gestiuni",
+    desc: "Administrezi efectiv gestiunile pe fiecare locatie: adaugare, editare, default si status.",
     route: "/gestiune/gestiuni",
     icon: Building2,
   },
