@@ -16,6 +16,8 @@ import {
 } from "../components/DocumentUi"
 import { API_BASE as API, getToken } from "../lib/api"
 import { getActiveLocationId, setActiveLocationId, subscribeToActiveLocation } from "../lib/location"
+import { getActiveWarehouseId, setActiveWarehouseId, subscribeToActiveWarehouse } from "../lib/warehouse"
+import { getWarehouseConfig, subscribeToWarehouseConfig, type WarehouseConfig } from "../lib/warehouseConfig"
 
 type LocationOption = {
   id: string
@@ -139,7 +141,8 @@ export default function BonConsumNou() {
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [warehouses, setWarehouses] = useState<WarehouseOption[]>([])
   const [locationId, setLocationIdState] = useState(getActiveLocationId())
-  const [warehouseId, setWarehouseId] = useState("")
+  const [warehouseId, setWarehouseId] = useState(getActiveWarehouseId())
+  const [warehouseConfig, setWarehouseConfig] = useState<WarehouseConfig>(getWarehouseConfig())
   const [docNo, setDocNo] = useState("")
   const [docStatus, setDocStatus] = useState("DRAFT")
   const [docDate, setDocDate] = useState(() => new Date().toISOString().slice(0, 10))
@@ -167,17 +170,30 @@ export default function BonConsumNou() {
   }, [editingId])
 
   useEffect(() => {
+    return subscribeToActiveWarehouse((nextWarehouseId) => {
+      setWarehouseId(nextWarehouseId)
+    })
+  }, [])
+
+  useEffect(() => {
+    return subscribeToWarehouseConfig((nextConfig) => {
+      setWarehouseConfig(nextConfig)
+    })
+  }, [])
+
+  useEffect(() => {
     if (locationId) loadStockForLocation(locationId)
   }, [locationId])
 
   useEffect(() => {
-    if (locationId) {
+    if (locationId && warehouseConfig.multiWarehouseEnabled) {
       loadWarehouses(locationId)
     } else {
       setWarehouses([])
       setWarehouseId("")
+      setActiveWarehouseId("")
     }
-  }, [locationId])
+  }, [locationId, warehouseConfig.multiWarehouseEnabled])
 
   async function loadLocations() {
     try {
@@ -223,8 +239,10 @@ export default function BonConsumNou() {
       const normalized = normalizeWarehouses(json)
       setWarehouses(normalized)
       setWarehouseId((current) => {
+        const globalWarehouseId = getActiveWarehouseId()
         if (current && normalized.some((warehouse) => warehouse.id === current)) return current
-        return normalized[0]?.id || ""
+        if (globalWarehouseId && normalized.some((warehouse) => warehouse.id === globalWarehouseId)) return globalWarehouseId
+        return warehouseConfig.autoSelectSingleWarehouse ? normalized[0]?.id || "" : ""
       })
     } catch {
       setWarehouses([])
@@ -287,6 +305,15 @@ export default function BonConsumNou() {
   function setLocation(nextLocationId: string) {
     setLocationIdState(nextLocationId)
     setActiveLocationId(nextLocationId)
+    if (!warehouseConfig.multiWarehouseEnabled) {
+      setWarehouseId("")
+      setActiveWarehouseId("")
+    }
+  }
+
+  function setWarehouse(nextWarehouseId: string) {
+    setWarehouseId(nextWarehouseId)
+    setActiveWarehouseId(nextWarehouseId)
   }
 
   function focusQty(productId: string) {
@@ -334,6 +361,11 @@ export default function BonConsumNou() {
   async function saveDoc() {
     if (!locationId) {
       setError("Selecteaza locatia.")
+      return
+    }
+
+    if (warehouseConfig.multiWarehouseEnabled && warehouseConfig.requireWarehouseOnDocuments && !warehouseId) {
+      setError(`Selecteaza ${warehouseConfig.warehouseLabel.toLowerCase()} pentru document.`)
       return
     }
 
@@ -556,8 +588,8 @@ export default function BonConsumNou() {
               </select>
             </DocumentField>
 
-            <DocumentField label="Gestiune">
-              <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} className={documentInputClass}>
+            {warehouseConfig.multiWarehouseEnabled ? <DocumentField label={warehouseConfig.warehouseLabel}>
+              <select value={warehouseId} onChange={(e) => setWarehouse(e.target.value)} className={documentInputClass}>
                 {warehouses.length === 0 ? <option value="">Se incarca gestiunile...</option> : null}
                 {warehouses.map((warehouse) => (
                   <option key={warehouse.id} value={warehouse.id}>
@@ -565,7 +597,7 @@ export default function BonConsumNou() {
                   </option>
                 ))}
               </select>
-            </DocumentField>
+            </DocumentField> : null}
 
             <DocumentField label="Data document">
               <input
@@ -588,7 +620,7 @@ export default function BonConsumNou() {
 
             <InlineNotice>
               Locatie activa: <span className="font-semibold">{selectedLocationName}</span>
-              <span className="ml-3">Gestiune: <span className="font-semibold">{selectedWarehouseName}</span></span>
+              {warehouseConfig.multiWarehouseEnabled ? <span className="ml-3">{warehouseConfig.warehouseLabel}: <span className="font-semibold">{selectedWarehouseName}</span></span> : null}
               <span className="ml-3">Status: <span className="font-semibold">{docStatus}</span></span>
             </InlineNotice>
 

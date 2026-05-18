@@ -37,6 +37,7 @@ import FirmaPage from "./pages/Firma"
 import SetariNumerotarePage from "./pages/SetariNumerotare"
 import SetariEFacturaPage from "./pages/SetariEFactura"
 import SetariBackupPage from "./pages/SetariBackup"
+import SetariGestiunePage from "./pages/SetariGestiune"
 import UtilizatoriPage from "./pages/Utilizatori"
 import IstoricActiuniPage from "./pages/IstoricActiuni"
 import Productie from "./pages/Productie"
@@ -158,6 +159,7 @@ export default function App() {
 
         <Route path="/setari" element={<RequireModule code="settings"><Setari /></RequireModule>} />
         <Route path="/setari/firma" element={<RequireModule code="settings"><FirmaPage /></RequireModule>} />
+        <Route path="/setari/gestiune" element={<RequireModule code="settings"><SetariGestiunePage /></RequireModule>} />
         <Route path="/setari/tva" element={<RequireModule code="settings"><TvaPage /></RequireModule>} />
         <Route path="/setari/numerotare" element={<RequireModule code="settings"><SetariNumerotarePage /></RequireModule>} />
         <Route path="/setari/efactura" element={<RequireModule code="settings"><SetariEFacturaPage /></RequireModule>} />

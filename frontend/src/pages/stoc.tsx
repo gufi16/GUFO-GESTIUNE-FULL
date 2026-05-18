@@ -5,6 +5,8 @@ import PageHeader from "../components/PageHeader"
 import { API_BASE as API, getToken, authHeaders } from "../lib/api"
 import { getActiveLocationId, subscribeToActiveLocation } from "../lib/location"
 import { formatQtyRo } from "../lib/format"
+import { getActiveWarehouseId, setActiveWarehouseId, subscribeToActiveWarehouse } from "../lib/warehouse"
+import { getWarehouseConfig, subscribeToWarehouseConfig, type WarehouseConfig } from "../lib/warehouseConfig"
 
 type PaginationState = {
   page: number
@@ -25,7 +27,8 @@ export default function StocPage() {
   const [locations, setLocations] = useState<any[]>([])
   const [locationId, setLocationId] = useState(getActiveLocationId())
   const [warehouses, setWarehouses] = useState<any[]>([])
-  const [warehouseId, setWarehouseId] = useState("")
+  const [warehouseId, setWarehouseId] = useState(getActiveWarehouseId())
+  const [warehouseConfig, setWarehouseConfig] = useState<WarehouseConfig>(getWarehouseConfig())
 
   const [stock, setStock] = useState<any[]>([])
   const [globalStock, setGlobalStock] = useState<any[]>([])
@@ -58,6 +61,8 @@ export default function StocPage() {
 
   const headers = authHeaders()
   const pageSize = 15
+  const warehouseEnabled = warehouseConfig.multiWarehouseEnabled
+  const activeWarehouseId = warehouseEnabled ? warehouseId : ""
 
   async function loadLocations() {
     const res = await fetch(`${API}/api/v1/meta/locations`, { headers })
@@ -70,6 +75,7 @@ export default function StocPage() {
     if (!selectedLocationId) {
       setWarehouses([])
       setWarehouseId("")
+      setActiveWarehouseId("")
       return
     }
     const res = await fetch(`${API}/api/v1/meta/warehouses?locationId=${encodeURIComponent(selectedLocationId)}`, { headers })
@@ -77,7 +83,16 @@ export default function StocPage() {
     if (res.status === 401) throw new Error("Token expirat sau invalid. Fa login din nou.")
     const items = Array.isArray(data.items) ? data.items : []
     setWarehouses(items)
-    setWarehouseId((current) => (current && items.some((item: any) => item.id === current) ? current : ""))
+    setWarehouseId((current) => {
+      const nextWarehouseId =
+        current && items.some((item: any) => item.id === current)
+          ? current
+          : warehouseConfig.autoSelectSingleWarehouse && items.length === 1
+            ? String(items[0].id || "")
+            : ""
+      setActiveWarehouseId(nextWarehouseId)
+      return nextWarehouseId
+    })
   }
 
   async function loadGlobalStock() {
@@ -96,7 +111,7 @@ export default function StocPage() {
     try {
       const qs = new URLSearchParams()
       if (selectedLocationId) qs.set("locationId", selectedLocationId)
-      if (warehouseId) qs.set("warehouseId", warehouseId)
+      if (activeWarehouseId) qs.set("warehouseId", activeWarehouseId)
       if (movesSearch.trim()) qs.set("q", movesSearch.trim())
       if (fromDate) qs.set("fromDate", fromDate)
       if (toDate) qs.set("toDate", toDate)
@@ -129,7 +144,7 @@ export default function StocPage() {
 
     const qs = new URLSearchParams()
     qs.set("locationId", id)
-    if (warehouseId) qs.set("warehouseId", warehouseId)
+    if (activeWarehouseId) qs.set("warehouseId", activeWarehouseId)
     if (stockSearch.trim()) qs.set("q", stockSearch.trim())
 
     const res = await fetch(`${API}/api/v1/stock/by-location?${qs.toString()}`, { headers })
@@ -178,6 +193,18 @@ export default function StocPage() {
   }, [])
 
   useEffect(() => {
+    return subscribeToActiveWarehouse((nextWarehouseId) => {
+      setWarehouseId(nextWarehouseId)
+    })
+  }, [])
+
+  useEffect(() => {
+    return subscribeToWarehouseConfig((nextConfig) => {
+      setWarehouseConfig(nextConfig)
+    })
+  }, [])
+
+  useEffect(() => {
     if (!token) return
 
     setLoading(true)
@@ -203,7 +230,7 @@ export default function StocPage() {
   useEffect(() => {
     if (!token || !locationId) return
     loadLocationStock(locationId).catch((e: any) => setError(e?.message || "Nu pot incarca stocul pe locatie."))
-  }, [stockSearch, warehouseId])
+  }, [stockSearch, activeWarehouseId, warehouseEnabled])
 
   useEffect(() => {
     if (!token) return
@@ -213,7 +240,13 @@ export default function StocPage() {
     }, 250)
 
     return () => clearTimeout(timeout)
-  }, [movesSearch, fromDate, toDate, warehouseId])
+  }, [movesSearch, fromDate, toDate, activeWarehouseId, warehouseEnabled])
+
+  useEffect(() => {
+    if (warehouseEnabled) return
+    setWarehouseId("")
+    setActiveWarehouseId("")
+  }, [warehouseEnabled])
 
   const filteredGlobalStock = useMemo(() => globalStock, [globalStock])
   const filteredLocationStock = useMemo(() => stock, [stock])
@@ -248,6 +281,11 @@ export default function StocPage() {
     loadMoves(locationId, nextPage).catch((e: any) => {
       setError(e?.message || "Nu pot incarca miscarile de stoc.")
     })
+  }
+
+  function handleWarehouseChange(nextWarehouseId: string) {
+    setWarehouseId(nextWarehouseId)
+    setActiveWarehouseId(nextWarehouseId)
   }
 
   return (
@@ -329,8 +367,8 @@ export default function StocPage() {
         >
           <div style={filterBar}>
             <span style={infoChip}>{locationId ? "Locatia activa din topbar" : "Alege o locatie din topbar"}</span>
-            {locationId ? (
-              <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} style={compactSelect}>
+            {locationId && warehouseEnabled ? (
+              <select value={warehouseId} onChange={(e) => handleWarehouseChange(e.target.value)} style={compactSelect}>
                 <option value="">Toate gestiunile</option>
                 {warehouses.map((warehouse) => (
                   <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>
@@ -442,15 +480,15 @@ export default function StocPage() {
                 <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} style={filterInput} />
               </div>
 
-              <div style={filterField}>
+              {warehouseEnabled ? <div style={filterField}>
                 <label style={filterLabel}>Gestiune</label>
-                <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} style={filterInput}>
+                <select value={warehouseId} onChange={(e) => handleWarehouseChange(e.target.value)} style={filterInput}>
                   <option value="">Toate gestiunile</option>
                   {warehouses.map((warehouse) => (
                     <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>
                   ))}
                 </select>
-              </div>
+              </div> : null}
             </div>
           </div>
 

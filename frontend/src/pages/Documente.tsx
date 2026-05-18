@@ -24,6 +24,8 @@ import PageHeader from "../components/PageHeader"
 import { DocumentMetric, InlineNotice, documentInputClass } from "../components/DocumentUi"
 import { API_BASE as API, getToken } from "../lib/api"
 import { getActiveLocationId, setActiveLocationId, subscribeToActiveLocation } from "../lib/location"
+import { getActiveWarehouseId, subscribeToActiveWarehouse } from "../lib/warehouse"
+import { getWarehouseConfig, subscribeToWarehouseConfig, type WarehouseConfig } from "../lib/warehouseConfig"
 import { openPdfInNewTab } from "../lib/pdf"
 import { hasModule } from "../lib/modules"
 import { formatMoneyRo, formatNumberRo, formatQtyRo } from "../lib/format"
@@ -563,6 +565,8 @@ export default function Documente() {
   const [message, setMessage] = useState("")
   const [locations] = useState<Array<{ id: string; name: string; code?: string }>>([])
   const [selectedLocationId, setSelectedLocationId] = useState(getActiveLocationId())
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState(getActiveWarehouseId())
+  const [warehouseConfig, setWarehouseConfig] = useState<WarehouseConfig>(getWarehouseConfig())
   const [pageByTab, setPageByTab] = useState<Record<ActiveTab, number>>({
     consumption: 1,
     production: 1,
@@ -606,6 +610,18 @@ export default function Documente() {
   }, [])
 
   useEffect(() => {
+    return subscribeToActiveWarehouse((nextWarehouseId) => {
+      setSelectedWarehouseId(nextWarehouseId)
+    })
+  }, [])
+
+  useEffect(() => {
+    return subscribeToWarehouseConfig((nextConfig) => {
+      setWarehouseConfig(nextConfig)
+    })
+  }, [])
+
+  useEffect(() => {
     if (activeTab === "consumption") {
       loadConsumptionDocs()
     } else if (activeTab === "production") {
@@ -621,14 +637,14 @@ export default function Documente() {
     } else {
       loadInventoryDocs()
     }
-  }, [activeTab, dateFrom, dateTo, selectedLocationId])
+  }, [activeTab, dateFrom, dateTo, selectedLocationId, selectedWarehouseId, warehouseConfig.multiWarehouseEnabled])
 
   useEffect(() => {
     setPageByTab((prev) => ({
       ...prev,
       [activeTab]: 1,
     }))
-  }, [activeTab, search, efacturaFilter, minutesFilter, dateFrom, dateTo, selectedLocationId])
+  }, [activeTab, search, efacturaFilter, minutesFilter, dateFrom, dateTo, selectedLocationId, selectedWarehouseId, warehouseConfig.multiWarehouseEnabled])
 
   async function loadMinutesDocs() {
     if (!token) {
@@ -745,7 +761,11 @@ export default function Documente() {
           : []
 
       if (selectedLocationId) {
-        items = items.filter((doc) => String(doc?.location?.id || doc?.warehouse?.id || "") === selectedLocationId)
+        items = items.filter((doc) => String(doc?.location?.id || "") === selectedLocationId)
+      }
+
+      if (warehouseConfig.multiWarehouseEnabled && selectedWarehouseId) {
+        items = items.filter((doc) => String(doc?.warehouse?.id || "") === selectedWarehouseId)
       }
 
       if (dateFrom || dateTo) {
@@ -853,7 +873,11 @@ export default function Documente() {
       throw new Error("Nu am putut incarca bonurile de consum.")
       }
 
-      setConsumptionDocs(Array.isArray(data.items) ? data.items : [])
+      let items = Array.isArray(data.items) ? data.items : []
+      if (warehouseConfig.multiWarehouseEnabled && selectedWarehouseId) {
+        items = items.filter((doc) => String(doc?.warehouse?.id || "") === selectedWarehouseId)
+      }
+      setConsumptionDocs(items)
     } catch (err) {
       console.error("LOAD CONSUMPTION DOCS ERROR", err)
       setConsumptionDocs([])

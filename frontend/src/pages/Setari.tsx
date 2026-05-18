@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import PageHeader from "../components/PageHeader"
 import { useNavigate } from "react-router-dom"
-import { Archive, ArrowRight, Building2, FileDigit, History, Percent, ReceiptText, RefreshCcw, Settings2, Users } from "lucide-react"
+import { Archive, ArrowRight, Building2, FileDigit, History, Percent, ReceiptText, RefreshCcw, Settings2, Users, Warehouse } from "lucide-react"
 import {
   DocumentMetric,
   InlineNotice,
@@ -36,6 +36,12 @@ const items = [
     desc: "Configurezi firma, mediul de lucru si tokenul ANAF pentru SPV.",
     route: "/setari/efactura",
     icon: ReceiptText,
+  },
+  {
+    name: "Configurare gestiune",
+    desc: "Activezi multi-gestiune, filtrele globale si regulile de lucru pentru documente si stoc.",
+    route: "/setari/gestiune",
+    icon: Warehouse,
   },
   {
     name: "Utilizatori ERP",

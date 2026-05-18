@@ -211,6 +211,13 @@ function mapCompanyResponse(company: any, oauthConfig: any) {
 
   return {
     ...company,
+    warehouseConfig: {
+      multiWarehouseEnabled: Boolean(company?.multiWarehouseEnabled),
+      warehouseFilterEnabled: Boolean(company?.warehouseFilterEnabled),
+      requireWarehouseOnDocuments: Boolean(company?.requireWarehouseOnDocuments),
+      autoSelectSingleWarehouse: company?.autoSelectSingleWarehouse !== false,
+      warehouseLabel: String(company?.warehouseLabel || "Gestiune"),
+    },
     efacturaEnvironment: oauthConfig.environment || company?.efacturaEnvironment || "test",
     efacturaPlatformConfigured: oauthConfig.platformConfigured,
     efacturaUsesPlatformConfig: oauthConfig.usesPlatformConfig,
@@ -954,6 +961,11 @@ router.post("/api/v1/company", async (req: AuthedRequest, res) => {
     contactEmail,
     phone,
     isVatPayer,
+    multiWarehouseEnabled,
+    warehouseFilterEnabled,
+    requireWarehouseOnDocuments,
+    autoSelectSingleWarehouse,
+    warehouseLabel,
     posSyncInterval,
     efacturaEnabled,
     efacturaEnvironment,
@@ -1010,6 +1022,23 @@ router.post("/api/v1/company", async (req: AuthedRequest, res) => {
         isVatPayer: isVatPayer !== undefined
           ? nextIsVatPayer
           : (existing?.isVatPayer ?? true),
+        multiWarehouseEnabled: Object.prototype.hasOwnProperty.call(req.body || {}, "multiWarehouseEnabled")
+          ? Boolean(multiWarehouseEnabled)
+          : (existing?.multiWarehouseEnabled ?? false),
+        warehouseFilterEnabled: Object.prototype.hasOwnProperty.call(req.body || {}, "warehouseFilterEnabled")
+          ? Boolean(warehouseFilterEnabled)
+          : (existing?.warehouseFilterEnabled ?? false),
+        requireWarehouseOnDocuments: Object.prototype.hasOwnProperty.call(req.body || {}, "requireWarehouseOnDocuments")
+          ? Boolean(requireWarehouseOnDocuments)
+          : (existing?.requireWarehouseOnDocuments ?? false),
+        autoSelectSingleWarehouse: Object.prototype.hasOwnProperty.call(req.body || {}, "autoSelectSingleWarehouse")
+          ? Boolean(autoSelectSingleWarehouse)
+          : (existing?.autoSelectSingleWarehouse ?? true),
+        warehouseLabel: String(
+          warehouseLabel ||
+          existing?.warehouseLabel ||
+          "Gestiune",
+        ).trim() || "Gestiune",
         efacturaEnabled: efacturaEnabled !== undefined
           ? Boolean(efacturaEnabled)
           : (existing?.efacturaEnabled ?? false),
@@ -1054,6 +1083,13 @@ router.post("/api/v1/company", async (req: AuthedRequest, res) => {
         contactEmail: contactEmail ? String(contactEmail).trim() : null,
         phone: phone ? String(phone).trim() : null,
         isVatPayer: nextIsVatPayer,
+        multiWarehouseEnabled: Boolean(multiWarehouseEnabled),
+        warehouseFilterEnabled: Boolean(warehouseFilterEnabled),
+        requireWarehouseOnDocuments: Boolean(requireWarehouseOnDocuments),
+        autoSelectSingleWarehouse: Object.prototype.hasOwnProperty.call(req.body || {}, "autoSelectSingleWarehouse")
+          ? Boolean(autoSelectSingleWarehouse)
+          : true,
+        warehouseLabel: String(warehouseLabel || "Gestiune").trim() || "Gestiune",
         efacturaEnabled: Boolean(efacturaEnabled),
         efacturaEnvironment: String(efacturaEnvironment || "test").trim() || "test",
         efacturaSellerCountryCode: String(efacturaSellerCountryCode || country || "RO").trim().toUpperCase() || "RO",
@@ -1091,6 +1127,88 @@ router.post("/api/v1/company", async (req: AuthedRequest, res) => {
     return res.status(500).json({
       ok: false,
       error: e?.message || "Eroare la salvarea firmei"
+    })
+  }
+})
+
+router.get("/api/v1/company/warehouse-config", async (req: AuthedRequest, res) => {
+  try {
+    const company = await getRequestCompany(req, {
+      select: {
+        multiWarehouseEnabled: true,
+        warehouseFilterEnabled: true,
+        requireWarehouseOnDocuments: true,
+        autoSelectSingleWarehouse: true,
+        warehouseLabel: true,
+      },
+    })
+
+    return res.json({
+      ok: true,
+      settings: {
+        multiWarehouseEnabled: Boolean(company?.multiWarehouseEnabled),
+        warehouseFilterEnabled: Boolean(company?.warehouseFilterEnabled),
+        requireWarehouseOnDocuments: Boolean(company?.requireWarehouseOnDocuments),
+        autoSelectSingleWarehouse: company?.autoSelectSingleWarehouse !== false,
+        warehouseLabel: String(company?.warehouseLabel || "Gestiune"),
+      },
+    })
+  } catch (e: any) {
+    return res.status(500).json({
+      ok: false,
+      error: e?.message || "Nu am putut incarca setarile de gestiune.",
+    })
+  }
+})
+
+router.post("/api/v1/company/warehouse-config", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth!.tenantId
+
+  try {
+    const existing = await getRequestCompany(req)
+    const settings = {
+      multiWarehouseEnabled: Boolean(req.body?.multiWarehouseEnabled),
+      warehouseFilterEnabled: Boolean(req.body?.warehouseFilterEnabled),
+      requireWarehouseOnDocuments: Boolean(req.body?.requireWarehouseOnDocuments),
+      autoSelectSingleWarehouse: req.body?.autoSelectSingleWarehouse !== false,
+      warehouseLabel: String(req.body?.warehouseLabel || existing?.warehouseLabel || "Gestiune").trim() || "Gestiune",
+    }
+
+    const company = await updateRequestCompany(req, settings, {
+      name: existing?.name || "Companie",
+      code: existing?.code || "FIRMA-1",
+      country: existing?.country || "RO",
+      isVatPayer: existing?.isVatPayer ?? true,
+      invoiceSeries: existing?.invoiceSeries || "FAC",
+      purchaseSeries: existing?.purchaseSeries || "NIR",
+      transferSeries: existing?.transferSeries || "TRF",
+      inventorySeries: existing?.inventorySeries || "INV",
+      consumptionSeries: existing?.consumptionSeries || "BC",
+      productionSeries: existing?.productionSeries || "PROD",
+      customerCodePrefix: existing?.customerCodePrefix || "CLI",
+      supplierCodePrefix: existing?.supplierCodePrefix || "FUR",
+      posSyncInterval: existing?.posSyncInterval || 5,
+      efacturaEnvironment: existing?.efacturaEnvironment || "test",
+      ...settings,
+    })
+
+    const resolvedCompany = await getRequestCompany(req, { includeCredentialList: true })
+
+    return res.json({
+      ok: true,
+      settings: {
+        multiWarehouseEnabled: Boolean(company?.multiWarehouseEnabled),
+        warehouseFilterEnabled: Boolean(company?.warehouseFilterEnabled),
+        requireWarehouseOnDocuments: Boolean(company?.requireWarehouseOnDocuments),
+        autoSelectSingleWarehouse: company?.autoSelectSingleWarehouse !== false,
+        warehouseLabel: String(company?.warehouseLabel || "Gestiune"),
+      },
+      company: mapCompanyResponse(resolvedCompany, await getEffectiveAnafOauthConfig(tenantId, getActiveCompanyId(req))),
+    })
+  } catch (e: any) {
+    return res.status(500).json({
+      ok: false,
+      error: e?.message || "Nu am putut salva setarile de gestiune.",
     })
   }
 })

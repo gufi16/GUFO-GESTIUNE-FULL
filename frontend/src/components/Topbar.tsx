@@ -1,10 +1,16 @@
-import { Bell, Building2, LogOut, MapPin, Menu } from "lucide-react"
+import { Bell, Building2, LogOut, MapPin, Menu, Warehouse } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom"
 import { API_BASE as API, authHeaders } from "../lib/api"
 import { logout, me, selectCompany } from "../lib/auth"
 import { getActiveLocationId, setActiveLocationId, subscribeToActiveLocation } from "../lib/location"
 import { getActiveTerminalId, setActiveTerminalId, subscribeToActiveTerminal } from "../lib/terminal"
+import { getActiveWarehouseId, setActiveWarehouseId, subscribeToActiveWarehouse } from "../lib/warehouse"
+import {
+  getDefaultWarehouseConfig,
+  setWarehouseConfig as persistWarehouseConfig,
+  subscribeToWarehouseConfig,
+} from "../lib/warehouseConfig"
 
 function toInputDate(value: Date) {
   const year = value.getFullYear()
@@ -21,8 +27,10 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
   const [terminals, setTerminals] = useState<
     Array<{ id: string; label: string; deviceId: string; locationId?: string; locationName?: string; locationCode?: string }>
   >([])
+  const [warehouses, setWarehouses] = useState<Array<{ id: string; name: string; code?: string; isDefault?: boolean }>>([])
   const [locationId, setLocationIdState] = useState(getActiveLocationId())
   const [terminalId, setTerminalIdState] = useState(getActiveTerminalId())
+  const [warehouseId, setWarehouseIdState] = useState(getActiveWarehouseId())
   const [userLabel, setUserLabel] = useState("Utilizator")
   const [userMeta, setUserMeta] = useState("ERP")
   const [companyLabel, setCompanyLabel] = useState("Firma activa")
@@ -30,6 +38,7 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
   const [activeCompanyId, setActiveCompanyId] = useState("")
   const [switchingCompany, setSwitchingCompany] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [warehouseConfig, setWarehouseConfig] = useState(getDefaultWarehouseConfig())
 
   const isDashboard = location.pathname === "/dashboard"
   const isReports = location.pathname === "/rapoarte"
@@ -65,14 +74,18 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
 
     async function loadTopbarData() {
       try {
-        const [locationsRes, profile] = await Promise.all([
+        const [locationsRes, profile, warehouseConfigRes] = await Promise.all([
           fetch(`${API}/api/v1/meta/locations`, {
             headers: authHeaders(),
           }),
           me().catch(() => null),
+          fetch(`${API}/api/v1/company/warehouse-config`, {
+            headers: authHeaders(),
+          }).catch(() => null),
         ])
         const data = await locationsRes.json().catch(() => ({}))
         const items = Array.isArray(data?.locations) ? data.locations : []
+        const warehouseConfigJson = warehouseConfigRes ? await warehouseConfigRes.json().catch(() => ({})) : {}
 
         if (cancelled) return
 
@@ -83,6 +96,15 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
         }))
 
         setLocations(normalized)
+        const nextWarehouseConfig = {
+          multiWarehouseEnabled: Boolean(warehouseConfigJson?.settings?.multiWarehouseEnabled),
+          warehouseFilterEnabled: Boolean(warehouseConfigJson?.settings?.warehouseFilterEnabled),
+          requireWarehouseOnDocuments: Boolean(warehouseConfigJson?.settings?.requireWarehouseOnDocuments),
+          autoSelectSingleWarehouse: warehouseConfigJson?.settings?.autoSelectSingleWarehouse !== false,
+          warehouseLabel: String(warehouseConfigJson?.settings?.warehouseLabel || "Gestiune"),
+        }
+        setWarehouseConfig(nextWarehouseConfig)
+        persistWarehouseConfig(nextWarehouseConfig)
 
         if (!locationId && normalized.length === 1) {
           setLocationIdState(normalized[0].id)
@@ -140,6 +162,18 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
   }, [])
 
   useEffect(() => {
+    return subscribeToActiveWarehouse((nextWarehouseId) => {
+      setWarehouseIdState(nextWarehouseId)
+    })
+  }, [])
+
+  useEffect(() => {
+    return subscribeToWarehouseConfig((nextConfig) => {
+      setWarehouseConfig(nextConfig)
+    })
+  }, [])
+
+  useEffect(() => {
     let cancelled = false
 
     async function loadTerminals() {
@@ -185,6 +219,56 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
   }, [locationId, terminalId])
 
   useEffect(() => {
+    let cancelled = false
+
+    async function loadWarehouses() {
+      if (!warehouseConfig.multiWarehouseEnabled || !warehouseConfig.warehouseFilterEnabled || !locationId) {
+        setWarehouses([])
+        setWarehouseIdState("")
+        setActiveWarehouseId("")
+        return
+      }
+
+      try {
+        const res = await fetch(`${API}/api/v1/meta/warehouses?locationId=${encodeURIComponent(locationId)}`, {
+          headers: authHeaders(),
+        })
+        const data = await res.json().catch(() => ({}))
+        const items = Array.isArray(data?.warehouses) ? data.warehouses : Array.isArray(data?.items) ? data.items : []
+        if (cancelled) return
+
+        const normalized = items.map((item: any) => ({
+          id: String(item.id || ""),
+          name: String(item.name || "Gestiune"),
+          code: item.code ? String(item.code) : undefined,
+          isDefault: Boolean(item.isDefault),
+        }))
+
+        setWarehouses(normalized)
+
+        const nextWarehouseId =
+          warehouseId && normalized.some((item: { id: string }) => item.id === warehouseId)
+            ? warehouseId
+            : warehouseConfig.autoSelectSingleWarehouse && normalized.length === 1
+              ? normalized[0].id
+              : ""
+
+        setWarehouseIdState(nextWarehouseId)
+        setActiveWarehouseId(nextWarehouseId)
+      } catch {
+        if (!cancelled) {
+          setWarehouses([])
+        }
+      }
+    }
+
+    void loadWarehouses()
+    return () => {
+      cancelled = true
+    }
+  }, [locationId, warehouseConfig.autoSelectSingleWarehouse, warehouseConfig.multiWarehouseEnabled, warehouseConfig.warehouseFilterEnabled])
+
+  useEffect(() => {
     setNotificationsOpen(false)
   }, [location.pathname])
 
@@ -200,11 +284,19 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
     return selected.deviceId ? `${selected.label} (${selected.deviceId})` : selected.label
   }, [terminalId, terminals])
 
+  const selectedWarehouseLabel = useMemo(() => {
+    const selected = warehouses.find((item) => item.id === warehouseId)
+    if (!selected) return warehouseConfig.warehouseLabel === "Gestiune" ? "Toate gestiunile" : `Toate ${warehouseConfig.warehouseLabel.toLowerCase()}`
+    return selected.code ? `${selected.name} (${selected.code})` : selected.name
+  }, [warehouseConfig.warehouseLabel, warehouseId, warehouses])
+
   function handleLocationChange(nextLocationId: string) {
     setLocationIdState(nextLocationId)
     setActiveLocationId(nextLocationId)
     setTerminalIdState("")
     setActiveTerminalId("")
+    setWarehouseIdState("")
+    setActiveWarehouseId("")
   }
 
   function handleTerminalChange(nextTerminalId: string) {
@@ -219,6 +311,12 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
 
     setLocationIdState(selectedTerminal.locationId)
     setActiveLocationId(selectedTerminal.locationId)
+  }
+
+  function handleWarehouseChange(nextWarehouseId: string) {
+    const normalized = String(nextWarehouseId || "")
+    setWarehouseIdState(normalized)
+    setActiveWarehouseId(normalized)
   }
 
   function handleIesire() {
@@ -339,6 +437,33 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
             </div>
           </div>
 
+          {warehouseConfig.multiWarehouseEnabled && warehouseConfig.warehouseFilterEnabled ? (
+            <div className="mt-2 flex items-center gap-2 rounded-[12px] border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm shadow-slate-900/[0.03]">
+              <div className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-[#EEF4FB] text-[#244A7C]">
+                <Warehouse size={16} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6C7A89]">
+                  {warehouseConfig.warehouseLabel}
+                </div>
+                <select
+                  value={warehouseId}
+                  onChange={(e) => handleWarehouseChange(e.target.value)}
+                  className="h-8 w-full rounded-[8px] border border-slate-200 bg-white px-2 text-sm text-[#17324D] outline-none transition focus:border-[#244A7C] focus:bg-white"
+                  title={selectedWarehouseLabel}
+                  disabled={!locationId}
+                >
+                  <option value="">{warehouseConfig.warehouseLabel === "Gestiune" ? "Toate gestiunile" : `Toate ${warehouseConfig.warehouseLabel.toLowerCase()}`}</option>
+                  {warehouses.map((warehouseItem) => (
+                    <option key={warehouseItem.id} value={warehouseItem.id}>
+                      {warehouseItem.code ? `${warehouseItem.name} (${warehouseItem.code})` : warehouseItem.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ) : null}
+
           {showSalesFilters ? (
             <div className="mt-2 flex items-center gap-2 rounded-[12px] border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm shadow-slate-900/[0.03]">
               <div className="min-w-0 flex-1">
@@ -414,6 +539,33 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
                 </select>
               </div>
             </div>
+
+            {warehouseConfig.multiWarehouseEnabled && warehouseConfig.warehouseFilterEnabled ? (
+              <div className="flex items-center gap-2 rounded-[12px] border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm shadow-slate-900/[0.03]">
+                <div className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-[#EEF4FB] text-[#244A7C]">
+                  <Warehouse size={16} />
+                </div>
+                <div className="min-w-[190px]">
+                  <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6C7A89]">
+                    {warehouseConfig.warehouseLabel}
+                  </div>
+                  <select
+                    value={warehouseId}
+                    onChange={(e) => handleWarehouseChange(e.target.value)}
+                    className="h-7 w-full rounded-[8px] border border-slate-200 bg-white px-2 text-sm text-[#17324D] outline-none transition focus:border-[#244A7C] focus:bg-white"
+                    title={selectedWarehouseLabel}
+                    disabled={!locationId}
+                  >
+                    <option value="">{warehouseConfig.warehouseLabel === "Gestiune" ? "Toate gestiunile" : `Toate ${warehouseConfig.warehouseLabel.toLowerCase()}`}</option>
+                    {warehouses.map((warehouseItem) => (
+                      <option key={warehouseItem.id} value={warehouseItem.id}>
+                        {warehouseItem.code ? `${warehouseItem.name} (${warehouseItem.code})` : warehouseItem.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            ) : null}
 
             {showSalesFilters ? (
               <div className="flex items-center gap-2 rounded-[12px] border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm shadow-slate-900/[0.03]">
