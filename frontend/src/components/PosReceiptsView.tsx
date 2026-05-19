@@ -231,7 +231,7 @@ export default function PosReceiptsView({ compact = false }: Props) {
                     ) : null}
                   </div>
                   <div className="text-slate-600">
-                    {item.location?.name || "Locatie"} / {item.terminal?.label || item.terminal?.deviceId || "Terminal"}
+                    {item.location?.name || "Locatie"} / {item.terminal?.label || "Terminal"}
                   </div>
                   <div className="font-medium text-slate-700">{paymentLabel(item)}</div>
                   <div className="text-right text-base font-bold text-slate-900">{formatMoneyRo(item.total)}</div>

@@ -170,7 +170,7 @@ export default function SetariKds() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="text-[16px] font-semibold text-slate-900">{item.label || "GuFo KDS"}</div>
-                    <div className="mt-1 text-sm text-slate-500">{item.deviceId}</div>
+                    <div className="mt-1 text-sm text-slate-500">Device KDS conectat</div>
                   </div>
                   <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
                     activ

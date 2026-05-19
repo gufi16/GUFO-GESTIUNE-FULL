@@ -281,7 +281,7 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
   const selectedTerminalLabel = useMemo(() => {
     const selected = terminals.find((item) => item.id === terminalId)
     if (!selected) return "Toate device-urile"
-    return selected.deviceId ? `${selected.label} (${selected.deviceId})` : selected.label
+    return selected.label || "Terminal"
   }, [terminalId, terminals])
 
   const selectedWarehouseLabel = useMemo(() => {
@@ -479,7 +479,7 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
                   <option value="">Toate device-urile</option>
                   {terminals.map((terminalItem) => (
                     <option key={terminalItem.id} value={terminalItem.id}>
-                      {terminalItem.deviceId ? `${terminalItem.label} (${terminalItem.deviceId})` : terminalItem.label}
+                      {terminalItem.label || "Terminal"}
                     </option>
                   ))}
                 </select>
@@ -582,7 +582,7 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
                     <option value="">Toate device-urile</option>
                     {terminals.map((terminalItem) => (
                       <option key={terminalItem.id} value={terminalItem.id}>
-                        {terminalItem.deviceId ? `${terminalItem.label} (${terminalItem.deviceId})` : terminalItem.label}
+                        {terminalItem.label || "Terminal"}
                       </option>
                     ))}
                   </select>

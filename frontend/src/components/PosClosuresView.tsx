@@ -232,7 +232,7 @@ export default function PosClosuresView() {
                     <div className="text-xs text-slate-500">{formatDateTime(item.closedAt)}</div>
                   </div>
                   <div className="text-slate-600">
-                    {item.locationName || "Locatie"} / {item.terminalLabel || item.deviceId || "Terminal"}
+                    {item.locationName || "Locatie"} / {item.terminalLabel || "Terminal"}
                   </div>
                   <div className="text-slate-700">
                     Cash {formatMoneyRo(item.cashTotal)} / Card {formatMoneyRo(item.cardTotal)}
