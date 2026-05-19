@@ -184,7 +184,7 @@ async function enrichImportedItems(tenantId: string, integrationId: string | nul
         },
         select: {
           id: true,
-          code: true,
+          sku: true,
           departmentId: true,
           vatRate: true,
         },
@@ -200,7 +200,7 @@ async function enrichImportedItems(tenantId: string, integrationId: string | nul
       ...item,
       erpProductId,
       departmentId: item.departmentId || product?.departmentId || undefined,
-      sku: item.sku || product?.code || undefined,
+      sku: item.sku || product?.sku || undefined,
       vatRate: item.vatRate ?? product?.vatRate ?? undefined,
     }
   })
