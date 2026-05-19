@@ -590,7 +590,13 @@ export default function StocPage() {
           </div>
 
           {filteredLots.length === 0 ? (
-            <Empty text="Nu exista loturi disponibile pentru filtrele selectate." />
+            <Empty
+              text={
+                trackedProductsCount > 0
+                  ? "Produsele sunt configurate pe lot, dar nu exista inca loturi active pe locatia si gestiunea selectate. Loturile apar aici doar dupa NIR postat cu Lot si, daca este cazul, Expira."
+                  : "Nu exista loturi disponibile pentru filtrele selectate."
+              }
+            />
           ) : (
             <>
               <Table
