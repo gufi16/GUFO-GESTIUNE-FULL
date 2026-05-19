@@ -186,7 +186,11 @@ async function enrichImportedItems(tenantId: string, integrationId: string | nul
           id: true,
           sku: true,
           departmentId: true,
-          vatRate: true,
+          vatRate: {
+            select: {
+              rate: true,
+            },
+          },
         },
       })
     : []
@@ -201,7 +205,7 @@ async function enrichImportedItems(tenantId: string, integrationId: string | nul
       erpProductId,
       departmentId: item.departmentId || product?.departmentId || undefined,
       sku: item.sku || product?.sku || undefined,
-      vatRate: item.vatRate ?? product?.vatRate ?? undefined,
+      vatRate: item.vatRate ?? product?.vatRate?.rate ?? undefined,
     }
   })
 }
