@@ -1286,7 +1286,7 @@ export default function NirPage() {
                 PDF
               </button>
               {!isPosted && (
-                <button type="button" onClick={() => saveNir(false)} disabled={saving || loadingReceipt} className={documentButtonPrimaryClass}>
+                <button type="button" onClick={() => saveNir(true)} disabled={saving || loadingReceipt} className={documentButtonPrimaryClass}>
                   {saving ? "Se salveaza..." : "Finalizeaza"}
                 </button>
               )}
