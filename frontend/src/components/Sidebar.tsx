@@ -15,6 +15,7 @@ import {
   LayoutDashboard,
   Receipt,
   Settings,
+  Store,
   Truck,
   Warehouse,
 } from "lucide-react"
@@ -80,7 +81,10 @@ const sections: SidebarSection[] = [
   },
   {
     title: "Configurare",
-    items: [{ to: "/setari", label: "Setari", icon: Settings, module: "settings" }],
+    items: [
+      { to: "/setari", label: "Setari", icon: Settings, module: "settings" },
+      { to: "/setari/marketplace", label: "Marketplace", icon: Store, module: "settings" },
+    ],
   },
 ]
 
