@@ -1725,7 +1725,7 @@ export default function NirPage() {
               <div>TVA</div>
               <div>Cant./ambalaj</div>
               <div>Total</div>
-              <div></div>
+              <div>Actiuni</div>
             </div>
 
             <div style={isMobileViewport ? { ...linesViewport, ...linesViewportMobile } : linesViewport}>
@@ -1933,8 +1933,9 @@ export default function NirPage() {
                         <div
                           style={{
                             display: "flex",
-                            flexDirection: "column",
-                            gap: 4,
+                            flexDirection: isMobileViewport ? "column" : "row",
+                            gap: 6,
+                            alignItems: isMobileViewport ? "stretch" : "center",
                             justifyContent: "flex-end",
                             minWidth: 0,
                             ...(isMobileViewport ? mobileFullSpan : {}),
@@ -1950,16 +1951,26 @@ export default function NirPage() {
                               Detalii
                             </button>
                           ) : null}
+                          {!isMobileViewport && (line.trackLot || line.trackExpiry) ? (
+                            <button
+                              type="button"
+                              style={btnLotDetails}
+                              onClick={() => openLineEditor(line)}
+                            >
+                              Lot / Expira
+                            </button>
+                          ) : null}
                           {!isPosted && (
                             <button
+                              type="button"
                               style={
                                 isMobileViewport
-                                  ? { ...btnDangerIcon, width: "100%" }
-                                  : btnDangerIcon
+                                  ? { ...btnDangerText, width: "100%" }
+                                  : btnDangerText
                               }
                               onClick={() => removeLine(line.id)}
                             >
-                              aœ•
+                              Sterge
                             </button>
                           )}
                         </div>
@@ -2872,7 +2883,7 @@ const toolbarSubtitle: CSSProperties = {
 
 const rowsHeader: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "minmax(210px,1.7fr) 80px 88px 96px 70px 110px 150px 44px",
+  gridTemplateColumns: "minmax(210px,1.7fr) 80px 88px 96px 70px 110px 150px 140px",
   gap: 5,
   padding: "0 2px 4px",
   color: "#64748b",
@@ -2908,7 +2919,7 @@ const rowCard: CSSProperties = {
 
 const rowMain: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "minmax(210px,1.7fr) 80px 88px 96px 70px 110px 150px 44px",
+  gridTemplateColumns: "minmax(210px,1.7fr) 80px 88px 96px 70px 110px 150px 140px",
   gap: 5,
   alignItems: "center",
 }
@@ -3245,6 +3256,30 @@ const btnDangerIcon: CSSProperties = {
   cursor: "pointer",
   fontSize: 12,
   fontWeight: 800,
+}
+
+const btnDangerText: CSSProperties = {
+  padding: "8px 10px",
+  minWidth: 72,
+  borderRadius: 10,
+  border: "1px solid #fecaca",
+  background: "#fff1f2",
+  color: "#991b1b",
+  cursor: "pointer",
+  fontSize: 12,
+  fontWeight: 700,
+}
+
+const btnLotDetails: CSSProperties = {
+  padding: "8px 10px",
+  minWidth: 98,
+  borderRadius: 10,
+  border: "1px solid #bfdbfe",
+  background: "#eff6ff",
+  color: "#1d4ed8",
+  cursor: "pointer",
+  fontSize: 12,
+  fontWeight: 700,
 }
 
 const btnDangerMobile: CSSProperties = {
