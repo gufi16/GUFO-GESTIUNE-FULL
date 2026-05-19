@@ -1,4 +1,5 @@
 import { Router } from "express"
+import crypto from "crypto"
 import { z } from "zod"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
@@ -130,141 +131,106 @@ async function createOrderHistory(tenantId: string, externalOrderId: string, sta
   })
 }
 
-router.use(requireAuth)
+function hmacHex(secret: string, payload: string) {
+  return crypto.createHmac("sha256", secret).update(payload).digest("hex")
+}
 
-router.get("/api/v1/marketplace/platforms", (_req, res) => {
-  return res.json({
-    ok: true,
-    items: [
-      { code: "GLOVO", label: "Glovo", capabilities: ["ORDERS", "KDS", "READY_FOR_FISCAL"] },
-      { code: "WOLT", label: "Wolt", capabilities: ["ORDERS", "KDS", "READY_FOR_FISCAL"] },
-      { code: "BOLT_FOOD", label: "Bolt Food", capabilities: ["ORDERS_PENDING_ACCESS", "KDS", "READY_FOR_FISCAL"] },
-    ],
-  })
-})
-
-router.get("/api/v1/marketplace/integrations", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth?.tenantId
-  if (!tenantId) {
-    return res.status(400).json({ ok: false, error: "Missing tenant context" })
+function safeJsonStringify(value: unknown) {
+  try {
+    return JSON.stringify(value ?? {})
+  } catch {
+    return "{}"
   }
+}
 
-  const items = await db.externalIntegration.findMany({
-    where: { tenantId },
-    include: {
-      location: {
-        select: { id: true, name: true, code: true },
-      },
-    },
-    orderBy: [{ platform: "asc" }, { createdAt: "desc" }],
-  })
-
-  return res.json({ ok: true, items })
-})
-
-router.post("/api/v1/marketplace/integrations/:platform/connect", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth?.tenantId
-  if (!tenantId) {
-    return res.status(400).json({ ok: false, error: "Missing tenant context" })
+function toMoneyNumber(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  if (typeof value === "string") {
+    const parsed = Number(value.replace(",", "."))
+    return Number.isFinite(parsed) ? parsed : 0
   }
-
-  const platformParsed = PLATFORM_ENUM.safeParse(req.params.platform)
-  if (!platformParsed.success) {
-    return res.status(400).json({ ok: false, error: "Platform invalid" })
+  if (value && typeof value === "object") {
+    const obj = value as any
+    return (
+      toMoneyNumber(obj.total) ||
+      toMoneyNumber(obj.amount) ||
+      toMoneyNumber(obj.value) ||
+      toMoneyNumber(obj.gross) ||
+      0
+    )
   }
+  return 0
+}
 
-  const bodyParsed = ConnectIntegrationSchema.safeParse(req.body)
-  if (!bodyParsed.success) {
-    return res.status(400).json({ ok: false, error: bodyParsed.error.flatten() })
-  }
-
-  const location = await ensureLocationForTenant(tenantId, bodyParsed.data.locationId)
-  if (!location) {
-    return res.status(404).json({ ok: false, error: "Location not found" })
-  }
-
-  const existingIntegration = await db.externalIntegration.findFirst({
-    where: {
-      tenantId,
-      locationId: location.id,
-      platform: platformParsed.data,
-    },
-    orderBy: { createdAt: "desc" },
-  })
-
-  const integrationPayload = {
-    status: "ACTIVE",
-    authType: bodyParsed.data.authType,
-    merchantId: bodyParsed.data.merchantId || null,
-    storeId: bodyParsed.data.storeId || null,
-    accessToken: bodyParsed.data.accessToken || null,
-    refreshToken: bodyParsed.data.refreshToken || null,
-    webhookSecret: bodyParsed.data.webhookSecret || null,
-    settingsJson: bodyParsed.data.settings || undefined,
-  }
-
-  const integration = existingIntegration
-    ? await db.externalIntegration.update({
-        where: { id: existingIntegration.id },
-        data: integrationPayload,
-        include: {
-          location: {
-            select: { id: true, name: true, code: true },
-          },
-        },
-      })
-    : await db.externalIntegration.create({
-        data: {
-          tenantId,
-          locationId: location.id,
-          platform: platformParsed.data,
-          ...integrationPayload,
-        },
-        include: {
-          location: {
-            select: { id: true, name: true, code: true },
-          },
-        },
-      })
-
-  return res.json({
-    ok: true,
-    integration,
-  })
-})
-
-router.post("/api/v1/marketplace/orders/import", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth?.tenantId
-  if (!tenantId) {
-    return res.status(400).json({ ok: false, error: "Missing tenant context" })
-  }
-
-  const parsed = ImportMarketplaceOrderSchema.safeParse(req.body)
-  if (!parsed.success) {
-    return res.status(400).json({ ok: false, error: parsed.error.flatten() })
-  }
-
-  const payload = parsed.data
-  const location = await ensureLocationForTenant(tenantId, payload.locationId)
-  if (!location) {
-    return res.status(404).json({ ok: false, error: "Location not found" })
-  }
-
-  const externalOrder = await db.$transaction(async (tx: any) => {
-    let integrationId = payload.integrationId || null
-
-    if (!integrationId) {
-      const foundIntegration = await tx.externalIntegration.findFirst({
+async function enrichImportedItems(tenantId: string, integrationId: string | null, items: z.infer<typeof ImportMarketplaceOrderSchema>["items"]) {
+  const externalIds = items.map((item) => item.externalProductId?.trim()).filter(Boolean) as string[]
+  const mappings = integrationId && externalIds.length > 0
+    ? await db.marketplaceProductMapping.findMany({
         where: {
           tenantId,
-          locationId: payload.locationId,
-          platform: payload.platform,
+          integrationId,
+          externalProductId: { in: externalIds },
         },
-        orderBy: { createdAt: "desc" },
       })
-      integrationId = foundIntegration?.id || null
-    }
+    : []
 
+  const mappingByExternalId = new Map<string, any>(mappings.map((item: any) => [item.externalProductId, item]))
+  const mappedProductIds = mappings.map((item: any) => item.erpProductId).filter(Boolean)
+  const products = mappedProductIds.length > 0
+    ? await db.product.findMany({
+        where: {
+          tenantId,
+          id: { in: mappedProductIds },
+        },
+        select: {
+          id: true,
+          code: true,
+          departmentId: true,
+          vatRate: true,
+        },
+      })
+    : []
+  const productById = new Map<string, any>(products.map((item: any) => [item.id, item]))
+
+  return items.map((item) => {
+    const mapping = item.externalProductId ? mappingByExternalId.get(item.externalProductId) : null
+    const erpProductId = item.erpProductId || mapping?.erpProductId || undefined
+    const product = erpProductId ? productById.get(erpProductId) : null
+    return {
+      ...item,
+      erpProductId,
+      departmentId: item.departmentId || product?.departmentId || undefined,
+      sku: item.sku || product?.code || undefined,
+      vatRate: item.vatRate ?? product?.vatRate ?? undefined,
+    }
+  })
+}
+
+async function importMarketplaceOrderForTenant(tenantId: string, rawPayload: z.infer<typeof ImportMarketplaceOrderSchema>) {
+  const location = await ensureLocationForTenant(tenantId, rawPayload.locationId)
+  if (!location) {
+    throw new Error("Location not found")
+  }
+
+  let integrationId = rawPayload.integrationId || null
+  if (!integrationId) {
+    const foundIntegration = await db.externalIntegration.findFirst({
+      where: {
+        tenantId,
+        locationId: rawPayload.locationId,
+        platform: rawPayload.platform,
+      },
+      orderBy: { createdAt: "desc" },
+    })
+    integrationId = foundIntegration?.id || null
+  }
+
+  const payload = {
+    ...rawPayload,
+    items: await enrichImportedItems(tenantId, integrationId, rawPayload.items),
+  }
+
+  return db.$transaction(async (tx: any) => {
     const order = await tx.externalOrder.upsert({
       where: {
         tenantId_platform_externalOrderId: {
@@ -416,6 +382,535 @@ router.post("/api/v1/marketplace/orders/import", async (req: AuthedRequest, res)
       },
     })
   })
+}
+
+async function setMarketplaceLifecycleStatus(tenantId: string, inputOrderId: string, status: "RECEIVED" | "ACKNOWLEDGED" | "IN_KITCHEN" | "READY_FOR_FISCAL" | "DELIVERED" | "CANCELLED", source: "PLATFORM" | "KDS" | "POS" | "ERP", message: string, payloadJson?: unknown) {
+  const order = await resolveMarketplaceOrder(tenantId, inputOrderId, {
+    kitchenTicket: true,
+    saleDraft: true,
+  })
+  if (!order) return null
+
+  const now = new Date()
+  await db.$transaction(async (tx: any) => {
+    await tx.externalOrder.update({
+      where: { id: order.id },
+      data: {
+        status,
+        ...(status === "ACKNOWLEDGED" ? { acknowledgedAt: now } : {}),
+        ...(status === "READY_FOR_FISCAL" ? { readyAt: now } : {}),
+        ...(status === "DELIVERED" ? { fiscalizedAt: order.fiscalizedAt || now } : {}),
+        ...(status === "CANCELLED" ? { cancelledAt: now } : {}),
+      },
+    })
+
+    if (order.kitchenTicket) {
+      await tx.kitchenTicket.update({
+        where: { id: order.kitchenTicket.id },
+        data:
+          status === "READY_FOR_FISCAL"
+            ? { status: "READY", readyAt: now }
+            : status === "IN_KITCHEN"
+              ? { status: "IN_PROGRESS" }
+              : status === "DELIVERED"
+                ? { status: "COMPLETED", completedAt: now }
+                : status === "CANCELLED"
+                  ? { status: "CANCELLED" }
+                  : { status: "NEW" },
+      })
+    }
+
+    if (order.saleDraft) {
+      const nextDraftStatus =
+        status === "READY_FOR_FISCAL"
+          ? "READY_FOR_FISCAL"
+          : status === "DELIVERED"
+            ? "FISCALIZED"
+            : status === "CANCELLED"
+              ? "CANCELLED"
+              : "OPEN"
+      await tx.saleDraft.update({
+        where: { id: order.saleDraft.id },
+        data: { status: nextDraftStatus },
+      })
+    }
+
+    await tx.externalOrderStatusHistory.create({
+      data: {
+        tenantId,
+        externalOrderId: order.id,
+        status,
+        source,
+        message,
+        payloadJson: payloadJson ?? undefined,
+      },
+    })
+  })
+
+  return resolveMarketplaceOrder(tenantId, order.id, {
+    items: true,
+    kitchenTicket: true,
+    saleDraft: true,
+  })
+}
+
+async function fetchWoltOrderV2(orderId: string, token: string) {
+  const response = await fetch(`https://pos-integration-service.wolt.com/v2/orders/${encodeURIComponent(orderId)}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+    },
+  })
+  if (!response.ok) {
+    throw new Error(`Wolt order fetch failed with ${response.status}`)
+  }
+  return response.json()
+}
+
+function normalizeWoltOrderToImportPayload(integration: any, payload: any): z.infer<typeof ImportMarketplaceOrderSchema> {
+  const items = Array.isArray(payload?.items) ? payload.items : []
+  const subtotal = toMoneyNumber(payload?.basket_price)
+  const total =
+    toMoneyNumber(payload?.price) ||
+    toMoneyNumber(payload?.total_price) ||
+    subtotal + toMoneyNumber(payload?.fees)
+
+  return {
+    platform: "WOLT",
+    locationId: integration.locationId,
+    integrationId: integration.id,
+    externalOrderId: String(payload?.id || "").trim(),
+    externalOrderNumber: String(payload?.order_number || "").trim() || undefined,
+    customerName: String(payload?.consumer_name || "").trim() || undefined,
+    customerPhone: String(payload?.consumer_phone_number || "").trim() || undefined,
+    customerNote: String(payload?.consumer_comment || "").trim() || undefined,
+    paymentLabel: String(payload?.payment_type || payload?.payment_method || "").trim() || undefined,
+    currency: "RON",
+    subtotal,
+    total,
+    displayNumber: String(payload?.order_number || payload?.id || "").trim() || undefined,
+    station: undefined,
+    items: items.map((item: any, index: number) => {
+      const quantity = Number(item?.quantity || item?.qty || 1) || 1
+      const lineTotal = toMoneyNumber(item?.price) || toMoneyNumber(item?.total_price)
+      return {
+        externalLineId: String(item?.id || `${payload?.id || "wolt"}-${index + 1}`).trim(),
+        externalProductId: String(item?.pos_product_id || item?.merchant_supplied_id || item?.id || "").trim() || undefined,
+        name: String(item?.name || item?.item_name || "Produs Wolt").trim(),
+        sku: String(item?.merchant_supplied_id || item?.sku || "").trim() || undefined,
+        qty: quantity,
+        unitPrice: quantity > 0 ? (lineTotal > 0 ? lineTotal / quantity : toMoneyNumber(item?.unit_price)) : 0,
+        vatRate: Number(item?.vat_percentage ?? item?.vat_rate ?? 0) || undefined,
+        note: String(item?.comment || item?.note || "").trim() || undefined,
+        modifiers: Array.isArray(item?.options)
+          ? item.options.map((option: any) => String(option?.name || "").trim()).filter(Boolean)
+          : undefined,
+        erpProductId: undefined,
+        departmentId: undefined,
+        station: undefined,
+      }
+    }),
+    rawPayload: payload,
+  }
+}
+
+function normalizeGlovoOrderToImportPayload(integration: any, payload: any): z.infer<typeof ImportMarketplaceOrderSchema> {
+  const products = Array.isArray(payload?.products) ? payload.products : Array.isArray(payload?.items) ? payload.items : []
+  const total = toMoneyNumber(payload?.total_price) || toMoneyNumber(payload?.total) || products.reduce((sum: number, item: any) => sum + toMoneyNumber(item?.price) * (Number(item?.quantity || 1) || 1), 0)
+  const subtotal = toMoneyNumber(payload?.subtotal) || total
+
+  return {
+    platform: "GLOVO",
+    locationId: integration.locationId,
+    integrationId: integration.id,
+    externalOrderId: String(payload?.id || payload?.order_id || "").trim(),
+    externalOrderNumber: String(payload?.order_code || payload?.order_number || "").trim() || undefined,
+    customerName: String(payload?.customer?.name || payload?.customer_name || "").trim() || undefined,
+    customerPhone: String(payload?.customer?.phone || payload?.customer_phone || "").trim() || undefined,
+    customerNote: String(payload?.comments || payload?.notes || payload?.customer_note || "").trim() || undefined,
+    paymentLabel: String(payload?.payment_method || payload?.payment_type || "").trim() || undefined,
+    currency: "RON",
+    subtotal,
+    total,
+    displayNumber: String(payload?.order_code || payload?.id || payload?.order_id || "").trim() || undefined,
+    station: undefined,
+    items: products.map((item: any, index: number) => {
+      const quantity = Number(item?.quantity || item?.qty || 1) || 1
+      const unitPrice = toMoneyNumber(item?.price) || toMoneyNumber(item?.unit_price)
+      return {
+        externalLineId: String(item?.id || item?.product_id || `${payload?.id || "glovo"}-${index + 1}`).trim(),
+        externalProductId: String(item?.product_id || item?.id || "").trim() || undefined,
+        name: String(item?.name || item?.product_name || "Produs Glovo").trim(),
+        sku: String(item?.sku || "").trim() || undefined,
+        qty: quantity,
+        unitPrice,
+        vatRate: Number(item?.vat_percentage ?? item?.vat_rate ?? 0) || undefined,
+        note: String(item?.comment || item?.note || "").trim() || undefined,
+        modifiers: Array.isArray(item?.attributes)
+          ? item.attributes.map((option: any) => String(option?.name || "").trim()).filter(Boolean)
+          : undefined,
+        erpProductId: undefined,
+        departmentId: undefined,
+        station: undefined,
+      }
+    }),
+    rawPayload: payload,
+  }
+}
+
+router.post("/api/v1/marketplace/webhooks/wolt", async (req, res) => {
+  const payload = req.body || {}
+  const order = payload?.order || {}
+  const venueId = String(order?.venue_id || "").trim()
+  const externalVenueId = String(payload?.external_venue_id || order?.external_venue_id || "").trim()
+  const orderId = String(order?.id || "").trim()
+  const signature = String(req.header("WOLT-SIGNATURE") || "").trim().toLowerCase()
+
+  const integrations = await db.externalIntegration.findMany({
+    where: {
+      platform: "WOLT",
+      status: "ACTIVE",
+    },
+  })
+
+  const matchedIntegration = integrations.find((integration: any) => {
+    const storeMatches = externalVenueId && integration.storeId && integration.storeId === externalVenueId
+    const merchantMatches = venueId && integration.merchantId && integration.merchantId === venueId
+    const secret = String(integration.webhookSecret || "").trim()
+    if (secret && signature) {
+      const expected = hmacHex(secret, safeJsonStringify(payload)).toLowerCase()
+      if (expected !== signature) return false
+    }
+    return storeMatches || merchantMatches
+  })
+
+  if (!matchedIntegration) {
+    return res.status(404).json({ ok: false, error: "No Wolt integration matched webhook." })
+  }
+
+  try {
+    const eventStatus = String(order?.status || "").trim().toUpperCase()
+
+    if (["CANCELED", "REJECTED"].includes(eventStatus)) {
+      if (orderId) {
+        await setMarketplaceLifecycleStatus(
+          matchedIntegration.tenantId,
+          orderId,
+          "CANCELLED",
+          "PLATFORM",
+          "Wolt webhook marked order as cancelled.",
+          payload
+        )
+      }
+      return res.json({ ok: true })
+    }
+
+    if (eventStatus === "DELIVERED" && orderId) {
+      await setMarketplaceLifecycleStatus(
+        matchedIntegration.tenantId,
+        orderId,
+        "DELIVERED",
+        "PLATFORM",
+        "Wolt webhook marked order as delivered.",
+        payload
+      )
+      return res.json({ ok: true })
+    }
+
+    const token = String(matchedIntegration.accessToken || "").trim()
+    if (!token) {
+      return res.status(400).json({ ok: false, error: "Missing Wolt access token on integration." })
+    }
+
+    const orderData = await fetchWoltOrderV2(orderId, token)
+    const importPayload = normalizeWoltOrderToImportPayload(matchedIntegration, orderData)
+    const externalOrder = await importMarketplaceOrderForTenant(matchedIntegration.tenantId, importPayload)
+
+    if (eventStatus === "PRODUCTION") {
+      await setMarketplaceLifecycleStatus(
+        matchedIntegration.tenantId,
+        externalOrder.id,
+        "IN_KITCHEN",
+        "PLATFORM",
+        "Wolt webhook marked order as in production.",
+        payload
+      )
+    }
+
+    if (eventStatus === "READY") {
+      await setMarketplaceLifecycleStatus(
+        matchedIntegration.tenantId,
+        externalOrder.id,
+        "READY_FOR_FISCAL",
+        "PLATFORM",
+        "Wolt webhook marked order as ready.",
+        payload
+      )
+    }
+
+    return res.json({ ok: true, orderId: externalOrder.id })
+  } catch (error: any) {
+    return res.status(500).json({ ok: false, error: error?.message || "Wolt webhook failed" })
+  }
+})
+
+router.post("/api/v1/marketplace/webhooks/glovo/:storeId?", async (req, res) => {
+  const storeId = String(req.params.storeId || req.body?.store_id || req.body?.storeId || "").trim()
+  const orderId = String(req.body?.id || req.body?.order_id || "").trim()
+  const webhookSecret = String(req.header("X-Glovo-Webhook-Token") || req.header("Authorization") || "").replace(/^Bearer\s+/i, "").trim()
+
+  const integrations = await db.externalIntegration.findMany({
+    where: {
+      platform: "GLOVO",
+      status: "ACTIVE",
+      ...(storeId ? { storeId } : {}),
+    },
+  })
+
+  const matchedIntegration = integrations.find((integration: any) => {
+    const secret = String(integration.webhookSecret || "").trim()
+    return !secret || !webhookSecret || secret === webhookSecret
+  })
+
+  if (!matchedIntegration) {
+    return res.status(404).json({ ok: false, error: "No Glovo integration matched webhook." })
+  }
+
+  try {
+    const rawStatus = String(req.body?.status || req.body?.order_status || "").trim().toUpperCase()
+
+    if (["CANCELLED", "CANCELED"].includes(rawStatus) && orderId) {
+      await setMarketplaceLifecycleStatus(
+        matchedIntegration.tenantId,
+        orderId,
+        "CANCELLED",
+        "PLATFORM",
+        "Glovo webhook marked order as cancelled.",
+        req.body
+      )
+      return res.json({ ok: true })
+    }
+
+    const parsedPayload = normalizeGlovoOrderToImportPayload(matchedIntegration, req.body)
+    const externalOrder = await importMarketplaceOrderForTenant(matchedIntegration.tenantId, parsedPayload)
+
+    if (["ACCEPTED"].includes(rawStatus)) {
+      await setMarketplaceLifecycleStatus(
+        matchedIntegration.tenantId,
+        externalOrder.id,
+        "ACKNOWLEDGED",
+        "PLATFORM",
+        "Glovo webhook marked order as accepted.",
+        req.body
+      )
+    }
+
+    if (["READY_FOR_PICKUP", "READY"].includes(rawStatus)) {
+      await setMarketplaceLifecycleStatus(
+        matchedIntegration.tenantId,
+        externalOrder.id,
+        "READY_FOR_FISCAL",
+        "PLATFORM",
+        "Glovo webhook marked order as ready for pickup.",
+        req.body
+      )
+    }
+
+    return res.json({ ok: true, orderId: externalOrder.id })
+  } catch (error: any) {
+    return res.status(500).json({ ok: false, error: error?.message || "Glovo webhook failed" })
+  }
+})
+
+router.use(requireAuth)
+
+router.get("/api/v1/marketplace/platforms", (_req, res) => {
+  return res.json({
+    ok: true,
+    items: [
+      { code: "GLOVO", label: "Glovo", capabilities: ["ORDERS", "KDS", "READY_FOR_FISCAL"] },
+      { code: "WOLT", label: "Wolt", capabilities: ["ORDERS", "KDS", "READY_FOR_FISCAL"] },
+      { code: "BOLT_FOOD", label: "Bolt Food", capabilities: ["ORDERS_PENDING_ACCESS", "KDS", "READY_FOR_FISCAL"] },
+    ],
+  })
+})
+
+router.get("/api/v1/marketplace/integrations", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth?.tenantId
+  if (!tenantId) {
+    return res.status(400).json({ ok: false, error: "Missing tenant context" })
+  }
+
+  const items = await db.externalIntegration.findMany({
+    where: { tenantId },
+    include: {
+      location: {
+        select: { id: true, name: true, code: true },
+      },
+    },
+    orderBy: [{ platform: "asc" }, { createdAt: "desc" }],
+  })
+
+  return res.json({ ok: true, items })
+})
+
+router.post("/api/v1/marketplace/integrations/:platform/connect", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth?.tenantId
+  if (!tenantId) {
+    return res.status(400).json({ ok: false, error: "Missing tenant context" })
+  }
+
+  const platformParsed = PLATFORM_ENUM.safeParse(req.params.platform)
+  if (!platformParsed.success) {
+    return res.status(400).json({ ok: false, error: "Platform invalid" })
+  }
+
+  const bodyParsed = ConnectIntegrationSchema.safeParse(req.body)
+  if (!bodyParsed.success) {
+    return res.status(400).json({ ok: false, error: bodyParsed.error.flatten() })
+  }
+
+  const location = await ensureLocationForTenant(tenantId, bodyParsed.data.locationId)
+  if (!location) {
+    return res.status(404).json({ ok: false, error: "Location not found" })
+  }
+
+  const existingIntegration = await db.externalIntegration.findFirst({
+    where: {
+      tenantId,
+      locationId: location.id,
+      platform: platformParsed.data,
+    },
+    orderBy: { createdAt: "desc" },
+  })
+
+  const integrationPayload = {
+    status: "ACTIVE",
+    authType: bodyParsed.data.authType,
+    merchantId: bodyParsed.data.merchantId || null,
+    storeId: bodyParsed.data.storeId || null,
+    accessToken: bodyParsed.data.accessToken || null,
+    refreshToken: bodyParsed.data.refreshToken || null,
+    webhookSecret: bodyParsed.data.webhookSecret || null,
+    settingsJson: bodyParsed.data.settings || undefined,
+  }
+
+  const integration = existingIntegration
+    ? await db.externalIntegration.update({
+        where: { id: existingIntegration.id },
+        data: integrationPayload,
+        include: {
+          location: {
+            select: { id: true, name: true, code: true },
+          },
+        },
+      })
+    : await db.externalIntegration.create({
+        data: {
+          tenantId,
+          locationId: location.id,
+          platform: platformParsed.data,
+          ...integrationPayload,
+        },
+        include: {
+          location: {
+            select: { id: true, name: true, code: true },
+          },
+        },
+      })
+
+  return res.json({
+    ok: true,
+    integration,
+  })
+})
+
+router.post("/api/v1/marketplace/integrations/wolt/test-pull", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth?.tenantId
+  if (!tenantId) {
+    return res.status(400).json({ ok: false, error: "Missing tenant context" })
+  }
+
+  const integrationId = String(req.body?.integrationId || "").trim()
+  const orderId = String(req.body?.orderId || "").trim()
+  if (!integrationId || !orderId) {
+    return res.status(400).json({ ok: false, error: "integrationId and orderId are required" })
+  }
+
+  const integration = await db.externalIntegration.findFirst({
+    where: {
+      id: integrationId,
+      tenantId,
+      platform: "WOLT",
+    },
+  })
+  if (!integration) {
+    return res.status(404).json({ ok: false, error: "Wolt integration not found" })
+  }
+
+  try {
+    const token = String(integration.accessToken || "").trim()
+    if (!token) {
+      return res.status(400).json({ ok: false, error: "Missing Wolt access token" })
+    }
+    const orderData = await fetchWoltOrderV2(orderId, token)
+    const importPayload = normalizeWoltOrderToImportPayload(integration, orderData)
+    const externalOrder = await importMarketplaceOrderForTenant(tenantId, importPayload)
+    return res.json({ ok: true, order: externalOrder })
+  } catch (error: any) {
+    return res.status(500).json({ ok: false, error: error?.message || "Wolt pull failed" })
+  }
+})
+
+router.post("/api/v1/marketplace/integrations/glovo/test-import", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth?.tenantId
+  if (!tenantId) {
+    return res.status(400).json({ ok: false, error: "Missing tenant context" })
+  }
+
+  const integrationId = String(req.body?.integrationId || "").trim()
+  if (!integrationId) {
+    return res.status(400).json({ ok: false, error: "integrationId is required" })
+  }
+
+  const integration = await db.externalIntegration.findFirst({
+    where: {
+      id: integrationId,
+      tenantId,
+      platform: "GLOVO",
+    },
+  })
+  if (!integration) {
+    return res.status(404).json({ ok: false, error: "Glovo integration not found" })
+  }
+
+  try {
+    const importPayload = normalizeGlovoOrderToImportPayload(integration, req.body?.order || req.body)
+    const externalOrder = await importMarketplaceOrderForTenant(tenantId, importPayload)
+    return res.json({ ok: true, order: externalOrder })
+  } catch (error: any) {
+    return res.status(500).json({ ok: false, error: error?.message || "Glovo import failed" })
+  }
+})
+
+router.post("/api/v1/marketplace/orders/import", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth?.tenantId
+  if (!tenantId) {
+    return res.status(400).json({ ok: false, error: "Missing tenant context" })
+  }
+
+  const parsed = ImportMarketplaceOrderSchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res.status(400).json({ ok: false, error: parsed.error.flatten() })
+  }
+
+  const payload = parsed.data
+  let externalOrder
+  try {
+    externalOrder = await importMarketplaceOrderForTenant(tenantId, payload)
+  } catch (error: any) {
+    return res.status(400).json({ ok: false, error: error?.message || "Import failed" })
+  }
 
   return res.status(201).json({
     ok: true,

@@ -1270,6 +1270,289 @@ router.get("/api/v1/pos/marketplace/ready-for-fiscal", async (req: PosAuthReques
   return res.json({ ok: true, items });
 });
 
+const ACTIVE_MARKETPLACE_ORDER_STATUSES = [
+  "RECEIVED",
+  "ACKNOWLEDGED",
+  "IN_KITCHEN",
+  "READY",
+  "READY_FOR_FISCAL",
+] as const;
+
+const PosMarketplaceKdsStatusSchema = z.object({
+  status: z.string().trim().min(1),
+  message: z.string().trim().optional(),
+});
+
+async function resolvePosMarketplaceTerminalLocation(auth: NonNullable<PosAuthRequest["auth"]>) {
+  if (!auth.terminalId) return null;
+  return prisma.terminal.findUnique({
+    where: { id: auth.terminalId },
+    select: { locationId: true },
+  });
+}
+
+async function resolvePosMarketplaceOrder(auth: NonNullable<PosAuthRequest["auth"]>, inputOrderId: string, include: Record<string, unknown> = {}) {
+  const terminal = await resolvePosMarketplaceTerminalLocation(auth);
+  return prisma.externalOrder.findFirst({
+    where: {
+      tenantId: auth.tenantId,
+      ...(terminal?.locationId ? { locationId: terminal.locationId } : {}),
+      OR: [{ id: inputOrderId }, { externalOrderId: inputOrderId }],
+    },
+    include,
+  });
+}
+
+async function createPosMarketplaceHistory(
+  auth: NonNullable<PosAuthRequest["auth"]>,
+  externalOrderId: string,
+  status: string,
+  source: string,
+  message: string,
+  payloadJson?: unknown
+) {
+  return prisma.externalOrderStatusHistory.create({
+    data: {
+      tenantId: auth.tenantId,
+      externalOrderId,
+      status,
+      source,
+      message,
+      payloadJson: payloadJson ?? undefined,
+    },
+  });
+}
+
+function normalizePosMarketplaceKdsStatus(rawStatus: string) {
+  const value = String(rawStatus || "").trim().toUpperCase();
+  if (["READY", "FINAL", "FINALIZED", "DONE", "COMPLETED", "COMPLETE", "READY_FOR_FISCAL"].includes(value)) {
+    return "READY_FOR_FISCAL" as const;
+  }
+  if (["IN_PROGRESS", "PREPARING", "START", "STARTED", "COOKING"].includes(value)) {
+    return "IN_KITCHEN" as const;
+  }
+  if (["SENT", "SENT_TO_KDS", "QUEUED", "WAITING"].includes(value)) {
+    return "IN_KITCHEN" as const;
+  }
+  if (["ACCEPT", "ACCEPTED"].includes(value)) {
+    return "ACKNOWLEDGED" as const;
+  }
+  if (["RECEIVED", "NEW", "PENDING"].includes(value)) {
+    return "RECEIVED" as const;
+  }
+  return null;
+}
+
+router.get("/api/v1/pos/marketplace/orders", async (req: PosAuthRequest, res: Response) => {
+  const auth = await resolvePosAuthContext(req);
+  if (!auth?.tenantId) {
+    return res.status(401).json({
+      ok: false,
+      error: "POS neautentificat. Fa pair din nou.",
+    });
+  }
+
+  const terminal = await resolvePosMarketplaceTerminalLocation(auth);
+
+  const items = await prisma.externalOrder.findMany({
+    where: {
+      tenantId: auth.tenantId,
+      ...(terminal?.locationId ? { locationId: terminal.locationId } : {}),
+      status: { in: [...ACTIVE_MARKETPLACE_ORDER_STATUSES] },
+    },
+    include: {
+      location: {
+        select: { id: true, name: true, code: true },
+      },
+      saleDraft: {
+        select: { id: true, status: true, total: true, subtotal: true, updatedAt: true },
+      },
+      kitchenTicket: {
+        select: { id: true, status: true, displayNumber: true, readyAt: true, updatedAt: true },
+      },
+      items: true,
+    },
+    orderBy: [{ createdAt: "desc" }],
+  });
+
+  return res.json({ ok: true, items });
+});
+
+router.post("/api/v1/pos/marketplace/:externalOrderId/accept", async (req: PosAuthRequest, res: Response) => {
+  const auth = await resolvePosAuthContext(req);
+  if (!auth?.tenantId) {
+    return res.status(401).json({
+      ok: false,
+      error: "POS neautentificat. Fa pair din nou.",
+    });
+  }
+
+  const inputOrderId = String(req.params.externalOrderId || "").trim();
+  if (!inputOrderId) {
+    return res.status(400).json({ ok: false, error: "Missing externalOrderId" });
+  }
+
+  const order = await resolvePosMarketplaceOrder(auth, inputOrderId, {
+    saleDraft: true,
+    kitchenTicket: true,
+  });
+
+  if (!order) {
+    return res.status(404).json({ ok: false, error: "Marketplace order not found" });
+  }
+
+  const nextStatus = order.status === "RECEIVED" ? "ACKNOWLEDGED" : order.status;
+  if (nextStatus !== order.status) {
+    await prisma.externalOrder.update({
+      where: { id: order.id },
+      data: { status: nextStatus },
+    });
+  }
+
+  await createPosMarketplaceHistory(
+    auth,
+    order.id,
+    nextStatus,
+    "POS",
+    "Marketplace order accepted in POS.",
+    { terminalId: auth.terminalId || null }
+  );
+
+  return res.json({ ok: true, externalOrderId: order.id, status: nextStatus });
+});
+
+router.post("/api/v1/pos/marketplace/:externalOrderId/send-to-kds", async (req: PosAuthRequest, res: Response) => {
+  const auth = await resolvePosAuthContext(req);
+  if (!auth?.tenantId) {
+    return res.status(401).json({
+      ok: false,
+      error: "POS neautentificat. Fa pair din nou.",
+    });
+  }
+
+  const inputOrderId = String(req.params.externalOrderId || "").trim();
+  if (!inputOrderId) {
+    return res.status(400).json({ ok: false, error: "Missing externalOrderId" });
+  }
+
+  const order = await resolvePosMarketplaceOrder(auth, inputOrderId, {
+    kitchenTicket: true,
+    saleDraft: true,
+  });
+
+  if (!order) {
+    return res.status(404).json({ ok: false, error: "Marketplace order not found" });
+  }
+
+  await prisma.$transaction(async (tx: any) => {
+    await tx.externalOrder.update({
+      where: { id: order.id },
+        data: { status: "IN_KITCHEN" },
+    });
+
+    if (order.kitchenTicket) {
+      await tx.kitchenTicket.update({
+        where: { id: order.kitchenTicket.id },
+        data: { status: "NEW" },
+      });
+    }
+
+    await tx.externalOrderStatusHistory.create({
+      data: {
+        tenantId: auth.tenantId,
+        externalOrderId: order.id,
+        status: "IN_KITCHEN",
+        source: "POS",
+        message: "Marketplace order sent to KDS from POS.",
+        payloadJson: { terminalId: auth.terminalId || null },
+      },
+    });
+  });
+
+  return res.json({ ok: true, externalOrderId: order.id, status: "IN_KITCHEN" });
+});
+
+router.post("/api/v1/pos/marketplace/:externalOrderId/kds-status", async (req: PosAuthRequest, res: Response) => {
+  const auth = await resolvePosAuthContext(req);
+  if (!auth?.tenantId) {
+    return res.status(401).json({
+      ok: false,
+      error: "POS neautentificat. Fa pair din nou.",
+    });
+  }
+
+  const parsed = PosMarketplaceKdsStatusSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ ok: false, error: parsed.error.flatten() });
+  }
+
+  const normalizedStatus = normalizePosMarketplaceKdsStatus(parsed.data.status);
+  if (!normalizedStatus) {
+    return res.status(400).json({ ok: false, error: "Unsupported marketplace KDS status" });
+  }
+
+  const inputOrderId = String(req.params.externalOrderId || "").trim();
+  if (!inputOrderId) {
+    return res.status(400).json({ ok: false, error: "Missing externalOrderId" });
+  }
+
+  const order = await resolvePosMarketplaceOrder(auth, inputOrderId, {
+    kitchenTicket: true,
+    saleDraft: true,
+  });
+
+  if (!order) {
+    return res.status(404).json({ ok: false, error: "Marketplace order not found" });
+  }
+
+  const now = new Date();
+
+  await prisma.$transaction(async (tx: any) => {
+    await tx.externalOrder.update({
+      where: { id: order.id },
+      data: {
+        status: normalizedStatus,
+        ...(normalizedStatus === "READY_FOR_FISCAL" ? { readyAt: now } : {}),
+      },
+    });
+
+    if (order.kitchenTicket) {
+      const kitchenPayload =
+        normalizedStatus === "READY_FOR_FISCAL"
+          ? { status: "READY", readyAt: now }
+          : normalizedStatus === "IN_KITCHEN"
+            ? { status: "IN_PROGRESS" }
+            : normalizedStatus === "ACKNOWLEDGED"
+                ? { status: "NEW" }
+                : { status: "NEW" };
+      await tx.kitchenTicket.update({
+        where: { id: order.kitchenTicket.id },
+        data: kitchenPayload,
+      });
+    }
+
+    if (order.saleDraft && normalizedStatus === "READY_FOR_FISCAL") {
+      await tx.saleDraft.update({
+        where: { id: order.saleDraft.id },
+        data: { status: "READY_FOR_FISCAL" },
+      });
+    }
+
+    await tx.externalOrderStatusHistory.create({
+      data: {
+        tenantId: auth.tenantId,
+        externalOrderId: order.id,
+        status: normalizedStatus,
+        source: "KDS",
+        message: parsed.data.message || `Marketplace order marked ${normalizedStatus} from POS KDS callback.`,
+        payloadJson: { terminalId: auth.terminalId || null },
+      },
+    });
+  });
+
+  return res.json({ ok: true, externalOrderId: order.id, status: normalizedStatus });
+});
+
 router.post("/api/v1/pos/marketplace/:externalOrderId/load-cart", async (req: PosAuthRequest, res: Response) => {
   const auth = await resolvePosAuthContext(req);
   if (!auth?.tenantId) {
