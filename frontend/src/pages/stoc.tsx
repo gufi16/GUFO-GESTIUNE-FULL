@@ -95,6 +95,7 @@ export default function StocPage() {
   const [lots, setLots] = useState<any[]>([])
   const [moves, setMoves] = useState<any[]>([])
   const [selectedLot, setSelectedLot] = useState<any | null>(null)
+  const [selectedProductLots, setSelectedProductLots] = useState<any | null>(null)
 
   const [loading, setLoading] = useState(false)
   const [movesLoading, setMovesLoading] = useState(false)
@@ -370,6 +371,18 @@ export default function StocPage() {
     [filteredLots, lotPage]
   )
 
+  const selectedProductLotRows = useMemo(() => {
+    if (!selectedProductLots?.productId) return []
+    return filteredLots
+      .filter((item) => item.productId === selectedProductLots.productId)
+      .sort((a, b) => {
+        const aExpiry = a.expiryDate ? new Date(a.expiryDate).getTime() : Number.MAX_SAFE_INTEGER
+        const bExpiry = b.expiryDate ? new Date(b.expiryDate).getTime() : Number.MAX_SAFE_INTEGER
+        if (aExpiry !== bExpiry) return aExpiry - bExpiry
+        return new Date(a.receivedAt || 0).getTime() - new Date(b.receivedAt || 0).getTime()
+      })
+  }, [filteredLots, selectedProductLots])
+
   useEffect(() => {
     setLocationPage(1)
   }, [locationId, stockSearch, filteredLocationStock.length])
@@ -386,6 +399,17 @@ export default function StocPage() {
     if (nextPage < 1 || nextPage > pagination.totalPages) return
     loadMoves(locationId, nextPage).catch((e: any) => {
       setError(e?.message || "Nu pot incarca miscarile de stoc.")
+    })
+  }
+
+  function openProductLots(item: any) {
+    setSelectedProductLots({
+      productId: item.productId,
+      productName: item.productName || item.name || "-",
+      sku: item.sku || "",
+      trackLot: Boolean(item.trackLot),
+      trackExpiry: Boolean(item.trackExpiry),
+      costMethod: item.costMethod || "AVG",
     })
   }
 
@@ -492,10 +516,10 @@ export default function StocPage() {
               <Table
                 headers={["Produs", "SKU", "UM", "Control lot", "Gestiune", "Stoc", "Status"]}
                 rows={pagedLocationStock.map((s) => [
-                  <div>
+                  <button type="button" style={lotProductButton} onClick={() => openProductLots(s)}>
                     <div style={{ fontWeight: 700 }}>{s.name}</div>
                     {s.nextExpiry ? <div style={{ color: "#64748b", fontSize: 12 }}>Urmatoarea expirare: {formatShortDate(s.nextExpiry)}</div> : null}
-                  </div>,
+                  </button>,
                   s.sku,
                   s.uom,
                   <ProductControlBadges item={s} />,
@@ -545,10 +569,10 @@ export default function StocPage() {
               <Table
                 headers={["Produs", "SKU", "UM", "Control lot", "Locatii cu stoc", "Stoc total"]}
                 rows={pagedGlobalStock.map((s) => [
-                  <div>
+                  <button type="button" style={lotProductButton} onClick={() => openProductLots(s)}>
                     <div style={{ fontWeight: 700 }}>{s.name}</div>
                     {s.nextExpiry ? <div style={{ color: "#64748b", fontSize: 12 }}>Urmatoarea expirare: {formatShortDate(s.nextExpiry)}</div> : null}
-                  </div>,
+                  </button>,
                   s.sku,
                   s.uom,
                   <ProductControlBadges item={s} />,
@@ -797,6 +821,62 @@ export default function StocPage() {
                 <div style={lotDetailValue}>{formatShortDate(selectedLot.receivedAt)}</div>
               </div>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {selectedProductLots ? (
+        <div style={modalOverlay}>
+          <div style={{ ...modalCard, maxWidth: 980 }}>
+            <div style={modalHeader}>
+              <div>
+                <h3 style={{ margin: 0 }}>{selectedProductLots.productName}</h3>
+                <div style={{ color: "#64748b", fontSize: 13, marginTop: 4 }}>
+                  {selectedProductLots.sku || "-"} · {selectedProductLots.costMethod || "AVG"}
+                </div>
+              </div>
+              <button type="button" style={btnSecondary} onClick={() => setSelectedProductLots(null)}>
+                Inchide
+              </button>
+            </div>
+
+            <div style={{ ...filterBar, marginTop: 16, marginBottom: 16 }}>
+              <ProductControlBadges item={{ ...selectedProductLots, lotCount: selectedProductLotRows.length, nextExpiry: selectedProductLotRows[0]?.expiryDate || null }} />
+              <span style={infoChip}>{selectedProductLotRows.length} loturi active</span>
+              {locationId ? <span style={infoChip}>Locatie: {locations.find((item) => item.id === locationId)?.name || "-"}</span> : null}
+              {warehouseEnabled ? <span style={infoChip}>{activeWarehouseLabel(warehouses, warehouseId)}</span> : null}
+            </div>
+
+            {selectedProductLotRows.length === 0 ? (
+              <Empty text="Produsul este configurat pe lot, dar pe filtrele active nu exista loturi disponibile." />
+            ) : (
+              <Table
+                headers={["Lot", "Expira", "Gestiune", "Cant. initiala", "Cant. ramasa", "Cost unitar", "Valoare ramasa", "Receptionat"]}
+                rows={selectedProductLotRows.map((lot) => [
+                  <button type="button" style={lotCodeButton} onClick={() => setSelectedLot(lot)}>
+                    {lot.lotNo}
+                  </button>,
+                  <div>
+                    <div>{formatShortDate(lot.expiryDate)}</div>
+                    <div style={{ color: daysUntil(lot.expiryDate) !== null && (daysUntil(lot.expiryDate) as number) <= 7 ? "#b91c1c" : "#64748b", fontSize: 12 }}>
+                      {lot.expiryDate
+                        ? daysUntil(lot.expiryDate) === 0
+                          ? "expira azi"
+                          : daysUntil(lot.expiryDate) !== null && (daysUntil(lot.expiryDate) as number) > 0
+                            ? `${daysUntil(lot.expiryDate)} zile`
+                            : "expirat"
+                        : "-"}
+                    </div>
+                  </div>,
+                  lot.warehouseName || "-",
+                  `${formatQtyRo(Number(lot.initialQty || 0), 3)} ${lot.uom || ""}`.trim(),
+                  `${formatQtyRo(Number(lot.remainingQty || 0), 3)} ${lot.uom || ""}`.trim(),
+                  formatRon(Number(lot.unitCost || 0)),
+                  formatRon(Number(lot.totalRemainingValue || 0)),
+                  formatShortDate(lot.receivedAt),
+                ])}
+              />
+            )}
           </div>
         </div>
       ) : null}
@@ -1160,6 +1240,16 @@ const lotProductButton = {
   padding: 0,
   cursor: "pointer",
   color: "#0f172a",
+}
+
+const lotCodeButton = {
+  border: "none",
+  background: "transparent",
+  padding: 0,
+  color: "#1d4ed8",
+  cursor: "pointer",
+  fontWeight: 700,
+  textAlign: "left" as const,
 }
 
 const badgeWrap = {
