@@ -43,6 +43,13 @@ function daysUntil(value: string | Date | null | undefined) {
   return Math.round((target - start) / 86400000)
 }
 
+function activeWarehouseLabel(warehouses: any[], warehouseId: string) {
+  if (!warehouseId) return "Toate gestiunile"
+  const warehouse = warehouses.find((item) => item.id === warehouseId)
+  if (!warehouse) return "Gestiunea activa din topbar"
+  return warehouse.code ? `${warehouse.name} (${warehouse.code})` : warehouse.name
+}
+
 function ProductControlBadges({ item }: { item: any }) {
   const expiryDays = daysUntil(item?.nextExpiry)
 
@@ -131,7 +138,6 @@ export default function StocPage() {
     if (!selectedLocationId) {
       setWarehouses([])
       setWarehouseId("")
-      setActiveWarehouseId("")
       return
     }
     const res = await fetch(`${API}/api/v1/meta/warehouses?locationId=${encodeURIComponent(selectedLocationId)}`, { headers })
@@ -139,14 +145,16 @@ export default function StocPage() {
     if (res.status === 401) throw new Error("Token expirat sau invalid. Fa login din nou.")
     const items = Array.isArray(data.items) ? data.items : []
     setWarehouses(items)
+    const topbarWarehouseId = getActiveWarehouseId()
     setWarehouseId((current) => {
       const nextWarehouseId =
-        current && items.some((item: any) => item.id === current)
+        topbarWarehouseId && items.some((item: any) => item.id === topbarWarehouseId)
+          ? topbarWarehouseId
+          : current && items.some((item: any) => item.id === current)
           ? current
           : warehouseConfig.autoSelectSingleWarehouse && items.length === 1
             ? String(items[0].id || "")
             : ""
-      setActiveWarehouseId(nextWarehouseId)
       return nextWarehouseId
     })
   }
@@ -381,11 +389,6 @@ export default function StocPage() {
     })
   }
 
-  function handleWarehouseChange(nextWarehouseId: string) {
-    setWarehouseId(nextWarehouseId)
-    setActiveWarehouseId(nextWarehouseId)
-  }
-
   return (
     <div className="space-y-3">
       <PageHeader badge="gestiune" title="Stoc" />
@@ -476,14 +479,7 @@ export default function StocPage() {
         >
           <div style={filterBar}>
             <span style={infoChip}>{locationId ? "Locatia activa din topbar" : "Alege o locatie din topbar"}</span>
-            {locationId && warehouseEnabled ? (
-              <select value={warehouseId} onChange={(e) => handleWarehouseChange(e.target.value)} style={compactSelect}>
-                <option value="">Toate gestiunile</option>
-                {warehouses.map((warehouse) => (
-                  <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>
-                ))}
-              </select>
-            ) : null}
+            {locationId && warehouseEnabled ? <span style={infoChip}>{activeWarehouseLabel(warehouses, warehouseId)}</span> : null}
             <span style={infoChip}>{filteredLocationStock.length} produse</span>
           </div>
 
@@ -590,14 +586,7 @@ export default function StocPage() {
           <div style={filterBar}>
             <span style={infoChip}>{filteredLots.length} loturi</span>
             <span style={infoChip}>{expiringLotsSoonCount} expira in 7 zile</span>
-            {warehouseEnabled ? (
-              <select value={warehouseId} onChange={(e) => handleWarehouseChange(e.target.value)} style={compactSelect}>
-                <option value="">Toate gestiunile</option>
-                {warehouses.map((warehouse) => (
-                  <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>
-                ))}
-              </select>
-            ) : null}
+            {warehouseEnabled ? <span style={infoChip}>{activeWarehouseLabel(warehouses, warehouseId)}</span> : null}
           </div>
 
           {filteredLots.length === 0 ? (
@@ -672,13 +661,8 @@ export default function StocPage() {
               </div>
 
               {warehouseEnabled ? <div style={filterField}>
-                <label style={filterLabel}>Gestiune</label>
-                <select value={warehouseId} onChange={(e) => handleWarehouseChange(e.target.value)} style={filterInput}>
-                  <option value="">Toate gestiunile</option>
-                  {warehouses.map((warehouse) => (
-                    <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>
-                  ))}
-                </select>
+                <label style={filterLabel}>Gestiune activa</label>
+                <div style={readOnlyFilterField}>{activeWarehouseLabel(warehouses, warehouseId)}</div>
               </div> : null}
             </div>
           </div>
@@ -927,16 +911,6 @@ const filterInput = {
   boxSizing: "border-box" as const,
 }
 
-const compactSelect = {
-  padding: "8px 12px",
-  borderRadius: 12,
-  border: "1px solid #cbd5e1",
-  background: "#ffffff",
-  outline: "none",
-  fontSize: 13,
-  color: "#0f172a",
-}
-
 const movesFiltersWrap = {
   marginBottom: 12,
 }
@@ -957,6 +931,20 @@ const filterLabel = {
   fontSize: 12,
   fontWeight: 600,
   color: "#475569",
+}
+
+const readOnlyFilterField = {
+  minHeight: 42,
+  display: "flex",
+  alignItems: "center",
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "1px solid #cbd5e1",
+  background: "#f8fafc",
+  color: "#0f172a",
+  fontSize: 13,
+  fontWeight: 600,
+  boxSizing: "border-box" as const,
 }
 
 const paginationBar = {
