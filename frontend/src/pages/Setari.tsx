@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import PageHeader from "../components/PageHeader"
 import { useNavigate } from "react-router-dom"
-import { Archive, ArrowRight, Building2, FileDigit, History, Percent, ReceiptText, RefreshCcw, Settings2, Users, Warehouse } from "lucide-react"
+import { Archive, ArrowRight, Building2, FileDigit, History, Percent, ReceiptText, RefreshCcw, Settings2, Store, Users, Warehouse } from "lucide-react"
 import {
   DocumentMetric,
   InlineNotice,
@@ -42,6 +42,12 @@ const items = [
     desc: "Setezi regulile de lucru, filtrele si etichetele folosite pentru gestiune in ERP.",
     route: "/setari/gestiune",
     icon: Warehouse,
+  },
+  {
+    name: "Marketplace",
+    desc: "Conectezi Glovo, Wolt si Bolt Food, mapezi produsele si urmaresti comenzile intrate din platforme.",
+    route: "/setari/marketplace",
+    icon: Store,
   },
   {
     name: "Gestiuni",

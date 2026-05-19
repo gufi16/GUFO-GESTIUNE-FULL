@@ -754,6 +754,261 @@ router.get("/api/v1/marketplace/integrations", async (req: AuthedRequest, res) =
   return res.json({ ok: true, items })
 })
 
+router.get("/api/v1/marketplace/orders", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth?.tenantId
+  if (!tenantId) {
+    return res.status(400).json({ ok: false, error: "Missing tenant context" })
+  }
+
+  const platform = String(req.query.platform || "").trim().toUpperCase()
+  const status = String(req.query.status || "").trim().toUpperCase()
+  const locationId = String(req.query.locationId || "").trim()
+  const q = String(req.query.q || "").trim()
+
+  const where: any = { tenantId }
+  if (platform && PLATFORMS.includes(platform as any)) where.platform = platform
+  if (status) where.status = status
+  if (locationId) where.locationId = locationId
+  if (q) {
+    where.OR = [
+      { externalOrderId: { contains: q, mode: "insensitive" } },
+      { externalOrderNumber: { contains: q, mode: "insensitive" } },
+      { customerName: { contains: q, mode: "insensitive" } },
+    ]
+  }
+
+  const items = await db.externalOrder.findMany({
+    where,
+    include: {
+      location: {
+        select: { id: true, name: true, code: true },
+      },
+      integration: {
+        select: {
+          id: true,
+          platform: true,
+          status: true,
+          locationId: true,
+          merchantId: true,
+          storeId: true,
+        },
+      },
+      kitchenTicket: {
+        select: {
+          id: true,
+          status: true,
+          displayNumber: true,
+          sentToKdsAt: true,
+          readyAt: true,
+          completedAt: true,
+        },
+      },
+      saleDraft: {
+        select: {
+          id: true,
+          status: true,
+          subtotal: true,
+          total: true,
+          updatedAt: true,
+        },
+      },
+      items: {
+        orderBy: { createdAt: "asc" },
+      },
+      statusHistory: {
+        orderBy: { createdAt: "desc" },
+        take: 8,
+      },
+    },
+    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+    take: 120,
+  })
+
+  return res.json({ ok: true, items })
+})
+
+router.get("/api/v1/marketplace/mappings", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth?.tenantId
+  if (!tenantId) {
+    return res.status(400).json({ ok: false, error: "Missing tenant context" })
+  }
+
+  const integrationId = String(req.query.integrationId || "").trim()
+
+  const mappings = await db.marketplaceProductMapping.findMany({
+    where: {
+      tenantId,
+      ...(integrationId ? { integrationId } : {}),
+    },
+    include: {
+      integration: {
+        include: {
+          location: {
+            select: { id: true, name: true, code: true },
+          },
+        },
+      },
+      erpProduct: {
+        select: {
+          id: true,
+          sku: true,
+          name: true,
+          trackLot: true,
+          trackExpiry: true,
+          costMethod: true,
+        },
+      },
+    },
+    orderBy: [{ updatedAt: "desc" }],
+  })
+
+  const recentItems = await db.externalOrderItem.findMany({
+    where: {
+      externalOrder: {
+        tenantId,
+        ...(integrationId ? { integrationId } : {}),
+      },
+    },
+    include: {
+      externalOrder: {
+        select: {
+          id: true,
+          platform: true,
+          integrationId: true,
+          locationId: true,
+          updatedAt: true,
+          location: {
+            select: { id: true, name: true, code: true },
+          },
+        },
+      },
+    },
+    orderBy: [{ updatedAt: "desc" }],
+    take: 300,
+  })
+
+  const mappedKeySet = new Set(
+    mappings.map((item: any) => `${item.integrationId}::${item.externalProductId}`),
+  )
+
+  const seenRecent = new Map<string, any>()
+  for (const item of recentItems) {
+    const integrationKey = `${item.externalOrder?.integrationId || ""}::${item.externalProductId || item.name}`
+    if (seenRecent.has(integrationKey)) continue
+    seenRecent.set(integrationKey, {
+      integrationId: item.externalOrder?.integrationId || null,
+      externalProductId: item.externalProductId || null,
+      externalName: item.name,
+      sku: item.sku || null,
+      mappingStatus: item.mappingStatus,
+      orderItemId: item.id,
+      lastSeenAt: item.updatedAt,
+      location: item.externalOrder?.location || null,
+      platform: item.externalOrder?.platform || null,
+      mapped: mappedKeySet.has(`${item.externalOrder?.integrationId || ""}::${item.externalProductId || ""}`),
+    })
+  }
+
+  return res.json({
+    ok: true,
+    mappings,
+    recentExternalProducts: Array.from(seenRecent.values()),
+  })
+})
+
+router.post("/api/v1/marketplace/mappings", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth?.tenantId
+  if (!tenantId) {
+    return res.status(400).json({ ok: false, error: "Missing tenant context" })
+  }
+
+  const integrationId = String(req.body?.integrationId || "").trim()
+  const externalProductId = String(req.body?.externalProductId || "").trim()
+  const externalName = String(req.body?.externalName || "").trim() || null
+  const erpProductId = String(req.body?.erpProductId || "").trim() || null
+
+  if (!integrationId || !externalProductId) {
+    return res.status(400).json({ ok: false, error: "integrationId si externalProductId sunt obligatorii." })
+  }
+
+  const integration = await db.externalIntegration.findFirst({
+    where: { id: integrationId, tenantId },
+  })
+  if (!integration) {
+    return res.status(404).json({ ok: false, error: "Integrarea marketplace nu exista." })
+  }
+
+  const product = erpProductId
+    ? await db.product.findFirst({
+        where: { id: erpProductId, tenantId },
+        select: { id: true, name: true, sku: true, trackLot: true, trackExpiry: true, costMethod: true },
+      })
+    : null
+
+  if (erpProductId && !product) {
+    return res.status(404).json({ ok: false, error: "Produsul ERP nu exista." })
+  }
+
+  const mapping = await db.marketplaceProductMapping.upsert({
+    where: {
+      integrationId_externalProductId: {
+        integrationId,
+        externalProductId,
+      },
+    },
+    update: {
+      externalName,
+      erpProductId,
+      status: erpProductId ? "MAPPED" : "UNMAPPED",
+      lastSeenAt: new Date(),
+    },
+    create: {
+      tenantId,
+      integrationId,
+      externalProductId,
+      externalName,
+      erpProductId,
+      status: erpProductId ? "MAPPED" : "UNMAPPED",
+      lastSeenAt: new Date(),
+    },
+    include: {
+      integration: {
+        include: {
+          location: {
+            select: { id: true, name: true, code: true },
+          },
+        },
+      },
+      erpProduct: {
+        select: {
+          id: true,
+          sku: true,
+          name: true,
+          trackLot: true,
+          trackExpiry: true,
+          costMethod: true,
+        },
+      },
+    },
+  })
+
+  await db.externalOrderItem.updateMany({
+    where: {
+      externalProductId,
+      externalOrder: {
+        tenantId,
+        integrationId,
+      },
+    },
+    data: {
+      erpProductId,
+      mappingStatus: erpProductId ? "MAPPED" : "UNMAPPED",
+    },
+  })
+
+  return res.json({ ok: true, mapping })
+})
+
 router.post("/api/v1/marketplace/integrations/:platform/connect", async (req: AuthedRequest, res) => {
   const tenantId = req.auth?.tenantId
   if (!tenantId) {
