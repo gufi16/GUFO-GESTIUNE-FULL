@@ -1819,23 +1819,9 @@ export default function NirPage() {
                           />
 
                           {line.productId && (
-                            <div style={selectedProductMetaRow}>
-                              <div style={selectedProductMeta}>
-                                Selectat · ambalaj {line.uomCode || "-"} {line.isSgr ? "· SGR" : ""}
-                                {line.autoFactor ? " · factor auto" : " · factor manual"}
-                              </div>
-
-                              {(line.trackLot || line.trackExpiry) && (
-                                <button
-                                  type="button"
-                                  style={!isPosted ? lineMetaActionButton : lineMetaActionStatic}
-                                  onClick={() => !isPosted && openLineEditor(line)}
-                                >
-                                  {line.trackLot ? `Lot: ${line.lotNo || "-"}` : ""}
-                                  {line.trackLot && line.trackExpiry ? " · " : ""}
-                                  {line.trackExpiry ? `Expira: ${line.expiryDate || "-"}` : ""}
-                                </button>
-                              )}
+                            <div style={selectedProductMeta}>
+                              Selectat · ambalaj {line.uomCode || "-"} {line.isSgr ? "· SGR" : ""}
+                              {line.autoFactor ? " · factor auto" : " · factor manual"}
                             </div>
                           )}
 
@@ -1993,23 +1979,15 @@ export default function NirPage() {
                             </div>
 
                             {line.trackLot && (
-                              <button
-                                type="button"
-                                style={!isPosted ? insightChipButton : insightChipStatic}
-                                onClick={() => !isPosted && openLineEditor(line)}
-                              >
+                              <div style={insightChip}>
                                 <strong>Lot:</strong> {line.lotNo || "-"}
-                              </button>
+                              </div>
                             )}
 
                             {line.trackExpiry && (
-                              <button
-                                type="button"
-                                style={!isPosted ? insightChipButton : insightChipStatic}
-                                onClick={() => !isPosted && openLineEditor(line)}
-                              >
+                              <div style={insightChip}>
                                 <strong>Expira:</strong> {line.expiryDate || "-"}
-                              </button>
+                              </div>
                             )}
 
                             {(line.trackLot || line.trackExpiry) && (
@@ -2883,7 +2861,7 @@ const toolbarSubtitle: CSSProperties = {
 
 const rowsHeader: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "minmax(210px,1.7fr) 80px 88px 96px 70px 110px 150px 140px",
+  gridTemplateColumns: "minmax(170px,1.3fr) 74px 78px 90px 62px 104px 140px 176px",
   gap: 5,
   padding: "0 2px 4px",
   color: "#64748b",
@@ -2919,7 +2897,7 @@ const rowCard: CSSProperties = {
 
 const rowMain: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "minmax(210px,1.7fr) 80px 88px 96px 70px 110px 150px 140px",
+  gridTemplateColumns: "minmax(170px,1.3fr) 74px 78px 90px 62px 104px 140px 176px",
   gap: 5,
   alignItems: "center",
 }
@@ -2950,14 +2928,6 @@ const selectedProductMeta: CSSProperties = {
   color: "#16a34a",
   fontWeight: 700,
   paddingLeft: 2,
-}
-
-const selectedProductMetaRow: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 8,
-  flexWrap: "wrap",
 }
 
 const duplicateMeta: CSSProperties = {
@@ -3143,37 +3113,6 @@ const insightChip: CSSProperties = {
   border: "1px solid #e2e8f0",
   fontSize: 11,
   color: "#0f172a",
-}
-
-const insightChipButton: CSSProperties = {
-  ...insightChip,
-  cursor: "pointer",
-  fontWeight: 700,
-}
-
-const insightChipStatic: CSSProperties = {
-  ...insightChip,
-  borderStyle: "dashed",
-}
-
-const lineMetaActionButton: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 6,
-  padding: "4px 8px",
-  borderRadius: 999,
-  border: "1px solid #bfdbfe",
-  background: "#eff6ff",
-  color: "#1d4ed8",
-  cursor: "pointer",
-  fontSize: 11,
-  fontWeight: 700,
-}
-
-const lineMetaActionStatic: CSSProperties = {
-  ...lineMetaActionButton,
-  cursor: "default",
-  borderStyle: "dashed",
 }
 
 const readOnlyTopbarField: CSSProperties = {
