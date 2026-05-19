@@ -94,6 +94,7 @@ export default function StocPage() {
   const [globalStock, setGlobalStock] = useState<any[]>([])
   const [lots, setLots] = useState<any[]>([])
   const [moves, setMoves] = useState<any[]>([])
+  const [selectedLot, setSelectedLot] = useState<any | null>(null)
 
   const [loading, setLoading] = useState(false)
   const [movesLoading, setMovesLoading] = useState(false)
@@ -220,7 +221,6 @@ export default function StocPage() {
 
     const qs = new URLSearchParams()
     qs.set("locationId", id)
-    if (activeWarehouseId) qs.set("warehouseId", activeWarehouseId)
     if (stockSearch.trim()) qs.set("q", stockSearch.trim())
 
     const res = await fetch(`${API}/api/v1/stock/by-location?${qs.toString()}`, { headers })
@@ -479,7 +479,7 @@ export default function StocPage() {
         >
           <div style={filterBar}>
             <span style={infoChip}>{locationId ? "Locatia activa din topbar" : "Alege o locatie din topbar"}</span>
-            {locationId && warehouseEnabled ? <span style={infoChip}>{activeWarehouseLabel(warehouses, warehouseId)}</span> : null}
+            {locationId && warehouseEnabled ? <span style={infoChip}>Stocul pe locatie afiseaza totalul locatiei. Pentru loturi pe gestiune vezi tabul `Loturi`.</span> : null}
             <span style={infoChip}>{filteredLocationStock.length} produse</span>
           </div>
 
@@ -543,7 +543,7 @@ export default function StocPage() {
           ) : (
             <>
               <Table
-                headers={["Produs", "SKU", "UM", "Control lot", "Stoc total"]}
+                headers={["Produs", "SKU", "UM", "Control lot", "Locatii cu stoc", "Stoc total"]}
                 rows={pagedGlobalStock.map((s) => [
                   <div>
                     <div style={{ fontWeight: 700 }}>{s.name}</div>
@@ -552,6 +552,15 @@ export default function StocPage() {
                   s.sku,
                   s.uom,
                   <ProductControlBadges item={s} />,
+                  <div style={locationsWrap}>
+                    {Array.isArray(s.locations) && s.locations.length > 0 ? s.locations.map((entry: any, index: number) => (
+                      <div key={`${entry.locationId}-${entry.warehouseId}-${index}`} style={locationEntry}>
+                        <strong>{entry.locationName || "-"}</strong>
+                        <span>{formatQtyRo(Number(entry.qty || 0), 3)}</span>
+                        {entry.warehouseName ? <em>{entry.warehouseName}</em> : null}
+                      </div>
+                    )) : "-"}
+                  </div>,
                   formatQtyRo(Number(s.totalQty || 0), 3),
                 ])}
               />
@@ -602,10 +611,10 @@ export default function StocPage() {
               <Table
                 headers={["Produs", "Control", "Lot", "Expira", "Locatie", "Gestiune", "Cant. initiala", "Cant. ramasa", "Cost unitar", "Valoare ramasa"]}
                 rows={pagedLots.map((lot) => [
-                  <div>
+                  <button type="button" style={lotProductButton} onClick={() => setSelectedLot(lot)}>
                     <div style={{ fontWeight: 700 }}>{lot.productName}</div>
                     <div style={{ color: "#64748b", fontSize: 12 }}>{lot.sku || "-"}</div>
-                  </div>,
+                  </button>,
                   <ProductControlBadges item={lot} />,
                   lot.lotNo,
                   <div>
@@ -746,6 +755,51 @@ export default function StocPage() {
       )}
 
       {(loading || movesLoading) && <p style={{ marginTop: 12, color: "#64748b", fontSize: 13 }}>Se incarca...</p>}
+
+      {selectedLot ? (
+        <div style={modalOverlay}>
+          <div style={modalCard}>
+            <div style={modalHeader}>
+              <div>
+                <h3 style={{ margin: 0 }}>{selectedLot.productName}</h3>
+                <div style={{ color: "#64748b", fontSize: 13, marginTop: 4 }}>
+                  Lot {selectedLot.lotNo || "-"} · {selectedLot.warehouseName || "fara gestiune"}
+                </div>
+              </div>
+              <button type="button" style={btnSecondary} onClick={() => setSelectedLot(null)}>
+                Inchide
+              </button>
+            </div>
+
+            <div style={lotDetailGrid}>
+              <div style={lotDetailCard}>
+                <div style={lotDetailLabel}>Expira</div>
+                <div style={lotDetailValue}>{formatShortDate(selectedLot.expiryDate)}</div>
+              </div>
+              <div style={lotDetailCard}>
+                <div style={lotDetailLabel}>Cantitate initiala</div>
+                <div style={lotDetailValue}>{`${formatQtyRo(Number(selectedLot.initialQty || 0), 3)} ${selectedLot.uom || ""}`.trim()}</div>
+              </div>
+              <div style={lotDetailCard}>
+                <div style={lotDetailLabel}>Cantitate ramasa</div>
+                <div style={lotDetailValue}>{`${formatQtyRo(Number(selectedLot.remainingQty || 0), 3)} ${selectedLot.uom || ""}`.trim()}</div>
+              </div>
+              <div style={lotDetailCard}>
+                <div style={lotDetailLabel}>Cost unitar</div>
+                <div style={lotDetailValue}>{formatRon(Number(selectedLot.unitCost || 0))}</div>
+              </div>
+              <div style={lotDetailCard}>
+                <div style={lotDetailLabel}>Valoare ramasa</div>
+                <div style={lotDetailValue}>{formatRon(Number(selectedLot.totalRemainingValue || 0))}</div>
+              </div>
+              <div style={lotDetailCard}>
+                <div style={lotDetailLabel}>Receptionat</div>
+                <div style={lotDetailValue}>{formatShortDate(selectedLot.receivedAt)}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -1062,6 +1116,21 @@ const sectionTitle = {
   color: "#0f172a",
 }
 
+const locationsWrap = {
+  display: "flex",
+  flexDirection: "column" as const,
+  gap: 6,
+}
+
+const locationEntry = {
+  display: "flex",
+  gap: 6,
+  alignItems: "center",
+  flexWrap: "wrap" as const,
+  fontSize: 12,
+  color: "#334155",
+}
+
 const emptyBox = {
   padding: 16,
   border: "1px dashed #cbd5e1",
@@ -1081,6 +1150,16 @@ const infoChip = {
   color: "#475569",
   fontSize: 12,
   fontWeight: 600,
+}
+
+const lotProductButton = {
+  width: "100%",
+  textAlign: "left" as const,
+  border: "none",
+  background: "transparent",
+  padding: 0,
+  cursor: "pointer",
+  color: "#0f172a",
 }
 
 const badgeWrap = {
@@ -1130,5 +1209,60 @@ const miniBadgeRed = {
   background: "#fef2f2",
   borderColor: "#fecaca",
   color: "#b91c1c",
+}
+
+const modalOverlay = {
+  position: "fixed" as const,
+  inset: 0,
+  background: "rgba(15, 23, 42, 0.35)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 16,
+  zIndex: 60,
+}
+
+const modalCard = {
+  width: "100%",
+  maxWidth: 760,
+  borderRadius: 18,
+  border: "1px solid #e2e8f0",
+  background: "#fff",
+  padding: 18,
+  boxShadow: "0 24px 60px rgba(15,23,42,0.18)",
+}
+
+const modalHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 12,
+}
+
+const lotDetailGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gap: 12,
+  marginTop: 16,
+}
+
+const lotDetailCard = {
+  border: "1px solid #e2e8f0",
+  borderRadius: 14,
+  padding: 12,
+  background: "#f8fafc",
+}
+
+const lotDetailLabel = {
+  fontSize: 12,
+  color: "#64748b",
+  fontWeight: 700,
+  marginBottom: 6,
+}
+
+const lotDetailValue = {
+  fontSize: 15,
+  color: "#0f172a",
+  fontWeight: 700,
 }
 

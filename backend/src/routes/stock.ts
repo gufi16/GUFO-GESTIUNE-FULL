@@ -86,6 +86,32 @@ router.get("/api/v1/stock/global", async (req: AuthedRequest, res) => {
     lotMeta.set(lot.productId, current)
   }
 
+  const balances = await prisma.stockBalance.findMany({
+    where: {
+      tenantId,
+      companyId,
+      productId: { in: productIds },
+    },
+    include: {
+      location: true,
+      warehouse: true,
+    },
+    orderBy: [{ locationId: "asc" }, { warehouseId: "asc" }],
+  })
+
+  const balanceMap = new Map<string, Array<{ locationId: string; locationName: string; warehouseId: string; warehouseName: string; qty: number }>>()
+  for (const row of balances) {
+    const current = balanceMap.get(row.productId) || []
+    current.push({
+      locationId: row.locationId,
+      locationName: row.location?.name || "",
+      warehouseId: row.warehouseId || "",
+      warehouseName: row.warehouse?.name || "",
+      qty: Number(row.qty || 0),
+    })
+    balanceMap.set(row.productId, current)
+  }
+
   const productMap = new Map(products.map((p) => [p.id, p]))
 
   const items = grouped
@@ -105,6 +131,7 @@ router.get("/api/v1/stock/global", async (req: AuthedRequest, res) => {
         costMethod: p.costMethod || "AVG",
         lotCount: lotMeta.get(p.id)?.lotCount || 0,
         nextExpiry: lotMeta.get(p.id)?.nextExpiry || null,
+        locations: balanceMap.get(p.id) || [],
       }
     })
 
