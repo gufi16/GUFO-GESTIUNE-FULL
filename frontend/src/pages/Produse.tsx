@@ -214,6 +214,18 @@ function normalizeHostedImageUrl(value: any) {
   const text = String(value || "").trim()
   if (!text) return ""
 
+  if (/^(data:|blob:)/i.test(text)) {
+    return text
+  }
+
+  if (/^\/(?!\/)/.test(text)) {
+    return `${API_BASE}${text}`
+  }
+
+  if (!/^https?:\/\//i.test(text)) {
+    return `${API_BASE}/${text.replace(/^\/+/, "")}`
+  }
+
   if (typeof window !== "undefined" && window.location.protocol === "https:" && text.startsWith("http://")) {
     return text.replace(/^http:\/\//i, "https://")
   }
@@ -311,6 +323,10 @@ export default function ProdusePage() {
       }
     }
   }, [livePreviewUrl])
+
+  useEffect(() => {
+    setPreviewImageFailed(false)
+  }, [imagePreviewSrc])
 
   useEffect(() => {
     loadAll()
@@ -1718,18 +1734,22 @@ function getDefaultVat(list = vatRates) {
                         {uploading ? "Se incarca..." : "Incarca poza"}
                       </span>
                     </label>
-
                   </div>
 
                   {imagePreviewSrc && !previewImageFailed ? (
-                    <div style={imagePreviewWrapCompact}>
+                    <div style={imagePreviewCard}>
                       <img
                         key={imagePreviewSrc}
                         src={imagePreviewSrc}
-                        alt="Preview produs"
-                        style={imagePreviewLarge}
+                        alt="Poza produs"
+                        style={imagePreviewThumb}
+                        onLoad={() => setPreviewImageFailed(false)}
                         onError={() => setPreviewImageFailed(true)}
                       />
+                      <div style={imagePreviewMeta}>
+                        <div style={imagePreviewTitle}>Poza produs</div>
+                        <div style={imagePreviewText}>Imaginea salvata se vede si in lista de produse.</div>
+                      </div>
                     </div>
                   ) : (
                     <div style={hintBox}>
@@ -2433,18 +2453,40 @@ const hintBoxInline: CSSProperties = {
   alignItems: "center"
 }
 
-const imagePreviewWrapCompact: CSSProperties = {
-  marginTop: 10
+const imagePreviewCard: CSSProperties = {
+  marginTop: 10,
+  display: "flex",
+  alignItems: "center",
+  gap: 12,
+  padding: 12,
+  borderRadius: 12,
+  border: "1px solid #e5e7eb",
+  background: "#f8fafc"
 }
 
-const imagePreviewLarge: CSSProperties = {
-  width: "100%",
-  maxWidth: 260,
-  aspectRatio: "1 / 1",
+const imagePreviewThumb: CSSProperties = {
+  width: 76,
+  height: 76,
   objectFit: "cover",
   borderRadius: 12,
   border: "1px solid #e5e7eb",
   background: "#f8fafc"
+}
+
+const imagePreviewMeta: CSSProperties = {
+  display: "grid",
+  gap: 4
+}
+
+const imagePreviewTitle: CSSProperties = {
+  fontSize: 13,
+  fontWeight: 800,
+  color: "#0f172a"
+}
+
+const imagePreviewText: CSSProperties = {
+  fontSize: 12,
+  color: "#64748b"
 }
 
 const modalOverlay: CSSProperties = {
