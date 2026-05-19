@@ -26,6 +26,50 @@ function formatRon(value: number) {
   }).format(Number.isFinite(value) ? value : 0)
 }
 
+function formatShortDate(value: string | Date | null | undefined) {
+  if (!value) return "-"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "-"
+  return date.toLocaleDateString("ro-RO")
+}
+
+function daysUntil(value: string | Date | null | undefined) {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  const now = new Date()
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+  return Math.round((target - start) / 86400000)
+}
+
+function ProductControlBadges({ item }: { item: any }) {
+  const expiryDays = daysUntil(item?.nextExpiry)
+
+  return (
+    <div style={badgeWrap}>
+      {item?.trackLot ? <span style={{ ...miniBadge, ...miniBadgeBlue }}>Lot</span> : null}
+      {item?.trackExpiry ? <span style={{ ...miniBadge, ...miniBadgeAmber }}>Expira</span> : null}
+      <span style={{ ...miniBadge, ...miniBadgeSlate }}>{item?.costMethod || "AVG"}</span>
+      {Number(item?.lotCount || 0) > 0 ? (
+        <span style={{ ...miniBadge, ...miniBadgeGreen }}>
+          {Number(item?.lotCount || 0)} lot{Number(item?.lotCount || 0) === 1 ? "" : "uri"}
+        </span>
+      ) : null}
+      {item?.trackExpiry && item?.nextExpiry ? (
+        <span
+          style={{
+            ...miniBadge,
+            ...(expiryDays !== null && expiryDays <= 7 ? miniBadgeRed : miniBadgeAmber),
+          }}
+        >
+          Expira {formatShortDate(item.nextExpiry)}
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
 export default function StocPage() {
   const navigate = useNavigate()
   const token = getToken() || ""
@@ -286,6 +330,18 @@ export default function StocPage() {
     () => filteredLocationStock.filter((item) => Number(item?.qty || 0) <= 0).length,
     [filteredLocationStock]
   )
+  const trackedProductsCount = useMemo(
+    () => filteredLocationStock.filter((item) => item?.trackLot || item?.trackExpiry).length,
+    [filteredLocationStock]
+  )
+  const expiringLotsSoonCount = useMemo(
+    () =>
+      filteredLots.filter((item) => {
+        const diff = daysUntil(item?.expiryDate)
+        return diff !== null && diff >= 0 && diff <= 7
+      }).length,
+    [filteredLots]
+  )
 
   const locationTotalPages = Math.max(1, Math.ceil(filteredLocationStock.length / pageSize))
   const globalTotalPages = Math.max(1, Math.ceil(filteredGlobalStock.length / pageSize))
@@ -352,8 +408,8 @@ export default function StocPage() {
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-4">
         <Card title="Produse" value={filteredGlobalStock.length} icon={<Boxes size={16} />} />
         <Card title="Miscari" value={pagination.total} icon={<ArrowRightLeft size={16} />} />
-        <Card title="Locatii" value={locations.length} icon={<ClipboardList size={16} />} />
-        <Card title="Fara stoc" value={lowStockCount} icon={<SearchDot />} />
+        <Card title="Produse cu lot" value={trackedProductsCount} icon={<ClipboardList size={16} />} />
+        <Card title="Expira curand" value={expiringLotsSoonCount} icon={<SearchDot />} />
       </div>
 
       <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
@@ -438,11 +494,15 @@ export default function StocPage() {
           ) : (
             <>
               <Table
-                headers={["Produs", "SKU", "UM", "Gestiune", "Stoc", "Status"]}
+                headers={["Produs", "SKU", "UM", "Control lot", "Gestiune", "Stoc", "Status"]}
                 rows={pagedLocationStock.map((s) => [
-                  s.name,
+                  <div>
+                    <div style={{ fontWeight: 700 }}>{s.name}</div>
+                    {s.nextExpiry ? <div style={{ color: "#64748b", fontSize: 12 }}>Urmatoarea expirare: {formatShortDate(s.nextExpiry)}</div> : null}
+                  </div>,
                   s.sku,
                   s.uom,
+                  <ProductControlBadges item={s} />,
                   s.warehouseName || "-",
                   formatQtyRo(Number(s.qty || 0), 3),
                   <span style={{ ...typeBadge, ...(Number(s.qty || 0) > 0 ? typeIn : typeOut) }}>
@@ -487,11 +547,15 @@ export default function StocPage() {
           ) : (
             <>
               <Table
-                headers={["Produs", "SKU", "UM", "Stoc total"]}
+                headers={["Produs", "SKU", "UM", "Control lot", "Stoc total"]}
                 rows={pagedGlobalStock.map((s) => [
-                  s.name,
+                  <div>
+                    <div style={{ fontWeight: 700 }}>{s.name}</div>
+                    {s.nextExpiry ? <div style={{ color: "#64748b", fontSize: 12 }}>Urmatoarea expirare: {formatShortDate(s.nextExpiry)}</div> : null}
+                  </div>,
                   s.sku,
                   s.uom,
+                  <ProductControlBadges item={s} />,
                   formatQtyRo(Number(s.totalQty || 0), 3),
                 ])}
               />
@@ -525,6 +589,7 @@ export default function StocPage() {
         >
           <div style={filterBar}>
             <span style={infoChip}>{filteredLots.length} loturi</span>
+            <span style={infoChip}>{expiringLotsSoonCount} expira in 7 zile</span>
             {warehouseEnabled ? (
               <select value={warehouseId} onChange={(e) => handleWarehouseChange(e.target.value)} style={compactSelect}>
                 <option value="">Toate gestiunile</option>
@@ -540,14 +605,26 @@ export default function StocPage() {
           ) : (
             <>
               <Table
-                headers={["Produs", "Lot", "Expira", "Locatie", "Gestiune", "Cant. initiala", "Cant. ramasa", "Cost unitar", "Valoare ramasa"]}
+                headers={["Produs", "Control", "Lot", "Expira", "Locatie", "Gestiune", "Cant. initiala", "Cant. ramasa", "Cost unitar", "Valoare ramasa"]}
                 rows={pagedLots.map((lot) => [
                   <div>
                     <div style={{ fontWeight: 700 }}>{lot.productName}</div>
                     <div style={{ color: "#64748b", fontSize: 12 }}>{lot.sku || "-"}</div>
                   </div>,
+                  <ProductControlBadges item={lot} />,
                   lot.lotNo,
-                  lot.expiryDate ? new Date(lot.expiryDate).toLocaleDateString("ro-RO") : "-",
+                  <div>
+                    <div>{formatShortDate(lot.expiryDate)}</div>
+                    {lot.expiryDate ? (
+                      <div style={{ color: daysUntil(lot.expiryDate) !== null && (daysUntil(lot.expiryDate) as number) <= 7 ? "#b91c1c" : "#64748b", fontSize: 12 }}>
+                        {daysUntil(lot.expiryDate) === 0
+                          ? "expira azi"
+                          : daysUntil(lot.expiryDate) !== null && (daysUntil(lot.expiryDate) as number) > 0
+                            ? `${daysUntil(lot.expiryDate)} zile`
+                            : "expirat"}
+                      </div>
+                    ) : null}
+                  </div>,
                   lot.locationName || "-",
                   lot.warehouseName || "-",
                   `${formatQtyRo(Number(lot.initialQty || 0), 3)} ${lot.uom || ""}`.trim(),
@@ -1010,5 +1087,54 @@ const infoChip = {
   color: "#475569",
   fontSize: 12,
   fontWeight: 600,
+}
+
+const badgeWrap = {
+  display: "flex",
+  gap: 6,
+  flexWrap: "wrap" as const,
+  alignItems: "center",
+}
+
+const miniBadge = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "4px 8px",
+  borderRadius: 999,
+  fontSize: 11,
+  fontWeight: 700,
+  border: "1px solid transparent",
+  whiteSpace: "nowrap" as const,
+}
+
+const miniBadgeBlue = {
+  background: "#eff6ff",
+  borderColor: "#bfdbfe",
+  color: "#1d4ed8",
+}
+
+const miniBadgeAmber = {
+  background: "#fffbeb",
+  borderColor: "#fde68a",
+  color: "#b45309",
+}
+
+const miniBadgeGreen = {
+  background: "#f0fdf4",
+  borderColor: "#bbf7d0",
+  color: "#166534",
+}
+
+const miniBadgeSlate = {
+  background: "#f8fafc",
+  borderColor: "#e2e8f0",
+  color: "#334155",
+}
+
+const miniBadgeRed = {
+  background: "#fef2f2",
+  borderColor: "#fecaca",
+  color: "#b91c1c",
 }
 

@@ -19,6 +19,12 @@ function toPositiveInt(value: any, fallback: number) {
   return intValue > 0 ? intValue : fallback
 }
 
+function pickEarlierDate(current: Date | null, candidate: Date | null | undefined) {
+  if (!candidate) return current
+  if (!current) return candidate
+  return candidate.getTime() < current.getTime() ? candidate : current
+}
+
 // stoc global: suma pe toate locatiile
 router.get("/api/v1/stock/global", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
@@ -59,6 +65,27 @@ router.get("/api/v1/stock/global", async (req: AuthedRequest, res) => {
     orderBy: { name: "asc" }
   })
 
+  const lots = await prisma.stockLot.findMany({
+    where: {
+      tenantId,
+      companyId,
+      productId: { in: productIds },
+      remainingQty: { gt: 0 },
+    },
+    select: {
+      productId: true,
+      expiryDate: true,
+    },
+  })
+
+  const lotMeta = new Map<string, { lotCount: number; nextExpiry: Date | null }>()
+  for (const lot of lots) {
+    const current = lotMeta.get(lot.productId) || { lotCount: 0, nextExpiry: null }
+    current.lotCount += 1
+    current.nextExpiry = pickEarlierDate(current.nextExpiry, lot.expiryDate)
+    lotMeta.set(lot.productId, current)
+  }
+
   const productMap = new Map(products.map((p) => [p.id, p]))
 
   const items = grouped
@@ -72,7 +99,12 @@ router.get("/api/v1/stock/global", async (req: AuthedRequest, res) => {
         uom: p.uom?.code ?? "",
         department: p.department?.name ?? "",
         category: p.category?.name ?? "",
-        totalQty: Number(g._sum.qty ?? 0)
+        totalQty: Number(g._sum.qty ?? 0),
+        trackLot: Boolean(p.trackLot),
+        trackExpiry: Boolean(p.trackExpiry),
+        costMethod: p.costMethod || "AVG",
+        lotCount: lotMeta.get(p.id)?.lotCount || 0,
+        nextExpiry: lotMeta.get(p.id)?.nextExpiry || null,
       }
     })
 
@@ -107,6 +139,32 @@ router.get("/api/v1/stock/by-location", async (req: AuthedRequest, res) => {
     orderBy: [{ locationId: "asc" }, { productId: "asc" }]
   })
 
+  const balanceProductIds = [...new Set(balances.map((row) => row.productId).filter(Boolean))]
+  const balanceLots = balanceProductIds.length
+    ? await prisma.stockLot.findMany({
+        where: {
+          tenantId,
+          companyId,
+          productId: { in: balanceProductIds },
+          ...(locationId ? { locationId } : {}),
+          ...(warehouseId ? { warehouseId } : {}),
+          remainingQty: { gt: 0 },
+        },
+        select: {
+          productId: true,
+          expiryDate: true,
+        },
+      })
+    : []
+
+  const balanceLotMeta = new Map<string, { lotCount: number; nextExpiry: Date | null }>()
+  for (const lot of balanceLots) {
+    const current = balanceLotMeta.get(lot.productId) || { lotCount: 0, nextExpiry: null }
+    current.lotCount += 1
+    current.nextExpiry = pickEarlierDate(current.nextExpiry, lot.expiryDate)
+    balanceLotMeta.set(lot.productId, current)
+  }
+
   const filtered = balances.filter((row) => {
     if (!q) return true
     const name = row.product?.name ?? ""
@@ -129,7 +187,12 @@ router.get("/api/v1/stock/by-location", async (req: AuthedRequest, res) => {
     uom: row.product?.uom?.code ?? "",
     department: row.product?.department?.name ?? "",
     category: row.product?.category?.name ?? "",
-    qty: Number(row.qty)
+    qty: Number(row.qty),
+    trackLot: Boolean(row.product?.trackLot),
+    trackExpiry: Boolean(row.product?.trackExpiry),
+    costMethod: row.product?.costMethod || "AVG",
+    lotCount: balanceLotMeta.get(row.productId)?.lotCount || 0,
+    nextExpiry: balanceLotMeta.get(row.productId)?.nextExpiry || null,
   }))
 
   res.json({ ok: true, items })
@@ -181,6 +244,9 @@ router.get("/api/v1/stock/lots", async (req: AuthedRequest, res) => {
       productName: lot.product?.name || "",
       sku: lot.product?.sku || "",
       uom: lot.product?.uom?.code || "",
+      trackLot: Boolean(lot.product?.trackLot),
+      trackExpiry: Boolean(lot.product?.trackExpiry),
+      costMethod: lot.product?.costMethod || "AVG",
       locationId: lot.locationId,
       locationName: lot.location?.name || "",
       warehouseId: lot.warehouseId || "",
