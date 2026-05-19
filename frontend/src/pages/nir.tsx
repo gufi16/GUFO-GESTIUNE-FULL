@@ -183,6 +183,12 @@ function getLineComputed(line: NirLine, fxRate: string) {
   }
 }
 
+function activeWarehouseLabel(warehouses: AnyObj[], warehouseId: string) {
+  const warehouse = ensureArray(warehouses).find((item: AnyObj) => item.id === warehouseId)
+  if (!warehouse) return "-"
+  return warehouse.code ? `${warehouse.name} (${warehouse.code})` : warehouse.name
+}
+
 export default function NirPage() {
   const navigate = useNavigate()
   const token = rawToken()
@@ -1384,9 +1390,8 @@ export default function NirPage() {
                         value={header.locationId}
                         onChange={(e) => {
                           const nextLocationId = e.target.value
-                          setHeader({ ...header, locationId: nextLocationId, warehouseId: "" })
+                          setHeader({ ...header, locationId: nextLocationId })
                           setActiveLocationId(nextLocationId)
-                          setActiveWarehouseId("")
                         }}
                         style={input}
                       disabled={isPosted}
@@ -1400,25 +1405,13 @@ export default function NirPage() {
                     </select>
                   </Field>
 
-                  {warehouseConfig.multiWarehouseEnabled ? <Field label={warehouseConfig.warehouseLabel}>
-                      <select
-                        value={header.warehouseId}
-                        onChange={(e) => {
-                          const nextWarehouseId = e.target.value
-                          setHeader({ ...header, warehouseId: nextWarehouseId })
-                          setActiveWarehouseId(nextWarehouseId)
-                        }}
-                        style={input}
-                        disabled={isPosted}
-                      >
-                        <option value="">Selecteaza gestiunea</option>
-                        {ensureArray(warehouses).map((warehouse: AnyObj) => (
-                        <option key={warehouse.id} value={warehouse.id}>
-                          {warehouse.name}{warehouse.code ? ` (${warehouse.code})` : ""}
-                          </option>
-                        ))}
-                      </select>
-                  </Field> : null}
+                  {warehouseConfig.multiWarehouseEnabled ? (
+                    <Field label={`${warehouseConfig.warehouseLabel} activa`}>
+                      <div style={readOnlyTopbarField}>
+                        {activeWarehouseLabel(warehouses, header.warehouseId)}
+                      </div>
+                    </Field>
+                  ) : null}
 
                   <Field label="Nr. document">
                     <input
@@ -1507,9 +1500,8 @@ export default function NirPage() {
                   value={header.locationId}
                   onChange={(e) => {
                     const nextLocationId = e.target.value
-                    setHeader({ ...header, locationId: nextLocationId, warehouseId: "" })
+                    setHeader({ ...header, locationId: nextLocationId })
                     setActiveLocationId(nextLocationId)
-                    setActiveWarehouseId("")
                   }}
                   style={input}
                   disabled={isPosted}
@@ -1524,27 +1516,15 @@ export default function NirPage() {
                 </Field>
               </div>
 
-                {warehouseConfig.multiWarehouseEnabled ? <div>
-                <Field label={warehouseConfig.warehouseLabel}>
-                  <select
-                    value={header.warehouseId}
-                    onChange={(e) => {
-                      const nextWarehouseId = e.target.value
-                      setHeader({ ...header, warehouseId: nextWarehouseId })
-                      setActiveWarehouseId(nextWarehouseId)
-                    }}
-                    style={input}
-                    disabled={isPosted}
-                  >
-                    <option value="">Selecteaza gestiunea</option>
-                    {ensureArray(warehouses).map((warehouse: AnyObj) => (
-                    <option key={warehouse.id} value={warehouse.id}>
-                      {warehouse.name}{warehouse.code ? ` (${warehouse.code})` : ""}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                </div> : null}
+              {warehouseConfig.multiWarehouseEnabled ? (
+                <div>
+                  <Field label={`${warehouseConfig.warehouseLabel} activa`}>
+                    <div style={readOnlyTopbarField}>
+                      {activeWarehouseLabel(warehouses, header.warehouseId)}
+                    </div>
+                  </Field>
+                </div>
+              ) : null}
 
               <Field label="Nr. document">
                 <input
@@ -1839,9 +1819,23 @@ export default function NirPage() {
                           />
 
                           {line.productId && (
-                            <div style={selectedProductMeta}>
-                              Selectat · ambalaj {line.uomCode || "-"} {line.isSgr ? "· SGR" : ""}
-                              {line.autoFactor ? " · factor auto" : " · factor manual"}
+                            <div style={selectedProductMetaRow}>
+                              <div style={selectedProductMeta}>
+                                Selectat · ambalaj {line.uomCode || "-"} {line.isSgr ? "· SGR" : ""}
+                                {line.autoFactor ? " · factor auto" : " · factor manual"}
+                              </div>
+
+                              {(line.trackLot || line.trackExpiry) && (
+                                <button
+                                  type="button"
+                                  style={!isPosted ? lineMetaActionButton : lineMetaActionStatic}
+                                  onClick={() => !isPosted && openLineEditor(line)}
+                                >
+                                  {line.trackLot ? `Lot: ${line.lotNo || "-"}` : ""}
+                                  {line.trackLot && line.trackExpiry ? " · " : ""}
+                                  {line.trackExpiry ? `Expira: ${line.expiryDate || "-"}` : ""}
+                                </button>
+                              )}
                             </div>
                           )}
 
@@ -1947,17 +1941,15 @@ export default function NirPage() {
                           }}
                         >
                           {isMobileViewport && <div style={mobileGridLabel}>Actiuni</div>}
-                          <button
-                            type="button"
-                            style={
-                              isMobileViewport
-                                ? { ...btnSecondary, width: "100%" }
-                                : { ...btnSecondary, padding: "8px 10px", minWidth: 96 }
-                            }
-                            onClick={() => openLineEditor(line)}
-                          >
-                            Detalii
-                          </button>
+                          {isMobileViewport ? (
+                            <button
+                              type="button"
+                              style={{ ...btnSecondary, width: "100%" }}
+                              onClick={() => openLineEditor(line)}
+                            >
+                              Detalii
+                            </button>
+                          ) : null}
                           {!isPosted && (
                             <button
                               style={
@@ -1990,15 +1982,23 @@ export default function NirPage() {
                             </div>
 
                             {line.trackLot && (
-                              <div style={insightChip}>
+                              <button
+                                type="button"
+                                style={!isPosted ? insightChipButton : insightChipStatic}
+                                onClick={() => !isPosted && openLineEditor(line)}
+                              >
                                 <strong>Lot:</strong> {line.lotNo || "-"}
-                              </div>
+                              </button>
                             )}
 
                             {line.trackExpiry && (
-                              <div style={insightChip}>
+                              <button
+                                type="button"
+                                style={!isPosted ? insightChipButton : insightChipStatic}
+                                onClick={() => !isPosted && openLineEditor(line)}
+                              >
                                 <strong>Expira:</strong> {line.expiryDate || "-"}
-                              </div>
+                              </button>
                             )}
 
                             {(line.trackLot || line.trackExpiry) && (
@@ -2872,7 +2872,7 @@ const toolbarSubtitle: CSSProperties = {
 
 const rowsHeader: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "minmax(260px,2.4fr) 80px 88px 96px 70px 110px 150px 44px",
+  gridTemplateColumns: "minmax(210px,1.7fr) 80px 88px 96px 70px 110px 150px 44px",
   gap: 5,
   padding: "0 2px 4px",
   color: "#64748b",
@@ -2908,7 +2908,7 @@ const rowCard: CSSProperties = {
 
 const rowMain: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "minmax(260px,2.4fr) 80px 88px 96px 70px 110px 150px 44px",
+  gridTemplateColumns: "minmax(210px,1.7fr) 80px 88px 96px 70px 110px 150px 44px",
   gap: 5,
   alignItems: "center",
 }
@@ -2939,6 +2939,14 @@ const selectedProductMeta: CSSProperties = {
   color: "#16a34a",
   fontWeight: 700,
   paddingLeft: 2,
+}
+
+const selectedProductMetaRow: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 8,
+  flexWrap: "wrap",
 }
 
 const duplicateMeta: CSSProperties = {
@@ -3124,6 +3132,51 @@ const insightChip: CSSProperties = {
   border: "1px solid #e2e8f0",
   fontSize: 11,
   color: "#0f172a",
+}
+
+const insightChipButton: CSSProperties = {
+  ...insightChip,
+  cursor: "pointer",
+  fontWeight: 700,
+}
+
+const insightChipStatic: CSSProperties = {
+  ...insightChip,
+  borderStyle: "dashed",
+}
+
+const lineMetaActionButton: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  padding: "4px 8px",
+  borderRadius: 999,
+  border: "1px solid #bfdbfe",
+  background: "#eff6ff",
+  color: "#1d4ed8",
+  cursor: "pointer",
+  fontSize: 11,
+  fontWeight: 700,
+}
+
+const lineMetaActionStatic: CSSProperties = {
+  ...lineMetaActionButton,
+  cursor: "default",
+  borderStyle: "dashed",
+}
+
+const readOnlyTopbarField: CSSProperties = {
+  minHeight: 42,
+  display: "flex",
+  alignItems: "center",
+  padding: "9px 10px",
+  borderRadius: 10,
+  border: "1px solid #cbd5e1",
+  background: "#f8fafc",
+  color: "#0f172a",
+  fontSize: 13,
+  fontWeight: 600,
+  boxSizing: "border-box",
 }
 
 const btnPrimary: CSSProperties = {
