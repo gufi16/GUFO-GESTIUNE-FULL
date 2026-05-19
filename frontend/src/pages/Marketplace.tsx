@@ -29,6 +29,18 @@ type LocationItem = {
   code?: string
 }
 
+type TerminalItem = {
+  id: string
+  label: string
+  deviceId: string
+  locationId?: string
+  location?: {
+    id: string
+    name: string
+    code?: string
+  } | null
+}
+
 type ProductItem = {
   id: string
   sku: string
@@ -119,6 +131,7 @@ type MarketplaceOrder = {
 
 type IntegrationForm = {
   locationId: string
+  targetTerminalId: string
   authType: "PARTNER" | "OAUTH" | "API_KEY"
   merchantId: string
   storeId: string
@@ -143,6 +156,7 @@ const defaultPlatforms: PlatformItem[] = [
 function emptyForm(): IntegrationForm {
   return {
     locationId: "",
+    targetTerminalId: "",
     authType: "PARTNER",
     merchantId: "",
     storeId: "",
@@ -186,6 +200,7 @@ export default function MarketplacePage() {
   const [platforms, setPlatforms] = useState<PlatformItem[]>(defaultPlatforms)
   const [locations, setLocations] = useState<LocationItem[]>([])
   const [products, setProducts] = useState<ProductItem[]>([])
+  const [terminals, setTerminals] = useState<TerminalItem[]>([])
   const [integrations, setIntegrations] = useState<IntegrationItem[]>([])
   const [orders, setOrders] = useState<MarketplaceOrder[]>([])
   const [mappings, setMappings] = useState<MappingItem[]>([])
@@ -256,6 +271,27 @@ export default function MarketplacePage() {
     }
   }
 
+  useEffect(() => {
+    const locationId = forms[selectedPlatform]?.locationId || ""
+    if (!locationId) {
+      setTerminals([])
+      return
+    }
+    void loadTerminals(locationId)
+  }, [forms, selectedPlatform])
+
+  async function loadTerminals(locationId: string) {
+    try {
+      const data = await api<{ ok: boolean; terminals: TerminalItem[] }>(
+        `/api/v1/meta/terminals?locationId=${encodeURIComponent(locationId)}`,
+      )
+      setTerminals(Array.isArray(data?.terminals) ? data.terminals : [])
+    } catch (e: any) {
+      setError(e?.message || "Nu am putut incarca device-urile POS.")
+      setTerminals([])
+    }
+  }
+
   function hydrateFormsFromIntegrations() {
     setForms((current) => {
       const next = { ...current }
@@ -271,6 +307,10 @@ export default function MarketplacePage() {
               refreshToken: integration.refreshToken || "",
               webhookSecret: integration.webhookSecret || "",
               settingsJson: integration.settingsJson ? JSON.stringify(integration.settingsJson, null, 2) : "",
+              targetTerminalId:
+                typeof integration.settingsJson?.targetTerminalId === "string"
+                  ? integration.settingsJson.targetTerminalId
+                  : "",
             }
           : current[platform.code] || emptyForm()
       }
@@ -327,7 +367,11 @@ export default function MarketplacePage() {
           accessToken: form.accessToken.trim() || undefined,
           refreshToken: form.refreshToken.trim() || undefined,
           webhookSecret: form.webhookSecret.trim() || undefined,
-          settings,
+          settings: {
+            ...(settings || {}),
+            targetTerminalId: form.targetTerminalId || undefined,
+            dispatchMode: "POS_CONFIRM",
+          },
         }),
       })
 
@@ -452,6 +496,7 @@ export default function MarketplacePage() {
   const connectedLocations = useMemo(() => new Set(activeIntegrations.map((item) => item.locationId).filter(Boolean)).size, [activeIntegrations])
   const currentForm = forms[selectedPlatform] || emptyForm()
   const selectedIntegration = integrations.find((item) => item.platform === selectedPlatform) || null
+  const selectedTerminal = terminals.find((item) => item.id === currentForm.targetTerminalId) || null
 
   return (
     <div className="space-y-3">
@@ -500,22 +545,69 @@ export default function MarketplacePage() {
           >
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.2fr_0.8fr]">
               <div className="space-y-3">
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <DocumentField label="Locatie">
-                    <select
-                      value={currentForm.locationId}
-                      onChange={(e) => setForms((prev) => ({ ...prev, [selectedPlatform]: { ...prev[selectedPlatform], locationId: e.target.value } }))}
-                      className={documentInputClass}
-                    >
-                      <option value="">Selecteaza locatia</option>
-                      {locations.map((location) => (
-                        <option key={location.id} value={location.id}>
-                          {location.code ? `${location.name} (${location.code})` : location.name}
-                        </option>
-                      ))}
-                    </select>
-                  </DocumentField>
+                <div className="rounded-[18px] border border-slate-200 bg-slate-50 p-4">
+                  <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
+                    <Truck size={16} className="text-[#17324D]" />
+                    Rutare operationala
+                  </div>
 
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <DocumentField label="Locatie">
+                      <select
+                        value={currentForm.locationId}
+                        onChange={(e) =>
+                          setForms((prev) => ({
+                            ...prev,
+                            [selectedPlatform]: { ...prev[selectedPlatform], locationId: e.target.value, targetTerminalId: "" },
+                          }))
+                        }
+                        className={documentInputClass}
+                      >
+                        <option value="">Selecteaza locatia</option>
+                        {locations.map((location) => (
+                          <option key={location.id} value={location.id}>
+                            {location.code ? `${location.name} (${location.code})` : location.name}
+                          </option>
+                        ))}
+                      </select>
+                    </DocumentField>
+
+                    <DocumentField label="Device POS / licenta tinta">
+                      <select
+                        value={currentForm.targetTerminalId}
+                        onChange={(e) =>
+                          setForms((prev) => ({
+                            ...prev,
+                            [selectedPlatform]: { ...prev[selectedPlatform], targetTerminalId: e.target.value },
+                          }))
+                        }
+                        className={documentInputClass}
+                        disabled={!currentForm.locationId}
+                      >
+                        <option value="">Alege device-ul POS</option>
+                        {terminals.map((terminal) => (
+                          <option key={terminal.id} value={terminal.id}>
+                            {terminal.label || terminal.deviceId} {terminal.deviceId ? `(${terminal.deviceId})` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </DocumentField>
+                  </div>
+
+                  <div className="mt-3 rounded-[14px] border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
+                    {selectedTerminal
+                      ? `Comenzile marketplace vor intra in POS-ul: ${selectedTerminal.label || selectedTerminal.deviceId}`
+                      : "Alege device-ul/licenta Android POS care trebuie sa primeasca comenzile din platforma."}
+                  </div>
+                </div>
+
+                <div className="rounded-[18px] border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
+                    <Link2 size={16} className="text-[#17324D]" />
+                    Date integrare platforma
+                  </div>
+
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <DocumentField label="Tip autentificare">
                     <select
                       value={currentForm.authType}
@@ -574,15 +666,16 @@ export default function MarketplacePage() {
                   </DocumentField>
                 </div>
 
-                <DocumentField label="Setari suplimentare JSON">
-                  <textarea
-                    value={currentForm.settingsJson}
-                    onChange={(e) => setForms((prev) => ({ ...prev, [selectedPlatform]: { ...prev[selectedPlatform], settingsJson: e.target.value } }))}
-                    className={documentTextareaClass}
-                    rows={5}
-                    placeholder='{"autoAccept": true}'
-                  />
-                </DocumentField>
+                  <DocumentField label="Setari suplimentare JSON">
+                    <textarea
+                      value={currentForm.settingsJson}
+                      onChange={(e) => setForms((prev) => ({ ...prev, [selectedPlatform]: { ...prev[selectedPlatform], settingsJson: e.target.value } }))}
+                      className={documentTextareaClass}
+                      rows={4}
+                      placeholder='{"autoAccept": true}'
+                    />
+                  </DocumentField>
+                </div>
 
                 <div className="flex flex-wrap gap-2">
                   <button type="button" className={documentButtonPrimaryClass} onClick={() => saveIntegration(selectedPlatform)} disabled={saving}>
@@ -615,6 +708,11 @@ export default function MarketplacePage() {
                       {selectedIntegration?.location?.name || "Alege locatia pentru conectare"}
                     </span>
                   </div>
+                  {selectedTerminal ? (
+                    <div className="mt-3 rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                      Device activ pentru comenzi: <span className="font-semibold">{selectedTerminal.label || selectedTerminal.deviceId}</span>
+                    </div>
+                  ) : null}
                 </div>
 
                 {selectedPlatform === "WOLT" ? (

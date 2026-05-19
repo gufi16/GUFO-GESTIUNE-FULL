@@ -1287,20 +1287,43 @@ async function resolvePosMarketplaceTerminalLocation(auth: NonNullable<PosAuthRe
   if (!auth.terminalId) return null;
   return prisma.terminal.findUnique({
     where: { id: auth.terminalId },
-    select: { locationId: true },
+    select: { id: true, locationId: true, label: true, deviceId: true },
   });
+}
+
+function getMarketplaceTargetTerminalId(integration: any) {
+  const value = integration?.settingsJson?.targetTerminalId;
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function isMarketplaceOrderVisibleToTerminal(order: any, auth: NonNullable<PosAuthRequest["auth"]>) {
+  if (!auth.terminalId) return true;
+  const targetTerminalId = getMarketplaceTargetTerminalId(order?.integration);
+  if (!targetTerminalId) return true;
+  return targetTerminalId === auth.terminalId;
 }
 
 async function resolvePosMarketplaceOrder(auth: NonNullable<PosAuthRequest["auth"]>, inputOrderId: string, include: Record<string, unknown> = {}) {
   const terminal = await resolvePosMarketplaceTerminalLocation(auth);
-  return prisma.externalOrder.findFirst({
+  const order = await prisma.externalOrder.findFirst({
     where: {
       tenantId: auth.tenantId,
       ...(terminal?.locationId ? { locationId: terminal.locationId } : {}),
       OR: [{ id: inputOrderId }, { externalOrderId: inputOrderId }],
     },
-    include,
+    include: {
+      integration: {
+        select: {
+          id: true,
+          settingsJson: true,
+          locationId: true,
+        },
+      },
+      ...include,
+    },
   });
+  if (!order) return null;
+  return isMarketplaceOrderVisibleToTerminal(order, auth) ? order : null;
 }
 
 async function createPosMarketplaceHistory(
@@ -1370,12 +1393,19 @@ router.get("/api/v1/pos/marketplace/orders", async (req: PosAuthRequest, res: Re
       kitchenTicket: {
         select: { id: true, status: true, displayNumber: true, readyAt: true, updatedAt: true },
       },
+      integration: {
+        select: {
+          id: true,
+          settingsJson: true,
+          locationId: true,
+        },
+      },
       items: true,
     },
     orderBy: [{ createdAt: "desc" }],
   });
 
-  return res.json({ ok: true, items });
+  return res.json({ ok: true, items: items.filter((item) => isMarketplaceOrderVisibleToTerminal(item, auth)) });
 });
 
 router.post("/api/v1/pos/marketplace/:externalOrderId/accept", async (req: PosAuthRequest, res: Response) => {
