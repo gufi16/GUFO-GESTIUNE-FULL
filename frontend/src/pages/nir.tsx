@@ -1947,6 +1947,17 @@ export default function NirPage() {
                           }}
                         >
                           {isMobileViewport && <div style={mobileGridLabel}>Actiuni</div>}
+                          <button
+                            type="button"
+                            style={
+                              isMobileViewport
+                                ? { ...btnSecondary, width: "100%" }
+                                : { ...btnSecondary, padding: "8px 10px", minWidth: 96 }
+                            }
+                            onClick={() => openLineEditor(line)}
+                          >
+                            Detalii
+                          </button>
                           {!isPosted && (
                             <button
                               style={
