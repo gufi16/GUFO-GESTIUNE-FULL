@@ -132,6 +132,7 @@ type MarketplaceOrder = {
 type IntegrationForm = {
   locationId: string
   targetTerminalId: string
+  targetTerminalDeviceId: string
   authType: "PARTNER" | "OAUTH" | "API_KEY"
   merchantId: string
   storeId: string
@@ -157,6 +158,7 @@ function emptyForm(): IntegrationForm {
   return {
     locationId: "",
     targetTerminalId: "",
+    targetTerminalDeviceId: "",
     authType: "PARTNER",
     merchantId: "",
     storeId: "",
@@ -184,7 +186,14 @@ function statusPill(status: string) {
 
 function formatMoney(value: number | string | null | undefined) {
   const amount = Number(value || 0)
+  if (!Number.isFinite(amount)) return "0.00 RON"
   return `${amount.toFixed(2)} RON`
+}
+
+function formatQty(value: number | string | null | undefined) {
+  const qty = Number(value || 0)
+  if (!Number.isFinite(qty)) return "0.000"
+  return qty.toFixed(3)
 }
 
 function formatDate(value?: string | null) {
@@ -311,6 +320,10 @@ export default function MarketplacePage() {
                 typeof integration.settingsJson?.targetTerminalId === "string"
                   ? integration.settingsJson.targetTerminalId
                   : "",
+              targetTerminalDeviceId:
+                typeof integration.settingsJson?.targetTerminalDeviceId === "string"
+                  ? integration.settingsJson.targetTerminalDeviceId
+                  : "",
             }
           : current[platform.code] || emptyForm()
       }
@@ -370,6 +383,8 @@ export default function MarketplacePage() {
           settings: {
             ...(settings || {}),
             targetTerminalId: form.targetTerminalId || undefined,
+            targetTerminalDeviceId: selectedTerminal?.deviceId || form.targetTerminalDeviceId || undefined,
+            targetTerminalLabel: selectedTerminal?.label || undefined,
             dispatchMode: "POS_CONFIRM",
           },
         }),
@@ -558,7 +573,12 @@ export default function MarketplacePage() {
                         onChange={(e) =>
                           setForms((prev) => ({
                             ...prev,
-                            [selectedPlatform]: { ...prev[selectedPlatform], locationId: e.target.value, targetTerminalId: "" },
+                            [selectedPlatform]: {
+                              ...prev[selectedPlatform],
+                              locationId: e.target.value,
+                              targetTerminalId: "",
+                              targetTerminalDeviceId: "",
+                            },
                           }))
                         }
                         className={documentInputClass}
@@ -578,7 +598,11 @@ export default function MarketplacePage() {
                         onChange={(e) =>
                           setForms((prev) => ({
                             ...prev,
-                            [selectedPlatform]: { ...prev[selectedPlatform], targetTerminalId: e.target.value },
+                            [selectedPlatform]: {
+                              ...prev[selectedPlatform],
+                              targetTerminalId: e.target.value,
+                              targetTerminalDeviceId: terminals.find((terminal) => terminal.id === e.target.value)?.deviceId || "",
+                            },
                           }))
                         }
                         className={documentInputClass}
@@ -910,7 +934,7 @@ export default function MarketplacePage() {
                             <div key={item.id} className="flex items-center justify-between gap-3 text-sm">
                               <div className="min-w-0 text-slate-700">
                                 {item.name}
-                                <span className="ml-2 text-slate-400">x {Number(item.qty || 0).toFixed(3)}</span>
+                                <span className="ml-2 text-slate-400">x {formatQty(item.qty)}</span>
                               </div>
                               <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${item.mappingStatus === "MAPPED" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
                                 {item.mappingStatus || "UNMAPPED"}

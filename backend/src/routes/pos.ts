@@ -1296,11 +1296,59 @@ function getMarketplaceTargetTerminalId(integration: any) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function isMarketplaceOrderVisibleToTerminal(order: any, auth: NonNullable<PosAuthRequest["auth"]>) {
-  if (!auth.terminalId) return true;
-  const targetTerminalId = getMarketplaceTargetTerminalId(order?.integration);
-  if (!targetTerminalId) return true;
-  return targetTerminalId === auth.terminalId;
+function getMarketplaceTargetTerminalDeviceId(integration: any) {
+  const value = integration?.settingsJson?.targetTerminalDeviceId;
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+async function resolveMarketplaceTargetTerminal(integration: any) {
+  const targetTerminalId = getMarketplaceTargetTerminalId(integration);
+  const targetTerminalDeviceId = getMarketplaceTargetTerminalDeviceId(integration);
+
+  if (!targetTerminalId && !targetTerminalDeviceId) {
+    return null;
+  }
+
+  if (targetTerminalId && targetTerminalDeviceId) {
+    return {
+      id: targetTerminalId,
+      deviceId: targetTerminalDeviceId,
+    };
+  }
+
+  if (targetTerminalId) {
+    const terminal = await prisma.terminal.findUnique({
+      where: { id: targetTerminalId },
+      select: { id: true, deviceId: true },
+    });
+
+    return {
+      id: targetTerminalId,
+      deviceId: terminal?.deviceId?.trim() || null,
+    };
+  }
+
+  return {
+    id: null,
+    deviceId: targetTerminalDeviceId,
+  };
+}
+
+async function isMarketplaceOrderVisibleToTerminal(order: any, auth: NonNullable<PosAuthRequest["auth"]>) {
+  if (!auth.terminalId && !auth.deviceId) return true;
+
+  const targetTerminal = await resolveMarketplaceTargetTerminal(order?.integration);
+  if (!targetTerminal) return true;
+
+  if (auth.terminalId && targetTerminal.id === auth.terminalId) {
+    return true;
+  }
+
+  if (auth.deviceId && targetTerminal.deviceId === auth.deviceId) {
+    return true;
+  }
+
+  return false;
 }
 
 async function resolvePosMarketplaceOrder(auth: NonNullable<PosAuthRequest["auth"]>, inputOrderId: string, include: Record<string, unknown> = {}) {
@@ -1323,7 +1371,7 @@ async function resolvePosMarketplaceOrder(auth: NonNullable<PosAuthRequest["auth
     },
   });
   if (!order) return null;
-  return isMarketplaceOrderVisibleToTerminal(order, auth) ? order : null;
+  return (await isMarketplaceOrderVisibleToTerminal(order, auth)) ? order : null;
 }
 
 async function createPosMarketplaceHistory(
@@ -1405,7 +1453,13 @@ router.get("/api/v1/pos/marketplace/orders", async (req: PosAuthRequest, res: Re
     orderBy: [{ createdAt: "desc" }],
   });
 
-  return res.json({ ok: true, items: items.filter((item) => isMarketplaceOrderVisibleToTerminal(item, auth)) });
+  const visibleItems = (
+    await Promise.all(
+      items.map(async (item) => ((await isMarketplaceOrderVisibleToTerminal(item, auth)) ? item : null))
+    )
+  ).filter(Boolean);
+
+  return res.json({ ok: true, items: visibleItems });
 });
 
 router.post("/api/v1/pos/marketplace/:externalOrderId/accept", async (req: PosAuthRequest, res: Response) => {
