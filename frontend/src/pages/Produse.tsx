@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import type { CSSProperties, ReactNode } from "react"
 import PageHeader from "../components/PageHeader"
+import { DocumentTabs } from "../components/DocumentUi"
 import { API_BASE, getToken } from "../lib/api"
 import { formatFactorRo, formatMoneyRo, formatQtyRo, parseLocaleNumber } from "../lib/format"
 
@@ -94,6 +95,8 @@ type RecipeForm = {
   isActive: boolean
   items: RecipeLine[]
 }
+
+type ProductModalTab = "general" | "comercial" | "control" | "media"
 
 type NcSuggestion = {
   code: string
@@ -245,6 +248,8 @@ export default function ProdusePage() {
   const [editingItem, setEditingItem] = useState<Product | null>(null)
   const [recipeProduct, setRecipeProduct] = useState<Product | null>(null)
   const [previewImageFailed, setPreviewImageFailed] = useState(false)
+  const [livePreviewUrl, setLivePreviewUrl] = useState("")
+  const [activeProductTab, setActiveProductTab] = useState<ProductModalTab>("general")
   const [ncSuggesting, setNcSuggesting] = useState(false)
   const [ncSuggestion, setNcSuggestion] = useState<NcSuggestion | null>(null)
   const [ncCodeManual, setNcCodeManual] = useState(false)
@@ -279,6 +284,13 @@ export default function ProdusePage() {
   }, [form.isFiscalRiskProduct, ncSuggestion])
 
   const isFinishedProduct = form.class === "PRODUS_FIN"
+  const productModalTabs = [
+    { id: "general" as const, title: "Date generale" },
+    { id: "comercial" as const, title: "Unitati si achizitie" },
+    { id: "control" as const, title: "Control si loturi" },
+    { id: "media" as const, title: "Poza produs" },
+  ]
+  const imagePreviewSrc = livePreviewUrl || form.imageUrl.trim()
 
   useEffect(() => {
     if (!isFinishedProduct || !form.uomId) return
@@ -291,6 +303,14 @@ export default function ProdusePage() {
       }))
     }
   }, [isFinishedProduct, form.uomId, form.purchaseUomId, form.purchaseFactor])
+
+  useEffect(() => {
+    return () => {
+      if (livePreviewUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(livePreviewUrl)
+      }
+    }
+  }, [livePreviewUrl])
 
   useEffect(() => {
     loadAll()
@@ -420,6 +440,8 @@ function getDefaultVat(list = vatRates) {
     setNcSuggestion(null)
     setNcCodeManual(false)
     setPreviewImageFailed(false)
+    setActiveProductTab("general")
+    setLivePreviewUrl("")
     setShowModal(true)
   }
 
@@ -454,10 +476,15 @@ function getDefaultVat(list = vatRates) {
     setNcSuggestion(null)
     setNcCodeManual(false)
     setPreviewImageFailed(false)
+    setActiveProductTab("general")
+    setLivePreviewUrl("")
     setShowModal(true)
   }
 
   function closeModal() {
+    if (livePreviewUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(livePreviewUrl)
+    }
     setShowModal(false)
     setSaving(false)
     setUploading(false)
@@ -465,6 +492,7 @@ function getDefaultVat(list = vatRates) {
     setNcSuggestion(null)
     setNcCodeManual(false)
     setPreviewImageFailed(false)
+    setLivePreviewUrl("")
   }
 
   async function uploadImage(file: File) {
@@ -475,6 +503,10 @@ function getDefaultVat(list = vatRates) {
 
     const formData = new FormData()
     formData.append("image", file)
+    if (livePreviewUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(livePreviewUrl)
+    }
+    setLivePreviewUrl(URL.createObjectURL(file))
 
     setUploading(true)
     setError("")
@@ -1174,8 +1206,12 @@ function getDefaultVat(list = vatRates) {
               </button>
             </div>
 
-            <div style={modalBodyLayout}>
-              <div style={modalMainColumn}>
+            <div style={{ marginBottom: 12 }}>
+              <DocumentTabs items={productModalTabs} activeId={activeProductTab} onChange={setActiveProductTab} />
+            </div>
+
+            <div style={productTabPanel}>
+              {activeProductTab === "general" ? (
                 <SectionCard title="Date generale">
                   <div style={gridCompact}>
                     <Field label="SKU">
@@ -1309,7 +1345,9 @@ function getDefaultVat(list = vatRates) {
                     ) : null}
                   </div>
                 </SectionCard>
+              ) : null}
 
+              {activeProductTab === "comercial" ? (
                 <SectionCard title="Unitati si achizitie">
                   <div style={gridCompact}>
                     <Field label={isFinishedProduct ? "UM vanzare" : "UM"}>
@@ -1485,9 +1523,10 @@ function getDefaultVat(list = vatRates) {
                     ) : null}
                   </div>
                 </SectionCard>
-              </div>
+              ) : null}
 
-              <div style={modalSideColumn}>
+              {activeProductTab === "control" ? (
+                <>
                 <SectionCard title="Loturi si cost">
                   <div style={sideStack}>
                     <div style={checkBlock}>
@@ -1657,7 +1696,11 @@ function getDefaultVat(list = vatRates) {
                     </div>
                   </div>
                 </SectionCard>
+                </>
+              ) : null}
 
+              {activeProductTab === "media" ? (
+                <>
                 <SectionCard title="Poza produs">
                   <div style={uploadRowCompact}>
                     <label style={uploadLabel}>
@@ -1677,11 +1720,11 @@ function getDefaultVat(list = vatRates) {
 
                   </div>
 
-                  {form.imageUrl.trim() && !previewImageFailed ? (
+                  {imagePreviewSrc && !previewImageFailed ? (
                     <div style={imagePreviewWrapCompact}>
                       <img
-                        key={form.imageUrl}
-                        src={form.imageUrl}
+                        key={imagePreviewSrc}
+                        src={imagePreviewSrc}
                         alt="Preview produs"
                         style={imagePreviewLarge}
                         onError={() => setPreviewImageFailed(true)}
@@ -1689,7 +1732,7 @@ function getDefaultVat(list = vatRates) {
                     </div>
                   ) : (
                     <div style={hintBox}>
-                      {form.imageUrl.trim()
+                      {imagePreviewSrc
                         ? "Poza produsului nu a putut fi incarcata in preview."
                         : "Produsul nu are inca poza. Se lucreaza doar cu upload, fara camp de image URL."}
                     </div>
@@ -1701,7 +1744,8 @@ function getDefaultVat(list = vatRates) {
                     Pentru aceasta clasificare, produsul se salveaza intai ca inactiv si trebuie completat imediat retetarul.
                   </div>
                 )}
-              </div>
+                </>
+              ) : null}
             </div>
 
             <div style={actionsRow}>
@@ -2062,6 +2106,12 @@ const modalBodyLayout: CSSProperties = {
   gridTemplateColumns: "minmax(0, 2fr) minmax(320px, 1fr)",
   gap: 12,
   alignItems: "start"
+}
+
+const productTabPanel: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 12
 }
 
 const modalMainColumn: CSSProperties = {
