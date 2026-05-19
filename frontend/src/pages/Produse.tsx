@@ -354,6 +354,7 @@ export default function ProdusePage() {
       const nextProducts = Array.isArray(productsData.items)
         ? productsData.items.map((item: any) => ({
             ...item,
+            imageUrl: normalizeHostedImageUrl(item?.imageUrl || ""),
             price: toNumberSafe(item?.price),
             costPrice: toNumberSafe(item?.costPrice),
             purchaseFactor: toNumberSafe(item?.purchaseFactor || 1),
@@ -2101,26 +2102,7 @@ const modalHeader: CSSProperties = {
   paddingBottom: 4
 }
 
-const modalBodyLayout: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "minmax(0, 2fr) minmax(320px, 1fr)",
-  gap: 12,
-  alignItems: "start"
-}
-
 const productTabPanel: CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 12
-}
-
-const modalMainColumn: CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 12
-}
-
-const modalSideColumn: CSSProperties = {
   display: "flex",
   flexDirection: "column",
   gap: 12
