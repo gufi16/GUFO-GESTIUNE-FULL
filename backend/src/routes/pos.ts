@@ -242,7 +242,7 @@ export async function resolvePosAuthContext(req: PosAuthRequest) {
 
   return null;
 }
-function requirePosAuth(req: PosAuthRequest, res: Response, next: NextFunction) {
+async function requirePosAuth(req: PosAuthRequest, res: Response, next: NextFunction) {
   const authHeader = normalizeText(req.headers.authorization);
   const headerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : authHeader;
   const token =
