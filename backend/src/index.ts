@@ -143,6 +143,135 @@ function normalizeText(value: unknown) {
   return String(value ?? "").trim()
 }
 
+const ACTIVE_MARKETPLACE_ORDER_STATUSES = [
+  "RECEIVED",
+  "ACKNOWLEDGED",
+  "IN_KITCHEN",
+  "READY",
+  "READY_FOR_FISCAL",
+] as const
+
+function parseMarketplaceSettings(settingsJson: unknown) {
+  if (!settingsJson) return {}
+  if (typeof settingsJson === "object") return settingsJson as Record<string, any>
+  if (typeof settingsJson !== "string") return {}
+  try {
+    return JSON.parse(settingsJson) as Record<string, any>
+  } catch {
+    return {}
+  }
+}
+
+async function resolveMarketplacePosAuth(req: express.Request) {
+  const resolved = await resolvePosAuthContext(req as any)
+  if (resolved?.tenantId) {
+    return resolved
+  }
+
+  const terminalId = normalizeText(req.query.terminalId)
+  const licenseKey = normalizeText(req.query.licenseKey)
+  const terminalDeviceId = normalizeText(req.query.terminalDeviceId)
+  const androidDeviceId = normalizeText(req.query.deviceId)
+
+  if (!terminalId && !licenseKey && !terminalDeviceId && !androidDeviceId) {
+    return null
+  }
+
+  const terminal = await prisma.terminal.findFirst({
+    where: {
+      OR: [
+        ...(terminalId ? [{ id: terminalId }] : []),
+        ...(licenseKey ? [{ deviceId: licenseKey }] : []),
+        ...(terminalDeviceId ? [{ deviceId: terminalDeviceId }] : []),
+        ...(androidDeviceId ? [{ deviceId: androidDeviceId }] : []),
+      ],
+    },
+    include: {
+      tenant: {
+        include: {
+          licenses: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
+        },
+      },
+    },
+  })
+
+  if (!terminal) {
+    console.warn("INDEX MARKETPLACE AUTH MISS", {
+      terminalId,
+      licenseKey,
+      terminalDeviceId,
+      androidDeviceId,
+      path: req.path,
+    })
+    return null
+  }
+
+  const license = terminal.tenant?.licenses?.[0]
+  if (license && (license.isSuspended || license.expiresAt <= new Date())) {
+    return null
+  }
+
+  console.warn("INDEX MARKETPLACE AUTH FALLBACK", {
+    terminalId,
+    licenseKey,
+    terminalDeviceId,
+    androidDeviceId,
+    resolvedTerminalId: terminal.id,
+    resolvedTerminalDeviceId: terminal.deviceId,
+    path: req.path,
+  })
+
+  return {
+    tenantId: terminal.tenantId,
+    terminalId: terminal.id,
+    deviceId: terminal.deviceId,
+  }
+}
+
+async function resolveMarketplaceTerminalLocationId(terminalId?: string | null) {
+  if (!terminalId) return ""
+  const terminal = await prisma.terminal.findUnique({
+    where: { id: terminalId },
+    select: { locationId: true, label: true, deviceId: true },
+  })
+  return terminal?.locationId || ""
+}
+
+function computeMarketplaceVisibility(
+  order: any,
+  auth: { terminalId?: string; deviceId?: string },
+  terminalLocationId: string
+) {
+  const settings = parseMarketplaceSettings(order?.integration?.settingsJson)
+  const targetTerminalId = normalizeText(settings?.targetTerminalId)
+  const targetTerminalDeviceId = normalizeText(settings?.targetTerminalDeviceId)
+  const explicitTarget = Boolean(targetTerminalId || targetTerminalDeviceId)
+  const matchesTerminalId = !!(targetTerminalId && auth.terminalId && targetTerminalId === auth.terminalId)
+  const matchesDeviceId = !!(targetTerminalDeviceId && auth.deviceId && targetTerminalDeviceId === auth.deviceId)
+  const locationMatches = !order?.integration?.locationId || order.integration.locationId === terminalLocationId
+  const visible = explicitTarget ? matchesTerminalId || matchesDeviceId : locationMatches
+  const reason = explicitTarget
+    ? matchesTerminalId
+      ? "matched-terminal-id"
+      : matchesDeviceId
+        ? "matched-device-id"
+        : "target-mismatch"
+    : locationMatches
+      ? "matched-location"
+      : "location-mismatch"
+  return {
+    visible,
+    reason,
+    authTerminalId: auth.terminalId || null,
+    authDeviceId: auth.deviceId || null,
+    targetTerminalId: targetTerminalId || null,
+    targetTerminalDeviceId: targetTerminalDeviceId || null,
+  }
+}
+
 function normalizeSubdomain(value: unknown) {
   return String(value ?? "")
     .normalize("NFKD")
@@ -1221,6 +1350,132 @@ app.get("/api/v1/pos/catalog", async (req, res) => {
       ok: false,
       error: "Eroare la incarcarea catalogului POS",
     })
+  }
+})
+
+app.get("/api/v1/pos/marketplace/orders", async (req, res) => {
+  console.log("INDEX POS MARKETPLACE ORDERS HIT", req.query)
+  try {
+    const auth = await resolveMarketplacePosAuth(req)
+    if (!auth?.tenantId) {
+      return res.status(401).json({
+        ok: false,
+        error: "POS neautentificat. Fa pair din nou.",
+      })
+    }
+
+    const terminalLocationId = await resolveMarketplaceTerminalLocationId(auth.terminalId)
+    const items = await prisma.externalOrder.findMany({
+      where: {
+        tenantId: auth.tenantId,
+        status: { in: [...ACTIVE_MARKETPLACE_ORDER_STATUSES] },
+      },
+      include: {
+        location: {
+          select: { id: true, name: true, code: true },
+        },
+        saleDraft: {
+          select: { id: true, status: true, total: true, subtotal: true, updatedAt: true },
+        },
+        kitchenTicket: {
+          select: { id: true, status: true, displayNumber: true, readyAt: true, updatedAt: true },
+        },
+        integration: {
+          select: {
+            id: true,
+            settingsJson: true,
+            locationId: true,
+          },
+        },
+        items: true,
+      },
+      orderBy: [{ createdAt: "desc" }],
+    })
+
+    const visibleItems = items.filter((item) =>
+      computeMarketplaceVisibility(item, auth, terminalLocationId).visible
+    )
+
+    return res.json({ ok: true, items: visibleItems })
+  } catch (error) {
+    console.error("INDEX POS MARKETPLACE ORDERS ERROR", error)
+    return res.status(500).json({ ok: false, error: "Eroare la incarcarea comenzilor marketplace" })
+  }
+})
+
+app.get("/api/v1/pos/marketplace/debug", async (req, res) => {
+  console.log("INDEX POS MARKETPLACE DEBUG HIT", req.query)
+  try {
+    const auth = await resolveMarketplacePosAuth(req)
+    if (!auth?.tenantId) {
+      return res.status(401).json({
+        ok: false,
+        error: "POS neautentificat. Fa pair din nou.",
+      })
+    }
+
+    const terminal = auth.terminalId
+      ? await prisma.terminal.findUnique({
+          where: { id: auth.terminalId },
+          select: {
+            id: true,
+            label: true,
+            deviceId: true,
+            locationId: true,
+            location: { select: { id: true, name: true } },
+          },
+        })
+      : null
+    const terminalLocationId = terminal?.locationId || ""
+
+    const items = await prisma.externalOrder.findMany({
+      where: {
+        tenantId: auth.tenantId,
+        status: { in: [...ACTIVE_MARKETPLACE_ORDER_STATUSES] },
+      },
+      include: {
+        location: { select: { id: true, name: true, code: true } },
+        integration: { select: { id: true, locationId: true, settingsJson: true } },
+        kitchenTicket: { select: { id: true, status: true, displayNumber: true } },
+        items: { select: { id: true, name: true, qty: true, externalProductId: true, mappingStatus: true } },
+      },
+      orderBy: [{ createdAt: "desc" }],
+    })
+
+    const withVisibility = items.map((item) => ({
+      id: item.id,
+      externalOrderId: item.externalOrderId,
+      externalOrderNumber: item.externalOrderNumber,
+      platform: item.platform,
+      status: item.status,
+      location: item.location,
+      visibility: computeMarketplaceVisibility(item, auth, terminalLocationId),
+    }))
+
+    return res.json({
+      ok: true,
+      auth: {
+        terminalId: auth.terminalId || null,
+        deviceId: auth.deviceId || null,
+      },
+      terminal: terminal
+        ? {
+            id: terminal.id,
+            label: terminal.label,
+            deviceId: terminal.deviceId,
+            locationId: terminal.locationId,
+            name: terminal.location?.name || null,
+          }
+        : null,
+      counts: {
+        totalActiveInLocation: items.length,
+        visibleToCurrentPos: withVisibility.filter((item) => item.visibility.visible).length,
+      },
+      items: withVisibility,
+    })
+  } catch (error) {
+    console.error("INDEX POS MARKETPLACE DEBUG ERROR", error)
+    return res.status(500).json({ ok: false, error: "Eroare la debug marketplace" })
   }
 })
 
