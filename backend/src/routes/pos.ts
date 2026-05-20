@@ -80,6 +80,71 @@ function resolveLatestPairedPosSession() {
   return lastPairedPosSession;
 }
 
+async function resolvePosHeaderTerminalContext(req: Request) {
+  const headerTerminalId =
+    normalizeText(req.headers["x-pos-terminal-id"]) ||
+    normalizeText(req.headers["terminal-id"]) ||
+    normalizeText(req.query.terminalId);
+  const headerLicenseKey =
+    normalizeText(req.headers["x-pos-license-key"]) ||
+    normalizeText(req.headers["license-key"]) ||
+    normalizeText(req.query.licenseKey);
+  const headerTerminalDeviceId =
+    normalizeText(req.headers["x-pos-terminal-device-id"]) ||
+    normalizeText(req.headers["terminal-device-id"]) ||
+    normalizeText(req.query.terminalDeviceId);
+  const headerAndroidDeviceId =
+    normalizeText(req.headers["x-pos-device-id"]) ||
+    normalizeText(req.headers["device-id"]) ||
+    normalizeText(req.query.deviceId);
+
+  if (!headerTerminalId && !headerLicenseKey && !headerTerminalDeviceId && !headerAndroidDeviceId) {
+    return null;
+  }
+
+  const terminal = await prisma.terminal.findFirst({
+    where: {
+      OR: [
+        ...(headerTerminalId ? [{ id: headerTerminalId }] : []),
+        ...(headerLicenseKey ? [{ deviceId: headerLicenseKey }] : []),
+        ...(headerTerminalDeviceId ? [{ deviceId: headerTerminalDeviceId }] : []),
+      ],
+    },
+    include: {
+      tenant: {
+        include: {
+          licenses: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
+        },
+      },
+    },
+  });
+
+  const license = terminal?.tenant.licenses?.[0];
+  if (!terminal || !license || license.isSuspended || license.expiresAt <= new Date() || !license.modPos) {
+    return null;
+  }
+
+  console.warn("POS AUTH HEADER FALLBACK", {
+    path: req.path,
+    method: req.method,
+    headerTerminalId,
+    headerLicenseKey,
+    headerTerminalDeviceId,
+    headerAndroidDeviceId,
+    resolvedTerminalId: terminal.id,
+    resolvedTerminalDeviceId: terminal.deviceId,
+  });
+
+  return {
+    tenantId: terminal.tenantId,
+    terminalId: terminal.id,
+    deviceId: terminal.deviceId,
+  };
+}
+
 export async function resolvePosAuthContext(req: PosAuthRequest) {
   if (req.auth?.tenantId) {
     return req.auth;
@@ -112,9 +177,14 @@ export async function resolvePosAuthContext(req: PosAuthRequest) {
         deviceId: decoded.deviceId,
       };
       return req.auth;
-    } catch {
-      // Fallback-urile existente de mai jos rămân utile dacă tokenul e expirat
-      // și avem totuși o sesiune pair-uită disponibilă pe server.
+    } catch (error) {
+      console.warn("POS AUTH INVALID TOKEN IN CONTEXT", {
+        path: req.path,
+        method: req.method,
+        tokenPreview: token.slice(0, 24),
+        tokenLength: token.length,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -134,6 +204,11 @@ export async function resolvePosAuthContext(req: PosAuthRequest) {
       terminalId: latestSession.terminalId,
       deviceId: latestSession.deviceId,
     };
+  }
+
+  const headerResolved = await resolvePosHeaderTerminalContext(req);
+  if (headerResolved) {
+    return headerResolved;
   }
 
   const latestTerminal = await prisma.terminal.findFirst({
@@ -167,7 +242,6 @@ export async function resolvePosAuthContext(req: PosAuthRequest) {
 
   return null;
 }
-
 function requirePosAuth(req: PosAuthRequest, res: Response, next: NextFunction) {
   const authHeader = normalizeText(req.headers.authorization);
   const headerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : authHeader;
@@ -183,6 +257,12 @@ function requirePosAuth(req: PosAuthRequest, res: Response, next: NextFunction) 
     normalizeText(req.query.access_token);
 
   if (!token) {
+    const headerResolved = await resolvePosHeaderTerminalContext(req);
+    if (headerResolved) {
+      req.auth = headerResolved;
+      return next();
+    }
+
     const fallbackSession = resolvePairedPosSession(req);
     if (fallbackSession) {
       req.auth = {
@@ -246,6 +326,12 @@ function requirePosAuth(req: PosAuthRequest, res: Response, next: NextFunction) 
 
     next();
   } catch (error) {
+    const headerResolved = await resolvePosHeaderTerminalContext(req);
+    if (headerResolved) {
+      req.auth = headerResolved;
+      return next();
+    }
+
     const fallbackSession = resolvePairedPosSession(req);
     if (fallbackSession) {
       req.auth = {
@@ -3839,6 +3925,7 @@ router.post("/api/v1/pos/sales", requirePosAuth, handlePosSale);
 router.post("/api/v1/pos/receipts", requirePosAuth, handlePosSale);
 
 export default router;
+
 
 
 
