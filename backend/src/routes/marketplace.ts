@@ -34,6 +34,7 @@ const ImportMarketplaceOrderSchema = z.object({
   currency: z.enum(["RON", "EUR", "USD", "HUF"]).default("RON"),
   subtotal: z.coerce.number().nonnegative().default(0),
   total: z.coerce.number().nonnegative().default(0),
+  placedAt: z.coerce.date().optional(),
   displayNumber: z.string().trim().optional(),
   station: z.string().trim().optional(),
   items: z.array(
@@ -162,6 +163,74 @@ function toMoneyNumber(value: unknown): number {
   return 0
 }
 
+function toGlovoMoneyNumber(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    if (Number.isInteger(value)) return value / 100
+    return value
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim()
+    if (!trimmed) return 0
+    if (trimmed.includes(".") || trimmed.includes(",")) {
+      const parsed = Number(trimmed.replace(",", "."))
+      return Number.isFinite(parsed) ? parsed : 0
+    }
+    const parsed = Number(trimmed)
+    return Number.isFinite(parsed) ? parsed / 100 : 0
+  }
+
+  return toMoneyNumber(value)
+}
+
+function normalizeGlovoStoreId(value: unknown) {
+  return String(value || "").trim()
+}
+
+function inferGlovoPartnerName(storeId: string) {
+  const normalized = normalizeGlovoStoreId(storeId)
+  const [partnerName] = normalized.split("__")
+  return partnerName?.trim() || ""
+}
+
+function buildGlovoContractChecklist(integration: any) {
+  const settings = integration?.settingsJson && typeof integration.settingsJson === "object"
+    ? integration.settingsJson
+    : {}
+  const storeId = normalizeGlovoStoreId(integration?.storeId)
+  const partnerName = String(settings?.partnerName || inferGlovoPartnerName(storeId)).trim()
+  const tokenConfigured = Boolean(String(integration?.webhookSecret || integration?.accessToken || "").trim())
+  const locationSelected = Boolean(String(integration?.locationId || "").trim())
+  const targetTerminalSelected = Boolean(String(settings?.targetTerminalId || settings?.targetTerminalDeviceId || "").trim())
+  const storeIdConfigured = Boolean(storeId)
+  const storeIdLooksValid = storeId.includes("__")
+  const orderNotificationsEnabled = Boolean(settings?.portalOrderNotificationsEnabled)
+  const cancelNotificationsEnabled = Boolean(settings?.portalCancelNotificationsEnabled)
+  const menuManagedByIntegration = Boolean(settings?.menuManagedByIntegration)
+
+  return {
+    partnerName,
+    storeId,
+    checks: {
+      locationSelected,
+      targetTerminalSelected,
+      tokenConfigured,
+      storeIdConfigured,
+      storeIdLooksValid,
+      orderNotificationsEnabled,
+      cancelNotificationsEnabled,
+      menuManagedByIntegration,
+    },
+    readyForLiveOrders:
+      locationSelected &&
+      targetTerminalSelected &&
+      tokenConfigured &&
+      storeIdConfigured &&
+      storeIdLooksValid &&
+      orderNotificationsEnabled,
+  }
+}
+
 async function enrichImportedItems(tenantId: string, integrationId: string | null, items: z.infer<typeof ImportMarketplaceOrderSchema>["items"]) {
   const externalIds = items.map((item) => item.externalProductId?.trim()).filter(Boolean) as string[]
   const mappings = integrationId && externalIds.length > 0
@@ -255,8 +324,8 @@ async function importMarketplaceOrderForTenant(tenantId: string, rawPayload: z.i
         currency: payload.currency,
         subtotal: payload.subtotal,
         total: payload.total,
-        rawPayloadJson: payload.rawPayload ?? payload,
-        placedAt: new Date(),
+    rawPayloadJson: payload.rawPayload ?? payload,
+        placedAt: payload.placedAt || new Date(),
         status: "RECEIVED",
       },
       create: {
@@ -274,7 +343,7 @@ async function importMarketplaceOrderForTenant(tenantId: string, rawPayload: z.i
         subtotal: payload.subtotal,
         total: payload.total,
         rawPayloadJson: payload.rawPayload ?? payload,
-        placedAt: new Date(),
+        placedAt: payload.placedAt || new Date(),
         status: "RECEIVED",
       },
     })
@@ -520,8 +589,19 @@ function normalizeWoltOrderToImportPayload(integration: any, payload: any): z.in
 
 function normalizeGlovoOrderToImportPayload(integration: any, payload: any): z.infer<typeof ImportMarketplaceOrderSchema> {
   const products = Array.isArray(payload?.products) ? payload.products : Array.isArray(payload?.items) ? payload.items : []
-  const total = toMoneyNumber(payload?.total_price) || toMoneyNumber(payload?.total) || products.reduce((sum: number, item: any) => sum + toMoneyNumber(item?.price) * (Number(item?.quantity || 1) || 1), 0)
-  const subtotal = toMoneyNumber(payload?.subtotal) || total
+  const total =
+    toGlovoMoneyNumber(payload?.payment_total) ||
+    toGlovoMoneyNumber(payload?.total_price) ||
+    toGlovoMoneyNumber(payload?.total) ||
+    products.reduce((sum: number, item: any) => sum + toGlovoMoneyNumber(item?.price) * (Number(item?.quantity || 1) || 1), 0)
+  const subtotal = toGlovoMoneyNumber(payload?.subtotal) || total
+  const customerNotes = [
+    String(payload?.special_requirements || "").trim(),
+    String(payload?.comments || payload?.notes || payload?.customer_note || "").trim(),
+    String(payload?.allergy_info || "").trim(),
+  ].filter(Boolean)
+  const placedAtRaw = String(payload?.order_time || "").trim()
+  const placedAt = placedAtRaw ? new Date(placedAtRaw.replace(" ", "T")) : undefined
 
   return {
     platform: "GLOVO",
@@ -530,19 +610,20 @@ function normalizeGlovoOrderToImportPayload(integration: any, payload: any): z.i
     externalOrderId: String(payload?.id || payload?.order_id || "").trim(),
     externalOrderNumber: String(payload?.order_code || payload?.order_number || "").trim() || undefined,
     customerName: String(payload?.customer?.name || payload?.customer_name || "").trim() || undefined,
-    customerPhone: String(payload?.customer?.phone || payload?.customer_phone || "").trim() || undefined,
-    customerNote: String(payload?.comments || payload?.notes || payload?.customer_note || "").trim() || undefined,
+    customerPhone: String(payload?.customer?.phone_number || payload?.customer?.phone || payload?.customer_phone || "").trim() || undefined,
+    customerNote: customerNotes.join(" | ") || undefined,
     paymentLabel: String(payload?.payment_method || payload?.payment_type || "").trim() || undefined,
     currency: "RON",
     subtotal,
     total,
+    placedAt: placedAt && !Number.isNaN(placedAt.getTime()) ? placedAt : undefined,
     displayNumber: String(payload?.order_code || payload?.id || payload?.order_id || "").trim() || undefined,
     station: undefined,
     items: products.map((item: any, index: number) => {
       const quantity = Number(item?.quantity || item?.qty || 1) || 1
-      const unitPrice = toMoneyNumber(item?.price) || toMoneyNumber(item?.unit_price)
+      const unitPrice = toGlovoMoneyNumber(item?.price) || toGlovoMoneyNumber(item?.unit_price)
       return {
-        externalLineId: String(item?.id || item?.product_id || `${payload?.id || "glovo"}-${index + 1}`).trim(),
+        externalLineId: String(item?.purchased_product_id || item?.id || item?.product_id || `${payload?.id || "glovo"}-${index + 1}`).trim(),
         externalProductId: String(item?.product_id || item?.id || "").trim() || undefined,
         name: String(item?.name || item?.product_name || "Produs Glovo").trim(),
         sku: String(item?.sku || "").trim() || undefined,
@@ -559,6 +640,90 @@ function normalizeGlovoOrderToImportPayload(integration: any, payload: any): z.i
       }
     }),
     rawPayload: payload,
+  }
+}
+
+async function findMatchingGlovoIntegration(payload: any, routeStoreId?: string) {
+  const storeId = normalizeGlovoStoreId(routeStoreId || payload?.store_id || payload?.storeId)
+  const token = String(payload?._glovoToken || "").trim()
+
+  const integrations = await db.externalIntegration.findMany({
+    where: {
+      platform: "GLOVO",
+      status: "ACTIVE",
+      ...(storeId ? { storeId } : {}),
+    },
+  })
+
+  return integrations.find((integration: any) => {
+    const secret = String(integration.webhookSecret || integration.accessToken || "").trim()
+    if (secret && token) return secret === token
+    if (secret && !token) return false
+    return true
+  }) || null
+}
+
+async function processGlovoWebhook(req: any, res: any, kind: "ORDER" | "CANCEL") {
+  const token = String(req.header("Authorization") || req.header("X-Glovo-Webhook-Token") || "")
+    .replace(/^Bearer\s+/i, "")
+    .trim()
+  const payload = {
+    ...(req.body || {}),
+    _glovoToken: token,
+  }
+  const storeId = normalizeGlovoStoreId(req.params.storeId || req.body?.store_id || req.body?.storeId)
+  const orderId = String(req.body?.id || req.body?.order_id || "").trim()
+
+  const matchedIntegration = await findMatchingGlovoIntegration(payload, storeId)
+  if (!matchedIntegration) {
+    return res.status(404).json({ ok: false, error: "No Glovo integration matched webhook." })
+  }
+
+  try {
+    const rawStatus = String(req.body?.status || req.body?.order_status || "").trim().toUpperCase()
+
+    if (kind === "CANCEL" || ["CANCELLED", "CANCELED"].includes(rawStatus)) {
+      if (orderId) {
+        await setMarketplaceLifecycleStatus(
+          matchedIntegration.tenantId,
+          orderId,
+          "CANCELLED",
+          "PLATFORM",
+          "Glovo cancellation notification received.",
+          req.body,
+        )
+      }
+      return res.json({ ok: true })
+    }
+
+    const parsedPayload = normalizeGlovoOrderToImportPayload(matchedIntegration, req.body)
+    const externalOrder = await importMarketplaceOrderForTenant(matchedIntegration.tenantId, parsedPayload)
+
+    if (["ACCEPTED"].includes(rawStatus)) {
+      await setMarketplaceLifecycleStatus(
+        matchedIntegration.tenantId,
+        externalOrder.id,
+        "ACKNOWLEDGED",
+        "PLATFORM",
+        "Glovo webhook marked order as accepted.",
+        req.body
+      )
+    }
+
+    if (["READY_FOR_PICKUP", "READY"].includes(rawStatus)) {
+      await setMarketplaceLifecycleStatus(
+        matchedIntegration.tenantId,
+        externalOrder.id,
+        "READY_FOR_FISCAL",
+        "PLATFORM",
+        "Glovo webhook marked order as ready for pickup.",
+        req.body
+      )
+    }
+
+    return res.json({ ok: true, orderId: externalOrder.id })
+  } catch (error: any) {
+    return res.status(500).json({ ok: false, error: error?.message || "Glovo webhook failed" })
   }
 }
 
@@ -659,71 +824,15 @@ router.post("/api/v1/marketplace/webhooks/wolt", async (req, res) => {
 })
 
 router.post("/api/v1/marketplace/webhooks/glovo/:storeId?", async (req, res) => {
-  const storeId = String(req.params.storeId || req.body?.store_id || req.body?.storeId || "").trim()
-  const orderId = String(req.body?.id || req.body?.order_id || "").trim()
-  const webhookSecret = String(req.header("X-Glovo-Webhook-Token") || req.header("Authorization") || "").replace(/^Bearer\s+/i, "").trim()
+  return processGlovoWebhook(req, res, "ORDER")
+})
 
-  const integrations = await db.externalIntegration.findMany({
-    where: {
-      platform: "GLOVO",
-      status: "ACTIVE",
-      ...(storeId ? { storeId } : {}),
-    },
-  })
+router.post("/api/v1/marketplace/webhooks/glovo/order/:storeId?", async (req, res) => {
+  return processGlovoWebhook(req, res, "ORDER")
+})
 
-  const matchedIntegration = integrations.find((integration: any) => {
-    const secret = String(integration.webhookSecret || "").trim()
-    return !secret || !webhookSecret || secret === webhookSecret
-  })
-
-  if (!matchedIntegration) {
-    return res.status(404).json({ ok: false, error: "No Glovo integration matched webhook." })
-  }
-
-  try {
-    const rawStatus = String(req.body?.status || req.body?.order_status || "").trim().toUpperCase()
-
-    if (["CANCELLED", "CANCELED"].includes(rawStatus) && orderId) {
-      await setMarketplaceLifecycleStatus(
-        matchedIntegration.tenantId,
-        orderId,
-        "CANCELLED",
-        "PLATFORM",
-        "Glovo webhook marked order as cancelled.",
-        req.body
-      )
-      return res.json({ ok: true })
-    }
-
-    const parsedPayload = normalizeGlovoOrderToImportPayload(matchedIntegration, req.body)
-    const externalOrder = await importMarketplaceOrderForTenant(matchedIntegration.tenantId, parsedPayload)
-
-    if (["ACCEPTED"].includes(rawStatus)) {
-      await setMarketplaceLifecycleStatus(
-        matchedIntegration.tenantId,
-        externalOrder.id,
-        "ACKNOWLEDGED",
-        "PLATFORM",
-        "Glovo webhook marked order as accepted.",
-        req.body
-      )
-    }
-
-    if (["READY_FOR_PICKUP", "READY"].includes(rawStatus)) {
-      await setMarketplaceLifecycleStatus(
-        matchedIntegration.tenantId,
-        externalOrder.id,
-        "READY_FOR_FISCAL",
-        "PLATFORM",
-        "Glovo webhook marked order as ready for pickup.",
-        req.body
-      )
-    }
-
-    return res.json({ ok: true, orderId: externalOrder.id })
-  } catch (error: any) {
-    return res.status(500).json({ ok: false, error: error?.message || "Glovo webhook failed" })
-  }
+router.post("/api/v1/marketplace/webhooks/glovo/cancel/:storeId?", async (req, res) => {
+  return processGlovoWebhook(req, res, "CANCEL")
 })
 
 router.use(requireAuth)
@@ -755,7 +864,12 @@ router.get("/api/v1/marketplace/integrations", async (req: AuthedRequest, res) =
     orderBy: [{ platform: "asc" }, { createdAt: "desc" }],
   })
 
-  return res.json({ ok: true, items })
+  const enrichedItems = items.map((item: any) => ({
+    ...item,
+    contract: item.platform === "GLOVO" ? buildGlovoContractChecklist(item) : null,
+  }))
+
+  return res.json({ ok: true, items: enrichedItems })
 })
 
 router.get("/api/v1/marketplace/orders", async (req: AuthedRequest, res) => {
@@ -1034,6 +1148,24 @@ router.post("/api/v1/marketplace/integrations/:platform/connect", async (req: Au
     return res.status(404).json({ ok: false, error: "Location not found" })
   }
 
+  const incomingSettings = bodyParsed.data.settings && typeof bodyParsed.data.settings === "object"
+    ? { ...bodyParsed.data.settings }
+    : {}
+
+  if (platformParsed.data === "GLOVO") {
+    const normalizedStoreId = normalizeGlovoStoreId(bodyParsed.data.storeId)
+    if (!normalizedStoreId) {
+      return res.status(400).json({ ok: false, error: "Glovo are nevoie de Store ID / LID din portal." })
+    }
+
+    const partnerName = String(incomingSettings.partnerName || inferGlovoPartnerName(normalizedStoreId)).trim()
+    incomingSettings.partnerName = partnerName || undefined
+    incomingSettings.portalOrderNotificationsEnabled = Boolean(incomingSettings.portalOrderNotificationsEnabled)
+    incomingSettings.portalCancelNotificationsEnabled = Boolean(incomingSettings.portalCancelNotificationsEnabled)
+    incomingSettings.menuManagedByIntegration = Boolean(incomingSettings.menuManagedByIntegration)
+    incomingSettings.glovoStoreIdLooksValid = normalizedStoreId.includes("__")
+  }
+
   const existingIntegration = await db.externalIntegration.findFirst({
     where: {
       tenantId,
@@ -1051,7 +1183,7 @@ router.post("/api/v1/marketplace/integrations/:platform/connect", async (req: Au
     accessToken: bodyParsed.data.accessToken || null,
     refreshToken: bodyParsed.data.refreshToken || null,
     webhookSecret: bodyParsed.data.webhookSecret || null,
-    settingsJson: bodyParsed.data.settings || undefined,
+    settingsJson: Object.keys(incomingSettings).length > 0 ? incomingSettings : undefined,
   }
 
   const integration = existingIntegration

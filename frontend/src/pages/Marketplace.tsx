@@ -62,6 +62,12 @@ type IntegrationItem = {
   webhookSecret?: string | null
   locationId?: string | null
   settingsJson?: any
+  contract?: {
+    partnerName?: string
+    storeId?: string
+    checks?: Record<string, boolean>
+    readyForLiveOrders?: boolean
+  } | null
   location?: {
     id: string
     name: string
@@ -134,11 +140,15 @@ type IntegrationForm = {
   targetTerminalId: string
   targetTerminalDeviceId: string
   authType: "PARTNER" | "OAUTH" | "API_KEY"
+  partnerName: string
   merchantId: string
   storeId: string
   accessToken: string
   refreshToken: string
   webhookSecret: string
+  portalOrderNotificationsEnabled: boolean
+  portalCancelNotificationsEnabled: boolean
+  menuManagedByIntegration: boolean
   settingsJson: string
 }
 
@@ -160,11 +170,15 @@ function emptyForm(): IntegrationForm {
     targetTerminalId: "",
     targetTerminalDeviceId: "",
     authType: "PARTNER",
+    partnerName: "",
     merchantId: "",
     storeId: "",
     accessToken: "",
     refreshToken: "",
     webhookSecret: "",
+    portalOrderNotificationsEnabled: false,
+    portalCancelNotificationsEnabled: false,
+    menuManagedByIntegration: false,
     settingsJson: "",
   }
 }
@@ -201,6 +215,12 @@ function formatDate(value?: string | null) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return "-"
   return date.toLocaleString("ro-RO")
+}
+
+const glovoDocs = {
+  overview: "https://qcommerce-integrations.glovoapp.com/",
+  portalGuide: "https://en-api-integration.docs.app.onlineservice.io/",
+  partnerApi: "https://qcommerce-integrations.glovoapp.com/this-is-api-detail-page/",
 }
 
 export default function MarketplacePage() {
@@ -310,11 +330,18 @@ export default function MarketplacePage() {
           ? {
               locationId: integration.locationId || "",
               authType: (integration.authType as IntegrationForm["authType"]) || "PARTNER",
+              partnerName:
+                typeof integration.settingsJson?.partnerName === "string"
+                  ? integration.settingsJson.partnerName
+                  : "",
               merchantId: integration.merchantId || "",
               storeId: integration.storeId || "",
               accessToken: integration.accessToken || "",
               refreshToken: integration.refreshToken || "",
               webhookSecret: integration.webhookSecret || "",
+              portalOrderNotificationsEnabled: Boolean(integration.settingsJson?.portalOrderNotificationsEnabled),
+              portalCancelNotificationsEnabled: Boolean(integration.settingsJson?.portalCancelNotificationsEnabled),
+              menuManagedByIntegration: Boolean(integration.settingsJson?.menuManagedByIntegration),
               settingsJson: integration.settingsJson ? JSON.stringify(integration.settingsJson, null, 2) : "",
               targetTerminalId:
                 typeof integration.settingsJson?.targetTerminalId === "string"
@@ -382,6 +409,10 @@ export default function MarketplacePage() {
           webhookSecret: form.webhookSecret.trim() || undefined,
           settings: {
             ...(settings || {}),
+            partnerName: form.partnerName.trim() || undefined,
+            portalOrderNotificationsEnabled: form.portalOrderNotificationsEnabled,
+            portalCancelNotificationsEnabled: form.portalCancelNotificationsEnabled,
+            menuManagedByIntegration: form.menuManagedByIntegration,
             targetTerminalId: form.targetTerminalId || undefined,
             targetTerminalDeviceId: selectedTerminal?.deviceId || form.targetTerminalDeviceId || undefined,
             targetTerminalLabel: selectedTerminal?.label || undefined,
@@ -512,6 +543,7 @@ export default function MarketplacePage() {
   const currentForm = forms[selectedPlatform] || emptyForm()
   const selectedIntegration = integrations.find((item) => item.platform === selectedPlatform) || null
   const selectedTerminal = terminals.find((item) => item.id === currentForm.targetTerminalId) || null
+  const glovoContractChecks = selectedIntegration?.platform === "GLOVO" ? selectedIntegration.contract?.checks || {} : {}
 
   return (
     <div className="space-y-3">
@@ -625,6 +657,45 @@ export default function MarketplacePage() {
                   </div>
                 </div>
 
+                {selectedPlatform === "GLOVO" ? (
+                  <div className="rounded-[18px] border border-slate-200 bg-emerald-50/60 p-4">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold text-slate-900">Checklist oficial Glovo</div>
+                        <div className="mt-1 text-sm text-slate-600">
+                          Facem setup-ul dupa portalul oficial Glovo, nu doar ca test intern.
+                        </div>
+                      </div>
+                      <span className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${selectedIntegration?.contract?.readyForLiveOrders ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                        {selectedIntegration?.contract?.readyForLiveOrders ? "Live-ready" : "Necomplet"}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                      {[
+                        ["Locatie selectata", Boolean(glovoContractChecks.locationSelected)],
+                        ["POS/licenta tinta selectata", Boolean(glovoContractChecks.targetTerminalSelected)],
+                        ["Token Glovo configurat", Boolean(glovoContractChecks.tokenConfigured)],
+                        ["Store ID / LID completat", Boolean(glovoContractChecks.storeIdConfigured)],
+                        ["Store ID in format partner__store", Boolean(glovoContractChecks.storeIdLooksValid)],
+                        ["Order notifications activate in portal", Boolean(glovoContractChecks.orderNotificationsEnabled)],
+                        ["Cancel notifications activate in portal", Boolean(glovoContractChecks.cancelNotificationsEnabled)],
+                        ["Meniu gestionat prin integrare", Boolean(glovoContractChecks.menuManagedByIntegration)],
+                      ].map(([label, ok]) => (
+                        <div key={String(label)} className={`rounded-[14px] border px-3 py-2 text-sm ${ok ? "border-emerald-200 bg-white text-emerald-800" : "border-amber-200 bg-white text-amber-800"}`}>
+                          {ok ? "OK" : "Lipseste"}: {label}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-2 text-sm">
+                      <a className="text-[#17324D] underline underline-offset-2" href={glovoDocs.overview} target="_blank" rel="noreferrer">Overview Glovo</a>
+                      <a className="text-[#17324D] underline underline-offset-2" href={glovoDocs.portalGuide} target="_blank" rel="noreferrer">Portal & setup</a>
+                      <a className="text-[#17324D] underline underline-offset-2" href={glovoDocs.partnerApi} target="_blank" rel="noreferrer">Orders & status API</a>
+                    </div>
+                  </div>
+                ) : null}
+
                 <div className="rounded-[18px] border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
                     <Link2 size={16} className="text-[#17324D]" />
@@ -651,6 +722,17 @@ export default function MarketplacePage() {
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  {selectedPlatform === "GLOVO" ? (
+                    <DocumentField label="Partner name Glovo">
+                      <input
+                        value={currentForm.partnerName}
+                        onChange={(e) => setForms((prev) => ({ ...prev, [selectedPlatform]: { ...prev[selectedPlatform], partnerName: e.target.value } }))}
+                        className={documentInputClass}
+                        placeholder="numele POS-ului din portal"
+                      />
+                    </DocumentField>
+                  ) : null}
+
                   <DocumentField label="Merchant ID">
                     <input
                       value={currentForm.merchantId}
@@ -665,7 +747,7 @@ export default function MarketplacePage() {
                       value={currentForm.storeId}
                       onChange={(e) => setForms((prev) => ({ ...prev, [selectedPlatform]: { ...prev[selectedPlatform], storeId: e.target.value } }))}
                       className={documentInputClass}
-                      placeholder="store-01"
+                      placeholder={selectedPlatform === "GLOVO" ? "partner__store-id" : "store-01"}
                     />
                   </DocumentField>
                 </div>
@@ -699,6 +781,31 @@ export default function MarketplacePage() {
                       placeholder='{"autoAccept": true}'
                     />
                   </DocumentField>
+
+                  {selectedPlatform === "GLOVO" ? (
+                    <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                      {[
+                        ["portalOrderNotificationsEnabled", "In portal este activ 'Order notifications'"],
+                        ["portalCancelNotificationsEnabled", "In portal este activ 'Canceled order notifications'"],
+                        ["menuManagedByIntegration", "Meniul Glovo este gestionat prin integrare"],
+                      ].map(([key, label]) => (
+                        <label key={key} className="flex items-start gap-2 rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(currentForm[key as keyof IntegrationForm])}
+                            onChange={(e) =>
+                              setForms((prev) => ({
+                                ...prev,
+                                [selectedPlatform]: { ...prev[selectedPlatform], [key]: e.target.checked },
+                              }))
+                            }
+                            className="mt-0.5"
+                          />
+                          <span>{label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="flex flex-wrap gap-2">
@@ -758,7 +865,10 @@ export default function MarketplacePage() {
 
                 {selectedPlatform === "GLOVO" ? (
                   <div className="rounded-[18px] border border-slate-200 bg-white p-4 shadow-sm">
-                    <div className="text-sm font-semibold text-slate-800">Test import Glovo</div>
+                    <div className="text-sm font-semibold text-slate-800">Test intern Glovo</div>
+                    <div className="mt-1 text-sm text-slate-500">
+                      Acest buton verifica fluxul intern ERP/POS. Activarea oficiala Glovo se face prin portalul lor si comenzi reale.
+                    </div>
                     <div className="mt-3 flex gap-2">
                       <input
                         value={testGlovoOrderId}
