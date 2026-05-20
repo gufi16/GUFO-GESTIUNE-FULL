@@ -1576,7 +1576,7 @@ function decideGlovoOutboundStatus(order: any, nextInternalStatus: string) {
   return null;
 }
 
-async function syncGlovoPartnerStatusForOrder(
+export async function syncGlovoPartnerStatusForOrder(
   auth: NonNullable<PosAuthRequest["auth"]>,
   order: any,
   nextInternalStatus: string,
@@ -1768,7 +1768,7 @@ async function getMarketplaceVisibilityDebug(order: any, auth: NonNullable<PosAu
   };
 }
 
-async function resolvePosMarketplaceOrder(auth: NonNullable<PosAuthRequest["auth"]>, inputOrderId: string, include: Record<string, unknown> = {}) {
+export async function resolvePosMarketplaceOrder(auth: NonNullable<PosAuthRequest["auth"]>, inputOrderId: string, include: Record<string, unknown> = {}) {
   const order = await prisma.externalOrder.findFirst({
     where: {
       tenantId: auth.tenantId,
@@ -1789,7 +1789,7 @@ async function resolvePosMarketplaceOrder(auth: NonNullable<PosAuthRequest["auth
   return (await isMarketplaceOrderVisibleToTerminal(order, auth)) ? order : null;
 }
 
-async function createPosMarketplaceHistory(
+export async function createPosMarketplaceHistory(
   auth: NonNullable<PosAuthRequest["auth"]>,
   externalOrderId: string,
   status: string,
@@ -1809,7 +1809,7 @@ async function createPosMarketplaceHistory(
   });
 }
 
-function normalizePosMarketplaceKdsStatus(rawStatus: string) {
+export function normalizePosMarketplaceKdsStatus(rawStatus: string) {
   const value = String(rawStatus || "").trim().toUpperCase();
   if (["READY", "FINAL", "FINALIZED", "DONE", "COMPLETED", "COMPLETE", "READY_FOR_FISCAL"].includes(value)) {
     return "READY_FOR_FISCAL" as const;

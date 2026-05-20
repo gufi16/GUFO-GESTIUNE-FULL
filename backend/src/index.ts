@@ -22,7 +22,7 @@ import { repairDeepStrings } from "./lib/textRepair"
 
 import productsRouter from "./routes/products"
 import metaRouter from "./routes/meta"
-import posRouter, { buildCatalogPayload, handlePosBackofficeProductsSearch, handlePosBackofficeReceiptCreate, handlePosBackofficeSalesSummary, handlePosBackofficeSuppliersSearch, handlePosCustomersSearch, handlePosDailyClosure, handlePosOperatorLogin, handlePosOperatorsList, handlePosReceiptInvoice, handlePosReceiptsList, handlePosSale, registerPairedPosSession, resolvePosAuthContext } from "./routes/pos"
+import posRouter, { buildCatalogPayload, createPosMarketplaceHistory, handlePosBackofficeProductsSearch, handlePosBackofficeReceiptCreate, handlePosBackofficeSalesSummary, handlePosBackofficeSuppliersSearch, handlePosCustomersSearch, handlePosDailyClosure, handlePosOperatorLogin, handlePosOperatorsList, handlePosReceiptInvoice, handlePosReceiptsList, handlePosSale, normalizePosMarketplaceKdsStatus, registerPairedPosSession, resolvePosAuthContext, resolvePosMarketplaceOrder, syncGlovoPartnerStatusForOrder } from "./routes/pos"
 import stockRouter from "./routes/stock"
 import purchaseRouter from "./routes/purchase"
 import companyRouter, { handleAnafOauthCallback } from "./routes/company"
@@ -1476,6 +1476,267 @@ app.get("/api/v1/pos/marketplace/debug", async (req, res) => {
   } catch (error) {
     console.error("INDEX POS MARKETPLACE DEBUG ERROR", error)
     return res.status(500).json({ ok: false, error: "Eroare la debug marketplace" })
+  }
+})
+
+app.post("/api/v1/pos/marketplace/:externalOrderId/accept", async (req, res) => {
+  console.log("INDEX POS MARKETPLACE ACCEPT HIT", req.params, req.query)
+  try {
+    const auth = await resolveMarketplacePosAuth(req)
+    if (!auth?.tenantId) {
+      return res.status(401).json({ ok: false, error: "POS neautentificat. Fa pair din nou." })
+    }
+
+    const inputOrderId = String(req.params.externalOrderId || "").trim()
+    if (!inputOrderId) {
+      return res.status(400).json({ ok: false, error: "Missing externalOrderId" })
+    }
+
+    const order = await resolvePosMarketplaceOrder(auth as any, inputOrderId, {
+      saleDraft: true,
+      kitchenTicket: true,
+    })
+    if (!order) {
+      return res.status(404).json({ ok: false, error: "Marketplace order not found" })
+    }
+
+    const nextStatus = order.status === "RECEIVED" ? "ACKNOWLEDGED" : order.status
+    if (nextStatus !== order.status) {
+      await prisma.externalOrder.update({
+        where: { id: order.id },
+        data: { status: nextStatus },
+      })
+    }
+
+    await createPosMarketplaceHistory(auth as any, order.id, nextStatus, "POS", "Marketplace order accepted in POS.", {
+      terminalId: auth.terminalId || null,
+    })
+
+    let glovoSync: any = { skipped: true, reason: "not-run" }
+    try {
+      glovoSync = await syncGlovoPartnerStatusForOrder(auth as any, { ...order, status: nextStatus }, nextStatus, "POS")
+      if (glovoSync?.skipped && glovoSync?.reason && glovoSync.reason !== "not-glovo") {
+        await createPosMarketplaceHistory(auth as any, order.id, nextStatus, "GLOVO", `Glovo sync nu a fost trimis la acceptare: ${glovoSync.reason}.`, glovoSync)
+      }
+    } catch (error: any) {
+      glovoSync = { skipped: false, error: error?.message || "Glovo accept sync failed." }
+      await createPosMarketplaceHistory(auth as any, order.id, nextStatus, "GLOVO", `Glovo sync a esuat la acceptare: ${glovoSync.error}`, glovoSync)
+    }
+
+    return res.json({ ok: true, externalOrderId: order.id, status: nextStatus, glovoSync })
+  } catch (error) {
+    console.error("INDEX POS MARKETPLACE ACCEPT ERROR", error)
+    return res.status(500).json({ ok: false, error: "Eroare la acceptarea comenzii marketplace" })
+  }
+})
+
+app.post("/api/v1/pos/marketplace/:externalOrderId/send-to-kds", async (req, res) => {
+  console.log("INDEX POS MARKETPLACE SEND TO KDS HIT", req.params, req.query)
+  try {
+    const auth = await resolveMarketplacePosAuth(req)
+    if (!auth?.tenantId) {
+      return res.status(401).json({ ok: false, error: "POS neautentificat. Fa pair din nou." })
+    }
+
+    const inputOrderId = String(req.params.externalOrderId || "").trim()
+    if (!inputOrderId) {
+      return res.status(400).json({ ok: false, error: "Missing externalOrderId" })
+    }
+
+    const order = await resolvePosMarketplaceOrder(auth as any, inputOrderId, {
+      kitchenTicket: true,
+      saleDraft: true,
+    })
+    if (!order) {
+      return res.status(404).json({ ok: false, error: "Marketplace order not found" })
+    }
+
+    await prisma.$transaction(async (tx: any) => {
+      await tx.externalOrder.update({
+        where: { id: order.id },
+        data: { status: "IN_KITCHEN" },
+      })
+      if (order.kitchenTicket) {
+        await tx.kitchenTicket.update({
+          where: { id: order.kitchenTicket.id },
+          data: { status: "NEW" },
+        })
+      }
+      await tx.externalOrderStatusHistory.create({
+        data: {
+          tenantId: auth.tenantId,
+          externalOrderId: order.id,
+          status: "IN_KITCHEN",
+          source: "POS",
+          message: "Marketplace order sent to KDS from POS.",
+          payloadJson: { terminalId: auth.terminalId || null },
+        },
+      })
+    })
+
+    return res.json({ ok: true, externalOrderId: order.id, status: "IN_KITCHEN" })
+  } catch (error) {
+    console.error("INDEX POS MARKETPLACE SEND TO KDS ERROR", error)
+    return res.status(500).json({ ok: false, error: "Eroare la trimiterea comenzii spre KDS" })
+  }
+})
+
+app.post("/api/v1/pos/marketplace/:externalOrderId/kds-status", async (req, res) => {
+  console.log("INDEX POS MARKETPLACE KDS STATUS HIT", req.params, req.body)
+  try {
+    const auth = await resolveMarketplacePosAuth(req)
+    if (!auth?.tenantId) {
+      return res.status(401).json({ ok: false, error: "POS neautentificat. Fa pair din nou." })
+    }
+
+    const normalizedStatus = normalizePosMarketplaceKdsStatus(String(req.body?.status || ""))
+    if (!normalizedStatus) {
+      return res.status(400).json({ ok: false, error: "Unsupported marketplace KDS status" })
+    }
+
+    const inputOrderId = String(req.params.externalOrderId || "").trim()
+    if (!inputOrderId) {
+      return res.status(400).json({ ok: false, error: "Missing externalOrderId" })
+    }
+
+    const order = await resolvePosMarketplaceOrder(auth as any, inputOrderId, {
+      kitchenTicket: true,
+      saleDraft: true,
+    })
+    if (!order) {
+      return res.status(404).json({ ok: false, error: "Marketplace order not found" })
+    }
+
+    const now = new Date()
+    await prisma.$transaction(async (tx: any) => {
+      await tx.externalOrder.update({
+        where: { id: order.id },
+        data: {
+          status: normalizedStatus,
+          ...(normalizedStatus === "READY_FOR_FISCAL" ? { readyAt: now } : {}),
+        },
+      })
+
+      if (order.kitchenTicket) {
+        const kitchenPayload =
+          normalizedStatus === "READY_FOR_FISCAL"
+            ? { status: "READY", readyAt: now }
+            : normalizedStatus === "IN_KITCHEN"
+              ? { status: "IN_PROGRESS" }
+              : normalizedStatus === "ACKNOWLEDGED"
+                ? { status: "NEW" }
+                : { status: "NEW" }
+        await tx.kitchenTicket.update({
+          where: { id: order.kitchenTicket.id },
+          data: kitchenPayload,
+        })
+      }
+
+      if (order.saleDraft && normalizedStatus === "READY_FOR_FISCAL") {
+        await tx.saleDraft.update({
+          where: { id: order.saleDraft.id },
+          data: { status: "READY_FOR_FISCAL" },
+        })
+      }
+
+      await tx.externalOrderStatusHistory.create({
+        data: {
+          tenantId: auth.tenantId,
+          externalOrderId: order.id,
+          status: normalizedStatus,
+          source: "KDS",
+          message: String(req.body?.message || "").trim() || `Marketplace order marked ${normalizedStatus} from POS KDS callback.`,
+          payloadJson: { terminalId: auth.terminalId || null },
+        },
+      })
+    })
+
+    let glovoSync: any = { skipped: true, reason: "not-run" }
+    try {
+      glovoSync = await syncGlovoPartnerStatusForOrder(
+        auth as any,
+        { ...order, status: normalizedStatus, readyAt: normalizedStatus === "READY_FOR_FISCAL" ? now : order.readyAt },
+        normalizedStatus,
+        "KDS"
+      )
+      if (glovoSync?.skipped && glovoSync?.reason && glovoSync.reason !== "not-glovo") {
+        await createPosMarketplaceHistory(auth as any, order.id, normalizedStatus, "GLOVO", `Glovo sync nu a fost trimis din KDS: ${glovoSync.reason}.`, glovoSync)
+      }
+    } catch (error: any) {
+      glovoSync = { skipped: false, error: error?.message || "Glovo KDS sync failed." }
+      await createPosMarketplaceHistory(auth as any, order.id, normalizedStatus, "GLOVO", `Glovo sync a esuat din KDS: ${glovoSync.error}`, glovoSync)
+    }
+
+    return res.json({ ok: true, externalOrderId: order.id, status: normalizedStatus, glovoSync })
+  } catch (error) {
+    console.error("INDEX POS MARKETPLACE KDS STATUS ERROR", error)
+    return res.status(500).json({ ok: false, error: "Eroare la actualizarea statusului marketplace din KDS" })
+  }
+})
+
+app.post("/api/v1/pos/marketplace/:externalOrderId/load-cart", async (req, res) => {
+  console.log("INDEX POS MARKETPLACE LOAD CART HIT", req.params, req.query)
+  try {
+    const auth = await resolveMarketplacePosAuth(req)
+    if (!auth?.tenantId) {
+      return res.status(401).json({ ok: false, error: "POS neautentificat. Fa pair din nou." })
+    }
+
+    const inputOrderId = String(req.params.externalOrderId || "").trim()
+    if (!inputOrderId) {
+      return res.status(400).json({ ok: false, error: "Missing externalOrderId" })
+    }
+
+    const order = await prisma.externalOrder.findFirst({
+      where: {
+        tenantId: auth.tenantId,
+        OR: [{ id: inputOrderId }, { externalOrderId: inputOrderId }],
+      },
+      include: {
+        integration: {
+          select: { id: true, settingsJson: true, locationId: true },
+        },
+        saleDraft: true,
+        location: { select: { id: true, name: true, code: true } },
+      },
+    })
+
+    if (!order || !computeMarketplaceVisibility(order, auth, await resolveMarketplaceTerminalLocationId(auth.terminalId)).visible) {
+      return res.status(404).json({ ok: false, error: "Marketplace order not found" })
+    }
+    if (!order.saleDraft) {
+      return res.status(404).json({ ok: false, error: "Sale draft not found for marketplace order" })
+    }
+    if (order.saleDraft.status === "CANCELLED") {
+      return res.status(400).json({ ok: false, error: "Sale draft is cancelled" })
+    }
+
+    await prisma.externalOrderStatusHistory.create({
+      data: {
+        tenantId: auth.tenantId,
+        externalOrderId: order.id,
+        status: order.status,
+        source: "POS",
+        message: "Marketplace order loaded into POS cart.",
+        payloadJson: { terminalId: auth.terminalId || null },
+      },
+    })
+
+    return res.json({
+      ok: true,
+      externalOrder: {
+        id: order.id,
+        externalOrderId: order.externalOrderId,
+        externalOrderNumber: order.externalOrderNumber,
+        platform: order.platform,
+        status: order.status,
+        location: order.location,
+      },
+      saleDraft: order.saleDraft,
+    })
+  } catch (error) {
+    console.error("INDEX POS MARKETPLACE LOAD CART ERROR", error)
+    return res.status(500).json({ ok: false, error: "Eroare la incarcarea comenzii marketplace" })
   }
 })
 
