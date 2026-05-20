@@ -102,12 +102,22 @@ async function resolvePosHeaderTerminalContext(req: Request) {
     return null;
   }
 
+  console.warn("POS AUTH HEADER LOOKUP", {
+    path: req.path,
+    method: req.method,
+    headerTerminalId,
+    headerLicenseKey,
+    headerTerminalDeviceId,
+    headerAndroidDeviceId,
+  });
+
   const terminal = await prisma.terminal.findFirst({
     where: {
       OR: [
         ...(headerTerminalId ? [{ id: headerTerminalId }] : []),
         ...(headerLicenseKey ? [{ deviceId: headerLicenseKey }] : []),
         ...(headerTerminalDeviceId ? [{ deviceId: headerTerminalDeviceId }] : []),
+        ...(headerAndroidDeviceId ? [{ deviceId: headerAndroidDeviceId }] : []),
       ],
     },
     include: {
@@ -122,9 +132,35 @@ async function resolvePosHeaderTerminalContext(req: Request) {
     },
   });
 
-  const license = terminal?.tenant.licenses?.[0];
-  if (!terminal || !license || license.isSuspended || license.expiresAt <= new Date() || !license.modPos) {
+  if (!terminal) {
+    console.warn("POS AUTH HEADER LOOKUP MISS", {
+      path: req.path,
+      method: req.method,
+      headerTerminalId,
+      headerLicenseKey,
+      headerTerminalDeviceId,
+      headerAndroidDeviceId,
+    });
     return null;
+  }
+
+  const license = terminal?.tenant.licenses?.[0];
+  if (!license || license.isSuspended || license.expiresAt <= new Date() || !license.modPos) {
+    console.warn("POS AUTH HEADER LOOKUP LICENSE BYPASS", {
+      path: req.path,
+      method: req.method,
+      resolvedTerminalId: terminal.id,
+      resolvedTerminalDeviceId: terminal.deviceId,
+      licensePresent: Boolean(license),
+      licenseSuspended: license?.isSuspended ?? null,
+      licenseExpired: license ? license.expiresAt <= new Date() : null,
+      modPos: license?.modPos ?? null,
+    });
+    return {
+      tenantId: terminal.tenantId,
+      terminalId: terminal.id,
+      deviceId: terminal.deviceId,
+    };
   }
 
   console.warn("POS AUTH HEADER FALLBACK", {
