@@ -1570,6 +1570,9 @@ function decideGlovoOutboundStatus(order: any, nextInternalStatus: string) {
   if (nextInternalStatus === "ACKNOWLEDGED" && transportType === "VENDOR_DELIVERY") {
     return "ACCEPTED";
   }
+  if (nextInternalStatus === "READY_FOR_FISCAL" && transportType === "VENDOR_DELIVERY") {
+    return "DISPATCHED";
+  }
   if (nextInternalStatus === "READY_FOR_FISCAL" && transportType === "LOGISTICS_DELIVERY") {
     return "READY_FOR_PICKUP";
   }
@@ -1664,6 +1667,84 @@ export async function syncGlovoPartnerStatusForOrder(
   );
 
   return { skipped: false, glovoStatus, response: payload };
+}
+
+export async function syncGlovoPartnerCancellationForOrder(
+  auth: NonNullable<PosAuthRequest["auth"]>,
+  order: any,
+  source: "POS" | "KDS",
+  reason = "OTHER"
+) {
+  if (order?.platform !== "GLOVO" || !order?.integration) {
+    return { skipped: true, reason: "not-glovo" };
+  }
+
+  const chainId = getGlovoChainIdForOrder(order);
+  const glovoOrderId = getGlovoOrderUuid(order);
+  const items = buildGlovoUpdateItems(order);
+  const confirmedAmount = Number(order?.total || 0) || 0;
+
+  if (!chainId) {
+    return { skipped: true, reason: "missing-chain-id" };
+  }
+  if (!glovoOrderId) {
+    return { skipped: true, reason: "missing-order-id" };
+  }
+  if (!items.length) {
+    return { skipped: true, reason: "missing-order-items" };
+  }
+
+  const accessToken = await requestGlovoPartnerAccessToken(order.integration);
+  const response = await fetch(`${GLOVO_PARTNER_API_BASE}/v2/chains/${encodeURIComponent(chainId)}/orders/${encodeURIComponent(glovoOrderId)}`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({
+      order_id: glovoOrderId,
+      status: "CANCELLED",
+      confirmed_amount: confirmedAmount,
+      items,
+      cancellation: {
+        reason: String(reason || "OTHER").trim() || "OTHER",
+      },
+    }),
+  });
+
+  const text = await response.text();
+  let payload: any = null;
+  try {
+    payload = text ? JSON.parse(text) : null;
+  } catch {
+    payload = text || null;
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      payload?.message ||
+      payload?.error ||
+      payload?.detail ||
+      `Glovo Cancel Order failed with ${response.status}`
+    );
+  }
+
+  await createPosMarketplaceHistory(
+    auth,
+    order.id,
+    "CANCELLED",
+    "GLOVO",
+    `Glovo sync trimis cu status CANCELLED din ${source}.`,
+    {
+      glovoStatus: "CANCELLED",
+      chainId,
+      glovoOrderId,
+      response: payload,
+    }
+  );
+
+  return { skipped: false, glovoStatus: "CANCELLED", response: payload };
 }
 
 async function resolvePosMarketplaceTerminalLocation(auth: NonNullable<PosAuthRequest["auth"]>) {
@@ -1811,6 +1892,9 @@ export async function createPosMarketplaceHistory(
 
 export function normalizePosMarketplaceKdsStatus(rawStatus: string) {
   const value = String(rawStatus || "").trim().toUpperCase();
+  if (["CANCEL", "CANCELED", "CANCELLED", "REJECTED"].includes(value)) {
+    return "CANCELLED" as const;
+  }
   if (["READY", "FINAL", "FINALIZED", "DONE", "COMPLETED", "COMPLETE", "READY_FOR_FISCAL"].includes(value)) {
     return "READY_FOR_FISCAL" as const;
   }

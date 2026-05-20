@@ -22,7 +22,7 @@ import { repairDeepStrings } from "./lib/textRepair"
 
 import productsRouter from "./routes/products"
 import metaRouter from "./routes/meta"
-import posRouter, { buildCatalogPayload, createPosMarketplaceHistory, handlePosBackofficeProductsSearch, handlePosBackofficeReceiptCreate, handlePosBackofficeSalesSummary, handlePosBackofficeSuppliersSearch, handlePosCustomersSearch, handlePosDailyClosure, handlePosOperatorLogin, handlePosOperatorsList, handlePosReceiptInvoice, handlePosReceiptsList, handlePosSale, normalizePosMarketplaceKdsStatus, registerPairedPosSession, resolvePosAuthContext, resolvePosMarketplaceOrder, syncGlovoPartnerStatusForOrder } from "./routes/pos"
+import posRouter, { buildCatalogPayload, createPosMarketplaceHistory, handlePosBackofficeProductsSearch, handlePosBackofficeReceiptCreate, handlePosBackofficeSalesSummary, handlePosBackofficeSuppliersSearch, handlePosCustomersSearch, handlePosDailyClosure, handlePosOperatorLogin, handlePosOperatorsList, handlePosReceiptInvoice, handlePosReceiptsList, handlePosSale, normalizePosMarketplaceKdsStatus, registerPairedPosSession, resolvePosAuthContext, resolvePosMarketplaceOrder, syncGlovoPartnerCancellationForOrder, syncGlovoPartnerStatusForOrder } from "./routes/pos"
 import stockRouter from "./routes/stock"
 import purchaseRouter from "./routes/purchase"
 import companyRouter, { handleAnafOauthCallback } from "./routes/company"
@@ -1530,6 +1530,76 @@ app.post("/api/v1/pos/marketplace/:externalOrderId/accept", async (req, res) => 
   }
 })
 
+app.post("/api/v1/pos/marketplace/:externalOrderId/reject", async (req, res) => {
+  console.log("INDEX POS MARKETPLACE REJECT HIT", req.params, req.query, req.body)
+  try {
+    const auth = await resolveMarketplacePosAuth(req)
+    if (!auth?.tenantId) {
+      return res.status(401).json({ ok: false, error: "POS neautentificat. Fa pair din nou." })
+    }
+
+    const inputOrderId = String(req.params.externalOrderId || "").trim()
+    if (!inputOrderId) {
+      return res.status(400).json({ ok: false, error: "Missing externalOrderId" })
+    }
+
+    const reason = String(req.body?.reason || "OTHER").trim() || "OTHER"
+    const order = await resolvePosMarketplaceOrder(auth as any, inputOrderId, {
+      saleDraft: true,
+      kitchenTicket: true,
+    })
+    if (!order) {
+      return res.status(404).json({ ok: false, error: "Marketplace order not found" })
+    }
+
+    const now = new Date()
+    await prisma.$transaction(async (tx: any) => {
+      await tx.externalOrder.update({
+        where: { id: order.id },
+        data: {
+          status: "CANCELLED",
+          cancelledAt: now,
+        },
+      })
+
+      if (order.kitchenTicket) {
+        await tx.kitchenTicket.update({
+          where: { id: order.kitchenTicket.id },
+          data: { status: "CANCELLED" },
+        })
+      }
+
+      if (order.saleDraft) {
+        await tx.saleDraft.update({
+          where: { id: order.saleDraft.id },
+          data: { status: "CANCELLED" },
+        })
+      }
+    })
+
+    await createPosMarketplaceHistory(auth as any, order.id, "CANCELLED", "POS", "Marketplace order rejected in POS.", {
+      terminalId: auth.terminalId || null,
+      reason,
+    })
+
+    let glovoSync: any = { skipped: true, reason: "not-run" }
+    try {
+      glovoSync = await syncGlovoPartnerCancellationForOrder(auth as any, { ...order, status: "CANCELLED" }, "POS", reason)
+      if (glovoSync?.skipped && glovoSync?.reason && glovoSync.reason !== "not-glovo") {
+        await createPosMarketplaceHistory(auth as any, order.id, "CANCELLED", "GLOVO", `Glovo cancel sync nu a fost trimis: ${glovoSync.reason}.`, glovoSync)
+      }
+    } catch (error: any) {
+      glovoSync = { skipped: false, error: error?.message || "Glovo reject sync failed." }
+      await createPosMarketplaceHistory(auth as any, order.id, "CANCELLED", "GLOVO", `Glovo cancel sync a esuat: ${glovoSync.error}`, glovoSync)
+    }
+
+    return res.json({ ok: true, externalOrderId: order.id, status: "CANCELLED", glovoSync })
+  } catch (error) {
+    console.error("INDEX POS MARKETPLACE REJECT ERROR", error)
+    return res.status(500).json({ ok: false, error: "Eroare la refuzul comenzii marketplace" })
+  }
+})
+
 app.post("/api/v1/pos/marketplace/:externalOrderId/send-to-kds", async (req, res) => {
   console.log("INDEX POS MARKETPLACE SEND TO KDS HIT", req.params, req.query)
   try {
@@ -1614,6 +1684,7 @@ app.post("/api/v1/pos/marketplace/:externalOrderId/kds-status", async (req, res)
         data: {
           status: normalizedStatus,
           ...(normalizedStatus === "READY_FOR_FISCAL" ? { readyAt: now } : {}),
+          ...(normalizedStatus === "CANCELLED" ? { cancelledAt: now } : {}),
         },
       })
 
@@ -1623,6 +1694,8 @@ app.post("/api/v1/pos/marketplace/:externalOrderId/kds-status", async (req, res)
             ? { status: "READY", readyAt: now }
             : normalizedStatus === "IN_KITCHEN"
               ? { status: "IN_PROGRESS" }
+              : normalizedStatus === "CANCELLED"
+                ? { status: "CANCELLED" }
               : normalizedStatus === "ACKNOWLEDGED"
                 ? { status: "NEW" }
                 : { status: "NEW" }
@@ -1632,11 +1705,18 @@ app.post("/api/v1/pos/marketplace/:externalOrderId/kds-status", async (req, res)
         })
       }
 
-      if (order.saleDraft && normalizedStatus === "READY_FOR_FISCAL") {
-        await tx.saleDraft.update({
-          where: { id: order.saleDraft.id },
-          data: { status: "READY_FOR_FISCAL" },
-        })
+      if (order.saleDraft) {
+        if (normalizedStatus === "READY_FOR_FISCAL") {
+          await tx.saleDraft.update({
+            where: { id: order.saleDraft.id },
+            data: { status: "READY_FOR_FISCAL" },
+          })
+        } else if (normalizedStatus === "CANCELLED") {
+          await tx.saleDraft.update({
+            where: { id: order.saleDraft.id },
+            data: { status: "CANCELLED" },
+          })
+        }
       }
 
       await tx.externalOrderStatusHistory.create({
@@ -1653,12 +1733,19 @@ app.post("/api/v1/pos/marketplace/:externalOrderId/kds-status", async (req, res)
 
     let glovoSync: any = { skipped: true, reason: "not-run" }
     try {
-      glovoSync = await syncGlovoPartnerStatusForOrder(
-        auth as any,
-        { ...order, status: normalizedStatus, readyAt: normalizedStatus === "READY_FOR_FISCAL" ? now : order.readyAt },
-        normalizedStatus,
-        "KDS"
-      )
+      glovoSync =
+        normalizedStatus === "CANCELLED"
+          ? await syncGlovoPartnerCancellationForOrder(
+              auth as any,
+              { ...order, status: "CANCELLED", cancelledAt: now },
+              "KDS"
+            )
+          : await syncGlovoPartnerStatusForOrder(
+              auth as any,
+              { ...order, status: normalizedStatus, readyAt: normalizedStatus === "READY_FOR_FISCAL" ? now : order.readyAt },
+              normalizedStatus,
+              "KDS"
+            )
       if (glovoSync?.skipped && glovoSync?.reason && glovoSync.reason !== "not-glovo") {
         await createPosMarketplaceHistory(auth as any, order.id, normalizedStatus, "GLOVO", `Glovo sync nu a fost trimis din KDS: ${glovoSync.reason}.`, glovoSync)
       }

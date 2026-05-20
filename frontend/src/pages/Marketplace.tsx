@@ -198,6 +198,31 @@ function platformPill(platform: string) {
   return "bg-slate-100 text-slate-700"
 }
 
+function platformLabel(platform: string) {
+  if (platform === "GLOVO") return "Glovo"
+  if (platform === "WOLT") return "Wolt"
+  if (platform === "BOLT_FOOD") return "Bolt Food"
+  return platform || "Marketplace"
+}
+
+function PlatformBadge({ platform, uppercase = false }: { platform: string; uppercase?: boolean }) {
+  const label = platformLabel(platform)
+  const wrapperClass = `inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-[0.14em] ${platformPill(platform)}`
+
+  return (
+    <span className={wrapperClass}>
+      {platform === "GLOVO" ? (
+        <img src="/marketplace/glovo-badge.png" alt="Glovo" className="h-5 w-5 rounded-full object-cover" />
+      ) : (
+        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/80 text-[10px] font-bold">
+          {label.slice(0, 1).toUpperCase()}
+        </span>
+      )}
+      <span>{uppercase ? platform || "MARKETPLACE" : label}</span>
+    </span>
+  )
+}
+
 function statusPill(status: string) {
   const value = String(status || "").toUpperCase()
   if (["READY_FOR_FISCAL", "READY", "FISCALIZED", "DELIVERED"].includes(value)) return "bg-emerald-100 text-emerald-700"
@@ -504,10 +529,15 @@ export default function MarketplacePage() {
           integrationId: integration.id,
           order: {
             id: testGlovoOrderId.trim() || "GLOVO-TEST-1001",
-            order_code: "ERP-TEST",
-            status: "ACCEPTED",
+            order_code: (testGlovoOrderId.trim() || "GLOVO-TEST-1001").replace(/^GLOVO-?/i, ""),
+            status: "RECEIVED",
             store_id: integration.storeId || "STORE-01",
+            transport_type: "LOGISTICS_DELIVERY",
+            customer: {
+              name: "Client test Glovo",
+            },
             total_price: 19.5,
+            special_requirements: "Fara tacamuri",
             products: [
               {
                 id: "LINE-1",
@@ -604,7 +634,11 @@ export default function MarketplacePage() {
                     selectedPlatform === platform.code ? "bg-[#17324D] text-white" : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                   }`}
                 >
-                  <Store size={14} />
+                  {platform.code === "GLOVO" ? (
+                    <img src="/marketplace/glovo-badge.png" alt="Glovo" className="h-5 w-5 rounded-full object-cover" />
+                  ) : (
+                    <Store size={14} />
+                  )}
                   {platform.label}
                 </button>
               ))}
@@ -995,9 +1029,7 @@ export default function MarketplacePage() {
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
                           <div className="text-[15px] font-semibold text-slate-900">{item.externalName || "Produs extern fara nume"}</div>
-                          <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] ${platformPill(item.platform || "")}`}>
-                            {item.platform || "Marketplace"}
-                          </span>
+                          <PlatformBadge platform={item.platform || ""} uppercase />
                           <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] ${item.mapped ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
                             {item.mapped ? "Mapat" : "Nemapat"}
                           </span>
@@ -1044,9 +1076,7 @@ export default function MarketplacePage() {
                     <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] ${platformPill(mapping.integration.platform)}`}>
-                            {mapping.integration.platform}
-                          </span>
+                          <PlatformBadge platform={mapping.integration.platform} uppercase />
                           <div className="text-[15px] font-semibold text-slate-900">{mapping.externalName || mapping.externalProductId}</div>
                         </div>
                         <div className="mt-2 text-sm text-slate-500">
@@ -1088,9 +1118,7 @@ export default function MarketplacePage() {
                     <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] ${platformPill(order.platform)}`}>
-                            {order.platform}
-                          </span>
+                          <PlatformBadge platform={order.platform} uppercase />
                           <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] ${statusPill(order.status)}`}>
                             {order.status}
                           </span>
