@@ -1278,10 +1278,238 @@ const ACTIVE_MARKETPLACE_ORDER_STATUSES = [
   "READY_FOR_FISCAL",
 ] as const;
 
+const GLOVO_PARTNER_API_BASE = process.env.GLOVO_PARTNER_API_BASE || "https://glovo.partner.deliveryhero.io";
+
 const PosMarketplaceKdsStatusSchema = z.object({
   status: z.string().trim().min(1),
   message: z.string().trim().optional(),
 });
+
+function getIntegrationSettingsObject(integration: any) {
+  return integration?.settingsJson && typeof integration.settingsJson === "object" ? integration.settingsJson : {};
+}
+
+function normalizeGlovoTransportType(value: unknown) {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (normalized === "LOGISTICS" || normalized === "LOGISTICS_DELIVERY") return "LOGISTICS_DELIVERY";
+  if (normalized === "VENDOR" || normalized === "VENDOR_DELIVERY") return "VENDOR_DELIVERY";
+  return normalized || null;
+}
+
+function getGlovoChainIdForOrder(order: any) {
+  const raw = order?.rawPayloadJson && typeof order.rawPayloadJson === "object" ? order.rawPayloadJson : {};
+  const settings = getIntegrationSettingsObject(order?.integration);
+  return String(raw?.client?.chain_id || raw?.chain_id || settings?.glovoChainId || "").trim() || null;
+}
+
+function getGlovoOrderUuid(order: any) {
+  const raw = order?.rawPayloadJson && typeof order.rawPayloadJson === "object" ? order.rawPayloadJson : {};
+  return String(raw?.order_id || raw?.id || order?.externalOrderId || "").trim() || null;
+}
+
+function getGlovoAcceptedFor(order: any) {
+  const raw = order?.rawPayloadJson && typeof order.rawPayloadJson === "object" ? order.rawPayloadJson : {};
+  const acceptedRaw = String(raw?.accepted_for || raw?.promised_for || "").trim();
+  if (acceptedRaw) {
+    const parsed = new Date(acceptedRaw);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+  }
+
+  const settings = getIntegrationSettingsObject(order?.integration);
+  const prepMinutes = Number(settings?.glovoDefaultPrepMinutes || 0);
+  if (prepMinutes > 0) {
+    const base = order?.placedAt ? new Date(order.placedAt) : new Date();
+    if (!Number.isNaN(base.getTime())) {
+      base.setMinutes(base.getMinutes() + prepMinutes);
+      return base.toISOString();
+    }
+  }
+
+  return null;
+}
+
+function buildGlovoUpdateItems(order: any) {
+  const raw = order?.rawPayloadJson && typeof order.rawPayloadJson === "object" ? order.rawPayloadJson : {};
+  const rawItems = Array.isArray(raw?.items)
+    ? raw.items
+    : Array.isArray(raw?.products)
+      ? raw.products
+      : [];
+  const fallbackItems = Array.isArray(order?.items) ? order.items : [];
+
+  const normalized = rawItems.length ? rawItems : fallbackItems;
+  return normalized
+    .map((item: any, index: number) => {
+      const fallbackOrderItem = fallbackItems[index];
+      const quantity = Number(item?.pricing?.quantity ?? item?.quantity ?? item?.qty ?? fallbackOrderItem?.qty ?? 1) || 1;
+      const unitPrice = Number(
+        item?.pricing?.unit_price ??
+        item?.original_pricing?.unit_price ??
+        item?.unit_price ??
+        item?.price ??
+        fallbackOrderItem?.unitPrice ??
+        0
+      ) || 0;
+      const payloadItem: any = {
+        pricing: {
+          pricing_type: "UNIT",
+          quantity,
+          unit_price: unitPrice,
+          weight: Number(item?.pricing?.weight ?? item?.original_pricing?.weight ?? 0) || 0,
+        },
+        status: "IN_CART",
+      };
+      const rawId = String(item?._id || item?.id || "").trim();
+      const rawSku = String(item?.sku || fallbackOrderItem?.sku || item?.product_id || item?.externalProductId || "").trim();
+      if (rawId) payloadItem._id = rawId;
+      if (rawSku) payloadItem.sku = rawSku;
+      if (!payloadItem._id && !payloadItem.sku) return null;
+      return payloadItem;
+    })
+    .filter(Boolean);
+}
+
+async function requestGlovoPartnerAccessToken(integration: any) {
+  const settings = getIntegrationSettingsObject(integration);
+  const clientId = String(settings?.glovoClientId || "").trim();
+  const clientSecret = String(settings?.glovoClientSecret || "").trim();
+  if (!clientId || !clientSecret) {
+    throw new Error("Glovo Partner API necesita clientId si clientSecret.");
+  }
+
+  const response = await fetch(`${GLOVO_PARTNER_API_BASE}/v2/oauth/token`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Accept: "application/json",
+    },
+    body: new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: clientId,
+      client_secret: clientSecret,
+    }),
+  });
+
+  const text = await response.text();
+  let payload: any = null;
+  try {
+    payload = text ? JSON.parse(text) : null;
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    throw new Error(payload?.message || payload?.error_description || `Glovo OAuth failed with ${response.status}`);
+  }
+
+  const token = String(payload?.access_token || "").trim();
+  if (!token) {
+    throw new Error("Glovo OAuth nu a returnat access_token.");
+  }
+
+  return token;
+}
+
+function decideGlovoOutboundStatus(order: any, nextInternalStatus: string) {
+  const transportType = normalizeGlovoTransportType(order?.rawPayloadJson?.transport_type);
+  if (nextInternalStatus === "ACKNOWLEDGED" && transportType === "VENDOR_DELIVERY") {
+    return "ACCEPTED";
+  }
+  if (nextInternalStatus === "READY_FOR_FISCAL" && transportType === "LOGISTICS_DELIVERY") {
+    return "READY_FOR_PICKUP";
+  }
+  return null;
+}
+
+async function syncGlovoPartnerStatusForOrder(
+  auth: NonNullable<PosAuthRequest["auth"]>,
+  order: any,
+  nextInternalStatus: string,
+  source: "POS" | "KDS"
+) {
+  if (order?.platform !== "GLOVO" || !order?.integration) {
+    return { skipped: true, reason: "not-glovo" };
+  }
+
+  const glovoStatus = decideGlovoOutboundStatus(order, nextInternalStatus);
+  if (!glovoStatus) {
+    return { skipped: true, reason: "no-outbound-status-for-transition" };
+  }
+
+  const chainId = getGlovoChainIdForOrder(order);
+  const glovoOrderId = getGlovoOrderUuid(order);
+  const items = buildGlovoUpdateItems(order);
+  const confirmedAmount = Number(order?.total || 0) || 0;
+
+  if (!chainId) {
+    return { skipped: true, reason: "missing-chain-id" };
+  }
+  if (!glovoOrderId) {
+    return { skipped: true, reason: "missing-order-id" };
+  }
+  if (!items.length) {
+    return { skipped: true, reason: "missing-order-items" };
+  }
+
+  const body: any = {
+    order_id: glovoOrderId,
+    status: glovoStatus,
+    confirmed_amount: confirmedAmount,
+    items,
+  };
+
+  if (glovoStatus === "ACCEPTED") {
+    const acceptedFor = getGlovoAcceptedFor(order);
+    if (!acceptedFor) {
+      return { skipped: true, reason: "missing-accepted-for" };
+    }
+    body.accepted_for = acceptedFor;
+  }
+
+  const accessToken = await requestGlovoPartnerAccessToken(order.integration);
+  const response = await fetch(`${GLOVO_PARTNER_API_BASE}/v2/chains/${encodeURIComponent(chainId)}/orders/${encodeURIComponent(glovoOrderId)}`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  const text = await response.text();
+  let payload: any = null;
+  try {
+    payload = text ? JSON.parse(text) : null;
+  } catch {
+    payload = text || null;
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      payload?.message ||
+      payload?.error ||
+      payload?.detail ||
+      `Glovo Update Order failed with ${response.status}`
+    );
+  }
+
+  await createPosMarketplaceHistory(
+    auth,
+    order.id,
+    nextInternalStatus,
+    "GLOVO",
+    `Glovo sync trimis cu status ${glovoStatus} din ${source}.`,
+    {
+      glovoStatus,
+      chainId,
+      glovoOrderId,
+      response: payload,
+    }
+  );
+
+  return { skipped: false, glovoStatus, response: payload };
+}
 
 async function resolvePosMarketplaceTerminalLocation(auth: NonNullable<PosAuthRequest["auth"]>) {
   if (!auth.terminalId) return null;
@@ -1596,7 +1824,40 @@ router.post("/api/v1/pos/marketplace/:externalOrderId/accept", async (req: PosAu
     { terminalId: auth.terminalId || null }
   );
 
-  return res.json({ ok: true, externalOrderId: order.id, status: nextStatus });
+  let glovoSync: any = { skipped: true, reason: "not-run" };
+  try {
+    glovoSync = await syncGlovoPartnerStatusForOrder(
+      auth,
+      {
+        ...order,
+        status: nextStatus,
+      },
+      nextStatus,
+      "POS"
+    );
+    if (glovoSync?.skipped && glovoSync?.reason && glovoSync.reason !== "not-glovo") {
+      await createPosMarketplaceHistory(
+        auth,
+        order.id,
+        nextStatus,
+        "GLOVO",
+        `Glovo sync nu a fost trimis la acceptare: ${glovoSync.reason}.`,
+        glovoSync
+      );
+    }
+  } catch (error: any) {
+    glovoSync = { skipped: false, error: error?.message || "Glovo accept sync failed." };
+    await createPosMarketplaceHistory(
+      auth,
+      order.id,
+      nextStatus,
+      "GLOVO",
+      `Glovo sync a esuat la acceptare: ${glovoSync.error}`,
+      glovoSync
+    );
+  }
+
+  return res.json({ ok: true, externalOrderId: order.id, status: nextStatus, glovoSync });
 });
 
 router.post("/api/v1/pos/marketplace/:externalOrderId/send-to-kds", async (req: PosAuthRequest, res: Response) => {
@@ -1728,7 +1989,41 @@ router.post("/api/v1/pos/marketplace/:externalOrderId/kds-status", async (req: P
     });
   });
 
-  return res.json({ ok: true, externalOrderId: order.id, status: normalizedStatus });
+  let glovoSync: any = { skipped: true, reason: "not-run" };
+  try {
+    glovoSync = await syncGlovoPartnerStatusForOrder(
+      auth,
+      {
+        ...order,
+        status: normalizedStatus,
+        readyAt: normalizedStatus === "READY_FOR_FISCAL" ? now : order.readyAt,
+      },
+      normalizedStatus,
+      "KDS"
+    );
+    if (glovoSync?.skipped && glovoSync?.reason && glovoSync.reason !== "not-glovo") {
+      await createPosMarketplaceHistory(
+        auth,
+        order.id,
+        normalizedStatus,
+        "GLOVO",
+        `Glovo sync nu a fost trimis din KDS: ${glovoSync.reason}.`,
+        glovoSync
+      );
+    }
+  } catch (error: any) {
+    glovoSync = { skipped: false, error: error?.message || "Glovo KDS sync failed." };
+    await createPosMarketplaceHistory(
+      auth,
+      order.id,
+      normalizedStatus,
+      "GLOVO",
+      `Glovo sync a esuat din KDS: ${glovoSync.error}`,
+      glovoSync
+    );
+  }
+
+  return res.json({ ok: true, externalOrderId: order.id, status: normalizedStatus, glovoSync });
 });
 
 router.post("/api/v1/pos/marketplace/:externalOrderId/load-cart", async (req: PosAuthRequest, res: Response) => {

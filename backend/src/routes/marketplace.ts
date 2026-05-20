@@ -204,6 +204,9 @@ function buildGlovoContractChecklist(integration: any) {
   const targetTerminalSelected = Boolean(String(settings?.targetTerminalId || settings?.targetTerminalDeviceId || "").trim())
   const storeIdConfigured = Boolean(storeId)
   const storeIdLooksValid = storeId.includes("__")
+  const chainIdConfigured = Boolean(String(settings?.glovoChainId || "").trim())
+  const clientIdConfigured = Boolean(String(settings?.glovoClientId || "").trim())
+  const clientSecretConfigured = Boolean(String(settings?.glovoClientSecret || "").trim())
   const orderNotificationsEnabled = Boolean(settings?.portalOrderNotificationsEnabled)
   const cancelNotificationsEnabled = Boolean(settings?.portalCancelNotificationsEnabled)
   const menuManagedByIntegration = Boolean(settings?.menuManagedByIntegration)
@@ -216,6 +219,9 @@ function buildGlovoContractChecklist(integration: any) {
       targetTerminalSelected,
       tokenConfigured,
       storeIdConfigured,
+      chainIdConfigured,
+      clientIdConfigured,
+      clientSecretConfigured,
       storeIdLooksValid,
       orderNotificationsEnabled,
       cancelNotificationsEnabled,
@@ -226,6 +232,9 @@ function buildGlovoContractChecklist(integration: any) {
       targetTerminalSelected &&
       tokenConfigured &&
       storeIdConfigured &&
+      chainIdConfigured &&
+      clientIdConfigured &&
+      clientSecretConfigured &&
       storeIdLooksValid &&
       orderNotificationsEnabled,
   }

@@ -141,6 +141,10 @@ type IntegrationForm = {
   targetTerminalDeviceId: string
   authType: "PARTNER" | "OAUTH" | "API_KEY"
   partnerName: string
+  glovoClientId: string
+  glovoClientSecret: string
+  glovoChainId: string
+  glovoDefaultPrepMinutes: string
   merchantId: string
   storeId: string
   accessToken: string
@@ -171,6 +175,10 @@ function emptyForm(): IntegrationForm {
     targetTerminalDeviceId: "",
     authType: "PARTNER",
     partnerName: "",
+    glovoClientId: "",
+    glovoClientSecret: "",
+    glovoChainId: "",
+    glovoDefaultPrepMinutes: "",
     merchantId: "",
     storeId: "",
     accessToken: "",
@@ -334,6 +342,22 @@ export default function MarketplacePage() {
                 typeof integration.settingsJson?.partnerName === "string"
                   ? integration.settingsJson.partnerName
                   : "",
+              glovoClientId:
+                typeof integration.settingsJson?.glovoClientId === "string"
+                  ? integration.settingsJson.glovoClientId
+                  : "",
+              glovoClientSecret:
+                typeof integration.settingsJson?.glovoClientSecret === "string"
+                  ? integration.settingsJson.glovoClientSecret
+                  : "",
+              glovoChainId:
+                typeof integration.settingsJson?.glovoChainId === "string"
+                  ? integration.settingsJson.glovoChainId
+                  : "",
+              glovoDefaultPrepMinutes:
+                integration.settingsJson?.glovoDefaultPrepMinutes != null
+                  ? String(integration.settingsJson.glovoDefaultPrepMinutes)
+                  : "",
               merchantId: integration.merchantId || "",
               storeId: integration.storeId || "",
               accessToken: integration.accessToken || "",
@@ -410,6 +434,12 @@ export default function MarketplacePage() {
           settings: {
             ...(settings || {}),
             partnerName: form.partnerName.trim() || undefined,
+            glovoClientId: form.glovoClientId.trim() || undefined,
+            glovoClientSecret: form.glovoClientSecret.trim() || undefined,
+            glovoChainId: form.glovoChainId.trim() || undefined,
+            glovoDefaultPrepMinutes: form.glovoDefaultPrepMinutes.trim()
+              ? Number(form.glovoDefaultPrepMinutes)
+              : undefined,
             portalOrderNotificationsEnabled: form.portalOrderNotificationsEnabled,
             portalCancelNotificationsEnabled: form.portalCancelNotificationsEnabled,
             menuManagedByIntegration: form.menuManagedByIntegration,
@@ -677,6 +707,9 @@ export default function MarketplacePage() {
                         ["POS/licenta tinta selectata", Boolean(glovoContractChecks.targetTerminalSelected)],
                         ["Token Glovo configurat", Boolean(glovoContractChecks.tokenConfigured)],
                         ["Store ID / LID completat", Boolean(glovoContractChecks.storeIdConfigured)],
+                        ["Chain ID Glovo completat", Boolean(glovoContractChecks.chainIdConfigured)],
+                        ["Client ID Glovo completat", Boolean(glovoContractChecks.clientIdConfigured)],
+                        ["Client Secret Glovo completat", Boolean(glovoContractChecks.clientSecretConfigured)],
                         ["Store ID in format partner__store", Boolean(glovoContractChecks.storeIdLooksValid)],
                         ["Order notifications activate in portal", Boolean(glovoContractChecks.orderNotificationsEnabled)],
                         ["Cancel notifications activate in portal", Boolean(glovoContractChecks.cancelNotificationsEnabled)],
@@ -733,6 +766,28 @@ export default function MarketplacePage() {
                     </DocumentField>
                   ) : null}
 
+                  {selectedPlatform === "GLOVO" ? (
+                    <DocumentField label="Client ID Glovo Partner API">
+                      <input
+                        value={currentForm.glovoClientId}
+                        onChange={(e) => setForms((prev) => ({ ...prev, [selectedPlatform]: { ...prev[selectedPlatform], glovoClientId: e.target.value } }))}
+                        className={documentInputClass}
+                        placeholder="client_id din Glovo Partner API"
+                      />
+                    </DocumentField>
+                  ) : null}
+
+                  {selectedPlatform === "GLOVO" ? (
+                    <DocumentField label="Client Secret Glovo Partner API">
+                      <input
+                        value={currentForm.glovoClientSecret}
+                        onChange={(e) => setForms((prev) => ({ ...prev, [selectedPlatform]: { ...prev[selectedPlatform], glovoClientSecret: e.target.value } }))}
+                        className={documentInputClass}
+                        placeholder="client_secret din Glovo Partner API"
+                      />
+                    </DocumentField>
+                  ) : null}
+
                   <DocumentField label="Merchant ID">
                     <input
                       value={currentForm.merchantId}
@@ -750,6 +805,17 @@ export default function MarketplacePage() {
                       placeholder={selectedPlatform === "GLOVO" ? "partner__store-id" : "store-01"}
                     />
                   </DocumentField>
+
+                  {selectedPlatform === "GLOVO" ? (
+                    <DocumentField label="Chain ID Glovo">
+                      <input
+                        value={currentForm.glovoChainId}
+                        onChange={(e) => setForms((prev) => ({ ...prev, [selectedPlatform]: { ...prev[selectedPlatform], glovoChainId: e.target.value } }))}
+                        className={documentInputClass}
+                        placeholder="550e8400-e29b-41d4-a716-446655440000"
+                      />
+                    </DocumentField>
+                  ) : null}
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -770,6 +836,17 @@ export default function MarketplacePage() {
                       placeholder="secret webhook"
                     />
                   </DocumentField>
+
+                  {selectedPlatform === "GLOVO" ? (
+                    <DocumentField label="Timp preparare fallback (minute)">
+                      <input
+                        value={currentForm.glovoDefaultPrepMinutes}
+                        onChange={(e) => setForms((prev) => ({ ...prev, [selectedPlatform]: { ...prev[selectedPlatform], glovoDefaultPrepMinutes: e.target.value } }))}
+                        className={documentInputClass}
+                        placeholder="15"
+                      />
+                    </DocumentField>
+                  ) : null}
                 </div>
 
                   <DocumentField label="Setari suplimentare JSON">
