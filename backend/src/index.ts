@@ -1501,12 +1501,32 @@ app.post("/api/v1/pos/marketplace/:externalOrderId/accept", async (req, res) => 
     }
 
     const nextStatus = order.status === "RECEIVED" ? "ACKNOWLEDGED" : order.status
-    if (nextStatus !== order.status) {
-      await prisma.externalOrder.update({
-        where: { id: order.id },
-        data: { status: nextStatus },
-      })
-    }
+    await prisma.$transaction(async (tx: any) => {
+      if (nextStatus !== order.status || order.cancelledAt) {
+        await tx.externalOrder.update({
+          where: { id: order.id },
+          data: {
+            status: nextStatus,
+            acknowledgedAt: nextStatus === "ACKNOWLEDGED" ? new Date() : order.acknowledgedAt,
+            cancelledAt: null,
+          },
+        })
+      }
+
+      if (order.saleDraft?.id && order.saleDraft.status === "CANCELLED") {
+        await tx.saleDraft.update({
+          where: { id: order.saleDraft.id },
+          data: { status: "OPEN" },
+        })
+      }
+
+      if (order.kitchenTicket?.id && order.kitchenTicket.status === "CANCELLED") {
+        await tx.kitchenTicket.update({
+          where: { id: order.kitchenTicket.id },
+          data: { status: "NEW", completedAt: null, readyAt: null },
+        })
+      }
+    })
 
     await createPosMarketplaceHistory(auth as any, order.id, nextStatus, "POS", "Marketplace order accepted in POS.", {
       terminalId: auth.terminalId || null,
