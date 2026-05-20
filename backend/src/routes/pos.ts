@@ -85,6 +85,39 @@ export async function resolvePosAuthContext(req: PosAuthRequest) {
     return req.auth;
   }
 
+  const authHeader = normalizeText(req.headers.authorization);
+  const headerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : authHeader;
+  const token =
+    headerToken ||
+    normalizeText(req.headers["x-pos-token"]) ||
+    normalizeText(req.headers["x-access-token"]) ||
+    normalizeText(req.headers["pos-token"]) ||
+    normalizeText(req.headers["token"]) ||
+    normalizeText(req.headers["pos_token"]) ||
+    normalizeText(req.query.token) ||
+    normalizeText(req.query.pos_token) ||
+    normalizeText(req.query.access_token);
+
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as {
+        tenantId: string;
+        terminalId: string;
+        deviceId: string;
+      };
+
+      req.auth = {
+        tenantId: decoded.tenantId,
+        terminalId: decoded.terminalId,
+        deviceId: decoded.deviceId,
+      };
+      return req.auth;
+    } catch {
+      // Fallback-urile existente de mai jos rămân utile dacă tokenul e expirat
+      // și avem totuși o sesiune pair-uită disponibilă pe server.
+    }
+  }
+
   const scopedSession = resolvePairedPosSession(req);
   if (scopedSession) {
     return {
