@@ -1878,14 +1878,36 @@ export async function createPosMarketplaceHistory(
   message: string,
   payloadJson?: unknown
 ) {
+  const normalizedSource = (() => {
+    const value = String(source || "").trim().toUpperCase();
+    if (["POS", "KDS", "ERP", "BACKEND", "PLATFORM"].includes(value)) {
+      return value;
+    }
+    if (["GLOVO", "WOLT", "BOLT", "BOLT_FOOD"].includes(value)) {
+      return "PLATFORM";
+    }
+    return "BACKEND";
+  })();
+
+  const normalizedPayload =
+    payloadJson && typeof payloadJson === "object" && !Array.isArray(payloadJson)
+      ? {
+          ...(payloadJson as Record<string, unknown>),
+          historyPlatformSource:
+            normalizedSource === "PLATFORM" && !["PLATFORM", "POS", "KDS", "ERP", "BACKEND"].includes(String(source || "").trim().toUpperCase())
+              ? String(source || "").trim().toUpperCase()
+              : undefined,
+        }
+      : payloadJson;
+
   return prisma.externalOrderStatusHistory.create({
     data: {
       tenantId: auth.tenantId,
       externalOrderId,
       status,
-      source,
+      source: normalizedSource as any,
       message,
-      payloadJson: payloadJson ?? undefined,
+      payloadJson: normalizedPayload ?? undefined,
     },
   });
 }
