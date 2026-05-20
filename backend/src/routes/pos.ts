@@ -1563,20 +1563,25 @@ async function resolveMarketplaceTargetTerminal(integration: any) {
 }
 
 async function isMarketplaceOrderVisibleToTerminal(order: any, auth: NonNullable<PosAuthRequest["auth"]>) {
-  if (!auth.terminalId && !auth.deviceId) return true;
-
   const targetTerminal = await resolveMarketplaceTargetTerminal(order?.integration);
-  if (!targetTerminal) return true;
+  if (targetTerminal) {
+    if (auth.terminalId && targetTerminal.id === auth.terminalId) {
+      return true;
+    }
 
-  if (auth.terminalId && targetTerminal.id === auth.terminalId) {
-    return true;
+    const authDeviceId = String(auth.deviceId || "").trim().toUpperCase();
+    const targetDeviceId = String(targetTerminal.deviceId || "").trim().toUpperCase();
+    if (authDeviceId && targetDeviceId && targetDeviceId === authDeviceId) {
+      return true;
+    }
+
+    return false;
   }
 
-  if (auth.deviceId && targetTerminal.deviceId === auth.deviceId) {
-    return true;
-  }
-
-  return false;
+  if (!auth.terminalId) return true;
+  const terminal = await resolvePosMarketplaceTerminalLocation(auth);
+  if (!terminal?.locationId) return true;
+  return terminal.locationId === order?.locationId;
 }
 
 async function getMarketplaceVisibilityDebug(order: any, auth: NonNullable<PosAuthRequest["auth"]>) {
@@ -1609,11 +1614,9 @@ async function getMarketplaceVisibilityDebug(order: any, auth: NonNullable<PosAu
 }
 
 async function resolvePosMarketplaceOrder(auth: NonNullable<PosAuthRequest["auth"]>, inputOrderId: string, include: Record<string, unknown> = {}) {
-  const terminal = await resolvePosMarketplaceTerminalLocation(auth);
   const order = await prisma.externalOrder.findFirst({
     where: {
       tenantId: auth.tenantId,
-      ...(terminal?.locationId ? { locationId: terminal.locationId } : {}),
       OR: [{ id: inputOrderId }, { externalOrderId: inputOrderId }],
     },
     include: {
@@ -1680,12 +1683,9 @@ router.get("/api/v1/pos/marketplace/orders", async (req: PosAuthRequest, res: Re
     });
   }
 
-  const terminal = await resolvePosMarketplaceTerminalLocation(auth);
-
   const items = await prisma.externalOrder.findMany({
     where: {
       tenantId: auth.tenantId,
-      ...(terminal?.locationId ? { locationId: terminal.locationId } : {}),
       status: { in: [...ACTIVE_MARKETPLACE_ORDER_STATUSES] },
     },
     include: {
@@ -1728,12 +1728,9 @@ router.get("/api/v1/pos/marketplace/debug", async (req: PosAuthRequest, res: Res
     });
   }
 
-  const terminal = await resolvePosMarketplaceTerminalLocation(auth);
-
   const items = await prisma.externalOrder.findMany({
     where: {
       tenantId: auth.tenantId,
-      ...(terminal?.locationId ? { locationId: terminal.locationId } : {}),
       status: { in: [...ACTIVE_MARKETPLACE_ORDER_STATUSES] },
     },
     include: {
@@ -2040,17 +2037,9 @@ router.post("/api/v1/pos/marketplace/:externalOrderId/load-cart", async (req: Po
     return res.status(400).json({ ok: false, error: "Missing externalOrderId" });
   }
 
-  const terminal = auth.terminalId
-    ? await prisma.terminal.findUnique({
-        where: { id: auth.terminalId },
-        select: { locationId: true },
-      })
-    : null;
-
   const order = await prisma.externalOrder.findFirst({
     where: {
       tenantId: auth.tenantId,
-      ...(terminal?.locationId ? { locationId: terminal.locationId } : {}),
       OR: [{ id: inputOrderId }, { externalOrderId: inputOrderId }],
     },
     include: {
