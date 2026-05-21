@@ -317,6 +317,10 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
   const requestedIsSgr = req.body?.isSgr === undefined ? false : Boolean(req.body?.isSgr)
   const requestedIsFiscalRiskProduct =
     req.body?.isFiscalRiskProduct === undefined ? false : Boolean(req.body?.isFiscalRiskProduct)
+  const requestedIsMenu = Boolean(req.body?.isMenu)
+  const requestedPublishToGlovo = Boolean(req.body?.publishToGlovo)
+  const requestedPosMenuCategory = toNullableText(req.body?.posMenuCategory)
+  const posMenuCategory = requestedIsMenu ? requestedPosMenuCategory : null
 
   if (!ALL_PRODUCT_CLASSES.includes(classValue)) {
     return res.status(400).json({ ok: false, error: "Clasificare produs invalida." })
@@ -377,6 +381,10 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
 
   if (!uomId) {
     return res.status(400).json({ ok: false, error: "UM este obligatorie." })
+  }
+
+  if (requestedIsMenu && !posMenuCategory) {
+    return res.status(400).json({ ok: false, error: "Categoria de meniu POS este obligatorie pentru articolele de tip meniu." })
   }
 
   if (normalizedPurchaseFactor <= 0) {
@@ -515,7 +523,10 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
           trackExpiry,
           costMethod: costMethod as any,
           isActive: forcedInactiveBecauseMissingRecipe ? false : requestedIsActive,
+          isMenu: requestedIsMenu,
+          posMenuCategory,
           isVisibleInPos,
+          publishToGlovo: requestedPublishToGlovo,
           isSgr,
           sgrValue: isSgr ? 0.5 : 0,
           productionMode: productionMode as any
@@ -602,6 +613,10 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   const requestedIsSgr = req.body?.isSgr === undefined ? false : Boolean(req.body?.isSgr)
   const requestedIsFiscalRiskProduct =
     req.body?.isFiscalRiskProduct === undefined ? false : Boolean(req.body?.isFiscalRiskProduct)
+  const requestedIsMenu = Boolean(req.body?.isMenu)
+  const requestedPublishToGlovo = Boolean(req.body?.publishToGlovo)
+  const requestedPosMenuCategory = toNullableText(req.body?.posMenuCategory)
+  const posMenuCategory = requestedIsMenu ? requestedPosMenuCategory : null
 
   if (!ALL_PRODUCT_CLASSES.includes(classValue)) {
     return res.status(400).json({ ok: false, error: "Clasificare produs invalida." })
@@ -639,6 +654,10 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
 
   if (!uomId) {
     return res.status(400).json({ ok: false, error: "UM este obligatorie." })
+  }
+
+  if (requestedIsMenu && !posMenuCategory) {
+    return res.status(400).json({ ok: false, error: "Categoria de meniu POS este obligatorie pentru articolele de tip meniu." })
   }
 
   if (normalizedPurchaseFactor <= 0) {
@@ -770,7 +789,10 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
         trackExpiry,
         costMethod: costMethod as any,
         isActive: forcedInactiveBecauseMissingRecipe ? false : requestedIsActive,
+        isMenu: requestedIsMenu,
+        posMenuCategory,
         isVisibleInPos,
+        publishToGlovo: requestedPublishToGlovo,
         isSgr,
         sgrValue: isSgr ? 0.5 : 0,
         productionMode: productionMode as any

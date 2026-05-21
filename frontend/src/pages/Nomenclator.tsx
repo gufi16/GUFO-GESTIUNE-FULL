@@ -1,9 +1,10 @@
-import { ArrowRight, BookOpen, Boxes, Building2, FolderTree, Package2, Ruler } from "lucide-react"
+import { ArrowRight, BookOpen, Boxes, Building2, FolderTree, Package2, Ruler, UtensilsCrossed } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import PageHeader from "../components/PageHeader"
 
 const items = [
   { name: "Produse", route: "/nomenclator/produse", icon: Package2 },
+  { name: "Meniuri", route: "/nomenclator/meniuri", icon: UtensilsCrossed },
   { name: "Furnizori", route: "/nomenclator/furnizori", icon: Building2 },
   { name: "Clienti", route: "/nomenclator/clienti", icon: Building2 },
   { name: "Locatii", route: "/nomenclator/locatii", icon: Boxes },

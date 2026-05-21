@@ -794,7 +794,10 @@ model Product {
   trackExpiry    Boolean        @default(false)
   costMethod     StockCostMethod @default(AVG)
   isActive       Boolean        @default(true)
+  isMenu         Boolean        @default(false)
+  posMenuCategory String?
   isVisibleInPos Boolean        @default(true)
+  publishToGlovo Boolean        @default(false)
   isSgr          Boolean        @default(false)
   sgrValue       Decimal        @default(0)
   productionMode ProductionMode @default(AUTO)

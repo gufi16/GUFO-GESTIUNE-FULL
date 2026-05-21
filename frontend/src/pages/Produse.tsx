@@ -19,6 +19,7 @@ type Product = {
   costPrice?: number
   purchaseFactor?: number
   isActive: boolean
+  isMenu?: boolean
   isVisibleInPos?: boolean
   isSgr?: boolean
   sgrValue?: number
@@ -381,8 +382,8 @@ export default function ProdusePage() {
           }))
         : []
 
-      setItems(nextProducts)
-      setProductOptions(nextProducts)
+      setItems(nextProducts.filter((item: Product) => item.isMenu !== true))
+      setProductOptions(nextProducts.filter((item: Product) => item.isMenu !== true))
       setUoms(Array.isArray(uomData.items) ? uomData.items : [])
       setVatRates(Array.isArray(vatData.items) ? vatData.items : [])
       setCategories(Array.isArray(catData.items) ? catData.items : [])
@@ -1022,7 +1023,7 @@ function getDefaultVat(list = vatRates) {
       <PageHeader
         badge="nomenclator"
         title="Produse"
-        subtitle="Lista produselor, configurarea lor, clasificari, POS, SGR si retetare."
+        subtitle="Lista produselor simple, configurarea lor, clasificari, POS, SGR si retetare."
       />
 
       {error ? <div style={errorBox}>{error}</div> : null}
