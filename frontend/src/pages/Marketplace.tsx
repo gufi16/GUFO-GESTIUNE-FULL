@@ -1,4 +1,4 @@
-import { ArrowLeft, CheckCircle2, Link2, Package2, RefreshCcw, Save, ShoppingBag, Truck } from "lucide-react"
+import { ArrowLeft, CheckCircle2, Link2, Package2, RefreshCcw, Save, Search, ShoppingBag, Truck } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import PageHeader from "../components/PageHeader"
 import {
@@ -282,6 +282,7 @@ export default function MarketplacePage() {
   const [testGlovoOrderId, setTestGlovoOrderId] = useState("GLOVO-TEST-1001")
   const [testGlovoPaymentType, setTestGlovoPaymentType] = useState<"PAID" | "CASH">("PAID")
   const [testGlovoScenario, setTestGlovoScenario] = useState<"DELIVERY" | "CUSTOMER_PICKUP">("DELIVERY")
+  const [productMappingSearch, setProductMappingSearch] = useState("")
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [loadingOrders, setLoadingOrders] = useState(false)
@@ -645,6 +646,15 @@ export default function MarketplacePage() {
   const selectedPlatformMeta =
     platforms.find((item) => item.code === selectedPlatform) || defaultPlatforms.find((item) => item.code === selectedPlatform)
   const activePlatformIntegrationCount = integrations.filter((item) => item.status === "ACTIVE" && item.platform === selectedPlatform).length
+  const filteredPlatformRecentExternalProducts = useMemo(() => {
+    const query = productMappingSearch.trim().toLowerCase()
+    if (!query) return platformRecentExternalProducts
+    return platformRecentExternalProducts.filter((item) =>
+      [item.externalName, item.externalProductId, item.sku]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query)),
+    )
+  }, [platformRecentExternalProducts, productMappingSearch])
 
   return (
     <div className="space-y-3">
@@ -682,7 +692,7 @@ export default function MarketplacePage() {
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">Platforma</div>
                     <div className="mt-2 text-[26px] font-semibold tracking-tight text-[#17324D]">{platform.label}</div>
                   </div>
-                  <img src={platformLogo(platform.code)} alt={platform.label} className="h-20 w-20 rounded-[24px] border border-white/70 bg-white/70 object-cover shadow-sm" />
+                  <img src={platformLogo(platform.code)} alt={platform.label} className="h-20 w-20 rounded-full object-cover shadow-lg shadow-slate-900/10 ring-4 ring-white/35" />
                 </div>
 
                 <div className="mt-5 grid grid-cols-3 gap-2">
@@ -720,7 +730,7 @@ export default function MarketplacePage() {
                 >
                   <ArrowLeft size={18} />
                 </button>
-                <img src={platformLogo(selectedPlatform)} alt={selectedPlatformMeta?.label || selectedPlatform} className="h-14 w-14 rounded-[18px] border border-slate-200 bg-white object-cover" />
+                <img src={platformLogo(selectedPlatform)} alt={selectedPlatformMeta?.label || selectedPlatform} className="h-14 w-14 rounded-full object-cover shadow-sm ring-2 ring-slate-100" />
                 <div>
                   <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Platforma marketplace</div>
                   <div className="mt-1 flex items-center gap-2">
@@ -743,28 +753,6 @@ export default function MarketplacePage() {
 
           {activeTab === "integrari" ? (
             <div className="space-y-3">
-              <DocumentSection title="Platforme marketplace">
-                <div className="flex flex-wrap gap-2">
-                  {platforms.map((platform) => (
-                    <button
-                      key={platform.code}
-                      type="button"
-                      onClick={() => {
-                        setSelectedPlatform(platform.code)
-                        setPlatformView(platform.code)
-                        setActiveTab("integrari")
-                      }}
-                      className={`inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-semibold transition ${
-                        selectedPlatform === platform.code ? "bg-[#17324D] text-white" : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                      }`}
-                    >
-                      <img src={platformLogo(platform.code)} alt={platform.label} className="h-5 w-5 rounded-full object-cover" />
-                      {platform.label}
-                    </button>
-                  ))}
-                </div>
-              </DocumentSection>
-
               <DocumentSection
                 title={`Rutare si conectare ${platforms.find((item) => item.code === selectedPlatform)?.label || selectedPlatform}`}
                 actions={
@@ -1104,64 +1092,80 @@ export default function MarketplacePage() {
 
       {activeTab === "mapari" ? (
         <div className="space-y-3">
-          <DocumentSection title="Filtru integrare">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,320px)_auto]">
+          <DocumentSection title={`Catalog merchant ${selectedPlatformMeta?.label || selectedPlatform}`}>
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,260px)_minmax(0,260px)_auto]">
               <select value={mappingIntegrationId} onChange={(e) => setMappingIntegrationId(e.target.value)} className={documentInputClass}>
                 <option value="">Toate integrările</option>
                 {integrations.filter((integration) => integration.platform === selectedPlatform).map((integration) => (
                   <option key={integration.id} value={integration.id}>
-                    {integration.platform} - {integration.location?.name || "Fara locatie"}
+                    {integration.location?.name || "Fara locatie"} · {integration.storeId || integration.platform}
                   </option>
                 ))}
               </select>
+              <div className="relative">
+                <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  value={productMappingSearch}
+                  onChange={(e) => setProductMappingSearch(e.target.value)}
+                  className={`${documentInputClass} pl-9`}
+                  placeholder="Cauta dupa produs, SKU sau ID extern"
+                />
+              </div>
               <button type="button" className={documentButtonSecondaryClass} onClick={() => loadMappings(mappingIntegrationId)} disabled={loadingMappings}>
                 <RefreshCcw size={14} className="mr-1.5" />
                 Reincarca maparile
               </button>
             </div>
+            <div className="mt-3 text-sm text-slate-500">
+              Aici vezi produsele detectate in merchant-ul platformei si le mapezi catre produsele tale ERP.
+            </div>
           </DocumentSection>
 
-          <DocumentSection title="Produse externe detectate">
-            <div className="space-y-2.5">
-              {!platformRecentExternalProducts.length ? (
-                <InlineNotice>Nu exista produse externe detectate inca pentru integrările selectate.</InlineNotice>
+          <DocumentSection title="Produse merchant pentru mapare">
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+              {!filteredPlatformRecentExternalProducts.length ? (
+                <InlineNotice>Nu exista produse detectate pentru platforma selectata sau filtrul ales.</InlineNotice>
               ) : (
-                platformRecentExternalProducts.map((item) => (
-                  <div key={`${item.integrationId || "none"}::${item.externalProductId || item.externalName || "row"}`} className="rounded-[18px] border border-slate-200 bg-white p-4 shadow-sm">
-                    <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.1fr_1fr_auto]">
-                      <div>
+                filteredPlatformRecentExternalProducts.map((item) => (
+                  <div key={`${item.integrationId || "none"}::${item.externalProductId || item.externalName || "row"}`} className="rounded-[22px] border border-slate-200 bg-white p-4 shadow-sm shadow-slate-900/[0.03]">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <div className="text-[15px] font-semibold text-slate-900">{item.externalName || "Produs extern fara nume"}</div>
-                          <PlatformBadge platform={item.platform || ""} uppercase />
+                          <PlatformBadge platform={item.platform || selectedPlatform} uppercase />
                           <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] ${item.mapped ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
                             {item.mapped ? "Mapat" : "Nemapat"}
                           </span>
                         </div>
+                        <div className="mt-3 text-[18px] font-semibold text-slate-900">{item.externalName || "Produs extern fara nume"}</div>
                         <div className="mt-2 text-sm text-slate-500">
                           ID extern: <span className="font-semibold text-slate-700">{item.externalProductId || "-"}</span>
-                          {" · "}
+                        </div>
+                        <div className="mt-1 text-sm text-slate-500">
+                          SKU extern: <span className="font-semibold text-slate-700">{item.sku || "-"}</span>
+                        </div>
+                        <div className="mt-1 text-sm text-slate-500">
                           Locatie: <span className="font-semibold text-slate-700">{item.location?.name || "-"}</span>
-                          {" · "}
+                        </div>
+                        <div className="mt-1 text-sm text-slate-500">
                           Vazut ultima data: <span className="font-semibold text-slate-700">{formatDate(item.lastSeenAt)}</span>
                         </div>
                       </div>
+                    </div>
 
+                    <div className="mt-4 rounded-[18px] border border-slate-200 bg-slate-50 p-3">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Produs ERP</div>
                       <select
-                        className={documentInputClass}
+                        className={`${documentInputClass} mt-2`}
                         defaultValue={mappings.find((mapping) => mapping.integrationId === item.integrationId && mapping.externalProductId === item.externalProductId)?.erpProduct?.id || ""}
                         onChange={(e) => saveMapping(item.integrationId || "", item.externalProductId || "", item.externalName || "", e.target.value)}
                       >
-                        <option value="">Alege produs ERP</option>
+                        <option value="">Alege produs ERP pentru mapare</option>
                         {products.map((product) => (
                           <option key={product.id} value={product.id}>
                             {product.sku} - {product.name}
                           </option>
                         ))}
                       </select>
-
-                      <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-                        {item.sku ? `SKU extern: ${item.sku}` : "Fara SKU extern"}
-                      </div>
                     </div>
                   </div>
                 ))
