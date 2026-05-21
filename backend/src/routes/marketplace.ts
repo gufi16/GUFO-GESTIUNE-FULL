@@ -570,7 +570,14 @@ function normalizeWoltOrderToImportPayload(integration: any, payload: any): z.in
     customerName: String(payload?.consumer_name || "").trim() || undefined,
     customerPhone: String(payload?.consumer_phone_number || "").trim() || undefined,
     customerNote: String(payload?.consumer_comment || "").trim() || undefined,
-    paymentLabel: String(payload?.payment_type || payload?.payment_method || "").trim() || undefined,
+    paymentLabel:
+      String(
+        payload?.payment?.type ||
+        payload?.payment?.payment_type ||
+        payload?.payment_type ||
+        payload?.payment_method ||
+        ""
+      ).trim() || undefined,
     currency: "RON",
     subtotal,
     total,
@@ -625,7 +632,14 @@ function normalizeGlovoOrderToImportPayload(integration: any, payload: any): z.i
     customerName: String(payload?.customer?.name || payload?.customer_name || "").trim() || undefined,
     customerPhone: String(payload?.customer?.phone_number || payload?.customer?.phone || payload?.customer_phone || "").trim() || undefined,
     customerNote: customerNotes.join(" | ") || undefined,
-    paymentLabel: String(payload?.payment_method || payload?.payment_type || "").trim() || undefined,
+    paymentLabel:
+      String(
+        payload?.payment?.type ||
+        payload?.payment?.payment_type ||
+        payload?.payment_method ||
+        payload?.payment_type ||
+        ""
+      ).trim() || undefined,
     currency: "RON",
     subtotal,
     total,
