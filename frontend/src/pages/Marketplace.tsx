@@ -271,6 +271,8 @@ export default function MarketplacePage() {
   const [mappingIntegrationId, setMappingIntegrationId] = useState("")
   const [testWoltOrderId, setTestWoltOrderId] = useState("")
   const [testGlovoOrderId, setTestGlovoOrderId] = useState("GLOVO-TEST-1001")
+  const [testGlovoPaymentType, setTestGlovoPaymentType] = useState<"PAID" | "CASH">("PAID")
+  const [testGlovoScenario, setTestGlovoScenario] = useState<"DELIVERY" | "CUSTOMER_PICKUP">("DELIVERY")
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [loadingOrders, setLoadingOrders] = useState(false)
@@ -523,25 +525,36 @@ export default function MarketplacePage() {
     setError("")
     setMessage("")
     try {
+      const normalizedOrderId = testGlovoOrderId.trim() || "GLOVO-TEST-1001"
+      const isCustomerPickup = testGlovoScenario === "CUSTOMER_PICKUP"
       await api("/api/v1/marketplace/integrations/glovo/test-import", {
         method: "POST",
         body: JSON.stringify({
           integrationId: integration.id,
           order: {
-            id: testGlovoOrderId.trim() || "GLOVO-TEST-1001",
-            order_code: (testGlovoOrderId.trim() || "GLOVO-TEST-1001").replace(/^GLOVO-?/i, ""),
+            id: normalizedOrderId,
+            order_code: normalizedOrderId.replace(/^GLOVO-?/i, ""),
             status: "RECEIVED",
             store_id: integration.storeId || "STORE-01",
             transport_type: "LOGISTICS_DELIVERY",
+            order_type: isCustomerPickup ? "pickup" : "delivery",
+            is_picked_up_by_customer: isCustomerPickup,
+            pickup_code: isCustomerPickup ? "PU-1234" : undefined,
+            estimated_pickup_time: isCustomerPickup ? "20 min" : undefined,
             customer: {
               name: "Client test Glovo",
               phone_number: "0722000000",
             },
             payment: {
-              type: "PAID",
-              payment_type: "PAID",
+              type: testGlovoPaymentType,
+              payment_type: testGlovoPaymentType,
             },
             total_price: 19.5,
+            delivery_address: isCustomerPickup
+              ? undefined
+              : {
+                  label: "Strada Test 10, Bucuresti",
+                },
             special_requirements: "Fara tacamuri",
             products: [
               {
@@ -985,16 +998,27 @@ export default function MarketplacePage() {
                     <div className="mt-1 text-sm text-slate-500">
                       Acest buton verifica fluxul intern ERP/POS. Activarea oficiala Glovo se face prin portalul lor si comenzi reale.
                     </div>
-                    <div className="mt-3 flex gap-2">
+                    <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
                       <input
                         value={testGlovoOrderId}
                         onChange={(e) => setTestGlovoOrderId(e.target.value)}
                         className={documentInputClass}
                         placeholder="orderId Glovo"
                       />
+                      <select value={testGlovoPaymentType} onChange={(e) => setTestGlovoPaymentType(e.target.value as "PAID" | "CASH")} className={documentInputClass}>
+                        <option value="PAID">Plata PAID / Card</option>
+                        <option value="CASH">Plata CASH</option>
+                      </select>
+                      <select value={testGlovoScenario} onChange={(e) => setTestGlovoScenario(e.target.value as "DELIVERY" | "CUSTOMER_PICKUP")} className={documentInputClass}>
+                        <option value="DELIVERY">Delivery normal</option>
+                        <option value="CUSTOMER_PICKUP">Ridicare de client</option>
+                      </select>
                       <button type="button" className={documentButtonSecondaryClass} onClick={runGlovoTest} disabled={saving}>
                         Test
                       </button>
+                    </div>
+                    <div className="mt-2 text-xs text-slate-500">
+                      Scenariul selectat seteaza automat plata si tipul comenzii pentru validare POS/KDS.
                     </div>
                   </div>
                 ) : null}
