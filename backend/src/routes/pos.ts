@@ -434,6 +434,25 @@ function normalizeOptionalText(value: unknown) {
   return text || null;
 }
 
+function parseLooseJsonObject(value: unknown) {
+  if (!value) return {};
+  if (typeof value === "object") return value as Record<string, any>;
+  if (typeof value !== "string") return {};
+  try {
+    return JSON.parse(value) as Record<string, any>;
+  } catch {
+    return {};
+  }
+}
+
+function pickFirstNonBlank(...values: unknown[]) {
+  for (const value of values) {
+    const text = normalizeText(value);
+    if (text) return text;
+  }
+  return "";
+}
+
 function extractAnafCompanyPayload(entry: any) {
   const general = entry?.date_generale || {};
   const headquarters = entry?.adresa_sediu_social || {};
@@ -2366,6 +2385,50 @@ router.post("/api/v1/pos/marketplace/:externalOrderId/load-cart", async (req: Po
         customerPhone: order.customerPhone,
         customerNote: order.customerNote,
         paymentLabel: order.paymentLabel,
+        restaurantName: pickFirstNonBlank(
+          parseMarketplaceSettings(order.integration?.settingsJson)?.merchantName,
+          parseMarketplaceSettings(order.integration?.settingsJson)?.partnerName,
+          order.location?.name
+        ) || null,
+        deliveryAddress: pickFirstNonBlank(
+          parseLooseJsonObject(order.rawPayloadJson)?.delivery?.address?.label,
+          parseLooseJsonObject(order.rawPayloadJson)?.customer?.address?.label,
+          parseLooseJsonObject(order.rawPayloadJson)?.address?.label,
+          parseLooseJsonObject(order.rawPayloadJson)?.delivery_address?.label,
+          parseLooseJsonObject(order.rawPayloadJson)?.deliveryAddress?.label,
+          parseLooseJsonObject(order.rawPayloadJson)?.deliveryAddress
+        ) || null,
+        orderType: pickFirstNonBlank(
+          parseLooseJsonObject(order.rawPayloadJson)?.order_type,
+          parseLooseJsonObject(order.rawPayloadJson)?.orderType,
+          parseLooseJsonObject(order.rawPayloadJson)?.transport_type,
+          parseLooseJsonObject(order.rawPayloadJson)?.transportType
+        ) || null,
+        isPickedUpByCustomer: Boolean(
+          parseLooseJsonObject(order.rawPayloadJson)?.is_picked_up_by_customer ??
+            parseLooseJsonObject(order.rawPayloadJson)?.isPickedUpByCustomer ??
+            false
+        ),
+        pickUpCode: pickFirstNonBlank(
+          parseLooseJsonObject(order.rawPayloadJson)?.pick_up_code,
+          parseLooseJsonObject(order.rawPayloadJson)?.pickup_code,
+          parseLooseJsonObject(order.rawPayloadJson)?.pickupCode
+        ) || null,
+        estimatedPickupTime: pickFirstNonBlank(
+          parseLooseJsonObject(order.rawPayloadJson)?.estimated_pickup_time,
+          parseLooseJsonObject(order.rawPayloadJson)?.estimatedPickupTime,
+          parseLooseJsonObject(order.rawPayloadJson)?.pickup_eta
+        ) || null,
+        courierName: pickFirstNonBlank(
+          parseLooseJsonObject(order.rawPayloadJson)?.courier?.name,
+          parseLooseJsonObject(order.rawPayloadJson)?.courier_name,
+          parseLooseJsonObject(order.rawPayloadJson)?.courierName
+        ) || null,
+        courierPhone: pickFirstNonBlank(
+          parseLooseJsonObject(order.rawPayloadJson)?.courier?.phone,
+          parseLooseJsonObject(order.rawPayloadJson)?.courier_phone,
+          parseLooseJsonObject(order.rawPayloadJson)?.courierPhone
+        ) || null,
         location: order.location,
       },
     saleDraft: {
