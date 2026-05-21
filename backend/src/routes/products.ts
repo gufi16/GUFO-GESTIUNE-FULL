@@ -383,10 +383,6 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
     return res.status(400).json({ ok: false, error: "UM este obligatorie." })
   }
 
-  if (requestedIsMenu && !posMenuCategory) {
-    return res.status(400).json({ ok: false, error: "Categoria de meniu POS este obligatorie pentru articolele de tip meniu." })
-  }
-
   if (normalizedPurchaseFactor <= 0) {
     return res.status(400).json({ ok: false, error: "Factorul trebuie sa fie mai mare decat 0." })
   }
@@ -654,10 +650,6 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
 
   if (!uomId) {
     return res.status(400).json({ ok: false, error: "UM este obligatorie." })
-  }
-
-  if (requestedIsMenu && !posMenuCategory) {
-    return res.status(400).json({ ok: false, error: "Categoria de meniu POS este obligatorie pentru articolele de tip meniu." })
   }
 
   if (normalizedPurchaseFactor <= 0) {

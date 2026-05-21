@@ -398,18 +398,21 @@ export default function MeniuriPage() {
       return
     }
 
-    if (!form.uomId) {
-      setError("Selecteaza UM.")
+    if (!form.categoryId) {
+      setError("Selecteaza categoria meniului.")
       return
     }
 
-    if (!form.posMenuCategory.trim()) {
-      setError("Completeaza categoria cu care meniul apare in POS.")
+    const fallbackUom = form.uomId || getDefaultUom()?.id || ""
+    const fallbackVat = isVatPayer ? form.vatRateId || getDefaultVat()?.id || "" : ""
+
+    if (!fallbackUom) {
+      setError("Nu am gasit o unitate de masura implicita pentru salvarea meniului.")
       return
     }
 
-    if (isVatPayer && !form.vatRateId) {
-      setError("Selecteaza TVA.")
+    if (isVatPayer && !fallbackVat) {
+      setError("Nu am gasit o cota TVA implicita pentru salvarea meniului.")
       return
     }
 
@@ -435,16 +438,16 @@ export default function MeniuriPage() {
           name: form.name.trim(),
           imageUrl: normalizeHostedImageUrl(form.imageUrl.trim()) || null,
           class: "PRODUS_FIN",
-          uomId: form.uomId,
-          purchaseUomId: form.uomId,
+          uomId: fallbackUom,
+          purchaseUomId: fallbackUom,
           purchaseFactor: 1,
-          vatRateId: isVatPayer ? form.vatRateId : null,
+          vatRateId: isVatPayer ? fallbackVat : null,
           categoryId: form.categoryId || null,
           price: Math.max(0, toNumberSafe(form.price || 0)),
           costPrice: Math.max(0, toNumberSafe(form.costPrice || 0)),
           isActive: form.isActive,
           isMenu: true,
-          posMenuCategory: form.posMenuCategory.trim(),
+          posMenuCategory: null,
           isVisibleInPos: form.isVisibleInPos,
           publishToGlovo: form.publishToGlovo,
           isSgr: false,
@@ -848,7 +851,7 @@ export default function MeniuriPage() {
               <div>
                 <div style={cardTitle}>{editingItem ? "Editare meniu" : "Meniu nou"}</div>
                 <div style={cardSubtitleCompact}>
-                  Creezi un meniu separat, cu poza, categorie in POS, activare si publicare pentru Glovo.
+                  Creezi un meniu separat, cu cod automat, nume, categorie, poza si produsele lui componente din ERP.
                 </div>
               </div>
 
@@ -863,9 +866,8 @@ export default function MeniuriPage() {
                   <Field label="Cod meniu">
                     <input
                       value={form.sku}
-                      onChange={(e) => setForm((prev) => ({ ...prev, sku: e.target.value }))}
                       style={input}
-                      readOnly={Boolean(editingItem)}
+                      readOnly
                     />
                   </Field>
 
@@ -894,67 +896,14 @@ export default function MeniuriPage() {
                     </select>
                   </Field>
 
-                  <Field label="Departament">
-                    <input
-                      value={selectedCategory?.department?.name || "-"}
-                      readOnly
-                      style={{ ...input, background: "#f8fafc" }}
-                    />
-                  </Field>
-
-                  <Field label="Categorie meniu POS">
-                    <input
-                      value={form.posMenuCategory}
-                      onChange={(e) => setForm((prev) => ({ ...prev, posMenuCategory: e.target.value }))}
-                      placeholder="Ex: Meniuri Burgeri"
-                      style={input}
-                    />
-                  </Field>
+                  <div style={hintBoxInline}>
+                    Produsele din meniu se aleg dupa salvare, din butonul <strong>Produse in meniu</strong>.
+                  </div>
                 </div>
               </SectionCard>
 
               <SectionCard title="Pret, imagine si publicare">
                 <div style={sideStack}>
-                  <Field label="UM">
-                    <select
-                      value={form.uomId}
-                      onChange={(e) => setForm((prev) => ({ ...prev, uomId: e.target.value }))}
-                      style={input}
-                    >
-                      <option value="">Selecteaza UM</option>
-                      {uoms
-                        .filter((u) => u.isActive !== false)
-                        .map((u) => (
-                          <option key={u.id} value={u.id}>
-                            {formatUomOption(u)}
-                          </option>
-                        ))}
-                    </select>
-                  </Field>
-
-                  <Field label="TVA">
-                    {isVatPayer ? (
-                      <select
-                        value={form.vatRateId}
-                        onChange={(e) => setForm((prev) => ({ ...prev, vatRateId: e.target.value }))}
-                        style={input}
-                      >
-                        <option value="">Selecteaza TVA</option>
-                        {vatRates
-                          .filter((v) => v.isActive !== false)
-                          .map((v) => (
-                            <option key={v.id} value={v.id}>
-                              {v.rate}%
-                            </option>
-                          ))}
-                      </select>
-                    ) : (
-                      <div style={hintBoxInline}>
-                        Firma este neplatitoare de TVA. Meniul se salveaza fara cota TVA.
-                      </div>
-                    )}
-                  </Field>
-
                   <Field label="Pret vanzare">
                     <input
                       type="text"
@@ -1003,6 +952,18 @@ export default function MeniuriPage() {
                     <label style={checkLabel}>
                       <input
                         type="checkbox"
+                        checked={form.isActive}
+                        onChange={(e) => setForm((prev) => ({ ...prev, isActive: e.target.checked }))}
+                      />
+                      <span>Meniu activ</span>
+                    </label>
+                    <div style={checkHint}>Daca este inactiv, meniul ramane in nomenclator, dar nu poate fi folosit.</div>
+                  </div>
+
+                  <div style={checkBlock}>
+                    <label style={checkLabel}>
+                      <input
+                        type="checkbox"
                         checked={form.publishToGlovo}
                         onChange={(e) => setForm((prev) => ({ ...prev, publishToGlovo: e.target.checked }))}
                       />
@@ -1011,18 +972,6 @@ export default function MeniuriPage() {
                     <div style={checkHint}>
                       Marcheaza meniul pentru exportul catre Glovo Merchant cand legam integrarea.
                     </div>
-                  </div>
-
-                  <div style={checkBlock}>
-                    <label style={checkLabel}>
-                      <input
-                        type="checkbox"
-                        checked={form.isActive}
-                        onChange={(e) => setForm((prev) => ({ ...prev, isActive: e.target.checked }))}
-                      />
-                      <span>Meniu activ</span>
-                    </label>
-                    <div style={checkHint}>Daca este inactiv, meniul ramane in nomenclator, dar nu poate fi folosit.</div>
                   </div>
                 </div>
               </SectionCard>
@@ -1076,7 +1025,7 @@ export default function MeniuriPage() {
             </SectionCard>
 
             <div style={hintBox}>
-              Dupa salvarea meniului, folosesti butonul <strong>Produse in meniu</strong> ca sa alegi exact ce produse intra in el.
+              Dupa salvarea meniului, folosesti butonul <strong>Produse in meniu</strong> ca sa alegi exact produsele din ERP care intra in el.
             </div>
 
             <div style={actionsRow}>
