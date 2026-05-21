@@ -535,6 +535,11 @@ export default function MarketplacePage() {
             transport_type: "LOGISTICS_DELIVERY",
             customer: {
               name: "Client test Glovo",
+              phone_number: "0722000000",
+            },
+            payment: {
+              type: "PAID",
+              payment_type: "PAID",
             },
             total_price: 19.5,
             special_requirements: "Fara tacamuri",

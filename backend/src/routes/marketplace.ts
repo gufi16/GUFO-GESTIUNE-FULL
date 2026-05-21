@@ -1303,7 +1303,21 @@ router.post("/api/v1/marketplace/integrations/glovo/test-import", async (req: Au
   }
 
   try {
-    const importPayload = normalizeGlovoOrderToImportPayload(integration, req.body?.order || req.body)
+    const requestOrder = req.body?.order || req.body || {}
+    const normalizedTestOrder = {
+      ...requestOrder,
+      customer: {
+        ...(requestOrder?.customer || {}),
+        name: String(requestOrder?.customer?.name || requestOrder?.customer_name || "Client test Glovo").trim(),
+        phone_number: String(requestOrder?.customer?.phone_number || requestOrder?.customer?.phone || requestOrder?.customer_phone || "0722000000").trim(),
+      },
+      payment: {
+        ...(requestOrder?.payment || {}),
+        type: String(requestOrder?.payment?.type || requestOrder?.payment?.payment_type || requestOrder?.payment_type || "PAID").trim(),
+        payment_type: String(requestOrder?.payment?.payment_type || requestOrder?.payment?.type || requestOrder?.payment_type || "PAID").trim(),
+      },
+    }
+    const importPayload = normalizeGlovoOrderToImportPayload(integration, normalizedTestOrder)
     const externalOrder = await importMarketplaceOrderForTenant(tenantId, importPayload)
     return res.json({ ok: true, order: externalOrder })
   } catch (error: any) {
