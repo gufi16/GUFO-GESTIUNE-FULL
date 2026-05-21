@@ -247,7 +247,13 @@ export default function MeniuriPage() {
         : []
 
       setItems(allProducts.filter((item: Product) => item.isMenu === true))
-      setProductOptions(allProducts.filter((item: Product) => item.isMenu !== true))
+      setProductOptions(
+        allProducts.filter(
+          (item: Product) =>
+            item.isMenu !== true &&
+            ["PRODUS_FIN", "MARFA", "SEMIFABRICATE"].includes(String(item.class || ""))
+        )
+      )
       setUoms(Array.isArray(uomData.items) ? uomData.items : [])
       setVatRates(Array.isArray(vatData.items) ? vatData.items : [])
       setCategories(Array.isArray(catData.items) ? catData.items : [])
@@ -709,9 +715,8 @@ export default function MeniuriPage() {
       if (!qq) return true
       const name = String(item.name || "").toLowerCase()
       const sku = String(item.sku || "").toLowerCase()
-      const posCategory = String(item.posMenuCategory || "").toLowerCase()
       const category = String(item.category?.name || "").toLowerCase()
-      return name.includes(qq) || sku.includes(qq) || posCategory.includes(qq) || category.includes(qq)
+      return name.includes(qq) || sku.includes(qq) || category.includes(qq)
     })
   }, [items, q])
 
@@ -730,7 +735,7 @@ export default function MeniuriPage() {
       <PageHeader
         badge="nomenclator"
         title="Meniuri"
-        subtitle="Definesti meniurile vandabile, poza lor, categoria din POS si produsele componente care intra in fiecare meniu."
+        subtitle="Definesti meniurile vandabile si alegi ce produse finite sau produse de vanzare din ERP intra in fiecare meniu."
       />
 
       {error ? <div style={errorBox}>{error}</div> : null}
@@ -748,7 +753,7 @@ export default function MeniuriPage() {
         <div style={topBar}>
           <div style={{ flex: 1 }}>
             <input
-              placeholder="Cauta dupa meniu, cod, categorie ERP sau categorie POS..."
+              placeholder="Cauta dupa meniu, cod sau categorie ERP..."
               value={q}
               onChange={(e) => setQ(e.target.value)}
               style={input}
@@ -761,7 +766,7 @@ export default function MeniuriPage() {
         </div>
 
         <div style={hintBox}>
-          Meniul se salveaza separat de produsele normale. Produsele componente se aleg din butonul <strong>Produse in meniu</strong>.
+          Meniul se salveaza separat de produsele normale. In compozitie poti alege produse finite, marfa si semifabricate, fara materii prime.
         </div>
 
         {!isVatPayer ? (
@@ -783,8 +788,6 @@ export default function MeniuriPage() {
                   <th style={th}>Cod</th>
                   <th style={th}>Meniu</th>
                   <th style={th}>Categorie ERP</th>
-                  <th style={th}>Categorie POS</th>
-                  <th style={th}>UM</th>
                   <th style={th}>Pret</th>
                   <th style={th}>Cost</th>
                   <th style={th}>Produse in meniu</th>
@@ -814,8 +817,6 @@ export default function MeniuriPage() {
                     <td style={td}>{item.sku}</td>
                     <td style={td}>{item.name}</td>
                     <td style={td}>{item.category?.name || "-"}</td>
-                    <td style={td}>{item.posMenuCategory || "-"}</td>
-                    <td style={td}>{formatUomOption(item.uom)}</td>
                     <td style={td}>{formatMoney(item.price || 0)}</td>
                     <td style={td}>{formatMoney(item.costPrice || 0)}</td>
                     <td style={td}>
@@ -897,7 +898,7 @@ export default function MeniuriPage() {
                   </Field>
 
                   <div style={hintBoxInline}>
-                    Produsele din meniu se aleg dupa salvare, din butonul <strong>Produse in meniu</strong>.
+                    Produsele din meniu se aleg dupa salvare, din butonul <strong>Produse in meniu</strong>. Materiile prime nu apar aici.
                   </div>
                 </div>
               </SectionCard>
@@ -1119,7 +1120,7 @@ export default function MeniuriPage() {
                 </div>
 
                 <div style={recipeHeaderRow}>
-                  <div style={{ fontSize: 15, fontWeight: 700 }}>Articole componente</div>
+                  <div style={{ fontSize: 15, fontWeight: 700 }}>Produse din meniu</div>
                   <button onClick={addRecipeLine} style={btnPrimary}>
                     Adauga produs
                   </button>
@@ -1216,7 +1217,7 @@ export default function MeniuriPage() {
                     <span>Configuratie activa</span>
                   </label>
                   <div style={checkHint}>
-                    Produsele alocate aici reprezinta continutul meniului si baza pentru consumul ulterior.
+                    Produsele alocate aici reprezinta continutul meniului care trebuie dus in cos la vanzare.
                   </div>
                 </div>
 

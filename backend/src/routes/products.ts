@@ -50,6 +50,7 @@ router.use(requireAuth)
 
 const RECIPE_REQUIRED_CLASSES = ["PRODUS_FIN", "SEMIFABRICATE"]
 const RECIPE_INGREDIENT_CLASSES = ["MATERIE_PRIMA", "MARFA", "SEMIFABRICATE"]
+const MENU_COMPONENT_CLASSES = ["PRODUS_FIN", "MARFA", "SEMIFABRICATE"]
 const PRODUCTION_MODE_VALUES = ["AUTO", "MANUAL"]
 const STOCK_COST_METHOD_VALUES = ["AVG", "FIFO", "FEFO"]
 
@@ -968,15 +969,21 @@ router.post("/api/v1/products/:id/recipe", async (req: AuthedRequest, res) => {
     return res.status(400).json({ ok: false, error: "Unul sau mai multe ingrediente nu exista." })
   }
 
+  const allowedIngredientClasses = product.isMenu === true
+    ? MENU_COMPONENT_CLASSES
+    : RECIPE_INGREDIENT_CLASSES
+
   const invalidIngredient = ingredients.find(
-    (ingredient) => !RECIPE_INGREDIENT_CLASSES.includes(String(ingredient.class))
+    (ingredient) => !allowedIngredientClasses.includes(String(ingredient.class))
   )
 
   if (invalidIngredient) {
     return res.status(400).json({
       ok: false,
       error:
-        "In retetar sunt permise doar ingrediente din clasele MATERIE_PRIMA, MARFA sau SEMIFABRICATE."
+        product.isMenu === true
+          ? "In meniuri sunt permise doar produse din clasele PRODUS_FIN, MARFA sau SEMIFABRICATE."
+          : "In retetar sunt permise doar ingrediente din clasele MATERIE_PRIMA, MARFA sau SEMIFABRICATE."
     })
   }
 
