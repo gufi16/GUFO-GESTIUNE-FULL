@@ -1,4 +1,4 @@
-import { CheckCircle2, Link2, Package2, RefreshCcw, Save, ShoppingBag, Store, Truck } from "lucide-react"
+import { ArrowLeft, CheckCircle2, Link2, Package2, RefreshCcw, Save, ShoppingBag, Truck } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import PageHeader from "../components/PageHeader"
 import {
@@ -157,9 +157,9 @@ type IntegrationForm = {
 }
 
 const tabs = [
-  { id: "integrari", title: "Integrari" },
+  { id: "integrari", title: "Rutare" },
   { id: "mapari", title: "Mapare produse" },
-  { id: "comenzi", title: "Comenzi" },
+  { id: "comenzi", title: "Operational" },
 ] as Array<{ id: TabId; title: string }>
 
 const defaultPlatforms: PlatformItem[] = [
@@ -198,6 +198,20 @@ function platformPill(platform: string) {
   return "bg-slate-100 text-slate-700"
 }
 
+function platformLogo(platform: string) {
+  if (platform === "GLOVO") return "/marketplace/glovo-badge.png"
+  if (platform === "WOLT") return "/marketplace/wolt-badge.png"
+  if (platform === "BOLT_FOOD") return "/marketplace/bolt-food-badge.jpg"
+  return "/marketplace/glovo-badge.png"
+}
+
+function platformCardTheme(platform: string) {
+  if (platform === "GLOVO") return "from-[#FFF7CC] via-[#FFF1A3] to-[#FDE36A]"
+  if (platform === "WOLT") return "from-[#D8F6FD] via-[#B7ECFA] to-[#8CE0F7]"
+  if (platform === "BOLT_FOOD") return "from-[#DDF9E7] via-[#B6F0CD] to-[#86E4AF]"
+  return "from-slate-100 via-slate-50 to-white"
+}
+
 function platformLabel(platform: string) {
   if (platform === "GLOVO") return "Glovo"
   if (platform === "WOLT") return "Wolt"
@@ -211,13 +225,7 @@ function PlatformBadge({ platform, uppercase = false }: { platform: string; uppe
 
   return (
     <span className={wrapperClass}>
-      {platform === "GLOVO" ? (
-        <img src="/marketplace/glovo-badge.png" alt="Glovo" className="h-5 w-5 rounded-full object-cover" />
-      ) : (
-        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/80 text-[10px] font-bold">
-          {label.slice(0, 1).toUpperCase()}
-        </span>
-      )}
+      <img src={platformLogo(platform)} alt={label} className="h-5 w-5 rounded-full object-cover" />
       <span>{uppercase ? platform || "MARKETPLACE" : label}</span>
     </span>
   )
@@ -268,6 +276,7 @@ export default function MarketplacePage() {
   const [mappings, setMappings] = useState<MappingItem[]>([])
   const [recentExternalProducts, setRecentExternalProducts] = useState<RecentExternalProduct[]>([])
   const [selectedPlatform, setSelectedPlatform] = useState<PlatformCode>("GLOVO")
+  const [platformView, setPlatformView] = useState<PlatformCode | null>(null)
   const [mappingIntegrationId, setMappingIntegrationId] = useState("")
   const [testWoltOrderId, setTestWoltOrderId] = useState("")
   const [testGlovoOrderId, setTestGlovoOrderId] = useState("GLOVO-TEST-1001")
@@ -343,6 +352,13 @@ export default function MarketplacePage() {
     }
     void loadTerminals(locationId)
   }, [forms, selectedPlatform])
+
+  useEffect(() => {
+    const integrationForPlatform = integrations.find((item) => item.platform === selectedPlatform)
+    if (integrationForPlatform?.id) {
+      setMappingIntegrationId(integrationForPlatform.id)
+    }
+  }, [integrations, selectedPlatform])
 
   async function loadTerminals(locationId: string) {
     try {
@@ -621,7 +637,14 @@ export default function MarketplacePage() {
   const currentForm = forms[selectedPlatform] || emptyForm()
   const selectedIntegration = integrations.find((item) => item.platform === selectedPlatform) || null
   const selectedTerminal = terminals.find((item) => item.id === currentForm.targetTerminalId) || null
-  const glovoContractChecks = selectedIntegration?.platform === "GLOVO" ? selectedIntegration.contract?.checks || {} : {}
+  const platformMappings = mappings.filter((mapping) => mapping.integration.platform === selectedPlatform)
+  const platformRecentExternalProducts = recentExternalProducts.filter(
+    (item) => !item.platform || item.platform === selectedPlatform || item.integrationId === selectedIntegration?.id,
+  )
+  const platformOrders = orders.filter((order) => order.platform === selectedPlatform)
+  const selectedPlatformMeta =
+    platforms.find((item) => item.code === selectedPlatform) || defaultPlatforms.find((item) => item.code === selectedPlatform)
+  const activePlatformIntegrationCount = integrations.filter((item) => item.status === "ACTIVE" && item.platform === selectedPlatform).length
 
   return (
     <div className="space-y-3">
@@ -636,156 +659,193 @@ export default function MarketplacePage() {
 
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
+      {!platformView ? (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          {defaultPlatforms.map((platform) => {
+            const integrationCount = integrations.filter((item) => item.status === "ACTIVE" && item.platform === platform.code).length
+            const orderCount = orders.filter((item) => item.platform === platform.code && item.status !== "FISCALIZED" && item.status !== "DELIVERED").length
+            const productCount = recentExternalProducts.filter((item) => item.platform === platform.code).length
 
-      <DocumentTabs items={tabs} activeId={activeTab} onChange={setActiveTab} />
-
-      {activeTab === "integrari" ? (
-        <div className="space-y-3">
-          <DocumentSection title="Platforme marketplace">
-            <div className="flex flex-wrap gap-2">
-              {platforms.map((platform) => (
-                <button
-                  key={platform.code}
-                  type="button"
-                  onClick={() => setSelectedPlatform(platform.code)}
-                  className={`inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-semibold transition ${
-                    selectedPlatform === platform.code ? "bg-[#17324D] text-white" : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                  }`}
-                >
-                  {platform.code === "GLOVO" ? (
-                    <img src="/marketplace/glovo-badge.png" alt="Glovo" className="h-5 w-5 rounded-full object-cover" />
-                  ) : (
-                    <Store size={14} />
-                  )}
-                  {platform.label}
-                </button>
-              ))}
-            </div>
-          </DocumentSection>
-
-          <DocumentSection
-            title={`Conectare ${platforms.find((item) => item.code === selectedPlatform)?.label || selectedPlatform}`}
-            actions={
-              <button type="button" className={documentButtonSecondaryClass} onClick={initialLoad} disabled={loading || saving}>
-                <RefreshCcw size={14} className="mr-1.5" />
-                Reincarca
-              </button>
-            }
-          >
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-              <div className="space-y-3">
-                <div className="rounded-[18px] border border-slate-200 bg-slate-50 p-4">
-                  <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
-                    <Truck size={16} className="text-[#17324D]" />
-                    Rutare operationala
+            return (
+              <button
+                key={platform.code}
+                type="button"
+                onClick={() => {
+                  setSelectedPlatform(platform.code)
+                  setPlatformView(platform.code)
+                  setActiveTab("integrari")
+                }}
+                className={`group rounded-[28px] border border-slate-200 bg-gradient-to-br ${platformCardTheme(platform.code)} p-5 text-left shadow-sm shadow-slate-900/[0.04] transition hover:-translate-y-0.5 hover:shadow-lg hover:shadow-slate-900/[0.08]`}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">Platforma</div>
+                    <div className="mt-2 text-[26px] font-semibold tracking-tight text-[#17324D]">{platform.label}</div>
                   </div>
+                  <img src={platformLogo(platform.code)} alt={platform.label} className="h-20 w-20 rounded-[24px] border border-white/70 bg-white/70 object-cover shadow-sm" />
+                </div>
 
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <DocumentField label="Locatie">
-                      <select
-                        value={currentForm.locationId}
-                        onChange={(e) =>
-                          setForms((prev) => ({
-                            ...prev,
-                            [selectedPlatform]: {
-                              ...prev[selectedPlatform],
-                              locationId: e.target.value,
-                              targetTerminalId: "",
-                              targetTerminalDeviceId: "",
-                            },
-                          }))
-                        }
-                        className={documentInputClass}
-                      >
-                        <option value="">Selecteaza locatia</option>
-                        {locations.map((location) => (
-                          <option key={location.id} value={location.id}>
-                            {location.code ? `${location.name} (${location.code})` : location.name}
-                          </option>
-                        ))}
-                      </select>
-                    </DocumentField>
-
-                    <DocumentField label="Device POS / licenta tinta">
-                      <select
-                        value={currentForm.targetTerminalId}
-                        onChange={(e) =>
-                          setForms((prev) => ({
-                            ...prev,
-                            [selectedPlatform]: {
-                              ...prev[selectedPlatform],
-                              targetTerminalId: e.target.value,
-                              targetTerminalDeviceId: terminals.find((terminal) => terminal.id === e.target.value)?.deviceId || "",
-                            },
-                          }))
-                        }
-                        className={documentInputClass}
-                        disabled={!currentForm.locationId}
-                      >
-                        <option value="">Alege device-ul POS</option>
-                        {terminals.map((terminal) => (
-                          <option key={terminal.id} value={terminal.id}>
-                            {terminal.label || terminal.deviceId} {terminal.deviceId ? `(${terminal.deviceId})` : ""}
-                          </option>
-                        ))}
-                      </select>
-                    </DocumentField>
+                <div className="mt-5 grid grid-cols-3 gap-2">
+                  <div className="rounded-[18px] border border-white/70 bg-white/75 px-3 py-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Integrari</div>
+                    <div className="mt-1 text-lg font-semibold text-[#17324D]">{integrationCount}</div>
                   </div>
-
-                  <div className="mt-3 rounded-[14px] border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
-                    {selectedTerminal
-                      ? `Comenzile marketplace vor intra in POS-ul: ${selectedTerminal.label || selectedTerminal.deviceId}`
-                      : "Alege device-ul/licenta Android POS care trebuie sa primeasca comenzile din platforma."}
+                  <div className="rounded-[18px] border border-white/70 bg-white/75 px-3 py-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Comenzi</div>
+                    <div className="mt-1 text-lg font-semibold text-[#17324D]">{orderCount}</div>
+                  </div>
+                  <div className="rounded-[18px] border border-white/70 bg-white/75 px-3 py-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Produse</div>
+                    <div className="mt-1 text-lg font-semibold text-[#17324D]">{productCount}</div>
                   </div>
                 </div>
 
-                {selectedPlatform === "GLOVO" ? (
-                  <div className="rounded-[18px] border border-slate-200 bg-emerald-50/60 p-4">
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-semibold text-slate-900">Checklist oficial Glovo</div>
-                        <div className="mt-1 text-sm text-slate-600">
-                          Facem setup-ul dupa portalul oficial Glovo, nu doar ca test intern.
-                        </div>
+                <div className="mt-5 flex items-center justify-between rounded-[18px] border border-white/70 bg-white/70 px-4 py-3 text-sm text-slate-700">
+                  <span>Deschide configurarea si operarea</span>
+                  <span className="font-semibold text-[#17324D] transition group-hover:translate-x-0.5">Intra</span>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      ) : (
+        <>
+          <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 shadow-sm shadow-slate-900/[0.03]">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPlatformView(null)}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-[12px] border border-slate-200 bg-slate-50 text-slate-600 transition hover:bg-slate-100"
+                >
+                  <ArrowLeft size={18} />
+                </button>
+                <img src={platformLogo(selectedPlatform)} alt={selectedPlatformMeta?.label || selectedPlatform} className="h-14 w-14 rounded-[18px] border border-slate-200 bg-white object-cover" />
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Platforma marketplace</div>
+                  <div className="mt-1 flex items-center gap-2">
+                    <h2 className="text-[26px] font-semibold tracking-tight text-[#17324D]">{selectedPlatformMeta?.label || selectedPlatform}</h2>
+                    <PlatformBadge platform={selectedPlatform} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+                <DocumentMetric title="Integrari active" value={activePlatformIntegrationCount} tone="emerald" />
+                <DocumentMetric title="Locatie" value={selectedIntegration?.location?.code || selectedIntegration?.location?.name || "-"} tone="blue" />
+                <DocumentMetric title="Nemapate" value={platformRecentExternalProducts.filter((item) => !item.mapped).length} tone="amber" />
+                <DocumentMetric title="In flux" value={platformOrders.filter((item) => item.status !== "FISCALIZED" && item.status !== "DELIVERED").length} tone="slate" />
+              </div>
+            </div>
+          </div>
+
+          <DocumentTabs items={tabs} activeId={activeTab} onChange={setActiveTab} />
+
+          {activeTab === "integrari" ? (
+            <div className="space-y-3">
+              <DocumentSection title="Platforme marketplace">
+                <div className="flex flex-wrap gap-2">
+                  {platforms.map((platform) => (
+                    <button
+                      key={platform.code}
+                      type="button"
+                      onClick={() => {
+                        setSelectedPlatform(platform.code)
+                        setPlatformView(platform.code)
+                        setActiveTab("integrari")
+                      }}
+                      className={`inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-semibold transition ${
+                        selectedPlatform === platform.code ? "bg-[#17324D] text-white" : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      <img src={platformLogo(platform.code)} alt={platform.label} className="h-5 w-5 rounded-full object-cover" />
+                      {platform.label}
+                    </button>
+                  ))}
+                </div>
+              </DocumentSection>
+
+              <DocumentSection
+                title={`Rutare si conectare ${platforms.find((item) => item.code === selectedPlatform)?.label || selectedPlatform}`}
+                actions={
+                  <button type="button" className={documentButtonSecondaryClass} onClick={initialLoad} disabled={loading || saving}>
+                    <RefreshCcw size={14} className="mr-1.5" />
+                    Reincarca
+                  </button>
+                }
+              >
+                <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+                  <div className="space-y-3">
+                    <div className="rounded-[18px] border border-slate-200 bg-slate-50 p-4">
+                      <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
+                        <Truck size={16} className="text-[#17324D]" />
+                        Rutare operationala
                       </div>
-                      <span className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${selectedIntegration?.contract?.readyForLiveOrders ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
-                        {selectedIntegration?.contract?.readyForLiveOrders ? "Live-ready" : "Necomplet"}
-                      </span>
+
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <DocumentField label="Locatie">
+                          <select
+                            value={currentForm.locationId}
+                            onChange={(e) =>
+                              setForms((prev) => ({
+                                ...prev,
+                                [selectedPlatform]: {
+                                  ...prev[selectedPlatform],
+                                  locationId: e.target.value,
+                                  targetTerminalId: "",
+                                  targetTerminalDeviceId: "",
+                                },
+                              }))
+                            }
+                            className={documentInputClass}
+                          >
+                            <option value="">Selecteaza locatia</option>
+                            {locations.map((location) => (
+                              <option key={location.id} value={location.id}>
+                                {location.code ? `${location.name} (${location.code})` : location.name}
+                              </option>
+                            ))}
+                          </select>
+                        </DocumentField>
+
+                        <DocumentField label="Device POS / licenta tinta">
+                          <select
+                            value={currentForm.targetTerminalId}
+                            onChange={(e) =>
+                              setForms((prev) => ({
+                                ...prev,
+                                [selectedPlatform]: {
+                                  ...prev[selectedPlatform],
+                                  targetTerminalId: e.target.value,
+                                  targetTerminalDeviceId: terminals.find((terminal) => terminal.id === e.target.value)?.deviceId || "",
+                                },
+                              }))
+                            }
+                            className={documentInputClass}
+                            disabled={!currentForm.locationId}
+                          >
+                            <option value="">Alege device-ul POS</option>
+                            {terminals.map((terminal) => (
+                              <option key={terminal.id} value={terminal.id}>
+                                {terminal.label || terminal.deviceId} {terminal.deviceId ? `(${terminal.deviceId})` : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </DocumentField>
+                      </div>
+
+                      <div className="mt-3 rounded-[14px] border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
+                        {selectedTerminal
+                          ? `Comenzile marketplace vor intra in POS-ul: ${selectedTerminal.label || selectedTerminal.deviceId}`
+                          : "Alege device-ul/licenta Android POS care trebuie sa primeasca comenzile din platforma."}
+                      </div>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                      {[
-                        ["Locatie selectata", Boolean(glovoContractChecks.locationSelected)],
-                        ["POS/licenta tinta selectata", Boolean(glovoContractChecks.targetTerminalSelected)],
-                        ["Token Glovo configurat", Boolean(glovoContractChecks.tokenConfigured)],
-                        ["Store ID / LID completat", Boolean(glovoContractChecks.storeIdConfigured)],
-                        ["Chain ID Glovo completat", Boolean(glovoContractChecks.chainIdConfigured)],
-                        ["Client ID Glovo completat", Boolean(glovoContractChecks.clientIdConfigured)],
-                        ["Client Secret Glovo completat", Boolean(glovoContractChecks.clientSecretConfigured)],
-                        ["Store ID in format partner__store", Boolean(glovoContractChecks.storeIdLooksValid)],
-                        ["Order notifications activate in portal", Boolean(glovoContractChecks.orderNotificationsEnabled)],
-                        ["Cancel notifications activate in portal", Boolean(glovoContractChecks.cancelNotificationsEnabled)],
-                        ["Meniu gestionat prin integrare", Boolean(glovoContractChecks.menuManagedByIntegration)],
-                      ].map(([label, ok]) => (
-                        <div key={String(label)} className={`rounded-[14px] border px-3 py-2 text-sm ${ok ? "border-emerald-200 bg-white text-emerald-800" : "border-amber-200 bg-white text-amber-800"}`}>
-                          {ok ? "OK" : "Lipseste"}: {label}
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="mt-3 flex flex-wrap gap-2 text-sm">
-                      <a className="text-[#17324D] underline underline-offset-2" href={glovoDocs.overview} target="_blank" rel="noreferrer">Overview Glovo</a>
-                      <a className="text-[#17324D] underline underline-offset-2" href={glovoDocs.portalGuide} target="_blank" rel="noreferrer">Portal & setup</a>
-                      <a className="text-[#17324D] underline underline-offset-2" href={glovoDocs.partnerApi} target="_blank" rel="noreferrer">Orders & status API</a>
-                    </div>
-                  </div>
-                ) : null}
-
-                <div className="rounded-[18px] border border-slate-200 bg-white p-4 shadow-sm">
-                  <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
-                    <Link2 size={16} className="text-[#17324D]" />
-                    Date integrare platforma
-                  </div>
+                    <div className="rounded-[18px] border border-slate-200 bg-white p-4 shadow-sm">
+                      <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
+                        <Link2 size={16} className="text-[#17324D]" />
+                        Date integrare platforma
+                      </div>
 
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <DocumentField label="Tip autentificare">
@@ -975,6 +1035,20 @@ export default function MarketplacePage() {
                   ) : null}
                 </div>
 
+                {selectedPlatform === "GLOVO" ? (
+                  <div className="rounded-[18px] border border-slate-200 bg-emerald-50/60 p-4">
+                    <div className="text-sm font-semibold text-slate-900">Documentatie Glovo</div>
+                    <div className="mt-1 text-sm text-slate-600">
+                      Am lasat aici doar legaturile utile pentru activare si operare, fara checklistul lung din vechea pagina.
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2 text-sm">
+                      <a className="text-[#17324D] underline underline-offset-2" href={glovoDocs.overview} target="_blank" rel="noreferrer">Overview Glovo</a>
+                      <a className="text-[#17324D] underline underline-offset-2" href={glovoDocs.portalGuide} target="_blank" rel="noreferrer">Portal & setup</a>
+                      <a className="text-[#17324D] underline underline-offset-2" href={glovoDocs.partnerApi} target="_blank" rel="noreferrer">Orders & status API</a>
+                    </div>
+                  </div>
+                ) : null}
+
                 {selectedPlatform === "WOLT" ? (
                   <div className="rounded-[18px] border border-slate-200 bg-white p-4 shadow-sm">
                     <div className="text-sm font-semibold text-slate-800">Test import Wolt</div>
@@ -1034,7 +1108,7 @@ export default function MarketplacePage() {
             <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,320px)_auto]">
               <select value={mappingIntegrationId} onChange={(e) => setMappingIntegrationId(e.target.value)} className={documentInputClass}>
                 <option value="">Toate integrările</option>
-                {integrations.map((integration) => (
+                {integrations.filter((integration) => integration.platform === selectedPlatform).map((integration) => (
                   <option key={integration.id} value={integration.id}>
                     {integration.platform} - {integration.location?.name || "Fara locatie"}
                   </option>
@@ -1049,10 +1123,10 @@ export default function MarketplacePage() {
 
           <DocumentSection title="Produse externe detectate">
             <div className="space-y-2.5">
-              {!recentExternalProducts.length ? (
+              {!platformRecentExternalProducts.length ? (
                 <InlineNotice>Nu exista produse externe detectate inca pentru integrările selectate.</InlineNotice>
               ) : (
-                recentExternalProducts.map((item) => (
+                platformRecentExternalProducts.map((item) => (
                   <div key={`${item.integrationId || "none"}::${item.externalProductId || item.externalName || "row"}`} className="rounded-[18px] border border-slate-200 bg-white p-4 shadow-sm">
                     <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.1fr_1fr_auto]">
                       <div>
@@ -1097,10 +1171,10 @@ export default function MarketplacePage() {
 
           <DocumentSection title="Mapari salvate">
             <div className="space-y-2.5">
-              {!mappings.length ? (
+              {!platformMappings.length ? (
                 <InlineNotice>Nu exista mapari salvate inca.</InlineNotice>
               ) : (
-                mappings.map((mapping) => (
+                platformMappings.map((mapping) => (
                   <div key={mapping.id} className="rounded-[18px] border border-slate-200 bg-white p-4 shadow-sm">
                     <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                       <div className="min-w-0">
@@ -1139,10 +1213,10 @@ export default function MarketplacePage() {
             }
           >
             <div className="space-y-2.5">
-              {!orders.length ? (
+              {!platformOrders.length ? (
                 <InlineNotice>{loadingOrders ? "Se incarca..." : "Nu exista comenzi marketplace inca."}</InlineNotice>
               ) : (
-                orders.map((order) => (
+                platformOrders.map((order) => (
                   <div key={order.id} className="rounded-[18px] border border-slate-200 bg-white p-4 shadow-sm">
                     <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                       <div className="min-w-0">
@@ -1212,6 +1286,8 @@ export default function MarketplacePage() {
           </DocumentSection>
         </div>
       ) : null}
+        </>
+      )}
     </div>
   )
 }
