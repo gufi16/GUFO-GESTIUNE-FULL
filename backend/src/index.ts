@@ -1839,7 +1839,12 @@ app.post("/api/v1/pos/marketplace/:externalOrderId/load-cart", async (req, res) 
         status: order.status,
         location: order.location,
       },
-      saleDraft: order.saleDraft,
+      saleDraft: order.saleDraft
+        ? {
+            ...order.saleDraft,
+            cart: order.saleDraft.cartJson ?? null,
+          }
+        : null,
     })
   } catch (error) {
     console.error("INDEX POS MARKETPLACE LOAD CART ERROR", error)
