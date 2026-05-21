@@ -1837,6 +1837,10 @@ app.post("/api/v1/pos/marketplace/:externalOrderId/load-cart", async (req, res) 
         externalOrderNumber: order.externalOrderNumber,
         platform: order.platform,
         status: order.status,
+        customerName: order.customerName,
+        customerPhone: order.customerPhone,
+        customerNote: order.customerNote,
+        paymentLabel: order.paymentLabel,
         location: order.location,
       },
       saleDraft: order.saleDraft
