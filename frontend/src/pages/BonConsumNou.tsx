@@ -400,11 +400,10 @@ export default function BonConsumNou() {
       setMessage(`${editingId ? "Draft actualizat" : "Bon de consum salvat"}: ${json?.item?.docNo || docNo || "OK"}`)
       setDocNo(json?.item?.docNo || docNo)
       setDocStatus(json?.item?.status || docStatus)
-      setItems([])
-      setQuery("")
-      setNote("")
-      searchInputRef.current?.focus()
-      setTimeout(() => navigate("/documente?tab=consumption"), 700)
+      if (!editingId && json?.item?.id) {
+        navigate(`/inregistrare-document/bon-consum/new?id=${encodeURIComponent(String(json.item.id))}`, { replace: true })
+        return
+      }
     } catch {
       setError("Nu am putut salva bonul de consum.")
     } finally {
