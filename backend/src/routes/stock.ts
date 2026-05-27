@@ -447,11 +447,12 @@ router.post("/api/v1/stock/transfer", async (req: AuthedRequest, res) => {
     const result = await prisma.$transaction(async (tx) => {
       const sourceBalance = await tx.stockBalance.findUnique({
         where: {
-          tenantId_companyId_locationId_productId: {
+          tenantId_companyId_locationId_productId_warehouseScope: {
             tenantId,
             companyId,
             locationId: fromLocationId,
-            productId
+            productId,
+            warehouseScope: "__NO_WAREHOUSE__",
           }
         }
       })
@@ -466,11 +467,12 @@ router.post("/api/v1/stock/transfer", async (req: AuthedRequest, res) => {
 
       await tx.stockBalance.update({
         where: {
-          tenantId_companyId_locationId_productId: {
+          tenantId_companyId_locationId_productId_warehouseScope: {
             tenantId,
             companyId,
             locationId: fromLocationId,
-            productId
+            productId,
+            warehouseScope: "__NO_WAREHOUSE__",
           }
         },
         data: {
@@ -482,22 +484,25 @@ router.post("/api/v1/stock/transfer", async (req: AuthedRequest, res) => {
 
       await tx.stockBalance.upsert({
         where: {
-          tenantId_companyId_locationId_productId: {
+          tenantId_companyId_locationId_productId_warehouseScope: {
             tenantId,
             companyId,
             locationId: toLocationId,
-            productId
+            productId,
+            warehouseScope: "__NO_WAREHOUSE__",
           }
         },
         update: {
           qty: {
             increment: qty
-          }
+          },
+          warehouseScope: "__NO_WAREHOUSE__",
         },
         create: {
           tenantId,
           companyId,
           locationId: toLocationId,
+          warehouseScope: "__NO_WAREHOUSE__",
           productId,
           qty
         }

@@ -1074,6 +1074,7 @@ model StockBalance {
     companyId  String?
     locationId String
     warehouseId String?
+    warehouseScope String @default("__NO_WAREHOUSE__")
     productId  String
 
   qty Decimal @default(0)
@@ -1084,7 +1085,7 @@ model StockBalance {
     warehouse Warehouse? @relation(fields: [warehouseId], references: [id])
     product  Product  @relation(fields: [productId], references: [id])
 
-    @@unique([tenantId, companyId, locationId, productId])
+    @@unique([tenantId, companyId, locationId, productId, warehouseScope])
     @@index([tenantId])
     @@index([tenantId, companyId])
     @@index([companyId])

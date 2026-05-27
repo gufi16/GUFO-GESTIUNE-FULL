@@ -3646,20 +3646,23 @@ export async function handlePosBackofficeReceiptCreate(req: PosAuthRequest, res:
         if (payload.postNow) {
           await tx.stockBalance.upsert({
             where: {
-              tenantId_companyId_locationId_productId: {
+              tenantId_companyId_locationId_productId_warehouseScope: {
                 tenantId,
                 companyId: company?.id || null,
                 locationId: terminal.locationId!,
                 productId: product.id,
+                warehouseScope: "__NO_WAREHOUSE__",
               },
             },
             update: {
               qty: { increment: stockQty },
+              warehouseScope: "__NO_WAREHOUSE__",
             },
             create: {
               tenantId,
               companyId: company?.id || null,
               locationId: terminal.locationId!,
+              warehouseScope: "__NO_WAREHOUSE__",
               productId: product.id,
               qty: stockQty,
             },

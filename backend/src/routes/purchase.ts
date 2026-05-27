@@ -388,17 +388,19 @@ async function postReceiptToStock(tenantId: string, companyId: string, receiptId
 
       await tx.stockBalance.upsert({
         where: {
-          tenantId_companyId_locationId_productId: {
+          tenantId_companyId_locationId_productId_warehouseScope: {
             tenantId,
             companyId,
             locationId: receipt.locationId,
-            productId: item.productId
+            productId: item.productId,
+            warehouseScope: String(receipt.warehouseId || "").trim() || "__NO_WAREHOUSE__",
           }
         },
         update: {
           qty: {
             increment: stockQty
           },
+          warehouseScope: String(receipt.warehouseId || "").trim() || "__NO_WAREHOUSE__",
           warehouseId: receipt.warehouseId || null
         },
         create: {
@@ -406,6 +408,7 @@ async function postReceiptToStock(tenantId: string, companyId: string, receiptId
           companyId,
           locationId: receipt.locationId,
           warehouseId: receipt.warehouseId || null,
+          warehouseScope: String(receipt.warehouseId || "").trim() || "__NO_WAREHOUSE__",
           productId: item.productId,
           qty: stockQty
         }

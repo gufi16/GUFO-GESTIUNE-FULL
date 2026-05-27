@@ -1,5 +1,12 @@
 // @ts-nocheck
 import { Prisma } from "@prisma/client"
+const NO_WAREHOUSE_SCOPE = "__NO_WAREHOUSE__"
+
+function stockWarehouseScope(warehouseId?: string | null) {
+  const trimmed = String(warehouseId || "").trim()
+  return trimmed || NO_WAREHOUSE_SCOPE
+}
+
 function toNumber(value: Prisma.Decimal | number | string | null | undefined) {
   const n = Number(value ?? 0)
   return Number.isFinite(n) ? n : 0
@@ -69,6 +76,7 @@ export async function decrementStockBalanceStrict(
     tenantId: params.tenantId,
     companyId: params.companyId,
     locationId: params.locationId,
+    warehouseId: params.warehouseId,
     productId: params.productId,
     requiredQty: params.qty,
     productName: params.productName,
@@ -77,17 +85,19 @@ export async function decrementStockBalanceStrict(
 
   return tx.stockBalance.update({
     where: {
-      tenantId_companyId_locationId_productId: {
+      tenantId_companyId_locationId_productId_warehouseScope: {
         tenantId: params.tenantId,
         companyId: params.companyId,
         locationId: params.locationId,
         productId: params.productId,
+        warehouseScope: stockWarehouseScope(params.warehouseId),
       },
     },
     data: {
       qty: {
         decrement: params.qty,
       },
+      warehouseScope: stockWarehouseScope(params.warehouseId),
       ...(params.warehouseId ? { warehouseId: params.warehouseId } : {}),
     },
   })
@@ -106,17 +116,19 @@ export async function decrementStockBalanceAllowNegative(
 ) {
   return tx.stockBalance.upsert({
     where: {
-      tenantId_companyId_locationId_productId: {
+      tenantId_companyId_locationId_productId_warehouseScope: {
         tenantId: params.tenantId,
         companyId: params.companyId,
         locationId: params.locationId,
         productId: params.productId,
+        warehouseScope: stockWarehouseScope(params.warehouseId),
       },
     },
     update: {
       qty: {
         decrement: params.qty,
       },
+      warehouseScope: stockWarehouseScope(params.warehouseId),
       ...(params.warehouseId ? { warehouseId: params.warehouseId } : {}),
     },
     create: {
@@ -124,6 +136,7 @@ export async function decrementStockBalanceAllowNegative(
       companyId: params.companyId,
       locationId: params.locationId,
       warehouseId: params.warehouseId || null,
+      warehouseScope: stockWarehouseScope(params.warehouseId),
       productId: params.productId,
       qty: new Prisma.Decimal(0).minus(params.qty),
     },
@@ -143,17 +156,19 @@ export async function incrementStockBalance(
 ) {
   return tx.stockBalance.upsert({
     where: {
-      tenantId_companyId_locationId_productId: {
+      tenantId_companyId_locationId_productId_warehouseScope: {
         tenantId: params.tenantId,
         companyId: params.companyId,
         locationId: params.locationId,
         productId: params.productId,
+        warehouseScope: stockWarehouseScope(params.warehouseId),
       },
     },
     update: {
       qty: {
         increment: params.qty,
       },
+      warehouseScope: stockWarehouseScope(params.warehouseId),
       ...(params.warehouseId ? { warehouseId: params.warehouseId } : {}),
     },
     create: {
@@ -161,6 +176,7 @@ export async function incrementStockBalance(
       companyId: params.companyId,
       locationId: params.locationId,
       warehouseId: params.warehouseId || null,
+      warehouseScope: stockWarehouseScope(params.warehouseId),
       productId: params.productId,
       qty: new Prisma.Decimal(params.qty),
     },
