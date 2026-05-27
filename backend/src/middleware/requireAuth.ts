@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express"
-import jwt from "jsonwebtoken"
+import { verifyAccessToken } from "../lib/auth"
 
 export interface AuthedRequest extends Request {
   auth?: {
@@ -52,7 +52,7 @@ export function requireAuth(req: AuthedRequest, res: Response, next: NextFunctio
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as any
+    const decoded = verifyAccessToken(token) as any
 
     req.auth = {
       userId: decoded.userId || decoded.user_id || decoded.id,

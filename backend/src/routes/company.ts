@@ -31,6 +31,8 @@ import {
   hasEfacturaCertificateFile,
 } from "../lib/efacturaCertificate"
 import { ensureUploadSubdir } from "../lib/uploads"
+import { getJwtSecret } from "../lib/auth"
+import { ensureTenantAdminAccess } from "../lib/tenantAdmin"
 
 const router = Router()
 
@@ -39,7 +41,7 @@ const ANAF_TOKEN_URL = "https://logincert.anaf.ro/anaf-oauth2/v1/token"
 const ANAF_LOGOUT_URL = "https://login.anaf.ro/my.logout.php3?errorcode=19"
 const ANAF_TEST_URL = "https://api.anaf.ro/TestOauth/jaxrs/hello?name=GuFo%20ERP"
 const ANAF_CUI_LOOKUP_URL = "https://webservicesp.anaf.ro/api/PlatitorTvaRest/v9/tva"
-const JWT_SECRET = process.env.JWT_SECRET || "dev_secret"
+const JWT_SECRET = getJwtSecret()
 const ANAF_OAUTH_CTX_COOKIE = "gufo_anaf_oauth_ctx"
 const efacturaAgentUploadsDir = ensureUploadSubdir("efactura-agent")
 const certUploadsDir = ensureEfacturaCertDir()
@@ -944,6 +946,7 @@ router.get("/api/v1/company/cui-lookup", async (req: AuthedRequest, res) => {
 })
 
 router.post("/api/v1/company", async (req: AuthedRequest, res) => {
+  if (!ensureTenantAdminAccess(req, res)) return
   const tenantId = req.auth!.tenantId
 
   const {
@@ -1132,6 +1135,7 @@ router.post("/api/v1/company", async (req: AuthedRequest, res) => {
 })
 
 router.get("/api/v1/company/warehouse-config", async (req: AuthedRequest, res) => {
+  if (!ensureTenantAdminAccess(req, res)) return
   try {
     const company = await getRequestCompany(req, {
       select: {
@@ -1162,6 +1166,7 @@ router.get("/api/v1/company/warehouse-config", async (req: AuthedRequest, res) =
 })
 
 router.post("/api/v1/company/warehouse-config", async (req: AuthedRequest, res) => {
+  if (!ensureTenantAdminAccess(req, res)) return
   const tenantId = req.auth!.tenantId
 
   try {
@@ -1564,6 +1569,7 @@ router.get("/api/v1/company/efactura/agent-download-info", requireAuth, async (r
 })
 
 router.get("/api/v1/company/efactura/credentials", requireAuth, async (req: AuthedRequest, res) => {
+  if (!ensureTenantAdminAccess(req, res)) return
   try {
     const company = await getRequestCompany(req, {
       select: {
@@ -1593,6 +1599,7 @@ router.get("/api/v1/company/efactura/credentials", requireAuth, async (req: Auth
 })
 
 router.post("/api/v1/company/efactura/credentials", requireAuth, async (req: AuthedRequest, res) => {
+  if (!ensureTenantAdminAccess(req, res)) return
   try {
     const company = await getRequestCompany(req, {
       select: {
@@ -1647,6 +1654,7 @@ router.post("/api/v1/company/efactura/credentials", requireAuth, async (req: Aut
 })
 
 router.patch("/api/v1/company/efactura/credentials/:id", requireAuth, async (req: AuthedRequest, res) => {
+  if (!ensureTenantAdminAccess(req, res)) return
   try {
     const company = await getRequestCompany(req, {
       select: {
@@ -1867,6 +1875,7 @@ router.get("/api/v1/company/efactura/diagnostics", async (req: AuthedRequest, re
 })
 
 router.get("/api/v1/company/document-numbering", async (req: AuthedRequest, res) => {
+  if (!ensureTenantAdminAccess(req, res)) return
   const tenantId = req.auth!.tenantId
 
   try {
@@ -1897,6 +1906,7 @@ router.get("/api/v1/company/document-numbering", async (req: AuthedRequest, res)
 })
 
 router.post("/api/v1/company/document-numbering", async (req: AuthedRequest, res) => {
+  if (!ensureTenantAdminAccess(req, res)) return
   const tenantId = req.auth!.tenantId
 
   try {
@@ -1968,6 +1978,7 @@ router.post("/api/v1/company/document-numbering", async (req: AuthedRequest, res
 })
 
 router.get("/api/v1/company/pos-sync-config", async (req: AuthedRequest, res) => {
+  if (!ensureTenantAdminAccess(req, res)) return
   const tenantId = req.auth!.tenantId
 
   try {
@@ -1991,6 +2002,7 @@ router.get("/api/v1/company/pos-sync-config", async (req: AuthedRequest, res) =>
 })
 
 router.post("/api/v1/company/pos-sync-config", async (req: AuthedRequest, res) => {
+  if (!ensureTenantAdminAccess(req, res)) return
   const tenantId = req.auth!.tenantId
   const interval = Number(req.body?.posSyncInterval)
 

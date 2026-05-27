@@ -7,6 +7,7 @@ import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { buildTenantBackupStats, buildTenantExportZip, ensureTenantBackupDir } from "../lib/tenantExport"
 import { restoreMissingTenantFilesFromBackupFile, restoreTenantBackupFromFile } from "../lib/tenantRestore"
+import { ensureTenantAdminAccess } from "../lib/tenantAdmin"
 
 const router = Router()
 const upload = multer({
@@ -27,6 +28,10 @@ const upload = multer({
 })
 
 router.use(requireAuth)
+router.use((req: AuthedRequest, res, next) => {
+  if (!ensureTenantAdminAccess(req, res)) return
+  next()
+})
 
 function sanitizeLabel(value: string) {
   return String(value || "")

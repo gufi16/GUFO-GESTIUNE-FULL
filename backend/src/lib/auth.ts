@@ -12,6 +12,8 @@ function getJwtSecret() {
   return JWT_SECRET;
 }
 
+export { getJwtSecret }
+
 export function hashSecret(raw: string) {
   return bcrypt.hash(raw, 12);
 }

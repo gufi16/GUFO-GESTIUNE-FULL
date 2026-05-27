@@ -15,9 +15,19 @@ export default function ForgotPassword() {
     setMessage(null)
 
     try {
+      const hostname = typeof window !== "undefined" ? window.location.hostname || "" : ""
+      const tenantSubdomain =
+        hostname &&
+        hostname.endsWith(".gufo.ink") &&
+        hostname !== "app.gufo.ink" &&
+        hostname !== "test.gufo.ink" &&
+        hostname !== "api.gufo.ink"
+          ? hostname.split(".")[0]
+          : undefined
+
       const response = await api<{ ok: boolean; message?: string }>("/api/v1/auth/forgot-password", {
         method: "POST",
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, tenantSubdomain }),
       })
       setMessage(response.message || "Daca exista un cont pe acest email, am trimis instructiunile.")
     } catch (err: any) {

@@ -60,6 +60,13 @@ const CORS_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:5173"
 const CORS_ORIGINS = CORS_ORIGIN.split(",").map((value) => value.trim()).filter(Boolean)
 const JWT_SECRET =
   process.env.JWT_SECRET || (process.env.NODE_ENV !== "production" ? "dev_secret" : "")
+const authRateLimitBuckets = new Map<string, { count: number; resetAt: number }>()
+const AUTH_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000
+const AUTH_RATE_LIMITS = {
+  erpLogin: 10,
+  controlPanelLogin: 8,
+  forgotPassword: 6,
+} as const
 
 const uploadsDir = getUploadsRoot()
 ensureUploadSubdir("products")
@@ -301,6 +308,43 @@ function normalizeSubdomain(value: unknown) {
     .slice(0, 50)
 }
 
+function getRateLimitKey(req: express.Request, scope: string) {
+  const forwardedFor = String(req.headers["x-forwarded-for"] || "")
+    .split(",")[0]
+    .trim()
+  const ip = forwardedFor || req.ip || "unknown-ip"
+  return `${scope}:${ip}`
+}
+
+function checkSimpleRateLimit(req: express.Request, res: express.Response, scope: keyof typeof AUTH_RATE_LIMITS) {
+  const now = Date.now()
+  const key = getRateLimitKey(req, scope)
+  const limit = AUTH_RATE_LIMITS[scope]
+  const bucket = authRateLimitBuckets.get(key)
+
+  if (!bucket || bucket.resetAt <= now) {
+    authRateLimitBuckets.set(key, {
+      count: 1,
+      resetAt: now + AUTH_RATE_LIMIT_WINDOW_MS,
+    })
+    return true
+  }
+
+  if (bucket.count >= limit) {
+    const retryAfterSeconds = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000))
+    res.setHeader("Retry-After", String(retryAfterSeconds))
+    res.status(429).json({
+      ok: false,
+      error: "Prea multe incercari. Reincearca in cateva minute.",
+    })
+    return false
+  }
+
+  bucket.count += 1
+  authRateLimitBuckets.set(key, bucket)
+  return true
+}
+
 function getRequestHostname(req: express.Request) {
   const forwardedHost = String(req.headers["x-forwarded-host"] || req.get("host") || "")
     .split(",")[0]
@@ -420,6 +464,29 @@ async function resolveTenantIdFromRequestHost(req: express.Request) {
   return tenant?.id || null
 }
 
+async function resolveRequestedTenantId(
+  req: express.Request,
+  tenantId?: string | null,
+  tenantSubdomain?: string | null
+) {
+  const hostTenantId = await resolveTenantIdFromRequestHost(req)
+  let requestedTenantId = String(tenantId || "").trim() || undefined
+
+  if (!requestedTenantId && tenantSubdomain) {
+    const tenant = await prisma.tenant.findFirst({
+      where: { subdomain: normalizeSubdomain(tenantSubdomain) },
+      select: { id: true },
+    })
+    requestedTenantId = tenant?.id || undefined
+  }
+
+  if (requestedTenantId && hostTenantId && requestedTenantId !== hostTenantId) {
+    throw new Error("Tenantul nu corespunde subdomeniului.")
+  }
+
+  return requestedTenantId || hostTenantId || undefined
+}
+
 app.get("/health", (_req, res) => {
   res.json({
     ok: true,
@@ -444,6 +511,8 @@ const ControlPanelLoginSchema = z.object({
 
 const ForgotPasswordSchema = z.object({
   email: z.string().email(),
+  tenantId: z.string().optional(),
+  tenantSubdomain: z.string().optional(),
 })
 
 const ResetPasswordSchema = z.object({
@@ -456,28 +525,19 @@ const SelectCompanySchema = z.object({
 })
 
 app.post("/api/v1/auth/login", async (req, res) => {
+  if (!checkSimpleRateLimit(req, res, "erpLogin")) return
   const parsed = LoginSchema.safeParse(req.body)
   if (!parsed.success) {
     return res.status(400).json({ ok: false, error: parsed.error.flatten() })
   }
 
   const { email, password, tenantId, tenantSubdomain } = parsed.data
-  const hostTenantId = await resolveTenantIdFromRequestHost(req)
-  let requestedTenantId = tenantId || undefined
-
-  if (!requestedTenantId && tenantSubdomain) {
-    const tenant = await prisma.tenant.findFirst({
-      where: { subdomain: normalizeSubdomain(tenantSubdomain) },
-      select: { id: true },
-    })
-    requestedTenantId = tenant?.id || undefined
+  let scopedTenantId: string | undefined
+  try {
+    scopedTenantId = await resolveRequestedTenantId(req, tenantId, tenantSubdomain)
+  } catch (error: any) {
+    return res.status(403).json({ ok: false, error: error?.message || "Tenant invalid." })
   }
-
-  if (requestedTenantId && hostTenantId && requestedTenantId !== hostTenantId) {
-    return res.status(403).json({ ok: false, error: "Tenantul nu corespunde subdomeniului." })
-  }
-
-  const scopedTenantId = requestedTenantId || hostTenantId || undefined
 
   const candidates = await prisma.user.findMany({
     where: {
@@ -490,6 +550,16 @@ app.post("/api/v1/auth/login", async (req, res) => {
 
   if (candidates.length === 0) {
     return res.status(401).json({ ok: false, error: "Invalid credentials" })
+  }
+
+  if (!scopedTenantId) {
+    const distinctTenantIds = new Set(candidates.map((candidate) => String(candidate.tenantId || "")))
+    if (distinctTenantIds.size > 1) {
+      return res.status(409).json({
+        ok: false,
+        error: "Acest email exista in mai multe conturi. Foloseste subdomeniul firmei sau selecteaza tenantul corect.",
+      })
+    }
   }
 
   let user: (typeof candidates)[number] | null = null
@@ -638,6 +708,7 @@ app.get("/api/v1/public/domain-allow", async (req, res) => {
 })
 
 app.post("/api/v1/admin/auth/login", async (req, res) => {
+  if (!checkSimpleRateLimit(req, res, "controlPanelLogin")) return
   const parsed = ControlPanelLoginSchema.safeParse(req.body)
   if (!parsed.success) {
     return res.status(400).json({ ok: false, error: parsed.error.flatten() })
@@ -677,6 +748,7 @@ app.post("/api/v1/admin/auth/login", async (req, res) => {
 })
 
 app.post("/api/v1/auth/forgot-password", async (req, res) => {
+  if (!checkSimpleRateLimit(req, res, "forgotPassword")) return
   const parsed = ForgotPasswordSchema.safeParse(req.body)
   if (!parsed.success) {
     return res.status(400).json({ ok: false, error: parsed.error.flatten() })
@@ -690,26 +762,49 @@ app.post("/api/v1/auth/forgot-password", async (req, res) => {
   }
 
   const email = parsed.data.email.trim().toLowerCase()
-  const user = await prisma.user.findFirst({
+  let scopedTenantId: string | undefined
+  try {
+    scopedTenantId = await resolveRequestedTenantId(req, parsed.data.tenantId, parsed.data.tenantSubdomain)
+  } catch {
+    return res.json({
+      ok: true,
+      message: "Daca exista un cont pe acest email, am trimis instructiunile de resetare.",
+    })
+  }
+
+  const users = await prisma.user.findMany({
     where: {
       email,
       isActive: true,
+      ...(scopedTenantId ? { tenantId: scopedTenantId } : {}),
     },
     include: {
       tenant: {
         select: {
           name: true,
+          subdomain: true,
         },
       },
     },
     orderBy: { createdAt: "desc" },
   })
 
+  const user = users[0]
   if (!user) {
     return res.json({
       ok: true,
       message: "Daca exista un cont pe acest email, am trimis instructiunile de resetare.",
     })
+  }
+
+  if (!scopedTenantId) {
+    const distinctTenantIds = new Set(users.map((candidate) => String(candidate.tenantId || "")))
+    if (distinctTenantIds.size > 1) {
+      return res.json({
+        ok: true,
+        message: "Daca exista un cont pe acest email, am trimis instructiunile de resetare.",
+      })
+    }
   }
 
   await prisma.passwordResetToken.updateMany({
@@ -739,6 +834,7 @@ app.post("/api/v1/auth/forgot-password", async (req, res) => {
   const publicBase =
     String(process.env.PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "") ||
     String(req.headers.origin || "").trim().replace(/\/+$/, "") ||
+    (user.tenant?.subdomain ? `https://${user.tenant.subdomain}.gufo.ink` : "") ||
     String(CORS_ORIGIN || "").trim().replace(/\/+$/, "")
 
   const resetUrl = `${publicBase}/reset-password?token=${rawToken}`

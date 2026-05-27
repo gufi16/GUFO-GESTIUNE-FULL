@@ -9,8 +9,11 @@ function getCryptoSecret() {
   const seed =
     process.env.EFACTURA_CERT_SECRET ||
     process.env.JWT_SECRET ||
-    process.env.CONTROL_PANEL_PASSWORD ||
-    "gufo-efactura-cert-secret"
+    (process.env.NODE_ENV !== "production" ? "gufo-efactura-cert-dev-secret" : "")
+
+  if (!seed) {
+    throw new Error("EFACTURA_CERT_SECRET sau JWT_SECRET este obligatoriu in productie.")
+  }
 
   return crypto.createHash("sha256").update(String(seed)).digest()
 }

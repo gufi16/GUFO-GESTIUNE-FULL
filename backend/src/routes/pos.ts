@@ -7,13 +7,13 @@ import { prisma } from "../lib/prisma";
 import { decrementStockBalanceAllowNegative } from "../lib/stock";
 import { getPrimaryTenantCompany } from "../lib/companyResolver";
 import { reserveNextNumber } from "../lib/numbering";
-import { verifySecret } from "../lib/auth";
+import { getJwtSecret, verifySecret } from "../lib/auth";
 import { createConsumptionDraft, validateConsumptionDoc } from "../lib/consumptionDocs";
 
 console.log("POS ROUTES FILE LOADED");
 
 const router = Router();
-const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
+const JWT_SECRET = getJwtSecret();
 const POS_SESSION_TTL_MS = 10 * 60 * 1000;
 const pairedPosSessions = new Map<
   string,
