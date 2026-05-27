@@ -592,6 +592,25 @@ function buildInvoiceFromSaleNote(sale: any, userNote?: string) {
 }
 
 function mapCatalogProduct(req: Request, product: any, isVatPayer: boolean) {
+  const recipeItems = Array.isArray(product.recipe?.items) ? product.recipe.items : [];
+  const menuComponents =
+    product.isMenu === true
+      ? recipeItems
+          .map((item: any) => {
+            const ingredient = item?.ingredient;
+            const componentId = String(ingredient?.id || item?.ingredientId || "").trim();
+            if (!componentId) return null;
+            return {
+              id: componentId,
+              code: componentId,
+              sku: String(ingredient?.sku || "").trim() || null,
+              name: String(ingredient?.name || "").trim() || null,
+              qty: toNumber(item?.qty || 0),
+            };
+          })
+          .filter(Boolean)
+      : [];
+
   return {
     id: product.id,
     sku: product.sku,
@@ -643,6 +662,8 @@ function mapCatalogProduct(req: Request, product: any, isVatPayer: boolean) {
     categoryId: product.categoryId || null,
     departmentId: product.departmentId || product.category?.departmentId || null,
     sgrLabel: product.isSgr ? "SGR" : null,
+    isMenu: Boolean(product.isMenu),
+    menuComponents,
     barcodes: Array.isArray(product.barcodes)
       ? product.barcodes.map((barcode: any) => barcode.barcode)
       : [],
@@ -706,6 +727,24 @@ export async function buildCatalogPayload(req: Request, tenantId: string) {
       department: true,
       category: true,
       barcodes: true,
+      recipe: {
+        include: {
+          items: {
+            include: {
+              ingredient: {
+                select: {
+                  id: true,
+                  sku: true,
+                  name: true,
+                },
+              },
+            },
+            orderBy: {
+              sortOrder: "asc",
+            },
+          },
+        },
+      },
     },
     orderBy: { name: "asc" },
   });
