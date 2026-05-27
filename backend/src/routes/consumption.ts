@@ -109,6 +109,7 @@ async function buildAggregateConsumptionPayload(
     warehouseId?: string | null
     dateFrom: Date
     dateTo: Date
+    includeManual?: boolean
   }
 ) {
   const sourceDocs = await tx.consumptionDoc.findMany({
@@ -120,7 +121,7 @@ async function buildAggregateConsumptionPayload(
         gte: params.dateFrom,
         lte: params.dateTo,
       },
-      source: "POS_RECIPE",
+      source: params.includeManual ? { in: ["POS_RECIPE", "MANUAL"] as any } : "POS_RECIPE",
       status: "VALIDATED",
       aggregateParentId: null,
     },
@@ -566,6 +567,7 @@ router.post("/api/v1/consumption-docs/generate-from-sales", requireAuth, async (
     const locationId = String(req.body?.locationId || "").trim()
     const requestedWarehouseId = String(req.body?.warehouseId || "").trim()
     const note = typeof req.body?.note === "string" ? req.body.note.trim() : ""
+    const includeManual = Boolean(req.body?.includeManual)
     const docDate = req.body?.docDate ? new Date(String(req.body.docDate)) : new Date()
     const dateFromInput = req.body?.dateFrom ? new Date(String(req.body.dateFrom)) : docDate
     const dateToInput = req.body?.dateTo ? new Date(String(req.body.dateTo)) : docDate
@@ -597,10 +599,11 @@ router.post("/api/v1/consumption-docs/generate-from-sales", requireAuth, async (
         warehouseId: warehouse?.id || null,
         dateFrom,
         dateTo,
+        includeManual,
       })
 
       if (!payload.lines.length || !payload.sourceDocs.length) {
-        throw new Error("Nu exista bonuri de consum POS / Retetar neagregate in intervalul selectat.")
+        throw new Error(`Nu exista bonuri de consum ${includeManual ? "manuale sau POS / Retetar" : "POS / Retetar"} neagregate in intervalul selectat.`)
       }
 
       const details = [formatDateLabel(dateFrom)]
@@ -614,7 +617,7 @@ router.post("/api/v1/consumption-docs/generate-from-sales", requireAuth, async (
         sourcePeriodStart: dateFrom,
         sourcePeriodEnd: dateTo,
         docDate,
-        note: note || `Generat din bonuri POS / Retetar pentru perioada ${details.join(" - ")}`,
+        note: note || `Generat din bonuri ${includeManual ? "manuale + POS / Retetar" : "POS / Retetar"} pentru perioada ${details.join(" - ")}`,
         lines: payload.lines.map((line) => ({
           ingredientId: line.ingredientId,
           qty: line.qty,

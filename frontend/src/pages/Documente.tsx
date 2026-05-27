@@ -621,6 +621,7 @@ export default function Documente() {
     `${today.getFullYear()}-${`${today.getMonth() + 1}`.padStart(2, "0")}-${`${today.getDate()}`.padStart(2, "0")}`
   )
   const [generatorNote, setGeneratorNote] = useState("")
+  const [generatorIncludeManual, setGeneratorIncludeManual] = useState(false)
   const [generatorSaving, setGeneratorSaving] = useState(false)
   const [pageByTab, setPageByTab] = useState<Record<ActiveTab, number>>({
     consumption: 1,
@@ -776,6 +777,7 @@ export default function Documente() {
           dateFrom: generatorDateFrom,
           dateTo: generatorDateTo,
           note: generatorNote,
+          includeManual: generatorIncludeManual,
         }),
       })
 
@@ -2250,6 +2252,7 @@ export default function Documente() {
                     setGeneratorDateFrom(dateFrom)
                     setGeneratorDateTo(dateTo)
                     setGeneratorNote("")
+                    setGeneratorIncludeManual(false)
                     setShowConsumptionGenerator(true)
                   }}
                   className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-1.5 text-[13px] font-semibold text-white transition hover:bg-slate-800"
@@ -3492,6 +3495,18 @@ export default function Documente() {
                   placeholder="Optional: explicatii pentru bonul agregat."
                   className={documentInputClass}
                 />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={generatorIncludeManual}
+                    onChange={(e) => setGeneratorIncludeManual(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300"
+                  />
+                  Include si bonurile manuale validate din interval
+                </label>
               </div>
             </div>
 
