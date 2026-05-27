@@ -2086,30 +2086,43 @@ export default function Documente() {
               <div className="text-[15px] font-semibold text-slate-900">{activeTabMeta.title}</div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                if (activeTab === "consumption") {
-                  loadConsumptionDocs()
-                } else if (activeTab === "production") {
-                  loadProductionDocs()
-                } else if (activeTab === "invoice") {
-                  loadInvoiceDocs()
-                } else if (activeTab === "receipt") {
-                  loadReceiptDocs()
-                } else if (activeTab === "minutes") {
-                  loadMinutesDocs()
-                } else if (activeTab === "transfer") {
-                  loadTransferDocs()
-                } else {
-                  loadInventoryDocs()
-                }
-              }}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-[13px] font-semibold text-slate-700 transition hover:bg-white"
-            >
-              <PackageSearch size={15} />
+            <div className="flex flex-wrap items-center gap-2">
+              {activeTab === "consumption" ? (
+                <button
+                  type="button"
+                  onClick={() => navigate("/inregistrare-document/bon-consum/new?mode=sales")}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-1.5 text-[13px] font-semibold text-white transition hover:bg-slate-800"
+                >
+                  <FilePlus2 size={15} />
+                  Genereaza din vanzari
+                </button>
+              ) : null}
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (activeTab === "consumption") {
+                    loadConsumptionDocs()
+                  } else if (activeTab === "production") {
+                    loadProductionDocs()
+                  } else if (activeTab === "invoice") {
+                    loadInvoiceDocs()
+                  } else if (activeTab === "receipt") {
+                    loadReceiptDocs()
+                  } else if (activeTab === "minutes") {
+                    loadMinutesDocs()
+                  } else if (activeTab === "transfer") {
+                    loadTransferDocs()
+                  } else {
+                    loadInventoryDocs()
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-[13px] font-semibold text-slate-700 transition hover:bg-white"
+              >
+                <PackageSearch size={15} />
                 Reincarca
-            </button>
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
