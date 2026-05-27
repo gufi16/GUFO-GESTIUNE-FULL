@@ -159,6 +159,43 @@ function normalizeSearchText(value: string) {
   return String(value || "").trim().toLowerCase()
 }
 
+function findMatchingProduct(products: ProductOption[], value: string) {
+  const normalizedValue = normalizeSearchText(value)
+  if (!normalizedValue) return null
+
+  const exact = products.find((product) => {
+    const label = buildProductSearchLabel(product)
+    return (
+      normalizeSearchText(label) === normalizedValue ||
+      normalizeSearchText(product.name || "") === normalizedValue ||
+      normalizeSearchText(product.sku || "") === normalizedValue
+    )
+  })
+  if (exact) return exact
+
+  const startsWithMatches = products.filter((product) => {
+    const label = buildProductSearchLabel(product)
+    return (
+      normalizeSearchText(label).startsWith(normalizedValue) ||
+      normalizeSearchText(product.name || "").startsWith(normalizedValue) ||
+      normalizeSearchText(product.sku || "").startsWith(normalizedValue)
+    )
+  })
+  if (startsWithMatches.length === 1) return startsWithMatches[0]
+
+  const containsMatches = products.filter((product) => {
+    const label = buildProductSearchLabel(product)
+    return (
+      normalizeSearchText(label).includes(normalizedValue) ||
+      normalizeSearchText(product.name || "").includes(normalizedValue) ||
+      normalizeSearchText(product.sku || "").includes(normalizedValue)
+    )
+  })
+  if (containsMatches.length === 1) return containsMatches[0]
+
+  return null
+}
+
 export default function MeniuriPage() {
   const token =
     getToken() ||
@@ -670,18 +707,10 @@ export default function MeniuriPage() {
   }
 
   function updateRecipeLineSearch(index: number, value: string) {
-    const normalizedValue = normalizeSearchText(value)
-    const matchedProduct = productOptions.find((product) => {
-      const label = buildProductSearchLabel(product)
-      return (
-        normalizeSearchText(label) === normalizedValue ||
-        normalizeSearchText(product.name || "") === normalizedValue ||
-        normalizeSearchText(product.sku || "") === normalizedValue
-      )
-    })
+    const matchedProduct = findMatchingProduct(productOptions, value)
 
     updateRecipeLine(index, {
-      productSearch: value,
+      productSearch: matchedProduct ? buildProductSearchLabel(matchedProduct) : value,
       ingredientId: matchedProduct?.id || "",
     })
   }
@@ -694,6 +723,25 @@ export default function MeniuriPage() {
 
     if (!recipeForm.items.length) {
       setError("Adauga cel putin un produs in meniu.")
+      return
+    }
+
+    const normalizedItems = recipeForm.items.map((line) => {
+      const matchedProduct =
+        productOptions.find((product) => product.id === line.ingredientId) ||
+        findMatchingProduct(productOptions, line.productSearch)
+
+      return {
+        ...line,
+        ingredientId: matchedProduct?.id || "",
+        productSearch: matchedProduct ? buildProductSearchLabel(matchedProduct) : line.productSearch,
+      }
+    })
+
+    const invalidLineIndex = normalizedItems.findIndex((line) => !line.ingredientId)
+    if (invalidLineIndex >= 0) {
+      setRecipeForm((prev) => ({ ...prev, items: normalizedItems }))
+      setError(`Produsul de pe linia ${invalidLineIndex + 1} nu a fost selectat complet din cautare.`)
       return
     }
 
@@ -716,7 +764,7 @@ export default function MeniuriPage() {
           status: recipeForm.status,
           isActive: recipeForm.isActive,
           activateProduct: true,
-          items: recipeForm.items.map((line, idx) => ({
+          items: normalizedItems.map((line, idx) => ({
             ingredientId: line.ingredientId,
             qty: Number(line.qty || 0),
             lossPercent: Number(line.lossPercent || 0),
