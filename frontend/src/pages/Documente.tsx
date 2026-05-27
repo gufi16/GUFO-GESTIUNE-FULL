@@ -403,6 +403,19 @@ type TransferDocListItem = {
 
 type ActiveTab = "consumption" | "production" | "inventory" | "invoice" | "receipt" | "minutes" | "transfer"
 
+type LocationOption = {
+  id: string
+  name: string
+  code?: string
+}
+
+type WarehouseOption = {
+  id: string
+  name: string
+  code?: string
+  locationId?: string
+}
+
 const DOCUMENTS_PAGE_SIZE = 10
 
 function formatDate(value?: string | null) {
@@ -585,10 +598,22 @@ export default function Documente() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
-  const [locations] = useState<Array<{ id: string; name: string; code?: string }>>([])
+  const [locations, setLocations] = useState<LocationOption[]>([])
+  const [warehouses, setWarehouses] = useState<WarehouseOption[]>([])
   const [selectedLocationId, setSelectedLocationId] = useState(getActiveLocationId())
   const [selectedWarehouseId, setSelectedWarehouseId] = useState(getActiveWarehouseId())
   const [warehouseConfig, setWarehouseConfig] = useState<WarehouseConfig>(getWarehouseConfig())
+  const [showConsumptionGenerator, setShowConsumptionGenerator] = useState(false)
+  const [generatorLocationId, setGeneratorLocationId] = useState(getActiveLocationId())
+  const [generatorWarehouseId, setGeneratorWarehouseId] = useState(getActiveWarehouseId())
+  const [generatorDateFrom, setGeneratorDateFrom] = useState(
+    `${yearStart.getFullYear()}-${`${yearStart.getMonth() + 1}`.padStart(2, "0")}-${`${yearStart.getDate()}`.padStart(2, "0")}`
+  )
+  const [generatorDateTo, setGeneratorDateTo] = useState(
+    `${today.getFullYear()}-${`${today.getMonth() + 1}`.padStart(2, "0")}-${`${today.getDate()}`.padStart(2, "0")}`
+  )
+  const [generatorNote, setGeneratorNote] = useState("")
+  const [generatorSaving, setGeneratorSaving] = useState(false)
   const [pageByTab, setPageByTab] = useState<Record<ActiveTab, number>>({
     consumption: 1,
     production: 1,
@@ -626,14 +651,17 @@ export default function Documente() {
   }, [searchParams])
 
   useEffect(() => {
+    loadLocations()
     return subscribeToActiveLocation((nextLocationId) => {
       setSelectedLocationId(nextLocationId)
+      setGeneratorLocationId(nextLocationId)
     })
   }, [])
 
   useEffect(() => {
     return subscribeToActiveWarehouse((nextWarehouseId) => {
       setSelectedWarehouseId(nextWarehouseId)
+      setGeneratorWarehouseId(nextWarehouseId)
     })
   }, [])
 
@@ -642,6 +670,124 @@ export default function Documente() {
       setWarehouseConfig(nextConfig)
     })
   }, [])
+
+  useEffect(() => {
+    if (generatorLocationId && warehouseConfig.multiWarehouseEnabled) {
+      loadWarehouses(generatorLocationId)
+    } else {
+      setWarehouses([])
+      setGeneratorWarehouseId("")
+    }
+  }, [generatorLocationId, warehouseConfig.multiWarehouseEnabled])
+
+  async function loadLocations() {
+    if (!token) return
+    try {
+      const res = await fetch(`${API}/api/v1/meta/locations`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      const data = await res.json().catch(() => ({}))
+      const rows = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.items)
+          ? data.items
+          : Array.isArray(data?.locations)
+            ? data.locations
+            : []
+      const items = rows.map((item: any) => ({
+        id: String(item.id || item.locationId || ""),
+        name: String(item.name || item.label || "Locatie"),
+        code: item.code ? String(item.code) : "",
+      })).filter((item: LocationOption) => item.id)
+      setLocations(items)
+    } catch {
+      setLocations([])
+    }
+  }
+
+  async function loadWarehouses(locationId: string) {
+    if (!token || !locationId) return
+    try {
+      const res = await fetch(`${API}/api/v1/meta/warehouses?locationId=${encodeURIComponent(locationId)}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      const data = await res.json().catch(() => ({}))
+      const rows = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.items)
+          ? data.items
+          : Array.isArray(data?.warehouses)
+            ? data.warehouses
+            : []
+      const items = rows.map((item: any) => ({
+        id: String(item.id || ""),
+        name: String(item.name || item.label || "Gestiune"),
+        code: item.code ? String(item.code) : "",
+        locationId: item.locationId ? String(item.locationId) : "",
+      })).filter((item: WarehouseOption) => item.id)
+      setWarehouses(items)
+      setGeneratorWarehouseId((current) => {
+        if (current && items.some((warehouse: WarehouseOption) => warehouse.id === current)) return current
+        return warehouseConfig.autoSelectSingleWarehouse ? items[0]?.id || "" : ""
+      })
+    } catch {
+      setWarehouses([])
+      setGeneratorWarehouseId("")
+    }
+  }
+
+  async function generateConsumptionFromSales() {
+    if (!generatorLocationId) {
+      setError("Selecteaza locatia pentru generare.")
+      return
+    }
+    if (warehouseConfig.multiWarehouseEnabled && warehouseConfig.requireWarehouseOnDocuments && !generatorWarehouseId) {
+      setError(`Selecteaza ${warehouseConfig.warehouseLabel.toLowerCase()} pentru generare.`)
+      return
+    }
+
+    try {
+      setGeneratorSaving(true)
+      setError("")
+      setMessage("")
+
+      const res = await fetch(`${API}/api/v1/consumption-docs/generate-from-sales`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          locationId: generatorLocationId,
+          warehouseId: generatorWarehouseId || null,
+          docDate: generatorDateTo,
+          dateFrom: generatorDateFrom,
+          dateTo: generatorDateTo,
+          note: generatorNote,
+        }),
+      })
+
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Nu am putut genera bonul de consum.")
+      }
+
+      const docNo = String(data?.item?.docNo || "OK")
+      const salesCount = Number(data?.summary?.salesCount || 0)
+      setShowConsumptionGenerator(false)
+      setGeneratorNote("")
+      setMessage(`Bon generat: ${docNo}${salesCount > 0 ? ` · ${salesCount} vanzari incluse` : ""}`)
+      await loadConsumptionDocs()
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut genera bonul de consum.")
+    } finally {
+      setGeneratorSaving(false)
+    }
+  }
 
   useEffect(() => {
     if (activeTab === "consumption") {
@@ -2090,7 +2236,14 @@ export default function Documente() {
               {activeTab === "consumption" ? (
                 <button
                   type="button"
-                  onClick={() => navigate("/inregistrare-document/bon-consum/new?mode=sales")}
+                  onClick={() => {
+                    setGeneratorLocationId(selectedLocationId)
+                    setGeneratorWarehouseId(selectedWarehouseId)
+                    setGeneratorDateFrom(dateFrom)
+                    setGeneratorDateTo(dateTo)
+                    setGeneratorNote("")
+                    setShowConsumptionGenerator(true)
+                  }}
                   className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-1.5 text-[13px] font-semibold text-white transition hover:bg-slate-800"
                 >
                   <FilePlus2 size={15} />
@@ -2276,8 +2429,15 @@ export default function Documente() {
                         <div>{doc.location?.name || "-"}</div>
                         <div className="text-xs text-slate-400">{doc.warehouse?.name || "-"}</div>
                       </td>
-                      <td className="px-3 py-2.5 text-slate-600">{doc.sourceLabel || doc.source}</td>
-                      <td className="px-3 py-2.5 text-slate-600">{doc.sale?.receiptNo || "-"}</td>
+                      <td className="px-3 py-2.5 text-slate-600">
+                        <div>{doc.sourceLabel || doc.source}</div>
+                        {doc.source === "SALES_AGGREGATE" && doc.batchSalesCount ? (
+                          <div className="text-xs text-slate-400">{doc.batchSalesCount} vanzari incluse</div>
+                        ) : null}
+                      </td>
+                      <td className="px-3 py-2.5 text-slate-600">
+                        {doc.sale?.receiptNo || (doc.source === "SALES_AGGREGATE" && doc.batchSalesCount ? `${doc.batchSalesCount} bonuri` : "-")}
+                      </td>
                       <td className="px-3 py-2.5 text-slate-600">
                         {doc.finishedProducts.length > 0
                           ? doc.finishedProducts.map((p) => p.name).join(", ")
@@ -3214,6 +3374,119 @@ export default function Documente() {
                 ) : null}
               </div>
             )}
+          </div>
+        </div>
+      ) : null}
+
+      {showConsumptionGenerator ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
+          <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <div className="text-lg font-semibold text-slate-900">Genereaza bon de consum din vanzari</div>
+                <div className="mt-1 text-sm text-slate-500">
+                  Selectezi locatia, gestiunea si intervalul, iar sistemul creeaza un bon agregat pentru vanzarile cu retetar.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => !generatorSaving && setShowConsumptionGenerator(false)}
+                className="inline-flex items-center gap-1.5 rounded-[14px] border border-[#E8E3DA] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#17324D] hover:bg-[#FCFBF8]"
+              >
+                <X size={16} />
+                Inchide
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div>
+                <div className="mb-1.5 text-sm font-medium text-slate-700">Locatie</div>
+                <select
+                  value={generatorLocationId}
+                  onChange={(e) => setGeneratorLocationId(e.target.value)}
+                  className={documentInputClass}
+                >
+                  {locations.map((location) => (
+                    <option key={location.id} value={location.id}>
+                      {location.name}{location.code ? ` (${location.code})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {warehouseConfig.multiWarehouseEnabled ? (
+                <div>
+                  <div className="mb-1.5 text-sm font-medium text-slate-700">{warehouseConfig.warehouseLabel}</div>
+                  <select
+                    value={generatorWarehouseId}
+                    onChange={(e) => setGeneratorWarehouseId(e.target.value)}
+                    className={documentInputClass}
+                  >
+                    {!warehouseConfig.requireWarehouseOnDocuments ? <option value="">Toate / implicit</option> : null}
+                    {warehouses.map((warehouse: WarehouseOption) => (
+                      <option key={warehouse.id} value={warehouse.id}>
+                        {warehouse.name}{warehouse.code ? ` (${warehouse.code})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+
+              <div>
+                <div className="mb-1.5 text-sm font-medium text-slate-700">Interval vanzari - de la</div>
+                <input
+                  type="date"
+                  value={generatorDateFrom}
+                  onChange={(e) => setGeneratorDateFrom(e.target.value)}
+                  className={documentInputClass}
+                />
+              </div>
+
+              <div>
+                <div className="mb-1.5 text-sm font-medium text-slate-700">Interval vanzari - pana la</div>
+                <input
+                  type="date"
+                  value={generatorDateTo}
+                  onChange={(e) => setGeneratorDateTo(e.target.value)}
+                  className={documentInputClass}
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <div className="mb-1.5 text-sm font-medium text-slate-700">Observatii</div>
+                <textarea
+                  value={generatorNote}
+                  onChange={(e) => setGeneratorNote(e.target.value)}
+                  rows={3}
+                  placeholder="Optional: explicatii pentru bonul agregat."
+                  className={documentInputClass}
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+              Bonul generat va aparea tot aici, in `Bonuri de consum`, cu sursa `Generat din vanzari` si numarul de vanzari incluse.
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowConsumptionGenerator(false)}
+                disabled={generatorSaving}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              >
+                Renunta
+              </button>
+              <button
+                type="button"
+                onClick={generateConsumptionFromSales}
+                disabled={generatorSaving}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+              >
+                <FilePlus2 size={15} />
+                {generatorSaving ? "Se genereaza..." : "Genereaza"}
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

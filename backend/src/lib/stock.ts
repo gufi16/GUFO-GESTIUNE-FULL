@@ -81,7 +81,6 @@ export async function decrementStockBalanceStrict(
         tenantId: params.tenantId,
         companyId: params.companyId,
         locationId: params.locationId,
-        warehouseId: params.warehouseId,
         productId: params.productId,
       },
     },

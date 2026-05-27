@@ -50,8 +50,6 @@ type ConsumptionItem = {
   um: string
 }
 
-type ConsumptionMode = "manual" | "sales"
-
 function toNumber(value: unknown) {
   const n = Number(value)
   return Number.isFinite(n) ? n : 0
@@ -139,9 +137,7 @@ export default function BonConsumNou() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const editingId = searchParams.get("id") || ""
-  const requestedMode = searchParams.get("mode") === "sales" ? "sales" : "manual"
   const [activePanel, setActivePanel] = useState<"date" | "produse">("date")
-  const [mode, setMode] = useState<ConsumptionMode>(editingId ? "manual" : requestedMode)
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [warehouses, setWarehouses] = useState<WarehouseOption[]>([])
   const [locationId, setLocationIdState] = useState(getActiveLocationId())
@@ -150,8 +146,6 @@ export default function BonConsumNou() {
   const [docNo, setDocNo] = useState("")
   const [docStatus, setDocStatus] = useState("DRAFT")
   const [docDate, setDocDate] = useState(() => new Date().toISOString().slice(0, 10))
-  const [salesDateFrom, setSalesDateFrom] = useState(() => new Date().toISOString().slice(0, 10))
-  const [salesDateTo, setSalesDateTo] = useState(() => new Date().toISOString().slice(0, 10))
   const [note, setNote] = useState("")
   const [query, setQuery] = useState("")
   const [products, setProducts] = useState<ProductOption[]>([])
@@ -174,14 +168,6 @@ export default function BonConsumNou() {
     })
     return unsubscribe
   }, [editingId])
-
-  useEffect(() => {
-    if (editingId) {
-      setMode("manual")
-    } else {
-      setMode(requestedMode)
-    }
-  }, [editingId, requestedMode])
 
   useEffect(() => {
     return subscribeToActiveWarehouse((nextWarehouseId) => {
@@ -388,34 +374,6 @@ export default function BonConsumNou() {
       setError("")
       setMessage("")
       const token = getToken() || ""
-      if (mode === "sales" && !editingId) {
-        const res = await fetch(`${API}/api/v1/consumption-docs/generate-from-sales`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({
-            locationId,
-            warehouseId: warehouseId || null,
-            docDate,
-            dateFrom: salesDateFrom,
-            dateTo: salesDateTo,
-            note,
-          }),
-        })
-        const json = await res.json().catch(() => ({}))
-        if (!res.ok) {
-          setError(json?.error || "Nu am putut genera bonul de consum.")
-          return
-        }
-        const generatedDocNo = json?.item?.docNo || "OK"
-        const generatedSalesCount = Number(json?.summary?.salesCount || 0)
-        setMessage(`Bon generat: ${generatedDocNo}${generatedSalesCount > 0 ? ` · ${generatedSalesCount} vanzari incluse` : ""}`)
-        setTimeout(() => navigate("/documente?tab=consumption"), 700)
-        return
-      }
-
       const lines = items.filter((item) => item.qty > 0).map((item) => ({
         productId: item.productId,
         qty: item.qty,
@@ -469,7 +427,7 @@ export default function BonConsumNou() {
   const lowStockItems = items.filter((item) => item.qty > item.stock).length
   const panels = [
     { key: "date", title: "Date" },
-    ...(mode === "manual" ? [{ key: "produse", title: "Produse" } as const] : []),
+    { key: "produse", title: "Produse" },
   ] as const
 
   return (
@@ -484,7 +442,7 @@ export default function BonConsumNou() {
             </button>
             <button type="button" onClick={saveDoc} disabled={saving} className={documentButtonPrimaryClass}>
               <Check size={16} className="mr-2" />
-              {saving ? "Se salveaza..." : editingId ? "Actualizeaza draft" : mode === "sales" ? "Genereaza bonul" : "Salveaza draft"}
+              {saving ? "Se salveaza..." : editingId ? "Actualizeaza draft" : "Salveaza draft"}
             </button>
           </>
         }
@@ -495,7 +453,7 @@ export default function BonConsumNou() {
 
       <DocumentTabs items={panels.map((panel) => ({ id: panel.key, title: panel.title }))} activeId={activePanel} onChange={setActivePanel} />
 
-      {activePanel === "produse" && mode === "manual" ? (
+      {activePanel === "produse" ? (
         <div className="space-y-3">
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
             <DocumentMetric title="Pozitii" value={totalProducts} tone="slate" />
@@ -622,49 +580,6 @@ export default function BonConsumNou() {
       {activePanel === "date" ? (
         <DocumentSection title="Detalii document">
           <div className="space-y-3">
-            {!editingId ? (
-              <DocumentField label="Mod de lucru">
-                <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMode("manual")
-                      setActivePanel("date")
-                    }}
-                    className={[
-                      "rounded-[14px] border px-4 py-3 text-left transition",
-                      mode === "manual"
-                        ? "border-slate-900 bg-slate-900 text-white"
-                        : "border-slate-200 bg-white text-slate-700 hover:border-slate-300",
-                    ].join(" ")}
-                  >
-                    <div className="text-sm font-semibold">Manual</div>
-                    <div className={`mt-1 text-xs ${mode === "manual" ? "text-slate-200" : "text-slate-500"}`}>
-                      Adaugi manual materiile prime sau semifabricatele consumate.
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMode("sales")
-                      setActivePanel("date")
-                    }}
-                    className={[
-                      "rounded-[14px] border px-4 py-3 text-left transition",
-                      mode === "sales"
-                        ? "border-slate-900 bg-slate-900 text-white"
-                        : "border-slate-200 bg-white text-slate-700 hover:border-slate-300",
-                    ].join(" ")}
-                  >
-                    <div className="text-sm font-semibold">Generat din vanzari</div>
-                    <div className={`mt-1 text-xs ${mode === "sales" ? "text-slate-200" : "text-slate-500"}`}>
-                      Aduna vanzarile cu retetar si face un singur bon mare de consum.
-                    </div>
-                  </button>
-                </div>
-              </DocumentField>
-            ) : null}
-
             <DocumentField label="Locatie">
               <select value={locationId} onChange={(e) => setLocation(e.target.value)} className={documentInputClass}>
                 {locations.map((location) => (
@@ -693,34 +608,12 @@ export default function BonConsumNou() {
               />
             </DocumentField>
 
-            {mode === "sales" && !editingId ? (
-              <>
-                <DocumentField label="Interval vanzari - de la">
-                  <input
-                    type="date"
-                    value={salesDateFrom}
-                    onChange={(e) => setSalesDateFrom(e.target.value)}
-                    className={documentInputClass}
-                  />
-                </DocumentField>
-
-                <DocumentField label="Interval vanzari - pana la">
-                  <input
-                    type="date"
-                    value={salesDateTo}
-                    onChange={(e) => setSalesDateTo(e.target.value)}
-                    className={documentInputClass}
-                  />
-                </DocumentField>
-              </>
-            ) : null}
-
             <DocumentField label="Observatii">
               <textarea
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 rows={4}
-                placeholder={mode === "sales" ? "Poti nota explicatii pentru bonul generat din vanzari." : "Poti nota explicatii pentru consumul manual."}
+                placeholder="Poti nota explicatii pentru consumul manual."
                 className={documentTextareaClass}
               />
             </DocumentField>
@@ -730,12 +623,6 @@ export default function BonConsumNou() {
               {warehouseConfig.multiWarehouseEnabled ? <span className="ml-3">{warehouseConfig.warehouseLabel}: <span className="font-semibold">{selectedWarehouseName}</span></span> : null}
               <span className="ml-3">Status: <span className="font-semibold">{docStatus}</span></span>
             </InlineNotice>
-
-            {mode === "sales" && !editingId ? (
-              <InlineNotice>
-                Generatorul ia doar vanzarile cu retetar care nu au mai fost incluse intr-un bon agregat si le salveaza in documentele existente.
-              </InlineNotice>
-            ) : null}
 
           </div>
         </DocumentSection>
