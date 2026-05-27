@@ -308,17 +308,23 @@ function normalizeSubdomain(value: unknown) {
     .slice(0, 50)
 }
 
-function getRateLimitKey(req: express.Request, scope: string) {
+function getRateLimitKey(req: express.Request, scope: string, identifier?: string | null) {
   const forwardedFor = String(req.headers["x-forwarded-for"] || "")
     .split(",")[0]
     .trim()
   const ip = forwardedFor || req.ip || "unknown-ip"
-  return `${scope}:${ip}`
+  const id = String(identifier || "").trim().toLowerCase()
+  return id ? `${scope}:${ip}:${id}` : `${scope}:${ip}`
 }
 
-function checkSimpleRateLimit(req: express.Request, res: express.Response, scope: keyof typeof AUTH_RATE_LIMITS) {
+function checkSimpleRateLimit(
+  req: express.Request,
+  res: express.Response,
+  scope: keyof typeof AUTH_RATE_LIMITS,
+  identifier?: string | null
+) {
   const now = Date.now()
-  const key = getRateLimitKey(req, scope)
+  const key = getRateLimitKey(req, scope, identifier)
   const limit = AUTH_RATE_LIMITS[scope]
   const bucket = authRateLimitBuckets.get(key)
 
@@ -525,11 +531,11 @@ const SelectCompanySchema = z.object({
 })
 
 app.post("/api/v1/auth/login", async (req, res) => {
-  if (!checkSimpleRateLimit(req, res, "erpLogin")) return
   const parsed = LoginSchema.safeParse(req.body)
   if (!parsed.success) {
     return res.status(400).json({ ok: false, error: parsed.error.flatten() })
   }
+  if (!checkSimpleRateLimit(req, res, "erpLogin", parsed.data.email)) return
 
   const { email, password, tenantId, tenantSubdomain } = parsed.data
   let scopedTenantId: string | undefined
@@ -708,11 +714,11 @@ app.get("/api/v1/public/domain-allow", async (req, res) => {
 })
 
 app.post("/api/v1/admin/auth/login", async (req, res) => {
-  if (!checkSimpleRateLimit(req, res, "controlPanelLogin")) return
   const parsed = ControlPanelLoginSchema.safeParse(req.body)
   if (!parsed.success) {
     return res.status(400).json({ ok: false, error: parsed.error.flatten() })
   }
+  if (!checkSimpleRateLimit(req, res, "controlPanelLogin", parsed.data.email)) return
 
   const controlEmail = String(
     process.env.CONTROL_PANEL_EMAIL || (process.env.NODE_ENV !== "production" ? "owner@gufo.local" : "")
@@ -748,11 +754,11 @@ app.post("/api/v1/admin/auth/login", async (req, res) => {
 })
 
 app.post("/api/v1/auth/forgot-password", async (req, res) => {
-  if (!checkSimpleRateLimit(req, res, "forgotPassword")) return
   const parsed = ForgotPasswordSchema.safeParse(req.body)
   if (!parsed.success) {
     return res.status(400).json({ ok: false, error: parsed.error.flatten() })
   }
+  if (!checkSimpleRateLimit(req, res, "forgotPassword", parsed.data.email)) return
 
   if (!hasSmtpConfig()) {
     return res.status(503).json({
