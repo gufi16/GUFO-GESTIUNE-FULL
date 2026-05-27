@@ -136,6 +136,32 @@ function serializeProduct(item: any) {
   }
 }
 
+function serializeRecipe(recipe: any) {
+  if (!recipe) return recipe
+
+  return {
+    ...recipe,
+    yieldQty: toNumber(recipe.yieldQty || 1),
+    items: Array.isArray(recipe.items)
+      ? recipe.items.map((item: any) => ({
+          ...item,
+          qty: toNumber(item.qty || 0),
+          lossPercent: toNumber(item.lossPercent || 0),
+          ingredient: item.ingredient
+            ? {
+                ...serializeProduct(item.ingredient),
+                uom: item.ingredient.uom
+                  ? {
+                      ...item.ingredient.uom,
+                    }
+                  : item.ingredient.uom,
+              }
+            : item.ingredient,
+        }))
+      : [],
+  }
+}
+
 function toNullableText(value: any) {
   const text = String(value || "").trim()
   return text || null
@@ -875,7 +901,7 @@ router.get("/api/v1/products/:id/recipe", async (req: AuthedRequest, res) => {
   return res.json({
     ok: true,
     product,
-    recipe
+    recipe: serializeRecipe(recipe)
   })
 })
 
@@ -1073,7 +1099,7 @@ router.post("/api/v1/products/:id/recipe", async (req: AuthedRequest, res) => {
 
     return res.json({
       ok: true,
-      recipe,
+      recipe: serializeRecipe(recipe),
       productActivated: activateProduct
     })
   } catch (e: any) {

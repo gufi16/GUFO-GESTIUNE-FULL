@@ -110,6 +110,12 @@ function normalizePositiveString(value: any, fallback = "0") {
   return String(Number.isFinite(n) ? n : Number(fallback))
 }
 
+function normalizeRecipeNumberString(value: any, fallback = "0") {
+  const n = toNumberSafe(value)
+  if (!Number.isFinite(n)) return fallback
+  return String(n)
+}
+
 function formatMoney(value: any) {
   return formatMoneyRo(value)
 }
@@ -637,7 +643,7 @@ export default function MeniuriPage() {
           code: recipe.code || "",
           name: recipe.name || item.name || "",
           notes: recipe.notes || "",
-          yieldQty: String(Number(recipe.yieldQty || 1)),
+          yieldQty: normalizeRecipeNumberString(recipe.yieldQty, "1"),
           status: recipe.status || "ACTIVE",
           isActive: recipe.isActive !== false,
           items: Array.isArray(recipe.items)
@@ -646,8 +652,8 @@ export default function MeniuriPage() {
                 productSearch: buildProductSearchLabel(
                   productOptions.find((product) => product.id === line.ingredientId)
                 ),
-                qty: String(Number(line.qty || 0)),
-                lossPercent: String(Number(line.lossPercent || 0)),
+                qty: normalizeRecipeNumberString(line.qty, "0"),
+                lossPercent: normalizeRecipeNumberString(line.lossPercent, "0"),
                 notes: line.notes || "",
                 sortOrder: Number(line.sortOrder || idx + 1),
               }))
