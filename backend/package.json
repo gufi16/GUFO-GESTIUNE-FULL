@@ -9,6 +9,7 @@
     "build": "tsc -p tsconfig.json && prisma generate",
     "test": "tsx --test src/**/*.test.ts",
     "audit:tenant": "tsx src/scripts/auditTenantIsolation.ts",
+    "audit:release": "tsx src/scripts/auditReleaseReadiness.ts",
     "start": "tsx src/index.ts",
     "start:worker": "tsx src/worker.ts",
     "db:deploy": "prisma db push",
