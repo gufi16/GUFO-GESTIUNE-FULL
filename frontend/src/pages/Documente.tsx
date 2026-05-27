@@ -36,8 +36,10 @@ type ConsumptionDocListItem = {
   docNo: string
   docDate: string
   note: string | null
-  source: "MANUAL" | "POS_RECIPE"
+  source: "MANUAL" | "POS_RECIPE" | "SALES_AGGREGATE"
   sourceLabel: string
+  sourcePeriodStart?: string | null
+  sourcePeriodEnd?: string | null
   status: "DRAFT" | "VALIDATED" | "CANCELLED"
   statusLabel: string
   totalValue: number
@@ -63,6 +65,7 @@ type ConsumptionDocListItem = {
     paymentType: string
     operatorName: string | null
   } | null
+  batchSalesCount?: number
   itemsCount: number
   totalQty: number
   finishedProducts: Array<{
@@ -77,8 +80,10 @@ type ConsumptionDocDetail = {
   docNo: string
   docDate: string
   note: string | null
-  source: "MANUAL" | "POS_RECIPE"
+  source: "MANUAL" | "POS_RECIPE" | "SALES_AGGREGATE"
   sourceLabel: string
+  sourcePeriodStart?: string | null
+  sourcePeriodEnd?: string | null
   status: "DRAFT" | "VALIDATED" | "CANCELLED"
   statusLabel: string
   totalValue: number
@@ -120,6 +125,14 @@ type ConsumptionDocDetail = {
       }
     }>
   } | null
+  batchSales?: Array<{
+    id: string
+    receiptNo: string | null
+    soldAt: string
+    total: number
+    paymentType: string
+    operatorName: string | null
+  }>
   itemsCount: number
   totalQty: number
   items: Array<{
@@ -3028,6 +3041,14 @@ export default function Documente() {
                     <div className="mt-2 text-sm font-semibold text-slate-900">{selectedConsumptionDoc.sourceLabel || selectedConsumptionDoc.source}</div>
                   </div>
                   <div className="rounded-[16px] border border-slate-200 bg-white p-3">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Perioada sursa</div>
+                    <div className="mt-2 text-sm font-semibold text-slate-900">
+                      {selectedConsumptionDoc.sourcePeriodStart
+                        ? `${formatDate(selectedConsumptionDoc.sourcePeriodStart)}${selectedConsumptionDoc.sourcePeriodEnd ? ` - ${formatDate(selectedConsumptionDoc.sourcePeriodEnd)}` : ""}`
+                        : "-"}
+                    </div>
+                  </div>
+                  <div className="rounded-[16px] border border-slate-200 bg-white p-3">
                     <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Cantitate totala</div>
                     <div className="mt-2 text-sm font-semibold text-slate-900">{formatNumber(selectedConsumptionDoc.totalQty)}</div>
                   </div>
@@ -3035,14 +3056,12 @@ export default function Documente() {
                     <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Validat la</div>
                     <div className="mt-2 text-sm font-semibold text-slate-900">{formatDateTime(selectedConsumptionDoc.validatedAt)}</div>
                   </div>
-                  <div className="rounded-[16px] border border-slate-200 bg-white p-3">
-                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Anulat la</div>
-                    <div className="mt-2 text-sm font-semibold text-slate-900">{formatDateTime(selectedConsumptionDoc.cancelledAt)}</div>
-                  </div>
                 </div>
 
                 <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-                  <div className="mb-4 text-lg font-semibold text-slate-900">Bon POS surs?</div>
+                  <div className="mb-4 text-lg font-semibold text-slate-900">
+                    {selectedConsumptionDoc.sale ? "Bon POS sursa" : "Vanzari incluse"}
+                  </div>
 
                   {selectedConsumptionDoc.sale ? (
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
@@ -3067,6 +3086,31 @@ export default function Documente() {
                         <div className="mt-2 text-slate-700">{selectedConsumptionDoc.sale.operatorName || "-"}</div>
                       </div>
                     </div>
+                  ) : selectedConsumptionDoc.batchSales?.length ? (
+                    <MobileTable minWidthClass="min-w-[700px]">
+                      <table className="w-full text-sm">
+                        <thead className="bg-slate-50 text-slate-500">
+                          <tr>
+                            <th className="px-3 py-2.5 text-left font-medium">Bon</th>
+                            <th className="px-3 py-2.5 text-left font-medium">Data vanzarii</th>
+                            <th className="px-3 py-2.5 text-left font-medium">Total</th>
+                            <th className="px-3 py-2.5 text-left font-medium">Plata</th>
+                            <th className="px-3 py-2.5 text-left font-medium">Operator</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedConsumptionDoc.batchSales.map((sale) => (
+                            <tr key={sale.id} className="border-t border-slate-200">
+                              <td className="px-3 py-2.5 font-semibold text-slate-900">{sale.receiptNo || "-"}</td>
+                              <td className="px-3 py-2.5 text-slate-600">{formatDateTime(sale.soldAt)}</td>
+                              <td className="px-3 py-2.5 text-slate-600">{formatRon(sale.total)}</td>
+                              <td className="px-3 py-2.5 text-slate-600">{sale.paymentType}</td>
+                              <td className="px-3 py-2.5 text-slate-600">{sale.operatorName || "-"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </MobileTable>
                   ) : (
                     <div className="text-sm text-slate-500">Document fara legatura la vanzare.</div>
                   )}

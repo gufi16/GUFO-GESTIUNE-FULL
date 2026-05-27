@@ -448,7 +448,13 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
           "Status",
           text(consumptionDoc.status),
           "Sursa",
-          text(consumptionDoc.source === "POS_RECIPE" ? "POS / Retetar" : "Manual"),
+          text(
+            consumptionDoc.source === "POS_RECIPE"
+              ? "POS / Retetar"
+              : consumptionDoc.source === "SALES_AGGREGATE"
+                ? "Generat din vanzari"
+                : "Manual"
+          ),
           "Valoare",
           `${fmt(num(consumptionDoc.totalValue))} lei`,
         ],

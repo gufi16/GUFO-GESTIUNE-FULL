@@ -29,7 +29,9 @@ export async function createConsumptionDraft(
     locationId: string
     warehouseId?: string | null
     saleId?: string | null
-    source?: "MANUAL" | "POS_RECIPE"
+    source?: "MANUAL" | "POS_RECIPE" | "SALES_AGGREGATE"
+    sourcePeriodStart?: Date | null
+    sourcePeriodEnd?: Date | null
     docDate?: Date
     note?: string | null
     lines: DraftLineInput[]
@@ -59,6 +61,8 @@ export async function createConsumptionDraft(
       docNo,
       docDate: params.docDate || new Date(),
       source: params.source || "MANUAL",
+      sourcePeriodStart: params.sourcePeriodStart || null,
+      sourcePeriodEnd: params.sourcePeriodEnd || null,
       status: "DRAFT",
       note: params.note || null,
     } as any,

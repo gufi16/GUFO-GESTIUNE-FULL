@@ -122,6 +122,7 @@ enum ConsumptionDocStatus {
 enum ConsumptionDocSource {
   MANUAL
   POS_RECIPE
+  SALES_AGGREGATE
 }
 
 enum SalesInvoiceStatus {
@@ -975,6 +976,8 @@ model Sale {
     locationId      String
   terminalId      String?
   externalOrderId String? @unique
+  consumptionBatchDocId String?
+  consumptionBatchProcessedAt DateTime?
 
   clientSaleId String?
   receiptNo    String?
@@ -1001,6 +1004,7 @@ model Sale {
     location      Location       @relation(fields: [locationId], references: [id])
   terminal      Terminal?      @relation(fields: [terminalId], references: [id])
   externalOrder ExternalOrder? @relation(fields: [externalOrderId], references: [id])
+  consumptionBatchDoc ConsumptionDoc? @relation("ConsumptionBatchSales", fields: [consumptionBatchDocId], references: [id])
 
   items           SaleItem[]
   consumptionDocs ConsumptionDoc[]
@@ -1012,6 +1016,8 @@ model Sale {
   @@index([terminalId])
   @@index([soldAt])
   @@index([externalOrderId])
+  @@index([consumptionBatchDocId])
+  @@index([consumptionBatchProcessedAt])
 }
 
 model SaleItem {
@@ -1179,6 +1185,8 @@ model ConsumptionDoc {
   docNo      String
   docDate    DateTime
   source     ConsumptionDocSource @default(MANUAL)
+  sourcePeriodStart DateTime?
+  sourcePeriodEnd DateTime?
   status     ConsumptionDocStatus @default(DRAFT)
   note       String?
   totalValue Decimal  @default(0)
@@ -1194,6 +1202,7 @@ model ConsumptionDoc {
     location Location @relation(fields: [locationId], references: [id])
     warehouse Warehouse? @relation(fields: [warehouseId], references: [id])
     sale     Sale?    @relation(fields: [saleId], references: [id])
+    batchSales Sale[] @relation("ConsumptionBatchSales")
 
   items ConsumptionDocItem[]
 
