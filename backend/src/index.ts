@@ -60,6 +60,7 @@ const CORS_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:5173"
 const CORS_ORIGINS = CORS_ORIGIN.split(",").map((value) => value.trim()).filter(Boolean)
 const JWT_SECRET =
   process.env.JWT_SECRET || (process.env.NODE_ENV !== "production" ? "dev_secret" : "")
+const ALLOW_DEV_CONTROL_PANEL_LOGIN = process.env.ALLOW_DEV_CONTROL_PANEL_LOGIN === "true"
 const authRateLimitBuckets = new Map<string, { count: number; resetAt: number }>()
 const AUTH_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000
 const AUTH_RATE_LIMITS = {
@@ -721,12 +722,14 @@ app.post("/api/v1/admin/auth/login", async (req, res) => {
   if (!checkSimpleRateLimit(req, res, "controlPanelLogin", parsed.data.email)) return
 
   const controlEmail = String(
-    process.env.CONTROL_PANEL_EMAIL || (process.env.NODE_ENV !== "production" ? "owner@gufo.local" : "")
+    process.env.CONTROL_PANEL_EMAIL ||
+      (process.env.NODE_ENV !== "production" && ALLOW_DEV_CONTROL_PANEL_LOGIN ? "owner@gufo.local" : "")
   )
     .trim()
     .toLowerCase()
   const controlPassword = String(
-    process.env.CONTROL_PANEL_PASSWORD || (process.env.NODE_ENV !== "production" ? "gufo1234" : "")
+    process.env.CONTROL_PANEL_PASSWORD ||
+      (process.env.NODE_ENV !== "production" && ALLOW_DEV_CONTROL_PANEL_LOGIN ? "gufo1234" : "")
   )
 
   if (!controlEmail || !controlPassword) {
@@ -937,10 +940,7 @@ app.get("/api/v1/admin/me", requireAuth, async (req: AuthedRequest, res) => {
     ok: true,
     user_id: auth.userId,
     role: auth.role,
-    email:
-      auth.email ||
-      process.env.CONTROL_PANEL_EMAIL ||
-      (process.env.NODE_ENV !== "production" ? "owner@gufo.local" : "owner"),
+    email: auth.email || process.env.CONTROL_PANEL_EMAIL || "owner",
   })
 })
 
