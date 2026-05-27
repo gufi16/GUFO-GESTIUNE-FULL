@@ -1182,6 +1182,7 @@ model ConsumptionDoc {
   locationId String
   warehouseId String?
   saleId     String?
+  aggregateParentId String?
   docNo      String
   docDate    DateTime
   source     ConsumptionDocSource @default(MANUAL)
@@ -1203,6 +1204,8 @@ model ConsumptionDoc {
     warehouse Warehouse? @relation(fields: [warehouseId], references: [id])
     sale     Sale?    @relation(fields: [saleId], references: [id])
     batchSales Sale[] @relation("ConsumptionBatchSales")
+    aggregateParent ConsumptionDoc? @relation("ConsumptionDocAggregation", fields: [aggregateParentId], references: [id])
+    sourceDocs ConsumptionDoc[] @relation("ConsumptionDocAggregation")
 
   items ConsumptionDocItem[]
 
@@ -1210,9 +1213,10 @@ model ConsumptionDoc {
     @@index([tenantId])
     @@index([tenantId, companyId])
     @@index([companyId])
-    @@index([locationId])
+  @@index([locationId])
   @@index([warehouseId])
   @@index([saleId])
+  @@index([aggregateParentId])
   @@index([docDate])
 }
 

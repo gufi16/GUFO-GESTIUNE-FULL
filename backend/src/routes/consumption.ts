@@ -106,99 +106,62 @@ async function buildAggregateConsumptionPayload(
     tenantId: string
     companyId: string
     locationId: string
+    warehouseId?: string | null
     dateFrom: Date
     dateTo: Date
   }
 ) {
-  const sales = await tx.sale.findMany({
+  const sourceDocs = await tx.consumptionDoc.findMany({
     where: {
       ...buildCompanyScopedTenantWhere(params.tenantId, params.companyId),
       locationId: params.locationId,
-      soldAt: {
+      ...(params.warehouseId ? { warehouseId: params.warehouseId } : {}),
+      docDate: {
         gte: params.dateFrom,
         lte: params.dateTo,
       },
-      consumptionBatchProcessedAt: null,
-      consumptionDocs: {
-        none: {
-          source: "POS_RECIPE",
-        },
-      },
-      items: {
-        some: {
-          product: {
-            recipe: {
-              is: {
-                status: "ACTIVE",
-                isActive: true,
-              },
-            },
-          },
-        },
-      },
+      source: "POS_RECIPE",
+      status: "VALIDATED",
+      aggregateParentId: null,
     },
     include: {
       items: {
         include: {
-          product: {
-            include: {
-              recipe: {
-                include: {
-                  items: {
-                    orderBy: {
-                      sortOrder: "asc",
-                    },
-                  },
-                },
-              },
-            },
-          },
+          ingredient: true,
         },
       },
     },
-    orderBy: [{ soldAt: "asc" }, { createdAt: "asc" }],
+    orderBy: [{ docDate: "asc" }, { createdAt: "asc" }],
   })
 
-  const ingredientMap = new Map<string, { ingredientId: string; qty: number }>()
-  let matchedSaleCount = 0
-  let matchedSaleLineCount = 0
+  const ingredientMap = new Map<string, { ingredientId: string; qty: number; totalCost: number }>()
 
-  for (const sale of sales) {
-    let saleHasConsumption = false
-
-    for (const saleItem of sale.items) {
-      const recipe = saleItem.product?.recipe
-      if (!recipe || recipe.status !== "ACTIVE" || recipe.isActive === false || !recipe.items?.length) continue
-      saleHasConsumption = true
-      matchedSaleLineCount += 1
-      const lineQty = toNumber(saleItem.qty)
-      const recipeYield = Math.max(toNumber(recipe.yieldQty), 0.000001)
-
-      for (const recipeItem of recipe.items) {
-        const ingredientQty = (lineQty * toNumber(recipeItem.qty) / recipeYield) * (1 + toNumber(recipeItem.lossPercent) / 100)
-        if (!Number.isFinite(ingredientQty) || ingredientQty <= 0) continue
-        const existing = ingredientMap.get(recipeItem.ingredientId)
-        if (existing) {
-          existing.qty += ingredientQty
-        } else {
-          ingredientMap.set(recipeItem.ingredientId, {
-            ingredientId: recipeItem.ingredientId,
-            qty: ingredientQty,
-          })
-        }
+  for (const doc of sourceDocs) {
+    for (const item of doc.items) {
+      const qty = toNumber(item.qty)
+      const totalCost = toNumber(item.totalCost)
+      if (qty <= 0) continue
+      const existing = ingredientMap.get(item.ingredientId)
+      if (existing) {
+        existing.qty += qty
+        existing.totalCost += totalCost
+      } else {
+        ingredientMap.set(item.ingredientId, {
+          ingredientId: item.ingredientId,
+          qty,
+          totalCost,
+        })
       }
     }
-
-    if (saleHasConsumption) matchedSaleCount += 1
   }
 
   return {
-    sales,
-    matchedSaleCount,
-    matchedSaleLineCount,
+    sourceDocs,
     lines: Array.from(ingredientMap.values()).map((item) => ({
       ingredientId: item.ingredientId,
       qty: item.qty,
+      unitCost: item.qty > 0 ? item.totalCost / item.qty : 0,
+      totalCost: item.totalCost,
     })),
   }
 }
@@ -258,6 +221,20 @@ async function buildConsumptionDocDetail(tenantId: string, companyId: string, id
           operatorName: true,
         },
         orderBy: [{ soldAt: "asc" }, { createdAt: "asc" }],
+      },
+      sourceDocs: {
+        select: {
+          id: true,
+          docNo: true,
+          docDate: true,
+          totalValue: true,
+          sale: {
+            select: {
+              receiptNo: true,
+            },
+          },
+        },
+        orderBy: [{ docDate: "asc" }, { createdAt: "asc" }],
       },
       items: {
         include: {
@@ -368,6 +345,13 @@ async function buildConsumptionDocDetail(tenantId: string, companyId: string, id
       total: Number(sale.total || 0),
       paymentType: sale.paymentType,
       operatorName: sale.operatorName,
+    })),
+    sourceDocs: (doc.sourceDocs || []).map((sourceDoc) => ({
+      id: sourceDoc.id,
+      docNo: sourceDoc.docNo,
+      docDate: sourceDoc.docDate,
+      totalValue: Number(sourceDoc.totalValue || 0),
+      receiptNo: sourceDoc.sale?.receiptNo || null,
     })),
     itemsCount: doc.items.length,
     totalQty,
@@ -610,12 +594,13 @@ router.post("/api/v1/consumption-docs/generate-from-sales", requireAuth, async (
         tenantId,
         companyId,
         locationId,
+        warehouseId: warehouse?.id || null,
         dateFrom,
         dateTo,
       })
 
-      if (!payload.lines.length || !payload.matchedSaleCount) {
-        throw new Error("Nu exista vanzari cu retetar neprocesate in intervalul selectat.")
+      if (!payload.lines.length || !payload.sourceDocs.length) {
+        throw new Error("Nu exista bonuri de consum POS / Retetar neagregate in intervalul selectat.")
       }
 
       const details = [formatDateLabel(dateFrom)]
@@ -629,34 +614,51 @@ router.post("/api/v1/consumption-docs/generate-from-sales", requireAuth, async (
         sourcePeriodStart: dateFrom,
         sourcePeriodEnd: dateTo,
         docDate,
-        note: note || `Generat din vanzari pentru perioada ${details.join(" - ")}`,
-        lines: payload.lines,
+        note: note || `Generat din bonuri POS / Retetar pentru perioada ${details.join(" - ")}`,
+        lines: payload.lines.map((line) => ({
+          ingredientId: line.ingredientId,
+          qty: line.qty,
+        })),
       })
 
-      await validateConsumptionDoc(tx, {
-        tenantId,
-        companyId,
-        docId: doc.id,
-        actorId: req.auth?.userId || null,
-        allowNegativeStock: false,
+      for (const line of payload.lines) {
+        await tx.consumptionDocItem.updateMany({
+          where: {
+            consumptionDocId: doc.id,
+            ingredientId: line.ingredientId,
+          },
+          data: {
+            unitCost: new Prisma.Decimal(line.unitCost),
+            totalCost: new Prisma.Decimal(line.totalCost),
+            costMethod: "SUMMARY",
+          },
+        })
+      }
+
+      await tx.consumptionDoc.update({
+        where: { id: doc.id },
+        data: {
+          status: "VALIDATED",
+          totalValue: new Prisma.Decimal(payload.lines.reduce((sum, line) => sum + line.totalCost, 0)),
+          validatedAt: new Date(),
+          validatedBy: req.auth?.userId || null,
+        },
       })
 
-      await tx.sale.updateMany({
+      await tx.consumptionDoc.updateMany({
         where: {
           id: {
-            in: payload.sales.map((sale) => sale.id),
+            in: payload.sourceDocs.map((sourceDoc) => sourceDoc.id),
           },
         },
         data: {
-          consumptionBatchDocId: doc.id,
-          consumptionBatchProcessedAt: new Date(),
+          aggregateParentId: doc.id,
         },
       })
 
       return {
         doc,
-        matchedSaleCount: payload.matchedSaleCount,
-        matchedSaleLineCount: payload.matchedSaleLineCount,
+        sourceDocsCount: payload.sourceDocs.length,
       }
     })
 
@@ -665,8 +667,7 @@ router.post("/api/v1/consumption-docs/generate-from-sales", requireAuth, async (
       ok: true,
       item,
       summary: {
-        salesCount: generated.matchedSaleCount,
-        saleLinesCount: generated.matchedSaleLineCount,
+        sourceDocsCount: generated.sourceDocsCount,
       },
     })
   } catch (error: any) {
@@ -711,7 +712,46 @@ router.post("/api/v1/consumption-docs/:id/cancel", requireAuth, async (req: Auth
     const companyId = await requireRequestCompanyId(req)
     const id = String(req.params.id || "").trim()
 
+    const existingDoc = await prisma.consumptionDoc.findFirst({
+      where: {
+        id,
+        ...buildCompanyScopedTenantWhere(tenantId, companyId, { id }),
+      },
+      select: {
+        id: true,
+        source: true,
+        status: true,
+      },
+    })
+
+    if (!existingDoc) {
+      return res.status(404).json({ ok: false, error: "Bonul de consum nu exista." })
+    }
+
     await prisma.$transaction(async (tx) => {
+      if (existingDoc.source === "SALES_AGGREGATE") {
+        if (existingDoc.status !== "VALIDATED") {
+          throw new Error("Doar bonurile agregate validate pot fi anulate.")
+        }
+        await tx.consumptionDoc.updateMany({
+          where: {
+            aggregateParentId: id,
+          },
+          data: {
+            aggregateParentId: null,
+          },
+        })
+        await tx.consumptionDoc.update({
+          where: { id },
+          data: {
+            status: "CANCELLED",
+            cancelledAt: new Date(),
+            cancelledBy: req.auth?.userId || null,
+          },
+        })
+        return
+      }
+
       await cancelConsumptionDoc(tx, {
         tenantId,
         companyId,
@@ -787,6 +827,11 @@ router.get("/api/v1/consumption-docs", requireAuth, async (req: AuthedRequest, r
             operatorName: true,
           },
         },
+        sourceDocs: {
+          select: {
+            id: true,
+          },
+        },
         items: {
           include: {
             ingredient: { select: { id: true, name: true, sku: true } },
@@ -841,6 +886,7 @@ router.get("/api/v1/consumption-docs", requireAuth, async (req: AuthedRequest, r
             }
           : null,
         batchSalesCount: doc.batchSales.length,
+        sourceDocsCount: doc.sourceDocs.length,
         itemsCount: doc.items.length,
         totalQty,
         finishedProducts: Array.from(finishedProductsMap.values()),

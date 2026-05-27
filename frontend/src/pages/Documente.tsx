@@ -66,6 +66,7 @@ type ConsumptionDocListItem = {
     operatorName: string | null
   } | null
   batchSalesCount?: number
+  sourceDocsCount?: number
   itemsCount: number
   totalQty: number
   finishedProducts: Array<{
@@ -132,6 +133,13 @@ type ConsumptionDocDetail = {
     total: number
     paymentType: string
     operatorName: string | null
+  }>
+  sourceDocs?: Array<{
+    id: string
+    docNo: string
+    docDate: string
+    totalValue: number
+    receiptNo: string | null
   }>
   itemsCount: number
   totalQty: number
@@ -777,10 +785,10 @@ export default function Documente() {
       }
 
       const docNo = String(data?.item?.docNo || "OK")
-      const salesCount = Number(data?.summary?.salesCount || 0)
+      const sourceDocsCount = Number(data?.summary?.sourceDocsCount || 0)
       setShowConsumptionGenerator(false)
       setGeneratorNote("")
-      setMessage(`Bon generat: ${docNo}${salesCount > 0 ? ` · ${salesCount} vanzari incluse` : ""}`)
+      setMessage(`Bon generat: ${docNo}${sourceDocsCount > 0 ? ` · ${sourceDocsCount} bonuri incluse` : ""}`)
       await loadConsumptionDocs()
     } catch (err: any) {
       setError(err?.message || "Nu am putut genera bonul de consum.")
@@ -2431,12 +2439,12 @@ export default function Documente() {
                       </td>
                       <td className="px-3 py-2.5 text-slate-600">
                         <div>{doc.sourceLabel || doc.source}</div>
-                        {doc.source === "SALES_AGGREGATE" && doc.batchSalesCount ? (
-                          <div className="text-xs text-slate-400">{doc.batchSalesCount} vanzari incluse</div>
+                        {doc.source === "SALES_AGGREGATE" && doc.sourceDocsCount ? (
+                          <div className="text-xs text-slate-400">{doc.sourceDocsCount} bonuri incluse</div>
                         ) : null}
                       </td>
                       <td className="px-3 py-2.5 text-slate-600">
-                        {doc.sale?.receiptNo || (doc.source === "SALES_AGGREGATE" && doc.batchSalesCount ? `${doc.batchSalesCount} bonuri` : "-")}
+                        {doc.sale?.receiptNo || (doc.source === "SALES_AGGREGATE" && doc.sourceDocsCount ? `${doc.sourceDocsCount} bonuri` : "-")}
                       </td>
                       <td className="px-3 py-2.5 text-slate-600">
                         {doc.finishedProducts.length > 0
@@ -3259,6 +3267,29 @@ export default function Documente() {
                         <div className="mt-2 text-slate-700">{selectedConsumptionDoc.sale.operatorName || "-"}</div>
                       </div>
                     </div>
+                  ) : selectedConsumptionDoc.sourceDocs?.length ? (
+                    <MobileTable minWidthClass="min-w-[700px]">
+                      <table className="w-full text-sm">
+                        <thead className="bg-slate-50 text-slate-500">
+                          <tr>
+                            <th className="px-3 py-2.5 text-left font-medium">Bon sursa</th>
+                            <th className="px-3 py-2.5 text-left font-medium">Data</th>
+                            <th className="px-3 py-2.5 text-left font-medium">Bon POS</th>
+                            <th className="px-3 py-2.5 text-left font-medium">Valoare</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedConsumptionDoc.sourceDocs.map((sourceDoc) => (
+                            <tr key={sourceDoc.id} className="border-t border-slate-200">
+                              <td className="px-3 py-2.5 font-semibold text-slate-900">{sourceDoc.docNo}</td>
+                              <td className="px-3 py-2.5 text-slate-600">{formatDateTime(sourceDoc.docDate)}</td>
+                              <td className="px-3 py-2.5 text-slate-600">{sourceDoc.receiptNo || "-"}</td>
+                              <td className="px-3 py-2.5 text-slate-600">{formatRon(sourceDoc.totalValue)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </MobileTable>
                   ) : selectedConsumptionDoc.batchSales?.length ? (
                     <MobileTable minWidthClass="min-w-[700px]">
                       <table className="w-full text-sm">
@@ -3465,7 +3496,7 @@ export default function Documente() {
             </div>
 
             <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-              Bonul generat va aparea tot aici, in `Bonuri de consum`, cu sursa `Generat din vanzari` si numarul de vanzari incluse.
+              Bonul generat va aparea tot aici, in Bonuri de consum, cu sursa Generat din vanzari si numarul de bonuri sursa incluse.
             </div>
 
             <div className="mt-4 flex justify-end gap-2">
