@@ -59,6 +59,7 @@ type FormState = {
 
 type RecipeLine = {
   ingredientId: string
+  productSearch: string
   qty: string
   lossPercent: string
   notes: string
@@ -144,6 +145,18 @@ function normalizeHostedImageUrl(value: any) {
   }
 
   return text
+}
+
+function buildProductSearchLabel(product?: { name?: string | null; sku?: string | null } | null) {
+  if (!product) return ""
+  const name = String(product.name || "").trim()
+  const sku = String(product.sku || "").trim()
+  if (name && sku) return `${name} (${sku})`
+  return name || sku
+}
+
+function normalizeSearchText(value: string) {
+  return String(value || "").trim().toLowerCase()
 }
 
 export default function MeniuriPage() {
@@ -593,6 +606,9 @@ export default function MeniuriPage() {
           items: Array.isArray(recipe.items)
             ? recipe.items.map((line: any, idx: number) => ({
                 ingredientId: line.ingredientId || "",
+                productSearch: buildProductSearchLabel(
+                  productOptions.find((product) => product.id === line.ingredientId)
+                ),
                 qty: String(Number(line.qty || 0)),
                 lossPercent: String(Number(line.lossPercent || 0)),
                 notes: line.notes || "",
@@ -624,6 +640,7 @@ export default function MeniuriPage() {
         ...prev.items,
         {
           ingredientId: "",
+          productSearch: "",
           qty: "1",
           lossPercent: "0",
           notes: "",
@@ -650,6 +667,23 @@ export default function MeniuriPage() {
       ...prev,
       items: prev.items.map((line, i) => (i === index ? { ...line, ...patch } : line)),
     }))
+  }
+
+  function updateRecipeLineSearch(index: number, value: string) {
+    const normalizedValue = normalizeSearchText(value)
+    const matchedProduct = productOptions.find((product) => {
+      const label = buildProductSearchLabel(product)
+      return (
+        normalizeSearchText(label) === normalizedValue ||
+        normalizeSearchText(product.name || "") === normalizedValue ||
+        normalizeSearchText(product.sku || "") === normalizedValue
+      )
+    })
+
+    updateRecipeLine(index, {
+      productSearch: value,
+      ingredientId: matchedProduct?.id || "",
+    })
   }
 
   async function saveRecipe() {
@@ -1147,20 +1181,20 @@ export default function MeniuriPage() {
                           return (
                             <tr key={`${index}-${line.sortOrder}`}>
                               <td style={td}>
-                                <select
-                                  value={line.ingredientId}
-                                  onChange={(e) => updateRecipeLine(index, { ingredientId: e.target.value })}
+                                <input
+                                  list={`menu-product-options-${index}`}
+                                  value={line.productSearch}
+                                  onChange={(e) => updateRecipeLineSearch(index, e.target.value)}
+                                  placeholder="Scrie numele sau primele litere..."
                                   style={input}
-                                >
-                                  <option value="">Selecteaza produsul</option>
+                                />
+                                <datalist id={`menu-product-options-${index}`}>
                                   {productOptions
                                     .filter((p) => p.isActive !== false)
                                     .map((p) => (
-                                      <option key={p.id} value={p.id}>
-                                        {p.name} ({p.sku})
-                                      </option>
+                                      <option key={p.id} value={buildProductSearchLabel(p)} />
                                     ))}
-                                </select>
+                                </datalist>
                               </td>
 
                               <td style={td}>{formatUomOption(selectedProduct?.uom)}</td>
