@@ -8,6 +8,7 @@ export default function SemifabricatePage() {
       fixedClassValue="SEMIFABRICATE"
       addButtonLabel="Adauga semifabricat"
       searchPlaceholder="Cauta semifabricat dupa nume, cod, categorie sau departament..."
+      hideSalePrice
     />
   )
 }

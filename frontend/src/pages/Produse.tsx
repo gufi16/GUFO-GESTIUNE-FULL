@@ -114,6 +114,7 @@ type ProdusePageProps = {
   fixedClassValue?: string | null
   addButtonLabel?: string
   searchPlaceholder?: string
+  hideSalePrice?: boolean
 }
 
 const CLASS_OPTIONS = [
@@ -248,6 +249,7 @@ export function ProductsCatalogPage({
   fixedClassValue = null,
   addButtonLabel = "Adauga produs",
   searchPlaceholder = "Cauta rapid dupa produs, cod, categorie, departament sau ambalaj...",
+  hideSalePrice = false,
 }: ProdusePageProps) {
   const token =
     getToken() ||
@@ -603,7 +605,7 @@ function getDefaultVat(list = vatRates) {
       : Math.max(0.000001, toNumberSafe(form.purchaseFactor || 1))
     const normalizedNetWeightKg = Math.max(0, toNumberSafe(form.netWeightKg || 0))
     const normalizedGrossWeightKg = Math.max(0, toNumberSafe(form.grossWeightKg || 0))
-    const normalizedPrice = Math.max(0, toNumberSafe(form.price || 0))
+    const normalizedPrice = hideSalePrice ? 0 : Math.max(0, toNumberSafe(form.price || 0))
     const normalizedCost = Math.max(0, toNumberSafe(form.costPrice || 0))
 
     setSaving(true)
@@ -1127,7 +1129,7 @@ function getDefaultVat(list = vatRates) {
                     <th style={th}>Ambalaj</th>
                     <th style={th}>Cant./ambalaj</th>
                     <th style={th}>TVA</th>
-                    <th style={th}>Pret</th>
+                    {!hideSalePrice ? <th style={th}>Pret</th> : null}
                     <th style={th}>Cost / UM</th>
                     <th style={th}>Lot / FIFO</th>
                     <th style={th}>POS</th>
@@ -1169,7 +1171,7 @@ function getDefaultVat(list = vatRates) {
                             : "-"
                           : "Neplatitor"}
                       </td>
-                      <td style={td}>{formatMoney(item.price || 0)}</td>
+                      {!hideSalePrice ? <td style={td}>{formatMoney(item.price || 0)}</td> : null}
                       <td style={td}>{formatMoney(item.costPrice || 0)}</td>
                       <td style={td}>
                         {item.trackLot ? (
@@ -1496,21 +1498,23 @@ function getDefaultVat(list = vatRates) {
                       )}
                     </Field>
 
-                    <Field label="Pret vanzare">
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={form.price}
-                        onChange={(e) => setForm((prev) => ({ ...prev, price: e.target.value }))}
-                        onBlur={() =>
-                          setForm((prev) => ({
-                            ...prev,
-                            price: normalizePositiveString(prev.price, "0")
-                          }))
-                        }
-                        style={input}
-                      />
-                    </Field>
+                    {!hideSalePrice ? (
+                      <Field label="Pret vanzare">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={form.price}
+                          onChange={(e) => setForm((prev) => ({ ...prev, price: e.target.value }))}
+                          onBlur={() =>
+                            setForm((prev) => ({
+                              ...prev,
+                              price: normalizePositiveString(prev.price, "0")
+                            }))
+                          }
+                          style={input}
+                        />
+                      </Field>
+                    ) : null}
 
                     <Field label="Cost achizitie / UM">
                       <input

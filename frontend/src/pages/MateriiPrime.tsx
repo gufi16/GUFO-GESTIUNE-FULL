@@ -8,6 +8,7 @@ export default function MateriiPrimePage() {
       fixedClassValue="MATERIE_PRIMA"
       addButtonLabel="Adauga materie prima"
       searchPlaceholder="Cauta materie prima dupa nume, cod, categorie sau departament..."
+      hideSalePrice
     />
   )
 }
