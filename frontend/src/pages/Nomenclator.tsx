@@ -4,6 +4,8 @@ import PageHeader from "../components/PageHeader"
 
 const items = [
   { name: "Produse", route: "/nomenclator/produse", icon: Package2 },
+  { name: "Materii prime", route: "/nomenclator/materii-prime", icon: Boxes },
+  { name: "Semifabricate", route: "/nomenclator/semifabricate", icon: BookOpen },
   { name: "Meniuri", route: "/nomenclator/meniuri", icon: UtensilsCrossed },
   { name: "Furnizori", route: "/nomenclator/furnizori", icon: Building2 },
   { name: "Clienti", route: "/nomenclator/clienti", icon: Building2 },

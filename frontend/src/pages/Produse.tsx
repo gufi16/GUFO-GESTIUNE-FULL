@@ -108,6 +108,14 @@ type NcSuggestion = {
   fiscalRiskCategory?: string | null
 }
 
+type ProdusePageProps = {
+  title?: string
+  subtitle?: string
+  fixedClassValue?: string | null
+  addButtonLabel?: string
+  searchPlaceholder?: string
+}
+
 const CLASS_OPTIONS = [
   { value: "MATERIE_PRIMA", label: "materie prima" },
   { value: "ALTE_MATERIALE", label: "alte materiale" },
@@ -234,7 +242,13 @@ function normalizeHostedImageUrl(value: any) {
   return text
 }
 
-export default function ProdusePage() {
+export function ProductsCatalogPage({
+  title = "Produse",
+  subtitle = "Lista produselor simple, configurarea lor, clasificari, POS, SGR si retetare.",
+  fixedClassValue = null,
+  addButtonLabel = "Adauga produs",
+  searchPlaceholder = "Cauta rapid dupa produs, cod, categorie, departament sau ambalaj...",
+}: ProdusePageProps) {
   const token =
     getToken() ||
     localStorage.getItem("token") ||
@@ -267,11 +281,12 @@ export default function ProdusePage() {
   const [ncSuggestion, setNcSuggestion] = useState<NcSuggestion | null>(null)
   const [ncCodeManual, setNcCodeManual] = useState(false)
   const [page, setPage] = useState(1)
-  const [classFilter, setClassFilter] = useState<string>("ALL")
+  const [classFilter, setClassFilter] = useState<string>(fixedClassValue || "ALL")
   const [nextSku, setNextSku] = useState("")
 
   const [form, setForm] = useState<FormState>(emptyForm)
   const [recipeForm, setRecipeForm] = useState<RecipeForm>(emptyRecipeForm)
+  const effectiveClassFilter = fixedClassValue || classFilter
 
   const pageSize = 10
 
@@ -431,12 +446,13 @@ function getDefaultVat(list = vatRates) {
   function openAddModal() {
     const defaultUom = getDefaultUom()
     const defaultVat = getDefaultVat()
+    const defaultClass = fixedClassValue || "MARFA"
 
     setEditingItem(null)
     setForm({
       ...emptyForm,
       sku: nextSku,
-      class: "MARFA",
+      class: defaultClass,
       uomId: defaultUom?.id || "",
       purchaseUomId: defaultUom?.id || "",
       purchaseFactor: "1",
@@ -611,7 +627,7 @@ function getDefaultVat(list = vatRates) {
           sku: !editingItem ? form.sku.trim() || null : undefined,
           name: form.name.trim(),
           imageUrl: normalizeHostedImageUrl(form.imageUrl.trim()) || null,
-          class: form.class,
+          class: fixedClassValue || form.class,
           uomId: form.uomId,
           purchaseUomId: normalizedPurchaseUomId,
           purchaseFactor: normalizedFactor,
@@ -974,7 +990,7 @@ function getDefaultVat(list = vatRates) {
     const qq = q.trim().toLowerCase()
 
     return items.filter((item) => {
-      const classOk = classFilter === "ALL" ? true : item.class === classFilter
+      const classOk = effectiveClassFilter === "ALL" ? true : item.class === effectiveClassFilter
       if (!classOk) return false
 
       if (!qq) return true
@@ -993,11 +1009,17 @@ function getDefaultVat(list = vatRates) {
         ambalaj.includes(qq)
       )
     })
-  }, [items, q, classFilter])
+  }, [items, q, effectiveClassFilter])
 
   useEffect(() => {
     setPage(1)
-  }, [q, classFilter])
+  }, [q, effectiveClassFilter])
+
+  useEffect(() => {
+    if (fixedClassValue) {
+      setClassFilter(fixedClassValue)
+    }
+  }, [fixedClassValue])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
 
@@ -1022,8 +1044,8 @@ function getDefaultVat(list = vatRates) {
     <div className="space-y-6">
       <PageHeader
         badge="nomenclator"
-        title="Produse"
-        subtitle="Lista produselor simple, configurarea lor, clasificari, POS, SGR si retetare."
+        title={title}
+        subtitle={subtitle}
       />
 
       {error ? <div style={errorBox}>{error}</div> : null}
@@ -1037,31 +1059,37 @@ function getDefaultVat(list = vatRates) {
       </div>
 
       <div style={card}>
-        <div style={filterBar}>
-          <button
-            type="button"
-            onClick={() => setClassFilter("ALL")}
-            style={classFilter === "ALL" ? chipActive : chip}
-          >
-            Toate ({items.length})
-          </button>
-
-          {CLASS_OPTIONS.map((option) => (
+        {!fixedClassValue ? (
+          <div style={filterBar}>
             <button
-              key={option.value}
               type="button"
-              onClick={() => setClassFilter(option.value)}
-              style={classFilter === option.value ? chipActive : chip}
+              onClick={() => setClassFilter("ALL")}
+              style={classFilter === "ALL" ? chipActive : chip}
             >
-              {option.label} ({classCounts[option.value] || 0})
+              Toate ({items.length})
             </button>
-          ))}
-        </div>
+
+            {CLASS_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setClassFilter(option.value)}
+                style={classFilter === option.value ? chipActive : chip}
+              >
+                {option.label} ({classCounts[option.value] || 0})
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div style={hintBox}>
+            Afisezi doar articolele din clasa <strong>{CLASS_LABEL_MAP[fixedClassValue] || fixedClassValue}</strong>.
+          </div>
+        )}
 
         <div style={topBar}>
           <div style={{ flex: 1 }}>
             <input
-              placeholder="Cauta rapid dupa produs, cod, categorie, departament sau ambalaj..."
+              placeholder={searchPlaceholder}
               value={q}
               onChange={(e) => setQ(e.target.value)}
               style={input}
@@ -1069,7 +1097,7 @@ function getDefaultVat(list = vatRates) {
           </div>
 
           <button onClick={openAddModal} style={btnPrimary}>
-            Adauga produs
+            {addButtonLabel}
           </button>
         </div>
 
@@ -1265,6 +1293,7 @@ function getDefaultVat(list = vatRates) {
                       <select
                         value={form.class}
                         onChange={(e) => setForm((prev) => ({ ...prev, class: e.target.value }))}
+                        disabled={Boolean(fixedClassValue)}
                         style={input}
                       >
                         {CLASS_OPTIONS.map((option) => (
@@ -2005,6 +2034,10 @@ function SectionCard({ title, children }: { title: string; children: ReactNode }
       {children}
     </div>
   )
+}
+
+export default function ProdusePage() {
+  return <ProductsCatalogPage />
 }
 
 const card: CSSProperties = {

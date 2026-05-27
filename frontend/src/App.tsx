@@ -14,7 +14,9 @@ import Documente from "./pages/Documente"
 import Nomenclator from "./pages/Nomenclator"
 import Setari from "./pages/Setari"
 import Produse from "./pages/Produse"
+import MateriiPrime from "./pages/MateriiPrime"
 import Meniuri from "./pages/Meniuri"
+import Semifabricate from "./pages/Semifabricate"
 import Furnizori from "./pages/Furnizori"
 import Clienti from "./pages/Clienti"
 import Locatii from "./pages/Locatii"
@@ -154,6 +156,8 @@ export default function App() {
 
         <Route path="/nomenclator" element={<RequireModule code="nomenclature"><Nomenclator /></RequireModule>} />
         <Route path="/nomenclator/produse" element={<RequireModule code="nomenclature"><Produse /></RequireModule>} />
+        <Route path="/nomenclator/materii-prime" element={<RequireModule code="nomenclature"><MateriiPrime /></RequireModule>} />
+        <Route path="/nomenclator/semifabricate" element={<RequireModule code="nomenclature"><Semifabricate /></RequireModule>} />
         <Route path="/nomenclator/meniuri" element={<RequireModule code="nomenclature"><Meniuri /></RequireModule>} />
         <Route path="/nomenclator/furnizori" element={<RequireModule code="nomenclature"><Furnizori /></RequireModule>} />
         <Route path="/nomenclator/clienti" element={<RequireModule code="nomenclature"><Clienti /></RequireModule>} />
