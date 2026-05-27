@@ -20,17 +20,31 @@ function resolveHostedApiBase() {
 
 export const API_BASE = envApiBase || (isLocalHost ? "http://localhost:3001" : resolveHostedApiBase())
 
-export function getToken(): string {
+function resolveTokenByPath(path?: string): string {
+  const normalizedPath = String(path || "").trim()
+  const isAdminApi = normalizedPath.startsWith("/api/v1/admin/")
+  if (isAdminApi) {
+    return localStorage.getItem("control_token") || ""
+  }
+
   const pathname =
     typeof window !== "undefined" ? window.location.pathname || "" : ""
   const isControlPanelRoute =
     pathname.startsWith("/control-panel") || pathname.startsWith("/cp")
+
+  if (isControlPanelRoute && normalizedPath) {
+    return localStorage.getItem("access_token") || localStorage.getItem("token") || ""
+  }
 
   if (isControlPanelRoute) {
     return localStorage.getItem("control_token") || ""
   }
 
   return localStorage.getItem("access_token") || localStorage.getItem("token") || ""
+}
+
+export function getToken(path?: string): string {
+  return resolveTokenByPath(path)
 }
 
 export function setToken(token: string) {
@@ -61,7 +75,7 @@ type ApiOptions = RequestInit & {
 }
 
 export async function api<T = any>(path: string, options: ApiOptions = {}): Promise<T> {
-  const token = getToken()
+  const token = getToken(path)
   const headers = new Headers(options.headers || {})
 
   if (!headers.has("Content-Type") && options.body && !(options.body instanceof FormData)) {
