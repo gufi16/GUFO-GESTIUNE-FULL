@@ -10,6 +10,7 @@ type CheckResult = {
 
 const results: CheckResult[] = []
 const NO_WAREHOUSE_SCOPE = "__NO_WAREHOUSE__"
+const SOFT_MODE = process.argv.includes("--soft")
 
 function addResult(name: string, ok: boolean, details?: string) {
   results.push({ name, ok, details })
@@ -138,9 +139,14 @@ function printResultsAndExit() {
     if (!result.ok) failed += 1
   }
 
-  if (failed > 0) {
+  if (failed > 0 && !SOFT_MODE) {
     console.error(`Release readiness audit failed with ${failed} issue(s).`)
     process.exit(1)
+  }
+
+  if (failed > 0 && SOFT_MODE) {
+    console.warn(`Release readiness audit completed with ${failed} issue(s) [soft mode].`)
+    process.exit(0)
   }
 
   console.log("Release readiness audit passed.")
