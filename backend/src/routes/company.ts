@@ -1223,6 +1223,7 @@ router.post(
   requireAuth,
   certUpload.single("certificate"),
   async (req: AuthedRequest, res) => {
+    if (!ensureTenantAdminAccess(req, res)) return
     const tenantId = req.auth!.tenantId
     const requestedCredentialId = getRequestedCredentialId(req)
 
@@ -1313,6 +1314,7 @@ router.post(
 )
 
 router.delete("/api/v1/company/efactura/certificate", requireAuth, async (req: AuthedRequest, res) => {
+  if (!ensureTenantAdminAccess(req, res)) return
   const tenantId = req.auth!.tenantId
   const requestedCredentialId = getRequestedCredentialId(req)
 
@@ -1374,6 +1376,7 @@ router.delete("/api/v1/company/efactura/certificate", requireAuth, async (req: A
 })
 
 router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, res) => {
+  if (!ensureTenantAdminAccess(req, res)) return
   const tenantId = req.auth!.tenantId
   const activeCompanyId = getActiveCompanyId(req)
   const requestedCompanyId = getRequestedCompanyId(req)
@@ -1466,6 +1469,7 @@ router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, re
 })
 
 router.post("/api/v1/company/efactura/oauth/test", async (req: AuthedRequest, res) => {
+  if (!ensureTenantAdminAccess(req, res)) return
   const tenantId = req.auth!.tenantId
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
 
@@ -1551,6 +1555,7 @@ router.post("/api/v1/company/efactura/oauth/test", async (req: AuthedRequest, re
 })
 
 router.get("/api/v1/company/efactura/agent-download-info", requireAuth, async (req: AuthedRequest, res) => {
+  if (!ensureTenantAdminAccess(req, res)) return
   const tenantId = req.auth!.tenantId
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
 
@@ -1738,6 +1743,7 @@ router.patch("/api/v1/company/efactura/credentials/:id", requireAuth, async (req
 })
 
 router.get("/api/v1/company/efactura/agent-download", requireAuth, async (req: AuthedRequest, res) => {
+  if (!ensureTenantAdminAccess(req, res)) return
   const tenantId = req.auth!.tenantId
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
 
@@ -1777,6 +1783,7 @@ router.get("/api/v1/company/efactura/agent-download", requireAuth, async (req: A
 })
 
 router.get("/api/v1/company/efactura/agent-download-link", requireAuth, async (req: AuthedRequest, res) => {
+  if (!ensureTenantAdminAccess(req, res)) return
   const tenantId = req.auth!.tenantId
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
 
@@ -1812,6 +1819,7 @@ router.get("/api/v1/company/efactura/agent-download-link", requireAuth, async (r
 })
 
 router.post("/api/v1/company/efactura/agent-pairing-code", requireAuth, async (req: AuthedRequest, res) => {
+  if (!ensureTenantAdminAccess(req, res)) return
   const tenantId = req.auth!.tenantId
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
 
@@ -1849,6 +1857,7 @@ router.post("/api/v1/company/efactura/agent-pairing-code", requireAuth, async (r
 })
 
 router.get("/api/v1/company/efactura/diagnostics", async (req: AuthedRequest, res) => {
+  if (!ensureTenantAdminAccess(req, res)) return
   const tenantId = req.auth!.tenantId
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
 
