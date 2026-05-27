@@ -16,8 +16,9 @@ function requireOwner(req: AuthedRequest, res: any, next: any) {
     return res.status(401).json({ ok: false, error: "Missing token" })
   }
 
-  if (req.auth.role !== UserRole.OWNER) {
-    return res.status(403).json({ ok: false, error: "Acces permis doar owner-ului" })
+  // The global control panel must stay separate from tenant owners.
+  if (req.auth.role !== UserRole.OWNER || req.auth.tenantId) {
+    return res.status(403).json({ ok: false, error: "Acces permis doar owner-ului global" })
   }
 
   next()

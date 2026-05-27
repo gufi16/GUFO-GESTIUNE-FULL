@@ -827,8 +827,8 @@ app.post("/api/v1/auth/reset-password", async (req, res) => {
 app.get("/api/v1/admin/me", requireAuth, async (req: AuthedRequest, res) => {
   const auth = req.auth!
 
-  if (auth.role !== "OWNER") {
-    return res.status(403).json({ ok: false, error: "Acces permis doar owner-ului" })
+  if (auth.role !== "OWNER" || auth.tenantId) {
+    return res.status(403).json({ ok: false, error: "Acces permis doar owner-ului global" })
   }
 
   return res.json({
