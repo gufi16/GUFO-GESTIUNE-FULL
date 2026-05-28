@@ -1,4 +1,4 @@
-﻿import { useEffect } from "react"
+import { useEffect } from "react"
 import { Navigate, Route, Routes } from "react-router-dom"
 import AppShell from "./components/AppShell"
 import RequireAuth from "./components/RequireAuth"
