@@ -1187,8 +1187,7 @@ async function buildLatestPurchaseCostMap(
     where: {
       productId: { in: uniqueIds },
       receipt: {
-        tenantId,
-        OR: [{ companyId }, { companyId: null }],
+        ...buildCompanyScopedTenantWhere(tenantId, companyId),
         status: "POSTED",
         ...(options?.locationId ? { locationId: options.locationId } : {}),
         ...(options?.dateTo ? { docDate: { lte: options.dateTo } } : {}),
@@ -1503,8 +1502,7 @@ router.get("/api/v1/reports/accounting/saga/export-preview", requireAuth, async 
   if (kind === "sales-invoices") {
     const items = await prisma.salesInvoice.findMany({
       where: {
-        tenantId,
-        OR: [{ companyId }, { companyId: null }],
+        ...buildCompanyScopedTenantWhere(tenantId, companyId),
         status: "ISSUED",
         docDate: { gte: from, lte: to },
         ...selectedIdWhere,
@@ -1521,8 +1519,7 @@ router.get("/api/v1/reports/accounting/saga/export-preview", requireAuth, async 
   if (kind === "purchase-receipts") {
     const items = await prisma.purchaseReceipt.findMany({
       where: {
-        tenantId,
-        OR: [{ companyId }, { companyId: null }],
+        ...buildCompanyScopedTenantWhere(tenantId, companyId),
         status: "POSTED",
         docDate: { gte: from, lte: to },
         ...selectedIdWhere,
@@ -1538,7 +1535,14 @@ router.get("/api/v1/reports/accounting/saga/export-preview", requireAuth, async 
 
   if (kind === "consumption-docs") {
     const items = await prisma.consumptionDoc.findMany({
-      where: { tenantId, OR: [{ companyId }, { companyId: null }], status: "VALIDATED", aggregateParentId: null, docDate: { gte: from, lte: to }, ...selectedIdWhere, ...(locationId ? { locationId } : {}) },
+      where: {
+        ...buildCompanyScopedTenantWhere(tenantId, companyId),
+        status: "VALIDATED",
+        aggregateParentId: null,
+        docDate: { gte: from, lte: to },
+        ...selectedIdWhere,
+        ...(locationId ? { locationId } : {}),
+      },
       orderBy: [{ docDate: "asc" }, { docNo: "asc" }],
     })
     return response(items.map((item) => ({ id: item.id, code: item.docNo, label: `Bon consum ${item.docNo}`, date: formatDate(item.docDate), status: item.status })))
@@ -1546,7 +1550,12 @@ router.get("/api/v1/reports/accounting/saga/export-preview", requireAuth, async 
 
   if (kind === "production-docs") {
     const items = await prisma.productionDoc.findMany({
-      where: { tenantId, OR: [{ companyId }, { companyId: null }], docDate: { gte: from, lte: to }, ...selectedIdWhere, ...(locationId ? { locationId } : {}) },
+      where: {
+        ...buildCompanyScopedTenantWhere(tenantId, companyId),
+        docDate: { gte: from, lte: to },
+        ...selectedIdWhere,
+        ...(locationId ? { locationId } : {}),
+      },
       orderBy: [{ docDate: "asc" }, { docNo: "asc" }],
     })
     return response(items.map((item) => ({ id: item.id, code: item.docNo, label: `Productie ${item.docNo}`, date: formatDate(item.docDate), status: "Creat" })))
@@ -1911,8 +1920,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
   } else if (kind === "sales-invoices") {
     const invoices = await prisma.salesInvoice.findMany({
       where: {
-        tenantId,
-        OR: [{ companyId }, { companyId: null }],
+        ...buildCompanyScopedTenantWhere(tenantId, companyId),
         status: "ISSUED",
         docDate: { gte: from, lte: to },
         ...selectedIdWhere,
@@ -2149,8 +2157,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
   } else if (kind === "purchase-receipts") {
     const receipts = await prisma.purchaseReceipt.findMany({
       where: {
-        tenantId,
-        OR: [{ companyId }, { companyId: null }],
+        ...buildCompanyScopedTenantWhere(tenantId, companyId),
         status: "POSTED",
         docDate: { gte: from, lte: to },
         ...selectedIdWhere,
@@ -2553,8 +2560,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
   } else if (kind === "consumption-docs") {
     const documents = await prisma.consumptionDoc.findMany({
       where: {
-        tenantId,
-        OR: [{ companyId }, { companyId: null }],
+        ...buildCompanyScopedTenantWhere(tenantId, companyId),
         status: "VALIDATED",
         aggregateParentId: null,
         docDate: { gte: from, lte: to },
@@ -2685,8 +2691,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
   } else if (kind === "production-docs") {
     const documents = await prisma.productionDoc.findMany({
       where: {
-        tenantId,
-        OR: [{ companyId }, { companyId: null }],
+        ...buildCompanyScopedTenantWhere(tenantId, companyId),
         docDate: { gte: from, lte: to },
         ...selectedIdWhere,
         ...(locationId ? { locationId } : {}),
