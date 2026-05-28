@@ -2919,11 +2919,7 @@ export async function handlePosReceiptInvoice(req: PosAuthRequest, res: Response
     where: {
       id: saleId,
       tenantId,
-      ...(company?.id
-        ? {
-            OR: [{ companyId: company.id }, { companyId: null }],
-          }
-        : {}),
+      ...(company?.id ? { companyId: company.id } : {}),
     },
     include: {
       items: {
