@@ -1,4 +1,4 @@
-// @ts-nocheck
+﻿// @ts-nocheck
 import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import jwt from "jsonwebtoken";
@@ -1062,7 +1062,7 @@ router.post("/api/v1/pos/validate", async (req: Request, res: Response) => {
 });
 
 router.post("/api/v1/pos/pair", async (req: Request, res: Response) => {
-  console.log("🔥 POS PAIR NOU HIT", req.body);
+  console.log("Ã°Å¸â€Â¥ POS PAIR NOU HIT", req.body);
 
   try {
     const parsed = PairSchema.safeParse(req.body);
@@ -3954,9 +3954,18 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
     toNumber(payload.discountTotal) || normalizedLineDiscountTotal + normalizedCartDiscountTotal
   );
   const normalizedCartDiscountPercent = Math.max(0, toNumber(payload.cartDiscountPercent));
+  const rawCashAmount = payload.cashAmount !== undefined ? toNumber(payload.cashAmount) : null;
+  const rawCardAmount = payload.cardAmount !== undefined ? toNumber(payload.cardAmount) : null;
+  const rawOtherAmount =
+    payload.otherAmount !== undefined
+      ? toNumber(payload.otherAmount)
+      : payload.otherTotal !== undefined
+      ? toNumber(payload.otherTotal)
+      : null;
+
   const normalizedCashAmount =
-    payload.cashAmount !== undefined
-      ? toNumber(payload.cashAmount)
+    rawCashAmount !== null
+      ? rawCashAmount
       : normalizedPaymentType === "CASH"
       ? totalWithSgr
       : normalizedPaymentType === "MIXED"
@@ -3964,14 +3973,17 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
       : 0;
 
   const normalizedCardAmount =
-    payload.cardAmount !== undefined
-      ? toNumber(payload.cardAmount)
-      : normalizedPaymentType === "CARD"
-      ? totalWithSgr
+    normalizedPaymentType === "CARD"
+      ? rawCardAmount !== null && rawCardAmount > 0
+        ? rawCardAmount
+        : rawOtherAmount !== null && rawOtherAmount > 0
+        ? rawOtherAmount
+        : totalWithSgr
+      : rawCardAmount !== null
+      ? rawCardAmount
       : normalizedPaymentType === "MIXED"
       ? 0
       : 0;
-
   let result: { sale: { id: string }; consumptionDocId: string | null };
 
   try {
