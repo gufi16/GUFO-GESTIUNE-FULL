@@ -408,6 +408,14 @@ function normalizedCui(value: any) {
   return normalizeCompanyCui(String(value || ""))
 }
 
+function getRequestedCredentialId(req: AuthedRequest) {
+  const bodyValue = String(req.body?.credentialId || "").trim()
+  if (bodyValue) return bodyValue
+  const queryValue = String(req.query?.credentialId || "").trim()
+  if (queryValue) return queryValue
+  return null
+}
+
 function invoiceBelongsToIncomingSide(entry: any, companyCui: string) {
   const supplierCif = normalizedCui(entry?.supplierCif)
   const customerCif = normalizedCui(entry?.customerCif)
@@ -955,12 +963,13 @@ router.get("/api/v1/efactura/incoming/bridge-config", async (req: AuthedRequest,
 router.post("/api/v1/efactura/incoming/sync", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
   const companyId = await requireRequestCompanyId(req)
+  const credentialId = getRequestedCredentialId(req)
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
   if (!moduleCheck.enabled) {
     return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
   }
 
-  const company = await loadAnafCompanyContext(tenantId, companyId)
+  const company = await loadAnafCompanyContext(tenantId, companyId, credentialId)
 
   if (!company) {
     return res.status(404).json({ ok: false, error: "Compania activa nu a fost gasita." })
@@ -1052,6 +1061,8 @@ router.post("/api/v1/efactura/incoming/sync", async (req: AuthedRequest, res) =>
           ? `Sincronizare e-Factura finalizata. Facturi importate: ${imported}.`
           : `Sincronizare e-Factura finalizata fara facturi noi pentru import.`,
       stats: {
+        companyId,
+        credentialId: company?.anafCredentialId || credentialId || null,
         days,
         totalMessages: rawMessages.length,
         invoiceMessages: invoiceMessages.length,

@@ -711,9 +711,11 @@ export async function handleAnafOauthCallback(req, res) {
       select: ANAF_CREDENTIAL_SELECT,
     })
 
-    if (credential.isDefault) {
-      await syncDefaultAnafCredentialToCompany(prisma as any, company.id, updatedCredential)
-    }
+    const activeCredential = credential.isDefault
+      ? updatedCredential
+      : await setDefaultCompanyAnafCredential(prisma as any, state.tenantId, company.id, updatedCredential.id)
+
+    await syncDefaultAnafCredentialToCompany(prisma as any, company.id, activeCredential)
 
     return res.redirect(`${state.returnTo}${state.returnTo.includes("?") ? "&" : "?"}oauth=success`)
   } catch (error: any) {

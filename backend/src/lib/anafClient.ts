@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { prisma } from "./prisma"
-import { resolveCompanyWithAnafCredential } from "./companyAnafCredentials"
+import { getCompanyAnafCredentialById, resolveCompanyWithAnafCredential } from "./companyAnafCredentials"
 import { anafHttpRequest } from "./anafHttp"
 import { getAnafCertificateOptions } from "./efacturaCertificate"
 import {
@@ -35,7 +35,8 @@ type AnafCompanyAuthContext = {
 
 export async function loadAnafCompanyContext(
   tenantOrAuth: string | AnafCompanyAuthContext,
-  activeCompanyId?: string | null
+  activeCompanyId?: string | null,
+  credentialId?: string | null,
 ) {
   const auth = typeof tenantOrAuth === "string" ? null : tenantOrAuth
   const tenantId = typeof tenantOrAuth === "string" ? tenantOrAuth : String(tenantOrAuth?.tenantId || "")
@@ -50,23 +51,45 @@ export async function loadAnafCompanyContext(
 
   if (!company) return company
 
+  const requestedCredential = credentialId
+    ? await getCompanyAnafCredentialById(prisma as any, tenantId, company.id, credentialId)
+    : null
+
+  const effectiveCompany = requestedCredential
+    ? {
+        ...company,
+        anafCredentialId: requestedCredential.id,
+        anafCredentialLabel: requestedCredential.label,
+        efacturaCertSerial: requestedCredential.certSerial,
+        efacturaCertPasswordEnc: requestedCredential.certPasswordEnc,
+        efacturaCertFilename: requestedCredential.certFilename,
+        efacturaCertUploadedAt: requestedCredential.certUploadedAt,
+        efacturaOauthAccessToken: requestedCredential.efacturaOauthAccessToken,
+        efacturaOauthRefreshToken: requestedCredential.efacturaOauthRefreshToken,
+        efacturaOauthAccessTokenExpiresAt: requestedCredential.efacturaOauthAccessTokenExpiresAt,
+        efacturaOauthRefreshTokenExpiresAt: requestedCredential.efacturaOauthRefreshTokenExpiresAt,
+        efacturaOauthConnectedAt: requestedCredential.efacturaOauthConnectedAt,
+        efacturaOauthLastError: requestedCredential.efacturaOauthLastError,
+      }
+    : company
+
   const platform = await prisma.platformConfig.findUnique({
     where: { key: "global" },
     select: { efacturaEnvironment: true },
   })
 
   const usesOwnOauthConfig = Boolean(
-    company?.efacturaOauthClientId &&
-      company?.efacturaOauthClientSecret &&
-      company?.efacturaOauthRedirectUri
+    effectiveCompany?.efacturaOauthClientId &&
+      effectiveCompany?.efacturaOauthClientSecret &&
+      effectiveCompany?.efacturaOauthRedirectUri
   )
 
   return {
-    ...company,
+    ...effectiveCompany,
     efacturaUsesPlatformConfig: !usesOwnOauthConfig,
     efacturaEnvironment: usesOwnOauthConfig
-      ? String(company?.efacturaEnvironment || "test").trim() || "test"
-      : String(platform?.efacturaEnvironment || company?.efacturaEnvironment || "test").trim() || "test",
+      ? String(effectiveCompany?.efacturaEnvironment || "test").trim() || "test"
+      : String(platform?.efacturaEnvironment || effectiveCompany?.efacturaEnvironment || "test").trim() || "test",
   }
 }
 
