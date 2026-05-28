@@ -214,74 +214,76 @@ async function recalcInvoice(invoiceId: string) {
 }
 
 async function createStornoInvoice(tenantId: string, companyId: string, sourceInvoice: any) {
-  const docNo = await prisma.$transaction((tx) => reserveNextNumber(tx, tenantId, "invoice"))
   const now = new Date()
-
-  const created = await prisma.salesInvoice.create({
-    data: {
-      tenantId,
-      companyId,
-      locationId: sourceInvoice.locationId,
-      customerId: sourceInvoice.customerId || null,
-      docNo,
-      docDate: now,
-      dueDate: now,
-      customerName: sourceInvoice.customerName,
-      customerCode: sourceInvoice.customerCode || null,
-      customerCif: sourceInvoice.customerCif || null,
-      customerRegNo: sourceInvoice.customerRegNo || null,
-      customerAddress: sourceInvoice.customerAddress || null,
-      customerEmail: sourceInvoice.customerEmail || null,
-      customerPhone: sourceInvoice.customerPhone || null,
-      currency: sourceInvoice.currency || "RON",
-      fxRate: sourceInvoice.fxRate || 1,
-      invoiceTypeCode: "381",
-      efacturaStatus: "NOT_READY",
-      efacturaXmlText: null,
-      efacturaErrorText: null,
-      efacturaPreparedAt: null,
-      efacturaValidatedAt: null,
-      efacturaLastCheckAt: null,
-      note: `Factura storno pentru ${sourceInvoice.docNo}${sourceInvoice.note ? `\n${sourceInvoice.note}` : ""}`,
-      status: "ISSUED",
-    },
-  })
-
-  for (const sourceItem of sourceInvoice.items || []) {
-    const qty = -Math.abs(toNumber(sourceItem.qty))
-
-    await prisma.salesInvoiceItem.create({
+  const createdId = await prisma.$transaction(async (tx) => {
+    const docNo = await reserveNextNumber(tx, tenantId, "invoice")
+    const created = await tx.salesInvoice.create({
       data: {
-        invoiceId: created.id,
-        productId: sourceItem.productId,
-        productName: sourceItem.productName || sourceItem.product?.name || "",
-        productCode: sourceItem.productCode || null,
-        uomCode: sourceItem.uomCode || null,
-        uomStandardCode: sourceItem.uomStandardCode || null,
-        vatCategoryCode: sourceItem.vatCategoryCode || null,
-        qty,
-        unitPriceFc: toNumber(sourceItem.unitPriceFc),
-        vatRateValue: toNumber(sourceItem.vatRateValue),
-        discountPercent: toNumber(sourceItem.discountPercent),
-        discountAmountFc: -Math.abs(toNumber(sourceItem.discountAmountFc)),
-        lineNetFc: -Math.abs(toNumber(sourceItem.lineNetFc)),
-        lineVatFc: -Math.abs(toNumber(sourceItem.lineVatFc)),
-        lineGrossFc: -Math.abs(toNumber(sourceItem.lineGrossFc)),
-        sgrUnitFc: toNumber(sourceItem.sgrUnitFc),
-        sgrTotalFc: -Math.abs(toNumber(sourceItem.sgrTotalFc)),
-        discountAmountRon: -Math.abs(toNumber(sourceItem.discountAmountRon)),
-        lineNetRon: -Math.abs(toNumber(sourceItem.lineNetRon)),
-        lineVatRon: -Math.abs(toNumber(sourceItem.lineVatRon)),
-        lineGrossRon: -Math.abs(toNumber(sourceItem.lineGrossRon)),
-        sgrTotalRon: -Math.abs(toNumber(sourceItem.sgrTotalRon)),
+        tenantId,
+        companyId,
+        locationId: sourceInvoice.locationId,
+        customerId: sourceInvoice.customerId || null,
+        docNo,
+        docDate: now,
+        dueDate: now,
+        customerName: sourceInvoice.customerName,
+        customerCode: sourceInvoice.customerCode || null,
+        customerCif: sourceInvoice.customerCif || null,
+        customerRegNo: sourceInvoice.customerRegNo || null,
+        customerAddress: sourceInvoice.customerAddress || null,
+        customerEmail: sourceInvoice.customerEmail || null,
+        customerPhone: sourceInvoice.customerPhone || null,
+        currency: sourceInvoice.currency || "RON",
+        fxRate: sourceInvoice.fxRate || 1,
+        invoiceTypeCode: "381",
+        efacturaStatus: "NOT_READY",
+        efacturaXmlText: null,
+        efacturaErrorText: null,
+        efacturaPreparedAt: null,
+        efacturaValidatedAt: null,
+        efacturaLastCheckAt: null,
+        note: `Factura storno pentru ${sourceInvoice.docNo}${sourceInvoice.note ? `\n${sourceInvoice.note}` : ""}`,
+        status: "ISSUED",
       },
     })
-  }
 
-  await recalcInvoice(created.id)
+    for (const sourceItem of sourceInvoice.items || []) {
+      const qty = -Math.abs(toNumber(sourceItem.qty))
+
+      await tx.salesInvoiceItem.create({
+        data: {
+          invoiceId: created.id,
+          productId: sourceItem.productId,
+          productName: sourceItem.productName || sourceItem.product?.name || "",
+          productCode: sourceItem.productCode || null,
+          uomCode: sourceItem.uomCode || null,
+          uomStandardCode: sourceItem.uomStandardCode || null,
+          vatCategoryCode: sourceItem.vatCategoryCode || null,
+          qty,
+          unitPriceFc: toNumber(sourceItem.unitPriceFc),
+          vatRateValue: toNumber(sourceItem.vatRateValue),
+          discountPercent: toNumber(sourceItem.discountPercent),
+          discountAmountFc: -Math.abs(toNumber(sourceItem.discountAmountFc)),
+          lineNetFc: -Math.abs(toNumber(sourceItem.lineNetFc)),
+          lineVatFc: -Math.abs(toNumber(sourceItem.lineVatFc)),
+          lineGrossFc: -Math.abs(toNumber(sourceItem.lineGrossFc)),
+          sgrUnitFc: toNumber(sourceItem.sgrUnitFc),
+          sgrTotalFc: -Math.abs(toNumber(sourceItem.sgrTotalFc)),
+          discountAmountRon: -Math.abs(toNumber(sourceItem.discountAmountRon)),
+          lineNetRon: -Math.abs(toNumber(sourceItem.lineNetRon)),
+          lineVatRon: -Math.abs(toNumber(sourceItem.lineVatRon)),
+          lineGrossRon: -Math.abs(toNumber(sourceItem.lineGrossRon)),
+          sgrTotalRon: -Math.abs(toNumber(sourceItem.sgrTotalRon)),
+        },
+      })
+    }
+
+    await recalcInvoiceWithClient(tx, created.id)
+    return created.id
+  })
 
   return prisma.salesInvoice.findFirst({
-    where: { id: created.id, tenantId, companyId },
+    where: { id: createdId, tenantId, companyId },
     include: {
       location: true,
       customer: true,
