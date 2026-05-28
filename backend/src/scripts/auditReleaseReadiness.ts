@@ -80,46 +80,40 @@ function assertRouteHardening() {
 }
 
 async function assertStockBalanceConsistency() {
-  const duplicateGroups = await prisma.stockBalance.groupBy({
-    by: ["tenantId", "companyId", "locationId", "productId", "warehouseScope"],
-    _count: { id: true },
-    having: {
-      id: {
-        _count: {
-          gt: 1,
-        },
-      },
-    },
-  })
+  const duplicateGroups = await prisma.$queryRawUnsafe<Array<{ duplicate_count: bigint }>>(
+    `
+      SELECT COUNT(*)::bigint AS duplicate_count
+      FROM (
+        SELECT 1
+        FROM "StockBalance"
+        GROUP BY "tenantId", "companyId", "locationId", "productId", "warehouseScope"
+        HAVING COUNT(*) > 1
+      ) duplicated
+    `
+  )
+  const duplicateGroupCount = Number(duplicateGroups[0]?.duplicate_count || 0)
 
   addResult(
     "StockBalance uniqueness by warehouse scope",
-    duplicateGroups.length === 0,
-    duplicateGroups.length
-      ? `Found ${duplicateGroups.length} duplicated stock balance groups.`
+    duplicateGroupCount === 0,
+    duplicateGroupCount
+      ? `Found ${duplicateGroupCount} duplicated stock balance groups.`
       : undefined
   )
 
-  const badScopeRows = await prisma.stockBalance.findMany({
-    where: {
-      OR: [
-        {
-          warehouseId: null,
-          NOT: { warehouseScope: NO_WAREHOUSE_SCOPE },
-        },
-        {
-          warehouseId: { not: null },
-          warehouseScope: NO_WAREHOUSE_SCOPE,
-        },
-      ],
-    },
-    take: 20,
-    select: {
-      id: true,
-      warehouseId: true,
-      warehouseScope: true,
-    },
-  })
+  const badScopeRows = await prisma.$queryRawUnsafe<
+    Array<{ id: string; warehouseId: string | null; warehouseScope: string | null }>
+  >(
+    `
+      SELECT "id", "warehouseId", "warehouseScope"
+      FROM "StockBalance"
+      WHERE
+        ("warehouseId" IS NULL AND COALESCE("warehouseScope", '') <> '${NO_WAREHOUSE_SCOPE}')
+        OR
+        ("warehouseId" IS NOT NULL AND COALESCE("warehouseScope", '') = '${NO_WAREHOUSE_SCOPE}')
+      LIMIT 20
+    `
+  )
 
   addResult(
     "StockBalance warehouse scope mapping sane",
