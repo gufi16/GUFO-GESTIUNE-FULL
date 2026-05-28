@@ -1316,7 +1316,7 @@ router.get("/api/v1/meta/departments", async (req: AuthedRequest, res) => {
   const items = await prisma.department.findMany({
     where: {
       tenantId,
-      OR: buildCompanyScope(companyId),
+      companyId,
     },
     orderBy: { name: "asc" }
   })
@@ -1385,7 +1385,7 @@ router.put("/api/v1/meta/departments/:id", async (req: AuthedRequest, res) => {
       where: {
         id,
         tenantId,
-        OR: buildCompanyScope(companyId),
+        companyId,
       }
     })
 
@@ -1436,7 +1436,7 @@ router.delete("/api/v1/meta/departments/:id", async (req: AuthedRequest, res) =>
       where: {
         id,
         tenantId,
-        OR: buildCompanyScope(companyId),
+        companyId,
       }
     })
 
@@ -1471,7 +1471,7 @@ router.get("/api/v1/meta/categories", async (req: AuthedRequest, res) => {
   const items = await prisma.category.findMany({
     where: {
       tenantId,
-      OR: buildCompanyScope(companyId),
+      companyId,
     },
     include: {
       department: true
@@ -1505,7 +1505,7 @@ router.post("/api/v1/meta/categories", async (req: AuthedRequest, res) => {
         where: {
           id: departmentId,
           tenantId,
-          OR: buildCompanyScope(companyId),
+          companyId,
         }
       })
 
@@ -1565,7 +1565,7 @@ router.put("/api/v1/meta/categories/:id", async (req: AuthedRequest, res) => {
       where: {
         id,
         tenantId,
-        OR: buildCompanyScope(companyId),
+        companyId,
       }
     })
 
@@ -1583,7 +1583,7 @@ router.put("/api/v1/meta/categories/:id", async (req: AuthedRequest, res) => {
         where: {
           id: departmentId,
           tenantId,
-          OR: buildCompanyScope(companyId),
+          companyId,
         }
       })
 
@@ -1628,7 +1628,7 @@ router.delete("/api/v1/meta/categories/:id", async (req: AuthedRequest, res) => 
       where: {
         id,
         tenantId,
-        OR: buildCompanyScope(companyId),
+        companyId,
       }
     })
 
