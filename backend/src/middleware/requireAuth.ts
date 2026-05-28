@@ -8,6 +8,7 @@ export interface AuthedRequest extends Request {
     role: string
     email?: string | null
     activeCompanyId?: string | null
+    controlPanel?: boolean
   }
 }
 
@@ -63,6 +64,7 @@ export function requireAuth(req: AuthedRequest, res: Response, next: NextFunctio
       role: decoded.role,
       email: decoded.email || null,
       activeCompanyId: decoded.activeCompanyId || decoded.active_company_id || null,
+      controlPanel: Boolean(decoded.controlPanel),
     }
 
     if (!req.auth.userId || !req.auth.role) {

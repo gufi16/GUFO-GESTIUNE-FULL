@@ -23,11 +23,12 @@ export function verifySecret(raw: string, hash: string) {
 }
 
 export function signAccessToken(payload: {
-  tenantId: string
+  tenantId: string | null
   userId: string
   role: string
   email?: string
   activeCompanyId?: string | null
+  controlPanel?: boolean
 }) {
   const expiresIn: SignOptions["expiresIn"] = JWT_EXPIRES_IN as SignOptions["expiresIn"]
   return jwt.sign(payload, getJwtSecret(), { expiresIn });
@@ -35,11 +36,12 @@ export function signAccessToken(payload: {
 
 export function verifyAccessToken(token: string) {
   return jwt.verify(token, getJwtSecret()) as {
-    tenantId: string
+    tenantId: string | null
     userId: string
     role: string
     email?: string
     activeCompanyId?: string | null
+    controlPanel?: boolean
     iat: number
     exp: number
   };
