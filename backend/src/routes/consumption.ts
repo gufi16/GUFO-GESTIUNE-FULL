@@ -4,7 +4,7 @@ import { Router } from "express"
 import { prisma } from "../lib/prisma"
 import { createConsumptionDraft, validateConsumptionDoc, cancelConsumptionDoc } from "../lib/consumptionDocs"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
-import { buildCompanyScopedTenantWhere, requireRequestCompanyId } from "../lib/companyScope"
+import { buildCompanyScopedTenantWhere, buildCompanyWhere, requireRequestCompanyId } from "../lib/companyScope"
 import { ensureDefaultWarehouseForLocation } from "../lib/warehouse"
 
 const router = Router()
@@ -114,7 +114,7 @@ async function buildAggregateConsumptionPayload(
 ) {
   const sourceDocs = await tx.consumptionDoc.findMany({
     where: {
-      ...buildCompanyScopedTenantWhere(params.tenantId, params.companyId),
+      ...buildCompanyWhere(params.tenantId, params.companyId),
       locationId: params.locationId,
       ...(params.warehouseId ? { warehouseId: params.warehouseId } : {}),
       docDate: {
@@ -171,7 +171,7 @@ async function buildConsumptionDocDetail(tenantId: string, companyId: string, id
   const doc = await prisma.consumptionDoc.findFirst({
     where: {
       id,
-      ...buildCompanyScopedTenantWhere(tenantId, companyId, { id }),
+      ...buildCompanyWhere(tenantId, companyId, { id }),
     },
     include: {
       location: {
@@ -473,7 +473,7 @@ router.put("/api/v1/consumption-docs/:id", requireAuth, async (req: AuthedReques
     const existingDoc = await prisma.consumptionDoc.findFirst({
       where: {
         id,
-        ...buildCompanyScopedTenantWhere(tenantId, companyId, { id }),
+        ...buildCompanyWhere(tenantId, companyId, { id }),
       },
       select: {
         id: true,
@@ -718,7 +718,7 @@ router.post("/api/v1/consumption-docs/:id/cancel", requireAuth, async (req: Auth
     const existingDoc = await prisma.consumptionDoc.findFirst({
       where: {
         id,
-        ...buildCompanyScopedTenantWhere(tenantId, companyId, { id }),
+        ...buildCompanyWhere(tenantId, companyId, { id }),
       },
       select: {
         id: true,
@@ -786,7 +786,7 @@ router.get("/api/v1/consumption-docs", requireAuth, async (req: AuthedRequest, r
 
     const docs = await prisma.consumptionDoc.findMany({
       where: {
-        ...buildCompanyScopedTenantWhere(tenantId, companyId),
+        ...buildCompanyWhere(tenantId, companyId),
         ...(locationId ? { locationId } : {}),
         ...(status ? { status: status as any } : {}),
         ...(dateFrom || dateTo

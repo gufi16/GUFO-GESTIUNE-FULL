@@ -561,7 +561,8 @@ router.post("/api/v1/sales-invoices/full", async (req: AuthedRequest, res) => {
       customer = await prisma.customer.findFirst({
         where: {
           id: customerId,
-          ...buildCompanyScopedTenantWhere(tenantId, companyId),
+          tenantId,
+          companyId,
         },
       })
 
