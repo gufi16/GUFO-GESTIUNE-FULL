@@ -49,8 +49,9 @@ export function requireAuth(req: AuthedRequest, res: Response, next: NextFunctio
       userId: "dev-control-panel",
       tenantId: null,
       role: "OWNER",
-      email: null,
+      email: String(process.env.CONTROL_PANEL_EMAIL || "").trim().toLowerCase() || null,
       activeCompanyId: null,
+      controlPanel: true,
     }
     return next()
   }

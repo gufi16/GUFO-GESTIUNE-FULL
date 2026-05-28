@@ -8,6 +8,7 @@ import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { hashSecret } from "../lib/auth"
 import { buildTenantExportZip } from "../lib/tenantExport"
+import { hasGlobalControlPanelOwnerAccess } from "../lib/tenantAdmin"
 
 const router = Router()
 
@@ -16,7 +17,7 @@ function requireOwner(req: AuthedRequest, res: any, next: any) {
     return res.status(401).json({ ok: false, error: "Missing token" })
   }
 
-  if (req.auth.role !== UserRole.OWNER) {
+  if (!hasGlobalControlPanelOwnerAccess(req)) {
     return res.status(403).json({ ok: false, error: "Acces permis doar owner-ului" })
   }
 

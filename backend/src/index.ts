@@ -19,6 +19,7 @@ import { writeAuditLogFromRequest, writeExplicitAuditLog } from "./lib/audit"
 import { requireAuth, AuthedRequest } from "./middleware/requireAuth"
 import { hasSmtpConfig, sendMail } from "./lib/mailer"
 import { repairDeepStrings } from "./lib/textRepair"
+import { hasGlobalControlPanelOwnerAccess } from "./lib/tenantAdmin"
 
 import productsRouter from "./routes/products"
 import metaRouter from "./routes/meta"
@@ -931,11 +932,11 @@ app.post("/api/v1/auth/reset-password", async (req, res) => {
 })
 
 app.get("/api/v1/admin/me", requireAuth, async (req: AuthedRequest, res) => {
-  const auth = req.auth!
-
-  if (auth.role !== "OWNER") {
+  if (!hasGlobalControlPanelOwnerAccess(req)) {
     return res.status(403).json({ ok: false, error: "Acces permis doar owner-ului" })
   }
+
+  const auth = req.auth!
 
   return res.json({
     ok: true,
