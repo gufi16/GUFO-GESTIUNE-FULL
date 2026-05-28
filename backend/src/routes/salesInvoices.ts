@@ -1,5 +1,6 @@
 ﻿// @ts-nocheck
 import fs from "fs"
+import { Prisma } from "@prisma/client"
 import { Router } from "express"
 import PDFDocument from "pdfkit"
 import { prisma } from "../lib/prisma"
@@ -93,8 +94,8 @@ function registerFonts(doc: PDFKit.PDFDocument) {
   }
 }
 
-async function recalcInvoice(invoiceId: string) {
-  const items = await prisma.salesInvoiceItem.findMany({
+async function recalcInvoiceWithClient(client: typeof prisma | Prisma.TransactionClient, invoiceId: string) {
+  const items = await client.salesInvoiceItem.findMany({
     where: { invoiceId },
   })
 
@@ -109,7 +110,7 @@ async function recalcInvoice(invoiceId: string) {
   const totalGrossRon = items.reduce((sum, item) => sum + toNumber(item.lineGrossRon), 0)
   const totalSgrRon = items.reduce((sum, item) => sum + toNumber(item.sgrTotalRon), 0)
 
-  return prisma.salesInvoice.update({
+  return client.salesInvoice.update({
     where: { id: invoiceId },
     data: {
       totalNetFc,
@@ -129,13 +130,14 @@ async function recalcInvoice(invoiceId: string) {
 }
 
 async function replaceInvoiceItems(
+  client: typeof prisma | Prisma.TransactionClient,
   tenantId: string,
   companyId: string,
   invoiceId: string,
   fxRate: number,
   items: any[]
 ) {
-  await prisma.salesInvoiceItem.deleteMany({
+  await client.salesInvoiceItem.deleteMany({
     where: { invoiceId },
   })
 
@@ -150,7 +152,7 @@ async function replaceInvoiceItems(
     if (qty <= 0) throw new Error("Cantitatea trebuie sa fie mai mare decat 0.")
     if (unitPriceFc < 0) throw new Error("Pretul trebuie sa fie mai mare sau egal cu 0.")
 
-    const product = await prisma.product.findFirst({
+    const product = await client.product.findFirst({
       where: {
         id: productId,
         tenantId,
@@ -176,7 +178,7 @@ async function replaceInvoiceItems(
     const sgrTotalFc = qty * sgrUnitFc
     const vatCategoryCode = vat > 0 ? "S" : "Z"
 
-    await prisma.salesInvoiceItem.create({
+    await client.salesInvoiceItem.create({
       data: {
         invoiceId,
         productId,
@@ -204,7 +206,11 @@ async function replaceInvoiceItems(
     })
   }
 
-  await recalcInvoice(invoiceId)
+  await recalcInvoiceWithClient(client, invoiceId)
+}
+
+async function recalcInvoice(invoiceId: string) {
+  return recalcInvoiceWithClient(prisma, invoiceId)
 }
 
 async function createStornoInvoice(tenantId: string, companyId: string, sourceInvoice: any) {
@@ -574,123 +580,126 @@ router.post("/api/v1/sales-invoices/full", async (req: AuthedRequest, res) => {
     }
 
     const rawDocNo = String(header?.docNo || "").trim()
-    let invoiceId = id ? String(id) : ""
-    let autoDocNo = ""
+    const invoiceId = await prisma.$transaction(async (tx) => {
+      let nextInvoiceId = id ? String(id) : ""
+      let autoDocNo = ""
 
-    if (!invoiceId) {
-      const preview = await getNextNumberPreview(tenantId, "invoice")
-      if (!rawDocNo || rawDocNo === preview.value) {
-        autoDocNo = await prisma.$transaction((tx) => reserveNextNumber(tx, tenantId, "invoice"))
-      }
-    }
-
-    const docNo = rawDocNo || autoDocNo
-
-    if (!invoiceId) {
-      const duplicate = await prisma.salesInvoice.findFirst({
-        where: {
-          tenantId,
-          companyId,
-          docNo,
-        },
-        select: { id: true },
-      })
-
-      if (duplicate) {
-        return res.status(400).json({ ok: false, error: "Exista deja o factura cu acest numar." })
+      if (!nextInvoiceId) {
+        const preview = await getNextNumberPreview(tenantId, "invoice")
+        if (!rawDocNo || rawDocNo === preview.value) {
+          autoDocNo = await reserveNextNumber(tx, tenantId, "invoice")
+        }
       }
 
-      const created = await prisma.salesInvoice.create({
-        data: {
-          tenantId,
-          companyId,
-          locationId: location.id,
-          customerId: customer?.id || null,
-          docNo,
-          docDate: new Date(header.docDate),
-          dueDate: header?.dueDate ? new Date(header.dueDate) : null,
-          customerName,
-          customerCode: customer?.code || (header?.customerCode ? String(header.customerCode).trim() : null),
-          customerCif: customer?.cif || (header?.customerCif ? String(header.customerCif).trim() : null),
-          customerRegNo: customer?.regNo || (header?.customerRegNo ? String(header.customerRegNo).trim() : null),
-          customerAddress: customer?.address || (header?.customerAddress ? String(header.customerAddress).trim() : null),
-          customerEmail: customer?.email || (header?.customerEmail ? String(header.customerEmail).trim() : null),
-          customerPhone: customer?.phone || (header?.customerPhone ? String(header.customerPhone).trim() : null),
-          currency,
-          fxRate,
-          efacturaStatus: "NOT_READY",
-          efacturaXmlText: null,
-          efacturaErrorText: null,
-          efacturaPreparedAt: null,
-          efacturaValidatedAt: null,
-          efacturaLastCheckAt: null,
-          note: header?.note ? String(header.note).trim() : null,
-          status: issueNow ? "ISSUED" : "DRAFT",
-        },
-      })
+      const docNo = rawDocNo || autoDocNo
 
-      invoiceId = created.id
-    } else {
-      const existing = await prisma.salesInvoice.findFirst({
-        where: {
-          id: invoiceId,
-          tenantId,
-          companyId,
-        },
-      })
+      if (!nextInvoiceId) {
+        const duplicate = await tx.salesInvoice.findFirst({
+          where: {
+            tenantId,
+            companyId,
+            docNo,
+          },
+          select: { id: true },
+        })
 
-      if (!existing) {
-        return res.status(404).json({ ok: false, error: "Factura nu a fost gasita." })
+        if (duplicate) {
+          throw new Error("Exista deja o factura cu acest numar.")
+        }
+
+        const created = await tx.salesInvoice.create({
+          data: {
+            tenantId,
+            companyId,
+            locationId: location.id,
+            customerId: customer?.id || null,
+            docNo,
+            docDate: new Date(header.docDate),
+            dueDate: header?.dueDate ? new Date(header.dueDate) : null,
+            customerName,
+            customerCode: customer?.code || (header?.customerCode ? String(header.customerCode).trim() : null),
+            customerCif: customer?.cif || (header?.customerCif ? String(header.customerCif).trim() : null),
+            customerRegNo: customer?.regNo || (header?.customerRegNo ? String(header.customerRegNo).trim() : null),
+            customerAddress: customer?.address || (header?.customerAddress ? String(header.customerAddress).trim() : null),
+            customerEmail: customer?.email || (header?.customerEmail ? String(header.customerEmail).trim() : null),
+            customerPhone: customer?.phone || (header?.customerPhone ? String(header.customerPhone).trim() : null),
+            currency,
+            fxRate,
+            efacturaStatus: "NOT_READY",
+            efacturaXmlText: null,
+            efacturaErrorText: null,
+            efacturaPreparedAt: null,
+            efacturaValidatedAt: null,
+            efacturaLastCheckAt: null,
+            note: header?.note ? String(header.note).trim() : null,
+            status: issueNow ? "ISSUED" : "DRAFT",
+          },
+        })
+
+        nextInvoiceId = created.id
+      } else {
+        const existing = await tx.salesInvoice.findFirst({
+          where: {
+            id: nextInvoiceId,
+            tenantId,
+            companyId,
+          },
+        })
+
+        if (!existing) {
+          throw new Error("Factura nu a fost gasita.")
+        }
+
+        if (existing.status === "CANCELLED") {
+          throw new Error("Factura anulata nu mai poate fi modificata.")
+        }
+
+        const duplicate = await tx.salesInvoice.findFirst({
+          where: {
+            tenantId,
+            companyId,
+            docNo,
+            NOT: { id: nextInvoiceId },
+          },
+          select: { id: true },
+        })
+
+        if (duplicate) {
+          throw new Error("Exista deja o factura cu acest numar.")
+        }
+
+        await tx.salesInvoice.update({
+          where: { id: nextInvoiceId },
+          data: {
+            locationId: location.id,
+            customerId: customer?.id || null,
+            docNo,
+            docDate: new Date(header.docDate),
+            dueDate: header?.dueDate ? new Date(header.dueDate) : null,
+            customerName,
+            customerCode: customer?.code || (header?.customerCode ? String(header.customerCode).trim() : null),
+            customerCif: customer?.cif || (header?.customerCif ? String(header.customerCif).trim() : null),
+            customerRegNo: customer?.regNo || (header?.customerRegNo ? String(header.customerRegNo).trim() : null),
+            customerAddress: customer?.address || (header?.customerAddress ? String(header.customerAddress).trim() : null),
+            customerEmail: customer?.email || (header?.customerEmail ? String(header.customerEmail).trim() : null),
+            customerPhone: customer?.phone || (header?.customerPhone ? String(header.customerPhone).trim() : null),
+            currency,
+            fxRate,
+            efacturaStatus: "NOT_READY",
+            efacturaXmlText: null,
+            efacturaErrorText: null,
+            efacturaPreparedAt: null,
+            efacturaValidatedAt: null,
+            efacturaLastCheckAt: new Date(),
+            note: header?.note ? String(header.note).trim() : null,
+            status: issueNow ? "ISSUED" : existing.status,
+          },
+        })
       }
 
-      if (existing.status === "CANCELLED") {
-        return res.status(400).json({ ok: false, error: "Factura anulata nu mai poate fi modificata." })
-      }
-
-      const duplicate = await prisma.salesInvoice.findFirst({
-        where: {
-          tenantId,
-          companyId,
-          docNo,
-          NOT: { id: invoiceId },
-        },
-        select: { id: true },
-      })
-
-      if (duplicate) {
-        return res.status(400).json({ ok: false, error: "Exista deja o factura cu acest numar." })
-      }
-
-      await prisma.salesInvoice.update({
-        where: { id: invoiceId },
-        data: {
-          locationId: location.id,
-          customerId: customer?.id || null,
-          docNo,
-          docDate: new Date(header.docDate),
-          dueDate: header?.dueDate ? new Date(header.dueDate) : null,
-          customerName,
-          customerCode: customer?.code || (header?.customerCode ? String(header.customerCode).trim() : null),
-          customerCif: customer?.cif || (header?.customerCif ? String(header.customerCif).trim() : null),
-          customerRegNo: customer?.regNo || (header?.customerRegNo ? String(header.customerRegNo).trim() : null),
-          customerAddress: customer?.address || (header?.customerAddress ? String(header.customerAddress).trim() : null),
-          customerEmail: customer?.email || (header?.customerEmail ? String(header.customerEmail).trim() : null),
-          customerPhone: customer?.phone || (header?.customerPhone ? String(header.customerPhone).trim() : null),
-          currency,
-          fxRate,
-          efacturaStatus: "NOT_READY",
-          efacturaXmlText: null,
-          efacturaErrorText: null,
-          efacturaPreparedAt: null,
-          efacturaValidatedAt: null,
-          efacturaLastCheckAt: new Date(),
-          note: header?.note ? String(header.note).trim() : null,
-          status: issueNow ? "ISSUED" : existing.status,
-        },
-      })
-    }
-
-    await replaceInvoiceItems(tenantId, companyId, invoiceId, fxRate, items)
+      await replaceInvoiceItems(tx, tenantId, companyId, nextInvoiceId, fxRate, items)
+      return nextInvoiceId
+    })
 
     const invoice = await prisma.salesInvoice.findFirst({
       where: { id: invoiceId, tenantId, companyId },

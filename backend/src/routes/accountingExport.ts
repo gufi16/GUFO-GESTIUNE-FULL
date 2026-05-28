@@ -1538,7 +1538,7 @@ router.get("/api/v1/reports/accounting/saga/export-preview", requireAuth, async 
 
   if (kind === "consumption-docs") {
     const items = await prisma.consumptionDoc.findMany({
-      where: { tenantId, OR: [{ companyId }, { companyId: null }], status: "VALIDATED", docDate: { gte: from, lte: to }, ...selectedIdWhere, ...(locationId ? { locationId } : {}) },
+      where: { tenantId, OR: [{ companyId }, { companyId: null }], status: "VALIDATED", aggregateParentId: null, docDate: { gte: from, lte: to }, ...selectedIdWhere, ...(locationId ? { locationId } : {}) },
       orderBy: [{ docDate: "asc" }, { docNo: "asc" }],
     })
     return response(items.map((item) => ({ id: item.id, code: item.docNo, label: `Bon consum ${item.docNo}`, date: formatDate(item.docDate), status: item.status })))
@@ -2556,6 +2556,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         tenantId,
         OR: [{ companyId }, { companyId: null }],
         status: "VALIDATED",
+        aggregateParentId: null,
         docDate: { gte: from, lte: to },
         ...selectedIdWhere,
         ...(locationId ? { locationId } : {}),
