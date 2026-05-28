@@ -721,9 +721,10 @@ router.delete("/api/v1/meta/locations/:id", async (req: AuthedRequest, res) => {
 
 router.get("/api/v1/meta/suppliers", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
 
   const suppliers = await prisma.supplier.findMany({
-    where: { tenantId },
+    where: { tenantId, companyId },
     orderBy: { name: "asc" }
   })
 
@@ -744,6 +745,7 @@ async function reserveUniqueSupplierCode(tx: any, tenantId: string) {
 
 router.post("/api/v1/meta/suppliers", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
 
   const name = String(req.body?.name || "").trim()
   const code = String(req.body?.code || "").trim() || null
@@ -766,7 +768,7 @@ router.post("/api/v1/meta/suppliers", async (req: AuthedRequest, res) => {
     const supplier = await prisma.$transaction(async (tx) => {
       if (code) {
         const duplicate = await tx.supplier.findFirst({
-          where: { tenantId, code },
+          where: { tenantId, companyId, code },
           select: { id: true },
         })
         if (duplicate) throw new Error("Exista deja un furnizor cu acest cod.")
@@ -776,6 +778,7 @@ router.post("/api/v1/meta/suppliers", async (req: AuthedRequest, res) => {
       return tx.supplier.create({
         data: {
           tenantId,
+          companyId,
           name,
           code: nextCode,
           cif,
@@ -801,6 +804,7 @@ router.post("/api/v1/meta/suppliers", async (req: AuthedRequest, res) => {
 
 router.put("/api/v1/meta/suppliers/:id", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const id = String(req.params.id)
 
   const name = String(req.body?.name || "").trim()
@@ -823,7 +827,7 @@ router.put("/api/v1/meta/suppliers/:id", async (req: AuthedRequest, res) => {
 
   try {
     const current = await prisma.supplier.findFirst({
-      where: { id, tenantId }
+      where: { id, tenantId, companyId }
     })
 
     if (!current) {
@@ -835,7 +839,7 @@ router.put("/api/v1/meta/suppliers/:id", async (req: AuthedRequest, res) => {
 
     if (code) {
       const duplicate = await prisma.supplier.findFirst({
-        where: { tenantId, code, NOT: { id } },
+        where: { tenantId, companyId, code, NOT: { id } },
         select: { id: true },
       })
       if (duplicate) {
@@ -870,11 +874,12 @@ router.put("/api/v1/meta/suppliers/:id", async (req: AuthedRequest, res) => {
 
 router.delete("/api/v1/meta/suppliers/:id", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  const companyId = await requireRequestCompanyId(req)
   const id = String(req.params.id)
 
   try {
     const current = await prisma.supplier.findFirst({
-      where: { id, tenantId }
+      where: { id, tenantId, companyId }
     })
 
     if (!current) {
