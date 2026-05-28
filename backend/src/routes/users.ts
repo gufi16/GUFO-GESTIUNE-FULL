@@ -5,22 +5,9 @@ import { z } from "zod"
 import { prisma } from "../lib/prisma"
 import { AuthedRequest, requireAuth } from "../middleware/requireAuth"
 import { hashSecret } from "../lib/auth"
+import { ensureTenantAdminAccess } from "../lib/tenantAdmin"
 
 const router = Router()
-
-function requireTenantAdmin(req: AuthedRequest) {
-  return Boolean(
-    req.auth?.tenantId && (req.auth?.role === UserRole.OWNER || req.auth?.role === UserRole.ADMIN)
-  )
-}
-
-function ensureTenantAdmin(req: AuthedRequest, res: any) {
-  if (!requireTenantAdmin(req)) {
-    res.status(403).json({ ok: false, error: "Acces permis doar administratorilor" })
-    return false
-  }
-  return true
-}
 
 function generateTemporaryPassword() {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
@@ -116,7 +103,7 @@ const userListSelect = {
 } as const
 
 router.get("/api/v1/users", requireAuth, async (req: AuthedRequest, res) => {
-  if (!ensureTenantAdmin(req, res)) return
+  if (!ensureTenantAdminAccess(req, res)) return
 
   const [users, availableCompanies] = await Promise.all([
     prisma.user.findMany({
@@ -139,7 +126,7 @@ router.get("/api/v1/users", requireAuth, async (req: AuthedRequest, res) => {
 })
 
 router.patch("/api/v1/users/:id", requireAuth, async (req: AuthedRequest, res) => {
-  if (!ensureTenantAdmin(req, res)) return
+  if (!ensureTenantAdminAccess(req, res)) return
 
   const parsed = UpdateUserSchema.safeParse(req.body || {})
   if (!parsed.success) {
@@ -240,7 +227,7 @@ router.patch("/api/v1/users/:id", requireAuth, async (req: AuthedRequest, res) =
 })
 
 router.post("/api/v1/users", requireAuth, async (req: AuthedRequest, res) => {
-  if (!ensureTenantAdmin(req, res)) return
+  if (!ensureTenantAdminAccess(req, res)) return
 
   const parsed = CreateUserSchema.safeParse(req.body)
   if (!parsed.success) {
@@ -318,7 +305,7 @@ router.post("/api/v1/users", requireAuth, async (req: AuthedRequest, res) => {
 })
 
 router.post("/api/v1/users/:id/pos-pin", requireAuth, async (req: AuthedRequest, res) => {
-  if (!ensureTenantAdmin(req, res)) return
+  if (!ensureTenantAdminAccess(req, res)) return
 
   const parsed = SetPosPinSchema.safeParse(req.body || {})
   if (!parsed.success) {
@@ -363,7 +350,7 @@ router.post("/api/v1/users/:id/pos-pin", requireAuth, async (req: AuthedRequest,
 })
 
 router.patch("/api/v1/users/:id/companies", requireAuth, async (req: AuthedRequest, res) => {
-  if (!ensureTenantAdmin(req, res)) return
+  if (!ensureTenantAdminAccess(req, res)) return
 
   const parsed = UpdateUserCompaniesSchema.safeParse(req.body || {})
   if (!parsed.success) {
@@ -419,7 +406,7 @@ router.patch("/api/v1/users/:id/companies", requireAuth, async (req: AuthedReque
 })
 
 router.post("/api/v1/users/:id/reset-password", requireAuth, async (req: AuthedRequest, res) => {
-  if (!ensureTenantAdmin(req, res)) return
+  if (!ensureTenantAdminAccess(req, res)) return
 
   const tenantId = req.auth!.tenantId!
   const actorRole = req.auth!.role as UserRole
@@ -461,7 +448,7 @@ router.post("/api/v1/users/:id/reset-password", requireAuth, async (req: AuthedR
 })
 
 router.patch("/api/v1/users/:id/status", requireAuth, async (req: AuthedRequest, res) => {
-  if (!ensureTenantAdmin(req, res)) return
+  if (!ensureTenantAdminAccess(req, res)) return
 
   const parsed = ToggleUserSchema.safeParse(req.body)
   if (!parsed.success) {

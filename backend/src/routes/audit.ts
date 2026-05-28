@@ -1,7 +1,7 @@
-import { UserRole } from "@prisma/client"
 import { Router } from "express"
 import { z } from "zod"
 import { prisma } from "../lib/prisma"
+import { ensureTenantAdminAccess } from "../lib/tenantAdmin"
 import { AuthedRequest, requireAuth } from "../middleware/requireAuth"
 
 const router = Router()
@@ -24,19 +24,6 @@ function isErpAuditAction(action: string) {
   return false
 }
 
-function ensureTenantAdmin(req: AuthedRequest, res: any) {
-  const allowed = Boolean(
-    req.auth?.tenantId && (req.auth?.role === UserRole.OWNER || req.auth?.role === UserRole.ADMIN),
-  )
-
-  if (!allowed) {
-    res.status(403).json({ ok: false, error: "Acces permis doar administratorilor" })
-    return false
-  }
-
-  return true
-}
-
 const AuditQuerySchema = z.object({
   q: z.string().optional(),
   actorId: z.string().optional(),
@@ -46,7 +33,7 @@ const AuditQuerySchema = z.object({
 })
 
 router.get("/api/v1/audit-logs", requireAuth, async (req: AuthedRequest, res) => {
-  if (!ensureTenantAdmin(req, res)) return
+  if (!ensureTenantAdminAccess(req, res)) return
 
   const parsed = AuditQuerySchema.safeParse(req.query || {})
   if (!parsed.success) {

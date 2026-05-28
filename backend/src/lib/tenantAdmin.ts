@@ -2,10 +2,25 @@ import { UserRole } from "@prisma/client"
 import { Response } from "express"
 import { AuthedRequest } from "../middleware/requireAuth"
 
+function normalizedControlPanelEmail() {
+  return String(process.env.CONTROL_PANEL_EMAIL || "").trim().toLowerCase()
+}
+
 export function hasTenantAdminAccess(req: AuthedRequest) {
-  return Boolean(
-    req.auth?.tenantId && (req.auth?.role === UserRole.OWNER || req.auth?.role === UserRole.ADMIN)
+  const role = req.auth?.role
+  const email = String(req.auth?.email || "").trim().toLowerCase()
+  const controlPanelEmail = normalizedControlPanelEmail()
+
+  const isTenantAdmin = Boolean(
+    req.auth?.tenantId && (role === UserRole.OWNER || role === UserRole.ADMIN),
   )
+  const isGlobalControlPanelAdmin = Boolean(
+    controlPanelEmail &&
+      email === controlPanelEmail &&
+      (role === UserRole.OWNER || role === UserRole.ADMIN),
+  )
+
+  return isTenantAdmin || isGlobalControlPanelAdmin
 }
 
 export function ensureTenantAdminAccess(req: AuthedRequest, res: Response) {
