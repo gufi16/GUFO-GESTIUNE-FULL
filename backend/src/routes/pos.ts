@@ -2518,7 +2518,7 @@ const PosSaleSchema = z.object({
     .optional()
     .nullable(),
 
-  paymentType: z.enum(["CASH", "CARD", "MIXED"]).optional(),
+  paymentType: z.enum(["CASH", "CARD", "MIXED", "MODERN", "PAID"]).optional(),
   cashAmount: z.number().optional(),
   cardAmount: z.number().optional(),
   operatorName: z.string().optional(),
@@ -3931,7 +3931,13 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
   const totalWithSgr = payloadLooksWithoutSgr ? expectedTotalWithSgr : payloadTotal;
   const totalWithoutSgr = Math.max(0, totalWithSgr - totalSgr);
 
-  const normalizedPaymentType = payload.paymentType ?? "CASH";
+  const rawPaymentType = String(payload.paymentType || "CASH").toUpperCase();
+  const normalizedPaymentType =
+    rawPaymentType === "MODERN" || rawPaymentType === "PAID"
+      ? "CARD"
+      : rawPaymentType === "CASH" || rawPaymentType === "CARD" || rawPaymentType === "MIXED"
+      ? rawPaymentType
+      : "CASH";
   const normalizedSubtotal = toNumber(payload.subtotal) || totalProductLines + totalSgr;
   const normalizedMerchandiseSubtotal = toNumber(payload.merchandiseSubtotal) || totalProductLines;
   const normalizedSgrTotal = toNumber(payload.sgrTotal) || totalSgr;
