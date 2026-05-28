@@ -43,6 +43,24 @@ function normalizeFiscalReceiptNo(value: unknown) {
   return uuidLike.test(text) ? null : text
 }
 
+function deriveSalePaymentBuckets(sale: { total?: any; paymentType?: any; cashAmount?: any; cardAmount?: any }) {
+  const total = numberValue(sale?.total)
+  const cash = numberValue(sale?.cashAmount)
+  const card = numberValue(sale?.cardAmount)
+  const paymentType = normalizeText(sale?.paymentType).toUpperCase()
+
+  if (paymentType === "CASH") {
+    return { cash: cash > 0 ? cash : total, card: 0, other: 0 }
+  }
+
+  if (paymentType === "CARD") {
+    return { cash: 0, card: card > 0 ? card : total, other: 0 }
+  }
+
+  const other = Math.max(0, total - cash - card)
+  return { cash, card, other }
+}
+
 function isSyntheticSgrLine(line: any) {
   if (!line?.product?.isSgr) return false
   const unitPrice = numberValue(line?.unitPrice)
@@ -141,8 +159,9 @@ router.get("/api/v1/finance/pos-receipts", requireAuth, async (req: AuthedReques
     const totals = items.reduce(
       (acc, sale) => {
         acc.total += sale.total
-        acc.cash += sale.cashAmount
-        acc.card += sale.cardAmount
+        const buckets = deriveSalePaymentBuckets(sale)
+        acc.cash += buckets.cash
+        acc.card += buckets.card
         acc.count += 1
         return acc
       },

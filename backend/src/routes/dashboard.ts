@@ -45,6 +45,23 @@ function buildTerminalWhere(terminalId: string | null) {
   return terminalId ? { terminalId } : {}
 }
 
+function deriveSalePaymentBuckets(sale: { total?: any; paymentType?: any; cashAmount?: any; cardAmount?: any }) {
+  const total = Number(sale?.total || 0)
+  const cash = Number(sale?.cashAmount || 0)
+  const card = Number(sale?.cardAmount || 0)
+  const paymentType = String(sale?.paymentType || "").trim().toUpperCase()
+
+  if (paymentType === "CASH") {
+    return { cash: cash > 0 ? cash : total, card: 0 }
+  }
+
+  if (paymentType === "CARD") {
+    return { cash: 0, card: card > 0 ? card : total }
+  }
+
+  return { cash, card }
+}
+
 router.get("/api/v1/dashboard", requireAuth, async (req: AuthedRequest, res: Response) => {
   try {
     const tenantId = req.auth!.tenantId
@@ -73,8 +90,7 @@ router.get("/api/v1/dashboard", requireAuth, async (req: AuthedRequest, res: Res
 
     const [
       salesAgg,
-      cashAgg,
-      cardAgg,
+      paymentSales,
       salesPerDayRows,
       topProductsRows,
       lowStock,
@@ -91,13 +107,14 @@ router.get("/api/v1/dashboard", requireAuth, async (req: AuthedRequest, res: Res
         _sum: { total: true },
         _count: { id: true },
       }),
-      prisma.sale.aggregate({
+      prisma.sale.findMany({
         where: saleWhere,
-        _sum: { cashAmount: true },
-      }),
-      prisma.sale.aggregate({
-        where: saleWhere,
-        _sum: { cardAmount: true },
+        select: {
+          total: true,
+          paymentType: true,
+          cashAmount: true,
+          cardAmount: true,
+        },
       }),
       prisma.$queryRaw<Array<{ day: string; total: number }>>(Prisma.sql`
         SELECT
@@ -284,8 +301,17 @@ router.get("/api/v1/dashboard", requireAuth, async (req: AuthedRequest, res: Res
     const sales = Number(salesAgg._sum.total || 0)
     const receipts = Number(salesAgg._count.id || 0)
     const avgReceipt = receipts > 0 ? sales / receipts : 0
-    const cash = Number(cashAgg._sum.cashAmount || 0)
-    const card = Number(cardAgg._sum.cardAmount || 0)
+    const paymentTotals = paymentSales.reduce(
+      (acc, sale) => {
+        const buckets = deriveSalePaymentBuckets(sale)
+        acc.cash += buckets.cash
+        acc.card += buckets.card
+        return acc
+      },
+      { cash: 0, card: 0 }
+    )
+    const cash = paymentTotals.cash
+    const card = paymentTotals.card
 
     const recentActivity: RecentActivityItem[] = [
       ...recentSales.map((item) => ({
