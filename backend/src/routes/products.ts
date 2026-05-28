@@ -6,7 +6,7 @@ import multer from "multer"
 import { Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
-import { requireRequestCompanyId, resolveRequestCompany } from "../lib/companyScope"
+import { buildCompanyScopedTenantWhere, requireRequestCompanyId, resolveRequestCompany } from "../lib/companyScope"
 import { suggestNcCodes } from "../lib/ncSuggest"
 import { buildPublicUploadUrl, ensureUploadSubdir, normalizeStoredUploadUrl } from "../lib/uploads"
 
@@ -440,14 +440,14 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
       ? prisma.vatRate.findFirst({
           where: {
             id: vatRateId,
-            tenantId
+            ...buildCompanyScopedTenantWhere(tenantId, companyId)
           }
         })
       : Promise.resolve(null),
     !isVatPayer
       ? prisma.vatRate.findFirst({
           where: {
-            tenantId,
+            ...buildCompanyScopedTenantWhere(tenantId, companyId),
             rate: 0,
             isActive: true
           }
@@ -456,14 +456,14 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
     prisma.uom.findFirst({
       where: {
         id: uomId,
-        tenantId
+        ...buildCompanyScopedTenantWhere(tenantId, companyId)
       }
     }),
     normalizedPurchaseUomId
       ? prisma.uom.findFirst({
           where: {
             id: normalizedPurchaseUomId,
-            tenantId
+            ...buildCompanyScopedTenantWhere(tenantId, companyId)
           }
         })
       : Promise.resolve(null),
@@ -471,7 +471,7 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
       ? prisma.category.findFirst({
           where: {
             id: categoryId,
-            tenantId
+            ...buildCompanyScopedTenantWhere(tenantId, companyId)
           },
           include: {
             department: true
@@ -732,14 +732,14 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
       ? prisma.vatRate.findFirst({
           where: {
             id: vatRateId,
-            tenantId
+            ...buildCompanyScopedTenantWhere(tenantId, companyId)
           }
         })
       : Promise.resolve(null),
     !isVatPayer
       ? prisma.vatRate.findFirst({
           where: {
-            tenantId,
+            ...buildCompanyScopedTenantWhere(tenantId, companyId),
             rate: 0,
             isActive: true
           }
@@ -748,14 +748,14 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
     prisma.uom.findFirst({
       where: {
         id: uomId,
-        tenantId
+        ...buildCompanyScopedTenantWhere(tenantId, companyId)
       }
     }),
     normalizedPurchaseUomId
       ? prisma.uom.findFirst({
           where: {
             id: normalizedPurchaseUomId,
-            tenantId
+            ...buildCompanyScopedTenantWhere(tenantId, companyId)
           }
         })
       : Promise.resolve(null),
@@ -763,7 +763,7 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
       ? prisma.category.findFirst({
           where: {
             id: categoryId,
-            tenantId
+            ...buildCompanyScopedTenantWhere(tenantId, companyId)
           },
           include: {
             department: true
