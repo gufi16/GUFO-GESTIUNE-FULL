@@ -1031,6 +1031,8 @@ app.get("/api/v1/me", requireAuth, async (req: AuthedRequest, res) => {
     role: auth.role,
     name: user.name,
     email: user.email,
+    imageUrl: user.imageUrl || null,
+    avatarUrl: user.imageUrl || null,
     active_company_id: activeCompany?.id || null,
     requires_company_selection: companies.length > 1 && !auth.activeCompanyId,
     companies: companies.map((company) => ({

@@ -1,13 +1,50 @@
 // @ts-nocheck
 import { UserRole } from "@prisma/client"
 import { Router } from "express"
+import path from "path"
+import multer from "multer"
 import { z } from "zod"
 import { prisma } from "../lib/prisma"
 import { AuthedRequest, requireAuth } from "../middleware/requireAuth"
 import { hashSecret } from "../lib/auth"
 import { ensureTenantAdminAccess } from "../lib/tenantAdmin"
+import { buildPublicUploadUrl, ensureUploadSubdir, normalizeStoredUploadUrl } from "../lib/uploads"
 
 const router = Router()
+
+const avatarUploadsDir = ensureUploadSubdir("users")
+
+const avatarStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, avatarUploadsDir)
+  },
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname || "").toLowerCase()
+    const safeExt = ext || ".jpg"
+    const baseName = path
+      .basename(file.originalname || "avatar", ext)
+      .replace(/[^a-zA-Z0-9-_]/g, "-")
+      .replace(/-+/g, "-")
+      .slice(0, 50)
+
+    cb(null, `${Date.now()}-${baseName}${safeExt}`)
+  },
+})
+
+const avatarUpload = multer({
+  storage: avatarStorage,
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+  },
+  fileFilter: (_req, file, cb) => {
+    const ok = /^image\/(jpeg|jpg|png|webp|gif)$/i.test(file.mimetype)
+    if (!ok) {
+      cb(new Error("Sunt permise doar fisiere imagine: jpg, png, webp, gif."))
+      return
+    }
+    cb(null, true)
+  },
+})
 
 function generateTemporaryPassword() {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
@@ -22,6 +59,7 @@ const CreateUserSchema = z.object({
   email: z.string().email(),
   name: z.string().min(2),
   role: z.nativeEnum(UserRole),
+  imageUrl: z.string().trim().optional().nullable(),
   password: z.string().min(6).optional(),
   posPin: z.string().trim().min(4).max(8).optional(),
   companyIds: z.array(z.string()).optional(),
@@ -31,6 +69,7 @@ const UpdateUserSchema = z.object({
   email: z.string().email(),
   name: z.string().min(2),
   role: z.nativeEnum(UserRole),
+  imageUrl: z.string().trim().optional().nullable(),
   password: z.string().trim().optional(),
   posPin: z.union([z.string().trim().min(4).max(8), z.literal(""), z.null()]).optional(),
   companyIds: z.array(z.string()).optional(),
@@ -78,10 +117,15 @@ async function syncUserCompanyAccess(userId: string, companyIds: string[]) {
   })
 }
 
+function normalizeImageUrl(value: any) {
+  return normalizeStoredUploadUrl(value)
+}
+
 const userListSelect = {
   id: true,
   email: true,
   name: true,
+  imageUrl: true,
   role: true,
   isActive: true,
   posPinHash: true,
@@ -122,6 +166,19 @@ router.get("/api/v1/users", requireAuth, async (req: AuthedRequest, res) => {
       hasPosPin: Boolean(user.posPinHash),
       companies: user.companyAccesses.map((entry) => entry.company),
     })),
+  })
+})
+
+router.post("/api/v1/users/upload-avatar", requireAuth, avatarUpload.single("image"), async (req: AuthedRequest, res) => {
+  if (!ensureTenantAdminAccess(req, res)) return
+
+  if (!req.file) {
+    return res.status(400).json({ ok: false, error: "Nu ai selectat nicio imagine." })
+  }
+
+  return res.json({
+    ok: true,
+    imageUrl: buildPublicUploadUrl("users", req.file.filename),
   })
 })
 
@@ -182,6 +239,7 @@ router.patch("/api/v1/users/:id", requireAuth, async (req: AuthedRequest, res) =
   const updateData: any = {
     email: normalizedEmail,
     name: parsed.data.name.trim(),
+    imageUrl: normalizeImageUrl(parsed.data.imageUrl),
     role: requestedRole,
   }
 
@@ -270,6 +328,7 @@ router.post("/api/v1/users", requireAuth, async (req: AuthedRequest, res) => {
       tenantId,
       email: parsed.data.email.trim().toLowerCase(),
       name: parsed.data.name.trim(),
+      imageUrl: normalizeImageUrl(parsed.data.imageUrl),
       role: requestedRole,
       isActive: true,
       passwordHash: await hashSecret(rawPassword),
@@ -279,6 +338,7 @@ router.post("/api/v1/users", requireAuth, async (req: AuthedRequest, res) => {
       id: true,
       email: true,
       name: true,
+      imageUrl: true,
       role: true,
       isActive: true,
       posPinHash: true,

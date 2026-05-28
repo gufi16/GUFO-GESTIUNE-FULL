@@ -10,7 +10,7 @@ import {
   documentButtonSecondaryClass,
   documentInputClass,
 } from "../components/DocumentUi"
-import { api } from "../lib/api"
+import { API_BASE, api, authHeaders } from "../lib/api"
 
 type CompanyItem = {
   id: string
@@ -24,6 +24,7 @@ type UserItem = {
   id: string
   email: string
   name: string
+  imageUrl?: string | null
   role: string
   isActive: boolean
   hasPosPin?: boolean
@@ -55,6 +56,7 @@ const roleOptions = [
 type UserFormState = {
   name: string
   email: string
+  imageUrl: string
   role: string
   password: string
   posPin: string
@@ -64,6 +66,7 @@ type UserFormState = {
 const emptyForm = (): UserFormState => ({
   name: "",
   email: "",
+  imageUrl: "",
   role: "CASHIER",
   password: "",
   posPin: "",
@@ -85,6 +88,7 @@ export default function Utilizatori() {
   const [modalVersion, setModalVersion] = useState(0)
   const [editingCompaniesFor, setEditingCompaniesFor] = useState<string | null>(null)
   const [companySelection, setCompanySelection] = useState<string[]>([])
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
 
   async function loadUsers() {
     setLoading(true)
@@ -131,6 +135,7 @@ export default function Utilizatori() {
     setForm({
       name: user.name,
       email: user.email,
+      imageUrl: user.imageUrl || "",
       role: user.role,
       password: "",
       posPin: "",
@@ -298,6 +303,29 @@ export default function Utilizatori() {
     }
   }
 
+  async function uploadAvatar(file: File) {
+    const formData = new FormData()
+    formData.append("image", file)
+    setUploadingAvatar(true)
+    setError("")
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/users/upload-avatar`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: formData,
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Nu am putut incarca poza utilizatorului.")
+      }
+      setForm((current) => ({ ...current, imageUrl: String(data.imageUrl || "") }))
+    } catch (err: any) {
+      setError(err?.message || "Nu am putut incarca poza utilizatorului.")
+    } finally {
+      setUploadingAvatar(false)
+    }
+  }
+
   return (
     <div className="space-y-3">
       <PageHeader badge="configurare" title="Utilizatori ERP" />
@@ -350,8 +378,25 @@ export default function Utilizatori() {
               {items.map((item) => (
                 <tr key={item.id} className="border-b border-slate-100">
                   <td className="px-3 py-3">
-                    <div className="font-semibold text-slate-900">{item.name}</div>
-                    <div className="text-xs text-slate-500">{item.email}</div>
+                    <div className="flex items-center gap-3">
+                      {item.imageUrl ? (
+                        <img src={item.imageUrl} alt={item.name} className="h-10 w-10 rounded-full border border-slate-200 object-cover" />
+                      ) : (
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#17324D] text-sm font-semibold text-white">
+                          {item.name
+                            .split(/\s+/)
+                            .filter(Boolean)
+                            .slice(0, 2)
+                            .map((part) => part[0])
+                            .join("")
+                            .toUpperCase() || "U"}
+                        </div>
+                      )}
+                      <div>
+                        <div className="font-semibold text-slate-900">{item.name}</div>
+                        <div className="text-xs text-slate-500">{item.email}</div>
+                      </div>
+                    </div>
                   </td>
                   <td className="px-3 py-3">{roleLabels[item.role] || item.role}</td>
                   <td className="px-3 py-3">
@@ -509,6 +554,50 @@ export default function Utilizatori() {
                     onChange={(e) => setForm((current) => ({ ...current, email: e.target.value }))}
                     placeholder="email@client.ro"
                   />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-xs font-medium text-slate-700">Poza profil</label>
+                  <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                    {form.imageUrl ? (
+                      <img src={form.imageUrl} alt={form.name || "Avatar"} className="h-16 w-16 rounded-full border border-slate-200 object-cover" />
+                    ) : (
+                      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#17324D] text-lg font-semibold text-white">
+                        {(form.name || "U")
+                          .split(/\s+/)
+                          .filter(Boolean)
+                          .slice(0, 2)
+                          .map((part) => part[0])
+                          .join("")
+                          .toUpperCase() || "U"}
+                      </div>
+                    )}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className={documentButtonSecondaryClass}>
+                        {uploadingAvatar ? "Se incarca..." : "Incarca poza"}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          disabled={uploadingAvatar}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) void uploadAvatar(file)
+                            e.currentTarget.value = ""
+                          }}
+                        />
+                      </label>
+                      {form.imageUrl ? (
+                        <button
+                          type="button"
+                          className={documentButtonSecondaryClass}
+                          onClick={() => setForm((current) => ({ ...current, imageUrl: "" }))}
+                        >
+                          Sterge poza
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
                 </div>
 
                 <div>

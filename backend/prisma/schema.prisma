@@ -490,6 +490,7 @@ model User {
   tenantId     String
   email        String
   name         String
+  imageUrl     String?
   passwordHash String
   posPinHash   String?
   role         UserRole @default(ADMIN)
