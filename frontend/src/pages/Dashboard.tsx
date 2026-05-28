@@ -13,6 +13,8 @@
   TrendingUp,
   Wallet,
   PackageSearch,
+  Radar,
+  ShieldAlert,
 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "react-router-dom"
@@ -223,7 +225,7 @@ function SalesChart({
   const hasData = data.some((item) => item.value > 0)
 
   return (
-    <div className="min-h-[360px] rounded-[8px] border border-slate-200 bg-white p-4 shadow-sm shadow-slate-900/[0.03]">
+    <div className="min-h-[360px] rounded-[24px] border border-[#D9E4EE] bg-[linear-gradient(180deg,#FFFFFF_0%,#F8FBFD_100%)] p-5 shadow-[0_22px_48px_rgba(15,23,42,0.06)]">
       <div className="mb-2.5 flex flex-col gap-2.5 xl:flex-row xl:items-start xl:justify-between">
         <div>
           <div className="flex items-center gap-2 text-[15px] font-semibold text-slate-950">
@@ -235,7 +237,7 @@ function SalesChart({
 
       </div>
 
-      <div className="mb-4 rounded-[8px] border border-slate-200 bg-slate-50 px-4 py-3">
+      <div className="mb-4 rounded-[18px] border border-[#E4ECF3] bg-[linear-gradient(180deg,#FBFDFE_0%,#F2F7FB_100%)] px-4 py-3">
         <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[#B66A00]">
           {hovered ? hovered.label : "-"}
         </div>
@@ -249,7 +251,7 @@ function SalesChart({
 
       <div className="relative w-full overflow-hidden">
         {!hasData && !loading ? (
-          <div className="absolute inset-x-6 top-14 z-10 rounded-[8px] border border-dashed border-slate-300 bg-white/90 px-4 py-5 text-center text-sm text-slate-500">
+          <div className="absolute inset-x-6 top-14 z-10 rounded-[18px] border border-dashed border-slate-300 bg-white/90 px-4 py-5 text-center text-sm text-slate-500">
             Nu exista vanzari pentru intervalul selectat.
           </div>
         ) : null}
@@ -324,7 +326,7 @@ function MetricCard({
   icon: any
 }) {
   return (
-    <div className="rounded-[8px] border border-slate-200 bg-white p-4 shadow-sm shadow-slate-900/[0.03] transition hover:border-slate-300">
+    <div className="rounded-[22px] border border-[#DCE6EF] bg-[linear-gradient(180deg,#FFFFFF_0%,#F8FBFD_100%)] p-4 shadow-[0_16px_34px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:border-slate-300">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-[12px] font-semibold uppercase tracking-[0.16em] text-slate-500">{title}</div>
@@ -334,7 +336,7 @@ function MetricCard({
 
         <span
           className={[
-            "flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px]",
+            "flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px]",
             tone === "blue" && "bg-[#17324D] text-white",
             tone === "slate" && "bg-[#17324D] text-white",
             tone === "amber" && "bg-[#F39C12] text-white",
@@ -363,7 +365,7 @@ function SectionCard({
   children: React.ReactNode
 }) {
   return (
-    <div className="rounded-[8px] border border-slate-200 bg-white p-4 shadow-sm shadow-slate-900/[0.03]">
+    <div className="rounded-[24px] border border-[#DCE6EF] bg-[linear-gradient(180deg,#FFFFFF_0%,#F8FBFD_100%)] p-5 shadow-[0_22px_48px_rgba(15,23,42,0.06)]">
       <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="text-[15px] font-semibold text-slate-950">{title}</div>
@@ -589,6 +591,9 @@ export default function Dashboard() {
   const rangeLabel = formatRangeLabel(dateFrom, dateTo)
   const scopeLabel = activeLocationId ? "Locatie selectata" : "Toate locatiile"
   const terminalLabel = activeTerminalId ? "Terminal selectat" : "Toate terminalele"
+  const operationsHealthLabel = criticalStockCount > 0 ? "Necesita atentie" : "Stabil"
+  const operationsHealthTone =
+    criticalStockCount > 0 ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"
   const stats = [
     {
       title: "Vanzari interval",
@@ -628,52 +633,103 @@ export default function Dashboard() {
   ]
 
   return (
-    <div className="w-full space-y-4">
-      <div className="rounded-[8px] border border-slate-200 bg-white p-4 shadow-sm shadow-slate-900/[0.03]">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+    <div className="w-full space-y-5">
+      <div className="overflow-hidden rounded-[28px] border border-[#DCE6EF] bg-[radial-gradient(circle_at_top_left,_rgba(71,194,177,0.18),_transparent_35%),radial-gradient(circle_at_top_right,_rgba(243,156,18,0.16),_transparent_30%),linear-gradient(180deg,#FFFFFF_0%,#F4F8FB_100%)] p-5 shadow-[0_28px_60px_rgba(15,23,42,0.08)]">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
-            <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600">
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/80 bg-white/85 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600 shadow-sm">
               <Activity size={13} className="text-emerald-600" />
               Dashboard operational
             </div>
-            <h1 className="text-[26px] font-semibold tracking-tight text-[#17324D] md:text-[30px]">
-              Imagine rapida pe vanzari, stoc si activitate
+            <h1 className="max-w-3xl text-[28px] font-semibold tracking-tight text-[#17324D] md:text-[34px]">
+              Un tablou mai clar pentru vanzari, incasari, stoc si ritmul zilnic al operatiunii
             </h1>
-            <div className="mt-2 flex flex-wrap gap-2 text-sm text-slate-500">
-              <span className="inline-flex items-center gap-2 rounded-full bg-slate-50 px-3 py-1">
+            <div className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+              KPI-urile cheie, semnalele comerciale si zonele cu risc sunt la un loc, fara sa pierzi contextul pe locatie sau terminal.
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2 text-sm text-slate-500">
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/80 px-3 py-1 shadow-sm">
                 <Clock3 size={14} />
                 {rangeLabel}
               </span>
-              <span className="inline-flex items-center gap-2 rounded-full bg-slate-50 px-3 py-1">
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/80 px-3 py-1 shadow-sm">
                 <Boxes size={14} />
                 {scopeLabel}
               </span>
-              <span className="inline-flex items-center gap-2 rounded-full bg-slate-50 px-3 py-1">
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/80 px-3 py-1 shadow-sm">
                 <CreditCard size={14} />
                 {terminalLabel}
               </span>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:w-[520px]">
-            <div className="rounded-[8px] border border-slate-200 bg-slate-50 px-3 py-2">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:w-[620px]">
+            <div className="rounded-[20px] border border-white/70 bg-white/85 px-3 py-3 shadow-sm">
               <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Live</div>
               <div className="mt-1 text-sm font-semibold text-emerald-700">{lastUpdatedLabel}</div>
             </div>
-            <div className="rounded-[8px] border border-slate-200 bg-slate-50 px-3 py-2">
+            <div className="rounded-[20px] border border-white/70 bg-white/85 px-3 py-3 shadow-sm">
               <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Cash</div>
               <div className="mt-1 text-sm font-semibold text-slate-950">{formatRon(cashTotal)}</div>
             </div>
-            <div className="rounded-[8px] border border-slate-200 bg-slate-50 px-3 py-2">
+            <div className="rounded-[20px] border border-white/70 bg-white/85 px-3 py-3 shadow-sm">
               <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Card</div>
               <div className="mt-1 text-sm font-semibold text-slate-950">{formatRon(cardTotal)}</div>
             </div>
+            <div className="rounded-[20px] border border-white/70 bg-white/85 px-3 py-3 shadow-sm">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Stare</div>
+              <div className={`mt-1 inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-semibold ${operationsHealthTone}`}>
+                <ShieldAlert size={13} />
+                {operationsHealthLabel}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-3 xl:grid-cols-3">
+          <div className="rounded-[22px] border border-white/70 bg-white/85 px-4 py-4 shadow-sm">
+            <div className="flex items-center gap-3">
+              <span className="flex h-11 w-11 items-center justify-center rounded-[16px] bg-[#17324D] text-white">
+                <Radar size={18} />
+              </span>
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Ritm comercial</div>
+                <div className="mt-1 text-lg font-semibold text-slate-950">{formatRon(salesTotal)}</div>
+              </div>
+            </div>
+            <div className="mt-3 text-sm text-slate-500">Vanzari agregate pentru intervalul si contextul selectat.</div>
+          </div>
+
+          <div className="rounded-[22px] border border-white/70 bg-white/85 px-4 py-4 shadow-sm">
+            <div className="flex items-center gap-3">
+              <span className="flex h-11 w-11 items-center justify-center rounded-[16px] bg-emerald-500 text-white">
+                <TrendingUp size={18} />
+              </span>
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Profit top produse</div>
+                <div className="mt-1 text-lg font-semibold text-slate-950">{formatRon(totalTopProfit)}</div>
+              </div>
+            </div>
+            <div className="mt-3 text-sm text-slate-500">Aportul comercial al produselor care trag cel mai mult in sus perioada.</div>
+          </div>
+
+          <div className="rounded-[22px] border border-white/70 bg-white/85 px-4 py-4 shadow-sm">
+            <div className="flex items-center gap-3">
+              <span className="flex h-11 w-11 items-center justify-center rounded-[16px] bg-amber-500 text-white">
+                <AlertTriangle size={18} />
+              </span>
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Zona de atentie</div>
+                <div className="mt-1 text-lg font-semibold text-slate-950">{criticalStockCount} produse</div>
+              </div>
+            </div>
+            <div className="mt-3 text-sm text-slate-500">Produse sau miscari care au nevoie de reactie rapida in operare.</div>
           </div>
         </div>
       </div>
 
       {dashboardError ? (
-        <div className="rounded-[8px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-[18px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {dashboardError}
         </div>
       ) : null}
@@ -699,9 +755,9 @@ export default function Dashboard() {
           }
         >
           <div className="space-y-2.5">
-            <div className="rounded-[8px] border border-slate-200 bg-slate-50 px-3 py-3">
+            <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-3">
               <div className="flex items-center gap-3">
-                <span className="flex h-11 w-11 items-center justify-center rounded-[8px] bg-emerald-500 text-white">
+                <span className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-emerald-500 text-white">
                   <TrendingUp size={18} />
                 </span>
                 <div className="min-w-0">
@@ -711,9 +767,9 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="rounded-[8px] border border-slate-200 bg-slate-50 px-3 py-3">
+            <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-3">
               <div className="flex items-center gap-3">
-                <span className="flex h-11 w-11 items-center justify-center rounded-[8px] bg-[#17324D] text-white">
+                <span className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-[#17324D] text-white">
                   <Wallet size={18} />
                 </span>
                 <div className="min-w-0">
@@ -723,9 +779,9 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="rounded-[8px] border border-slate-200 bg-slate-50 px-3 py-3">
+            <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-3">
               <div className="flex items-center gap-3">
-                <span className="flex h-11 w-11 items-center justify-center rounded-[8px] bg-[#F39C12] text-white">
+                <span className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-[#F39C12] text-white">
                   <PackageSearch size={18} />
                 </span>
                 <div className="min-w-0">
@@ -742,7 +798,7 @@ export default function Dashboard() {
 
       {receiptsOpen ? (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
-          <div className="max-h-[90vh] w-full max-w-6xl overflow-auto rounded-[8px] bg-white p-5 shadow-2xl">
+          <div className="max-h-[90vh] w-full max-w-6xl overflow-auto rounded-[24px] bg-white p-5 shadow-2xl">
             <div className="mb-4 flex items-start justify-between gap-4">
               <div>
                 <div className="text-xl font-bold text-slate-900">Vanzari / Bon</div>
@@ -751,7 +807,7 @@ export default function Dashboard() {
               <button
                 type="button"
                 onClick={() => setReceiptsOpen(false)}
-                className="rounded-[8px] border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+                className="rounded-[14px] border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
               >
                 Inchide
               </button>
@@ -774,7 +830,7 @@ export default function Dashboard() {
             {dashboardLoading ? (
               <div className="text-sm text-slate-500">Se incarca top produse...</div>
             ) : topProducts.length === 0 ? (
-              <div className="rounded-[8px] border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+              <div className="rounded-[18px] border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-500">
                 Nu exista produse vandute in intervalul selectat.
               </div>
             ) : (
@@ -782,7 +838,7 @@ export default function Dashboard() {
                 <div
                   key={`${item.name}-${index}`}
                   className={[
-                "grid grid-cols-1 gap-2 rounded-[8px] border px-3 py-2.5 sm:grid-cols-[minmax(150px,1.4fr)_90px_130px] sm:items-center sm:gap-3",
+                "grid grid-cols-1 gap-2 rounded-[18px] border px-3 py-2.5 sm:grid-cols-[minmax(150px,1.4fr)_90px_130px] sm:items-center sm:gap-3",
                     item.profit <= 0
                       ? "border-red-200 bg-red-50"
                       : "border-slate-200 bg-slate-50",
@@ -818,15 +874,15 @@ export default function Dashboard() {
             {dashboardLoading ? (
               <div className="text-sm text-slate-500">Se incarca activitatea recenta...</div>
             ) : recentActivity.length === 0 ? (
-              <div className="rounded-[8px] border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+              <div className="rounded-[18px] border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-500">
                 Nu exista inca activitate recenta pentru locatia selectata.
               </div>
             ) : (
               recentActivity.map((item, index) => {
                 const Icon = ACTIVITY_ICON_MAP[item.type] || FileText
                 return (
-                  <div key={`${item.type}-${item.at}-${index}`} className="rounded-[8px] border border-slate-200 bg-slate-50 p-3">
-                    <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-[8px] bg-white text-slate-900 shadow-sm">
+                  <div key={`${item.type}-${item.at}-${index}`} className="rounded-[18px] border border-slate-200 bg-slate-50 p-3">
+                    <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-[14px] bg-white text-slate-900 shadow-sm">
                       <Icon size={18} />
                     </div>
                     <div className="text-sm font-semibold text-slate-900">{item.title}</div>
@@ -850,7 +906,7 @@ export default function Dashboard() {
             lowStock.map((item, index) => (
               <div
                 key={`${item.product}-${item.location}-${index}`}
-                className="flex items-center justify-between rounded-[8px] border border-slate-200 bg-slate-50 px-3 py-2.5"
+                className="flex items-center justify-between rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-2.5"
               >
                 <div className="min-w-0">
                   <div className="truncate text-sm font-semibold text-slate-800">{item.product}</div>
@@ -862,14 +918,14 @@ export default function Dashboard() {
               </div>
             ))
           ) : criticalStock.length === 0 ? (
-            <div className="rounded-[8px] border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+            <div className="rounded-[18px] border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-500">
               Nu exista suficiente date pentru alerta de stoc critic.
             </div>
           ) : (
             criticalStock.map((product, index) => (
               <div
                 key={`${product.productId || product.id || index}`}
-                className="flex items-center justify-between rounded-[8px] border border-slate-200 bg-slate-50 px-3 py-2.5"
+                className="flex items-center justify-between rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-2.5"
               >
                 <div className="min-w-0">
                   <div className="truncate text-sm font-semibold text-slate-800">{product.name || "Produs fara nume"}</div>

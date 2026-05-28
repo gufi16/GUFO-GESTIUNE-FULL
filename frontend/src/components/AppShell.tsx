@@ -8,7 +8,7 @@ export default function AppShell() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-white text-slate-900">
+    <div className="min-h-screen overflow-x-hidden bg-[#F4F7FB] text-slate-900">
       <div className="flex min-h-screen overflow-x-hidden">
         <Sidebar
           mobileOpen={mobileSidebarOpen}
@@ -18,7 +18,7 @@ export default function AppShell() {
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar onOpenMenu={() => setMobileSidebarOpen(true)} />
 
-          <main className="flex-1 overflow-x-hidden p-2 md:p-3 xl:p-3">
+          <main className="flex-1 overflow-x-hidden p-3 md:p-4 xl:p-4">
             <div className="w-full min-w-0">
               <Outlet />
             </div>
