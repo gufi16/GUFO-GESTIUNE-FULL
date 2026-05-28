@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { Router } from "express"
+import { Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { reserveNextNumber } from "../lib/numbering"
@@ -167,40 +168,15 @@ function enrichReceipt(receipt: any) {
   }
 }
 
-async function recalcReceipt(receiptId: string) {
-  const items = await prisma.purchaseReceiptItem.findMany({
-    where: { receiptId }
-  })
-
-  const totalNetFc = items.reduce((s, x) => s + toNumber(x.lineNetFc), 0)
-  const totalVatFc = items.reduce((s, x) => s + toNumber(x.lineVatFc), 0)
-  const totalGrossFc = items.reduce((s, x) => s + toNumber(x.lineGrossFc), 0)
-
-  const totalNetRon = items.reduce((s, x) => s + toNumber(x.lineNetRon), 0)
-  const totalVatRon = items.reduce((s, x) => s + toNumber(x.lineVatRon), 0)
-  const totalGrossRon = items.reduce((s, x) => s + toNumber(x.lineGrossRon), 0)
-
-  return prisma.purchaseReceipt.update({
-    where: { id: receiptId },
-    data: {
-      totalNetFc,
-      totalVatFc,
-      totalGrossFc,
-      totalNetRon,
-      totalVatRon,
-      totalGrossRon
-    }
-  })
-}
-
 async function createOrReplaceReceiptItems(
+  client: typeof prisma | Prisma.TransactionClient,
   tenantId: string,
   companyId: string,
   receiptId: string,
   fxRate: number,
   items: any[]
 ) {
-  await prisma.purchaseReceiptItem.deleteMany({
+  await client.purchaseReceiptItem.deleteMany({
     where: { receiptId }
   })
 
@@ -230,7 +206,7 @@ async function createOrReplaceReceiptItems(
       throw new Error("Pretul fara TVA trebuie sa fie >= 0.")
     }
 
-    const product = await prisma.product.findFirst({
+    const product = await client.product.findFirst({
       where: {
         id: productId,
         tenantId,
@@ -268,7 +244,7 @@ async function createOrReplaceReceiptItems(
       throw new Error("UM selectata nu este valida pentru produsul ales.")
     }
 
-    const uom = await prisma.uom.findFirst({
+    const uom = await client.uom.findFirst({
       where: {
         id: usedUomId,
         tenantId
@@ -296,7 +272,7 @@ async function createOrReplaceReceiptItems(
     const lineVatRon = lineVatFc * fxRate
     const lineGrossRon = lineGrossFc * fxRate
 
-    await prisma.purchaseReceiptItem.create({
+    await client.purchaseReceiptItem.create({
       data: {
         receiptId,
         productId,
@@ -320,134 +296,171 @@ async function createOrReplaceReceiptItems(
     })
   }
 
-  await recalcReceipt(receiptId)
+  await recalcReceiptWithClient(client, receiptId)
+}
+
+async function recalcReceiptWithClient(client: typeof prisma | Prisma.TransactionClient, receiptId: string) {
+  const items = await client.purchaseReceiptItem.findMany({
+    where: { receiptId }
+  })
+
+  const totalNetFc = items.reduce((s, x) => s + toNumber(x.lineNetFc), 0)
+  const totalVatFc = items.reduce((s, x) => s + toNumber(x.lineVatFc), 0)
+  const totalGrossFc = items.reduce((s, x) => s + toNumber(x.lineGrossFc), 0)
+
+  const totalNetRon = items.reduce((s, x) => s + toNumber(x.lineNetRon), 0)
+  const totalVatRon = items.reduce((s, x) => s + toNumber(x.lineVatRon), 0)
+  const totalGrossRon = items.reduce((s, x) => s + toNumber(x.lineGrossRon), 0)
+
+  return client.purchaseReceipt.update({
+    where: { id: receiptId },
+    data: {
+      totalNetFc,
+      totalVatFc,
+      totalGrossFc,
+      totalNetRon,
+      totalVatRon,
+      totalGrossRon
+    }
+  })
+}
+
+async function recalcReceipt(receiptId: string) {
+  return recalcReceiptWithClient(prisma, receiptId)
+}
+
+async function postReceiptToStockWithClient(
+  tx: typeof prisma | Prisma.TransactionClient,
+  tenantId: string,
+  companyId: string,
+  receiptId: string
+) {
+  const receipt = await tx.purchaseReceipt.findFirst({
+    where: {
+      id: receiptId,
+      tenantId,
+      companyId
+    },
+    include: {
+      items: {
+        include: {
+          product: true
+        }
+      },
+      warehouse: true
+    }
+  })
+
+  if (!receipt) {
+    throw new Error("Receipt not found")
+  }
+
+  if (receipt.status !== "DRAFT") {
+    throw new Error("Doar documentele DRAFT pot fi postate.")
+  }
+
+  if (!receipt.items.length) {
+    throw new Error("Documentul nu are pozitii.")
+  }
+
+  for (const item of receipt.items) {
+    const stockQty = toNumber(item.stockQty)
+    const unitCostNetRon = toNumber(item.unitCostNetRon)
+    const lineNetRon = toNumber(item.lineNetRon)
+    const shouldCreateLot = Boolean(item.product?.trackLot || item.product?.trackExpiry)
+    const lotNo =
+      String(item.lotNo || "").trim() ||
+      (shouldCreateLot ? `${receipt.docNo}-${String(item.product?.sku || item.productId).trim()}` : "")
+
+    let lotId: string | null = null
+
+    if (shouldCreateLot) {
+      const lot = await tx.stockLot.create({
+        data: {
+          tenantId,
+          companyId,
+          locationId: receipt.locationId,
+          warehouseId: receipt.warehouseId || null,
+          productId: item.productId,
+          sourceReceiptId: receipt.id,
+          sourceReceiptItemId: item.id,
+          lotNo,
+          expiryDate: item.expiryDate || null,
+          receivedAt: receipt.docDate,
+          initialQty: stockQty,
+          remainingQty: stockQty,
+          unitCostNetRon,
+          totalRemainingValue: lineNetRon
+        }
+      })
+      lotId = lot.id
+    }
+
+    await tx.stockBalance.upsert({
+      where: {
+        tenantId_companyId_locationId_productId_warehouseScope: {
+          tenantId,
+          companyId,
+          locationId: receipt.locationId,
+          productId: item.productId,
+          warehouseScope: String(receipt.warehouseId || "").trim() || "__NO_WAREHOUSE__",
+        }
+      },
+      update: {
+        qty: {
+          increment: stockQty
+        },
+        warehouseScope: String(receipt.warehouseId || "").trim() || "__NO_WAREHOUSE__",
+        warehouseId: receipt.warehouseId || null
+      },
+      create: {
+        tenantId,
+        companyId,
+        locationId: receipt.locationId,
+        warehouseId: receipt.warehouseId || null,
+        warehouseScope: String(receipt.warehouseId || "").trim() || "__NO_WAREHOUSE__",
+        productId: item.productId,
+        qty: stockQty
+      }
+    })
+
+    await tx.stockMove.create({
+      data: {
+        tenantId,
+        companyId,
+        locationId: receipt.locationId,
+        warehouseId: receipt.warehouseId || null,
+        productId: item.productId,
+        lotId,
+        type: "IN",
+        qty: stockQty,
+        unitCost: unitCostNetRon,
+        totalValue: lineNetRon,
+        refType: "PURCHASE",
+        refId: receipt.id,
+        refItemId: item.id,
+        note: `NIR ${receipt.docNo}`
+      }
+    })
+
+    await tx.product.update({
+      where: { id: item.productId },
+      data: {
+        costPrice: item.unitCostNetRon
+      }
+    })
+  }
+
+  return tx.purchaseReceipt.update({
+    where: { id: receiptId },
+    data: {
+      status: "POSTED"
+    }
+  })
 }
 
 async function postReceiptToStock(tenantId: string, companyId: string, receiptId: string) {
-  return prisma.$transaction(async (tx) => {
-    const receipt = await tx.purchaseReceipt.findFirst({
-      where: {
-        id: receiptId,
-        tenantId,
-        companyId
-      },
-      include: {
-        items: {
-          include: {
-            product: true
-          }
-        },
-        warehouse: true
-      }
-    })
-
-    if (!receipt) {
-      throw new Error("Receipt not found")
-    }
-
-    if (receipt.status !== "DRAFT") {
-      throw new Error("Doar documentele DRAFT pot fi postate.")
-    }
-
-    if (!receipt.items.length) {
-      throw new Error("Documentul nu are pozitii.")
-    }
-
-    for (const item of receipt.items) {
-      const stockQty = toNumber(item.stockQty)
-      const unitCostNetRon = toNumber(item.unitCostNetRon)
-      const lineNetRon = toNumber(item.lineNetRon)
-      const shouldCreateLot = Boolean(item.product?.trackLot || item.product?.trackExpiry)
-      const lotNo =
-        String(item.lotNo || "").trim() ||
-        (shouldCreateLot ? `${receipt.docNo}-${String(item.product?.sku || item.productId).trim()}` : "")
-
-      let lotId: string | null = null
-
-      if (shouldCreateLot) {
-        const lot = await tx.stockLot.create({
-          data: {
-            tenantId,
-            companyId,
-            locationId: receipt.locationId,
-            warehouseId: receipt.warehouseId || null,
-            productId: item.productId,
-            sourceReceiptId: receipt.id,
-            sourceReceiptItemId: item.id,
-            lotNo,
-            expiryDate: item.expiryDate || null,
-            receivedAt: receipt.docDate,
-            initialQty: stockQty,
-            remainingQty: stockQty,
-            unitCostNetRon,
-            totalRemainingValue: lineNetRon
-          }
-        })
-        lotId = lot.id
-      }
-
-      await tx.stockBalance.upsert({
-        where: {
-          tenantId_companyId_locationId_productId_warehouseScope: {
-            tenantId,
-            companyId,
-            locationId: receipt.locationId,
-            productId: item.productId,
-            warehouseScope: String(receipt.warehouseId || "").trim() || "__NO_WAREHOUSE__",
-          }
-        },
-        update: {
-          qty: {
-            increment: stockQty
-          },
-          warehouseScope: String(receipt.warehouseId || "").trim() || "__NO_WAREHOUSE__",
-          warehouseId: receipt.warehouseId || null
-        },
-        create: {
-          tenantId,
-          companyId,
-          locationId: receipt.locationId,
-          warehouseId: receipt.warehouseId || null,
-          warehouseScope: String(receipt.warehouseId || "").trim() || "__NO_WAREHOUSE__",
-          productId: item.productId,
-          qty: stockQty
-        }
-      })
-
-      await tx.stockMove.create({
-        data: {
-          tenantId,
-          companyId,
-          locationId: receipt.locationId,
-          warehouseId: receipt.warehouseId || null,
-          productId: item.productId,
-          lotId,
-          type: "IN",
-          qty: stockQty,
-          unitCost: unitCostNetRon,
-          totalValue: lineNetRon,
-          refType: "PURCHASE",
-          refId: receipt.id,
-          refItemId: item.id,
-          note: `NIR ${receipt.docNo}`
-        }
-      })
-
-      await tx.product.update({
-        where: { id: item.productId },
-        data: {
-          costPrice: item.unitCostNetRon
-        }
-      })
-    }
-
-    return tx.purchaseReceipt.update({
-      where: { id: receiptId },
-      data: {
-        status: "POSTED"
-      }
-    })
-  })
+  return prisma.$transaction(async (tx) => postReceiptToStockWithClient(tx, tenantId, companyId, receiptId))
 }
 
 router.get("/api/v1/purchase-receipts", async (req: AuthedRequest, res) => {
@@ -628,117 +641,109 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
       })
     }
 
-    let receiptId = id ? String(id) : null
-    const autoDocNo =
-      !receiptId && !rawDocNo
-        ? await prisma.$transaction((tx) => reserveNextNumber(tx, tenantId, "purchaseReceipt"))
-        : ""
-    const finalDocNo = rawDocNo || autoDocNo
+    const receiptId = await prisma.$transaction(async (tx) => {
+      let nextReceiptId = id ? String(id) : null
+      const autoDocNo =
+        !nextReceiptId && !rawDocNo
+          ? await reserveNextNumber(tx, tenantId, "purchaseReceipt")
+          : ""
+      const finalDocNo = rawDocNo || autoDocNo
 
-    if (!receiptId) {
-      const duplicate = await prisma.purchaseReceipt.findFirst({
-        where: {
-          tenantId,
-          companyId,
-          docNo: finalDocNo
+      if (!nextReceiptId) {
+        const duplicate = await tx.purchaseReceipt.findFirst({
+          where: {
+            tenantId,
+            companyId,
+            docNo: finalDocNo
+          }
+        })
+
+        if (duplicate) {
+          throw new Error("Exista deja un document cu acest numar.")
         }
-      })
 
-      if (duplicate) {
-        return res.status(400).json({
-          ok: false,
-          error: "Exista deja un document cu acest numar."
+        const created = await tx.purchaseReceipt.create({
+          data: {
+            tenantId,
+            companyId,
+            locationId,
+            warehouseId: warehouse.id,
+            supplierId: supplier?.id || null,
+            supplierName: supplier?.name || (supplierName ? String(supplierName).trim() : null),
+            supplierCode: supplier?.code || (supplierCode ? String(supplierCode).trim() : null),
+            docNo: finalDocNo,
+            docDate: new Date(docDate),
+            currency: normalizedCurrency,
+            fxRate: normalizedFxRate,
+            note: note ? String(note).trim() : null,
+            sourceIncomingEInvoiceId,
+            spvDownloadId,
+            spvUploadIndex,
+            spvInvoiceNo,
+            status: "DRAFT"
+          }
+        })
+
+        nextReceiptId = created.id
+      } else {
+        const existing = await tx.purchaseReceipt.findFirst({
+          where: {
+            id: nextReceiptId,
+            ...buildCompanyScopedTenantWhere(tenantId, companyId)
+          }
+        })
+
+        if (!existing) {
+          throw new Error("Receipt not found")
+        }
+
+        if (existing.status !== "DRAFT") {
+          throw new Error("Documentul POSTED este read-only si nu mai poate fi modificat.")
+        }
+
+        const duplicate = await tx.purchaseReceipt.findFirst({
+          where: {
+            tenantId,
+            companyId,
+            docNo: finalDocNo,
+            NOT: { id: nextReceiptId }
+          }
+        })
+
+        if (duplicate) {
+          throw new Error("Exista deja un document cu acest numar.")
+        }
+
+        await tx.purchaseReceipt.update({
+          where: { id: nextReceiptId },
+          data: {
+            companyId,
+            locationId,
+            warehouseId: warehouse.id,
+            supplierId: supplier?.id || null,
+            supplierName: supplier?.name || (supplierName ? String(supplierName).trim() : null),
+            supplierCode: supplier?.code || (supplierCode ? String(supplierCode).trim() : null),
+            docNo: finalDocNo,
+            docDate: new Date(docDate),
+            currency: normalizedCurrency,
+            fxRate: normalizedFxRate,
+            note: note ? String(note).trim() : null,
+            sourceIncomingEInvoiceId,
+            spvDownloadId,
+            spvUploadIndex,
+            spvInvoiceNo
+          }
         })
       }
 
-      const created = await prisma.purchaseReceipt.create({
-        data: {
-          tenantId,
-          companyId,
-          locationId,
-          warehouseId: warehouse.id,
-          supplierId: supplier?.id || null,
-          supplierName: supplier?.name || (supplierName ? String(supplierName).trim() : null),
-          supplierCode: supplier?.code || (supplierCode ? String(supplierCode).trim() : null),
-          docNo: finalDocNo,
-          docDate: new Date(docDate),
-          currency: normalizedCurrency,
-          fxRate: normalizedFxRate,
-          note: note ? String(note).trim() : null,
-          sourceIncomingEInvoiceId,
-          spvDownloadId,
-          spvUploadIndex,
-          spvInvoiceNo,
-          status: "DRAFT"
-        }
-      })
+      await createOrReplaceReceiptItems(tx, tenantId, companyId, nextReceiptId, normalizedFxRate, items)
 
-      receiptId = created.id
-    } else {
-      const existing = await prisma.purchaseReceipt.findFirst({
-        where: {
-          id: receiptId,
-          ...buildCompanyScopedTenantWhere(tenantId, companyId)
-        }
-      })
-
-      if (!existing) {
-        return res.status(404).json({
-          ok: false,
-          error: "Receipt not found"
-        })
+      if (postNow === true) {
+        await postReceiptToStockWithClient(tx, tenantId, companyId, nextReceiptId)
       }
 
-      if (existing.status !== "DRAFT") {
-        return res.status(400).json({
-          ok: false,
-          error: "Documentul POSTED este read-only si nu mai poate fi modificat."
-        })
-      }
-
-      const duplicate = await prisma.purchaseReceipt.findFirst({
-        where: {
-          tenantId,
-          companyId,
-          docNo: finalDocNo,
-          NOT: { id: receiptId }
-        }
-      })
-
-      if (duplicate) {
-        return res.status(400).json({
-          ok: false,
-          error: "Exista deja un document cu acest numar."
-        })
-      }
-
-      await prisma.purchaseReceipt.update({
-        where: { id: receiptId },
-        data: {
-          companyId,
-          locationId,
-          warehouseId: warehouse.id,
-          supplierId: supplier?.id || null,
-          supplierName: supplier?.name || (supplierName ? String(supplierName).trim() : null),
-          supplierCode: supplier?.code || (supplierCode ? String(supplierCode).trim() : null),
-          docNo: finalDocNo,
-          docDate: new Date(docDate),
-          currency: normalizedCurrency,
-          fxRate: normalizedFxRate,
-          note: note ? String(note).trim() : null,
-          sourceIncomingEInvoiceId,
-          spvDownloadId,
-          spvUploadIndex,
-          spvInvoiceNo
-        }
-      })
-    }
-
-    await createOrReplaceReceiptItems(tenantId, companyId, receiptId, normalizedFxRate, items)
-
-    if (postNow === true) {
-      await postReceiptToStock(tenantId, companyId, receiptId)
-    }
+      return nextReceiptId
+    })
 
     const receipt = await prisma.purchaseReceipt.findFirst({
       where: {
