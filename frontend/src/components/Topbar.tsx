@@ -32,7 +32,7 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
   const [terminalId, setTerminalIdState] = useState(getActiveTerminalId())
   const [warehouseId, setWarehouseIdState] = useState(getActiveWarehouseId())
   const [userLabel, setUserLabel] = useState("Utilizator")
-  const [userMeta, setUserMeta] = useState("ERP")
+  const [userAvatarUrl, setUserAvatarUrl] = useState("")
   const [companyLabel, setCompanyLabel] = useState("Firma activa")
   const [companyChoices, setCompanyChoices] = useState<Array<{ id: string; name: string; code?: string; cui?: string; isDefault?: boolean }>>([])
   const [activeCompanyId, setActiveCompanyId] = useState("")
@@ -68,6 +68,14 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
       description: "Verifica ultimele alerte disponibile.",
     },
   ]
+
+  const userInitials = useMemo(() => {
+    const source = (userLabel || "U").trim()
+    const parts = source.split(/\s+/).filter(Boolean)
+    if (parts.length === 0) return "U"
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+    return `${parts[0][0] || ""}${parts[parts.length - 1][0] || ""}`.toUpperCase()
+  }, [userLabel])
 
   useEffect(() => {
     let cancelled = false
@@ -118,10 +126,14 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
               ? String((profile as any).email).trim()
               : "Utilizator"
 
-        const profileRole =
-          typeof (profile as any)?.role === "string" && (profile as any).role.trim()
-            ? String((profile as any).role).trim()
-            : "ERP"
+        const nextAvatarUrl = [
+          (profile as any)?.avatarUrl,
+          (profile as any)?.profileImageUrl,
+          (profile as any)?.photoUrl,
+          (profile as any)?.imageUrl,
+          (profile as any)?.avatar,
+          (profile as any)?.image,
+        ].find((value) => typeof value === "string" && value.trim()) as string | undefined
         const nextActiveCompanyId =
           typeof (profile as any)?.active_company_id === "string" ? String((profile as any).active_company_id) : ""
         const companies = Array.isArray((profile as any)?.companies) ? (profile as any).companies : []
@@ -132,7 +144,7 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
           null
 
         setUserLabel(profileName)
-        setUserMeta(profileRole)
+        setUserAvatarUrl(nextAvatarUrl?.trim() || "")
         setCompanyChoices(companies)
         setActiveCompanyId(activeCompany?.id || "")
         setCompanyLabel(activeCompany?.name || "Firma activa")
@@ -651,10 +663,19 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
             </div>
 
             <div className="flex min-w-0 max-w-[220px] items-center gap-2 rounded-[12px] border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm shadow-slate-900/[0.03]">
-              <img src="/gufo-logo.png?v=20260417-6" alt="Gufo" className="h-10 w-10 object-contain" />
+              {userAvatarUrl ? (
+                <img
+                  src={userAvatarUrl}
+                  alt={userLabel}
+                  className="h-10 w-10 shrink-0 rounded-full border border-slate-200 object-cover"
+                />
+              ) : (
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#17324D] text-sm font-semibold text-white">
+                  {userInitials}
+                </div>
+              )}
               <div className="min-w-0 text-sm">
                 <div className="truncate font-semibold text-[#17324D]">{userLabel}</div>
-                <div className="truncate text-xs uppercase text-slate-500">{companyLabel} • {userMeta}</div>
               </div>
             </div>
 

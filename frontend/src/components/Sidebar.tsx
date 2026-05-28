@@ -21,6 +21,8 @@ import {
 } from "lucide-react"
 import { hasModule } from "../lib/modules"
 
+const APP_VERSION = "V1.1"
+
 type SidebarItem = {
   to: string
   label: string
@@ -222,13 +224,13 @@ function SidebarContent({
       </div>
 
       <div className="px-3 pb-3 pt-1">
-        <div className="rounded-[16px] border border-emerald-100 bg-[linear-gradient(180deg,#F1FBF8_0%,#E8F8F3_100%)] px-3 py-2.5">
-          <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.15em] text-emerald-800">
-            <Circle size={8} fill="currentColor" />
-            Sistem activ
+        <div className="flex items-center justify-between rounded-[16px] border border-emerald-100 bg-[linear-gradient(180deg,#F1FBF8_0%,#E8F8F3_100%)] px-3 py-2.5">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.15em] text-emerald-800">
+            Versiunea: {APP_VERSION}
           </div>
-          <div className="mt-1 text-[11px] leading-4 text-emerald-700">
-            Datele live, SPV si documentele raman sincronizate in zonele critice.
+          <div className="inline-flex items-center gap-2 rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-emerald-700">
+            <Circle size={8} fill="currentColor" />
+            Activ
           </div>
         </div>
       </div>

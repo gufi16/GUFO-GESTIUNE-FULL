@@ -11,10 +11,7 @@
   Receipt,
   ShoppingCart,
   TrendingUp,
-  Wallet,
   PackageSearch,
-  Radar,
-  ShieldAlert,
 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "react-router-dom"
@@ -219,8 +216,13 @@ function SalesChart({
     return { ...d, x, y }
   })
 
-  const linePoints = points.map((p) => `${p.x},${p.y}`).join(" ")
-  const areaPoints = `${padding},${height - padding} ${linePoints} ${width - padding},${height - padding}`
+  const linePath = points.reduce((path, point, index) => {
+    if (index === 0) return `M ${point.x} ${point.y}`
+    const previous = points[index - 1]
+    const controlX = (previous.x + point.x) / 2
+    return `${path} C ${controlX} ${previous.y}, ${controlX} ${point.y}, ${point.x} ${point.y}`
+  }, "")
+  const areaPath = `${linePath} L ${width - padding} ${height - padding} L ${padding} ${height - padding} Z`
   const hovered = points[Math.min(hoveredIndex, Math.max(points.length - 1, 0))]
   const hasData = data.some((item) => item.value > 0)
 
@@ -237,18 +239,6 @@ function SalesChart({
 
       </div>
 
-      <div className="mb-4 rounded-[18px] border border-[#E4ECF3] bg-[linear-gradient(180deg,#FBFDFE_0%,#F2F7FB_100%)] px-4 py-3">
-        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[#B66A00]">
-          {hovered ? hovered.label : "-"}
-        </div>
-        <div className="mt-1 text-xl font-semibold text-slate-900">
-          {hovered ? formatRon(hovered.value) : "—"}
-        </div>
-        <div className="mt-1 text-sm text-slate-500">
-          {hovered ? `Vanzari inregistrate la data de ${hovered.date}` : "Nu exista date in intervalul ales."}
-        </div>
-      </div>
-
       <div className="relative w-full overflow-hidden">
         {!hasData && !loading ? (
           <div className="absolute inset-x-6 top-14 z-10 rounded-[18px] border border-dashed border-slate-300 bg-white/90 px-4 py-5 text-center text-sm text-slate-500">
@@ -258,8 +248,13 @@ function SalesChart({
         <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="h-[190px] w-full sm:h-[210px]">
           <defs>
             <linearGradient id="salesFill" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="#F39C12" stopOpacity="0.22" />
-              <stop offset="100%" stopColor="#F39C12" stopOpacity="0.03" />
+              <stop offset="0%" stopColor="#17324D" stopOpacity="0.18" />
+              <stop offset="45%" stopColor="#47C2B1" stopOpacity="0.12" />
+              <stop offset="100%" stopColor="#47C2B1" stopOpacity="0.02" />
+            </linearGradient>
+            <linearGradient id="salesLine" x1="0" x2="1" y1="0" y2="0">
+              <stop offset="0%" stopColor="#17324D" />
+              <stop offset="100%" stopColor="#47C2B1" />
             </linearGradient>
           </defs>
 
@@ -278,13 +273,13 @@ function SalesChart({
             )
           })}
 
-          {points.length > 1 ? <polygon points={areaPoints} fill="url(#salesFill)" /> : null}
+          {points.length > 1 ? <path d={areaPath} fill="url(#salesFill)" /> : null}
           {points.length > 1 ? (
-            <polyline
-              points={linePoints}
+            <path
+              d={linePath}
               fill="none"
-              stroke="#17324D"
-              strokeWidth="3.5"
+              stroke="url(#salesLine)"
+              strokeWidth="4"
               strokeLinejoin="round"
               strokeLinecap="round"
             />
@@ -298,15 +293,22 @@ function SalesChart({
               style={{ cursor: "pointer" }}
             >
               {hoveredIndex === index ? (
-                <circle cx={point.x} cy={point.y} r="14" fill="#17324D" opacity="0.12" />
+                <circle cx={point.x} cy={point.y} r="16" fill="#47C2B1" opacity="0.16" />
               ) : null}
-              <circle cx={point.x} cy={point.y} r={hoveredIndex === index ? "6.5" : "5"} fill="#17324D" />
+              <circle cx={point.x} cy={point.y} r={hoveredIndex === index ? "7" : "5"} fill="#17324D" />
+              <circle cx={point.x} cy={point.y} r={hoveredIndex === index ? "3.2" : "2.4"} fill="#fff" />
               <text x={point.x} y={height - 4} textAnchor="middle" fontSize="12" fill="#64748b">
                 {point.label}
               </text>
             </g>
           ))}
         </svg>
+        {hovered ? (
+          <div className="pointer-events-none absolute left-4 top-2 rounded-[16px] border border-slate-200 bg-white/95 px-3 py-2 shadow-lg shadow-slate-900/10">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{hovered.label}</div>
+            <div className="mt-1 text-lg font-semibold text-slate-950">{formatRon(hovered.value)}</div>
+          </div>
+        ) : null}
       </div>
     </div>
   )
@@ -576,12 +578,6 @@ export default function Dashboard() {
 
   const safeSales = filteredSales.length ? filteredSales : [{ date: "0000-00-00", label: "-", value: 0 }]
 
-  const bestDay = useMemo(() => {
-    if (!filteredSales.length) return "-"
-    const top = [...filteredSales].sort((a, b) => b.value - a.value)[0]
-    return `${top.label} • ${formatRon(top.value)}`
-  }, [filteredSales])
-
   const criticalStockCount = lowStock.length || criticalStock.length
   const paymentTotal = cashTotal + cardTotal
   const cashShare = paymentTotal > 0 ? (cashTotal / paymentTotal) * 100 : 0
@@ -591,9 +587,7 @@ export default function Dashboard() {
   const rangeLabel = formatRangeLabel(dateFrom, dateTo)
   const scopeLabel = activeLocationId ? "Locatie selectata" : "Toate locatiile"
   const terminalLabel = activeTerminalId ? "Terminal selectat" : "Toate terminalele"
-  const operationsHealthLabel = criticalStockCount > 0 ? "Necesita atentie" : "Stabil"
-  const operationsHealthTone =
-    criticalStockCount > 0 ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"
+  const appVersion = "V1.1"
   const stats = [
     {
       title: "Vanzari interval",
@@ -671,53 +665,11 @@ export default function Dashboard() {
               <div className="mt-1 text-sm font-semibold text-slate-950">{formatRon(cardTotal)}</div>
             </div>
             <div className="rounded-[20px] border border-white/70 bg-white/85 px-3 py-3 shadow-sm">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Stare</div>
-              <div className={`mt-1 inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-semibold ${operationsHealthTone}`}>
-                <ShieldAlert size={13} />
-                {operationsHealthLabel}
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Versiune</div>
+              <div className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
+                {appVersion}
               </div>
             </div>
-          </div>
-        </div>
-
-        <div className="mt-5 grid grid-cols-1 gap-3 xl:grid-cols-3">
-          <div className="rounded-[22px] border border-white/70 bg-white/85 px-4 py-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <span className="flex h-11 w-11 items-center justify-center rounded-[16px] bg-[#17324D] text-white">
-                <Radar size={18} />
-              </span>
-              <div>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Ritm comercial</div>
-                <div className="mt-1 text-lg font-semibold text-slate-950">{formatRon(salesTotal)}</div>
-              </div>
-            </div>
-            <div className="mt-3 text-sm text-slate-500">Vanzari agregate pentru intervalul si contextul selectat.</div>
-          </div>
-
-          <div className="rounded-[22px] border border-white/70 bg-white/85 px-4 py-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <span className="flex h-11 w-11 items-center justify-center rounded-[16px] bg-emerald-500 text-white">
-                <TrendingUp size={18} />
-              </span>
-              <div>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Profit top produse</div>
-                <div className="mt-1 text-lg font-semibold text-slate-950">{formatRon(totalTopProfit)}</div>
-              </div>
-            </div>
-            <div className="mt-3 text-sm text-slate-500">Aportul comercial al produselor care trag cel mai mult in sus perioada.</div>
-          </div>
-
-          <div className="rounded-[22px] border border-white/70 bg-white/85 px-4 py-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <span className="flex h-11 w-11 items-center justify-center rounded-[16px] bg-amber-500 text-white">
-                <AlertTriangle size={18} />
-              </span>
-              <div>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Zona de atentie</div>
-                <div className="mt-1 text-lg font-semibold text-slate-950">{criticalStockCount} produse</div>
-              </div>
-            </div>
-            <div className="mt-3 text-sm text-slate-500">Produse sau miscari care au nevoie de reactie rapida in operare.</div>
           </div>
         </div>
       </div>
@@ -734,58 +686,11 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 gap-3 2xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
+      <div className="grid grid-cols-1 gap-3">
         <SalesChart
           data={safeSales}
           loading={dashboardLoading}
         />
-
-        <SectionCard
-          title="Rezumat"
-          action={
-            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
-              live
-            </span>
-          }
-        >
-          <div className="space-y-2.5">
-            <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-3">
-              <div className="flex items-center gap-3">
-                <span className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-emerald-500 text-white">
-                  <TrendingUp size={18} />
-                </span>
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-slate-900">Cea mai buna zi</div>
-                  <div className="mt-1 text-sm text-slate-500">{bestDay}</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-3">
-              <div className="flex items-center gap-3">
-                <span className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-[#17324D] text-white">
-                  <Wallet size={18} />
-                </span>
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-slate-900">Total incasari urmarite</div>
-                  <div className="mt-1 text-sm text-slate-500">{formatRon(paymentTotal)}</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-3">
-              <div className="flex items-center gap-3">
-                <span className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-[#F39C12] text-white">
-                  <PackageSearch size={18} />
-                </span>
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-slate-900">Alerte stoc</div>
-                  <div className="mt-1 text-sm text-slate-500">{criticalStockCount} produse necesita atentie</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </SectionCard>
       </div>
 
       <QuickActions onOpenReceipts={() => setReceiptsOpen(true)} />
