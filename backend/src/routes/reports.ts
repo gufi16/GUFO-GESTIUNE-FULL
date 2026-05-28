@@ -90,8 +90,10 @@ router.get("/api/v1/reports/advanced", requireAuth, async (req: AuthedRequest, r
 
     const locationId = String(req.query.locationId || "").trim() || null
     const terminalId = String(req.query.terminalId || "").trim() || null
+    const warehouseId = String(req.query.warehouseId || "").trim() || null
     const whereLocation = locationId ? { locationId } : {}
     const whereTerminal = terminalId ? { terminalId } : {}
+    const whereWarehouse = warehouseId ? { warehouseId } : {}
 
     const [locations, products, sales, stockBalances, inventoryDocs, consumptionDocs, stockMoves] =
       await Promise.all([
@@ -170,6 +172,7 @@ router.get("/api/v1/reports/advanced", requireAuth, async (req: AuthedRequest, r
             tenantId,
             companyId,
             ...whereLocation,
+            ...whereWarehouse,
           },
           include: {
             product: {
@@ -196,6 +199,7 @@ router.get("/api/v1/reports/advanced", requireAuth, async (req: AuthedRequest, r
               lte: to,
             },
             ...whereLocation,
+            ...whereWarehouse,
           },
           include: {
             location: true,
@@ -217,11 +221,13 @@ router.get("/api/v1/reports/advanced", requireAuth, async (req: AuthedRequest, r
             tenantId,
             companyId,
             status: "VALIDATED",
+            aggregateParentId: null,
             docDate: {
               gte: from,
               lte: to,
             },
             ...whereLocation,
+            ...whereWarehouse,
           },
           include: {
             location: true,
@@ -248,6 +254,7 @@ router.get("/api/v1/reports/advanced", requireAuth, async (req: AuthedRequest, r
               lte: to,
             },
             ...whereLocation,
+            ...whereWarehouse,
           },
           include: {
             product: {
@@ -596,6 +603,7 @@ router.get("/api/v1/reports/advanced", requireAuth, async (req: AuthedRequest, r
         dateFrom: from,
         dateTo: to,
         locationId,
+        warehouseId,
       },
       locations,
       totalSales,
