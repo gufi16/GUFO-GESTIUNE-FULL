@@ -47,31 +47,6 @@ function normalizeWarehouseType(value: any) {
   return WAREHOUSE_TYPES.includes(text as (typeof WAREHOUSE_TYPES)[number]) ? text : "GENERAL"
 }
 
-async function buildPreferredCompanyFilter(
-  model: "location" | "terminal",
-  tenantId: string,
-  companyId: string
-) {
-  const companiesCount = await prisma.company.count({
-    where: { tenantId },
-  })
-
-  if (companiesCount > 1) {
-    return { companyId }
-  }
-
-  const hasCompanySpecific =
-    model === "location"
-      ? (await prisma.location.count({
-          where: { tenantId, companyId },
-        })) > 0
-      : (await prisma.terminal.count({
-          where: { tenantId, companyId },
-        })) > 0
-
-  return hasCompanySpecific ? { companyId } : { companyId: null }
-}
-
 async function ensureDefaultUoms(tenantId: string, companyId: string) {
   const existing = await prisma.uom.findMany({
     where: {
@@ -196,7 +171,6 @@ router.post(
 router.get("/api/v1/meta/locations", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
   const companyId = await requireRequestCompanyId(req)
-  const companyFilter = await buildPreferredCompanyFilter("location", tenantId, companyId)
 
   await prisma.$transaction(async (tx) => {
     await ensureDefaultWarehousesForCompany(tx, tenantId, companyId)
@@ -205,7 +179,7 @@ router.get("/api/v1/meta/locations", async (req: AuthedRequest, res) => {
   const locations = await prisma.location.findMany({
     where: {
       tenantId,
-      ...companyFilter,
+      companyId,
     },
     orderBy: { name: "asc" }
   })
@@ -229,7 +203,7 @@ router.get("/api/v1/meta/warehouses", async (req: AuthedRequest, res) => {
   const warehouses = await prisma.warehouse.findMany({
     where: {
       tenantId,
-      OR: buildCompanyScope(companyId),
+      companyId,
       ...(locationId ? { locationId } : {}),
       isActive: true,
     },
@@ -274,7 +248,7 @@ router.post("/api/v1/meta/warehouses", async (req: AuthedRequest, res) => {
         where: {
           id: locationId,
           tenantId,
-          OR: buildCompanyScope(companyId),
+          companyId,
         },
       })
 
@@ -284,7 +258,7 @@ router.post("/api/v1/meta/warehouses", async (req: AuthedRequest, res) => {
         where: {
           tenantId,
           locationId,
-          OR: buildCompanyScope(companyId),
+          companyId,
           code,
         },
         select: { id: true },
@@ -296,7 +270,7 @@ router.post("/api/v1/meta/warehouses", async (req: AuthedRequest, res) => {
         where: {
           tenantId,
           locationId,
-          OR: buildCompanyScope(companyId),
+          companyId,
         },
       })
 
@@ -307,7 +281,7 @@ router.post("/api/v1/meta/warehouses", async (req: AuthedRequest, res) => {
           where: {
             tenantId,
             locationId,
-            OR: buildCompanyScope(companyId),
+            companyId,
           },
           data: {
             isDefault: false,
@@ -374,7 +348,7 @@ router.put("/api/v1/meta/warehouses/:id", async (req: AuthedRequest, res) => {
         where: {
           id,
           tenantId,
-          OR: buildCompanyScope(companyId),
+          companyId,
         },
       })
 
@@ -384,7 +358,7 @@ router.put("/api/v1/meta/warehouses/:id", async (req: AuthedRequest, res) => {
         where: {
           id: locationId,
           tenantId,
-          OR: buildCompanyScope(companyId),
+          companyId,
         },
       })
 
@@ -394,7 +368,7 @@ router.put("/api/v1/meta/warehouses/:id", async (req: AuthedRequest, res) => {
         where: {
           tenantId,
           locationId,
-          OR: buildCompanyScope(companyId),
+          companyId,
           code,
           NOT: { id },
         },
@@ -408,7 +382,7 @@ router.put("/api/v1/meta/warehouses/:id", async (req: AuthedRequest, res) => {
           where: {
             tenantId,
             locationId,
-            OR: buildCompanyScope(companyId),
+            companyId,
           },
           data: {
             isDefault: false,
@@ -442,7 +416,7 @@ router.put("/api/v1/meta/warehouses/:id", async (req: AuthedRequest, res) => {
           where: {
             tenantId,
             locationId,
-            OR: buildCompanyScope(companyId),
+            companyId,
             isDefault: true,
           },
           select: { id: true },
@@ -480,7 +454,7 @@ router.delete("/api/v1/meta/warehouses/:id", async (req: AuthedRequest, res) => 
         where: {
           id,
           tenantId,
-          OR: buildCompanyScope(companyId),
+          companyId,
         },
       })
 
@@ -495,7 +469,7 @@ router.delete("/api/v1/meta/warehouses/:id", async (req: AuthedRequest, res) => 
           where: {
             tenantId,
             locationId: current.locationId,
-            OR: buildCompanyScope(companyId),
+            companyId,
           },
           orderBy: [{ isActive: "desc" }, { createdAt: "asc" }],
         })
@@ -522,12 +496,11 @@ router.get("/api/v1/meta/terminals", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
   const companyId = await requireRequestCompanyId(req)
   const locationId = String(req.query.locationId || "").trim()
-  const companyFilter = await buildPreferredCompanyFilter("terminal", tenantId, companyId)
 
   const terminals = await prisma.terminal.findMany({
     where: {
       tenantId,
-      ...companyFilter,
+      companyId,
       ...(locationId ? { locationId } : {}),
     },
     select: {
@@ -579,10 +552,8 @@ router.post("/api/v1/meta/locations", async (req: AuthedRequest, res) => {
     const existing = await prisma.location.findFirst({
       where: {
         tenantId,
-        AND: [
-          { OR: buildCompanyScope(companyId) },
-          { OR: [{ name }, { code }] }
-        ]
+        companyId,
+        OR: [{ name }, { code }],
       }
     })
 
@@ -660,7 +631,7 @@ router.put("/api/v1/meta/locations/:id", async (req: AuthedRequest, res) => {
       where: {
         id,
         tenantId,
-        OR: buildCompanyScope(companyId),
+        companyId,
       }
     })
 
@@ -720,7 +691,7 @@ router.delete("/api/v1/meta/locations/:id", async (req: AuthedRequest, res) => {
       where: {
         id,
         tenantId,
-        OR: buildCompanyScope(companyId),
+        companyId,
       }
     })
 
