@@ -1200,7 +1200,7 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
 
     if (!transferId) {
       const duplicate = await prisma.transferDoc.findFirst({
-        where: { tenantId, docNo }
+        where: { tenantId, companyId, docNo }
       })
 
       if (duplicate) {

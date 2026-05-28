@@ -8,6 +8,7 @@ import { requireRequestCompanyId } from "../lib/companyScope"
 
 const router = Router()
 router.use(requireAuth)
+const NO_WAREHOUSE_SCOPE = "__NO_WAREHOUSE__"
 
 function toNumber(value: any) {
   const n = Number(value)
@@ -16,6 +17,11 @@ function toNumber(value: any) {
 
 function normalizeText(value: any) {
   return String(value ?? "").trim()
+}
+
+function warehouseScope(warehouseId?: string | null) {
+  const trimmed = normalizeText(warehouseId)
+  return trimmed || NO_WAREHOUSE_SCOPE
 }
 
 function parseDateStart(value: any) {
@@ -56,6 +62,7 @@ async function validateInventoryPayload(
   tenantId: string,
   companyId: string,
   locationId: string,
+  warehouseId: string | null,
   items: Array<{ productId: string; countedQty: number }>
 ): Promise<InventoryValidationError | InventoryValidationSuccess> {
   if (!locationId) {
@@ -126,6 +133,7 @@ async function validateInventoryPayload(
       tenantId,
       companyId,
       locationId,
+      warehouseScope: warehouseScope(warehouseId),
       productId: {
         in: uniqueProductIds
       }
@@ -133,7 +141,9 @@ async function validateInventoryPayload(
   })
 
   const productMap = new Map(products.map((p) => [p.id, p]))
-  const balanceMap = new Map(balances.map((b) => [`${b.locationId}:${b.productId}`, b]))
+  const balanceMap = new Map(
+    balances.map((b) => [`${b.locationId}:${warehouseScope(b.warehouseId)}:${b.productId}`, b])
+  )
 
   return {
     ok: true,
@@ -396,10 +406,11 @@ router.post("/api/v1/inventory", async (req: AuthedRequest, res) => {
     const companyId = await requireRequestCompanyId(req)
 
     const locationId = normalizeText(req.body?.locationId)
+    const requestedWarehouseId = normalizeText(req.body?.warehouseId) || null
     const note = normalizeText(req.body?.note) || null
     const items = normalizeItems(Array.isArray(req.body?.items) ? req.body.items : [])
 
-    const validation = await validateInventoryPayload(tenantId, companyId, locationId, items)
+    const validation = await validateInventoryPayload(tenantId, companyId, locationId, requestedWarehouseId, items)
     if (!validation.ok) {
       return res.status(validation.status).json({
         ok: false,
@@ -415,6 +426,7 @@ router.post("/api/v1/inventory", async (req: AuthedRequest, res) => {
           tenantId,
           companyId,
           locationId,
+          warehouseId: requestedWarehouseId,
           docNo,
           docDate: new Date(),
           note,
@@ -423,7 +435,7 @@ router.post("/api/v1/inventory", async (req: AuthedRequest, res) => {
       })
 
       for (const row of items) {
-        const balanceKey = `${locationId}:${row.productId}`
+        const balanceKey = `${locationId}:${warehouseScope(requestedWarehouseId)}:${row.productId}`
         const existingBalance = validation.balanceMap.get(balanceKey)
 
         const systemQtyNumber = toNumber(existingBalance?.qty || 0)
@@ -488,10 +500,11 @@ router.put("/api/v1/inventory-docs/:id", async (req: AuthedRequest, res) => {
     }
 
     const locationId = normalizeText(req.body?.locationId || existingDoc.locationId)
+    const requestedWarehouseId = normalizeText(req.body?.warehouseId || existingDoc.warehouseId) || null
     const note = normalizeText(req.body?.note) || null
     const items = normalizeItems(Array.isArray(req.body?.items) ? req.body.items : [])
 
-    const validation = await validateInventoryPayload(tenantId, companyId, locationId, items)
+    const validation = await validateInventoryPayload(tenantId, companyId, locationId, requestedWarehouseId, items)
     if (!validation.ok) {
       return res.status(validation.status).json({
         ok: false,
@@ -504,6 +517,7 @@ router.put("/api/v1/inventory-docs/:id", async (req: AuthedRequest, res) => {
         where: { id },
         data: {
           locationId,
+          warehouseId: requestedWarehouseId,
           note,
           docDate: req.body?.docDate ? new Date(String(req.body.docDate)) : existingDoc.docDate
         }
@@ -516,7 +530,7 @@ router.put("/api/v1/inventory-docs/:id", async (req: AuthedRequest, res) => {
       })
 
       for (const row of items) {
-        const balanceKey = `${locationId}:${row.productId}`
+        const balanceKey = `${locationId}:${warehouseScope(requestedWarehouseId)}:${row.productId}`
         const existingBalance = validation.balanceMap.get(balanceKey)
 
         const systemQtyNumber = toNumber(existingBalance?.qty || 0)
@@ -591,6 +605,7 @@ router.post("/api/v1/inventory-docs/:id/finalize", async (req: AuthedRequest, re
             tenantId,
             companyId,
             locationId: doc.locationId,
+            warehouseScope: warehouseScope(doc.warehouseId),
             productId: item.productId
           }
         })
@@ -608,6 +623,8 @@ router.post("/api/v1/inventory-docs/:id/finalize", async (req: AuthedRequest, re
               tenantId,
               companyId,
               locationId: doc.locationId,
+              warehouseId: doc.warehouseId || null,
+              warehouseScope: warehouseScope(doc.warehouseId),
               productId: item.productId,
               qty: new Prisma.Decimal(countedQty)
             }
