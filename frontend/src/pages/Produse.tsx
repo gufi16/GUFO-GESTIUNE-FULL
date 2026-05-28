@@ -20,7 +20,9 @@ type Product = {
   purchaseFactor?: number
   isActive: boolean
   isMenu?: boolean
+  posMenuCategory?: string | null
   isVisibleInPos?: boolean
+  publishToGlovo?: boolean
   isSgr?: boolean
   sgrValue?: number
   productionMode?: "AUTO" | "MANUAL"
@@ -70,7 +72,10 @@ type FormState = {
   price: string
   costPrice: string
   isActive: boolean
+  isMenu: boolean
+  posMenuCategory: string
   isVisibleInPos: boolean
+  publishToGlovo: boolean
   isSgr: boolean
   isFiscalRiskProduct: boolean
   productionMode: "AUTO" | "MANUAL"
@@ -169,7 +174,10 @@ const emptyForm: FormState = {
   price: "0",
   costPrice: "0",
   isActive: true,
+  isMenu: false,
+  posMenuCategory: "",
   isVisibleInPos: true,
+  publishToGlovo: false,
   isSgr: false,
   isFiscalRiskProduct: false,
   productionMode: "AUTO",
@@ -463,7 +471,10 @@ function getDefaultVat(list = vatRates) {
       netWeightKg: "0",
       grossWeightKg: "0",
       isActive: true,
+      isMenu: false,
+      posMenuCategory: "",
       isVisibleInPos: true,
+      publishToGlovo: false,
       isSgr: false,
       isFiscalRiskProduct: false,
       productionMode: "AUTO",
@@ -499,7 +510,10 @@ function getDefaultVat(list = vatRates) {
       price: normalizePositiveString(item.price || 0, "0"),
       costPrice: normalizePositiveString(item.costPrice || 0, "0"),
       isActive: item.isActive !== false,
+      isMenu: item.isMenu === true,
+      posMenuCategory: item.posMenuCategory || "",
       isVisibleInPos: item.isVisibleInPos !== false,
+      publishToGlovo: item.publishToGlovo === true,
       isSgr: item.isSgr === true,
       isFiscalRiskProduct: item.isFiscalRiskProduct === true,
       productionMode: item.productionMode === "MANUAL" ? "MANUAL" : "AUTO",
@@ -594,6 +608,11 @@ function getDefaultVat(list = vatRates) {
       return
     }
 
+    if (form.isMenu && !form.posMenuCategory.trim()) {
+      setError("Completeaza categoria de meniu POS.")
+      return
+    }
+
     if (isVatPayer && !form.vatRateId) {
       setError("Selecteaza TVA.")
       return
@@ -641,7 +660,10 @@ function getDefaultVat(list = vatRates) {
           price: normalizedPrice,
           costPrice: normalizedCost,
           isActive: form.isActive,
+          isMenu: form.isMenu,
+          posMenuCategory: form.isMenu ? form.posMenuCategory.trim() || null : null,
           isVisibleInPos: form.isVisibleInPos,
+          publishToGlovo: form.publishToGlovo,
           isSgr: form.isSgr,
           isFiscalRiskProduct: form.isFiscalRiskProduct,
           productionMode: form.productionMode,
@@ -1036,7 +1058,9 @@ function getDefaultVat(list = vatRates) {
   const kpis = useMemo(() => {
     return {
       total: items.length,
+      menus: items.filter((x) => x.isMenu).length,
       visiblePos: items.filter((x) => x.isVisibleInPos !== false).length,
+      glovo: items.filter((x) => x.publishToGlovo).length,
       sgr: items.filter((x) => x.isSgr).length,
       recipe: items.filter((x) => recipeEligibleClasses.includes(x.class)).length
     }
@@ -1055,7 +1079,9 @@ function getDefaultVat(list = vatRates) {
 
       <div style={kpiGrid}>
         <MetricCard title="Total produse" value={String(kpis.total)} />
+        <MetricCard title="Meniuri" value={String(kpis.menus)} />
         <MetricCard title="Vizibile in POS" value={String(kpis.visiblePos)} />
+        <MetricCard title="Publicate Glovo" value={String(kpis.glovo)} />
         <MetricCard title="Cu SGR" value={String(kpis.sgr)} />
         <MetricCard title="Cu retetar" value={String(kpis.recipe)} />
       </div>
@@ -1122,8 +1148,10 @@ function getDefaultVat(list = vatRates) {
                     <th style={th}>Poza</th>
                     <th style={th}>Cod</th>
                     <th style={th}>Produs</th>
+                    <th style={th}>Tip</th>
                     <th style={th}>Clasificare</th>
                     <th style={th}>Categorie</th>
+                    <th style={th}>Cat. meniu POS</th>
                     <th style={th}>Departament</th>
                     <th style={th}>UM</th>
                     <th style={th}>Ambalaj</th>
@@ -1133,6 +1161,7 @@ function getDefaultVat(list = vatRates) {
                     <th style={th}>Cost / UM</th>
                     <th style={th}>Lot / FIFO</th>
                     <th style={th}>POS</th>
+                    <th style={th}>Glovo</th>
                     <th style={th}>SGR</th>
                     <th style={th}>Activ</th>
                     <th style={th}>Retetar</th>
@@ -1158,8 +1187,10 @@ function getDefaultVat(list = vatRates) {
                       </td>
                       <td style={td}>{item.sku}</td>
                       <td style={td}>{item.name}</td>
+                      <td style={td}>{item.isMenu ? "Meniu" : "Produs"}</td>
                       <td style={td}>{CLASS_LABEL_MAP[item.class] || item.class}</td>
                       <td style={td}>{item.category?.name || "-"}</td>
+                      <td style={td}>{item.posMenuCategory || "-"}</td>
                       <td style={td}>{item.category?.department?.name || item.department?.name || "-"}</td>
                       <td style={td}>{formatUomOption(item.uom)}</td>
                       <td style={td}>{formatUomOption(item.purchaseUom)}</td>
@@ -1184,6 +1215,7 @@ function getDefaultVat(list = vatRates) {
                         )}
                       </td>
                       <td style={td}>{item.isVisibleInPos !== false ? "Da" : "Nu"}</td>
+                      <td style={td}>{item.publishToGlovo ? "Da" : "Nu"}</td>
                       <td style={td}>{item.isSgr ? "Da" : "Nu"}</td>
                       <td style={td}>{item.isActive ? "Da" : "Nu"}</td>
                       <td style={td}>
@@ -1306,6 +1338,23 @@ function getDefaultVat(list = vatRates) {
                       </select>
                     </Field>
 
+                    <Field label="Tip articol">
+                      <select
+                        value={form.isMenu ? "MENU" : "PRODUCT"}
+                        onChange={(e) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            isMenu: e.target.value === "MENU",
+                            posMenuCategory: e.target.value === "MENU" ? prev.posMenuCategory : "",
+                          }))
+                        }
+                        style={input}
+                      >
+                        <option value="PRODUCT">Produs simplu</option>
+                        <option value="MENU">Meniu</option>
+                      </select>
+                    </Field>
+
                     <Field label="Mod productie">
                       <select
                         value={form.productionMode}
@@ -1349,6 +1398,19 @@ function getDefaultVat(list = vatRates) {
                         style={{ ...input, background: "#f8fafc" }}
                       />
                     </Field>
+
+                    {form.isMenu ? (
+                      <Field label="Categorie meniu POS">
+                        <input
+                          value={form.posMenuCategory}
+                          onChange={(e) =>
+                            setForm((prev) => ({ ...prev, posMenuCategory: e.target.value }))
+                          }
+                          placeholder="Ex: Meniuri Burgeri"
+                          style={input}
+                        />
+                      </Field>
+                    ) : null}
 
                     {form.isFiscalRiskProduct ? (
                       <Field label="Cod NC">
@@ -1647,6 +1709,26 @@ function getDefaultVat(list = vatRates) {
                       <label style={checkLabel}>
                         <input
                           type="checkbox"
+                          checked={form.isMenu}
+                          onChange={(e) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              isMenu: e.target.checked,
+                              posMenuCategory: e.target.checked ? prev.posMenuCategory : "",
+                            }))
+                          }
+                        />
+                        <span>Este meniu</span>
+                      </label>
+                      <div style={checkHint}>
+                        Marcheaza produsul ca meniu vandabil. Componentele meniului se pot tine in retetar.
+                      </div>
+                    </div>
+
+                    <div style={checkBlock}>
+                      <label style={checkLabel}>
+                        <input
+                          type="checkbox"
                           checked={form.isSgr}
                           onChange={(e) => setForm((prev) => ({ ...prev, isSgr: e.target.checked }))}
                         />
@@ -1730,6 +1812,22 @@ function getDefaultVat(list = vatRates) {
                         <span>Vizibil in POS</span>
                       </label>
                       <div style={checkHint}>Daca este debifat, produsul nu apare in Android POS.</div>
+                    </div>
+
+                    <div style={checkBlock}>
+                      <label style={checkLabel}>
+                        <input
+                          type="checkbox"
+                          checked={form.publishToGlovo}
+                          onChange={(e) =>
+                            setForm((prev) => ({ ...prev, publishToGlovo: e.target.checked }))
+                          }
+                        />
+                        <span>Publica in Glovo</span>
+                      </label>
+                      <div style={checkHint}>
+                        Marcaj pentru produsele sau meniurile pe care vrei sa le trimiti in Glovo Merchant.
+                      </div>
                     </div>
 
                     <div style={checkBlock}>

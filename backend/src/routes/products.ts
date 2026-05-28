@@ -167,6 +167,11 @@ function toNullableText(value: any) {
   return text || null
 }
 
+function normalizeBoolean(value: any, fallback: boolean) {
+  if (value === undefined) return fallback
+  return Boolean(value)
+}
+
 function padNumber(value: number, size = 6) {
   return String(value).padStart(size, "0")
 }
@@ -344,8 +349,8 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
   const requestedIsSgr = req.body?.isSgr === undefined ? false : Boolean(req.body?.isSgr)
   const requestedIsFiscalRiskProduct =
     req.body?.isFiscalRiskProduct === undefined ? false : Boolean(req.body?.isFiscalRiskProduct)
-  const requestedIsMenu = Boolean(req.body?.isMenu)
-  const requestedPublishToGlovo = Boolean(req.body?.publishToGlovo)
+  const requestedIsMenu = normalizeBoolean(req.body?.isMenu, false)
+  const requestedPublishToGlovo = normalizeBoolean(req.body?.publishToGlovo, false)
   const requestedPosMenuCategory = toNullableText(req.body?.posMenuCategory)
   const posMenuCategory = requestedIsMenu ? requestedPosMenuCategory : null
 
@@ -408,6 +413,10 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
 
   if (!uomId) {
     return res.status(400).json({ ok: false, error: "UM este obligatorie." })
+  }
+
+  if (requestedIsMenu && !posMenuCategory) {
+    return res.status(400).json({ ok: false, error: "Categoria de meniu POS este obligatorie pentru articolele de tip meniu." })
   }
 
   if (normalizedPurchaseFactor <= 0) {
@@ -636,8 +645,8 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   const requestedIsSgr = req.body?.isSgr === undefined ? false : Boolean(req.body?.isSgr)
   const requestedIsFiscalRiskProduct =
     req.body?.isFiscalRiskProduct === undefined ? false : Boolean(req.body?.isFiscalRiskProduct)
-  const requestedIsMenu = Boolean(req.body?.isMenu)
-  const requestedPublishToGlovo = Boolean(req.body?.publishToGlovo)
+  const requestedIsMenu = normalizeBoolean(req.body?.isMenu, false)
+  const requestedPublishToGlovo = normalizeBoolean(req.body?.publishToGlovo, false)
   const requestedPosMenuCategory = toNullableText(req.body?.posMenuCategory)
   const posMenuCategory = requestedIsMenu ? requestedPosMenuCategory : null
 
@@ -677,6 +686,10 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
 
   if (!uomId) {
     return res.status(400).json({ ok: false, error: "UM este obligatorie." })
+  }
+
+  if (requestedIsMenu && !posMenuCategory) {
+    return res.status(400).json({ ok: false, error: "Categoria de meniu POS este obligatorie pentru articolele de tip meniu." })
   }
 
   if (normalizedPurchaseFactor <= 0) {

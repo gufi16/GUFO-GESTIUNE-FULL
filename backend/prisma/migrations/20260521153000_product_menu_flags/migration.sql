@@ -1,0 +1,4 @@
+ALTER TABLE "Product"
+ADD COLUMN "isMenu" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN "posMenuCategory" TEXT,
+ADD COLUMN "publishToGlovo" BOOLEAN NOT NULL DEFAULT false;
