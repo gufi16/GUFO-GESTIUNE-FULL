@@ -488,14 +488,14 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
           ) : null}
         </div>
 
-        <div className="mt-2 hidden items-center justify-between gap-3 md:flex">
-          <div className="flex items-center gap-3">
+        <div className="mt-2 hidden flex-col gap-3 xl:flex">
+          <div className="flex flex-wrap items-center gap-2.5">
             {companyChoices.length > 1 ? (
-              <div className="flex items-center gap-2 rounded-[12px] border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm shadow-slate-900/[0.03]">
+              <div className="flex items-center gap-2 rounded-[12px] border border-slate-200 bg-white px-2 py-1.5 shadow-sm shadow-slate-900/[0.03]">
                 <div className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-[#EEF4FB] text-[#244A7C]">
                   <Building2 size={16} />
                 </div>
-                <div className="min-w-[220px]">
+                <div className="w-[190px]">
                   <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6C7A89]">
                     Firma
                   </div>
@@ -503,7 +503,7 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
                     value={activeCompanyId}
                     onChange={(e) => handleCompanyChange(e.target.value)}
                     disabled={switchingCompany}
-                    className="h-7 w-full rounded-[8px] border border-slate-200 bg-white px-2 text-sm text-[#17324D] outline-none transition focus:border-[#244A7C] focus:bg-white"
+                    className="h-7 w-full rounded-[8px] border border-slate-200 bg-white px-2 text-[13px] text-[#17324D] outline-none transition focus:border-[#244A7C] focus:bg-white"
                     title={companyLabel}
                   >
                     {companyChoices.map((company) => (
@@ -516,18 +516,18 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
               </div>
             ) : null}
 
-            <div className="flex items-center gap-2 rounded-[12px] border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm shadow-slate-900/[0.03]">
+            <div className="flex items-center gap-2 rounded-[12px] border border-slate-200 bg-white px-2 py-1.5 shadow-sm shadow-slate-900/[0.03]">
               <div className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-[#EEF4FB] text-[#244A7C]">
                 <MapPin size={16} />
               </div>
-              <div className="min-w-[190px]">
+              <div className="w-[170px]">
                 <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6C7A89]">
                   Locatie
                 </div>
                 <select
                   value={locationId}
                   onChange={(e) => handleLocationChange(e.target.value)}
-                  className="h-7 w-full rounded-[8px] border border-slate-200 bg-white px-2 text-sm text-[#17324D] outline-none transition focus:border-[#244A7C] focus:bg-white"
+                  className="h-7 w-full rounded-[8px] border border-slate-200 bg-white px-2 text-[13px] text-[#17324D] outline-none transition focus:border-[#244A7C] focus:bg-white"
                   title={selectedLocationLabel}
                 >
                   <option value="">Toate locatiile</option>
@@ -541,18 +541,18 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
             </div>
 
             {warehouseConfig.multiWarehouseEnabled && warehouseConfig.warehouseFilterEnabled ? (
-              <div className="flex items-center gap-2 rounded-[12px] border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm shadow-slate-900/[0.03]">
+              <div className="flex items-center gap-2 rounded-[12px] border border-slate-200 bg-white px-2 py-1.5 shadow-sm shadow-slate-900/[0.03]">
                 <div className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-[#EEF4FB] text-[#244A7C]">
                   <Warehouse size={16} />
                 </div>
-                <div className="min-w-[190px]">
+                <div className="w-[170px]">
                   <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6C7A89]">
                     {warehouseConfig.warehouseLabel}
                   </div>
                   <select
                     value={warehouseId}
                     onChange={(e) => handleWarehouseChange(e.target.value)}
-                    className="h-7 w-full rounded-[8px] border border-slate-200 bg-white px-2 text-sm text-[#17324D] outline-none transition focus:border-[#244A7C] focus:bg-white"
+                    className="h-7 w-full rounded-[8px] border border-slate-200 bg-white px-2 text-[13px] text-[#17324D] outline-none transition focus:border-[#244A7C] focus:bg-white"
                     title={selectedWarehouseLabel}
                     disabled={!locationId}
                   >
@@ -568,15 +568,15 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
             ) : null}
 
             {showSalesFilters ? (
-              <div className="flex items-center gap-2 rounded-[12px] border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm shadow-slate-900/[0.03]">
-                <div className="min-w-[230px]">
+              <div className="flex items-center gap-2 rounded-[12px] border border-slate-200 bg-white px-2 py-1.5 shadow-sm shadow-slate-900/[0.03]">
+                <div className="w-[170px]">
                   <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6C7A89]">
                     Device
                   </div>
                   <select
                     value={terminalId}
                     onChange={(e) => handleTerminalChange(e.target.value)}
-                    className="h-7 w-full rounded-[8px] border border-slate-200 bg-white px-2 text-sm text-[#17324D] outline-none transition focus:border-[#244A7C] focus:bg-white"
+                    className="h-7 w-full rounded-[8px] border border-slate-200 bg-white px-2 text-[13px] text-[#17324D] outline-none transition focus:border-[#244A7C] focus:bg-white"
                     title={selectedTerminalLabel}
                   >
                     <option value="">Toate device-urile</option>
@@ -591,7 +591,7 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
             ) : null}
 
             {isDashboard ? (
-              <div className="flex items-end gap-2 rounded-[12px] border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm shadow-slate-900/[0.03]">
+              <div className="flex items-end gap-2 rounded-[12px] border border-slate-200 bg-white px-2 py-1.5 shadow-sm shadow-slate-900/[0.03]">
                 <div>
                   <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6C7A89]">
                     De la
@@ -600,7 +600,7 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
                     type="date"
                     value={dashboardDateFrom}
                     onChange={(e) => updateDashboardRange({ dateFrom: e.target.value })}
-                    className="h-7 rounded-[8px] border border-slate-200 bg-white px-2 text-sm text-[#17324D] outline-none transition focus:border-[#244A7C] focus:bg-white"
+                    className="h-7 w-[132px] rounded-[8px] border border-slate-200 bg-white px-2 text-[13px] text-[#17324D] outline-none transition focus:border-[#244A7C] focus:bg-white"
                   />
                 </div>
                 <div>
@@ -611,7 +611,7 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
                     type="date"
                     value={dashboardDateTo}
                     onChange={(e) => updateDashboardRange({ dateTo: e.target.value })}
-                    className="h-7 rounded-[8px] border border-slate-200 bg-white px-2 text-sm text-[#17324D] outline-none transition focus:border-[#244A7C] focus:bg-white"
+                    className="h-7 w-[132px] rounded-[8px] border border-slate-200 bg-white px-2 text-[13px] text-[#17324D] outline-none transition focus:border-[#244A7C] focus:bg-white"
                   />
                 </div>
                 <button
@@ -625,43 +625,45 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
             ) : null}
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setNotificationsOpen((prev) => !prev)}
-                className="flex h-9 w-9 items-center justify-center rounded-[12px] border border-slate-200 bg-white text-[#6C7A89] shadow-sm transition hover:text-[#17324D]"
-              >
-                <Bell size={18} />
-              </button>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setNotificationsOpen((prev) => !prev)}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-slate-200 bg-white text-[#6C7A89] shadow-sm transition hover:text-[#17324D]"
+                >
+                  <Bell size={18} />
+                </button>
 
-              {notificationsOpen ? (
-                <div className="absolute right-0 top-12 z-40 w-[320px] rounded-[16px] border border-slate-200 bg-white p-3 shadow-xl">
-                  <div className="mb-2 text-sm font-semibold text-[#17324D]">Notificari</div>
-                  <div className="space-y-2">
-                    {notifications.map((item) => (
-                      <div key={item.id} className="rounded-[12px] border border-slate-200 bg-slate-50 px-3 py-2.5">
-                        <div className="text-sm font-semibold text-slate-900">{item.title}</div>
-                        <div className="mt-1 text-xs leading-5 text-slate-500">{item.description}</div>
-                      </div>
-                    ))}
+                {notificationsOpen ? (
+                  <div className="absolute right-0 top-12 z-40 w-[320px] rounded-[16px] border border-slate-200 bg-white p-3 shadow-xl">
+                    <div className="mb-2 text-sm font-semibold text-[#17324D]">Notificari</div>
+                    <div className="space-y-2">
+                      {notifications.map((item) => (
+                        <div key={item.id} className="rounded-[12px] border border-slate-200 bg-slate-50 px-3 py-2.5">
+                          <div className="text-sm font-semibold text-slate-900">{item.title}</div>
+                          <div className="mt-1 text-xs leading-5 text-slate-500">{item.description}</div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ) : null}
-            </div>
+                ) : null}
+              </div>
 
-            <div className="flex min-w-[190px] items-center gap-2 rounded-[12px] border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm shadow-slate-900/[0.03]">
-              <img src="/gufo-logo.png?v=20260417-6" alt="Gufo" className="h-10 w-10 object-contain" />
-              <div className="min-w-0 text-sm">
-                <div className="truncate font-semibold text-[#17324D]">{userLabel}</div>
-                <div className="truncate text-xs uppercase text-slate-500">{companyLabel} • {userMeta}</div>
+              <div className="flex min-w-0 max-w-[260px] items-center gap-2 rounded-[12px] border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm shadow-slate-900/[0.03]">
+                <img src="/gufo-logo.png?v=20260417-6" alt="Gufo" className="h-10 w-10 object-contain" />
+                <div className="min-w-0 text-sm">
+                  <div className="truncate font-semibold text-[#17324D]">{userLabel}</div>
+                  <div className="truncate text-xs uppercase text-slate-500">{companyLabel} • {userMeta}</div>
+                </div>
               </div>
             </div>
 
             <button
               type="button"
               onClick={handleIesire}
-              className="inline-flex h-9 items-center justify-center rounded-[12px] border border-rose-200 bg-rose-50 px-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
+              className="inline-flex h-9 shrink-0 items-center justify-center rounded-[12px] border border-rose-200 bg-rose-50 px-3.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
             >
               <LogOut size={16} className="mr-2" />
               Iesire
@@ -672,6 +674,3 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
     </header>
   )
 }
-
-
-

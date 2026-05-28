@@ -634,18 +634,12 @@ export default function Dashboard() {
 
   return (
     <div className="w-full space-y-5">
-      <div className="overflow-hidden rounded-[28px] border border-[#DCE6EF] bg-[radial-gradient(circle_at_top_left,_rgba(71,194,177,0.18),_transparent_35%),radial-gradient(circle_at_top_right,_rgba(243,156,18,0.16),_transparent_30%),linear-gradient(180deg,#FFFFFF_0%,#F4F8FB_100%)] p-5 shadow-[0_28px_60px_rgba(15,23,42,0.08)]">
+      <div className="overflow-hidden rounded-[28px] border border-[#DCE6EF] bg-[linear-gradient(180deg,#FFFFFF_0%,#F4F8FB_100%)] p-5 shadow-[0_28px_60px_rgba(15,23,42,0.08)]">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
             <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/80 bg-white/85 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600 shadow-sm">
               <Activity size={13} className="text-emerald-600" />
               Dashboard operational
-            </div>
-            <h1 className="max-w-3xl text-[28px] font-semibold tracking-tight text-[#17324D] md:text-[34px]">
-              Un tablou mai clar pentru vanzari, incasari, stoc si ritmul zilnic al operatiunii
-            </h1>
-            <div className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-              KPI-urile cheie, semnalele comerciale si zonele cu risc sunt la un loc, fara sa pierzi contextul pe locatie sau terminal.
             </div>
             <div className="mt-4 flex flex-wrap gap-2 text-sm text-slate-500">
               <span className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/80 px-3 py-1 shadow-sm">

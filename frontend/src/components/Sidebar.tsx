@@ -129,29 +129,19 @@ function BrandBlock({ mobile = false, totalItems }: { mobile?: boolean; totalIte
         mobile ? "p-3.5" : "p-4"
       )}
     >
-      <div className="flex items-center gap-3">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-white shadow-sm">
+      <div className="flex flex-col items-center text-center">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px]">
           <img
             src="/gufo-logo.png?v=20260417-6"
             alt="Gufo"
             className={clsx(
               "shrink-0 object-contain drop-shadow-[0_10px_18px_rgba(30,157,176,0.18)]",
-              mobile ? "h-8 w-8" : "h-9 w-9"
+              mobile ? "h-9 w-9" : "h-10 w-10"
             )}
           />
         </div>
-        <div className="min-w-0">
-          <span
-            className={clsx(
-              "block font-black leading-none tracking-[-0.05em] text-[#17324D]",
-              mobile ? "text-[1.55rem]" : "text-[1.7rem]"
-            )}
-          >
-            Gufo
-          </span>
-          <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
-            ERP operational
-          </div>
+        <div className="mt-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+          Gufo Backoffice
         </div>
       </div>
 
