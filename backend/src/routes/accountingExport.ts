@@ -1452,7 +1452,7 @@ router.get("/api/v1/reports/accounting/saga/export-preview", requireAuth, async 
     const items = await prisma.customer.findMany({
       where: {
         tenantId,
-        OR: [{ companyId }, { companyId: null }],
+        companyId,
         isActive: true,
         createdAt: { gte: from, lte: to },
         ...selectedIdWhere,
@@ -1470,7 +1470,7 @@ router.get("/api/v1/reports/accounting/saga/export-preview", requireAuth, async 
     const items = await prisma.supplier.findMany({
       where: {
         tenantId,
-        OR: [{ companyId }, { companyId: null }],
+        companyId,
         isActive: true,
         createdAt: { gte: from, lte: to },
         ...selectedIdWhere,
@@ -1675,7 +1675,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     const customers = await prisma.customer.findMany({
       where: {
         tenantId,
-        OR: [{ companyId }, { companyId: null }],
+        companyId,
         isActive: true,
         createdAt: { gte: from, lte: to },
         ...selectedIdWhere,
@@ -1802,7 +1802,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     const suppliers = await prisma.supplier.findMany({
       where: {
         tenantId,
-        OR: [{ companyId }, { companyId: null }],
+        companyId,
         isActive: true,
         createdAt: { gte: from, lte: to },
         ...selectedIdWhere,

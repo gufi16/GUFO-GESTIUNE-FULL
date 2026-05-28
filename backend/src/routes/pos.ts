@@ -685,7 +685,7 @@ export async function buildCatalogPayload(req: Request, tenantId: string) {
     where: {
       tenantId,
       isActive: true,
-      OR: [{ companyId: company?.id || null }, { companyId: null }],
+      companyId: company?.id || null,
     },
     orderBy: { name: "asc" },
   });
@@ -693,7 +693,7 @@ export async function buildCatalogPayload(req: Request, tenantId: string) {
   const categories = await prisma.category.findMany({
     where: {
       tenantId,
-      OR: [{ companyId: company?.id || null }, { companyId: null }],
+      companyId: company?.id || null,
       isActive: true,
       isVisibleInPos: true,
     },
@@ -1169,7 +1169,7 @@ router.post("/api/v1/pos/pair", async (req: Request, res: Response) => {
     const locations = await prisma.location.findMany({
       where: {
         tenantId: terminal.tenantId,
-        OR: [{ companyId: terminal.companyId || terminal.location?.companyId || null }, { companyId: null }],
+        companyId: terminal.companyId || terminal.location?.companyId || null,
         isActive: true,
       },
       orderBy: { name: "asc" },
@@ -1240,7 +1240,7 @@ router.post(
       where: {
         id: parsed.data.locationId,
         tenantId,
-        OR: [{ companyId: currentTerminal?.companyId || null }, { companyId: null }],
+        companyId: currentTerminal?.companyId || null,
         isActive: true,
       },
     });
