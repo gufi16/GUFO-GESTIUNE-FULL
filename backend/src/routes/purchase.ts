@@ -599,7 +599,7 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
       where: {
         id: locationId,
         tenantId,
-        OR: [{ companyId }, { companyId: null }],
+        companyId,
       }
     })
 

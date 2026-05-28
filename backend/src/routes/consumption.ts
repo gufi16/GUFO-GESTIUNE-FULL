@@ -53,7 +53,7 @@ async function ensureLocation(tenantId: string, companyId: string, locationId: s
     where: {
       id: locationId,
       tenantId,
-      OR: [{ companyId }, { companyId: null }],
+      companyId,
     },
     select: { id: true, name: true, code: true },
   })
@@ -66,8 +66,8 @@ async function ensureWarehouse(tenantId: string, companyId: string, locationId: 
         where: {
           id: warehouseId,
           tenantId,
+          companyId,
           locationId,
-          OR: [{ companyId }, { companyId: null }],
         },
         select: { id: true, name: true, code: true, locationId: true },
       })

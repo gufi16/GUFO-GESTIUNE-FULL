@@ -77,7 +77,7 @@ async function validateInventoryPayload(
     where: {
       id: locationId,
       tenantId,
-      OR: [{ companyId }, { companyId: null }]
+      companyId,
     }
   })
 

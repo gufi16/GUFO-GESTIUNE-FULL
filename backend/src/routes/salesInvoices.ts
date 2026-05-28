@@ -546,7 +546,7 @@ router.post("/api/v1/sales-invoices/full", async (req: AuthedRequest, res) => {
     where: {
       id: String(header.locationId),
       tenantId,
-      OR: [{ companyId }, { companyId: null }],
+      companyId,
     },
   })
 

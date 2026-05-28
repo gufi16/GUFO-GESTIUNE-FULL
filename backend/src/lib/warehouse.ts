@@ -84,7 +84,7 @@ export async function ensureDefaultWarehousesForCompany(
   const locations = await tx.location.findMany({
     where: {
       tenantId,
-      OR: [{ companyId }, { companyId: null }],
+      companyId,
     },
     select: {
       id: true,
@@ -121,8 +121,8 @@ export async function resolveWarehouseForLocation(
       where: {
         id: requestedId,
         tenantId: params.tenantId,
+        companyId: params.companyId,
         locationId: params.locationId,
-        OR: [{ companyId: params.companyId }, { companyId: null }],
         isActive: true,
       },
     })
