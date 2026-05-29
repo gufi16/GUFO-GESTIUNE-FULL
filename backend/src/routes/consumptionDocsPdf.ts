@@ -208,10 +208,6 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
     const margin = 20
     const contentWidth = pageWidth - margin * 2
 
-    const companyWidth = 250
-    const gap = 12
-    const rightWidth = contentWidth - companyWidth - gap
-
     const metaCols = [120, 190, 120, 220]
     const metaRowHeight = 24
 
@@ -232,6 +228,10 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
     const rowHeight = 24
     const footerBlockHeight = 84
     const signatureBlockHeight = 56
+    const metaTableWidth = metaCols.reduce((sum, value) => sum + value, 0)
+    const metaStartX = margin + (contentWidth - metaTableWidth) / 2
+    const itemsTableWidth = columns.reduce((sum, value) => sum + value, 0)
+    const itemsStartX = margin + (contentWidth - itemsTableWidth) / 2
 
     type RowData = {
       no: string
@@ -330,13 +330,13 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
     function drawPageHeader(pageNo: number, totalPagesCount: number) {
       let y = margin
 
-      drawBox(doc, margin, y, companyWidth, topHeaderHeight)
+      drawBox(doc, margin, y, contentWidth, topHeaderHeight)
       doc
         .font(fonts.bold)
         .fontSize(12)
         .fillColor("#111111")
         .text(text(company?.name), margin + 8, y + 8, {
-          width: companyWidth - 16,
+          width: 240,
           align: "left",
         })
 
@@ -352,33 +352,29 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
       let companyY = y + 26
       for (const line of companyLines) {
         doc.text(line, margin + 8, companyY, {
-          width: companyWidth - 16,
+          width: 240,
           align: "left",
         })
         companyY += 12
       }
 
-      const rightX = margin + companyWidth + gap
-
-      drawBox(doc, rightX, y, rightWidth, headerTitleHeight)
       doc
         .font(fonts.bold)
         .fontSize(21)
-        .text("BON DE CONSUM", rightX + 8, y + 14, {
-          width: rightWidth - 16,
+        .text("BON DE CONSUM", margin, y + 16, {
+          width: contentWidth,
           align: "center",
         })
 
-      drawBox(doc, rightX, y + headerTitleHeight + 10, rightWidth, introHeight)
       doc
         .font(fonts.regular)
-        .fontSize(8.5)
+        .fontSize(9)
         .text(
           "Act intern de consum materiale.",
-          rightX + 8,
-          y + headerTitleHeight + 11,
+          margin,
+          y + 46,
           {
-            width: rightWidth - 16,
+            width: contentWidth,
             align: "center",
           }
         )
@@ -412,10 +408,6 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
     function drawMetaBlock() {
       let y = margin + headerBlockHeight + 10
 
-      const saleReceiptNo = consumptionDoc.sale?.receiptNo || "-"
-      const operatorName = consumptionDoc.sale?.operatorName || "-"
-      const saleDate = consumptionDoc.sale?.soldAt ? fmtDateTime(consumptionDoc.sale.soldAt) : "-"
-
       const metaRows = [
         ["Document", text(consumptionDoc.docNo), "Data document", fmtDateTime(consumptionDoc.docDate)],
         ["Locatie", text(consumptionDoc.location?.name), "Gestiune", text(consumptionDoc.warehouse?.name)],
@@ -424,7 +416,7 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
       ]
 
       for (const row of metaRows) {
-        let x = margin
+        let x = metaStartX
 
         for (let i = 0; i < metaCols.length; i++) {
           const cellText = row[i] || ""
@@ -445,7 +437,7 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
     }
 
     function drawTableHeader(startY: number) {
-      let x = margin
+      let x = itemsStartX
 
       headers.forEach((header, index) => {
         drawCell(doc, x, startY, columns[index], tableHeaderHeight, header, fonts, {
@@ -461,7 +453,7 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
     function drawRow(row: RowData, startY: number) {
       const values = [row.no, row.ingredient, row.uom, row.qty]
 
-      let x = margin
+      let x = itemsStartX
 
       values.forEach((value, cellIndex) => {
         drawCell(doc, x, startY, columns[cellIndex], rowHeight, value, fonts, {
@@ -546,8 +538,7 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
       y += tableHeaderHeight
 
       if (pageRows.length === 0) {
-        const colspanWidth = columns.reduce((sum, value) => sum + value, 0)
-        drawCell(doc, margin, y, colspanWidth, rowHeight, "Nu exista pozitii in document.", fonts, {
+        drawCell(doc, itemsStartX, y, itemsTableWidth, rowHeight, "Nu exista pozitii in document.", fonts, {
           align: "center",
           fontSize: 9,
         })
