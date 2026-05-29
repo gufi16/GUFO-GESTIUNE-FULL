@@ -316,12 +316,11 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
     function drawPageHeader(pageNo: number, totalPagesCount: number) {
       let y = margin
 
-      drawBox(doc, margin, y, contentWidth, topHeaderHeight)
       doc
         .font(fonts.bold)
         .fontSize(12)
         .fillColor("#111111")
-        .text(text(company?.name), margin + 8, y + 8, {
+        .text(text(company?.name), margin + 6, y + 10, {
           width: 240,
           align: "left",
         })
@@ -337,18 +336,18 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
 
       let companyY = y + 26
       for (const line of companyLines) {
-        doc.text(line, margin + 8, companyY, {
+        doc.text(line, margin + 6, companyY, {
           width: 240,
           align: "left",
         })
-        companyY += 12
+        companyY += 11
       }
 
       const infoX = pageWidth - margin - 250
       doc
         .font(fonts.bold)
         .fontSize(21)
-        .text("BON DE CONSUM", margin + 240, y + 16, {
+        .text("BON DE CONSUM", margin + 240, y + 20, {
           width: contentWidth - 500,
           align: "center",
         })
@@ -359,7 +358,7 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
         .text(
           "Act intern de consum materiale.",
           margin + 240,
-          y + 46,
+          y + 48,
           {
             width: contentWidth - 500,
             align: "center",
@@ -379,7 +378,7 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
           width: 230,
           align: "left",
         })
-        infoY += 14
+        infoY += 13
       })
 
       doc
@@ -442,17 +441,15 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
     }
 
     function drawFooterBlock(startY: number) {
-      drawBox(doc, margin, startY, contentWidth, footerBlockHeight)
-
-      let totalsY = startY + 10
+      let totalsY = startY + 4
       const totalLine = (label: string, value: string, bold = false) => {
         doc.font(bold ? fonts.bold : fonts.regular).fontSize(bold ? 10 : 9)
-        doc.text(label, margin + 12, totalsY, {
+        doc.text(label, margin + 8, totalsY, {
           width: 220,
           align: "left",
         })
-        doc.text(value, margin + contentWidth - 120, totalsY, {
-          width: 108,
+        doc.text(value, margin + contentWidth - 110, totalsY, {
+          width: 102,
           align: "right",
         })
         totalsY += bold ? 17 : 14
@@ -464,7 +461,7 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
     }
 
     function drawSignature(startY: number) {
-      const gap = 20
+      const gap = 26
       const blockWidth = (contentWidth - gap) / 2
       const labels = ["Intocmit", "Predat din gestiune"]
 
