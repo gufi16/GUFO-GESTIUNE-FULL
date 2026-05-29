@@ -16,6 +16,7 @@ type PaginationState = {
 }
 
 type StockSection = "location" | "global" | "lots" | "moves"
+type StockClassFilter = "ALL" | "RAW" | "FINISHED" | "AUX"
 
 function formatRon(value: number) {
   return new Intl.NumberFormat("ro-RO", {
@@ -48,6 +49,52 @@ function activeWarehouseLabel(warehouses: any[], warehouseId: string) {
   const warehouse = warehouses.find((item) => item.id === warehouseId)
   if (!warehouse) return "Gestiunea activa din topbar"
   return warehouse.code ? `${warehouse.name} (${warehouse.code})` : warehouse.name
+}
+
+function productClassLabel(value: string | null | undefined) {
+  switch (String(value || "").toUpperCase()) {
+    case "MATERIE_PRIMA":
+      return "Materie prima"
+    case "SEMIFABRICATE":
+      return "Semifabricat"
+    case "PRODUS_FIN":
+      return "Produs finit"
+    case "MARFA":
+      return "Marfa"
+    case "AMBALAJE":
+      return "Ambalaj"
+    case "AMBALAJ_SGR":
+      return "Ambalaj SGR"
+    case "CONSUMABILE":
+      return "Consumabil"
+    case "ALTE_MATERIALE":
+      return "Alt material"
+    default:
+      return String(value || "-")
+  }
+}
+
+function isRawMaterialClass(value: string | null | undefined) {
+  const normalized = String(value || "").toUpperCase()
+  return normalized === "MATERIE_PRIMA" || normalized === "SEMIFABRICATE"
+}
+
+function isFinishedProductClass(value: string | null | undefined) {
+  const normalized = String(value || "").toUpperCase()
+  return normalized === "PRODUS_FIN" || normalized === "MARFA"
+}
+
+function matchesStockClassFilter(item: any, filter: StockClassFilter) {
+  if (filter === "ALL") return true
+  if (filter === "RAW") return isRawMaterialClass(item?.productClass)
+  if (filter === "FINISHED") return isFinishedProductClass(item?.productClass)
+  return !isRawMaterialClass(item?.productClass) && !isFinishedProductClass(item?.productClass)
+}
+
+function stockClassTone(value: string | null | undefined) {
+  if (isRawMaterialClass(value)) return miniBadgeBlue
+  if (isFinishedProductClass(value)) return miniBadgeGreen
+  return miniBadgeSlate
 }
 
 function ProductControlBadges({ item }: { item: any }) {
@@ -105,6 +152,7 @@ export default function StocPage() {
   const [stockSearch, setStockSearch] = useState("")
   const [globalSearch, setGlobalSearch] = useState("")
   const [lotSearch, setLotSearch] = useState("")
+  const [stockClassFilter, setStockClassFilter] = useState<StockClassFilter>("ALL")
   const [activeSection, setActiveSection] = useState<StockSection>("location")
   const [locationPage, setLocationPage] = useState(1)
   const [globalPage, setGlobalPage] = useState(1)
@@ -332,9 +380,9 @@ export default function StocPage() {
     setActiveWarehouseId("")
   }, [warehouseEnabled])
 
-  const filteredGlobalStock = useMemo(() => globalStock, [globalStock])
-  const filteredLocationStock = useMemo(() => stock, [stock])
-  const filteredLots = useMemo(() => lots, [lots])
+  const filteredGlobalStock = useMemo(() => globalStock.filter((item) => matchesStockClassFilter(item, stockClassFilter)), [globalStock, stockClassFilter])
+  const filteredLocationStock = useMemo(() => stock.filter((item) => matchesStockClassFilter(item, stockClassFilter)), [stock, stockClassFilter])
+  const filteredLots = useMemo(() => lots.filter((item) => matchesStockClassFilter(item, stockClassFilter)), [lots, stockClassFilter])
   const lowStockCount = useMemo(
     () => filteredLocationStock.filter((item) => Number(item?.qty || 0) <= 0).length,
     [filteredLocationStock]
@@ -350,6 +398,30 @@ export default function StocPage() {
         return diff !== null && diff >= 0 && diff <= 7
       }).length,
     [filteredLots]
+  )
+  const rawMaterialCount = useMemo(
+    () => filteredLocationStock.filter((item) => isRawMaterialClass(item?.productClass)).length,
+    [filteredLocationStock]
+  )
+  const finishedProductCount = useMemo(
+    () => filteredLocationStock.filter((item) => isFinishedProductClass(item?.productClass)).length,
+    [filteredLocationStock]
+  )
+  const totalLocationQty = useMemo(
+    () => filteredLocationStock.reduce((sum, item) => sum + Number(item?.qty || 0), 0),
+    [filteredLocationStock]
+  )
+  const outMovesQty = useMemo(
+    () => moves.filter((item) => item.type === "OUT").reduce((sum, item) => sum + Number(item.qty || 0), 0),
+    [moves]
+  )
+  const inMovesQty = useMemo(
+    () => moves.filter((item) => item.type === "IN").reduce((sum, item) => sum + Number(item.qty || 0), 0),
+    [moves]
+  )
+  const transferMovesQty = useMemo(
+    () => moves.filter((item) => item.type === "TRANSFER").reduce((sum, item) => sum + Number(item.qty || 0), 0),
+    [moves]
   )
 
   const locationTotalPages = Math.max(1, Math.ceil(filteredLocationStock.length / pageSize))
@@ -385,15 +457,15 @@ export default function StocPage() {
 
   useEffect(() => {
     setLocationPage(1)
-  }, [locationId, stockSearch, filteredLocationStock.length])
+  }, [locationId, stockSearch, filteredLocationStock.length, stockClassFilter])
 
   useEffect(() => {
     setGlobalPage(1)
-  }, [globalSearch, filteredGlobalStock.length])
+  }, [globalSearch, filteredGlobalStock.length, stockClassFilter])
 
   useEffect(() => {
     setLotPage(1)
-  }, [lotSearch, filteredLots.length, locationId, activeWarehouseId])
+  }, [lotSearch, filteredLots.length, locationId, activeWarehouseId, stockClassFilter])
 
   function goToPage(nextPage: number) {
     if (nextPage < 1 || nextPage > pagination.totalPages) return
@@ -432,11 +504,33 @@ export default function StocPage() {
 
       {error ? <div style={errorBox}>{error}</div> : null}
 
-      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-4">
-        <Card title="Produse" value={filteredGlobalStock.length} icon={<Boxes size={16} />} />
-        <Card title="Miscari" value={pagination.total} icon={<ArrowRightLeft size={16} />} />
-        <Card title="Produse cu lot" value={trackedProductsCount} icon={<ClipboardList size={16} />} />
-        <Card title="Expira curand" value={expiringLotsSoonCount} icon={<SearchDot />} />
+      <div className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm shadow-slate-900/[0.03]">
+        <div className="grid gap-4 lg:grid-cols-[1.3fr,1fr]">
+          <div className="space-y-3">
+            <div className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">
+              Control stoc operational
+            </div>
+            <div>
+              <h2 className="text-[24px] font-semibold tracking-tight text-[#17324D]">Vezi clar ce ai in stoc, ce iesiri ai avut si unde trebuie sa intervii</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Pagina de stoc separa acum stocul curent, loturile si miscarile, ca sa intelegi rapid materiile prime disponibile,
+                produsele ramase fara stoc si iesirile din intervalul selectat.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <span style={infoChip}>{locationId ? "Locatie activa din topbar" : "Selecteaza o locatie din topbar"}</span>
+              {warehouseEnabled ? <span style={infoChip}>{activeWarehouseLabel(warehouses, warehouseId)}</span> : null}
+              <span style={infoChip}>{filteredLocationStock.length} produse pe filtrul activ</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2.5">
+            <Card title="Materii prime" value={rawMaterialCount} icon={<Boxes size={16} />} />
+            <Card title="Produse finite" value={finishedProductCount} icon={<ClipboardList size={16} />} />
+            <Card title="Iesiri interval" value={formatQtyRo(outMovesQty, 3)} icon={<ArrowRightLeft size={16} />} />
+            <Card title="Expira curand" value={expiringLotsSoonCount} icon={<SearchDot />} />
+          </div>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
@@ -449,7 +543,7 @@ export default function StocPage() {
               : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
           }`}
         >
-          Stoc pe locatie
+          Stoc actual
         </button>
         <button
           type="button"
@@ -460,7 +554,7 @@ export default function StocPage() {
               : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
           }`}
         >
-          Stoc global
+          Toata compania
         </button>
         <button
           type="button"
@@ -471,7 +565,7 @@ export default function StocPage() {
               : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
           }`}
         >
-          Loturi
+          Loturi si expirari
         </button>
         <button
           type="button"
@@ -482,13 +576,39 @@ export default function StocPage() {
               : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
           }`}
         >
-          Miscari
+          Intrari / Iesiri
         </button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Filtru stoc</span>
+        {[
+          { id: "ALL", label: "Tot" },
+          { id: "RAW", label: "Materii prime" },
+          { id: "FINISHED", label: "Produse finite" },
+          { id: "AUX", label: "Auxiliare" },
+        ].map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            onClick={() => setStockClassFilter(option.id as StockClassFilter)}
+            className={`inline-flex items-center rounded-full px-3 py-1.5 text-[12px] font-semibold transition ${
+              stockClassFilter === option.id
+                ? "bg-[#17324D] text-white"
+                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
+        <span className="ml-auto text-xs text-slate-500">
+          Total locatie {formatQtyRo(totalLocationQty, 3)} · Intrari {formatQtyRo(inMovesQty, 3)} · Iesiri {formatQtyRo(outMovesQty, 3)}
+        </span>
       </div>
 
       {activeSection === "location" ? (
         <Section
-          title="Stoc pe locatie"
+          title="Stoc actual pe locatie"
           actions={
             <div className="min-w-[220px] md:w-[320px]">
               <input
@@ -503,8 +623,15 @@ export default function StocPage() {
         >
           <div style={filterBar}>
             <span style={infoChip}>{locationId ? "Locatia activa din topbar" : "Alege o locatie din topbar"}</span>
-            {locationId && warehouseEnabled ? <span style={infoChip}>Stocul pe locatie afiseaza totalul locatiei. Pentru loturi pe gestiune vezi tabul `Loturi`.</span> : null}
+            {locationId && warehouseEnabled ? <span style={infoChip}>Loturile raman in tabul dedicat, aici vezi stocul curent consolidat pe locatie.</span> : null}
             <span style={infoChip}>{filteredLocationStock.length} produse</span>
+          </div>
+
+          <div className="mb-3 grid grid-cols-1 gap-2.5 md:grid-cols-4">
+            <Card title="Cantitate totala" value={formatQtyRo(totalLocationQty, 3)} icon={<Boxes size={16} />} />
+            <Card title="Fara stoc" value={lowStockCount} icon={<SearchDot />} />
+            <Card title="Cu lot / expirare" value={trackedProductsCount} icon={<ClipboardList size={16} />} />
+            <Card title="Iesiri in interval" value={formatQtyRo(outMovesQty, 3)} icon={<ArrowRightLeft size={16} />} />
           </div>
 
           {locationId === "" ? (
@@ -514,17 +641,23 @@ export default function StocPage() {
           ) : (
             <>
               <Table
-                headers={["Produs", "SKU", "UM", "Control lot", "Gestiune", "Stoc", "Status"]}
+                headers={["Produs", "Clasa", "UM", "Control", "Gestiune", "Stoc curent", "Status"]}
                 rows={pagedLocationStock.map((s) => [
                   <button type="button" style={lotProductButton} onClick={() => openProductLots(s)}>
                     <div style={{ fontWeight: 700 }}>{s.name}</div>
+                    <div style={{ color: "#64748b", fontSize: 12 }}>
+                      {[s.sku, s.department, s.category].filter(Boolean).join(" · ") || "fara clasificare"}
+                    </div>
                     {s.nextExpiry ? <div style={{ color: "#64748b", fontSize: 12 }}>Urmatoarea expirare: {formatShortDate(s.nextExpiry)}</div> : null}
                   </button>,
-                  s.sku,
+                  <span style={{ ...miniBadge, ...stockClassTone(s.productClass) }}>{productClassLabel(s.productClass)}</span>,
                   s.uom,
                   <ProductControlBadges item={s} />,
                   s.warehouseName || "-",
-                  formatQtyRo(Number(s.qty || 0), 3),
+                  <div>
+                    <div style={{ fontWeight: 700 }}>{formatQtyRo(Number(s.qty || 0), 3)}</div>
+                    <div style={{ color: "#64748b", fontSize: 12 }}>{s.uom || "-"}</div>
+                  </div>,
                   <span style={{ ...typeBadge, ...(Number(s.qty || 0) > 0 ? typeIn : typeOut) }}>
                     {Number(s.qty || 0) > 0 ? "In stoc" : "Fara stoc"}
                   </span>,
@@ -546,7 +679,7 @@ export default function StocPage() {
         </Section>
       ) : activeSection === "global" ? (
         <Section
-          title="Stoc global"
+          title="Stoc consolidat pe toata compania"
           actions={
             <div className="flex min-w-[220px] items-center gap-2 md:w-[320px]">
               <input
@@ -567,13 +700,16 @@ export default function StocPage() {
           ) : (
             <>
               <Table
-                headers={["Produs", "SKU", "UM", "Control lot", "Locatii cu stoc", "Stoc total"]}
+                headers={["Produs", "Clasa", "UM", "Control", "Locatii cu stoc", "Stoc total"]}
                 rows={pagedGlobalStock.map((s) => [
                   <button type="button" style={lotProductButton} onClick={() => openProductLots(s)}>
                     <div style={{ fontWeight: 700 }}>{s.name}</div>
+                    <div style={{ color: "#64748b", fontSize: 12 }}>
+                      {[s.sku, s.department, s.category].filter(Boolean).join(" · ") || "fara clasificare"}
+                    </div>
                     {s.nextExpiry ? <div style={{ color: "#64748b", fontSize: 12 }}>Urmatoarea expirare: {formatShortDate(s.nextExpiry)}</div> : null}
                   </button>,
-                  s.sku,
+                  <span style={{ ...miniBadge, ...stockClassTone(s.productClass) }}>{productClassLabel(s.productClass)}</span>,
                   s.uom,
                   <ProductControlBadges item={s} />,
                   <div style={locationsWrap}>
@@ -604,7 +740,7 @@ export default function StocPage() {
         </Section>
       ) : activeSection === "lots" ? (
         <Section
-          title="Loturi disponibile"
+          title="Loturi, expirari si cost ramas"
           actions={
             <div className="min-w-[220px] md:w-[320px]">
               <input
@@ -676,7 +812,12 @@ export default function StocPage() {
           )}
         </Section>
       ) : (
-        <Section title="Miscari stoc">
+        <Section title="Intrari / iesiri de stoc">
+          <div className="mb-3 grid grid-cols-1 gap-2.5 md:grid-cols-3">
+            <Card title="Intrari" value={formatQtyRo(inMovesQty, 3)} icon={<Boxes size={16} />} />
+            <Card title="Iesiri" value={formatQtyRo(outMovesQty, 3)} icon={<ArrowRightLeft size={16} />} />
+            <Card title="Transferuri" value={formatQtyRo(transferMovesQty, 3)} icon={<RefreshCw size={16} />} />
+          </div>
           <div style={movesFiltersWrap}>
             <div style={movesFiltersGrid}>
               <div style={filterField}>
@@ -720,6 +861,7 @@ export default function StocPage() {
                       <th style={th}>UM</th>
                       <th style={th}>Locatie</th>
                       <th style={th}>Gestiune</th>
+                      <th style={th}>Clasa</th>
                       <th style={th}>Lot</th>
                       <th style={th}>Tip</th>
                       <th style={th}>Cantitate</th>
@@ -737,6 +879,9 @@ export default function StocPage() {
                         <td style={td}>{m.uom}</td>
                         <td style={td}>{m.locationName}</td>
                         <td style={td}>{m.warehouseName || "-"}</td>
+                        <td style={td}>
+                          <span style={{ ...miniBadge, ...stockClassTone(m.productClass) }}>{productClassLabel(m.productClass)}</span>
+                        </td>
                         <td style={td}>
                           {m.lotNo ? (
                             <div>
