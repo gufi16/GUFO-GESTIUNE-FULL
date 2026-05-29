@@ -10,7 +10,7 @@ import { allocateProductLots } from "../lib/stockLots"
 import { reserveNextNumber } from "../lib/numbering"
 import { resolveTenantCompany } from "../lib/companyResolver"
 import { readAnafHeader } from "../lib/anafHttp"
-import { drawDocumentHero, drawInfoCards, drawSimpleTable, drawSignatureRow, drawTotalsBox, ensurePdfPage, pdfDate, pdfFmt, pdfText, registerPdfFonts } from "../lib/professionalPdf"
+import { drawSimpleTable, ensurePdfPage, pdfDate, pdfFmt, pdfText, registerPdfFonts } from "../lib/professionalPdf"
 import { requireRequestCompanyId, resolveRequestCompany } from "../lib/companyScope"
 import { generateTransferETransportXml, validateTransferForETransport } from "../lib/etransport"
 import { resolveWarehouseForLocation } from "../lib/warehouse"
@@ -1460,7 +1460,9 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
     where: { id, tenantId, companyId },
     include: {
       fromLocation: true,
+      fromWarehouse: true,
       toLocation: true,
+      toWarehouse: true,
       items: {
         include: {
           product: { include: { uom: true } },
@@ -1485,66 +1487,102 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
   doc.pipe(res)
   const margin = 36
 
-  const drawHeader = () => drawDocumentHero(doc, fonts, {
-    title: 'Nota de transfer',
-    subtitle: 'Transfer intre gestiuni',
-    companyName: company?.name || '-',
-    companyLines: [
+  const pageWidth = doc.page.width
+  const contentWidth = pageWidth - margin * 2
+  const fromStorageLabel = [pdfText(docData.fromLocation.name), pdfText(docData.fromWarehouse?.name)].filter(Boolean).join(" / ")
+  const toStorageLabel = [pdfText(docData.toLocation.name), pdfText(docData.toWarehouse?.name)].filter(Boolean).join(" / ")
+  const drawHeader = () => {
+    const y = margin
+    doc.font(fonts.bold).fontSize(12).fillColor('#111827').text(pdfText(company?.name), margin, y + 8, {
+      width: 220,
+      align: 'left',
+    })
+    const companyLines = [
       `CUI: ${pdfText(company?.cui)}`,
       `Reg. com.: ${pdfText(company?.regNo)}`,
       `Adresa: ${pdfText(company?.address)}`,
       `Email: ${pdfText(company?.email || company?.contactEmail)}`,
       `Telefon: ${pdfText(company?.phone)}`,
-    ],
-    rightPairs: [
-      { label: 'Numar', value: pdfText(docData.docNo) },
-      { label: 'Data', value: pdfDate(docData.docDate) },
-      { label: 'Ora', value: new Date(docData.createdAt).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' }) },
-    ],
-    margin,
-  })
+    ]
+    let companyY = y + 28
+    doc.font(fonts.regular).fontSize(8.8).fillColor('#334155')
+    companyLines.forEach((lineText) => {
+      doc.text(lineText, margin, companyY, { width: 240, align: 'left' })
+      companyY += 11
+    })
+
+    doc.font(fonts.bold).fontSize(21).fillColor('#111827').text('TRANSFER INTRE GESTIUNI', margin + 200, y + 18, {
+      width: contentWidth - 400,
+      align: 'center',
+    })
+    doc.font(fonts.regular).fontSize(9).fillColor('#475569').text('Document intern de predare / primire stoc', margin + 200, y + 46, {
+      width: contentWidth - 400,
+      align: 'center',
+    })
+
+    const rightX = pageWidth - margin - 210
+    const rightLines = [
+      `Nr. document: ${pdfText(docData.docNo)}`,
+      `Data document: ${pdfDate(docData.docDate)}`,
+      `Ora: ${new Date(docData.createdAt).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' })}`,
+    ]
+    let rightY = y + 14
+    doc.font(fonts.regular).fontSize(9.4).fillColor('#111827')
+    rightLines.forEach((lineText) => {
+      doc.text(lineText, rightX, rightY, { width: 210, align: 'left' })
+      rightY += 14
+    })
+
+    return y + 90
+  }
 
   let y = drawHeader()
-  y = drawInfoCards(doc, fonts, {
-    margin,
-    y,
-    cards: [
-      {
-        title: 'Transfer',
-        pairs: [
-          { label: 'Din gestiune', value: pdfText(docData.fromLocation.name) },
-          { label: 'In gestiune', value: pdfText(docData.toLocation.name) },
-          { label: 'Motiv', value: pdfText(docData.reason) },
-          { label: 'Observatii', value: pdfText(docData.note) },
-        ],
-      },
-      {
-        title: 'Transport si predare',
-        pairs: [
-          { label: 'Delegat', value: pdfText(docData.delegateName) },
-          { label: 'CI / BI', value: pdfText(docData.delegateCi) },
-          { label: 'Mijloc transport', value: pdfText(docData.vehicle) },
-          { label: 'Nr. auto', value: pdfText(docData.vehicleNo) },
-        ],
-      },
+  const summaryRows = [
+    [
+      { label: 'Din gestiune', value: fromStorageLabel },
+      { label: 'In gestiune', value: toStorageLabel },
     ],
-  }) + 18
+    [
+      { label: 'Delegat', value: pdfText(docData.delegateName) },
+      { label: 'CI / BI', value: pdfText(docData.delegateCi) },
+    ],
+    [
+      { label: 'Transport', value: pdfText(docData.vehicle) },
+      { label: 'Nr. auto', value: pdfText(docData.vehicleNo) },
+    ],
+    [
+      { label: 'Motiv', value: pdfText(docData.reason) },
+      { label: 'Observatii', value: pdfText(docData.note) },
+    ],
+  ]
+
+  summaryRows.forEach((row) => {
+    const pairWidth = (contentWidth - 16) / 2
+    row.forEach((pair, idx) => {
+      const x = margin + idx * (pairWidth + 16)
+      doc.font(fonts.bold).fontSize(8.6).fillColor('#64748B').text(pair.label, x, y, { width: 96, align: 'left' })
+      doc.font(fonts.regular).fontSize(9.2).fillColor('#111827').text(pair.value, x + 98, y, {
+        width: pairWidth - 98,
+        align: 'left',
+      })
+    })
+    y += 18
+  })
+  y += 16
 
   y = ensurePdfPage(doc, y, 40, margin, drawHeader)
   doc.font(fonts.bold).fontSize(10).fillColor('#0F172A').text('Produse transferate', margin, y)
-  y += 14
+  y += 16
 
   y = drawSimpleTable(doc, fonts, {
     margin,
     y,
     columns: [
-      { label: '#', width: 28, align: 'center' },
-      { label: 'Cod produs', width: 76, align: 'left' },
-      { label: 'Produs', width: 210, align: 'left' },
-      { label: 'UM', width: 44, align: 'center' },
-      { label: 'Cant.', width: 58, align: 'right' },
-      { label: 'Pret', width: 62, align: 'right' },
-      { label: 'Valoare', width: 69, align: 'right' },
+      { label: '#', width: 30, align: 'center' },
+      { label: 'Cod produs', width: 92, align: 'left' },
+      { label: 'Produs', width: 294, align: 'left' },
+      { label: 'UM', width: 58, align: 'center' },
+      { label: 'Cant.', width: 90, align: 'right' },
     ],
     rows: docData.items.map((item, index) => ([
       String(index + 1),
@@ -1552,27 +1590,45 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
       pdfText(item.product?.name),
       pdfText(item.uom?.code || item.product?.uom?.code),
       pdfFmt(item.qty),
-      pdfFmt(item.unitPrice),
-      pdfFmt(item.lineValue),
     ])),
     rowHeight: 24,
     drawHeader,
   }) + 18
 
-  drawTotalsBox(doc, fonts, {
-    x: doc.page.width - margin - 220,
-    y,
-    width: 220,
-    lines: [
-      { label: 'Total cantitati', value: pdfFmt(docData.totalQty) },
-      { label: 'Total valoare', value: `${pdfFmt(docData.totalValue)} lei` },
-    ],
+  y += 8
+  doc.font(fonts.regular).fontSize(9.2).fillColor('#111827').text('Nr. pozitii', margin, y)
+  doc.font(fonts.bold).fontSize(9.6).text(String(docData.items.length), pageWidth - margin - 120, y, {
+    width: 120,
+    align: 'right',
+  })
+  y += 16
+  doc.font(fonts.regular).fontSize(9.2).fillColor('#111827').text('Cantitate totala transfer', margin, y)
+  doc.font(fonts.bold).fontSize(10.2).text(pdfFmt(docData.totalQty), pageWidth - margin - 120, y, {
+    width: 120,
+    align: 'right',
   })
 
-  drawSignatureRow(doc, fonts, {
-    margin,
-    y: y + 76,
-    labels: ['Am predat', 'Am primit', 'Avizat'],
+  y += 36
+  y = ensurePdfPage(doc, y, 80, margin, drawHeader)
+  const signatureWidth = 160
+  const signatureGap = (contentWidth - signatureWidth * 3) / 2
+  const signatureY = y
+  const signatures = [
+    { label: 'Intocmit', value: pdfText(docData.delegateName) || '-' },
+    { label: 'Am predat', value: fromStorageLabel },
+    { label: 'Am primit', value: toStorageLabel },
+  ]
+  signatures.forEach((signature, index) => {
+    const x = margin + index * (signatureWidth + signatureGap)
+    doc.font(fonts.bold).fontSize(10).fillColor('#111827').text(signature.label, x, signatureY, {
+      width: signatureWidth,
+      align: 'center',
+    })
+    doc.moveTo(x + 12, signatureY + 42).lineTo(x + signatureWidth - 12, signatureY + 42).strokeColor('#94A3B8').lineWidth(1).stroke()
+    doc.font(fonts.regular).fontSize(8.8).fillColor('#475569').text(signature.value, x, signatureY + 50, {
+      width: signatureWidth,
+      align: 'center',
+    })
   })
 
   doc.end()
