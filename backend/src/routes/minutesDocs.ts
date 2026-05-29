@@ -8,7 +8,7 @@ import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { getNextNumberPreview, reserveNextNumber } from "../lib/numbering"
 import { assertSufficientStock, decrementStockBalanceStrict } from "../lib/stock"
 import { requireRequestCompanyId, resolveRequestCompany } from "../lib/companyScope"
-import { drawDocumentHero, drawInfoCards, drawSimpleTable, drawSignatureRow, drawTotalsBox, ensurePdfPage, pdfDate, pdfFmt, pdfText, registerPdfFonts } from "../lib/professionalPdf"
+import { drawSimpleTable, drawSignatureRow, drawTotalsBox, ensurePdfPage, pdfDate, pdfFmt, pdfText, registerPdfFonts } from "../lib/professionalPdf"
 
 const router = Router()
 
@@ -498,51 +498,120 @@ router.get("/api/v1/minutes-docs/:id/pdf", async (req: AuthedRequest, res) => {
   const fonts = registerPdfFonts(doc)
   doc.pipe(res)
   const margin = 36
+  const pageWidth = doc.page.width
+  const contentWidth = pageWidth - margin * 2
 
-  const drawHeader = () => drawDocumentHero(doc, fonts, {
-    title: docTypeLabel(docData.type),
-    subtitle: 'ERP gestiune - document justificativ',
-    companyName: company?.name || '-',
-    companyLines: [
+  const drawHeader = () => {
+    const y = margin
+    doc.font(fonts.bold).fontSize(12).fillColor('#111827').text(pdfText(company?.name), margin, y + 8, {
+      width: 150,
+      align: 'left',
+    })
+
+    const companyLines = [
       `CUI: ${pdfText(company?.cui)}`,
       `Reg. com.: ${pdfText(company?.regNo)}`,
       `Adresa: ${pdfText(company?.address)}`,
       `Localitate: ${pdfText(company?.city)} / ${pdfText(company?.county)}`,
       `Email: ${pdfText(company?.contactEmail || company?.email)}`,
-    ],
-    rightPairs: [
-      { label: 'Numar', value: pdfText(docData.docNo) },
-      { label: 'Data', value: pdfDate(docData.docDate) },
-      { label: 'Status', value: pdfText(docData.status) },
-    ],
-    margin,
-  })
+    ]
+
+    let companyY = y + 28
+    doc.font(fonts.regular).fontSize(8.6).fillColor('#334155')
+    companyLines.forEach((lineText) => {
+      doc.text(lineText, margin, companyY, {
+        width: 155,
+        align: 'left',
+      })
+      companyY += 10
+    })
+
+    doc.font(fonts.bold).fontSize(18).fillColor('#111827').text(docTypeLabel(docData.type), margin + 170, y + 6, {
+      width: contentWidth - 340,
+      align: 'center',
+    })
+    doc.font(fonts.regular).fontSize(8.8).fillColor('#475569').text('Document justificativ de gestiune', margin + 170, y + 38, {
+      width: contentWidth - 340,
+      align: 'center',
+    })
+
+    const rightX = pageWidth - margin - 150
+    const rightLines = [
+      `Numar: ${pdfText(docData.docNo)}`,
+      `Data: ${pdfDate(docData.docDate)}`,
+      `Status: ${pdfText(docData.status)}`,
+    ]
+    let rightY = y + 10
+    doc.font(fonts.regular).fontSize(9.2).fillColor('#111827')
+    rightLines.forEach((lineText) => {
+      doc.text(lineText, rightX, rightY, {
+        width: 150,
+        align: 'left',
+      })
+      rightY += 14
+    })
+
+    return Math.max(companyY + 10, rightY + 8, y + 78)
+  }
+
+  const drawInfoTable = (x: number, startY: number, width: number, title: string, pairs: Array<{ label: string; value: string }>) => {
+    const labelWidth = 118
+    const titleHeight = 32
+    const rowHeights = pairs.map((pair) => {
+      const valueHeight = doc.heightOfString(pair.value || "-", {
+        width: width - labelWidth - 20,
+        align: "left",
+      })
+      return Math.max(30, Math.ceil(valueHeight) + 10)
+    })
+    const totalHeight = titleHeight + rowHeights.reduce((sum, rowHeight) => sum + rowHeight, 0)
+
+    doc.save()
+    doc.lineWidth(0.8).strokeColor("#CBD5E1").rect(x, startY, width, totalHeight).stroke()
+    doc.restore()
+    doc.font(fonts.bold).fontSize(10.5).fillColor("#0F172A").text(title, x + 12, startY + 11, {
+      width: width - 24,
+      align: "left",
+    })
+
+    let rowY = startY + titleHeight
+    pairs.forEach((pair, index) => {
+      const rowHeight = rowHeights[index]
+      doc.save()
+      doc.rect(x, rowY, labelWidth, rowHeight).fill("#E8EEF6")
+      doc.restore()
+      doc.save()
+      doc.lineWidth(0.6).strokeColor("#CBD5E1").rect(x, rowY, width, rowHeight).stroke()
+      doc.restore()
+      doc.font(fonts.bold).fontSize(8.4).fillColor("#334155").text(pair.label, x + 8, rowY + 8, {
+        width: labelWidth - 16,
+        align: "left",
+      })
+      doc.font(fonts.regular).fontSize(8.8).fillColor("#111827").text(pair.value || "-", x + labelWidth + 10, rowY + 7, {
+        width: width - labelWidth - 18,
+        align: "left",
+      })
+      rowY += rowHeight
+    })
+
+    return startY + totalHeight
+  }
 
   let y = drawHeader()
-  y = drawInfoCards(doc, fonts, {
-    margin,
-    y,
-    cards: [
-      {
-        title: 'Date document',
-        pairs: [
-          { label: 'Locatie', value: pdfText(docData.location.name) },
-          { label: 'Motiv', value: reasonLabel(docData.reasonCode) },
-          { label: 'Tip', value: docTypeShortLabel(docData.type) },
-          { label: 'Cantitate totala', value: pdfFmt(docData.totalQty, 3) },
-        ],
-      },
-      {
-        title: 'Constatare / observatii',
-        pairs: [
-          { label: 'Valoare totala', value: `${pdfFmt(docData.totalValue)} RON` },
-          { label: 'Constatare', value: docData.type === 'DETERIORATION' ? findingLabel(docData.findingCode, docData.reasonCode) : 'Actualizare preturi comerciale' },
-          { label: 'Nota', value: pdfText(docData.note) },
-        ],
-      },
-    ],
-    height: 132,
-  }) + 18
+  const infoGap = 18
+  const infoWidth = (contentWidth - infoGap) / 2
+  const leftBottom = drawInfoTable(margin, y, infoWidth, 'Date document', [
+    { label: 'Locatie', value: pdfText(docData.location.name) },
+    { label: 'Motiv', value: reasonLabel(docData.reasonCode) },
+    { label: 'Tip', value: docTypeShortLabel(docData.type) },
+    { label: 'Cantitate totala', value: pdfFmt(docData.totalQty, 3) },
+  ])
+  const rightBottom = drawInfoTable(margin + infoWidth + infoGap, y, infoWidth, 'Constatare / observatii', [
+    { label: 'Valoare totala', value: `${pdfFmt(docData.totalValue)} RON` },
+    { label: 'Constatare', value: docData.type === 'DETERIORATION' ? findingLabel(docData.findingCode, docData.reasonCode) : 'Actualizare preturi comerciale' },
+    { label: 'Nota', value: pdfText(docData.note) },
+  ])
+  y = Math.max(leftBottom, rightBottom) + 18
 
   y = ensurePdfPage(doc, y, 40, margin, drawHeader)
   doc.font(fonts.bold).fontSize(10).fillColor('#0F172A').text('Pozitii document', margin, y)
