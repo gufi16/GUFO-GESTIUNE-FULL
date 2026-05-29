@@ -208,9 +208,6 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
     const margin = 20
     const contentWidth = pageWidth - margin * 2
 
-    const metaCols = [120, 190, 120, 220]
-    const metaRowHeight = 24
-
     const columns = [34, 430, 90, 110]
     const headers = [
       "Nr.",
@@ -219,17 +216,12 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
       "Cant.",
     ]
 
-    const headerTitleHeight = 48
-    const introHeight = 32
     const topHeaderHeight = 96
-    const headerBlockHeight = Math.max(topHeaderHeight, headerTitleHeight + 10 + introHeight)
-    const metaBlockHeight = metaRowHeight * 4
+    const headerBlockHeight = topHeaderHeight
     const tableHeaderHeight = 28
     const rowHeight = 24
     const footerBlockHeight = 84
     const signatureBlockHeight = 56
-    const metaTableWidth = metaCols.reduce((sum, value) => sum + value, 0)
-    const metaStartX = margin + (contentWidth - metaTableWidth) / 2
     const itemsTableWidth = columns.reduce((sum, value) => sum + value, 0)
     const itemsStartX = margin + (contentWidth - itemsTableWidth) / 2
 
@@ -255,8 +247,6 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
         (pageHeight -
           margin -
           headerBlockHeight -
-          10 -
-          metaBlockHeight -
           8 -
           tableHeaderHeight -
           110) /
@@ -270,8 +260,6 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
         (pageHeight -
           margin -
           headerBlockHeight -
-          10 -
-          metaBlockHeight -
           8 -
           tableHeaderHeight -
           36) /
@@ -285,8 +273,6 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
         (pageHeight -
           margin -
           headerBlockHeight -
-          10 -
-          metaBlockHeight -
           8 -
           tableHeaderHeight -
           14 -
@@ -358,11 +344,12 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
         companyY += 12
       }
 
+      const infoX = pageWidth - margin - 250
       doc
         .font(fonts.bold)
         .fontSize(21)
-        .text("BON DE CONSUM", margin, y + 16, {
-          width: contentWidth,
+        .text("BON DE CONSUM", margin + 240, y + 16, {
+          width: contentWidth - 500,
           align: "center",
         })
 
@@ -371,13 +358,29 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
         .fontSize(9)
         .text(
           "Act intern de consum materiale.",
-          margin,
+          margin + 240,
           y + 46,
           {
-            width: contentWidth,
+            width: contentWidth - 500,
             align: "center",
           }
         )
+
+      const rightInfo = [
+        `Nr. document: ${text(consumptionDoc.docNo)}`,
+        `Data document: ${fmtDateTime(consumptionDoc.docDate)}`,
+        `Locatie: ${text(consumptionDoc.location?.name)}`,
+        `Gestiune: ${text(consumptionDoc.warehouse?.name)}`,
+      ]
+      let infoY = y + 12
+      doc.font(fonts.regular).fontSize(9.4).fillColor("#111111")
+      rightInfo.forEach((line) => {
+        doc.text(line, infoX, infoY, {
+          width: 230,
+          align: "left",
+        })
+        infoY += 14
+      })
 
       doc
         .font(fonts.regular)
@@ -402,37 +405,6 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
             { width: pageWidth - 160, align: "center" }
           )
         doc.restore()
-      }
-    }
-
-    function drawMetaBlock() {
-      let y = margin + headerBlockHeight + 10
-
-      const metaRows = [
-        ["Document", text(consumptionDoc.docNo), "Data document", fmtDateTime(consumptionDoc.docDate)],
-        ["Locatie", text(consumptionDoc.location?.name), "Gestiune", text(consumptionDoc.warehouse?.name)],
-        ["Status", text(consumptionDoc.status), "Nr. pozitii", String(consumptionDoc.items.length)],
-        ["Nota", text(consumptionDoc.note), "Cantitate totala", fmt(totalQty, 3)],
-      ]
-
-      for (const row of metaRows) {
-        let x = metaStartX
-
-        for (let i = 0; i < metaCols.length; i++) {
-          const cellText = row[i] || ""
-          const isLabel = i % 2 === 0 && cellText !== ""
-
-          drawCell(doc, x, y, metaCols[i], metaRowHeight, cellText, fonts, {
-            bold: isLabel,
-            fontSize: 9,
-            align: "left",
-            fillColor: isLabel ? "#f3f3f3" : null,
-          })
-
-          x += metaCols[i]
-        }
-
-        y += metaRowHeight
       }
     }
 
@@ -530,9 +502,7 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
       const isLastPage = currentPage === totalPages
 
       drawPageHeader(currentPage, totalPages)
-      drawMetaBlock()
-
-      let y = margin + headerBlockHeight + 10 + metaBlockHeight + 8
+      let y = margin + headerBlockHeight + 18
 
       drawTableHeader(y)
       y += tableHeaderHeight
