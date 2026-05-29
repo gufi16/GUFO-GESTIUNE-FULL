@@ -203,31 +203,13 @@ function SalesChart({
   data: SalesPoint[]
   loading?: boolean
 }) {
-  const width = 640
-  const height = 250
-  const padding = 28
   const maxValue = Math.max(...data.map((d) => d.value), 1)
-  const stepX = data.length > 1 ? (width - padding * 2) / (data.length - 1) : 0
   const [hoveredIndex, setHoveredIndex] = useState<number>(data.length ? data.length - 1 : 0)
-
-  const points = data.map((d, i) => {
-    const x = padding + i * stepX
-    const y = height - padding - (d.value / maxValue) * (height - padding * 2)
-    return { ...d, x, y }
-  })
-
-  const linePath = points.reduce((path, point, index) => {
-    if (index === 0) return `M ${point.x} ${point.y}`
-    const previous = points[index - 1]
-    const controlX = (previous.x + point.x) / 2
-    return `${path} C ${controlX} ${previous.y}, ${controlX} ${point.y}, ${point.x} ${point.y}`
-  }, "")
-  const areaPath = `${linePath} L ${width - padding} ${height - padding} L ${padding} ${height - padding} Z`
-  const hovered = points[Math.min(hoveredIndex, Math.max(points.length - 1, 0))]
+  const hovered = data[Math.min(hoveredIndex, Math.max(data.length - 1, 0))]
   const hasData = data.some((item) => item.value > 0)
 
   return (
-    <div className="min-h-[360px] rounded-[24px] border border-[#D9E4EE] bg-[linear-gradient(180deg,#FFFFFF_0%,#F8FBFD_100%)] p-5 shadow-[0_22px_48px_rgba(15,23,42,0.06)]">
+    <div className="rounded-[24px] border border-[#D9E4EE] bg-[linear-gradient(180deg,#FFFFFF_0%,#F8FBFD_100%)] p-5 shadow-[0_22px_48px_rgba(15,23,42,0.06)]">
       <div className="mb-2.5 flex flex-col gap-2.5 xl:flex-row xl:items-start xl:justify-between">
         <div>
           <div className="flex items-center gap-2 text-[15px] font-semibold text-slate-950">
@@ -239,74 +221,70 @@ function SalesChart({
 
       </div>
 
-      <div className="relative w-full overflow-hidden">
+      <div className="relative overflow-hidden rounded-[20px] border border-slate-200 bg-white/80 px-4 py-4">
         {!hasData && !loading ? (
-          <div className="absolute inset-x-6 top-14 z-10 rounded-[18px] border border-dashed border-slate-300 bg-white/90 px-4 py-5 text-center text-sm text-slate-500">
+          <div className="rounded-[18px] border border-dashed border-slate-300 bg-white/90 px-4 py-5 text-center text-sm text-slate-500">
             Nu exista vanzari pentru intervalul selectat.
           </div>
         ) : null}
-        <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="h-[190px] w-full sm:h-[210px]">
-          <defs>
-            <linearGradient id="salesFill" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="#17324D" stopOpacity="0.18" />
-              <stop offset="45%" stopColor="#47C2B1" stopOpacity="0.12" />
-              <stop offset="100%" stopColor="#47C2B1" stopOpacity="0.02" />
-            </linearGradient>
-            <linearGradient id="salesLine" x1="0" x2="1" y1="0" y2="0">
-              <stop offset="0%" stopColor="#17324D" />
-              <stop offset="100%" stopColor="#47C2B1" />
-            </linearGradient>
-          </defs>
 
-          {[0, 1, 2, 3].map((line) => {
-            const y = padding + ((height - padding * 2) / 3) * line
-            return (
-              <line
-                key={line}
-                x1={padding}
-                y1={y}
-                x2={width - padding}
-                y2={y}
-                stroke="#e2e8f0"
-                strokeDasharray="4 4"
-              />
-            )
-          })}
+        {hasData ? (
+          <>
+            {hovered ? (
+              <div className="mb-4 inline-flex rounded-[16px] border border-slate-200 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.95)_100%)] px-3 py-2 shadow-lg shadow-slate-900/10">
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{hovered.label}</div>
+                  <div className="mt-1 text-lg font-semibold text-slate-950">{formatRon(hovered.value)}</div>
+                </div>
+              </div>
+            ) : null}
 
-          {points.length > 1 ? <path d={areaPath} fill="url(#salesFill)" /> : null}
-          {points.length > 1 ? (
-            <path
-              d={linePath}
-              fill="none"
-              stroke="url(#salesLine)"
-              strokeWidth="4"
-              strokeLinejoin="round"
-              strokeLinecap="round"
-            />
-          ) : null}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {data.map((point, index) => {
+                const heightPercent = Math.max(10, Math.round((point.value / maxValue) * 100))
+                const active = hoveredIndex === index
+                return (
+                  <button
+                    key={point.date}
+                    type="button"
+                    onMouseEnter={() => setHoveredIndex(index)}
+                    onFocus={() => setHoveredIndex(index)}
+                    onClick={() => setHoveredIndex(index)}
+                    className={[
+                      "rounded-[18px] border px-4 py-4 text-left transition",
+                      active
+                        ? "border-[#47C2B1] bg-[#F4FBFA] shadow-[0_14px_28px_rgba(71,194,177,0.12)]"
+                        : "border-slate-200 bg-slate-50/70 hover:border-slate-300 hover:bg-white",
+                    ].join(" ")}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{point.label}</div>
+                      <div className="text-sm font-semibold text-slate-950">{formatRon(point.value)}</div>
+                    </div>
 
-          {points.map((point, index) => (
-            <g
-              key={point.date}
-              onMouseEnter={() => setHoveredIndex(index)}
-              onClick={() => setHoveredIndex(index)}
-              style={{ cursor: "pointer" }}
-            >
-              {hoveredIndex === index ? (
-                <circle cx={point.x} cy={point.y} r="16" fill="#47C2B1" opacity="0.16" />
-              ) : null}
-              <circle cx={point.x} cy={point.y} r={hoveredIndex === index ? "7" : "5"} fill="#17324D" />
-              <circle cx={point.x} cy={point.y} r={hoveredIndex === index ? "3.2" : "2.4"} fill="#fff" />
-              <text x={point.x} y={height - 4} textAnchor="middle" fontSize="12" fill="#64748b">
-                {point.label}
-              </text>
-            </g>
-          ))}
-        </svg>
-        {hovered ? (
-          <div className="pointer-events-none absolute left-4 top-2 rounded-[16px] border border-slate-200 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.95)_100%)] px-3 py-2 shadow-lg shadow-slate-900/10">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{hovered.label}</div>
-            <div className="mt-1 text-lg font-semibold text-slate-950">{formatRon(hovered.value)}</div>
+                    <div className="mt-4 h-24 rounded-[14px] bg-white/80 p-2">
+                      <div className="flex h-full items-end">
+                        <div
+                          className="w-full rounded-[10px] bg-[linear-gradient(180deg,#47C2B1_0%,#17324D_100%)] transition-all duration-300"
+                          style={{ height: `${heightPercent}%` }}
+                        />
+                      </div>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </>
+        ) : null}
+        {loading ? (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {[0, 1, 2].map((item) => (
+              <div key={item} className="animate-pulse rounded-[18px] border border-slate-200 bg-slate-50/70 px-4 py-4">
+                <div className="h-3 w-16 rounded bg-slate-200" />
+                <div className="mt-2 h-5 w-28 rounded bg-slate-200" />
+                <div className="mt-4 h-24 rounded-[14px] bg-slate-200" />
+              </div>
+            ))}
           </div>
         ) : null}
       </div>
