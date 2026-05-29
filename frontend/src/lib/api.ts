@@ -20,6 +20,21 @@ function resolveHostedApiBase() {
 
 export const API_BASE = envApiBase || (isLocalHost ? "http://localhost:3001" : resolveHostedApiBase())
 
+export function resolvePublicAssetUrl(value?: string | null): string {
+  const text = String(value || "").trim()
+  if (!text) return ""
+
+  if (/^https?:\/\//i.test(text) || text.startsWith("data:") || text.startsWith("blob:")) {
+    return text
+  }
+
+  if (text.startsWith("/")) {
+    return `${API_BASE}${text}`
+  }
+
+  return `${API_BASE}/${text.replace(/^\/+/, "")}`
+}
+
 function resolveTokenByPath(path?: string): string {
   const normalizedPath = String(path || "").trim()
   const isPublicAuthRoute =

@@ -1,7 +1,7 @@
 import { Bell, Building2, LogOut, MapPin, Menu, Warehouse } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom"
-import { API_BASE as API, authHeaders } from "../lib/api"
+import { API_BASE as API, authHeaders, resolvePublicAssetUrl } from "../lib/api"
 import { logout, me, selectCompany } from "../lib/auth"
 import { getActiveLocationId, setActiveLocationId, subscribeToActiveLocation } from "../lib/location"
 import { getActiveTerminalId, setActiveTerminalId, subscribeToActiveTerminal } from "../lib/terminal"
@@ -144,7 +144,7 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
           null
 
         setUserLabel(profileName)
-        setUserAvatarUrl(nextAvatarUrl?.trim() || "")
+        setUserAvatarUrl(resolvePublicAssetUrl(nextAvatarUrl?.trim() || ""))
         setCompanyChoices(companies)
         setActiveCompanyId(activeCompany?.id || "")
         setCompanyLabel(activeCompany?.name || "Firma activa")

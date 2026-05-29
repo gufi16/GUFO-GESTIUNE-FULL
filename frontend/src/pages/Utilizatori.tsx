@@ -10,7 +10,7 @@ import {
   documentButtonSecondaryClass,
   documentInputClass,
 } from "../components/DocumentUi"
-import { API_BASE, api, authHeaders } from "../lib/api"
+import { API_BASE, api, authHeaders, resolvePublicAssetUrl } from "../lib/api"
 
 type CompanyItem = {
   id: string
@@ -380,7 +380,7 @@ export default function Utilizatori() {
                   <td className="px-3 py-3">
                     <div className="flex items-center gap-3">
                       {item.imageUrl ? (
-                        <img src={item.imageUrl} alt={item.name} className="h-10 w-10 rounded-full border border-slate-200 object-cover" />
+                        <img src={resolvePublicAssetUrl(item.imageUrl)} alt={item.name} className="h-10 w-10 rounded-full border border-slate-200 object-cover" />
                       ) : (
                         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#17324D] text-sm font-semibold text-white">
                           {item.name
@@ -560,7 +560,7 @@ export default function Utilizatori() {
                   <label className="mb-1 block text-xs font-medium text-slate-700">Poza profil</label>
                   <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
                     {form.imageUrl ? (
-                      <img src={form.imageUrl} alt={form.name || "Avatar"} className="h-16 w-16 rounded-full border border-slate-200 object-cover" />
+                      <img src={resolvePublicAssetUrl(form.imageUrl)} alt={form.name || "Avatar"} className="h-16 w-16 rounded-full border border-slate-200 object-cover" />
                     ) : (
                       <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#17324D] text-lg font-semibold text-white">
                         {(form.name || "U")
