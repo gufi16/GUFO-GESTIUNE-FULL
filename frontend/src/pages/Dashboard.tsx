@@ -15,6 +15,15 @@
 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "react-router-dom"
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts"
 import QuickActions from "../components/QuickActions"
 import PosReceiptsView from "../components/PosReceiptsView"
 import { API_BASE as API, getToken, authHeaders } from "../lib/api"
@@ -203,10 +212,13 @@ function SalesChart({
   data: SalesPoint[]
   loading?: boolean
 }) {
-  const maxValue = Math.max(...data.map((d) => d.value), 1)
   const [hoveredIndex, setHoveredIndex] = useState<number>(data.length ? data.length - 1 : 0)
   const hovered = data[Math.min(hoveredIndex, Math.max(data.length - 1, 0))]
   const hasData = data.some((item) => item.value > 0)
+  const chartData = data.map((item) => ({
+    ...item,
+    amount: Number(item.value || 0),
+  }))
 
   return (
     <div className="rounded-[24px] border border-[#D9E4EE] bg-[linear-gradient(180deg,#FFFFFF_0%,#F8FBFD_100%)] p-5 shadow-[0_22px_48px_rgba(15,23,42,0.06)]">
@@ -242,62 +254,77 @@ function SalesChart({
               </div>
             ) : null}
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {data.map((point, index) => {
-                const heightPercent = Math.max(14, Math.round((point.value / maxValue) * 100))
-                const active = hoveredIndex === index
-                return (
-                  <button
-                    key={point.date}
-                    type="button"
-                    onMouseEnter={() => setHoveredIndex(index)}
-                    onFocus={() => setHoveredIndex(index)}
-                    onClick={() => setHoveredIndex(index)}
-                    className={[
-                      "rounded-[18px] border px-4 py-4 text-left transition",
-                      active
-                        ? "border-[#47C2B1] bg-[#F4FBFA] shadow-[0_14px_28px_rgba(71,194,177,0.12)]"
-                        : "border-slate-200 bg-slate-50/70 hover:border-slate-300 hover:bg-white",
-                    ].join(" ")}
+            <div className="rounded-[18px] border border-slate-200 bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(244,248,251,0.92)_100%)] px-3 py-3">
+              <div className="h-[240px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart
+                    data={chartData}
+                    margin={{ top: 12, right: 12, left: -18, bottom: 0 }}
+                    onMouseMove={(state) => {
+                      if (typeof state?.activeTooltipIndex === "number") {
+                        setHoveredIndex(state.activeTooltipIndex)
+                      }
+                    }}
                   >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{point.label}</div>
-                      <div className="text-sm font-semibold text-slate-950">{formatRon(point.value)}</div>
-                    </div>
-
-                    <div className="mt-4 rounded-[14px] border border-white/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.95)_0%,rgba(241,245,249,0.92)_100%)] px-4 py-3">
-                      <div className="flex h-28 items-end justify-center">
-                        <div className="relative flex h-full w-full items-end justify-center">
-                          <div className="absolute inset-x-0 bottom-0 h-[1px] bg-slate-200" />
-                          <div
-                            className={[
-                              "relative w-14 rounded-[16px] transition-all duration-300",
-                              active
-                                ? "bg-[linear-gradient(180deg,#5AD6C0_0%,#17324D_100%)] shadow-[0_18px_30px_rgba(35,111,156,0.22)]"
-                                : "bg-[linear-gradient(180deg,#7ADFD0_0%,#245D7F_100%)]",
-                            ].join(" ")}
-                            style={{ height: `${heightPercent}%` }}
-                          >
-                            <div className="absolute inset-x-2 top-2 h-1.5 rounded-full bg-white/20" />
+                    <defs>
+                      <linearGradient id="dashboard-sales-area" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#4FD1C5" stopOpacity={0.28} />
+                        <stop offset="55%" stopColor="#4FD1C5" stopOpacity={0.12} />
+                        <stop offset="100%" stopColor="#4FD1C5" stopOpacity={0.02} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid vertical={false} stroke="#E2E8F0" strokeDasharray="4 6" />
+                    <XAxis
+                      dataKey="label"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: "#7C8DA5", fontSize: 12, fontWeight: 600 }}
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      width={62}
+                      tick={{ fill: "#A0AEC0", fontSize: 11 }}
+                      tickFormatter={(value) => `${Math.round(Number(value || 0))}`}
+                    />
+                    <Tooltip
+                      cursor={{ stroke: "#47C2B1", strokeWidth: 1.5, strokeDasharray: "4 6" }}
+                      content={({ active, payload, label }) => {
+                        if (!active || !payload?.length) return null
+                        const value = Number(payload[0]?.value || 0)
+                        return (
+                          <div className="rounded-[16px] border border-slate-200 bg-white px-3 py-2 shadow-[0_16px_32px_rgba(15,23,42,0.12)]">
+                            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</div>
+                            <div className="mt-1 text-base font-semibold text-slate-950">{formatRon(value)}</div>
                           </div>
-                        </div>
-                      </div>
-                    </div>
-                  </button>
-                )
-              })}
+                        )
+                      }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="amount"
+                      stroke="#17324D"
+                      strokeWidth={3}
+                      fill="url(#dashboard-sales-area)"
+                      dot={{ r: 0 }}
+                      activeDot={{
+                        r: 6,
+                        fill: "#ffffff",
+                        stroke: "#17324D",
+                        strokeWidth: 3,
+                      }}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           </>
         ) : null}
         {loading ? (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {[0, 1, 2].map((item) => (
-              <div key={item} className="animate-pulse rounded-[18px] border border-slate-200 bg-slate-50/70 px-4 py-4">
-                <div className="h-3 w-16 rounded bg-slate-200" />
-                <div className="mt-2 h-5 w-28 rounded bg-slate-200" />
-                <div className="mt-4 h-24 rounded-[14px] bg-slate-200" />
-              </div>
-            ))}
+          <div className="animate-pulse rounded-[18px] border border-slate-200 bg-slate-50/70 px-4 py-4">
+            <div className="h-3 w-16 rounded bg-slate-200" />
+            <div className="mt-2 h-5 w-28 rounded bg-slate-200" />
+            <div className="mt-4 h-[220px] rounded-[14px] bg-slate-200" />
           </div>
         ) : null}
       </div>
