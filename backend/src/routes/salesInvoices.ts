@@ -837,8 +837,8 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
   const blockWidth = (contentWidth - colGap) / 2
   const centerX = margin + blockWidth - 18
   const titleWidth = 256
-  const clientBlockWidth = blockWidth - 10
-  const clientBlockX = pageWidth - margin - clientBlockWidth
+  const sideBlockWidth = blockWidth - 12
+  const clientBlockX = pageWidth - margin - sideBlockWidth
   const supplierLines = [
     pdfText(company?.name),
     `CIF: ${pdfText(company?.cui)}`,
@@ -867,8 +867,8 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
   doc.font(fonts.regular).fontSize(10.5).fillColor(muted).text(`Nr. factura: ${pdfText(invoiceIdentity.number)}`, centerX - titleWidth / 2, titleY + 45, { width: titleWidth, align: 'center' })
   doc.font(fonts.regular).fontSize(9.5).fillColor(muted).text(`Moneda: ${pdfText(invoice.currency || 'RON')}`, centerX - titleWidth / 2, titleY + 60, { width: titleWidth, align: 'center' })
 
-  const supplierEndY = drawFieldBlock('FURNIZOR', supplierLines, margin, y + 10, blockWidth - 10, 'left', 'left')
-  const clientEndY = drawFieldBlock('CLIENT', clientLines, clientBlockX, y + 10, clientBlockWidth, 'right', 'left')
+  const supplierEndY = drawFieldBlock('FURNIZOR', supplierLines, margin, y + 10, sideBlockWidth, 'left', 'left')
+  const clientEndY = drawFieldBlock('CLIENT', clientLines, clientBlockX, y + 10, sideBlockWidth, 'right', 'right')
   y = Math.max(supplierEndY, clientEndY, titleY + 82) + 12
 
   doc.moveTo(margin, y).lineTo(pageWidth - margin, y).strokeColor(line).lineWidth(1).stroke()
@@ -959,13 +959,12 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
 
   const footerY = doc.page.height - margin - 52
   const footerGap = 10
-  const footerWidths = [180, 126, 126, contentWidth - 180 - 126 - 126 - footerGap * 3]
+  const footerWidths = [220, 146, contentWidth - 220 - 146 - footerGap * 2]
   let footerX = margin
   const footerItems = [
     { label: 'ID descarcare SPV', value: pdfText(invoice.efacturaDownloadId || '-') , align: 'left' as const},
     { label: 'Data emitere', value: pdfDate(invoice.docDate), align: 'left' as const},
     { label: 'Data scadenta', value: pdfDate(invoice.dueDate || invoice.docDate), align: 'left' as const},
-    { label: 'Seria / Nr factura', value: `${pdfText(invoiceIdentity.series)} / ${pdfText(invoiceIdentity.number)}`, align: 'left' as const},
   ]
   footerItems.forEach((item, index) => {
     const width = footerWidths[index]
