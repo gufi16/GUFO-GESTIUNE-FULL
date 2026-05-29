@@ -801,18 +801,33 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
     doc.font(fonts.bold).fontSize(11).fillColor(dark).text(title, x, top, { width, align })
     let yy = top + 18
     lines.filter(Boolean).forEach((entry) => {
-      const h = doc.heightOfString(entry, { width, align: 'left' })
+      const h = doc.heightOfString(entry, { width, align })
       doc.font(fonts.regular).fontSize(9.5).fillColor(dark).text(entry, x, yy, { width, align })
       yy += h + 4
     })
     return yy
   }
 
+  const splitInvoiceIdentity = (value: string) => {
+    const raw = String(value || "").trim()
+    if (!raw) return { series: "-", number: "-" }
+    const match = raw.match(/^([A-Za-z]+)[\s\-\/]*([0-9]+)$/)
+    if (match) {
+      return { series: match[1], number: match[2] }
+    }
+    const compact = raw.replace(/\s+/g, "")
+    const digits = compact.match(/(\d+)$/)?.[1] || ""
+    const prefix = digits ? compact.slice(0, compact.length - digits.length).replace(/[-\/]+$/g, "") : ""
+    return {
+      series: prefix || raw,
+      number: digits || raw,
+    }
+  }
+
   let y = margin
   const colGap = 24
   const blockWidth = (contentWidth - colGap) / 2
   const centerX = margin + blockWidth
-  const centerW = colGap
   const supplierLines = [
     pdfText(company?.name),
     `CIF: ${pdfText(company?.cui)}`,
@@ -833,15 +848,17 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
     `Tara: ${pdfText(invoice.customerCountry || 'RO')}`,
     `Email: ${pdfText(invoice.customerEmail)}`,
   ]
+  const invoiceIdentity = splitInvoiceIdentity(invoice.docNo)
 
   const titleY = y + 8
   doc.font(fonts.bold).fontSize(25).fillColor(dark).text('FACTURA', centerX - 110, titleY, { width: 220, align: 'center' })
-  doc.font(fonts.regular).fontSize(10.5).fillColor(muted).text(`Seria / Numar ${pdfText(invoice.docNo)}`, centerX - 110, titleY + 28, { width: 220, align: 'center' })
-  doc.font(fonts.regular).fontSize(9.5).fillColor(muted).text(`Moneda ${pdfText(invoice.currency || 'RON')}`, centerX - 110, titleY + 42, { width: 220, align: 'center' })
+  doc.font(fonts.regular).fontSize(10.5).fillColor(muted).text(`Seria ${pdfText(invoiceIdentity.series)}`, centerX - 110, titleY + 28, { width: 220, align: 'center' })
+  doc.font(fonts.regular).fontSize(10.5).fillColor(muted).text(`Nr. factura ${pdfText(invoiceIdentity.number)}`, centerX - 110, titleY + 42, { width: 220, align: 'center' })
+  doc.font(fonts.regular).fontSize(9.5).fillColor(muted).text(`Moneda ${pdfText(invoice.currency || 'RON')}`, centerX - 110, titleY + 56, { width: 220, align: 'center' })
 
-  const supplierEndY = drawFieldBlock('FURNIZOR', supplierLines, margin, y + 10, blockWidth - 24, 'left')
-  const clientEndY = drawFieldBlock('CLIENT', clientLines, margin + blockWidth + colGap + 24, y + 10, blockWidth - 24, 'right')
-  y = Math.max(supplierEndY, clientEndY, titleY + 68) + 12
+  const supplierEndY = drawFieldBlock('FURNIZOR', supplierLines, margin, y + 10, blockWidth - 10, 'left')
+  const clientEndY = drawFieldBlock('CLIENT', clientLines, margin + blockWidth + colGap + 10, y + 10, blockWidth - 10, 'right')
+  y = Math.max(supplierEndY, clientEndY, titleY + 78) + 12
 
   doc.moveTo(margin, y).lineTo(pageWidth - margin, y).strokeColor(line).lineWidth(1).stroke()
   y += 16
@@ -929,13 +946,31 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
   doc.font(fonts.bold).fontSize(15).fillColor(dark).text(pdfFmt(invoice.totalWithSgrFc || invoice.totalGrossFc), totalsX + 120, y + 66, { width: 82, align: 'right' })
   y += 126
 
-  const footerY = doc.page.height - margin - 18
-  doc.font(fonts.regular).fontSize(9).fillColor(muted)
-  if (invoice.efacturaDownloadId) {
-    doc.text(`ID descarcare SPV: ${pdfText(invoice.efacturaDownloadId)}`, margin, footerY, { width: 220, align: 'left' })
-  }
-  doc.text(`Data factura: ${pdfDate(invoice.docDate)}`, pageWidth - margin - 180, footerY - 12, { width: 180, align: 'right' })
-  doc.text(`Data scadenta: ${pdfDate(invoice.dueDate || invoice.docDate)}`, pageWidth - margin - 180, footerY + 2, { width: 180, align: 'right' })
+  const footerY = doc.page.height - margin - 52
+  const footerGap = 10
+  const footerWidths = [180, 126, 126, contentWidth - 180 - 126 - 126 - footerGap * 3]
+  let footerX = margin
+  const footerItems = [
+    { label: 'ID descarcare SPV', value: pdfText(invoice.efacturaDownloadId || '-') , align: 'left' as const},
+    { label: 'Data emitere', value: pdfDate(invoice.docDate), align: 'center' as const},
+    { label: 'Data scadenta', value: pdfDate(invoice.dueDate || invoice.docDate), align: 'center' as const},
+    { label: 'Seria / Nr factura', value: `${pdfText(invoiceIdentity.series)} / ${pdfText(invoiceIdentity.number)}`, align: 'right' as const},
+  ]
+  footerItems.forEach((item, index) => {
+    const width = footerWidths[index]
+    doc.save()
+    doc.roundedRect(footerX, footerY, width, 38, 8).fillAndStroke("#F8FAFC", line)
+    doc.restore()
+    doc.font(fonts.bold).fontSize(8.2).fillColor(muted).text(item.label, footerX + 10, footerY + 7, {
+      width: width - 20,
+      align: item.align,
+    })
+    doc.font(fonts.regular).fontSize(9.3).fillColor(dark).text(item.value, footerX + 10, footerY + 19, {
+      width: width - 20,
+      align: item.align,
+    })
+    footerX += width + footerGap
+  })
 
   doc.end()
 })
