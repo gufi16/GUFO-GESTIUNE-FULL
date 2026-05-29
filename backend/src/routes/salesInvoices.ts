@@ -832,10 +832,9 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
     }
   }
 
-  let y = margin
   const colGap = 24
   const blockWidth = (contentWidth - colGap) / 2
-  const centerX = margin + blockWidth - 18
+  const centerX = pageWidth / 2
   const titleWidth = 256
   const sideBlockWidth = blockWidth - 12
   const clientBlockX = pageWidth - margin - sideBlockWidth
@@ -861,30 +860,38 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
   ]
   const invoiceIdentity = splitInvoiceIdentity(invoice.docNo)
 
-  const titleY = y + 8
-  doc.font(fonts.bold).fontSize(25).fillColor(dark).text('FACTURA', centerX - titleWidth / 2, titleY, { width: titleWidth, align: 'center' })
-  doc.font(fonts.regular).fontSize(10.5).fillColor(muted).text(`Seria: ${pdfText(invoiceIdentity.series)}`, centerX - titleWidth / 2, titleY + 30, { width: titleWidth, align: 'center' })
-  doc.font(fonts.regular).fontSize(10.5).fillColor(muted).text(`Nr. factura: ${pdfText(invoiceIdentity.number)}`, centerX - titleWidth / 2, titleY + 45, { width: titleWidth, align: 'center' })
-  doc.font(fonts.regular).fontSize(9.5).fillColor(muted).text(`Moneda: ${pdfText(invoice.currency || 'RON')}`, centerX - titleWidth / 2, titleY + 60, { width: titleWidth, align: 'center' })
-
-  const supplierEndY = drawFieldBlock('FURNIZOR', supplierLines, margin, y + 10, sideBlockWidth, 'left', 'left')
-  const clientEndY = drawFieldBlock('CLIENT', clientLines, clientBlockX, y + 10, sideBlockWidth, 'right', 'right')
-  y = Math.max(supplierEndY, clientEndY, titleY + 82) + 12
-
-  doc.moveTo(margin, y).lineTo(pageWidth - margin, y).strokeColor(line).lineWidth(1).stroke()
-  y += 16
-
   const cols = [22, 202, 40, 46, 78, 64, 75]
   const headers = ['#', 'Denumire', 'U.M.', 'Cant.', 'Pret fara TVA', 'Valoare', 'Valoare TVA']
-  let x = margin
-  headers.forEach((header, index) => {
-    const align = index === 1 ? 'left' : index === 0 ? 'center' : 'right'
-    doc.font(fonts.bold).fontSize(9).fillColor(dark).text(header, x + 3, y, { width: cols[index] - 6, align })
-    x += cols[index]
-  })
-  y += 16
-  doc.moveTo(margin, y).lineTo(pageWidth - margin, y).strokeColor(line).lineWidth(1.1).stroke()
-  y += 8
+  const drawTableHeader = (startY: number) => {
+    let x = margin
+    headers.forEach((header, index) => {
+      const align = index === 1 ? 'left' : index === 0 ? 'center' : 'right'
+      doc.font(fonts.bold).fontSize(9).fillColor(dark).text(header, x + 3, startY, { width: cols[index] - 6, align })
+      x += cols[index]
+    })
+    const afterHeaderY = startY + 16
+    doc.moveTo(margin, afterHeaderY).lineTo(pageWidth - margin, afterHeaderY).strokeColor(line).lineWidth(1.1).stroke()
+    return afterHeaderY + 8
+  }
+
+  const drawInvoiceHeader = () => {
+    let y = margin
+    const titleY = y + 8
+    doc.font(fonts.bold).fontSize(25).fillColor(dark).text('FACTURA', centerX - titleWidth / 2, titleY, { width: titleWidth, align: 'center' })
+    doc.font(fonts.regular).fontSize(10.5).fillColor(muted).text(`Seria: ${pdfText(invoiceIdentity.series)}`, centerX - titleWidth / 2, titleY + 30, { width: titleWidth, align: 'center' })
+    doc.font(fonts.regular).fontSize(10.5).fillColor(muted).text(`Nr. factura: ${pdfText(invoiceIdentity.number)}`, centerX - titleWidth / 2, titleY + 45, { width: titleWidth, align: 'center' })
+    doc.font(fonts.regular).fontSize(9.5).fillColor(muted).text(`Moneda: ${pdfText(invoice.currency || 'RON')}`, centerX - titleWidth / 2, titleY + 60, { width: titleWidth, align: 'center' })
+
+    const supplierEndY = drawFieldBlock('FURNIZOR', supplierLines, margin, y + 10, sideBlockWidth, 'left', 'left')
+    const clientEndY = drawFieldBlock('CLIENT', clientLines, clientBlockX, y + 10, sideBlockWidth, 'right', 'right')
+    y = Math.max(supplierEndY, clientEndY, titleY + 82) + 12
+
+    doc.moveTo(margin, y).lineTo(pageWidth - margin, y).strokeColor(line).lineWidth(1).stroke()
+    y += 16
+    return drawTableHeader(y)
+  }
+
+  let y = drawInvoiceHeader()
 
   invoice.items.forEach((item, index) => {
     const productTitle = pdfText(item.productName || item.product?.name)
@@ -898,6 +905,12 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
     const titleHeight = doc.heightOfString(productTitle, { width: cols[1] - 8 })
     const subHeight = subline ? doc.heightOfString(subline, { width: cols[1] - 8 }) + 3 : 0
     const rowHeight = Math.max(22, titleHeight + subHeight + 4)
+
+    if (y + rowHeight + 10 > doc.page.height - margin - 70) {
+      doc.addPage({ size: "A4", margin })
+      y = drawInvoiceHeader()
+    }
+
     let xx = margin
 
     doc.font(fonts.regular).fontSize(9).fillColor(dark).text(String(index + 1), xx + 2, y, { width: cols[0] - 4, align: 'center' })
@@ -929,6 +942,12 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
   const noteW = contentWidth - totalsBoxW - 16
   const observations = sanitizeInvoicePdfNote(invoice.note)
   const hasSpvDetails = Boolean(invoice.efacturaSentAt || invoice.efacturaUploadIndex || invoice.efacturaDownloadId)
+
+  const footerReserve = hasSpvDetails || observations ? 180 : 130
+  if (y + footerReserve > doc.page.height - margin) {
+    doc.addPage({ size: "A4", margin })
+    y = drawInvoiceHeader()
+  }
 
   if (observations) {
     doc.font(fonts.bold).fontSize(9.5).fillColor(dark).text('Observatii', margin, y + 2, { width: noteW })
