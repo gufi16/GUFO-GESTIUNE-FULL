@@ -508,6 +508,7 @@ router.get("/api/v1/minutes-docs/:id/pdf", async (req: AuthedRequest, res) => {
     const centerWidth = contentWidth - leftWidth - rightWidth
     const centerX = margin + leftWidth
     const rightX = centerX + centerWidth
+    const titleText = docTypeLabel(docData.type)
 
     doc.font(fonts.bold).fontSize(12).fillColor('#111827').text(pdfText(company?.name), margin, y + 8, {
       width: leftWidth - 16,
@@ -532,11 +533,20 @@ router.get("/api/v1/minutes-docs/:id/pdf", async (req: AuthedRequest, res) => {
       companyY += 10
     })
 
-    doc.font(fonts.bold).fontSize(17).fillColor('#111827').text(docTypeLabel(docData.type), centerX + 10, y + 6, {
+    doc.font(fonts.bold).fontSize(16).fillColor('#111827').text(titleText, centerX + 10, y + 6, {
       width: centerWidth - 20,
       align: 'center',
     })
-    doc.font(fonts.regular).fontSize(8.8).fillColor('#475569').text('Document justificativ de gestiune', centerX + 10, y + 40, {
+    const titleHeight = doc.heightOfString(titleText, {
+      width: centerWidth - 20,
+      align: 'center',
+    })
+    const subtitleY = y + 10 + titleHeight
+    doc.font(fonts.regular).fontSize(8.8).fillColor('#475569').text('Document justificativ de gestiune', centerX + 10, subtitleY, {
+      width: centerWidth - 20,
+      align: 'center',
+    })
+    const subtitleBottom = subtitleY + doc.heightOfString('Document justificativ de gestiune', {
       width: centerWidth - 20,
       align: 'center',
     })
@@ -556,7 +566,7 @@ router.get("/api/v1/minutes-docs/:id/pdf", async (req: AuthedRequest, res) => {
       rightY += 14
     })
 
-    return Math.max(companyY + 10, rightY + 8, y + 84)
+    return Math.max(companyY + 10, rightY + 8, subtitleBottom + 8, y + 90)
   }
 
   const drawInfoTable = (x: number, startY: number, width: number, title: string, pairs: Array<{ label: string; value: string }>) => {
