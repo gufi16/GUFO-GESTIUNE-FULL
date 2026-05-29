@@ -503,8 +503,14 @@ router.get("/api/v1/minutes-docs/:id/pdf", async (req: AuthedRequest, res) => {
 
   const drawHeader = () => {
     const y = margin
+    const leftWidth = 190
+    const rightWidth = 160
+    const centerWidth = contentWidth - leftWidth - rightWidth
+    const centerX = margin + leftWidth
+    const rightX = centerX + centerWidth
+
     doc.font(fonts.bold).fontSize(12).fillColor('#111827').text(pdfText(company?.name), margin, y + 8, {
-      width: 150,
+      width: leftWidth - 16,
       align: 'left',
     })
 
@@ -520,22 +526,21 @@ router.get("/api/v1/minutes-docs/:id/pdf", async (req: AuthedRequest, res) => {
     doc.font(fonts.regular).fontSize(8.6).fillColor('#334155')
     companyLines.forEach((lineText) => {
       doc.text(lineText, margin, companyY, {
-        width: 155,
+        width: leftWidth - 16,
         align: 'left',
       })
       companyY += 10
     })
 
-    doc.font(fonts.bold).fontSize(18).fillColor('#111827').text(docTypeLabel(docData.type), margin + 170, y + 6, {
-      width: contentWidth - 340,
+    doc.font(fonts.bold).fontSize(17).fillColor('#111827').text(docTypeLabel(docData.type), centerX + 10, y + 6, {
+      width: centerWidth - 20,
       align: 'center',
     })
-    doc.font(fonts.regular).fontSize(8.8).fillColor('#475569').text('Document justificativ de gestiune', margin + 170, y + 38, {
-      width: contentWidth - 340,
+    doc.font(fonts.regular).fontSize(8.8).fillColor('#475569').text('Document justificativ de gestiune', centerX + 10, y + 40, {
+      width: centerWidth - 20,
       align: 'center',
     })
 
-    const rightX = pageWidth - margin - 150
     const rightLines = [
       `Numar: ${pdfText(docData.docNo)}`,
       `Data: ${pdfDate(docData.docDate)}`,
@@ -545,13 +550,13 @@ router.get("/api/v1/minutes-docs/:id/pdf", async (req: AuthedRequest, res) => {
     doc.font(fonts.regular).fontSize(9.2).fillColor('#111827')
     rightLines.forEach((lineText) => {
       doc.text(lineText, rightX, rightY, {
-        width: 150,
+        width: rightWidth,
         align: 'left',
       })
       rightY += 14
     })
 
-    return Math.max(companyY + 10, rightY + 8, y + 78)
+    return Math.max(companyY + 10, rightY + 8, y + 84)
   }
 
   const drawInfoTable = (x: number, startY: number, width: number, title: string, pairs: Array<{ label: string; value: string }>) => {
