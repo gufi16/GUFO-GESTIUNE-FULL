@@ -457,7 +457,7 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
         align: "left",
       })
       doc.font(fonts.regular).fontSize(8.8).fillColor("#111111").text(
-        text(validatedUser?.name || validatedUser?.email || consumptionDoc.validatedBy || "-"),
+        text(validatedUser?.name || validatedUser?.email || consumptionDoc.sale?.operatorName || consumptionDoc.validatedBy || "-"),
         margin,
         startY + 14,
         {
@@ -472,7 +472,7 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
         .font(fonts.regular)
         .fontSize(8.3)
         .fillColor("#64748B")
-        .text(`Pagina ${pageNo} / ${totalPagesCount}`, margin, pageHeight - margin - 8, {
+        .text(`Pagina ${pageNo} / ${totalPagesCount}`, margin, pageHeight - margin - 18, {
           width: contentWidth,
           align: "right",
         })
