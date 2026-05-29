@@ -231,7 +231,10 @@ function SalesChart({
         {hasData ? (
           <>
             {hovered ? (
-              <div className="mb-4 inline-flex rounded-[16px] border border-slate-200 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.95)_100%)] px-3 py-2 shadow-lg shadow-slate-900/10">
+              <div className="mb-4 inline-flex items-center gap-3 rounded-[16px] border border-slate-200 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.95)_100%)] px-3 py-2 shadow-lg shadow-slate-900/10">
+                <div className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-[linear-gradient(180deg,#47C2B1_0%,#17324D_100%)] text-white">
+                  <BarChart3 size={16} />
+                </div>
                 <div>
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{hovered.label}</div>
                   <div className="mt-1 text-lg font-semibold text-slate-950">{formatRon(hovered.value)}</div>
@@ -241,7 +244,7 @@ function SalesChart({
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {data.map((point, index) => {
-                const heightPercent = Math.max(10, Math.round((point.value / maxValue) * 100))
+                const heightPercent = Math.max(14, Math.round((point.value / maxValue) * 100))
                 const active = hoveredIndex === index
                 return (
                   <button
@@ -262,12 +265,22 @@ function SalesChart({
                       <div className="text-sm font-semibold text-slate-950">{formatRon(point.value)}</div>
                     </div>
 
-                    <div className="mt-4 h-24 rounded-[14px] bg-white/80 p-2">
-                      <div className="flex h-full items-end">
-                        <div
-                          className="w-full rounded-[10px] bg-[linear-gradient(180deg,#47C2B1_0%,#17324D_100%)] transition-all duration-300"
-                          style={{ height: `${heightPercent}%` }}
-                        />
+                    <div className="mt-4 rounded-[14px] border border-white/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.95)_0%,rgba(241,245,249,0.92)_100%)] px-4 py-3">
+                      <div className="flex h-28 items-end justify-center">
+                        <div className="relative flex h-full w-full items-end justify-center">
+                          <div className="absolute inset-x-0 bottom-0 h-[1px] bg-slate-200" />
+                          <div
+                            className={[
+                              "relative w-14 rounded-[16px] transition-all duration-300",
+                              active
+                                ? "bg-[linear-gradient(180deg,#5AD6C0_0%,#17324D_100%)] shadow-[0_18px_30px_rgba(35,111,156,0.22)]"
+                                : "bg-[linear-gradient(180deg,#7ADFD0_0%,#245D7F_100%)]",
+                            ].join(" ")}
+                            style={{ height: `${heightPercent}%` }}
+                          >
+                            <div className="absolute inset-x-2 top-2 h-1.5 rounded-full bg-white/20" />
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </button>
