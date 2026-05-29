@@ -1482,13 +1482,15 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
   res.setHeader("Content-Type", "application/pdf")
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`)
 
-  const doc = new PDFDocument({ size: "A4", margin: 36 })
+  const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 34 })
   const fonts = registerPdfFonts(doc)
   doc.pipe(res)
-  const margin = 36
+  const margin = 34
 
   const pageWidth = doc.page.width
+  const pageHeight = doc.page.height
   const contentWidth = pageWidth - margin * 2
+  const headerBlockHeight = 78
   const fromStorageLabel = [pdfText(docData.fromLocation.name), pdfText(docData.fromWarehouse?.name)].filter(Boolean).join(" / ")
   const toStorageLabel = [pdfText(docData.toLocation.name), pdfText(docData.toWarehouse?.name)].filter(Boolean).join(" / ")
   const drawHeader = () => {
@@ -1533,7 +1535,18 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
       rightY += 14
     })
 
-    return y + 90
+    return y + headerBlockHeight
+  }
+
+  const drawPageFooter = (pageNo: number) => {
+    doc
+      .font(fonts.regular)
+      .fontSize(8.3)
+      .fillColor("#64748B")
+      .text(`Pagina ${pageNo}`, margin, pageHeight - margin - 10, {
+        width: contentWidth,
+        align: "right",
+      })
   }
 
   let y = drawHeader()
@@ -1557,10 +1570,10 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
   ]
 
   summaryRows.forEach((row) => {
-    const pairWidth = (contentWidth - 16) / 2
+    const pairWidth = (contentWidth - 28) / 2
     row.forEach((pair, idx) => {
-      const x = margin + idx * (pairWidth + 16)
-      doc.font(fonts.bold).fontSize(8.6).fillColor('#64748B').text(pair.label, x, y, { width: 96, align: 'left' })
+      const x = margin + idx * (pairWidth + 28)
+      doc.font(fonts.bold).fontSize(8.6).fillColor('#64748B').text(pair.label, x, y, { width: 100, align: 'left' })
       doc.font(fonts.regular).fontSize(9.2).fillColor('#111827').text(pair.value, x + 98, y, {
         width: pairWidth - 98,
         align: 'left',
@@ -1568,7 +1581,7 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
     })
     y += 18
   })
-  y += 16
+  y += 18
 
   y = ensurePdfPage(doc, y, 40, margin, drawHeader)
   doc.font(fonts.bold).fontSize(10).fillColor('#0F172A').text('Produse transferate', margin, y)
@@ -1578,11 +1591,11 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
     margin,
     y,
     columns: [
-      { label: '#', width: 30, align: 'center' },
-      { label: 'Cod produs', width: 92, align: 'left' },
-      { label: 'Produs', width: 294, align: 'left' },
-      { label: 'UM', width: 58, align: 'center' },
-      { label: 'Cant.', width: 90, align: 'right' },
+      { label: '#', width: 34, align: 'center' },
+      { label: 'Cod produs', width: 120, align: 'left' },
+      { label: 'Produs', width: 458, align: 'left' },
+      { label: 'UM', width: 72, align: 'center' },
+      { label: 'Cant.', width: 110, align: 'right' },
     ],
     rows: docData.items.map((item, index) => ([
       String(index + 1),
@@ -1608,9 +1621,9 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
     align: 'right',
   })
 
-  y += 36
+  y += 40
   y = ensurePdfPage(doc, y, 80, margin, drawHeader)
-  const signatureWidth = 160
+  const signatureWidth = 190
   const signatureGap = (contentWidth - signatureWidth * 3) / 2
   const signatureY = y
   const signatures = [
@@ -1630,6 +1643,8 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
       align: 'center',
     })
   })
+
+  drawPageFooter(1)
 
   doc.end()
 })
