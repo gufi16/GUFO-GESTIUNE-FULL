@@ -1455,6 +1455,7 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
   const companyId = await requireRequestCompanyId(req)
   const id = String(req.params.id)
+  const cleanValue = (value: unknown) => String(value || "").trim()
 
   const docData = await prisma.transferDoc.findFirst({
     where: { id, tenantId, companyId },
@@ -1477,6 +1478,13 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
     return res.status(404).json({ ok: false, error: "Documentul nu a fost gasit." })
   }
 
+  const actorUser = req.auth?.userId
+    ? await prisma.user.findFirst({
+        where: { id: req.auth.userId, tenantId },
+        select: { name: true, email: true },
+      })
+    : null
+
   const company = await resolveRequestCompany(req)
   const filename = `TRANSFER_${safeFilePart(docData.docNo)}_${safeFilePart(docData.fromLocation.name)}_${safeFilePart(docData.toLocation.name)}.pdf`
   res.setHeader("Content-Type", "application/pdf")
@@ -1491,8 +1499,10 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
   const pageHeight = doc.page.height
   const contentWidth = pageWidth - margin * 2
   const headerBlockHeight = 78
-  const fromStorageLabel = [pdfText(docData.fromLocation.name), pdfText(docData.fromWarehouse?.name)].filter(Boolean).join(" / ")
-  const toStorageLabel = [pdfText(docData.toLocation.name), pdfText(docData.toWarehouse?.name)].filter(Boolean).join(" / ")
+  const actorLabel = cleanValue(actorUser?.name) || cleanValue(actorUser?.email) || cleanValue(docData.delegateName) || "-"
+  const fromStorageLabel = [cleanValue(docData.fromLocation.name), cleanValue(docData.fromWarehouse?.name)].filter(Boolean).join(" / ") || "-"
+  const toStorageLabel = [cleanValue(docData.toLocation.name), cleanValue(docData.toWarehouse?.name)].filter(Boolean).join(" / ") || "-"
+  const observationsLabel = [cleanValue(docData.note), cleanValue(docData.eTransportUit) ? `UIT e-Transport: ${cleanValue(docData.eTransportUit)}` : ""].filter(Boolean).join(" | ") || "-"
   const drawHeader = () => {
     const y = margin
     doc.font(fonts.bold).fontSize(12).fillColor('#111827').text(pdfText(company?.name), margin, y + 8, {
@@ -1549,39 +1559,48 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
       })
   }
 
+  const drawSummaryPair = (x: number, startY: number, label: string, value: string, width: number) => {
+    doc.font(fonts.bold).fontSize(8.6).fillColor('#64748B').text(label, x, startY, {
+      width,
+      align: 'left',
+    })
+    const valueY = startY + 11
+    doc.font(fonts.regular).fontSize(9.4).fillColor('#111827').text(value || "-", x, valueY, {
+      width,
+      align: 'left',
+    })
+    return Math.max(26, doc.heightOfString(value || "-", { width, align: 'left' }) + 16)
+  }
+
   let y = drawHeader()
+  const leftX = margin
+  const rightX = margin + contentWidth / 2 + 14
+  const pairWidth = contentWidth / 2 - 20
   const summaryRows = [
     [
       { label: 'Din gestiune', value: fromStorageLabel },
       { label: 'In gestiune', value: toStorageLabel },
     ],
     [
-      { label: 'Delegat', value: pdfText(docData.delegateName) },
-      { label: 'CI / BI', value: pdfText(docData.delegateCi) },
+      { label: 'Delegat', value: actorLabel },
+      { label: 'CI / BI', value: cleanValue(docData.delegateCi) || '-' },
     ],
     [
-      { label: 'Transport', value: pdfText(docData.vehicle) },
-      { label: 'Nr. auto', value: pdfText(docData.vehicleNo) },
+      { label: 'Transport', value: cleanValue(docData.vehicle) || '-' },
+      { label: 'Nr. auto', value: cleanValue(docData.vehicleNo) || '-' },
     ],
     [
-      { label: 'Motiv', value: pdfText(docData.reason) },
-      { label: 'Observatii', value: pdfText(docData.note) },
+      { label: 'Motiv', value: cleanValue(docData.reason) || '-' },
+      { label: 'Observatii', value: observationsLabel },
     ],
   ]
 
   summaryRows.forEach((row) => {
-    const pairWidth = (contentWidth - 28) / 2
-    row.forEach((pair, idx) => {
-      const x = margin + idx * (pairWidth + 28)
-      doc.font(fonts.bold).fontSize(8.6).fillColor('#64748B').text(pair.label, x, y, { width: 100, align: 'left' })
-      doc.font(fonts.regular).fontSize(9.2).fillColor('#111827').text(pair.value, x + 98, y, {
-        width: pairWidth - 98,
-        align: 'left',
-      })
-    })
-    y += 18
+    const leftHeight = drawSummaryPair(leftX, y, row[0].label, row[0].value, pairWidth)
+    const rightHeight = drawSummaryPair(rightX, y, row[1].label, row[1].value, pairWidth)
+    y += Math.max(leftHeight, rightHeight) + 8
   })
-  y += 18
+  y += 14
 
   y = ensurePdfPage(doc, y, 40, margin, drawHeader)
   doc.font(fonts.bold).fontSize(10).fillColor('#0F172A').text('Produse transferate', margin, y)
@@ -1627,7 +1646,7 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
   const signatureGap = (contentWidth - signatureWidth * 3) / 2
   const signatureY = y
   const signatures = [
-    { label: 'Intocmit', value: pdfText(docData.delegateName) || '-' },
+    { label: 'Intocmit', value: actorLabel },
     { label: 'Am predat', value: fromStorageLabel },
     { label: 'Am primit', value: toStorageLabel },
   ]
