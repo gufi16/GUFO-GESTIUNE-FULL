@@ -1498,7 +1498,7 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
   const pageWidth = doc.page.width
   const pageHeight = doc.page.height
   const contentWidth = pageWidth - margin * 2
-  const headerBlockHeight = 78
+  const headerBlockHeight = 110
   const actorLabel = cleanValue(actorUser?.name) || cleanValue(actorUser?.email) || cleanValue(docData.delegateName) || "-"
   const fromStorageLabel = [cleanValue(docData.fromLocation.name), cleanValue(docData.fromWarehouse?.name)].filter(Boolean).join(" / ") || "-"
   const toStorageLabel = [cleanValue(docData.toLocation.name), cleanValue(docData.toWarehouse?.name)].filter(Boolean).join(" / ") || "-"
@@ -1545,7 +1545,7 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
       rightY += 14
     })
 
-    return y + headerBlockHeight
+    return Math.max(companyY + 8, rightY + 4, y + headerBlockHeight)
   }
 
   const drawPageFooter = (pageNo: number) => {
@@ -1586,11 +1586,7 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
       { label: 'CI / BI', value: cleanValue(docData.delegateCi) || '-' },
     ],
     [
-      { label: 'Transport', value: cleanValue(docData.vehicle) || '-' },
       { label: 'Nr. auto', value: cleanValue(docData.vehicleNo) || '-' },
-    ],
-    [
-      { label: 'Motiv', value: cleanValue(docData.reason) || '-' },
       { label: 'Observatii', value: observationsLabel },
     ],
   ]
