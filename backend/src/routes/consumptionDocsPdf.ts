@@ -202,16 +202,12 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
     const metaCols = [96, 170, 90, 120, 90, 154]
     const metaRowHeight = 22
 
-    const columns = [30, 130, 130, 58, 60, 70, 80, 128]
+    const columns = [34, 430, 90, 110]
     const headers = [
       "Nr.",
-      "Produs finit",
       "Ingredient",
       "UM",
       "Cant.",
-      "Stoc",
-      "Cost unitar",
-      "Valoare / Observatii",
     ]
 
     const headerTitleHeight = 48
@@ -221,50 +217,24 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
     const metaBlockHeight = metaRowHeight * 4
     const tableHeaderHeight = 28
     const rowHeight = 24
-    const footerBlockHeight = 120
+    const footerBlockHeight = 84
     const signatureBlockHeight = 56
 
     type RowData = {
       no: string
-      finishedProduct: string
       ingredient: string
       uom: string
       qty: string
-      stock: string
-      unitCost: string
-      valueNote: string
     }
 
     const rows: RowData[] = docData.items.map((item, index) => ({
       no: String(index + 1),
-      finishedProduct: text(item.finishedProduct?.name),
       ingredient: text(item.ingredient?.name),
       uom: text(item.ingredient?.uom?.code),
       qty: fmt(item.qty, 3),
-      stock: fmt(num(item.currentStock), 3),
-      unitCost: fmt(num(item.unitCost)),
-      valueNote: `${fmt(num(item.totalCost))} lei${item.note ? ` / ${item.note}` : ""}`,
     }))
 
     const totalQty = rows.reduce((sum, row) => sum + num(row.qty), 0)
-
-    const groupedFinishedProducts = Array.from(
-      new Map(
-        docData.items
-          .filter((item) => item.finishedProduct)
-          .map((item) => [
-            item.finishedProduct!.id,
-            {
-              name: item.finishedProduct!.name,
-              qtySold:
-                docData.sale?.items
-                  .filter((saleItem) => saleItem.productId === item.finishedProductId)
-                  .reduce((acc, saleItem) => acc + num(saleItem.qty), 0) || 0,
-              uom: item.finishedProduct?.uom?.code || "",
-            },
-          ])
-      ).values()
-    )
 
     const rowsPerFirstPage = Math.max(
       1,
@@ -510,16 +480,7 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
     }
 
     function drawRow(row: RowData, startY: number) {
-      const values = [
-        row.no,
-        row.finishedProduct,
-        row.ingredient,
-        row.uom,
-        row.qty,
-        row.stock,
-        row.unitCost,
-        row.valueNote,
-      ]
+      const values = [row.no, row.ingredient, row.uom, row.qty]
 
       let x = margin
 
@@ -527,9 +488,9 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
         drawCell(doc, x, startY, columns[cellIndex], rowHeight, value, fonts, {
           fontSize: 8.4,
           align:
-            cellIndex === 0 || cellIndex === 3
+            cellIndex === 0 || cellIndex === 2
               ? "center"
-              : cellIndex === 4 || cellIndex === 5 || cellIndex === 6
+              : cellIndex === 3
                 ? "right"
                 : "left",
         })
@@ -538,48 +499,17 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
     }
 
     function drawFooterBlock(startY: number) {
-      const leftWidth = 360
-      const rightWidthBox = 280
-      const rightX = margin + contentWidth - rightWidthBox
-
-      drawBox(doc, margin, startY, leftWidth, footerBlockHeight)
-      doc.font(fonts.bold).fontSize(10).text("Produse finite implicate", margin + 8, startY + 8, {
-        width: leftWidth - 16,
-        align: "left",
-      })
-
-      let y = startY + 28
-      if (groupedFinishedProducts.length === 0) {
-        doc.font(fonts.regular).fontSize(9).text("Nu exista produse finite asociate.", margin + 8, y, {
-          width: leftWidth - 16,
-          align: "left",
-        })
-      } else {
-        groupedFinishedProducts.forEach((item) => {
-          doc.font(fonts.regular).fontSize(9).text(
-            `${item.name} - ${fmt(item.qtySold, 3)} ${item.uom || ""}`.trim(),
-            margin + 8,
-            y,
-            {
-              width: leftWidth - 16,
-              align: "left",
-            }
-          )
-          y += 14
-        })
-      }
-
-      drawBox(doc, rightX, startY, rightWidthBox, footerBlockHeight)
+      drawBox(doc, margin, startY, contentWidth, footerBlockHeight)
 
       let totalsY = startY + 10
       const totalLine = (label: string, value: string, bold = false) => {
         doc.font(bold ? fonts.bold : fonts.regular).fontSize(bold ? 10 : 9)
-        doc.text(label, rightX + 8, totalsY, {
-          width: 170,
+        doc.text(label, margin + 12, totalsY, {
+          width: 220,
           align: "left",
         })
-        doc.text(value, rightX + 186, totalsY, {
-          width: 70,
+        doc.text(value, margin + contentWidth - 120, totalsY, {
+          width: 108,
           align: "right",
         })
         totalsY += bold ? 17 : 14
@@ -587,16 +517,7 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
 
       totalLine("Status document", text(consumptionDoc.status))
       totalLine("Nr. pozitii consum", String(consumptionDoc.items.length))
-      totalLine("Cantitate totala consum", fmt(totalQty, 3))
-      totalLine("Total valoare consum", `${fmt(num(consumptionDoc.totalValue))} lei`, true)
-
-      if (consumptionDoc.sale) {
-        totalsY += 6
-        doc.moveTo(rightX + 8, totalsY).lineTo(rightX + rightWidthBox - 8, totalsY).stroke("#111111")
-        totalsY += 8
-        totalLine("Bon POS", text(consumptionDoc.sale.receiptNo))
-        totalLine("Total vanzare", `${fmt(num(consumptionDoc.sale.total))} lei`, true)
-      }
+      totalLine("Cantitate totala consum", `${fmt(totalQty, 3)} ${text(docData.items[0]?.ingredient?.uom?.code || "")}`.trim(), true)
     }
 
     function drawSignature(startY: number) {
