@@ -797,32 +797,22 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
   const line = '#c8d0d8'
   const panel = '#f8fafc'
 
-  const drawFieldBlock = (title: string, lines: string[], x: number, top: number, width: number) => {
-    doc.font(fonts.bold).fontSize(11).fillColor(dark).text(title, x, top, { width })
+  const drawFieldBlock = (title: string, lines: string[], x: number, top: number, width: number, align: "left" | "right" = "left") => {
+    doc.font(fonts.bold).fontSize(11).fillColor(dark).text(title, x, top, { width, align })
     let yy = top + 18
     lines.filter(Boolean).forEach((entry) => {
       const h = doc.heightOfString(entry, { width, align: 'left' })
-      doc.font(fonts.regular).fontSize(9.5).fillColor(dark).text(entry, x, yy, { width, align: 'left' })
+      doc.font(fonts.regular).fontSize(9.5).fillColor(dark).text(entry, x, yy, { width, align })
       yy += h + 4
     })
     return yy
   }
 
   let y = margin
-  doc.font(fonts.bold).fontSize(28).fillColor(dark).text('FACTURA', margin, y, { width: contentWidth })
-  y += 36
-
-  doc.save()
-  doc.roundedRect(margin, y, contentWidth, 34, 10).fillAndStroke(panel, line)
-  doc.restore()
-  doc.font(fonts.bold).fontSize(9.5).fillColor(dark).text(`Seria / Numar: ${pdfText(invoice.docNo)}`, margin + 12, y + 10)
-  doc.font(fonts.regular).fontSize(9.5).text(`Data: ${pdfDate(invoice.docDate)}`, margin + 188, y + 10)
-  doc.text(`Scadenta: ${pdfDate(invoice.dueDate || invoice.docDate)}`, margin + 332, y + 10)
-  doc.text(`Moneda: ${pdfText(invoice.currency || 'RON')}`, pageWidth - margin - 132, y + 10, { width: 120, align: 'right' })
-  y += 50
-
   const colGap = 24
   const blockWidth = (contentWidth - colGap) / 2
+  const centerX = margin + blockWidth
+  const centerW = colGap
   const supplierLines = [
     pdfText(company?.name),
     `CIF: ${pdfText(company?.cui)}`,
@@ -844,9 +834,14 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
     `Email: ${pdfText(invoice.customerEmail)}`,
   ]
 
-  const supplierEndY = drawFieldBlock('FURNIZOR', supplierLines, margin, y, blockWidth)
-  const clientEndY = drawFieldBlock('CLIENT', clientLines, margin + blockWidth + colGap, y, blockWidth)
-  y = Math.max(supplierEndY, clientEndY) + 16
+  const titleY = y + 8
+  doc.font(fonts.bold).fontSize(25).fillColor(dark).text('FACTURA', centerX - 110, titleY, { width: 220, align: 'center' })
+  doc.font(fonts.regular).fontSize(10.5).fillColor(muted).text(`Seria / Numar ${pdfText(invoice.docNo)}`, centerX - 110, titleY + 28, { width: 220, align: 'center' })
+  doc.font(fonts.regular).fontSize(9.5).fillColor(muted).text(`Moneda ${pdfText(invoice.currency || 'RON')}`, centerX - 110, titleY + 42, { width: 220, align: 'center' })
+
+  const supplierEndY = drawFieldBlock('FURNIZOR', supplierLines, margin, y + 10, blockWidth - 24, 'left')
+  const clientEndY = drawFieldBlock('CLIENT', clientLines, margin + blockWidth + colGap + 24, y + 10, blockWidth - 24, 'right')
+  y = Math.max(supplierEndY, clientEndY, titleY + 68) + 12
 
   doc.moveTo(margin, y).lineTo(pageWidth - margin, y).strokeColor(line).lineWidth(1).stroke()
   y += 16
@@ -933,6 +928,14 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
   doc.font(fonts.bold).fontSize(10.5).text('Total factura', totalsX + 12, y + 70, { width: 110 })
   doc.font(fonts.bold).fontSize(15).fillColor(dark).text(pdfFmt(invoice.totalWithSgrFc || invoice.totalGrossFc), totalsX + 120, y + 66, { width: 82, align: 'right' })
   y += 126
+
+  const footerY = doc.page.height - margin - 18
+  doc.font(fonts.regular).fontSize(9).fillColor(muted)
+  if (invoice.efacturaDownloadId) {
+    doc.text(`ID descarcare SPV: ${pdfText(invoice.efacturaDownloadId)}`, margin, footerY, { width: 220, align: 'left' })
+  }
+  doc.text(`Data factura: ${pdfDate(invoice.docDate)}`, pageWidth - margin - 180, footerY - 12, { width: 180, align: 'right' })
+  doc.text(`Data scadenta: ${pdfDate(invoice.dueDate || invoice.docDate)}`, pageWidth - margin - 180, footerY + 2, { width: 180, align: 'right' })
 
   doc.end()
 })

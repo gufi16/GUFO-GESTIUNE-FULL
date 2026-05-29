@@ -501,7 +501,7 @@ router.get("/api/v1/minutes-docs/:id/pdf", async (req: AuthedRequest, res) => {
 
   const drawHeader = () => drawDocumentHero(doc, fonts, {
     title: docTypeLabel(docData.type),
-    subtitle: 'Document intern de gestiune',
+    subtitle: 'ERP gestiune - document justificativ',
     companyName: company?.name || '-',
     companyLines: [
       `CUI: ${pdfText(company?.cui)}`,
@@ -524,7 +524,7 @@ router.get("/api/v1/minutes-docs/:id/pdf", async (req: AuthedRequest, res) => {
     y,
     cards: [
       {
-        title: 'Detalii document',
+        title: 'Date document',
         pairs: [
           { label: 'Locatie', value: pdfText(docData.location.name) },
           { label: 'Motiv', value: reasonLabel(docData.reasonCode) },
@@ -533,7 +533,7 @@ router.get("/api/v1/minutes-docs/:id/pdf", async (req: AuthedRequest, res) => {
         ],
       },
       {
-        title: 'Observatii',
+        title: 'Constatare / observatii',
         pairs: [
           { label: 'Valoare totala', value: `${pdfFmt(docData.totalValue)} RON` },
           { label: 'Constatare', value: docData.type === 'DETERIORATION' ? findingLabel(docData.findingCode, docData.reasonCode) : 'Actualizare preturi comerciale' },
@@ -551,37 +551,45 @@ router.get("/api/v1/minutes-docs/:id/pdf", async (req: AuthedRequest, res) => {
   const columns = docData.type === 'DETERIORATION'
     ? [
         { label: '#', width: 28, align: 'center' },
-        { label: 'Produs', width: 240, align: 'left' },
-        { label: 'UM', width: 48, align: 'center' },
-        { label: 'Cant.', width: 60, align: 'right' },
-        { label: 'Val. unit.', width: 70, align: 'right' },
-        { label: 'Valoare', width: 70, align: 'right' },
+        { label: 'Produs', width: 150, align: 'left' },
+        { label: 'Cod', width: 56, align: 'left' },
+        { label: 'UM', width: 38, align: 'center' },
+        { label: 'Cant.', width: 48, align: 'right' },
+        { label: 'Val. unit.', width: 58, align: 'right' },
+        { label: 'Valoare', width: 58, align: 'right' },
+        { label: 'Nota linie', width: 87, align: 'left' },
       ]
     : [
         { label: '#', width: 28, align: 'center' },
-        { label: 'Produs', width: 226, align: 'left' },
-        { label: 'UM', width: 46, align: 'center' },
-        { label: 'Pret vechi', width: 72, align: 'right' },
-        { label: 'Pret nou', width: 72, align: 'right' },
-        { label: 'Impact', width: 72, align: 'right' },
+        { label: 'Produs', width: 145, align: 'left' },
+        { label: 'Cod', width: 56, align: 'left' },
+        { label: 'UM', width: 34, align: 'center' },
+        { label: 'Pret vechi', width: 65, align: 'right' },
+        { label: 'Pret nou', width: 65, align: 'right' },
+        { label: 'Impact', width: 60, align: 'right' },
+        { label: 'Nota', width: 70, align: 'left' },
       ]
 
   const rows = docData.items.map((item, index) => docData.type === 'DETERIORATION'
     ? [
         String(index + 1),
         item.product.name,
+        pdfText(item.product?.sku),
         item.product.uom?.code || '-',
         pdfFmt(item.qty, 3),
         pdfFmt(item.unitValue),
         pdfFmt(item.lineValue),
+        pdfText(item.note),
       ]
     : [
         String(index + 1),
         item.product.name,
+        pdfText(item.product?.sku),
         item.product.uom?.code || '-',
         pdfFmt(item.oldPrice),
         pdfFmt(item.newPrice),
         pdfFmt(item.lineValue),
+        pdfText(item.note),
       ])
 
   y = drawSimpleTable(doc, fonts, {
@@ -606,7 +614,7 @@ router.get("/api/v1/minutes-docs/:id/pdf", async (req: AuthedRequest, res) => {
   drawSignatureRow(doc, fonts, {
     margin,
     y: y + 76,
-    labels: docData.type === 'DETERIORATION' ? ['Gestionar', 'Aprobat'] : ['?ntocmit', 'Aprobat'],
+    labels: docData.type === 'DETERIORATION' ? ['Intocmit', 'Gestionar', 'Comisie / Aprobat'] : ['Intocmit', 'Gestionar', 'Comisie / Aprobat'],
   })
 
   doc.end()

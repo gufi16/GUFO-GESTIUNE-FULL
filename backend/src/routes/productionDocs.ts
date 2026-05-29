@@ -4,6 +4,7 @@ import PDFDocument from "pdfkit"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { requireRequestCompanyId } from "../lib/companyScope"
+import { resolveTenantCompany } from "../lib/companyResolver"
 
 const router = Router()
 
@@ -446,6 +447,8 @@ router.get("/api/v1/production-docs/:id/pdf", async (req: AuthedRequest, res) =>
       })
     }
 
+    const company = await resolveTenantCompany(prisma, tenantId, companyId)
+
     const pdf = new PDFDocument({
       size: "A4",
       layout: "landscape",
@@ -461,54 +464,79 @@ router.get("/api/v1/production-docs/:id/pdf", async (req: AuthedRequest, res) =>
     pdf.pipe(res)
 
     const pageWidth = getPageWidth(pdf)
-
-    pdf
-      .font("Helvetica-Bold")
-      .fontSize(24)
-      .fillColor("#0f172a")
-      .text("BON PRODUCTIE", pdf.page.margins.left, pdf.y, {
-        width: pageWidth,
-        align: "center",
-      })
-
-    pdf.moveDown(1.3)
-
-    const infoY = pdf.y
-    const cardGap = 18
-    const cardWidth = (pageWidth - cardGap) / 2
-    const cardHeight = 84
+    const fullWidth = pageWidth
+    const headerY = pdf.y
+    const leftW = 230
+    const rightW = 180
+    const centerW = fullWidth - leftW - rightW
     const leftX = pdf.page.margins.left
-    const rightX = leftX + cardWidth + cardGap
+    const centerX = leftX + leftW
+    const rightX = centerX + centerW
 
-    drawInfoCard(pdf, leftX, infoY, cardWidth, cardHeight, "DOCUMENT", [
-      `Numar: ${docData.docNo}`,
-      `Data: ${formatDate(docData.docDate)}`,
-    ])
+    pdf.save()
+    pdf.lineWidth(0.8).strokeColor("#CBD5E1").rect(leftX, headerY, fullWidth, 86).stroke()
+    pdf.moveTo(centerX, headerY).lineTo(centerX, headerY + 86).stroke()
+    pdf.moveTo(rightX, headerY).lineTo(rightX, headerY + 86).stroke()
+    pdf.restore()
 
-    drawInfoCard(pdf, rightX, infoY, cardWidth, cardHeight, "DETALII", [
-      `Locatie: ${docData.location?.name || "-"}`,
-      `Pozitii: ${docData.items.length}`,
-    ])
+    pdf.font("Helvetica-Bold").fontSize(12.5).fillColor("#111827").text(company?.name || "Gufo Gestiune", leftX + 12, headerY + 16, {
+      width: leftW - 24,
+      align: "left",
+    })
+    pdf.font("Helvetica").fontSize(9).fillColor("#334155").text("ERP gestiune - document productie", leftX + 12, headerY + 34, {
+      width: leftW - 24,
+      align: "left",
+    })
 
-    pdf.y = infoY + cardHeight + 28
+    pdf.font("Helvetica-Bold").fontSize(22).fillColor("#111827").text("BON DE PRODUCTIE", centerX + 12, headerY + 18, {
+      width: centerW - 24,
+      align: "center",
+    })
+
+    pdf.font("Helvetica").fontSize(9.5).fillColor("#111827")
+    pdf.text(`Nr: ${docData.docNo}`, rightX + 12, headerY + 16, { width: rightW - 24, align: "left" })
+    pdf.text(`Data: ${formatDate(docData.docDate)}`, rightX + 12, headerY + 30, { width: rightW - 24, align: "left" })
+    pdf.text(`Status: ${docData.status || "-"}`, rightX + 12, headerY + 44, { width: rightW - 24, align: "left" })
+
+    pdf.y = headerY + 98
+
+    const metaStartX = pdf.page.margins.left + 12
+    const metaTableWidth = pageWidth - 24
+    const metaCols = [96, 170, 84, 108, 74, metaTableWidth - 96 - 170 - 84 - 108 - 74]
+    const metaRows = [
+      ["Locatie", docData.location?.name || "-", "Pozitii", String(docData.items.length), "Status", docData.status || "-"],
+      ["Data", formatDate(docData.docDate), "Cantitate", formatNumber(docData.items.reduce((sum, row) => sum + Number(row.qty || 0), 0), 2), "Responsabil", "-"],
+    ]
+
+    let metaY = pdf.y
+    for (const row of metaRows) {
+      let x = metaStartX
+      for (let i = 0; i < metaCols.length; i++) {
+        const width = metaCols[i]
+        const isLabel = i % 2 === 0
+        pdf.save()
+        if (isLabel) pdf.rect(x, metaY, width, 24).fill("#E8EEF6")
+        pdf.restore()
+        pdf.save()
+        pdf.lineWidth(0.6).strokeColor("#CBD5E1").rect(x, metaY, width, 24).stroke()
+        pdf.restore()
+        pdf.font(isLabel ? "Helvetica-Bold" : "Helvetica").fontSize(9).fillColor("#111827").text(row[i], x + 8, metaY + 7, {
+          width: width - 16,
+          align: "left",
+        })
+        x += width
+      }
+      metaY += 24
+    }
+
+    pdf.y = metaY + 18
 
     if (docData.note) {
       ensureSpace(pdf, 60)
 
       pdf
-        .font("Helvetica-Bold")
-        .fontSize(11)
-        .fillColor("#334155")
-        .text("Observatii", pdf.page.margins.left, pdf.y, {
-          width: pageWidth,
-          align: "left",
-        })
-
-      pdf.moveDown(0.35)
-
-      pdf
         .font("Helvetica")
-        .fontSize(10.5)
+        .fontSize(10)
         .fillColor("#0f172a")
         .text(docData.note, pdf.page.margins.left, pdf.y, {
           width: pageWidth,
@@ -596,32 +624,23 @@ router.get("/api/v1/production-docs/:id/pdf", async (req: AuthedRequest, res) =>
       headerHeight: 30,
     })
 
-    ensureSpace(pdf, 82)
+    ensureSpace(pdf, 150)
 
     const totalsY = pdf.y
-    const totalsHeight = 68
+    const totalsHeight = 52
 
     pdf.save()
     pdf.roundedRect(tableStartX, totalsY, tableTotalWidth, totalsHeight, 12).fill("#f8fafc")
     pdf.restore()
 
     pdf
-      .font("Helvetica-Bold")
-      .fontSize(13)
-      .fillColor("#334155")
-      .text("Rezumat", tableStartX, totalsY + 14, {
-        width: tableTotalWidth,
-        align: "center",
-      })
-
-    pdf
       .font("Helvetica")
-      .fontSize(11.5)
+      .fontSize(10.5)
       .fillColor("#0f172a")
       .text(
         `Total pozitii: ${docData.items.length}`,
         tableStartX,
-        totalsY + 40,
+        totalsY + 18,
         {
           width: tableTotalWidth / 2,
           align: "center",
@@ -629,17 +648,41 @@ router.get("/api/v1/production-docs/:id/pdf", async (req: AuthedRequest, res) =>
       )
 
     pdf.text(
-      `Cantitate totala produse: ${formatNumber(
+        `Cantitate totala produse: ${formatNumber(
         docData.items.reduce((sum, row) => sum + Number(row.qty || 0), 0),
         2
       )}`,
       tableStartX + tableTotalWidth / 2,
-      totalsY + 40,
+      totalsY + 18,
       {
         width: tableTotalWidth / 2,
         align: "center",
       }
     )
+
+    const signY = totalsY + totalsHeight + 20
+    const signGap = 16
+    const signWidth = (tableTotalWidth - signGap * 2) / 3
+    ;["Intocmit", "Responsabil productie", "Aprobat"].forEach((label, index) => {
+      const x = tableStartX + index * (signWidth + signGap)
+      pdf.save()
+      pdf.lineWidth(0.7).strokeColor("#CBD5E1").rect(x, signY, signWidth, 72).stroke()
+      pdf.restore()
+      pdf.save()
+      pdf.rect(x, signY, signWidth, 26).fill("#EEF2F7")
+      pdf.restore()
+      pdf.save()
+      pdf.lineWidth(0.6).strokeColor("#CBD5E1").rect(x, signY, signWidth, 26).stroke()
+      pdf.restore()
+      pdf.font("Helvetica-Bold").fontSize(9).fillColor("#111827").text(label, x + 10, signY + 8, {
+        width: signWidth - 20,
+        align: "center",
+      })
+      pdf.font("Helvetica").fontSize(8.5).fillColor("#64748B").text("Nume / semnatura", x + 10, signY + 46, {
+        width: signWidth - 20,
+        align: "center",
+      })
+    })
 
     pdf.end()
   } catch (e: any) {

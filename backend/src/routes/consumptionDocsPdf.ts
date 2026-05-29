@@ -215,8 +215,8 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
     ]
 
     const headerTitleHeight = 48
-    const introHeight = 70
-    const topHeaderHeight = 128
+    const introHeight = 32
+    const topHeaderHeight = 96
     const headerBlockHeight = Math.max(topHeaderHeight, headerTitleHeight + 10 + introHeight)
     const metaBlockHeight = metaRowHeight * 4
     const tableHeaderHeight = 28
@@ -350,20 +350,18 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
       drawBox(doc, margin, y, companyWidth, topHeaderHeight)
       doc
         .font(fonts.bold)
-        .fontSize(11)
+        .fontSize(12)
         .fillColor("#111111")
         .text(text(company?.name), margin + 8, y + 8, {
           width: companyWidth - 16,
           align: "left",
         })
 
-      doc.font(fonts.regular).fontSize(8.5)
+      doc.font(fonts.regular).fontSize(8.7)
       const companyLines = [
         `CUI: ${text(company?.cui)}`,
         `Nr. Reg. Com.: ${text(company?.regNo)}`,
         `Adresa: ${text(company?.address)}`,
-        `Banca: ${text(company?.bank)}`,
-        `IBAN: ${text(company?.iban)}`,
         `Email: ${text(company?.email)}`,
         `Telefon: ${text(company?.phone)}`,
       ]
@@ -382,7 +380,7 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
       drawBox(doc, rightX, y, rightWidth, headerTitleHeight)
       doc
         .font(fonts.bold)
-        .fontSize(18)
+        .fontSize(21)
         .text("BON DE CONSUM", rightX + 8, y + 14, {
           width: rightWidth - 16,
           align: "center",
@@ -393,12 +391,12 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
         .font(fonts.regular)
         .fontSize(8.5)
         .text(
-          "Document generat automat din consumul pe retetar. Bonul reflecta materiile prime si ingredientele consumate pentru produsele finite vandute prin POS.",
+          "Act intern de consum materiale.",
           rightX + 8,
-          y + headerTitleHeight + 22,
+          y + headerTitleHeight + 11,
           {
             width: rightWidth - 16,
-            align: "justify",
+            align: "center",
           }
         )
 
@@ -602,18 +600,28 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
     }
 
     function drawSignature(startY: number) {
-      const leftX = margin
-      const midX = pageWidth / 2 - 70
-      const rightX = pageWidth - margin - 140
+      const gap = 18
+      const blockWidth = (contentWidth - gap * 2) / 3
+      const labels = ["Intocmit", "Predat din gestiune", "Aprobat"]
 
-      doc.font(fonts.bold).fontSize(9)
-      doc.text("Intocmit", leftX, startY, { width: 120, align: "center" })
-      doc.text("Predat / Scazut din gestiune", midX - 25, startY, { width: 170, align: "center" })
-      doc.text("Aprobat", rightX, startY, { width: 120, align: "center" })
-
-      doc.moveTo(leftX, startY + 28).lineTo(leftX + 120, startY + 28).stroke("#111111")
-      doc.moveTo(midX - 25, startY + 28).lineTo(midX + 145, startY + 28).stroke("#111111")
-      doc.moveTo(rightX, startY + 28).lineTo(rightX + 120, startY + 28).stroke("#111111")
+      labels.forEach((label, index) => {
+        const x = margin + index * (blockWidth + gap)
+        doc.save()
+        doc.lineWidth(0.7).strokeColor("#CBD5E1").rect(x, startY, blockWidth, 72).stroke()
+        doc.restore()
+        doc.save()
+        doc.rect(x, startY, blockWidth, 24).fill("#EEF2F7")
+        doc.restore()
+        doc.save()
+        doc.lineWidth(0.6).strokeColor("#CBD5E1").rect(x, startY, blockWidth, 24).stroke()
+        doc.restore()
+        doc.font(fonts.bold).fontSize(9).text(label, x + 8, startY + 7, { width: blockWidth - 16, align: "center" })
+        doc.font(fonts.regular).fontSize(8).fillColor("#64748B").text("Nume / semnatura", x + 8, startY + 45, {
+          width: blockWidth - 16,
+          align: "center",
+        })
+        doc.fillColor("#111111")
+      })
     }
 
     paginatedRows.forEach((pageRows, pageIndex) => {

@@ -110,45 +110,46 @@ export function drawDocumentHero(doc: PDFKit.PDFDocument, fonts: Fonts, options:
 }) {
   const margin = options.margin
   const width = doc.page.width - margin * 2
-  const leftW = Math.min(250, width * 0.46)
-  const rightW = width - leftW - 14
+  const leftW = Math.min(250, width * 0.27)
+  const rightW = Math.min(170, width * 0.22)
+  const centerW = width - leftW - rightW
   const y = margin
-  const rightX = margin + leftW + 14
+  const centerX = margin + leftW
+  const rightX = centerX + centerW
+  const heroHeight = 86
 
-  drawPanel(doc, margin, y, leftW, 110, { fill: "#F8FAFC" })
-  doc.font(fonts.bold).fontSize(13).fillColor("#0F172A").text(options.companyName || "Companie", margin + 14, y + 14, {
-    width: leftW - 28,
-  })
-  doc.font(fonts.regular).fontSize(9).fillColor("#334155")
-  let lineY = y + 36
-  for (const line of options.companyLines.filter(Boolean).slice(0, 6)) {
-    doc.text(line, margin + 14, lineY, { width: leftW - 28 })
-    lineY += 11
-  }
+  doc.save()
+  doc.lineWidth(0.8).strokeColor("#CBD5E1").rect(margin, y, width, heroHeight).stroke()
+  doc.moveTo(centerX, y).lineTo(centerX, y + heroHeight).stroke()
+  doc.moveTo(rightX, y).lineTo(rightX, y + heroHeight).stroke()
+  doc.restore()
 
-  drawPanel(doc, rightX, y, rightW, 110, { fill: "#F8FAFC" })
-  doc.font(fonts.bold).fontSize(18).fillColor("#0F172A").text(options.title, rightX + 16, y + 18, {
-    width: rightW - 32,
-    align: "right",
+  doc.font(fonts.bold).fontSize(12.5).fillColor("#111827").text(options.companyName || "Companie", margin + 12, y + 16, {
+    width: leftW - 24,
+    align: "left",
   })
   if (options.subtitle) {
-    doc.font(fonts.regular).fontSize(9).fillColor("#475569").text(options.subtitle, rightX + 16, y + 42, {
-      width: rightW - 32,
-      align: "right",
+    doc.font(fonts.regular).fontSize(8.8).fillColor("#334155").text(options.subtitle, margin + 12, y + 34, {
+      width: leftW - 24,
+      align: "left",
     })
   }
 
-  let pairY = y + 66
-  for (const pair of options.rightPairs.slice(0, 3)) {
-    doc.font(fonts.bold).fontSize(9).fillColor("#334155").text(`${pair.label}:`, rightX + 16, pairY, { width: 88 })
-    doc.font(fonts.regular).fontSize(9).fillColor("#0F172A").text(pair.value || "-", rightX + 106, pairY, {
-      width: rightW - 122,
-      align: "right",
+  doc.font(fonts.bold).fontSize(17).fillColor("#111827").text(options.title, centerX + 16, y + 12, {
+    width: centerW - 32,
+    align: "center",
+  })
+
+  let lineY = y + 18
+  for (const pair of options.rightPairs.slice(0, 4)) {
+    doc.font(fonts.regular).fontSize(9).fillColor("#111827").text(`${pair.label}: ${pair.value || "-"}`, rightX + 12, lineY, {
+      width: rightW - 24,
+      align: "left",
     })
-    pairY += 12
+    lineY += 14
   }
 
-  return y + 126
+  return y + heroHeight + 18
 }
 
 export function drawInfoCards(doc: PDFKit.PDFDocument, fonts: Fonts, options: {
@@ -165,15 +166,23 @@ export function drawInfoCards(doc: PDFKit.PDFDocument, fonts: Fonts, options: {
 
   options.cards.forEach((card, index) => {
     const x = options.margin + index * (cardW + gap)
-    drawPanel(doc, x, options.y, cardW, cardH, { fill: "#FFFFFF" })
-    doc.font(fonts.bold).fontSize(11).fillColor("#0F172A").text(card.title, x + 14, options.y + 14, {
+    doc.save()
+    doc.lineWidth(0.8).strokeColor("#CBD5E1").rect(x, options.y, cardW, cardH).stroke()
+    doc.restore()
+    doc.font(fonts.bold).fontSize(10.5).fillColor("#0F172A").text(card.title, x + 12, options.y + 12, {
       width: cardW - 28,
     })
-    let y = options.y + 38
+    let y = options.y + 34
     for (const pair of card.pairs.slice(0, 4)) {
-      doc.font(fonts.bold).fontSize(8).fillColor("#64748B").text(pair.label.toUpperCase(), x + 14, y, { width: cardW - 28 })
-      doc.font(fonts.regular).fontSize(9).fillColor("#111827").text(pair.value || "-", x + 14, y + 10, { width: cardW - 28 })
-      y += 24
+      doc.save()
+      doc.rect(x, y, 88, 22).fill("#E8EEF6")
+      doc.restore()
+      doc.save()
+      doc.lineWidth(0.6).strokeColor("#CBD5E1").rect(x, y, cardW, 22).stroke()
+      doc.restore()
+      doc.font(fonts.bold).fontSize(8.3).fillColor("#334155").text(pair.label, x + 8, y + 7, { width: 72 })
+      doc.font(fonts.regular).fontSize(8.8).fillColor("#111827").text(pair.value || "-", x + 98, y + 6, { width: cardW - 108 })
+      y += 22
     }
   })
 
@@ -200,8 +209,13 @@ export function drawSimpleTable(doc: PDFKit.PDFDocument, fonts: Fonts, options: 
   let x = options.margin
 
   options.columns.forEach((col) => {
-    drawPanel(doc, x, y, col.width, rowHeight, { fill: "#EFF4FB", stroke: "#D7DEEA", radius: 8 })
-    doc.font(fonts.bold).fontSize(8.5).fillColor("#0F172A").text(col.label, x + 6, y + 7, {
+    doc.save()
+    doc.rect(x, y, col.width, rowHeight).fill("#182033")
+    doc.restore()
+    doc.save()
+    doc.lineWidth(0.6).strokeColor("#D7DEEA").rect(x, y, col.width, rowHeight).stroke()
+    doc.restore()
+    doc.font(fonts.bold).fontSize(8.5).fillColor("#FFFFFF").text(col.label, x + 6, y + 7, {
       width: col.width - 12,
       align: col.align || "left",
     })
@@ -259,15 +273,23 @@ export function drawSignatureRow(doc: PDFKit.PDFDocument, fonts: Fonts, options:
   const cardW = (width - gap * (options.labels.length - 1)) / options.labels.length
   options.labels.forEach((label, index) => {
     const x = options.margin + index * (cardW + gap)
-    drawPanel(doc, x, options.y, cardW, 62, { fill: "#FFFFFF" })
-    doc.font(fonts.bold).fontSize(9).fillColor("#0F172A").text(label, x + 12, options.y + 14, {
+    doc.save()
+    doc.lineWidth(0.8).strokeColor("#CBD5E1").rect(x, options.y, cardW, 82).stroke()
+    doc.restore()
+    doc.save()
+    doc.rect(x, options.y, cardW, 28).fill("#EEF2F7")
+    doc.restore()
+    doc.save()
+    doc.lineWidth(0.6).strokeColor("#CBD5E1").rect(x, options.y, cardW, 28).stroke()
+    doc.restore()
+    doc.font(fonts.bold).fontSize(9).fillColor("#0F172A").text(label, x + 12, options.y + 9, {
       width: cardW - 24,
       align: "center",
     })
-    doc.font(fonts.regular).fontSize(8).fillColor("#64748B").text("Semnatura si nume", x + 12, options.y + 34, {
+    doc.font(fonts.regular).fontSize(8).fillColor("#64748B").text("Nume / semnatura", x + 12, options.y + 48, {
       width: cardW - 24,
       align: "center",
     })
   })
-  return options.y + 62
+  return options.y + 82
 }
