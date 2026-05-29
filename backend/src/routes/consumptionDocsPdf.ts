@@ -130,6 +130,7 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
       where: { id, tenantId, companyId },
       include: {
         location: true,
+        warehouse: true,
         sale: {
           include: {
             items: {
@@ -168,6 +169,18 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
     }
 
     const consumptionDoc = docData
+    const validatedUser = consumptionDoc.validatedBy
+      ? await prisma.user.findFirst({
+          where: {
+            id: consumptionDoc.validatedBy,
+            tenantId,
+          },
+          select: {
+            name: true,
+            email: true,
+          },
+        })
+      : null
 
     const company = await resolveTenantCompany(prisma, tenantId, companyId)
 
@@ -199,8 +212,8 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
     const gap = 12
     const rightWidth = contentWidth - companyWidth - gap
 
-    const metaCols = [96, 170, 90, 120, 90, 154]
-    const metaRowHeight = 22
+    const metaCols = [120, 190, 120, 220]
+    const metaRowHeight = 24
 
     const columns = [34, 430, 90, 110]
     const headers = [
@@ -404,44 +417,10 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
       const saleDate = consumptionDoc.sale?.soldAt ? fmtDateTime(consumptionDoc.sale.soldAt) : "-"
 
       const metaRows = [
-        [
-          "Document",
-          text(consumptionDoc.docNo),
-          "Data document",
-          fmtDateTime(consumptionDoc.docDate),
-          "Locatie",
-          text(consumptionDoc.location?.name),
-        ],
-        [
-          "Status",
-          text(consumptionDoc.status),
-          "Sursa",
-          text(
-            consumptionDoc.source === "POS_RECIPE"
-              ? "POS / Retetar"
-              : consumptionDoc.source === "SALES_AGGREGATE"
-                ? "Generat din vanzari"
-                : "Manual"
-          ),
-          "Valoare",
-          `${fmt(num(consumptionDoc.totalValue))} lei`,
-        ],
-        [
-          "Bon POS",
-          text(saleReceiptNo),
-          "Data vanzarii",
-          saleDate,
-          "Operator",
-          text(operatorName),
-        ],
-        [
-          "Nota",
-          text(consumptionDoc.note),
-          "Nr. pozitii",
-          String(consumptionDoc.items.length),
-          "Cantitate totala",
-          fmt(totalQty, 3),
-        ],
+        ["Document", text(consumptionDoc.docNo), "Data document", fmtDateTime(consumptionDoc.docDate)],
+        ["Locatie", text(consumptionDoc.location?.name), "Gestiune", text(consumptionDoc.warehouse?.name)],
+        ["Status", text(consumptionDoc.status), "Nr. pozitii", String(consumptionDoc.items.length)],
+        ["Nota", text(consumptionDoc.note), "Cantitate totala", fmt(totalQty, 3)],
       ]
 
       for (const row of metaRows) {
@@ -521,9 +500,9 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
     }
 
     function drawSignature(startY: number) {
-      const gap = 18
-      const blockWidth = (contentWidth - gap * 2) / 3
-      const labels = ["Intocmit", "Predat din gestiune", "Aprobat"]
+      const gap = 20
+      const blockWidth = (contentWidth - gap) / 2
+      const labels = ["Intocmit", "Predat din gestiune"]
 
       labels.forEach((label, index) => {
         const x = margin + index * (blockWidth + gap)
@@ -537,7 +516,12 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
         doc.lineWidth(0.6).strokeColor("#CBD5E1").rect(x, startY, blockWidth, 24).stroke()
         doc.restore()
         doc.font(fonts.bold).fontSize(9).text(label, x + 8, startY + 7, { width: blockWidth - 16, align: "center" })
-        doc.font(fonts.regular).fontSize(8).fillColor("#64748B").text("Nume / semnatura", x + 8, startY + 45, {
+        const value =
+          label === "Intocmit"
+            ? text(validatedUser?.name || validatedUser?.email || consumptionDoc.validatedBy || "-")
+            : `${text(consumptionDoc.location?.name)}${consumptionDoc.warehouse?.name ? ` / ${text(consumptionDoc.warehouse?.name)}` : ""}`
+
+        doc.font(fonts.regular).fontSize(8.5).fillColor("#111111").text(value, x + 8, startY + 40, {
           width: blockWidth - 16,
           align: "center",
         })
