@@ -372,7 +372,7 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
   }
 
   return (
-    <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/95 backdrop-blur">
+    <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.97)_0%,rgba(247,250,252,0.92)_100%)] backdrop-blur">
       <div className="px-3 py-2.5 md:px-3.5 md:py-2 xl:px-3.5">
         <div className="flex items-center gap-2.5 md:hidden">
           <button
@@ -642,9 +642,12 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
               <button
                 type="button"
                 onClick={() => setNotificationsOpen((prev) => !prev)}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-slate-200 bg-white text-[#6C7A89] shadow-sm transition hover:text-[#17324D]"
+                className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-slate-200 bg-white text-[#6C7A89] shadow-sm transition hover:border-slate-300 hover:text-[#17324D]"
               >
                 <Bell size={18} />
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-bold text-white">
+                  {notifications.length}
+                </span>
               </button>
 
               {notificationsOpen ? (
@@ -662,7 +665,7 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
               ) : null}
             </div>
 
-            <div className="flex min-w-0 max-w-[220px] items-center gap-2 rounded-[12px] border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm shadow-slate-900/[0.03]">
+            <div className="flex min-w-0 max-w-[240px] items-center gap-2 rounded-[14px] border border-slate-200 bg-[linear-gradient(180deg,#FFFFFF_0%,#F8FAFC_100%)] px-2.5 py-1.5 shadow-sm shadow-slate-900/[0.04]">
               {userAvatarUrl ? (
                 <img
                   src={userAvatarUrl}
@@ -676,13 +679,14 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
               )}
               <div className="min-w-0 text-sm">
                 <div className="truncate font-semibold text-[#17324D]">{userLabel}</div>
+                <div className="truncate text-[11px] text-slate-500">{companyLabel}</div>
               </div>
             </div>
 
             <button
               type="button"
               onClick={handleIesire}
-              className="inline-flex h-9 shrink-0 items-center justify-center rounded-[12px] border border-rose-200 bg-rose-50 px-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
+              className="inline-flex h-9 shrink-0 items-center justify-center rounded-[12px] border border-rose-200 bg-rose-50 px-3 text-sm font-semibold text-rose-700 transition hover:border-rose-300 hover:bg-rose-100"
             >
               <LogOut size={16} className="mr-2" />
               Iesire

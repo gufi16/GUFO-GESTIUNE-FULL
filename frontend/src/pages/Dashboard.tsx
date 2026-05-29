@@ -304,7 +304,7 @@ function SalesChart({
           ))}
         </svg>
         {hovered ? (
-          <div className="pointer-events-none absolute left-4 top-2 rounded-[16px] border border-slate-200 bg-white/95 px-3 py-2 shadow-lg shadow-slate-900/10">
+          <div className="pointer-events-none absolute left-4 top-2 rounded-[16px] border border-slate-200 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.95)_100%)] px-3 py-2 shadow-lg shadow-slate-900/10">
             <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{hovered.label}</div>
             <div className="mt-1 text-lg font-semibold text-slate-950">{formatRon(hovered.value)}</div>
           </div>
@@ -331,7 +331,7 @@ function MetricCard({
     <div className="rounded-[22px] border border-[#DCE6EF] bg-[linear-gradient(180deg,#FFFFFF_0%,#F8FBFD_100%)] p-4 shadow-[0_16px_34px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:border-slate-300">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-[12px] font-semibold uppercase tracking-[0.16em] text-slate-500">{title}</div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{title}</div>
           <div className="mt-2 break-words text-[24px] font-semibold tracking-tight text-slate-950">{value}</div>
           <div className="mt-1 text-[13px] text-slate-500">{hint}</div>
         </div>
@@ -370,7 +370,7 @@ function SectionCard({
     <div className="rounded-[24px] border border-[#DCE6EF] bg-[linear-gradient(180deg,#FFFFFF_0%,#F8FBFD_100%)] p-5 shadow-[0_22px_48px_rgba(15,23,42,0.06)]">
       <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <div className="text-[15px] font-semibold text-slate-950">{title}</div>
+          <div className="text-[15px] font-semibold tracking-[0.01em] text-slate-950">{title}</div>
           {subtitle ? <div className="mt-0.5 text-[13px] text-slate-500">{subtitle}</div> : null}
         </div>
         {action}
@@ -628,10 +628,10 @@ export default function Dashboard() {
 
   return (
     <div className="w-full space-y-5">
-      <div className="overflow-hidden rounded-[28px] border border-[#DCE6EF] bg-[linear-gradient(180deg,#FFFFFF_0%,#F4F8FB_100%)] p-5 shadow-[0_28px_60px_rgba(15,23,42,0.08)]">
+      <div className="overflow-hidden rounded-[28px] border border-[#DCE6EF] bg-[radial-gradient(circle_at_top_right,rgba(71,194,177,0.10),transparent_28%),linear-gradient(180deg,#FFFFFF_0%,#F4F8FB_100%)] p-5 shadow-[0_28px_60px_rgba(15,23,42,0.08)]">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/80 bg-white/85 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600 shadow-sm">
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/80 bg-white/90 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600 shadow-sm">
               <Activity size={13} className="text-emerald-600" />
               Dashboard operational
             </div>
@@ -652,21 +652,21 @@ export default function Dashboard() {
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:w-[620px]">
-            <div className="rounded-[20px] border border-white/70 bg-white/85 px-3 py-3 shadow-sm">
+            <div className="rounded-[20px] border border-white/70 bg-white/88 px-3 py-3 shadow-sm">
               <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Live</div>
               <div className="mt-1 text-sm font-semibold text-emerald-700">{lastUpdatedLabel}</div>
             </div>
-            <div className="rounded-[20px] border border-white/70 bg-white/85 px-3 py-3 shadow-sm">
+            <div className="rounded-[20px] border border-white/70 bg-white/88 px-3 py-3 shadow-sm">
               <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Cash</div>
               <div className="mt-1 text-sm font-semibold text-slate-950">{formatRon(cashTotal)}</div>
             </div>
-            <div className="rounded-[20px] border border-white/70 bg-white/85 px-3 py-3 shadow-sm">
+            <div className="rounded-[20px] border border-white/70 bg-white/88 px-3 py-3 shadow-sm">
               <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Card</div>
               <div className="mt-1 text-sm font-semibold text-slate-950">{formatRon(cardTotal)}</div>
             </div>
-            <div className="rounded-[20px] border border-white/70 bg-white/85 px-3 py-3 shadow-sm">
+            <div className="rounded-[20px] border border-white/70 bg-white/88 px-3 py-3 shadow-sm">
               <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Versiune</div>
-              <div className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
+              <div className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
                 {appVersion}
               </div>
             </div>

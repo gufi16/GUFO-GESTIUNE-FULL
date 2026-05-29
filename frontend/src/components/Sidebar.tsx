@@ -116,6 +116,13 @@ function SidebarLink({ item }: { item: SidebarItem }) {
 
           <span className="flex-1 truncate">{item.label}</span>
 
+          <span
+            className={clsx(
+              "h-2 w-2 shrink-0 rounded-full transition-all duration-200",
+              isActive ? "bg-[#6EE7D7]" : "bg-slate-200 opacity-0 group-hover:opacity-100"
+            )}
+          />
+
           {isActive ? <span className="absolute inset-y-2 left-1 w-1 rounded-full bg-white/80" /> : null}
         </>
       )}
@@ -135,7 +142,7 @@ function SidebarContent({
   onCloseMobile?: () => void
 }) {
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden bg-white">
+    <div className="flex h-full w-full flex-col overflow-hidden bg-[linear-gradient(180deg,#FFFFFF_0%,#FBFDFF_100%)]">
       <div className="border-b border-slate-200/80 px-4 pb-3 pt-4">
         {mobile ? (
           <div className="mb-2 flex items-center justify-between">
@@ -151,7 +158,7 @@ function SidebarContent({
           </div>
         ) : null}
 
-        <div className="rounded-[18px] border border-slate-200 bg-slate-50/80 p-4 shadow-sm shadow-slate-900/[0.03]">
+        <div className="rounded-[18px] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.92)_0%,rgba(255,255,255,1)_100%)] p-4 shadow-sm shadow-slate-900/[0.04]">
           <div className="flex flex-col items-center text-center">
             <img
               src="/gufo-logo.png?v=20260417-6"
@@ -167,14 +174,14 @@ function SidebarContent({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-        <div className="space-y-5">
+        <div className="space-y-4">
           {visibleSections.map((section) => (
             <section key={section.title}>
               <div className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">
                 {section.title}
               </div>
 
-              <div className="space-y-1.5">
+              <div className="space-y-1 rounded-[18px] border border-slate-100 bg-slate-50/65 p-1.5">
                 {section.items.map((item) => (
                   <div key={`${section.title}-${item.label}`} onClick={onNavigate}>
                     <SidebarLink item={item} />
@@ -187,7 +194,7 @@ function SidebarContent({
       </div>
 
       <div className="border-t border-slate-200/80 px-4 py-3">
-        <div className="flex items-center justify-between rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2.5 shadow-sm">
+        <div className="flex items-center justify-between rounded-[14px] border border-slate-200 bg-[linear-gradient(180deg,#F8FAFC_0%,#F1F5F9_100%)] px-3 py-2.5 shadow-sm">
           <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600">
             Versiunea: {APP_VERSION}
           </div>
