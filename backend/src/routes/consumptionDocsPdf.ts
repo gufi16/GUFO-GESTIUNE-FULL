@@ -220,8 +220,8 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
     const headerBlockHeight = topHeaderHeight
     const tableHeaderHeight = 28
     const rowHeight = 24
-    const footerBlockHeight = 84
-    const signatureBlockHeight = 56
+    const footerBlockHeight = 44
+    const signatureBlockHeight = 28
     const itemsTableWidth = columns.reduce((sum, value) => sum + value, 0)
     const itemsStartX = margin + (contentWidth - itemsTableWidth) / 2
 
@@ -381,14 +381,6 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
         infoY += 13
       })
 
-      doc
-        .font(fonts.regular)
-        .fontSize(8.5)
-        .text(`Pagina ${pageNo} / ${totalPagesCount}`, pageWidth - margin - 90, y - 2, {
-          width: 90,
-          align: "right",
-        })
-
       if (consumptionDoc.status && consumptionDoc.status !== "VALIDATED") {
         doc.save()
         doc.rotate(-18, { origin: [pageWidth / 2, pageHeight / 2] })
@@ -455,39 +447,35 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
         totalsY += bold ? 17 : 14
       }
 
-      totalLine("Status document", text(consumptionDoc.status))
       totalLine("Nr. pozitii consum", String(consumptionDoc.items.length))
       totalLine("Cantitate totala consum", `${fmt(totalQty, 3)} ${text(docData.items[0]?.ingredient?.uom?.code || "")}`.trim(), true)
     }
 
     function drawSignature(startY: number) {
-      const gap = 26
-      const blockWidth = (contentWidth - gap) / 2
-      const labels = ["Intocmit", "Predat din gestiune"]
-
-      labels.forEach((label, index) => {
-        const x = margin + index * (blockWidth + gap)
-        doc.save()
-        doc.lineWidth(0.7).strokeColor("#CBD5E1").rect(x, startY, blockWidth, 72).stroke()
-        doc.restore()
-        doc.save()
-        doc.rect(x, startY, blockWidth, 24).fill("#EEF2F7")
-        doc.restore()
-        doc.save()
-        doc.lineWidth(0.6).strokeColor("#CBD5E1").rect(x, startY, blockWidth, 24).stroke()
-        doc.restore()
-        doc.font(fonts.bold).fontSize(9).text(label, x + 8, startY + 7, { width: blockWidth - 16, align: "center" })
-        const value =
-          label === "Intocmit"
-            ? text(validatedUser?.name || validatedUser?.email || consumptionDoc.validatedBy || "-")
-            : `${text(consumptionDoc.location?.name)}${consumptionDoc.warehouse?.name ? ` / ${text(consumptionDoc.warehouse?.name)}` : ""}`
-
-        doc.font(fonts.regular).fontSize(8.5).fillColor("#111111").text(value, x + 8, startY + 40, {
-          width: blockWidth - 16,
-          align: "center",
-        })
-        doc.fillColor("#111111")
+      doc.font(fonts.bold).fontSize(9).fillColor("#111111").text("Intocmit", margin, startY, {
+        width: 140,
+        align: "left",
       })
+      doc.font(fonts.regular).fontSize(8.8).fillColor("#111111").text(
+        text(validatedUser?.name || validatedUser?.email || consumptionDoc.validatedBy || "-"),
+        margin,
+        startY + 14,
+        {
+          width: 220,
+          align: "left",
+        }
+      )
+    }
+
+    function drawPageFooter(pageNo: number, totalPagesCount: number) {
+      doc
+        .font(fonts.regular)
+        .fontSize(8.3)
+        .fillColor("#64748B")
+        .text(`Pagina ${pageNo} / ${totalPagesCount}`, margin, pageHeight - margin - 8, {
+          width: contentWidth,
+          align: "right",
+        })
     }
 
     paginatedRows.forEach((pageRows, pageIndex) => {
@@ -499,7 +487,7 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
       const isLastPage = currentPage === totalPages
 
       drawPageHeader(currentPage, totalPages)
-      let y = margin + headerBlockHeight + 18
+      let y = margin + headerBlockHeight + 28
 
       drawTableHeader(y)
       y += tableHeaderHeight
@@ -518,11 +506,13 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
       }
 
       if (isLastPage) {
-        y += 14
+        y += 24
         drawFooterBlock(y)
-        y += footerBlockHeight + 18
+        y += footerBlockHeight + 22
         drawSignature(y)
       }
+
+      drawPageFooter(currentPage, totalPages)
     })
 
     doc.end()
