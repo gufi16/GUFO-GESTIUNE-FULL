@@ -797,12 +797,20 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
   const line = '#c8d0d8'
   const panel = '#f8fafc'
 
-  const drawFieldBlock = (title: string, lines: string[], x: number, top: number, width: number, align: "left" | "right" = "left") => {
-    doc.font(fonts.bold).fontSize(11).fillColor(dark).text(title, x, top, { width, align })
+  const drawFieldBlock = (
+    title: string,
+    lines: string[],
+    x: number,
+    top: number,
+    width: number,
+    titleAlign: "left" | "right" = "left",
+    textAlign: "left" | "right" = "left",
+  ) => {
+    doc.font(fonts.bold).fontSize(11).fillColor(dark).text(title, x, top, { width, align: titleAlign })
     let yy = top + 18
     lines.filter(Boolean).forEach((entry) => {
-      const h = doc.heightOfString(entry, { width, align })
-      doc.font(fonts.regular).fontSize(9.5).fillColor(dark).text(entry, x, yy, { width, align })
+      const h = doc.heightOfString(entry, { width, align: textAlign })
+      doc.font(fonts.regular).fontSize(9.5).fillColor(dark).text(entry, x, yy, { width, align: textAlign })
       yy += h + 4
     })
     return yy
@@ -827,7 +835,10 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
   let y = margin
   const colGap = 24
   const blockWidth = (contentWidth - colGap) / 2
-  const centerX = margin + blockWidth
+  const centerX = margin + blockWidth - 18
+  const titleWidth = 256
+  const clientBlockWidth = blockWidth - 10
+  const clientBlockX = pageWidth - margin - clientBlockWidth
   const supplierLines = [
     pdfText(company?.name),
     `CIF: ${pdfText(company?.cui)}`,
@@ -851,14 +862,14 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
   const invoiceIdentity = splitInvoiceIdentity(invoice.docNo)
 
   const titleY = y + 8
-  doc.font(fonts.bold).fontSize(25).fillColor(dark).text('FACTURA', centerX - 110, titleY, { width: 220, align: 'center' })
-  doc.font(fonts.regular).fontSize(10.5).fillColor(muted).text(`Seria ${pdfText(invoiceIdentity.series)}`, centerX - 110, titleY + 28, { width: 220, align: 'center' })
-  doc.font(fonts.regular).fontSize(10.5).fillColor(muted).text(`Nr. factura ${pdfText(invoiceIdentity.number)}`, centerX - 110, titleY + 42, { width: 220, align: 'center' })
-  doc.font(fonts.regular).fontSize(9.5).fillColor(muted).text(`Moneda ${pdfText(invoice.currency || 'RON')}`, centerX - 110, titleY + 56, { width: 220, align: 'center' })
+  doc.font(fonts.bold).fontSize(25).fillColor(dark).text('FACTURA', centerX - titleWidth / 2, titleY, { width: titleWidth, align: 'center' })
+  doc.font(fonts.regular).fontSize(10.5).fillColor(muted).text(`Seria: ${pdfText(invoiceIdentity.series)}`, centerX - titleWidth / 2, titleY + 30, { width: titleWidth, align: 'center' })
+  doc.font(fonts.regular).fontSize(10.5).fillColor(muted).text(`Nr. factura: ${pdfText(invoiceIdentity.number)}`, centerX - titleWidth / 2, titleY + 45, { width: titleWidth, align: 'center' })
+  doc.font(fonts.regular).fontSize(9.5).fillColor(muted).text(`Moneda: ${pdfText(invoice.currency || 'RON')}`, centerX - titleWidth / 2, titleY + 60, { width: titleWidth, align: 'center' })
 
-  const supplierEndY = drawFieldBlock('FURNIZOR', supplierLines, margin, y + 10, blockWidth - 10, 'left')
-  const clientEndY = drawFieldBlock('CLIENT', clientLines, margin + blockWidth + colGap + 10, y + 10, blockWidth - 10, 'right')
-  y = Math.max(supplierEndY, clientEndY, titleY + 78) + 12
+  const supplierEndY = drawFieldBlock('FURNIZOR', supplierLines, margin, y + 10, blockWidth - 10, 'left', 'left')
+  const clientEndY = drawFieldBlock('CLIENT', clientLines, clientBlockX, y + 10, clientBlockWidth, 'right', 'left')
+  y = Math.max(supplierEndY, clientEndY, titleY + 82) + 12
 
   doc.moveTo(margin, y).lineTo(pageWidth - margin, y).strokeColor(line).lineWidth(1).stroke()
   y += 16
@@ -952,9 +963,9 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
   let footerX = margin
   const footerItems = [
     { label: 'ID descarcare SPV', value: pdfText(invoice.efacturaDownloadId || '-') , align: 'left' as const},
-    { label: 'Data emitere', value: pdfDate(invoice.docDate), align: 'center' as const},
-    { label: 'Data scadenta', value: pdfDate(invoice.dueDate || invoice.docDate), align: 'center' as const},
-    { label: 'Seria / Nr factura', value: `${pdfText(invoiceIdentity.series)} / ${pdfText(invoiceIdentity.number)}`, align: 'right' as const},
+    { label: 'Data emitere', value: pdfDate(invoice.docDate), align: 'left' as const},
+    { label: 'Data scadenta', value: pdfDate(invoice.dueDate || invoice.docDate), align: 'left' as const},
+    { label: 'Seria / Nr factura', value: `${pdfText(invoiceIdentity.series)} / ${pdfText(invoiceIdentity.number)}`, align: 'left' as const},
   ]
   footerItems.forEach((item, index) => {
     const width = footerWidths[index]
