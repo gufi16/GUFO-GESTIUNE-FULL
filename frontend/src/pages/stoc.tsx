@@ -212,6 +212,8 @@ export default function StocPage() {
   async function loadGlobalStock() {
     const qs = new URLSearchParams()
     if (globalSearch.trim()) qs.set("q", globalSearch.trim())
+    if (locationId) qs.set("locationId", locationId)
+    if (activeWarehouseId) qs.set("warehouseId", activeWarehouseId)
 
     const res = await fetch(`${API}/api/v1/stock/global${qs.toString() ? `?${qs.toString()}` : ""}`, { headers })
     const data = await res.json().catch(() => ({}))
@@ -270,6 +272,7 @@ export default function StocPage() {
 
     const qs = new URLSearchParams()
     qs.set("locationId", id)
+    if (activeWarehouseId) qs.set("warehouseId", activeWarehouseId)
     if (stockSearch.trim()) qs.set("q", stockSearch.trim())
 
     const res = await fetch(`${API}/api/v1/stock/by-location?${qs.toString()}`, { headers })
@@ -352,7 +355,7 @@ export default function StocPage() {
   useEffect(() => {
     if (!token) return
     loadGlobalStock().catch((e: any) => setError(e?.message || "Nu pot incarca stocul global."))
-  }, [globalSearch])
+  }, [globalSearch, locationId, activeWarehouseId, warehouseEnabled])
 
   useEffect(() => {
     if (!token || !locationId) return
@@ -382,7 +385,20 @@ export default function StocPage() {
 
   const filteredGlobalStock = useMemo(() => globalStock.filter((item) => matchesStockClassFilter(item, stockClassFilter)), [globalStock, stockClassFilter])
   const filteredLocationStock = useMemo(() => stock.filter((item) => matchesStockClassFilter(item, stockClassFilter)), [stock, stockClassFilter])
-  const filteredLots = useMemo(() => lots.filter((item) => matchesStockClassFilter(item, stockClassFilter)), [lots, stockClassFilter])
+  const filteredLots = useMemo(() => {
+    const fromTs = fromDate ? new Date(`${fromDate}T00:00:00`).getTime() : null
+    const toTs = toDate ? new Date(`${toDate}T23:59:59`).getTime() : null
+    return lots.filter((item) => {
+      if (!matchesStockClassFilter(item, stockClassFilter)) return false
+      if (!item?.expiryDate || (!fromTs && !toTs)) return true
+      const expiryTs = new Date(item.expiryDate).getTime()
+      if (Number.isNaN(expiryTs)) return true
+      if (fromTs !== null && expiryTs < fromTs) return false
+      if (toTs !== null && expiryTs > toTs) return false
+      return true
+    })
+  }, [lots, stockClassFilter, fromDate, toDate])
+  const filteredMoves = useMemo(() => moves.filter((item) => matchesStockClassFilter(item, stockClassFilter)), [moves, stockClassFilter])
   const lowStockCount = useMemo(
     () => filteredLocationStock.filter((item) => Number(item?.qty || 0) <= 0).length,
     [filteredLocationStock]
@@ -412,16 +428,16 @@ export default function StocPage() {
     [filteredLocationStock]
   )
   const outMovesQty = useMemo(
-    () => moves.filter((item) => item.type === "OUT").reduce((sum, item) => sum + Number(item.qty || 0), 0),
-    [moves]
+    () => filteredMoves.filter((item) => item.type === "OUT").reduce((sum, item) => sum + Number(item.qty || 0), 0),
+    [filteredMoves]
   )
   const inMovesQty = useMemo(
-    () => moves.filter((item) => item.type === "IN").reduce((sum, item) => sum + Number(item.qty || 0), 0),
-    [moves]
+    () => filteredMoves.filter((item) => item.type === "IN").reduce((sum, item) => sum + Number(item.qty || 0), 0),
+    [filteredMoves]
   )
   const transferMovesQty = useMemo(
-    () => moves.filter((item) => item.type === "TRANSFER").reduce((sum, item) => sum + Number(item.qty || 0), 0),
-    [moves]
+    () => filteredMoves.filter((item) => item.type === "TRANSFER").reduce((sum, item) => sum + Number(item.qty || 0), 0),
+    [filteredMoves]
   )
 
   const locationTotalPages = Math.max(1, Math.ceil(filteredLocationStock.length / pageSize))
@@ -534,11 +550,37 @@ export default function StocPage() {
           <div className="grid gap-3 md:grid-cols-3">
             <div style={filterField}>
               <label style={filterLabel}>Locatie activa</label>
-              <div style={readOnlyFilterField}>{activeLocationName}</div>
+              <select
+                value={locationId}
+                onChange={(e) => setLocationId(e.target.value)}
+                style={filterInput}
+              >
+                <option value="">Toate locatiile</option>
+                {locations.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
             </div>
             <div style={filterField}>
               <label style={filterLabel}>Gestiune activa</label>
-              <div style={readOnlyFilterField}>{activeWarehouseName}</div>
+              <select
+                value={warehouseId}
+                onChange={(e) => {
+                  setWarehouseId(e.target.value)
+                  setActiveWarehouseId(e.target.value)
+                }}
+                style={filterInput}
+                disabled={!warehouseEnabled || !locationId}
+              >
+                <option value="">Toate gestiunile</option>
+                {warehouses.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.code ? `${item.name} (${item.code})` : item.name}
+                  </option>
+                ))}
+              </select>
             </div>
             <div style={filterField}>
               <label style={filterLabel}>Cautare</label>
@@ -554,6 +596,14 @@ export default function StocPage() {
                 placeholder="Produs, SKU, lot sau document..."
                 style={filterInput}
               />
+            </div>
+            <div style={filterField}>
+              <label style={filterLabel}>De la</label>
+              <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} style={filterInput} />
+            </div>
+            <div style={filterField}>
+              <label style={filterLabel}>Pana la</label>
+              <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} style={filterInput} />
             </div>
           </div>
 
@@ -580,6 +630,8 @@ export default function StocPage() {
               ))}
             </div>
             <div className="flex flex-wrap gap-2">
+              <span style={infoChip}>{activeLocationName}</span>
+              <span style={infoChip}>{activeWarehouseName}</span>
               <span style={infoChip}>Total locatie: {formatQtyRo(totalLocationQty, 3)}</span>
               <span style={infoChip}>Intrari: {formatQtyRo(inMovesQty, 3)}</span>
               <span style={infoChip}>Transferuri: {formatQtyRo(transferMovesQty, 3)}</span>
@@ -823,16 +875,6 @@ export default function StocPage() {
                 />
               </div>
 
-              <div style={filterField}>
-                <label style={filterLabel}>De la</label>
-                <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} style={filterInput} />
-              </div>
-
-              <div style={filterField}>
-                <label style={filterLabel}>Pana la</label>
-                <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} style={filterInput} />
-              </div>
-
               {warehouseEnabled ? <div style={filterField}>
                 <label style={filterLabel}>Gestiune activa</label>
                 <div style={readOnlyFilterField}>{activeWarehouseLabel(warehouses, warehouseId)}</div>
@@ -840,7 +882,7 @@ export default function StocPage() {
             </div>
           </div>
 
-          {moves.length === 0 ? (
+          {filteredMoves.length === 0 ? (
             <Empty text="Nu exista miscari de stoc." />
           ) : (
             <>
@@ -862,7 +904,7 @@ export default function StocPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {moves.map((m) => (
+                    {filteredMoves.map((m) => (
                       <tr key={m.id}>
                         <td style={td}>{new Date(m.createdAt).toLocaleString("ro-RO")}</td>
                         <td style={td}>{m.productName}</td>
