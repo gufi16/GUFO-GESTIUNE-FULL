@@ -22,6 +22,16 @@ export const API_BASE = envApiBase || (isLocalHost ? "http://localhost:3001" : r
 
 function resolveTokenByPath(path?: string): string {
   const normalizedPath = String(path || "").trim()
+  const isPublicAuthRoute =
+    normalizedPath.startsWith("/api/v1/auth/login") ||
+    normalizedPath.startsWith("/api/v1/auth/forgot-password") ||
+    normalizedPath.startsWith("/api/v1/auth/reset-password") ||
+    normalizedPath.startsWith("/api/v1/public/")
+
+  if (isPublicAuthRoute) {
+    return ""
+  }
+
   const isAdminApi = normalizedPath.startsWith("/api/v1/admin/")
   if (isAdminApi) {
     return localStorage.getItem("control_token") || ""

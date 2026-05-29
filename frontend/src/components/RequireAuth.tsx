@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { Navigate } from "react-router-dom"
+import { clearErpToken } from "../lib/api"
 import { getToken } from "../lib/api"
 import { me, selectCompany } from "../lib/auth"
 
@@ -44,6 +45,9 @@ export default function RequireAuth({ children }: { children: React.ReactNode })
         }
         if (mounted) setOk(true)
       } catch {
+        localStorage.removeItem("active_company_id")
+        localStorage.removeItem("modules")
+        clearErpToken()
         if (mounted) setOk(false)
       } finally {
         if (mounted) setLoading(false)
