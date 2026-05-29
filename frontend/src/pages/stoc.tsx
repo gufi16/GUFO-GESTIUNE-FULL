@@ -485,6 +485,9 @@ export default function StocPage() {
     })
   }
 
+  const activeLocationName = locationId ? locations.find((item) => item.id === locationId)?.name || "Locatie activa" : "Toate locatiile"
+  const activeWarehouseName = warehouseEnabled ? activeWarehouseLabel(warehouses, warehouseId) : "Toate gestiunile"
+
   return (
     <div className="space-y-3">
       <PageHeader badge="gestiune" title="Stoc" />
@@ -504,31 +507,83 @@ export default function StocPage() {
 
       {error ? <div style={errorBox}>{error}</div> : null}
 
-      <div className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm shadow-slate-900/[0.03]">
-        <div className="grid gap-4 lg:grid-cols-[1.3fr,1fr]">
-          <div className="space-y-3">
-            <div className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">
-              Control stoc operational
+      <div className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-2">
+            <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600">
+              Balanta de stoc
             </div>
             <div>
-              <h2 className="text-[24px] font-semibold tracking-tight text-[#17324D]">Vezi clar ce ai in stoc, ce iesiri ai avut si unde trebuie sa intervii</h2>
+              <h2 className="text-[22px] font-semibold tracking-tight text-[#17324D]">Stocul trebuie sa se citeasca rapid, nu sa te plimbi printre carduri</h2>
               <p className="mt-1 text-sm text-slate-500">
-                Pagina de stoc separa acum stocul curent, loturile si miscarile, ca sa intelegi rapid materiile prime disponibile,
-                produsele ramase fara stoc si iesirile din intervalul selectat.
+                Structura de mai jos tine focusul pe tabelul principal, iar loturile si miscarile raman vizibile separat, cand chiar ai nevoie de ele.
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <span style={infoChip}>{locationId ? "Locatie activa din topbar" : "Selecteaza o locatie din topbar"}</span>
-              {warehouseEnabled ? <span style={infoChip}>{activeWarehouseLabel(warehouses, warehouseId)}</span> : null}
-              <span style={infoChip}>{filteredLocationStock.length} produse pe filtrul activ</span>
+          </div>
+          <div className="grid min-w-[280px] flex-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <SummaryMetric label="Materii prime" value={rawMaterialCount} hint="pe filtrul activ" />
+            <SummaryMetric label="Produse finite" value={finishedProductCount} hint="pe filtrul activ" />
+            <SummaryMetric label="Iesiri interval" value={formatQtyRo(outMovesQty, 3)} hint="miscari OUT" />
+            <SummaryMetric label="Expira curand" value={expiringLotsSoonCount} hint="in 7 zile" />
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="grid gap-3 lg:grid-cols-[1.3fr,1fr]">
+          <div className="grid gap-3 md:grid-cols-3">
+            <div style={filterField}>
+              <label style={filterLabel}>Locatie activa</label>
+              <div style={readOnlyFilterField}>{activeLocationName}</div>
+            </div>
+            <div style={filterField}>
+              <label style={filterLabel}>Gestiune activa</label>
+              <div style={readOnlyFilterField}>{activeWarehouseName}</div>
+            </div>
+            <div style={filterField}>
+              <label style={filterLabel}>Cautare</label>
+              <input
+                value={activeSection === "global" ? globalSearch : activeSection === "lots" ? lotSearch : activeSection === "moves" ? movesSearch : stockSearch}
+                onChange={(e) => {
+                  const value = e.target.value
+                  if (activeSection === "global") setGlobalSearch(value)
+                  else if (activeSection === "lots") setLotSearch(value)
+                  else if (activeSection === "moves") setMovesSearch(value)
+                  else setStockSearch(value)
+                }}
+                placeholder="Produs, SKU, lot sau document..."
+                style={filterInput}
+              />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2.5">
-            <Card title="Materii prime" value={rawMaterialCount} icon={<Boxes size={16} />} />
-            <Card title="Produse finite" value={finishedProductCount} icon={<ClipboardList size={16} />} />
-            <Card title="Iesiri interval" value={formatQtyRo(outMovesQty, 3)} icon={<ArrowRightLeft size={16} />} />
-            <Card title="Expira curand" value={expiringLotsSoonCount} icon={<SearchDot />} />
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-2">
+              {[
+                { id: "ALL", label: "Tot" },
+                { id: "RAW", label: "Materii prime" },
+                { id: "FINISHED", label: "Produse finite" },
+                { id: "AUX", label: "Auxiliare" },
+              ].map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => setStockClassFilter(option.id as StockClassFilter)}
+                  className={`inline-flex items-center rounded-full px-3 py-1.5 text-[12px] font-semibold transition ${
+                    stockClassFilter === option.id
+                      ? "bg-[#17324D] text-white"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <span style={infoChip}>Total locatie: {formatQtyRo(totalLocationQty, 3)}</span>
+              <span style={infoChip}>Intrari: {formatQtyRo(inMovesQty, 3)}</span>
+              <span style={infoChip}>Transferuri: {formatQtyRo(transferMovesQty, 3)}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -543,7 +598,7 @@ export default function StocPage() {
               : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
           }`}
         >
-          Stoc actual
+          Balanta locatie
         </button>
         <button
           type="button"
@@ -576,91 +631,53 @@ export default function StocPage() {
               : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
           }`}
         >
-          Intrari / Iesiri
+          Miscari stoc
         </button>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Filtru stoc</span>
-        {[
-          { id: "ALL", label: "Tot" },
-          { id: "RAW", label: "Materii prime" },
-          { id: "FINISHED", label: "Produse finite" },
-          { id: "AUX", label: "Auxiliare" },
-        ].map((option) => (
-          <button
-            key={option.id}
-            type="button"
-            onClick={() => setStockClassFilter(option.id as StockClassFilter)}
-            className={`inline-flex items-center rounded-full px-3 py-1.5 text-[12px] font-semibold transition ${
-              stockClassFilter === option.id
-                ? "bg-[#17324D] text-white"
-                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-            }`}
-          >
-            {option.label}
-          </button>
-        ))}
-        <span className="ml-auto text-xs text-slate-500">
-          Total locatie {formatQtyRo(totalLocationQty, 3)} · Intrari {formatQtyRo(inMovesQty, 3)} · Iesiri {formatQtyRo(outMovesQty, 3)}
-        </span>
-      </div>
-
       {activeSection === "location" ? (
-        <Section
-          title="Stoc actual pe locatie"
-          actions={
-            <div className="min-w-[220px] md:w-[320px]">
-              <input
-                value={stockSearch}
-                onChange={(e) => setStockSearch(e.target.value)}
-                placeholder="Cauta in locatia activa..."
-                style={filterInput}
-                disabled={!locationId}
-              />
-            </div>
-          }
-        >
-          <div style={filterBar}>
-            <span style={infoChip}>{locationId ? "Locatia activa din topbar" : "Alege o locatie din topbar"}</span>
-            {locationId && warehouseEnabled ? <span style={infoChip}>Loturile raman in tabul dedicat, aici vezi stocul curent consolidat pe locatie.</span> : null}
-            <span style={infoChip}>{filteredLocationStock.length} produse</span>
-          </div>
-
-          <div className="mb-3 grid grid-cols-1 gap-2.5 md:grid-cols-4">
-            <Card title="Cantitate totala" value={formatQtyRo(totalLocationQty, 3)} icon={<Boxes size={16} />} />
-            <Card title="Fara stoc" value={lowStockCount} icon={<SearchDot />} />
-            <Card title="Cu lot / expirare" value={trackedProductsCount} icon={<ClipboardList size={16} />} />
-            <Card title="Iesiri in interval" value={formatQtyRo(outMovesQty, 3)} icon={<ArrowRightLeft size={16} />} />
-          </div>
-
+        <Section title="Balanta de stoc pe locatia activa">
           {locationId === "" ? (
             <Empty text="Alege o locatie din topbar." />
           ) : filteredLocationStock.length === 0 ? (
             <Empty text="Nu exista produse pentru aceasta locatie." />
           ) : (
             <>
+              <div className="mb-3 grid grid-cols-1 gap-2.5 md:grid-cols-4">
+                <SummaryMetric label="Produse" value={filteredLocationStock.length} hint="pe locatie" />
+                <SummaryMetric label="Fara stoc" value={lowStockCount} hint="cantitate zero" />
+                <SummaryMetric label="Lot / expirare" value={trackedProductsCount} hint="control activ" />
+                <SummaryMetric label="Cantitate totala" value={formatQtyRo(totalLocationQty, 3)} hint="pe filtrul activ" />
+              </div>
               <Table
-                headers={["Produs", "Clasa", "UM", "Control", "Gestiune", "Stoc curent", "Status"]}
+                headers={["Produs", "Clasa", "UM", "Gestiune", "Control", "Stoc curent", "Observatii"]}
                 rows={pagedLocationStock.map((s) => [
                   <button type="button" style={lotProductButton} onClick={() => openProductLots(s)}>
                     <div style={{ fontWeight: 700 }}>{s.name}</div>
                     <div style={{ color: "#64748b", fontSize: 12 }}>
                       {[s.sku, s.department, s.category].filter(Boolean).join(" · ") || "fara clasificare"}
                     </div>
-                    {s.nextExpiry ? <div style={{ color: "#64748b", fontSize: 12 }}>Urmatoarea expirare: {formatShortDate(s.nextExpiry)}</div> : null}
                   </button>,
                   <span style={{ ...miniBadge, ...stockClassTone(s.productClass) }}>{productClassLabel(s.productClass)}</span>,
                   s.uom,
-                  <ProductControlBadges item={s} />,
                   s.warehouseName || "-",
+                  <ProductControlBadges item={s} />,
                   <div>
                     <div style={{ fontWeight: 700 }}>{formatQtyRo(Number(s.qty || 0), 3)}</div>
                     <div style={{ color: "#64748b", fontSize: 12 }}>{s.uom || "-"}</div>
                   </div>,
-                  <span style={{ ...typeBadge, ...(Number(s.qty || 0) > 0 ? typeIn : typeOut) }}>
-                    {Number(s.qty || 0) > 0 ? "In stoc" : "Fara stoc"}
-                  </span>,
+                  s.nextExpiry ? (
+                    <div>
+                      <div style={{ fontWeight: 600, color: "#0f172a" }}>Expira {formatShortDate(s.nextExpiry)}</div>
+                      <div style={{ color: "#64748b", fontSize: 12 }}>
+                        {daysUntil(s.nextExpiry) !== null && (daysUntil(s.nextExpiry) as number) <= 7 ? "necesita atentie" : "stoc urmarit"}
+                      </div>
+                    </div>
+                  ) : (
+                    <span style={{ ...typeBadge, ...(Number(s.qty || 0) > 0 ? typeIn : typeOut) }}>
+                      {Number(s.qty || 0) > 0 ? "In stoc" : "Fara stoc"}
+                    </span>
+                  ),
                 ])}
               />
               <div style={paginationBar}>
@@ -678,36 +695,24 @@ export default function StocPage() {
           )}
         </Section>
       ) : activeSection === "global" ? (
-        <Section
-          title="Stoc consolidat pe toata compania"
-          actions={
-            <div className="flex min-w-[220px] items-center gap-2 md:w-[320px]">
-              <input
-                value={globalSearch}
-                onChange={(e) => setGlobalSearch(e.target.value)}
-                placeholder="Cauta in stocul global..."
-                style={filterInput}
-              />
-            </div>
-          }
-        >
-          <div style={filterBar}>
-            <span style={infoChip}>{filteredGlobalStock.length} produse</span>
-          </div>
-
+        <Section title="Stoc consolidat pe toata compania">
           {filteredGlobalStock.length === 0 ? (
             <Empty text="Nu exista produse in stoc." />
           ) : (
             <>
+              <div className="mb-3 grid grid-cols-1 gap-2.5 md:grid-cols-3">
+                <SummaryMetric label="Produse totale" value={filteredGlobalStock.length} hint="in companie" />
+                <SummaryMetric label="Materii prime" value={filteredGlobalStock.filter((item) => isRawMaterialClass(item?.productClass)).length} hint="consolidat" />
+                <SummaryMetric label="Produse finite" value={filteredGlobalStock.filter((item) => isFinishedProductClass(item?.productClass)).length} hint="consolidat" />
+              </div>
               <Table
-                headers={["Produs", "Clasa", "UM", "Control", "Locatii cu stoc", "Stoc total"]}
+                headers={["Produs", "Clasa", "UM", "Control", "Locatii / gestiuni", "Stoc total"]}
                 rows={pagedGlobalStock.map((s) => [
                   <button type="button" style={lotProductButton} onClick={() => openProductLots(s)}>
                     <div style={{ fontWeight: 700 }}>{s.name}</div>
                     <div style={{ color: "#64748b", fontSize: 12 }}>
                       {[s.sku, s.department, s.category].filter(Boolean).join(" · ") || "fara clasificare"}
                     </div>
-                    {s.nextExpiry ? <div style={{ color: "#64748b", fontSize: 12 }}>Urmatoarea expirare: {formatShortDate(s.nextExpiry)}</div> : null}
                   </button>,
                   <span style={{ ...miniBadge, ...stockClassTone(s.productClass) }}>{productClassLabel(s.productClass)}</span>,
                   s.uom,
@@ -739,25 +744,7 @@ export default function StocPage() {
           )}
         </Section>
       ) : activeSection === "lots" ? (
-        <Section
-          title="Loturi, expirari si cost ramas"
-          actions={
-            <div className="min-w-[220px] md:w-[320px]">
-              <input
-                value={lotSearch}
-                onChange={(e) => setLotSearch(e.target.value)}
-                placeholder="Cauta dupa produs, SKU sau lot..."
-                style={filterInput}
-              />
-            </div>
-          }
-        >
-          <div style={filterBar}>
-            <span style={infoChip}>{filteredLots.length} loturi</span>
-            <span style={infoChip}>{expiringLotsSoonCount} expira in 7 zile</span>
-            {warehouseEnabled ? <span style={infoChip}>{activeWarehouseLabel(warehouses, warehouseId)}</span> : null}
-          </div>
-
+        <Section title="Loturi si expirari">
           {filteredLots.length === 0 ? (
             <Empty
               text={
@@ -768,6 +755,11 @@ export default function StocPage() {
             />
           ) : (
             <>
+              <div className="mb-3 grid grid-cols-1 gap-2.5 md:grid-cols-3">
+                <SummaryMetric label="Loturi active" value={filteredLots.length} hint="pe filtre" />
+                <SummaryMetric label="Expira curand" value={expiringLotsSoonCount} hint="in 7 zile" />
+                <SummaryMetric label="Gestiune" value={warehouseEnabled ? activeWarehouseName : "Toate"} hint="context activ" />
+              </div>
               <Table
                 headers={["Produs", "Control", "Lot", "Expira", "Locatie", "Gestiune", "Cant. initiala", "Cant. ramasa", "Cost unitar", "Valoare ramasa"]}
                 rows={pagedLots.map((lot) => [
@@ -813,10 +805,11 @@ export default function StocPage() {
         </Section>
       ) : (
         <Section title="Intrari / iesiri de stoc">
-          <div className="mb-3 grid grid-cols-1 gap-2.5 md:grid-cols-3">
-            <Card title="Intrari" value={formatQtyRo(inMovesQty, 3)} icon={<Boxes size={16} />} />
-            <Card title="Iesiri" value={formatQtyRo(outMovesQty, 3)} icon={<ArrowRightLeft size={16} />} />
-            <Card title="Transferuri" value={formatQtyRo(transferMovesQty, 3)} icon={<RefreshCw size={16} />} />
+          <div className="mb-3 grid grid-cols-1 gap-2.5 md:grid-cols-4">
+            <SummaryMetric label="Intrari" value={formatQtyRo(inMovesQty, 3)} hint="tip IN" />
+            <SummaryMetric label="Iesiri" value={formatQtyRo(outMovesQty, 3)} hint="tip OUT" />
+            <SummaryMetric label="Transferuri" value={formatQtyRo(transferMovesQty, 3)} hint="tip TRANSFER" />
+            <SummaryMetric label="Interval" value={`${fromDate || "-"} → ${toDate || "-"}`} hint="filtru activ" />
           </div>
           <div style={movesFiltersWrap}>
             <div style={movesFiltersGrid}>
@@ -865,8 +858,6 @@ export default function StocPage() {
                       <th style={th}>Lot</th>
                       <th style={th}>Tip</th>
                       <th style={th}>Cantitate</th>
-                      <th style={th}>Cost</th>
-                      <th style={th}>Valoare</th>
                       <th style={th}>Document</th>
                     </tr>
                   </thead>
@@ -898,8 +889,6 @@ export default function StocPage() {
                           </span>
                         </td>
                         <td style={td}>{formatQtyRo(Number(m.qty || 0), 3)}</td>
-                        <td style={td}>{formatRon(Number(m.unitCost || 0))}</td>
-                        <td style={td}>{formatRon(Number(m.totalValue || 0))}</td>
                         <td style={td}>{m.note || `${m.refType || "-"} ${m.refId || ""}`.trim()}</td>
                       </tr>
                     ))}
@@ -1025,6 +1014,16 @@ export default function StocPage() {
           </div>
         </div>
       ) : null}
+    </div>
+  )
+}
+
+function SummaryMetric({ label, value, hint }: { label: string; value: any; hint: string }) {
+  return (
+    <div style={summaryMetricCard}>
+      <div style={summaryMetricLabel}>{label}</div>
+      <div style={summaryMetricValue}>{value}</div>
+      <div style={summaryMetricHint}>{hint}</div>
     </div>
   )
 }
@@ -1315,6 +1314,35 @@ const metricValue = {
   fontWeight: 700,
   color: "#0f172a",
   lineHeight: 1.1,
+}
+
+const summaryMetricCard = {
+  border: "1px solid #e2e8f0",
+  borderRadius: 16,
+  padding: "14px 16px",
+  background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+}
+
+const summaryMetricLabel = {
+  fontSize: 12,
+  color: "#64748b",
+  fontWeight: 700,
+  textTransform: "uppercase" as const,
+  letterSpacing: "0.08em",
+}
+
+const summaryMetricValue = {
+  marginTop: 8,
+  fontSize: 24,
+  lineHeight: 1.1,
+  fontWeight: 700,
+  color: "#17324D",
+}
+
+const summaryMetricHint = {
+  marginTop: 6,
+  fontSize: 12,
+  color: "#64748b",
 }
 
 const sectionWrap = {
