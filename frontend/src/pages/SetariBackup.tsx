@@ -238,7 +238,7 @@ export default function SetariBackupPage() {
       <PageHeader
         badge="configurare"
         title="Backup client"
-        subtitle="Salvezi o copie completa a datelor clientului, pastrata in siguranta pe server."
+        subtitle="Salvezi, descarci si restaurezi copii complete ale datelor clientului, cu acces rapid la istoricul snapshot-urilor pastrate pe server."
       />
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
@@ -255,7 +255,7 @@ export default function SetariBackupPage() {
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Creeaza backup nou</div>
             <div className="mt-1 text-sm font-semibold text-[#17324D]">Salvezi o copie completa a datelor clientului curent.</div>
-            <div className="mt-2 text-sm text-slate-500">Sunt incluse datele importante si fisierele necesare. Restaurarea se face direct din copiile salvate pe server.</div>
+            <div className="mt-2 text-sm text-slate-500">Sunt incluse datele importante si fisierele necesare, iar restaurarea se face direct din copiile salvate pe server.</div>
           </div>
 
           <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
@@ -316,6 +316,7 @@ export default function SetariBackupPage() {
         <div>
           <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Backup-uri disponibile</div>
           <div className="mt-1 text-sm font-semibold text-[#17324D]">Istoric snapshot-uri pentru acest client</div>
+          <div className="mt-2 text-sm text-slate-500">Ai intr-un singur loc toate copiile disponibile, cu acces direct la descarcare, restaurare sau stergere.</div>
         </div>
 
         <div className="mt-4 overflow-x-auto">

@@ -401,7 +401,7 @@ export default function ExportContabilitatePage() {
       <PageHeader
         badge="rapoarte"
         title="Export contabilitate"
-        subtitle="Genereaza rapid fisierele contabile pentru firma activa."
+        subtitle="Generezi fisierele contabile pentru firma activa, alegi perioada si formatul corect si descarci rapid exportul pregatit pentru contabilitate."
       />
 
       {message ? <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</div> : null}
@@ -413,7 +413,7 @@ export default function ExportContabilitatePage() {
             <div>
               <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Generator export contabilitate</div>
               <div className="mt-1 text-lg font-semibold text-[#17324D]">{companyName}</div>
-              <div className="mt-1 text-sm text-slate-500">Alegi documentul, perioada si formatul, apoi descarci fisierul.</div>
+              <div className="mt-1 text-sm text-slate-500">Alegi documentul, perioada si formatul, apoi descarci fisierul pregatit pentru fluxul contabil al firmei active.</div>
             </div>
             <button
               type="button"
