@@ -1,18 +1,19 @@
-import { ArrowRight, BookOpen, Boxes, Building2, FolderTree, Package2, Ruler, UtensilsCrossed } from "lucide-react"
+import { BookOpen, Boxes, Building2, FolderTree, Package2, Ruler, UtensilsCrossed } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import PageHeader from "../components/PageHeader"
+import HubModuleCard from "../components/HubModuleCard"
 
 const items = [
-  { name: "Produse", route: "/nomenclator/produse", icon: Package2 },
-  { name: "Materii prime", route: "/nomenclator/materii-prime", icon: Boxes },
-  { name: "Semifabricate", route: "/nomenclator/semifabricate", icon: BookOpen },
-  { name: "Meniuri", route: "/nomenclator/meniuri", icon: UtensilsCrossed },
-  { name: "Furnizori", route: "/nomenclator/furnizori", icon: Building2 },
-  { name: "Clienti", route: "/nomenclator/clienti", icon: Building2 },
-  { name: "Locatii", route: "/nomenclator/locatii", icon: Boxes },
-  { name: "Unitati de masura", route: "/nomenclator/uom", icon: Ruler },
-  { name: "Departamente", route: "/nomenclator/departamente", icon: BookOpen },
-  { name: "Categorii produse", route: "/nomenclator/categorii", icon: FolderTree },
+  { name: "Produse", route: "/nomenclator/produse", icon: Package2, description: "Intri direct in catalogul comercial complet pentru administrare, cautare rapida si reguli operationale." },
+  { name: "Materii prime", route: "/nomenclator/materii-prime", icon: Boxes, description: "Revizuiesti materiile prime folosite in productie, consum intern si retetare, separate clar de restul catalogului." },
+  { name: "Semifabricate", route: "/nomenclator/semifabricate", icon: BookOpen, description: "Gestionezi preparatele intermediare care intra mai departe in productie, retete si fluxurile zilnice." },
+  { name: "Meniuri", route: "/nomenclator/meniuri", icon: UtensilsCrossed, description: "Configurezi meniurile vandabile, publicarea lor si legatura cu produsele finite deja definite in ERP." },
+  { name: "Furnizori", route: "/nomenclator/furnizori", icon: Building2, description: "Deschizi registrul partenerilor de achizitie si completezi rapid datele fiscale, comerciale si de contact." },
+  { name: "Clienti", route: "/nomenclator/clienti", icon: Building2, description: "Administrezi baza de clienti, datele de facturare si informatiile utile pentru livrare si fluxurile comerciale." },
+  { name: "Locatii", route: "/nomenclator/locatii", icon: Boxes, description: "Vezi locatiile companiei, adresele operationale si contextul folosit mai departe in documente si transport." },
+  { name: "Unitati de masura", route: "/nomenclator/uom", icon: Ruler, description: "Pastrezi nomenclatorul de unitati coerent pentru produse, achizitii, documente si e-Factura." },
+  { name: "Departamente", route: "/nomenclator/departamente", icon: BookOpen, description: "Organizezi structura comerciala folosita ulterior in categorii, produse si fluxurile din POS." },
+  { name: "Categorii produse", route: "/nomenclator/categorii", icon: FolderTree, description: "Controlezi gruparea produselor pe categorii, imagini si vizibilitate in interfetele comerciale." },
 ]
 
 export default function Nomenclator() {
@@ -27,29 +28,15 @@ export default function Nomenclator() {
       />
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {items.map((item) => {
-          const Icon = item.icon
-          return (
-            <button
-              key={item.name}
-              type="button"
-              onClick={() => nav(item.route)}
-              className="group rounded-[20px] border border-slate-200 bg-white px-4 py-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-[14px] bg-[#EAF0F6] text-[#17324D]">
-                  <Icon size={18} />
-                </span>
-                <ArrowRight size={16} className="text-slate-300 transition group-hover:translate-x-1 group-hover:text-[#17324D]" />
-              </div>
-
-              <div className="mt-4 text-[15px] font-semibold text-slate-900">{item.name}</div>
-              <div className="mt-1 text-sm leading-6 text-slate-500">
-                Intri direct in registrul dedicat pentru administrare, cautare rapida si intretinerea nomenclatorului.
-              </div>
-            </button>
-          )
-        })}
+        {items.map((item) => (
+          <HubModuleCard
+            key={item.name}
+            onClick={() => nav(item.route)}
+            title={item.name}
+            description={item.description}
+            icon={item.icon}
+          />
+        ))}
       </div>
     </div>
   )
