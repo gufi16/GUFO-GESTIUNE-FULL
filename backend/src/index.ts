@@ -2,7 +2,6 @@
 import express from "express"
 import cors from "cors"
 import morgan from "morgan"
-import dotenv from "dotenv"
 import cookieParser from "cookie-parser"
 import bcrypt from "bcryptjs"
 import jwt from "jsonwebtoken"
@@ -11,6 +10,7 @@ import fs from "fs"
 import path from "path"
 import crypto from "crypto"
 import { ensureUploadSubdir, getUploadsRoot } from "./lib/uploads"
+import { loadEnv } from "./lib/loadEnv"
 
 import { prisma } from "./lib/prisma"
 import { getPrimaryTenantCompany } from "./lib/companyResolver"
@@ -52,7 +52,7 @@ import financeRouter from "./routes/finance"
 import backupsRouter from "./routes/backups"
 import eTransportRegistryRouter from "./routes/etrransport"
 
-dotenv.config()
+loadEnv()
 
 const app = express()
 app.set("trust proxy", true)

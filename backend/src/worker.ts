@@ -1,8 +1,8 @@
-import dotenv from "dotenv"
 import { prisma } from "./lib/prisma"
+import { loadEnv } from "./lib/loadEnv"
 import { getWorkerIntervalMs, runWorkerCycle } from "./lib/workerJobs"
 
-dotenv.config()
+loadEnv()
 
 const startedAt = new Date()
 const intervalMs = getWorkerIntervalMs()

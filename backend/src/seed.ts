@@ -1,10 +1,10 @@
-import dotenv from "dotenv"
-dotenv.config()
-
 import bcrypt from "bcryptjs"
+import { loadEnv } from "./lib/loadEnv"
 import { prisma } from "./lib/prisma"
 import { hashSecret, makeLicenseKey } from "./lib/auth"
 import { ensureTenantCompany } from "./lib/companyResolver"
+
+loadEnv()
 
 async function main() {
   const demoEmail = "admin@demo.local"
