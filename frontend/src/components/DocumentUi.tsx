@@ -101,10 +101,12 @@ export function InlineNotice({
 export function DocumentPageHeader({
   badge = "Operatiuni",
   title,
+  subtitle,
   actions,
 }: {
   badge?: string
   title: string
+  subtitle?: string
   actions?: ReactNode
 }) {
   return (
@@ -115,6 +117,7 @@ export function DocumentPageHeader({
             {badge}
           </div>
           <h1 className="mt-2 text-[26px] font-semibold tracking-[-0.02em] text-[#17324D]">{title}</h1>
+          {subtitle ? <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">{subtitle}</p> : null}
         </div>
 
         {actions ? <div className="flex flex-wrap justify-end gap-2">{actions}</div> : null}

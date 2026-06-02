@@ -433,6 +433,7 @@ export default function BonConsumNou() {
     <div className="w-full space-y-3">
       <DocumentPageHeader
         title={editingId ? `Bon de consum ${docNo || ""}`.trim() : "Bon de consum"}
+        subtitle="Inregistreaza consumul operational de produse si materii prime, cu selectie rapida pe locatie, gestiune si pozitii validate in document."
         actions={
           <>
             <button type="button" onClick={() => navigate("/inregistrare-document")} className={documentButtonSecondaryClass}>
@@ -460,7 +461,7 @@ export default function BonConsumNou() {
             <DocumentMetric title="Peste stoc" value={lowStockItems} tone="amber" />
           </div>
 
-          <DocumentSection title="Adauga produse">
+          <DocumentSection title="Adauga produse" description="Cauta rapid produsele disponibile si adauga-le in documentul de consum fara sa pierzi contextul de stoc curent.">
             <div className="relative">
               <Search size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
@@ -511,7 +512,7 @@ export default function BonConsumNou() {
             )}
           </DocumentSection>
 
-          <DocumentSection title="Pozitii bon de consum">
+          <DocumentSection title="Pozitii bon de consum" description="Verifica stocul disponibil, ajusteaza cantitatile consumate si curata liniile nefolosite inainte de salvare.">
             <div>
               {items.length ? (
                 <div className="space-y-2">
@@ -577,7 +578,7 @@ export default function BonConsumNou() {
       ) : null}
 
       {activePanel === "date" ? (
-        <DocumentSection title="Detalii document">
+        <DocumentSection title="Detalii document" description="Completeaza contextul documentului cu locatia, gestiunea, data si observatiile care raman atasate consumului salvat.">
           <div className="space-y-3">
             <DocumentField label="Locatie">
               <select value={locationId} onChange={(e) => setLocation(e.target.value)} className={documentInputClass}>

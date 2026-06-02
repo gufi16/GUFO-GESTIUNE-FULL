@@ -228,7 +228,11 @@ export default function NirListPage() {
 
   return (
     <div className="space-y-3">
-      <PageHeader badge="Operatiuni" title="Receptii NIR" />
+      <PageHeader
+        badge="Operatiuni"
+        title="Receptii NIR"
+        subtitle="Monitorizeaza receptiile de marfa, filtreaza rapid documentele postate sau ramase in draft si intra direct in registrele care cer actiune."
+      />
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-4">
         <DocumentMetric title="Documente" value={stats.count} tone="slate" />

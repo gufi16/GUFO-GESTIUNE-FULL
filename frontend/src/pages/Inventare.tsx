@@ -605,6 +605,7 @@ export default function Inventare() {
       <PageHeader
         badge="gestiune"
         title="Inventare"
+        subtitle="Planifica, verifica si finalizeaza inventarele operationale pe locatia activa, cu evidenta clara pentru drafturi, documente inchise si anulari."
       />
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-4">

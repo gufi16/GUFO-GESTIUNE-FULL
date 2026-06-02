@@ -1378,6 +1378,7 @@ export default function TransferPage() {
     <div className="w-full space-y-3">
       <DocumentPageHeader
         title={!transferId ? "Transfer nou" : isPosted ? "Transfer postat" : "Editare transfer"}
+        subtitle="Gestioneaza mutarea stocului intre gestiuni, cu linii clare de transfer, context logistic si validare pentru fluxurile ANAF atunci cand este necesar."
         actions={
           <>
             <button type="button" onClick={() => navigate("/transfer")} className={documentButtonSecondaryClass}>
@@ -1433,12 +1434,16 @@ export default function TransferPage() {
             <DocumentMetric title="Valoare estimata" value={`${formatNumber(totals.totalValue)} RON`} tone="emerald" />
           </div>
 
-          <DocumentSection title="Linii transfer" actions={!isPosted ? (
+          <DocumentSection
+            title="Linii transfer"
+            description="Adauga produsele transferate, completeaza cantitatile si verifica rapid valoarea estimata a miscarii intre gestiuni."
+            actions={!isPosted ? (
             <button type="button" className={documentButtonPrimaryClass} onClick={addLine}>
               <Plus size={16} className="mr-2" />
               Adauga linie
             </button>
-          ) : null}>
+          ) : null}
+          >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="text-sm text-slate-500">Scrie minim 2 litere, alege produsul si completeaza repede cantitatea si pretul.</div>
             </div>
@@ -1554,6 +1559,7 @@ export default function TransferPage() {
         <div className="space-y-3 order-1">
           <DocumentSection
             title="Detalii transfer"
+            description="Stabileste gestiunea de plecare, gestiunea de destinatie, datele documentului si observatiile operationale folosite in registrul de transfer."
             actions={!isPosted && transferId ? (
               <button type="button" className={documentButtonDangerClass} onClick={deleteTransfer} disabled={saving || loadingDoc}>
                 Anuleaza
@@ -1814,7 +1820,7 @@ export default function TransferPage() {
                       </div>
 
                       {activeETransportPanel === "date" ? (
-                        <DocumentSection title="Date notificare">
+                        <DocumentSection title="Date notificare" description="Completeaza datele de baza ale notificarii care merg mai departe in fluxul RO e-Transport.">
                           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                             <div className="space-y-1 xl:col-span-2">
                               <label className="block text-xs font-medium text-[#17324D]">Tip document transport</label>
@@ -1938,7 +1944,7 @@ export default function TransferPage() {
                       ) : null}
 
                       {activeETransportPanel === "parties" ? (
-                        <DocumentSection title="Organizator si partener">
+                        <DocumentSection title="Organizator si partener" description="Verifica partile implicate in transport si completeaza datele de identificare folosite in notificare.">
                           <div className="grid gap-4 2xl:grid-cols-2">
                             <div className="min-w-0 rounded-[16px] border border-slate-200 bg-white p-4">
                               <div className="mb-3 text-sm font-semibold text-slate-900">Organizator transport</div>
@@ -1994,7 +2000,7 @@ export default function TransferPage() {
                       ) : null}
 
                       {activeETransportPanel === "route" ? (
-                        <DocumentSection title="Loc start si loc final traseu">
+                        <DocumentSection title="Loc start si loc final traseu" description="Defineste punctul de plecare si destinatia finala exact asa cum trebuie raportate in traseul logistic.">
                           <div className="grid gap-4 2xl:grid-cols-2">
                             <div className="min-w-0 space-y-3 rounded-[16px] border border-slate-200 bg-white p-4">
                               <div className="text-sm font-semibold text-slate-900">Loc start</div>
@@ -2224,7 +2230,7 @@ export default function TransferPage() {
                       ) : null}
 
                       {activeETransportPanel === "items" ? (
-                        <DocumentSection title="Bunuri transportate">
+                        <DocumentSection title="Bunuri transportate" description="Revizuieste bunurile declarate in e-Transport si asigura coerenta dintre cantitati, greutati si documentul sursa.">
                           <div className="mb-3 grid gap-3 md:grid-cols-3">
                             <DocumentMetric title="Bunuri" value={String(validLines.length)} tone="blue" />
                             <DocumentMetric title="Valoare fara TVA" value={`${formatNumber(eTransportSummary.totalValueRon)} RON`} tone="emerald" />
@@ -2280,7 +2286,7 @@ export default function TransferPage() {
                             <DocumentMetric title="Valoare fara TVA" value={`${formatNumber(eTransportSummary.totalValueRon)} RON`} tone="amber" />
                           </div>
 
-                          <DocumentSection title="Verificare ANAF">
+                          <DocumentSection title="Verificare ANAF" description="Confirma daca setul curent de date este complet si pregatit pentru validarea din fluxul ANAF.">
                             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                               {labelValue("Upload index", header.eTransportUploadIndex)}
                               {labelValue("Download ID", header.eTransportDownloadId)}
