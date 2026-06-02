@@ -575,8 +575,8 @@ export default function StocPage() {
       {error ? <div style={errorBox}>{error}</div> : null}
 
       <div className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="grid gap-3 lg:grid-cols-[1.5fr,1fr]">
-          <div className="grid gap-3 md:grid-cols-5">
+        <div className="space-y-3">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1.2fr,1fr,1fr,1.4fr]">
             <div style={filterField}>
               <label style={filterLabel}>Interval</label>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -632,26 +632,50 @@ export default function StocPage() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-start gap-2">
-            <button
-              type="button"
-              onClick={() => setOnlyInStock((current) => !current)}
-              className={`inline-flex items-center rounded-full px-3 py-1.5 text-[12px] font-semibold transition ${
-                onlyInStock ? "bg-[#17324D] text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-              }`}
-            >
-              Doar cu stoc
-            </button>
-            <button
-              type="button"
-              onClick={() => setOnlyTrackedLots((current) => !current)}
-              className={`inline-flex items-center rounded-full px-3 py-1.5 text-[12px] font-semibold transition ${
-                onlyTrackedLots ? "bg-[#17324D] text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-              }`}
-            >
-              Doar cu lot
-            </button>
-            <span style={infoChip}>FIFO / FEFO pentru loturi</span>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap gap-2">
+              {[
+                { id: "ALL", label: "Tot" },
+                { id: "RAW", label: "Materii prime" },
+                { id: "FINISHED", label: "Produse finite" },
+                { id: "AUX", label: "Auxiliare" },
+              ].map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => setStockClassFilter(option.id as StockClassFilter)}
+                  className={`inline-flex items-center rounded-full px-3 py-1.5 text-[12px] font-semibold transition ${
+                    stockClassFilter === option.id
+                      ? "bg-[#17324D] text-white"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setOnlyInStock((current) => !current)}
+                className={`inline-flex items-center rounded-full px-3 py-1.5 text-[12px] font-semibold transition ${
+                  onlyInStock ? "bg-[#17324D] text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                }`}
+              >
+                Doar cu stoc
+              </button>
+              <button
+                type="button"
+                onClick={() => setOnlyTrackedLots((current) => !current)}
+                className={`inline-flex items-center rounded-full px-3 py-1.5 text-[12px] font-semibold transition ${
+                  onlyTrackedLots ? "bg-[#17324D] text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                }`}
+              >
+                Doar cu lot
+              </button>
+              <span style={infoChip}>FIFO / FEFO pentru loturi</span>
+            </div>
           </div>
         </div>
       </div>
