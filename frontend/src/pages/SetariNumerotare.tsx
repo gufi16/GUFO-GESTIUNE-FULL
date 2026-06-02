@@ -300,7 +300,7 @@ export default function SetariNumerotare() {
         <NumberingTable rows={documentRows} form={form} loading={loading} saving={saving} onChange={update} />
       </DocumentSection>
 
-      <DocumentSection title="Coduri automate" description="Client si furnizor, intr-un singur loc.">
+      <DocumentSection title="Coduri automate" description="Gestionezi seriile automate pentru parteneri si alte coduri interne care trebuie sa ramana coerente in toata compania.">
         <NumberingTable rows={codeRows} form={form} loading={loading} saving={saving} onChange={update} />
       </DocumentSection>
     </div>

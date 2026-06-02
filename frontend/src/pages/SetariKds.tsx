@@ -103,7 +103,11 @@ export default function SetariKds() {
 
   return (
     <div className="space-y-3">
-      <PageHeader badge="configurare" title="Setari KDS" />
+      <PageHeader
+        badge="configurare"
+        title="Setari KDS"
+        subtitle="Configurezi fluxul de pairing, operatorii si device-urile KDS din acelasi ecran, fara sa pierzi contextul operational."
+      />
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-4">
         <DocumentMetric title="Device-uri KDS" value={activeDevices} tone="emerald" />
@@ -117,6 +121,7 @@ export default function SetariKds() {
 
       <DocumentSection
         title="Flux GuFo KDS"
+        description="Aici vezi ordinea corecta pentru conectarea device-urilor, loginul operatorilor si confirmarea ca tot fluxul KDS este pregatit de lucru."
         actions={
           <>
             <button className={documentButtonPrimaryClass} onClick={() => navigate("/setari/utilizatori")}>
@@ -162,7 +167,10 @@ export default function SetariKds() {
         </div>
       </DocumentSection>
 
-      <DocumentSection title="Device-uri GuFo KDS salvate">
+      <DocumentSection
+        title="Device-uri GuFo KDS salvate"
+        description="Monitorizezi device-urile deja pairuite si verifici rapid pe ce locatie ruleaza fiecare ecran KDS activ."
+      >
         {devices.length ? (
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
             {devices.map((item) => (
@@ -194,6 +202,7 @@ export default function SetariKds() {
 
       <DocumentSection
         title="Operatori care pot intra in KDS"
+        description="Revizuiesti personalul care poate folosi KDS, cu PIN-ul pregatit si legatura directa spre administrarea utilizatorilor ERP."
         actions={
           <>
             <button className={documentButtonPrimaryClass} onClick={() => navigate("/setari/utilizatori")}>

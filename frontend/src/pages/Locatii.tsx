@@ -335,7 +335,7 @@ export default function LocatiiPage() {
         </div>
       </DocumentSection>
 
-      <DocumentSection title="Locatii existente" description="Ai lista completa a locatiilor si poti deschide rapid editarea lor.">
+      <DocumentSection title="Locatii existente" description="Ai registrul complet al locatiilor, cu adresele salvate si acces rapid spre editare atunci cand apar schimbari operationale.">
         {loading ? (
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
             Se incarca locatiile...

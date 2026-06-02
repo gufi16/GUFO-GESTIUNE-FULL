@@ -197,7 +197,11 @@ export default function SetariGestiunePage() {
 
   return (
     <div className="space-y-3">
-      <PageHeader badge="configurare" title="Configurare gestiune" />
+      <PageHeader
+        badge="configurare"
+        title="Configurare gestiune"
+        subtitle="Controlezi modul de lucru pentru locatii si gestiuni, de la selectia din topbar pana la structura operationala folosita in documente."
+      />
 
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
@@ -244,6 +248,7 @@ export default function SetariGestiunePage() {
       {activeTab === "general" ? (
         <DocumentSection
           title="Setari generale"
+          description="Alegi daca lucrezi simplu sau multi-gestiune si stabilesti regulile de baza care devin vizibile in documentele din ERP."
           actions={
             <>
               <button type="button" className={documentButtonSecondaryClass} onClick={loadAll} disabled={loading || savingConfig}>
@@ -282,6 +287,7 @@ export default function SetariGestiunePage() {
       {activeTab === "display" ? (
         <DocumentSection
           title="Filtre si afisare"
+          description="Decizi cum apare selectorul de gestiune in ERP si ce eticheta foloseste echipa in topbar si in formularele operationale."
           actions={
             <button type="button" className={documentButtonPrimaryClass} onClick={saveConfig} disabled={loading || savingConfig}>
               <Save size={14} className="mr-1.5" />
@@ -321,6 +327,7 @@ export default function SetariGestiunePage() {
       {activeTab === "structure" ? (
         <DocumentSection
           title="Locatii si gestiuni"
+          description="Revizuiesti rapid structura activa din companie si intri direct in administrarea completa a locatiilor si gestiunilor."
           actions={
             <button type="button" className={documentButtonPrimaryClass} onClick={() => nav("/gestiune/gestiuni")}>
               Deschide administrare
