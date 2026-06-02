@@ -576,21 +576,13 @@ export default function StocPage() {
 
       <div className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm">
         <div className="space-y-3">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1.2fr,1fr,1fr,1.4fr]">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1.1fr,1.4fr,1.3fr]">
             <div style={filterField}>
               <label style={filterLabel}>Interval</label>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                 <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} style={filterInput} />
                 <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} style={filterInput} />
               </div>
-            </div>
-            <div style={filterField}>
-              <label style={filterLabel}>Locatie</label>
-              <div style={readOnlyFilterField}>{activeLocationName}</div>
-            </div>
-            <div style={filterField}>
-              <label style={filterLabel}>Gestiune</label>
-              <div style={readOnlyFilterField}>{activeWarehouseName}</div>
             </div>
             <div style={filterField}>
               <label style={filterLabel}>Tip produs</label>
