@@ -292,7 +292,7 @@ export default function TvaPage() {
       <PageHeader
         badge="nomenclator"
         title="Cote TVA"
-        subtitle="Configurezi rapid procentele de TVA si maparea fiscala folosita la emiterea bonului pe casa de marcat."
+        subtitle="Configurezi procentele de TVA si maparea fiscala folosita mai departe in produse, documente comerciale si bonul emis pe casa de marcat."
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -348,7 +348,7 @@ export default function TvaPage() {
 
       <DocumentSection
         title="Lista cote TVA"
-        description="Editezi rapid procentul, codul fiscal si starea fiecarei cote fara sa iesi din tabel."
+        description="Revizuiesti toate cotele definite si ajustezi rapid procentul, codul fiscal si starea fiecarei cote fara sa iesi din tabel."
       >
         {loading ? (
           <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-6 py-12 text-center text-sm text-slate-500">

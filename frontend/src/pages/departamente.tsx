@@ -128,7 +128,7 @@ export default function DepartamentePage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Departamente" subtitle="Organizare produse pe departamente, intr-un ecran mai clar si mai rapid de folosit." />
+      <PageHeader title="Departamente" subtitle="Organizezi produsele pe departamente operationale si mentii rapid structura folosita mai departe in categorii, produse si POS." />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <DocumentMetric title="Departamente" value={stats.total} tone="slate" />
@@ -158,7 +158,7 @@ export default function DepartamentePage() {
         </DocumentField>
       </DocumentSection>
 
-      <DocumentSection title="Lista departamente" description="Vezi rapid statusul si poti activa, dezactiva sau sterge direct din lista.">
+      <DocumentSection title="Lista departamente" description="Revizuiesti registrul complet al departamentelor si poti activa, dezactiva sau curata rapid structura care nu mai este folosita.">
         {loading ? (
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
             Se incarca...

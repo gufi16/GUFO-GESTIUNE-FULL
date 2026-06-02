@@ -287,7 +287,7 @@ export default function UomPage() {
       <PageHeader
         badge="nomenclator"
         title="Unitati de masura"
-        subtitle="Unitati utilizate in produse si documente. Codul salvat aici se foloseste mai departe pentru e-Factura."
+        subtitle="Configurezi unitatile de masura folosite in produse si documente, inclusiv codurile standard care merg mai departe in e-Factura."
       />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">

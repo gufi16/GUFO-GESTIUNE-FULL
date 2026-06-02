@@ -489,7 +489,7 @@ export default function FirmaPage() {
               <div className="mt-4">
                 <DocumentSection
                   title="Date emitent e-Factura"
-                  description="Aceste campuri sunt folosite direct in XML-ul ANAF. Daca le lasi goale, sistemul foloseste valorile generale ale firmei."
+                  description="Aceste campuri sunt folosite direct in XML-ul ANAF. Daca le lasi goale, sistemul mosteneste automat valorile generale salvate pe firma."
                 >
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                     <DocumentField label="Localitate emitent">

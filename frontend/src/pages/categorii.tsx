@@ -326,7 +326,7 @@ export default function CategoriiPage() {
       <PageHeader
         badge="nomenclator"
         title="Categorii produse"
-        subtitle="Categorii organizate pe departamente, cu imagine si vizibilitate pentru Android POS."
+        subtitle="Gestionezi categoriile de produse pe departamente, cu imagine si vizibilitate clara pentru meniurile si fluxurile Android POS."
       />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
@@ -351,7 +351,7 @@ export default function CategoriiPage() {
         {renderCategoryForm(false)}
       </DocumentSection>
 
-      <DocumentSection title="Categorii existente" description="Le vezi pe toate, cu departamentul, vizibilitatea in POS si imaginea asociata.">
+      <DocumentSection title="Categorii existente" description="Ai registrul complet al categoriilor, cu departamentul, vizibilitatea in POS si imaginea folosita in interfetele comerciale.">
         {loading ? (
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
             Se incarca...
@@ -425,7 +425,7 @@ export default function CategoriiPage() {
           <div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-[28px] bg-white shadow-2xl">
             <DocumentSection
               title="Edit categorie"
-              description="Editezi categoria intr-un popup separat, fara sa pierzi contextul listei."
+              description="Editezi categoria intr-un spatiu separat, fara sa pierzi contextul listei si fara sa iesi din fluxul de nomenclator."
               actions={
                 <>
                   <button type="button" onClick={resetForm} className={documentButtonSecondaryClass}>
