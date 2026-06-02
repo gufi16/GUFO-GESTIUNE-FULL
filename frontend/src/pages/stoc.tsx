@@ -557,9 +557,13 @@ export default function StocPage() {
 
   return (
     <div className="space-y-3">
-      <PageHeader badge="gestiune" title="Stoc" />
+      <PageHeader
+        badge="gestiune"
+        title="Stoc"
+        subtitle="Balanta clara pentru stoc curent, loturi, expirari si miscari pe contextul activ din topbar."
+      />
 
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-[18px] border border-slate-200 bg-white px-3 py-2.5 shadow-sm shadow-slate-900/[0.03]">
         <div className="flex flex-wrap gap-2">
           <button onClick={() => loadAll(locationId, 1)} style={btnSecondary}>
             <RefreshCw size={15} />
@@ -574,9 +578,16 @@ export default function StocPage() {
 
       {error ? <div style={errorBox}>{error}</div> : null}
 
-      <div className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="space-y-3">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1.1fr,1.4fr,1.3fr]">
+      <div className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm shadow-slate-900/[0.03]">
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2 rounded-[14px] border border-slate-100 bg-slate-50/80 px-3 py-2 text-[12px] text-slate-600">
+            <span className="font-semibold text-slate-800">Context activ:</span>
+            <span>{activeLocationName}</span>
+            <span className="text-slate-300">•</span>
+            <span>{activeWarehouseName}</span>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1.1fr,1.25fr,1.35fr]">
             <div style={filterField}>
               <label style={filterLabel}>Interval</label>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -624,29 +635,7 @@ export default function StocPage() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap gap-2">
-              {[
-                { id: "ALL", label: "Tot" },
-                { id: "RAW", label: "Materii prime" },
-                { id: "FINISHED", label: "Produse finite" },
-                { id: "AUX", label: "Auxiliare" },
-              ].map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  onClick={() => setStockClassFilter(option.id as StockClassFilter)}
-                  className={`inline-flex items-center rounded-full px-3 py-1.5 text-[12px] font-semibold transition ${
-                    stockClassFilter === option.id
-                      ? "bg-[#17324D] text-white"
-                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                  }`}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-slate-100 bg-white">
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
@@ -666,6 +655,9 @@ export default function StocPage() {
               >
                 Doar cu lot
               </button>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
               <span style={infoChip}>FIFO / FEFO pentru loturi</span>
             </div>
           </div>
