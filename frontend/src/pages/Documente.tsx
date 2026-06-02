@@ -2133,7 +2133,7 @@ export default function Documente() {
       <PageHeader
         badge="documente"
         title="Documente"
-        subtitle="Lucrezi intr-un singur ecran cu facturi, receptii, consum, transferuri, productie si inventare, cu filtre si actiuni uniforme."
+        subtitle="Lucrezi intr-un singur registru cu facturi, receptii, consum, transferuri, productie si inventare, cu filtre uniforme si actiuni rapide."
       />
 
       <div className="rounded-[18px] border border-slate-200 bg-white p-3 shadow-sm shadow-slate-900/[0.03]">
@@ -2246,6 +2246,7 @@ export default function Documente() {
             <div>
               <div className="text-[12px] font-semibold uppercase tracking-[0.16em] text-slate-400">Vizualizare activa</div>
               <div className="mt-1 text-[18px] font-semibold tracking-[-0.01em] text-slate-900">{activeTabMeta.title}</div>
+              <div className="mt-1 text-sm text-slate-500">{activeTabMeta.subtitle}</div>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">

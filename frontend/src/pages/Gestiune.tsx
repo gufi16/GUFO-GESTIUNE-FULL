@@ -31,7 +31,7 @@ export default function Gestiune() {
       <PageHeader
         badge="gestiune"
         title="Gestiune"
-        subtitle="Controlezi stocul, transferurile si productia dintr-un singur modul operational, cu acces rapid la actiunile importante."
+        subtitle="Controlezi stocul, transferurile, inventarele si productia dintr-un singur modul operational, cu intrare rapida in actiunile care misca marfa."
       />
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">

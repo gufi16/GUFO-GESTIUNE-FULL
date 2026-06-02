@@ -23,7 +23,7 @@ export default function Nomenclator() {
       <PageHeader
         badge="nomenclator"
         title="Nomenclatoare"
-        subtitle="Administrezi rapid produsele, materiile prime, partenerii si clasificarea comerciala dintr-un singur modul."
+        subtitle="Administrezi produsele, materiile prime, partenerii si clasificarea comerciala dintr-un singur modul, cu acces rapid la toate registrele de baza."
       />
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -45,7 +45,7 @@ export default function Nomenclator() {
 
               <div className="mt-4 text-[15px] font-semibold text-slate-900">{item.name}</div>
               <div className="mt-1 text-sm leading-6 text-slate-500">
-                Deschizi modulul pentru administrare si cautare rapida.
+                Intri direct in registrul dedicat pentru administrare, cautare rapida si intretinerea nomenclatorului.
               </div>
             </button>
           )

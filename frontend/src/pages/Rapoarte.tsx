@@ -488,7 +488,7 @@ export default function RapoartePage() {
       <PageHeader
         badge="raportare"
         title="Rapoarte"
-        subtitle="Indicatori executivi, vanzari, produse si operatiuni intr-un modul coerent, cu filtre simple si citire rapida."
+        subtitle="Indicatori executivi, vanzari, produse si operatiuni intr-un modul coerent, cu filtre simple si citire rapida pentru management."
       />
 
       {error ? (

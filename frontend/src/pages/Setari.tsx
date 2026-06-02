@@ -167,7 +167,7 @@ export default function Setari() {
       <PageHeader
         badge="configurare"
         title="Setari"
-        subtitle="Controlezi configurarea companiei, numerotarea, utilizatorii si integrarile dintr-un backoffice mai curat si mai usor de parcurs."
+        subtitle="Controlezi configurarea companiei, utilizatorii, numerotarea si integrarile dintr-un singur modul administrativ, cu trasee mai clare pentru echipa."
       />
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
@@ -216,6 +216,7 @@ export default function Setari() {
           <div className="flex items-start justify-between gap-4">
             <div>
               <div className="text-[16px] font-semibold text-slate-900">Sync POS</div>
+              <div className="mt-1 text-sm leading-6 text-slate-500">Configurezi cat de des sincronizeaza ERP-ul cu Android POS si revii rapid la setarea activa.</div>
             </div>
 
             <span className="flex h-10 w-10 items-center justify-center rounded-[14px] bg-slate-900 text-white">
