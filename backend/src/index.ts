@@ -800,57 +800,47 @@ app.post("/api/v1/auth/forgot-password", async (req, res) => {
     orderBy: { createdAt: "desc" },
   })
 
-  const user = users[0]
-  if (!user) {
+  if (!users.length) {
     return res.json({
       ok: true,
       message: "Daca exista un cont pe acest email, am trimis instructiunile de resetare.",
     })
   }
 
-  if (!scopedTenantId) {
-    const distinctTenantIds = new Set(users.map((candidate) => String(candidate.tenantId || "")))
-    if (distinctTenantIds.size > 1) {
-      return res.json({
-        ok: true,
-        message: "Daca exista un cont pe acest email, am trimis instructiunile de resetare.",
+  try {
+    for (const user of users) {
+      await prisma.passwordResetToken.updateMany({
+        where: {
+          userId: user.id,
+          usedAt: null,
+          expiresAt: { gt: new Date() },
+        },
+        data: {
+          usedAt: new Date(),
+        },
       })
-    }
-  }
 
-  await prisma.passwordResetToken.updateMany({
-    where: {
-      userId: user.id,
-      usedAt: null,
-      expiresAt: { gt: new Date() },
-    },
-    data: {
-      usedAt: new Date(),
-    },
-  })
+      const rawToken = crypto.randomBytes(32).toString("hex")
+      const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex")
+      const expiresAt = new Date(Date.now() + 1000 * 60 * 60)
 
-  const rawToken = crypto.randomBytes(32).toString("hex")
-  const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex")
-  const expiresAt = new Date(Date.now() + 1000 * 60 * 60)
+      await prisma.passwordResetToken.create({
+        data: {
+          tenantId: user.tenantId,
+          userId: user.id,
+          tokenHash,
+          expiresAt,
+        },
+      })
 
-  await prisma.passwordResetToken.create({
-    data: {
-      tenantId: user.tenantId,
-      userId: user.id,
-      tokenHash,
-      expiresAt,
-    },
-  })
+      const publicBase =
+        (user.tenant?.subdomain ? `https://${user.tenant.subdomain}.gufo.ink` : "") ||
+        String(process.env.PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "") ||
+        String(req.headers.origin || "").trim().replace(/\/+$/, "") ||
+        String(CORS_ORIGIN || "").trim().replace(/\/+$/, "")
 
-  const publicBase =
-    String(process.env.PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "") ||
-    String(req.headers.origin || "").trim().replace(/\/+$/, "") ||
-    (user.tenant?.subdomain ? `https://${user.tenant.subdomain}.gufo.ink` : "") ||
-    String(CORS_ORIGIN || "").trim().replace(/\/+$/, "")
+      const resetUrl = `${publicBase}/reset-password?token=${rawToken}`
 
-  const resetUrl = `${publicBase}/reset-password?token=${rawToken}`
-
-    try {
       await sendMail({
         to: user.email,
         subject: "Resetare parola Gufo ERP",
@@ -880,13 +870,14 @@ app.post("/api/v1/auth/forgot-password", async (req, res) => {
           </div>
         `,
       })
-    } catch (error) {
-      console.error("FORGOT PASSWORD MAIL ERROR", error)
-      return res.status(502).json({
-        ok: false,
-        error: "Nu am putut trimite emailul de resetare. Verifica setarile SMTP.",
-      })
     }
+  } catch (error) {
+    console.error("FORGOT PASSWORD MAIL ERROR", error)
+    return res.status(502).json({
+      ok: false,
+      error: "Nu am putut trimite emailul de resetare. Verifica setarile SMTP.",
+    })
+  }
 
   return res.json({
     ok: true,
