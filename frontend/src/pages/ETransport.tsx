@@ -1038,7 +1038,7 @@ export default function ETransportPage() {
           />
         </div>
 
-        <DocumentSection title="Registru notificari">
+        <DocumentSection title="Registru notificari" description="Ai lista tuturor notificarilor create, cu acces rapid la status, UIT, XML si redeschiderea documentului.">
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>
@@ -1090,6 +1090,7 @@ export default function ETransportPage() {
       <DocumentPageHeader
         badge="e-Transport"
         title={noticeId ? "Editare notificare" : "Notificare noua"}
+        subtitle="Pregatesti notificarea RO e-Transport cap-coada, cu date logistice, bunuri, traseu si verificarea raspunsurilor ANAF din acelasi flux."
         actions={
           <>
             <button type="button" onClick={() => navigate("/e-transport")} className={documentButtonSecondaryClass}>
@@ -1319,7 +1320,7 @@ export default function ETransportPage() {
       {activePanel === "items" ? (
       <DocumentSection
         title="Bunuri transportate"
-        description="Adaugi bunurile din notificare, cantitatile si greutatile folosite pentru calculul si validarea e-Transport."
+        description="Adaugi bunurile din notificare, cantitatile si greutatile folosite pentru calculul si validarea e-Transport inainte de trimiterea ANAF."
         actions={
           <button type="button" onClick={addLine} className={documentButtonSecondaryClass}>
             <Plus size={16} className="mr-2" />

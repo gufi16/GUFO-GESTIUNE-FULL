@@ -1067,7 +1067,7 @@ export default function FacturiPrimiteSPVPage() {
       <PageHeader
         badge="documente"
         title="Facturi primite SPV"
-        subtitle="Sincronizezi facturile furnizorilor din SPV, verifici ce a venit din ANAF si deschizi receptia direct din documentele importate."
+        subtitle="Sincronizezi facturile furnizorilor din SPV, verifici ce a venit din ANAF si deschizi receptia direct din documentele importate pentru firma activa."
       />
 
       <div className="flex flex-wrap gap-2">

@@ -331,7 +331,7 @@ export default function Utilizatori() {
       <PageHeader
         badge="configurare"
         title="Utilizatori ERP"
-        subtitle="Administrezi utilizatorii ERP, rolurile lor, accesul pe firme, avatarul si credentialele folosite in POS sau KDS."
+        subtitle="Administrezi utilizatorii ERP, rolurile, accesul pe firme, avatarul si credentialele folosite mai departe in POS sau KDS."
       />
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-5">
@@ -352,7 +352,7 @@ export default function Utilizatori() {
 
       <DocumentSection
         title="Lista utilizatori"
-        description="Vezi rapid toti utilizatorii activi sau inactivi, accesul pe firme si actiunile esentiale de administrare."
+        description="Vezi rapid utilizatorii activi sau inactivi, accesul pe firme si actiunile esentiale de administrare dintr-un singur registru clar."
         actions={
           <>
             <button className={documentButtonSecondaryClass} onClick={loadUsers} disabled={loading}>

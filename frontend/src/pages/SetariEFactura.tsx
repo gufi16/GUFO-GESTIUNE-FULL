@@ -1148,7 +1148,7 @@ export default function SetariEFacturaPage() {
       <PageHeader
         badge="configurare"
         title="Setari SPV"
-        subtitle="Pastrezi aici activarea, mediul ANAF si tokenul OAuth ANAF pentru comunicarea cu SPV."
+        subtitle="Configurezi activarea SPV pentru firma curenta, mediul ANAF si tokenul OAuth folosit mai departe in e-Factura si sincronizarea SPV."
       />
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
@@ -1173,7 +1173,7 @@ export default function SetariEFacturaPage() {
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
         <DocumentSection
           title="Flux firma"
-          description="Aici verifici daca firma este activata pentru SPV si in ce mediu ANAF functioneaza."
+          description="Aici verifici daca firma este activata pentru SPV si in ce mediu ANAF functioneaza, fara sa intri in detalii tehnice inutile."
           actions={
             <button type="button" onClick={() => setActiveModal("flow")} className={documentButtonPrimaryClass}>
               Configureaza
@@ -1195,7 +1195,7 @@ export default function SetariEFacturaPage() {
 
         <DocumentSection
           title="Conectare ANAF"
-          description="Gestionezi tokenul OAuth ANAF si verifici rapid daca firma curenta este conectata corect pentru SPV."
+          description="Gestionezi tokenul OAuth ANAF si verifici rapid daca firma curenta este conectata corect pentru toate fluxurile SPV active."
           actions={
             <div className="flex gap-2">
               <button type="button" onClick={testOauthConnection} className={documentButtonSecondaryClass} disabled={testing || loading || !oauthStatus.connected}>
