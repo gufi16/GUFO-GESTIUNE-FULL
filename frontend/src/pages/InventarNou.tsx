@@ -308,6 +308,7 @@ export default function InventarNou() {
     <div className="w-full space-y-3">
       <DocumentPageHeader
         title="Inventar nou"
+        subtitle="Pornesti inventarul de pe locatia activa, adaugi rapid produsele numarate si verifici imediat diferentele dintre stocul scriptic si cel constatat."
         actions={
           <>
             <button type="button" onClick={() => navigate("/inregistrare-document")} className={documentButtonSecondaryClass}>
@@ -335,7 +336,7 @@ export default function InventarNou() {
             <DocumentMetric title="Diferente" value={withDifferences} tone="amber" />
           </div>
 
-          <DocumentSection title="Adauga produse">
+          <DocumentSection title="Adauga produse" description="Cauta rapid produsele existente in locatie si adauga-le in inventar fara sa pierzi contextul de stoc scriptic.">
             <div className="relative">
               <Search size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
@@ -386,7 +387,7 @@ export default function InventarNou() {
             )}
           </DocumentSection>
 
-          <DocumentSection title="Pozitii inventar">
+          <DocumentSection title="Pozitii inventar" description="Introduci cantitatea numarata, vezi diferenta fata de scriptic si cureti usor liniile care nu mai trebuie inventariate.">
             <div>
               {items.length ? (
                 <div className="space-y-2">
@@ -456,7 +457,7 @@ export default function InventarNou() {
       ) : null}
 
       {activePanel === "date" ? (
-        <DocumentSection title="Detalii document">
+        <DocumentSection title="Detalii document" description="Pastrezi contextul documentului prin locatie si observatii, astfel incat inventarul sa ramana usor de urmarit dupa salvare.">
           <div className="space-y-3">
             <DocumentField label="Locatie">
               <select value={locationId} onChange={(e) => setLocation(e.target.value)} className={documentInputClass}>

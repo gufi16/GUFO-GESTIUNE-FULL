@@ -254,6 +254,7 @@ export default function ProcesVerbalPage() {
     <div className="w-full space-y-3">
       <DocumentPageHeader
         title={pageTitle}
+        subtitle="Documentezi procesele verbale operationale pentru deteriorare, expirare, pierdere sau schimbare de pret, cu pozitii clare si observatii salvate in registru."
         actions={
           <>
             <button type="button" onClick={() => navigate("/inregistrare-document")} className={documentButtonSecondaryClass}>
@@ -292,6 +293,7 @@ export default function ProcesVerbalPage() {
 
           <DocumentSection
             title="Pozitii document"
+            description="Adauga produsele afectate, ajusteaza valorile necesare si vezi imediat totalul documentului in functie de tipul procesului verbal."
             actions={
               status !== "POSTED" ? (
                 <button type="button" onClick={() => setLines((prev) => [...prev, makeLine()])} className={documentButtonPrimaryClass}>
@@ -436,7 +438,7 @@ export default function ProcesVerbalPage() {
 
       {activePanel === "date" ? (
         <div className="space-y-3">
-          <DocumentSection title="Detalii document">
+          <DocumentSection title="Detalii document" description="Completezi locatia, motivul, constatarea si observatiile care justifica oficial procesul verbal salvat in ERP.">
             <div className="space-y-3">
               <DocumentField label="Locatie">
                 <select

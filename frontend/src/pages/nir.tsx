@@ -1271,6 +1271,7 @@ export default function NirPage() {
       <div className="no-print">
         <DocumentPageHeader
           title={pageTitle}
+          subtitle="Construiesti receptia de marfa cap-coada, cu datele documentului, furnizorul, pozitiile receptionate si exportul PDF atunci cand documentul este finalizat."
           actions={
             <>
               <button type="button" onClick={() => navigate(receiptId ? "/documente?tab=receipt" : "/inregistrare-document")} className={documentButtonSecondaryClass}>

@@ -735,6 +735,7 @@ export default function FacturaPage() {
     <div className="space-y-3">
       <DocumentPageHeader
         title={invoiceId ? "Editare factura" : "Factura noua"}
+        subtitle="Pregatesti factura comerciala completa, cu antet, linii, totaluri si integrarea SPV atunci cand documentul trebuie trimis in fluxul ANAF."
         actions={
           <>
             <button
@@ -826,7 +827,7 @@ export default function FacturaPage() {
 
         <div className="min-w-0">
       {activePanel === "summary" && invoiceId && efacturaEnabled ? (
-        <DocumentSection title="Detalii SPV">
+        <DocumentSection title="Detalii SPV" description="Aici urmaresti trimiterea in SPV, momentul descarcarii recipisei si eventualele observatii intoarse din fluxul ANAF.">
           <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
             <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
               Trimis in SPV: <span className="font-semibold text-slate-900">{efacturaSentAt ? new Date(efacturaSentAt).toLocaleString("ro-RO") : "-"}</span>
@@ -850,7 +851,7 @@ export default function FacturaPage() {
 
       {activePanel === "header" ? (
       <>
-      <DocumentSection title="Antet factura">
+      <DocumentSection title="Antet factura" description="Completezi contextul comercial al facturii: locatie, client, datele documentului si observatiile care raman pe factura emisa.">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           <DocumentField label="Locatie">
             <div className="relative">
