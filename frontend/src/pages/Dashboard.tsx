@@ -4,17 +4,22 @@
   ArrowRightLeft,
   BarChart3,
   Boxes,
+  Check,
   Clock3,
   CircleDollarSign,
   CreditCard,
   FileText,
+  FolderSymlink,
+  PackagePlus,
   Receipt,
+  ScanLine,
+  Search,
   ShoppingCart,
   TrendingUp,
   PackageSearch,
 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
-import { useSearchParams } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
 import {
   Area,
   AreaChart,
@@ -400,6 +405,7 @@ function SectionCard({
 
 export default function Dashboard() {
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const token =
     getToken() || ""
 
@@ -606,6 +612,56 @@ export default function Dashboard() {
   const scopeLabel = activeLocationId ? "Locatie selectata" : "Toate locatiile"
   const terminalLabel = activeTerminalId ? "Terminal selectat" : "Toate terminalele"
   const appVersion = "V1.1"
+  const mobileQuickActions = [
+    {
+      title: "NIR rapid",
+      subtitle: "Intrare marfa",
+      badge: "scanare",
+      icon: PackagePlus,
+      iconClassName: "bg-[#17324D] text-white",
+      action: () => navigate("/inregistrare-document/nir/new"),
+    },
+    {
+      title: "Stoc produse",
+      subtitle: "Cauta / verifica",
+      badge: "rapid",
+      icon: PackageSearch,
+      iconClassName: "bg-[#12806A] text-white",
+      action: () => navigate("/gestiune/stoc"),
+    },
+    {
+      title: "Transfer",
+      subtitle: "Intre gestiuni",
+      badge: "",
+      icon: ArrowRightLeft,
+      iconClassName: "bg-[#7C3AED] text-white",
+      action: () => navigate("/transfer/new"),
+    },
+    {
+      title: "Inventar",
+      subtitle: "Numarare rapida",
+      badge: "offline",
+      icon: Check,
+      iconClassName: "bg-[#F76707] text-white",
+      action: () => navigate("/inregistrare-document/inventar/new"),
+    },
+    {
+      title: "Bon consum",
+      subtitle: "Scade materii",
+      badge: "",
+      icon: FileText,
+      iconClassName: "bg-[#C25A00] text-white",
+      action: () => navigate("/inregistrare-document/bon-consum/new"),
+    },
+    {
+      title: "Facturi SPV",
+      subtitle: "Primite ANAF",
+      badge: "nou",
+      icon: FolderSymlink,
+      iconClassName: "bg-[#1D4E89] text-white",
+      action: () => navigate("/documente/facturi-primite-spv"),
+    },
+  ]
   const stats = [
     {
       title: "Vanzari interval",
@@ -646,7 +702,105 @@ export default function Dashboard() {
 
   return (
     <div className="w-full space-y-5">
-      <div className="overflow-hidden rounded-[28px] border border-[#DCE6EF] bg-[radial-gradient(circle_at_top_right,rgba(71,194,177,0.10),transparent_28%),linear-gradient(180deg,#FFFFFF_0%,#F4F8FB_100%)] p-5 shadow-[0_28px_60px_rgba(15,23,42,0.08)]">
+      <div className="space-y-4 xl:hidden">
+        <section className="overflow-hidden rounded-[28px] border border-[#D8E4F0] bg-[linear-gradient(180deg,#FFFFFF_0%,#EEF5FB_100%)] p-4 shadow-[0_20px_40px_rgba(15,23,42,0.08)]">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-[16px] font-semibold uppercase tracking-[0.08em] text-[#17324D]">Gufo Mobile</div>
+              <div className="mt-1 text-sm text-slate-500">Lucru rapid pe telefon</div>
+            </div>
+            <div className="rounded-full bg-[#17324D] px-4 py-2 text-sm font-semibold text-white">{appVersion}</div>
+          </div>
+
+          <div className="mt-4 rounded-[24px] bg-[#17324D] px-4 py-4 text-white shadow-[0_20px_44px_rgba(23,50,77,0.25)]">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-sm text-white/70">Azi</div>
+                <div className="mt-2 text-[24px] font-semibold tracking-tight">{formatRon(salesTotal)}</div>
+              </div>
+              <div className="rounded-[20px] bg-white/10 px-3 py-2 text-right">
+                <div className="flex items-center gap-2 text-sm font-semibold text-[#7DE2BF]">
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#7DE2BF]" />
+                  sincronizat
+                </div>
+                <div className="mt-0.5 text-xs text-white/70">POS + gestiune active</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-[28px] border border-[#D8E4F0] bg-white p-4 shadow-[0_20px_40px_rgba(15,23,42,0.05)]">
+          <div>
+            <div className="text-[28px] font-semibold tracking-tight text-slate-950">Alege ce vrei sa faci</div>
+            <div className="mt-1 text-sm text-slate-500">Carduri mari, fara meniuri complicate</div>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            {mobileQuickActions.map((action) => {
+              const Icon = action.icon
+              return (
+                <button
+                  key={action.title}
+                  type="button"
+                  onClick={action.action}
+                  className="rounded-[24px] border border-[#D9E4EE] bg-[linear-gradient(180deg,#FFFFFF_0%,#F8FBFD_100%)] p-4 text-left shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <span className={`flex h-12 w-12 items-center justify-center rounded-[16px] ${action.iconClassName}`}>
+                      <Icon size={23} />
+                    </span>
+                    {action.badge ? (
+                      <span className="rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+                        {action.badge}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="mt-4 text-[16px] font-semibold leading-tight text-slate-950">{action.title}</div>
+                  <div className="mt-1 text-sm text-slate-500">{action.subtitle}</div>
+                  <div className="mt-4 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-center text-sm font-semibold text-[#17324D]">
+                    Deschide
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </section>
+
+        <section className="rounded-[28px] border border-[#D8E4F0] bg-white p-4 shadow-[0_20px_40px_rgba(15,23,42,0.05)]">
+          <div className="text-[18px] font-semibold text-slate-950">Pentru manager</div>
+          <div className="mt-4 grid grid-cols-3 gap-3">
+            <div className="rounded-[20px] border border-slate-200 bg-[#F8FBFD] px-3 py-3">
+              <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Cash</div>
+              <div className="mt-2 text-xl font-semibold text-[#17324D]">{formatRon(cashTotal).replace(" RON", "")}</div>
+            </div>
+            <div className="rounded-[20px] border border-slate-200 bg-[#F8FBFD] px-3 py-3">
+              <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Card</div>
+              <div className="mt-2 text-xl font-semibold text-[#17324D]">{formatRon(cardTotal).replace(" RON", "")}</div>
+            </div>
+            <div className="rounded-[20px] border border-slate-200 bg-[#F8FBFD] px-3 py-3">
+              <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Stoc critic</div>
+              <div className="mt-2 text-xl font-semibold text-[#17324D]">{criticalStockCount}</div>
+            </div>
+          </div>
+        </section>
+
+        <button
+          type="button"
+          onClick={() => navigate("/nomenclator/produse")}
+          className="flex w-full items-center gap-3 rounded-[24px] border border-[#D8E4F0] bg-white px-4 py-4 text-left shadow-[0_16px_30px_rgba(15,23,42,0.04)]"
+        >
+          <span className="flex h-11 w-11 items-center justify-center rounded-[16px] bg-[#EEF4FB] text-[#17324D]">
+            <ScanLine size={22} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="text-[18px] font-semibold text-slate-950">Scaneaza sau cauta produs</div>
+            <div className="mt-1 text-sm text-slate-500">Intrare rapida in cautare si verificare</div>
+          </div>
+          <Search size={20} className="text-slate-400" />
+        </button>
+      </div>
+
+      <div className="hidden overflow-hidden rounded-[28px] border border-[#DCE6EF] bg-[radial-gradient(circle_at_top_right,rgba(71,194,177,0.10),transparent_28%),linear-gradient(180deg,#FFFFFF_0%,#F4F8FB_100%)] p-5 shadow-[0_28px_60px_rgba(15,23,42,0.08)] xl:block">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
             <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/80 bg-white/90 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600 shadow-sm">
@@ -698,20 +852,22 @@ export default function Dashboard() {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+      <div className="hidden grid-cols-1 gap-3 md:grid-cols-2 xl:grid xl:grid-cols-5">
         {stats.map((stat) => (
           <MetricCard key={stat.title} {...stat} />
         ))}
       </div>
 
-      <div className="grid grid-cols-1 gap-3">
+      <div className="hidden grid-cols-1 gap-3 xl:grid">
         <SalesChart
           data={safeSales}
           loading={dashboardLoading}
         />
       </div>
 
-      <QuickActions onOpenReceipts={() => setReceiptsOpen(true)} />
+      <div className="hidden xl:block">
+        <QuickActions onOpenReceipts={() => setReceiptsOpen(true)} />
+      </div>
 
       {receiptsOpen ? (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
@@ -734,7 +890,7 @@ export default function Dashboard() {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-3 2xl:grid-cols-[minmax(300px,0.9fr)_minmax(0,1.1fr)]">
+      <div className="hidden grid-cols-1 gap-3 xl:grid 2xl:grid-cols-[minmax(300px,0.9fr)_minmax(0,1.1fr)]">
         <SectionCard
           title="Top produse"
           action={
@@ -813,49 +969,51 @@ export default function Dashboard() {
         </SectionCard>
       </div>
 
-      <SectionCard
-        title="Stoc critic automat"
-      >
-        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2 2xl:grid-cols-3">
-          {dashboardLoading || criticalLoading ? (
-            <div className="text-sm text-slate-500">Se incarca produsele cu stoc mic...</div>
-          ) : lowStock.length > 0 ? (
-            lowStock.map((item, index) => (
-              <div
-                key={`${item.product}-${item.location}-${index}`}
-                className="flex items-center justify-between rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-2.5"
-              >
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-slate-800">{item.product}</div>
-                  <div className="text-xs text-slate-500">{item.location}</div>
+      <div className="hidden xl:block">
+        <SectionCard
+          title="Stoc critic automat"
+        >
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-2 2xl:grid-cols-3">
+            {dashboardLoading || criticalLoading ? (
+              <div className="text-sm text-slate-500">Se incarca produsele cu stoc mic...</div>
+            ) : lowStock.length > 0 ? (
+              lowStock.map((item, index) => (
+                <div
+                  key={`${item.product}-${item.location}-${index}`}
+                  className="flex items-center justify-between rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-2.5"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-slate-800">{item.product}</div>
+                    <div className="text-xs text-slate-500">{item.location}</div>
+                  </div>
+                  <div className="ml-3 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+                    {formatQtyRo(item.qty || 0)}
+                  </div>
                 </div>
-                <div className="ml-3 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
-                  {formatQtyRo(item.qty || 0)}
-                </div>
+              ))
+            ) : criticalStock.length === 0 ? (
+              <div className="rounded-[18px] border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+                Nu exista suficiente date pentru alerta de stoc critic.
               </div>
-            ))
-          ) : criticalStock.length === 0 ? (
-            <div className="rounded-[18px] border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-              Nu exista suficiente date pentru alerta de stoc critic.
-            </div>
-          ) : (
-            criticalStock.map((product, index) => (
-              <div
-                key={`${product.productId || product.id || index}`}
-                className="flex items-center justify-between rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-2.5"
-              >
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-slate-800">{product.name || "Produs fara nume"}</div>
-                  <div className="text-xs text-slate-500">{product.sku || "fara SKU"}</div>
+            ) : (
+              criticalStock.map((product, index) => (
+                <div
+                  key={`${product.productId || product.id || index}`}
+                  className="flex items-center justify-between rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-2.5"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-slate-800">{product.name || "Produs fara nume"}</div>
+                    <div className="text-xs text-slate-500">{product.sku || "fara SKU"}</div>
+                  </div>
+                  <div className="ml-3 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+                    {formatQtyRo(activeLocationId ? product.qty : product.totalQty || 0)} {product.uom || ""}
+                  </div>
                 </div>
-                <div className="ml-3 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
-                  {formatQtyRo(activeLocationId ? product.qty : product.totalQty || 0)} {product.uom || ""}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </SectionCard>
+              ))
+            )}
+          </div>
+        </SectionCard>
+      </div>
     </div>
   )
 }
