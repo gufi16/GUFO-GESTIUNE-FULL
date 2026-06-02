@@ -20,7 +20,11 @@ export default function Nomenclator() {
 
   return (
     <div className="space-y-3">
-      <PageHeader badge="nomenclator" title="Nomenclatoare" />
+      <PageHeader
+        badge="nomenclator"
+        title="Nomenclatoare"
+        subtitle="Administrezi rapid produsele, materiile prime, partenerii si clasificarea comerciala dintr-un singur modul."
+      />
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
         {items.map((item) => {
@@ -30,7 +34,7 @@ export default function Nomenclator() {
               key={item.name}
               type="button"
               onClick={() => nav(item.route)}
-              className="group rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+              className="group rounded-[20px] border border-slate-200 bg-white px-4 py-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
             >
               <div className="flex items-center justify-between gap-3">
                 <span className="flex h-10 w-10 items-center justify-center rounded-[14px] bg-[#EAF0F6] text-[#17324D]">
@@ -39,7 +43,10 @@ export default function Nomenclator() {
                 <ArrowRight size={16} className="text-slate-300 transition group-hover:translate-x-1 group-hover:text-[#17324D]" />
               </div>
 
-              <div className="mt-3 text-[15px] font-semibold text-slate-900">{item.name}</div>
+              <div className="mt-4 text-[15px] font-semibold text-slate-900">{item.name}</div>
+              <div className="mt-1 text-sm leading-6 text-slate-500">
+                Deschizi modulul pentru administrare si cautare rapida.
+              </div>
             </button>
           )
         })}

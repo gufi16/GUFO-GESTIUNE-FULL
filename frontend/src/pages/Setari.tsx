@@ -164,7 +164,11 @@ export default function Setari() {
 
   return (
     <div className="space-y-3">
-      <PageHeader badge="configurare" title="Setari" />
+      <PageHeader
+        badge="configurare"
+        title="Setari"
+        subtitle="Controlezi configurarea companiei, numerotarea, utilizatorii si integrarile dintr-un backoffice mai curat si mai usor de parcurs."
+      />
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
         <DocumentMetric title="Module setari" value={items.length} tone="slate" />
@@ -197,6 +201,7 @@ export default function Setari() {
 
               <div className="mt-5">
                 <div className="text-[16px] font-semibold text-slate-900">{item.name}</div>
+                <div className="mt-1 text-sm leading-6 text-slate-500">{item.desc}</div>
               </div>
 
               <div className="mt-4 inline-flex items-center gap-1.5 text-[13px] font-semibold text-blue-700">
