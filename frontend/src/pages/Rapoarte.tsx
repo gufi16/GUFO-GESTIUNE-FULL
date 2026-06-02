@@ -488,7 +488,7 @@ export default function RapoartePage() {
       <PageHeader
         badge="raportare"
         title="Rapoarte"
-        subtitle="Taburi curate, indicatori clari si sectiuni aerisite, pe date live."
+        subtitle="Indicatori executivi, vanzari, produse si operatiuni intr-un modul coerent, cu filtre simple si citire rapida."
       />
 
       {error ? (
@@ -497,7 +497,7 @@ export default function RapoartePage() {
         </div>
       ) : null}
 
-      <div className="rounded-[18px] border border-slate-200 bg-white p-3.5 shadow-sm">
+      <div className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm shadow-slate-900/[0.03]">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex flex-wrap gap-2">
             {[
@@ -525,6 +525,13 @@ export default function RapoartePage() {
                 </button>
               )
             })}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-[12px] text-slate-600">
+            <span className="font-semibold text-slate-800">Context activ:</span>
+            <span>{selectedLocationId === "ALL" ? "Toate locatiile" : locationLabel}</span>
+            <span className="text-slate-300">•</span>
+            <span>{selectedTerminalId === "ALL" ? "Toate terminalele" : "Terminal selectat"}</span>
           </div>
         </div>
       </div>
