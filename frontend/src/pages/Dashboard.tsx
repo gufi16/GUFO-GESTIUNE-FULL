@@ -404,7 +404,7 @@ function SectionCard({
 }
 
 export default function Dashboard() {
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const token =
     getToken() || ""
@@ -435,6 +435,13 @@ export default function Dashboard() {
   const [updatedAt, setUpdatedAt] = useState("")
   const [activeLocationId, setActiveLocationId] = useState(getActiveLocationId())
   const [activeTerminalId, setActiveTerminalId] = useState(getActiveTerminalId())
+
+  function updateRange(nextDateFrom: string, nextDateTo: string) {
+    const params = new URLSearchParams(searchParams)
+    params.set("dateFrom", nextDateFrom)
+    params.set("dateTo", nextDateTo)
+    setSearchParams(params)
+  }
 
   useEffect(() => {
     return subscribeToActiveLocation((nextLocationId) => {
@@ -726,6 +733,30 @@ export default function Dashboard() {
                 <div className="mt-0.5 text-xs text-white/70">Sistem activ</div>
               </div>
             </div>
+          </div>
+
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <label className="rounded-[20px] border border-[#D8E4F0] bg-white px-3 py-2 shadow-sm">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">De la</div>
+              <input
+                type="date"
+                value={dateFrom}
+                max={dateTo}
+                onChange={(event) => updateRange(event.target.value, dateTo)}
+                className="mt-1 w-full border-0 bg-transparent p-0 text-sm font-semibold text-[#17324D] outline-none"
+              />
+            </label>
+            <label className="rounded-[20px] border border-[#D8E4F0] bg-white px-3 py-2 shadow-sm">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Pana la</div>
+              <input
+                type="date"
+                value={dateTo}
+                min={dateFrom}
+                max={defaultDateTo}
+                onChange={(event) => updateRange(dateFrom, event.target.value)}
+                className="mt-1 w-full border-0 bg-transparent p-0 text-sm font-semibold text-[#17324D] outline-none"
+              />
+            </label>
           </div>
         </section>
 
