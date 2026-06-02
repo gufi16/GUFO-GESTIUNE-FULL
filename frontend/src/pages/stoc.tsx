@@ -560,7 +560,7 @@ export default function StocPage() {
       <PageHeader
         badge="gestiune"
         title="Stoc"
-        subtitle="Balanta clara pentru stoc curent, loturi, expirari si miscari pe contextul activ din topbar."
+        subtitle="Balanta clara pentru stoc curent, loturi, expirari si miscari pe contextul activ din topbar, cu accent pe controlul operational."
       />
 
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-[18px] border border-slate-200 bg-white px-3 py-2.5 shadow-sm shadow-slate-900/[0.03]">
@@ -666,9 +666,9 @@ export default function StocPage() {
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-4">
         <SummaryMetric label="Stoc total" value={formatQtyRo(totalLocationQty, 3)} hint="pe filtrele active" />
-        <SummaryMetric label="Produse sub minim" value="—" hint="prag neconfigurat in produs" />
-        <SummaryMetric label="Produse fara stoc" value={lowStockCount} hint="cantitate zero" />
-        <SummaryMetric label="Loturi care expira" value={expiringLotsSoonCount} hint="in 7 zile" />
+        <SummaryMetric label="Produse sub minim" value="—" hint="pragul minim urmeaza sa fie configurat pe produs" />
+        <SummaryMetric label="Produse fara stoc" value={lowStockCount} hint="cantitate curenta zero" />
+        <SummaryMetric label="Loturi care expira" value={expiringLotsSoonCount} hint="expira in urmatoarele 7 zile" />
       </div>
 
       <Section title="Balanta de stoc">

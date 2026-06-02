@@ -180,7 +180,7 @@ export default function FurnizoriPage() {
       <PageHeader
         badge="nomenclator"
         title="Furnizori"
-        subtitle="Gestionezi partenerii de achizitie, datele fiscale si contactele folosite in receptii si documente."
+        subtitle="Gestionezi partenerii de achizitie, datele fiscale si contactele folosite mai departe in receptii, documente si fluxurile comerciale."
       />
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
@@ -193,7 +193,7 @@ export default function FurnizoriPage() {
 
       <DocumentSection
         title="Registru furnizori"
-        description="Vezi rapid baza de furnizori si deschizi direct fisa completa pentru actualizare sau completare dupa CUI."
+        description="Vezi rapid baza de furnizori si deschizi direct fisa completa pentru actualizare, completare dupa CUI sau corectii comerciale."
         actions={
           <button type="button" onClick={openNewModal} className={documentButtonPrimaryClass}>
             Adauga furnizor

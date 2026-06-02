@@ -325,7 +325,7 @@ export default function GestiuniPage() {
       <PageHeader
         badge="operational"
         title="Gestiuni"
-        subtitle="Configurezi gestiunile pe locatie, alegi default-ul operational si mentii clar separate materiile prime, produsele finite si stocurile auxiliare."
+        subtitle="Configurezi gestiunile pe locatie, alegi default-ul operational si mentii clar separate materiile prime, produsele finite si stocurile auxiliare din companie."
       />
 
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
@@ -338,7 +338,7 @@ export default function GestiuniPage() {
         <DocumentMetric title="Default" value={defaultWarehouse?.name || "-"} tone="amber" />
       </div>
 
-      <DocumentSection title="Locatii" description="Alegi rapid contextul activ pe care lucrezi si vezi doar gestiunile relevante pentru locatia selectata.">
+      <DocumentSection title="Locatii" description="Alegi rapid contextul activ pe care lucrezi si vezi doar gestiunile relevante pentru locatia selectata in operarea curenta.">
         <div className="flex flex-wrap gap-2">
           {locations.map((location) => {
             const active = location.id === selectedLocationId

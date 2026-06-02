@@ -257,7 +257,7 @@ export default function ClientiPage() {
       <PageHeader
         badge="nomenclator"
         title="Clienti"
-        subtitle="Administrezi baza de clienti, datele comerciale si informatiile utile pentru facturare si e-Factura."
+        subtitle="Administrezi baza de clienti, datele comerciale si informatiile utile pentru facturare, livrare si e-Factura intr-un registru usor de parcurs."
       />
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
@@ -270,7 +270,7 @@ export default function ClientiPage() {
 
       <DocumentSection
         title="Registru clienti"
-        description="Cauti rapid dupa nume, CIF, cod, oras sau telefon si deschizi direct fisa pentru editare."
+        description="Cauti rapid dupa nume, CIF, cod, oras sau telefon si deschizi direct fisa clientului pentru editare sau completarea datelor comerciale."
         actions={
           <button type="button" onClick={openNewModal} className={documentButtonPrimaryClass}>
             Adauga client

@@ -854,7 +854,7 @@ export default function MeniuriPage() {
         </div>
 
         <div style={hintBox}>
-          Meniul se salveaza separat de produsele normale. In compozitie poti alege produse finite, marfa si semifabricate, fara materii prime.
+          Meniul se salveaza separat de produsele normale. In compozitie poti alege produse finite, marfa si semifabricate, ca sa pastrezi clar partea vandabila de retetarul de productie.
         </div>
 
         {!isVatPayer ? (

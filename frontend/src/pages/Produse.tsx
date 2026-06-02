@@ -1110,7 +1110,7 @@ function getDefaultVat(list = vatRates) {
           </div>
         ) : (
           <div style={hintBox}>
-            Afisezi doar articolele din clasa <strong>{CLASS_LABEL_MAP[fixedClassValue] || fixedClassValue}</strong>.
+            Afisezi doar articolele din clasa <strong>{CLASS_LABEL_MAP[fixedClassValue] || fixedClassValue}</strong>, ca sa lucrezi mai repede pe registrul relevant.
           </div>
         )}
 
@@ -1131,7 +1131,7 @@ function getDefaultVat(list = vatRates) {
 
         {!isVatPayer ? (
           <div style={warningBox}>
-            Firma este setata ca neplatitoare de TVA. In aceasta pagina, produsele se salveaza fara cota TVA, iar in lista TVA-ul este ignorat.
+            Firma este setata ca neplatitoare de TVA. In aceasta pagina, produsele se salveaza fara cota TVA, iar campurile fiscale raman informative.
           </div>
         ) : null}
 
