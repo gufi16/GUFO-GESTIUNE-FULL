@@ -253,16 +253,13 @@ function SidebarContent({
           </div>
         ) : null}
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col items-center text-center">
           <img
             src="/gufo-logo.png?v=20260417-6"
             alt="Gufo"
             className={clsx("object-contain", mobile ? "h-10 w-10" : "h-11 w-11")}
           />
-          <div className="min-w-0">
-            <div className="text-sm font-semibold tracking-[0.01em] text-[#17324D]">Gufo Backoffice</div>
-            <div className="mt-0.5 text-[11px] uppercase tracking-[0.18em] text-slate-400">ERP operational</div>
-          </div>
+          <div className="mt-2 text-sm font-semibold tracking-[0.01em] text-[#17324D]">Gufo Backoffice</div>
         </div>
       </div>
 
