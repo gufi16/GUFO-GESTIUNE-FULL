@@ -4,21 +4,21 @@ import { useNavigate } from "react-router-dom"
 const actions = [
   {
     label: "Receptie marfa",
-    helper: "Adauga rapid un NIR nou",
+    helper: "NIR nou",
     icon: Plus,
     path: "/inregistrare-document/nir/new",
     tone: "blue",
   },
   {
     label: "Transfer intre locatii",
-    helper: "Muta stoc intre gestiuni",
+    helper: "Mutare stoc",
     icon: ArrowLeftRight,
     path: "/transfer/new",
     tone: "slate",
   },
   {
     label: "Vanzare / Bon",
-    helper: "Integrare POS si documente",
+    helper: "Bonuri emise",
     icon: Receipt,
     path: "",
     action: "receipts",
@@ -26,7 +26,7 @@ const actions = [
   },
   {
     label: "Cauta produs",
-    helper: "Intra direct in nomenclator",
+    helper: "Cautare rapida",
     icon: PackageSearch,
     path: "/nomenclator/produse",
     tone: "slate",
@@ -41,7 +41,7 @@ export default function QuickActions({ onOpenReceipts }: { onOpenReceipts?: () =
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <div className="text-lg font-semibold tracking-[-0.01em] text-[#17324D]">Actiuni rapide</div>
-          <div className="mt-1 text-sm text-slate-500">Scurtaturi curate pentru operarea zilnica din ERP.</div>
+          <div className="mt-1 text-sm text-slate-500">Acces direct.</div>
         </div>
       </div>
 

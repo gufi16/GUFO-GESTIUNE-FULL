@@ -16,49 +16,49 @@ const cards: Array<{
     path: "/inregistrare-document/factura/new",
     icon: ScrollText,
     tone: "bg-slate-100 text-slate-700",
-    description: "Intri direct in fluxul comercial complet pentru client, linii de factura, totaluri si pregatirea pentru e-Factura.",
+    description: "Emitere factura client.",
   },
   {
     title: "Nota de receptie",
     path: "/inregistrare-document/nir/new",
     icon: ReceiptText,
     tone: "bg-slate-100 text-slate-700",
-    description: "Pornesti receptia de marfa cu furnizor, produse, costuri si documentul pregatit pentru validare sau export PDF.",
+    description: "Intrare marfa in gestiune.",
   },
   {
     title: "Bon de consum",
     path: "/inregistrare-document/bon-consum/new",
     icon: PackageMinus,
     tone: "bg-amber-50 text-amber-700",
-    description: "Documentezi consumul operational pe locatie si gestiune, cu selectie rapida pentru produsele si materiile prime folosite.",
+    description: "Consum intern de stoc.",
   },
   {
     title: "Transfer intre gestiuni",
     path: "/transfer/new",
     icon: FilePlus2,
     tone: "bg-slate-100 text-slate-700",
-    description: "Muti stocul intre gestiuni cu context logistic clar si verificari pregatite pentru fluxurile unde apare si e-Transport.",
+    description: "Mutare stoc intre gestiuni.",
   },
   {
     title: "PV deteriorare",
     path: "/inregistrare-document/pv-deteriorare/new",
     icon: TriangleAlert,
     tone: "bg-slate-100 text-slate-700",
-    description: "Inregistrezi pierderile sau deteriorarile cu justificare clara, pozitii afectate si trasabilitate in registrul operational.",
+    description: "Pierderi si deteriorari.",
   },
   {
     title: "PV schimbare pret",
     path: "/inregistrare-document/pv-schimbare-pret/new",
     icon: Tags,
     tone: "bg-slate-100 text-slate-700",
-    description: "Actualizezi preturile prin document dedicat, astfel incat schimbarile comerciale sa ramana usor de urmarit in istoric.",
+    description: "Actualizare preturi.",
   },
   {
     title: "Inventar",
     path: "/inregistrare-document/inventar/new",
     icon: PackagePlus,
     tone: "bg-slate-100 text-slate-700",
-    description: "Pornesti inventarul pe locatia activa si compari rapid scripticul cu cantitatile constatate pentru fiecare articol.",
+    description: "Numarare si diferente stoc.",
   },
 ]
 
@@ -70,7 +70,7 @@ export default function InregistrareDocument() {
       <PageHeader
         badge="operatiuni"
         title="Inregistrare documente"
-        subtitle="Alegi rapid documentul pe care vrei sa il creezi si intri direct in fluxul operational potrivit pentru receptii, transferuri, consum, inventar sau documente comerciale."
+        subtitle="Alegi documentul si continui."
       />
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">

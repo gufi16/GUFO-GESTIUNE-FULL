@@ -615,7 +615,7 @@ export default function Dashboard() {
   const mobileQuickActions = [
     {
       title: "NIR rapid",
-      subtitle: "Intrare marfa",
+      subtitle: "NIR nou",
       badge: "scanare",
       icon: PackagePlus,
       iconClassName: "bg-[#17324D] text-white",
@@ -623,7 +623,7 @@ export default function Dashboard() {
     },
     {
       title: "Stoc produse",
-      subtitle: "Cauta / verifica",
+      subtitle: "Cautare rapida",
       badge: "rapid",
       icon: PackageSearch,
       iconClassName: "bg-[#12806A] text-white",
@@ -631,7 +631,7 @@ export default function Dashboard() {
     },
     {
       title: "Transfer",
-      subtitle: "Intre gestiuni",
+      subtitle: "Mutare stoc",
       badge: "",
       icon: ArrowRightLeft,
       iconClassName: "bg-[#7C3AED] text-white",
@@ -639,7 +639,7 @@ export default function Dashboard() {
     },
     {
       title: "Inventar",
-      subtitle: "Numarare rapida",
+      subtitle: "Numarare stoc",
       badge: "offline",
       icon: Check,
       iconClassName: "bg-[#F76707] text-white",
@@ -647,7 +647,7 @@ export default function Dashboard() {
     },
     {
       title: "Bon consum",
-      subtitle: "Scade materii",
+      subtitle: "Consum intern",
       badge: "",
       icon: FileText,
       iconClassName: "bg-[#C25A00] text-white",
@@ -655,7 +655,7 @@ export default function Dashboard() {
     },
     {
       title: "Facturi SPV",
-      subtitle: "Primite ANAF",
+      subtitle: "Import ANAF",
       badge: "nou",
       icon: FolderSymlink,
       iconClassName: "bg-[#1D4E89] text-white",
@@ -707,7 +707,7 @@ export default function Dashboard() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="text-[16px] font-semibold uppercase tracking-[0.08em] text-[#17324D]">Gufo Mobile</div>
-              <div className="mt-1 text-sm text-slate-500">Lucru rapid pe telefon</div>
+              <div className="mt-1 text-sm text-slate-500">Operare rapida</div>
             </div>
             <div className="rounded-full bg-[#17324D] px-4 py-2 text-sm font-semibold text-white">{appVersion}</div>
           </div>
@@ -723,7 +723,7 @@ export default function Dashboard() {
                   <span className="h-2.5 w-2.5 rounded-full bg-[#7DE2BF]" />
                   sincronizat
                 </div>
-                <div className="mt-0.5 text-xs text-white/70">POS + gestiune active</div>
+                <div className="mt-0.5 text-xs text-white/70">Sistem activ</div>
               </div>
             </div>
           </div>
@@ -732,7 +732,7 @@ export default function Dashboard() {
         <section className="rounded-[28px] border border-[#D8E4F0] bg-white p-4 shadow-[0_20px_40px_rgba(15,23,42,0.05)]">
           <div>
             <div className="text-[28px] font-semibold tracking-tight text-slate-950">Alege ce vrei sa faci</div>
-            <div className="mt-1 text-sm text-slate-500">Carduri mari, fara meniuri complicate</div>
+            <div className="mt-1 text-sm text-slate-500">Actiuni rapide</div>
           </div>
 
           <div className="mt-4 grid grid-cols-2 gap-3">
@@ -794,7 +794,7 @@ export default function Dashboard() {
           </span>
           <div className="min-w-0 flex-1">
             <div className="text-[18px] font-semibold text-slate-950">Scaneaza sau cauta produs</div>
-            <div className="mt-1 text-sm text-slate-500">Intrare rapida in cautare si verificare</div>
+            <div className="mt-1 text-sm text-slate-500">Cautare produs</div>
           </div>
           <Search size={20} className="text-slate-400" />
         </button>
