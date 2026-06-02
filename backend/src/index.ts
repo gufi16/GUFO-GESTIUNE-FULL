@@ -848,15 +848,17 @@ app.post("/api/v1/auth/forgot-password", async (req, res) => {
 
       await sendMail({
         to: user.email,
+        fromName: "Gufo Backoffice",
         subject: "Resetare parola Gufo Backoffice",
         text: [
           `Salut ${user.name},`,
           "",
-          `Am primit o cerere de resetare a parolei pentru contul tau din Gufo Backoffice pentru ${tenantBackofficeLabel}.`,
+          `Am primit o cerere de resetare a parolei pentru contul tau din ${tenantBackofficeLabel}.`,
           `Acceseaza linkul de mai jos pentru a seta o parola noua:`,
           resetUrl,
           "",
-          "Sau foloseste direct linkul de mai sus in browserul tau.",
+          "Sau foloseste direct acest link:",
+          resetUrl,
           "",
           "Linkul este valabil 60 de minute.",
           "Daca nu ai cerut resetarea parolei, poti ignora acest mesaj.",
@@ -865,7 +867,7 @@ app.post("/api/v1/auth/forgot-password", async (req, res) => {
           <div style="font-family:Arial,sans-serif;color:#17324D">
             <h2 style="margin-bottom:12px">Resetare parola Gufo Backoffice</h2>
             <p>Salut <strong>${user.name}</strong>,</p>
-            <p>Am primit o cerere de resetare a parolei pentru contul tau din <strong>Gufo Backoffice</strong> pentru <strong>${tenantBackofficeLabel}</strong>.</p>
+            <p>Am primit o cerere de resetare a parolei pentru contul tau din <strong>${tenantBackofficeLabel}</strong>.</p>
             <p>
               <a href="${resetUrl}" style="display:inline-block;padding:12px 18px;border-radius:10px;background:#17324D;color:#fff;text-decoration:none;font-weight:700">
                 Reseteaza parola

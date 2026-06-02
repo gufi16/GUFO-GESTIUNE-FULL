@@ -76,6 +76,7 @@ async function sendViaBrevoApi(input: {
   subject: string
   html: string
   text: string
+  fromName?: string
 }) {
   const apiKey = getBrevoApiKey()
   if (!apiKey) {
@@ -86,11 +87,11 @@ async function sendViaBrevoApi(input: {
   const match = fromRaw.match(/^(.*?)<([^>]+)>$/)
   const sender = match
     ? {
-        name: match[1].trim().replace(/^"|"$/g, ""),
+        name: input.fromName || match[1].trim().replace(/^"|"$/g, ""),
         email: match[2].trim(),
       }
     : {
-        name: "Gufo ERP",
+        name: input.fromName || "Gufo ERP",
         email: fromRaw,
       }
 
@@ -121,6 +122,7 @@ export async function sendMail(input: {
   subject: string
   html: string
   text: string
+  fromName?: string
 }) {
   if (!hasSmtpConfig()) {
     throw new Error("SMTP is not configured")
@@ -161,7 +163,16 @@ export async function sendMail(input: {
       })
 
       await transporter.sendMail({
-        from: process.env.SMTP_FROM,
+        from: input.fromName
+          ? (() => {
+              const fromRaw = String(process.env.SMTP_FROM || "").trim()
+              const match = fromRaw.match(/^(.*?)<([^>]+)>$/)
+              if (match) {
+                return `${input.fromName} <${match[2].trim()}>`
+              }
+              return `${input.fromName} <${fromRaw}>`
+            })()
+          : process.env.SMTP_FROM,
         to: input.to,
         subject: input.subject,
         text: input.text,
