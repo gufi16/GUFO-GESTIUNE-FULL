@@ -521,7 +521,11 @@ function asDate(value: unknown, fallback: Date) {
 function buildPublicBaseUrl(req: Request) {
   const configured = normalizeText(process.env.PUBLIC_BASE_URL);
   if (configured) {
-    return configured.replace(/\/+$/, "").replace(/^http:\/\//i, "https://");
+    return configured
+      .replace(/\/+$/, "")
+      .replace(/^http:\/\//i, "https://")
+      .replace("://app.gufo.ink", "://api.gufo.ink")
+      .replace("://test.gufo.ink", "://api.gufo.ink");
   }
 
   const host = req.get("host") || "";
@@ -536,7 +540,9 @@ function resolveImageUrl(req: Request, rawUrl: unknown) {
   if (!value) return null;
 
   const baseUrl = buildPublicBaseUrl(req);
-  const apiBaseUrl = baseUrl.replace("://test.gufo.ink", "://api.gufo.ink");
+  const apiBaseUrl = baseUrl
+    .replace("://app.gufo.ink", "://api.gufo.ink")
+    .replace("://test.gufo.ink", "://api.gufo.ink");
 
   const internalHostPattern =
     /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|api\.gufo\.ink)(:\d+)?/i;

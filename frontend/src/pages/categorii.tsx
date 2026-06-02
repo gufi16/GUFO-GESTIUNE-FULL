@@ -12,7 +12,7 @@ import {
   documentInputClass,
   documentTextareaClass,
 } from "../components/DocumentUi"
-import { API_BASE as API, getToken } from "../lib/api"
+import { API_BASE as API, getToken, resolvePublicAssetUrl } from "../lib/api"
 
 type Department = {
   id: string
@@ -31,6 +31,18 @@ type Category = {
 function normalizeHostedImageUrl(value: any) {
   const text = String(value || "").trim()
   if (!text) return ""
+
+  if (/^(data:|blob:)/i.test(text)) {
+    return text
+  }
+
+  if (/^\/(?!\/)/.test(text)) {
+    return `${API}${text}`
+  }
+
+  if (!/^https?:\/\//i.test(text)) {
+    return `${API}/${text.replace(/^\/+/, "")}`
+  }
 
   if (typeof window !== "undefined" && window.location.protocol === "https:" && text.startsWith("http://")) {
     return text.replace(/^http:\/\//i, "https://")
@@ -88,7 +100,14 @@ export default function CategoriiPage() {
       const categoriesData = await categoriesRes.json().catch(() => ({}))
       const depsData = await depsRes.json().catch(() => ({}))
 
-      setList(Array.isArray(categoriesData.items) ? categoriesData.items : [])
+      setList(
+        Array.isArray(categoriesData.items)
+          ? categoriesData.items.map((item: Category) => ({
+              ...item,
+              imageUrl: normalizeHostedImageUrl(item?.imageUrl || ""),
+            }))
+          : []
+      )
       setDeps(Array.isArray(depsData.items) ? depsData.items : [])
     } catch {
       setError("Nu pot incarca categoriile.")
@@ -276,28 +295,21 @@ export default function CategoriiPage() {
           <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
             <div className="mb-3 text-sm font-semibold text-slate-900">Imagine categorie</div>
 
-            {isEdit ? (
-              <div className="flex flex-wrap gap-3">
-                <label className={documentButtonSecondaryClass}>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0]
-                      if (file) uploadImage(file)
-                    }}
-                  />
-                  <ImagePlus size={16} className="mr-2" />
-                  {uploading ? "Se incarca..." : "Incarca poza categorie"}
-                </label>
-
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-4 text-sm text-slate-500">
-                Salveaza mai intai categoria, apoi intra pe edit ca sa incarci poza.
-              </div>
-            )}
+            <div className="flex flex-wrap gap-3">
+              <label className={documentButtonSecondaryClass}>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) uploadImage(file)
+                  }}
+                />
+                <ImagePlus size={16} className="mr-2" />
+                {uploading ? "Se incarca..." : "Incarca poza categorie"}
+              </label>
+            </div>
           </div>
 
           <div className="rounded-[24px] border border-slate-200 bg-white p-4">
@@ -374,7 +386,7 @@ export default function CategoriiPage() {
                     <td className="px-4 py-4">
                       {category.imageUrl ? (
                         <img
-                          src={category.imageUrl}
+                          src={resolvePublicAssetUrl(category.imageUrl)}
                           alt={category.name}
                           className="h-14 w-14 rounded-2xl border border-slate-200 object-cover"
                           onError={(e) => {
