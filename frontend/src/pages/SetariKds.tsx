@@ -106,7 +106,7 @@ export default function SetariKds() {
       <PageHeader
         badge="configurare"
         title="Setari KDS"
-        subtitle="Configurezi fluxul de pairing, operatorii si device-urile KDS din acelasi ecran, fara sa pierzi contextul operational."
+        subtitle="Configurezi fluxul de pairing, operatorii si device-urile KDS din acelasi ecran, fara sa pierzi contextul operational al locatiei."
       />
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-4">
@@ -121,7 +121,7 @@ export default function SetariKds() {
 
       <DocumentSection
         title="Flux GuFo KDS"
-        description="Aici vezi ordinea corecta pentru conectarea device-urilor, loginul operatorilor si confirmarea ca tot fluxul KDS este pregatit de lucru."
+        description="Aici vezi ordinea corecta pentru conectarea device-urilor, loginul operatorilor si confirmarea ca fluxul KDS este pregatit de lucru cap-coada."
         actions={
           <>
             <button className={documentButtonPrimaryClass} onClick={() => navigate("/setari/utilizatori")}>
@@ -160,9 +160,7 @@ export default function SetariKds() {
               <ShieldCheck size={18} />
               <div className="text-sm font-semibold">3. Finalizare comanda</div>
             </div>
-            <div className="text-sm text-slate-600">
-              Dupa pairing, device-ul KDS apare aici in ERP si poate fi urmarit separat pe locatie si pe device.
-            </div>
+            <div className="text-sm text-slate-600">Dupa pairing, device-ul KDS apare aici in ERP si poate fi urmarit clar pe locatie si pe device.</div>
           </div>
         </div>
       </DocumentSection>

@@ -1,9 +1,10 @@
-import { ArrowRight, Building2, CheckCircle2, Filter, RefreshCcw, Save, Settings2, Warehouse } from "lucide-react"
+import { ArrowRight, Building2, Filter, RefreshCcw, Save, Settings2, Warehouse } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import PageHeader from "../components/PageHeader"
 import {
   DocumentField,
+  DocumentMetric,
   DocumentSection,
   InlineNotice,
   documentButtonPrimaryClass,
@@ -200,29 +201,17 @@ export default function SetariGestiunePage() {
       <PageHeader
         badge="configurare"
         title="Configurare gestiune"
-        subtitle="Controlezi modul de lucru pentru locatii si gestiuni, de la selectia din topbar pana la structura operationala folosita in documente."
+        subtitle="Controlezi modul de lucru pentru locatii si gestiuni, de la selectia din topbar pana la structura operationala folosita consecvent in documente."
       />
 
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-4">
-        <div className="rounded-[16px] border border-slate-200 bg-white px-4 py-3 shadow-sm">
-          <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Mod</div>
-          <div className="mt-1 text-sm font-semibold text-[#17324D]">{configForm.multiWarehouseEnabled ? "Multi-gestiune" : "Simplu"}</div>
-        </div>
-        <div className="rounded-[16px] border border-slate-200 bg-white px-4 py-3 shadow-sm">
-          <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Locatii</div>
-          <div className="mt-1 text-sm font-semibold text-[#17324D]">{locations.length}</div>
-        </div>
-        <div className="rounded-[16px] border border-slate-200 bg-white px-4 py-3 shadow-sm">
-          <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Gestiuni active</div>
-          <div className="mt-1 text-sm font-semibold text-[#17324D]">{activeWarehousesCount}</div>
-        </div>
-        <div className="rounded-[16px] border border-slate-200 bg-white px-4 py-3 shadow-sm">
-          <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Default</div>
-          <div className="mt-1 text-sm font-semibold text-[#17324D]">{defaultWarehousesCount}</div>
-        </div>
+        <DocumentMetric title="Mod" value={configForm.multiWarehouseEnabled ? "Multi-gestiune" : "Simplu"} tone="slate" />
+        <DocumentMetric title="Locatii" value={locations.length} tone="blue" />
+        <DocumentMetric title="Gestiuni active" value={activeWarehousesCount} tone="emerald" />
+        <DocumentMetric title="Default" value={defaultWarehousesCount} tone="amber" />
       </div>
 
       <div className="flex flex-wrap gap-2 rounded-[18px] border border-slate-200 bg-white p-2 shadow-sm">
@@ -248,7 +237,7 @@ export default function SetariGestiunePage() {
       {activeTab === "general" ? (
         <DocumentSection
           title="Setari generale"
-          description="Alegi daca lucrezi simplu sau multi-gestiune si stabilesti regulile de baza care devin vizibile in documentele din ERP."
+          description="Alegi daca lucrezi simplu sau multi-gestiune si stabilesti regulile de baza care raman vizibile mai departe in documentele din ERP."
           actions={
             <>
               <button type="button" className={documentButtonSecondaryClass} onClick={loadAll} disabled={loading || savingConfig}>
@@ -287,7 +276,7 @@ export default function SetariGestiunePage() {
       {activeTab === "display" ? (
         <DocumentSection
           title="Filtre si afisare"
-          description="Decizi cum apare selectorul de gestiune in ERP si ce eticheta foloseste echipa in topbar si in formularele operationale."
+          description="Decizi cum apare selectorul de gestiune in ERP si ce eticheta foloseste echipa in topbar si in formularele operationale curente."
           actions={
             <button type="button" className={documentButtonPrimaryClass} onClick={saveConfig} disabled={loading || savingConfig}>
               <Save size={14} className="mr-1.5" />
@@ -345,16 +334,13 @@ export default function SetariGestiunePage() {
                 locations.map((location) => {
                   const locationWarehouses = warehouses.filter((warehouse) => warehouse.locationId === location.id)
                   const defaultWarehouse = locationWarehouses.find((warehouse) => warehouse.isDefault)
+
                   return (
                     <div key={location.id} className="rounded-[18px] border border-slate-200 bg-white p-4 shadow-sm">
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
-                          <div className="text-[15px] font-semibold text-slate-900">
-                            {location.code ? `${location.name} (${location.code})` : location.name}
-                          </div>
-                          <div className="mt-1 text-sm text-slate-500">
-                            {locationWarehouses.length} gestiuni · default {defaultWarehouse?.name || "-"}
-                          </div>
+                          <div className="text-[15px] font-semibold text-slate-900">{location.code ? `${location.name} (${location.code})` : location.name}</div>
+                          <div className="mt-1 text-sm text-slate-500">{locationWarehouses.length} gestiuni · default {defaultWarehouse?.name || "-"}</div>
                         </div>
 
                         <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600">
@@ -373,10 +359,10 @@ export default function SetariGestiunePage() {
                 Administrare separata
               </div>
               <div className="mt-3 space-y-2 text-sm text-slate-600">
-                <div className="rounded-[14px] border border-slate-200 bg-white px-3 py-2.5">Adaugare gestiuni</div>
-                <div className="rounded-[14px] border border-slate-200 bg-white px-3 py-2.5">Editare si stergere</div>
-                <div className="rounded-[14px] border border-slate-200 bg-white px-3 py-2.5">Setare gestiune default</div>
-                <div className="rounded-[14px] border border-slate-200 bg-white px-3 py-2.5">Activare si dezactivare</div>
+                <div className="rounded-[14px] border border-slate-200 bg-white px-3 py-2.5">Adaugare si structurare gestiuni</div>
+                <div className="rounded-[14px] border border-slate-200 bg-white px-3 py-2.5">Editare, stergere si curatare structura</div>
+                <div className="rounded-[14px] border border-slate-200 bg-white px-3 py-2.5">Setare gestiune default pe locatie</div>
+                <div className="rounded-[14px] border border-slate-200 bg-white px-3 py-2.5">Activare si dezactivare operationala</div>
               </div>
 
               <button type="button" className={`${documentButtonPrimaryClass} mt-4 w-full justify-center`} onClick={() => nav("/gestiune/gestiuni")}>
