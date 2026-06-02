@@ -848,34 +848,35 @@ app.post("/api/v1/auth/forgot-password", async (req, res) => {
 
       await sendMail({
         to: user.email,
-        fromName: "Gufo Backoffice",
-        subject: "Resetare parola Gufo Backoffice",
+        fromName: "Notificari cont",
+        subject: "Cerere de resetare a parolei",
         text: [
           `Salut ${user.name},`,
           "",
-          `Am primit o cerere de resetare a parolei pentru contul tau din ${tenantBackofficeLabel}.`,
-          `Acceseaza linkul de mai jos pentru a seta o parola noua:`,
-          resetUrl,
+          `Am primit o cerere de resetare a parolei pentru contul asociat cu ${tenantBackofficeLabel}.`,
           "",
+          "Pentru a seta o parola noua, foloseste butonul din email sau linkul de mai jos:",
           "Sau foloseste direct acest link:",
           resetUrl,
           "",
           "Linkul este valabil 60 de minute.",
-          "Daca nu ai cerut resetarea parolei, poti ignora acest mesaj.",
+          "Daca nu ai solicitat aceasta actiune, poti ignora in siguranta acest mesaj.",
         ].join("\n"),
         html: `
-          <div style="font-family:Arial,sans-serif;color:#17324D">
-            <h2 style="margin-bottom:12px">Resetare parola Gufo Backoffice</h2>
+          <div style="font-family:Arial,sans-serif;color:#17324D;line-height:1.6">
+            <h2 style="margin-bottom:12px">Cerere de resetare a parolei</h2>
             <p>Salut <strong>${user.name}</strong>,</p>
-            <p>Am primit o cerere de resetare a parolei pentru contul tau din <strong>${tenantBackofficeLabel}</strong>.</p>
+            <p>Am primit o cerere de resetare a parolei pentru contul asociat cu <strong>${tenantBackofficeLabel}</strong>.</p>
+            <p>Pentru a seta o parola noua, foloseste butonul de mai jos:</p>
             <p>
               <a href="${resetUrl}" style="display:inline-block;padding:12px 18px;border-radius:10px;background:#17324D;color:#fff;text-decoration:none;font-weight:700">
                 Reseteaza parola
               </a>
             </p>
             <p style="margin-top:12px">Sau foloseste direct acest link:</p>
-            <p><a href="${resetUrl}">${resetUrl}</a></p>
-            <p>Linkul este valabil 60 de minute.</p>
+            <p style="word-break:break-word"><a href="${resetUrl}">${resetUrl}</a></p>
+            <p><strong>Linkul este valabil 60 de minute.</strong></p>
+            <p>Daca nu ai solicitat aceasta actiune, poti ignora in siguranta acest mesaj.</p>
           </div>
         `,
       })
