@@ -4,8 +4,14 @@ import PosReceiptsView from "../components/PosReceiptsView"
 export default function FinanceReceipts() {
   return (
     <div className="space-y-4">
-      <PageHeader badge="financiar" title="Vanzari / Bon" subtitle="Bonuri fiscale emise in Android POS." />
-      <PosReceiptsView />
+      <PageHeader
+        badge="financiar"
+        title="Vanzari / Bon"
+        subtitle="Monitorizezi bonurile emise din Android POS intr-o pagina simpla, clara si potrivita pentru verificare rapida."
+      />
+      <div className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm shadow-slate-900/[0.03] md:p-5">
+        <PosReceiptsView />
+      </div>
     </div>
   )
 }

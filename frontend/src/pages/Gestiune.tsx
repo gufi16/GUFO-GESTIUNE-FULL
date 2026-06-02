@@ -28,7 +28,11 @@ export default function Gestiune() {
 
   return (
     <div className="space-y-3">
-      <PageHeader badge="gestiune" title="Gestiune" />
+      <PageHeader
+        badge="gestiune"
+        title="Gestiune"
+        subtitle="Controlezi stocul, transferurile si productia dintr-un singur modul operational, cu acces rapid la actiunile importante."
+      />
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
         {items.map((item) => {
@@ -38,10 +42,10 @@ export default function Gestiune() {
               key={item.name}
               type="button"
               onClick={() => nav(item.route)}
-              className="group rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+              className="group rounded-[20px] border border-slate-200 bg-white p-4 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
             >
               <div className="flex items-start justify-between gap-4">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-[#17324D]">
+                <span className="flex h-10 w-10 items-center justify-center rounded-[14px] bg-[#EAF0F6] text-[#17324D]">
                   <Icon size={18} />
                 </span>
 
@@ -51,8 +55,8 @@ export default function Gestiune() {
               </div>
 
               <div className="mt-4">
-                <div className="text-[18px] font-semibold text-slate-900">{item.name}</div>
-                <div className="mt-1.5 text-[13px] leading-5 text-slate-500">{item.desc}</div>
+                <div className="text-[17px] font-semibold text-slate-900">{item.name}</div>
+                <div className="mt-1.5 text-sm leading-6 text-slate-500">{item.desc}</div>
               </div>
 
               <div className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[#17324D]">
