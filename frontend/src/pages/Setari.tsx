@@ -58,7 +58,7 @@ const items = [
   },
   {
     name: "Utilizatori ERP",
-    desc: "Administrezi echipa si setezi PIN-ul de acces folosit in GuFo POS si GuFo KDS.",
+    desc: "Administrezi echipa, rolurile si PIN-ul de acces folosit mai departe in POS si KDS.",
     route: "/setari/utilizatori",
     icon: Users,
   },

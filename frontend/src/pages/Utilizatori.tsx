@@ -331,7 +331,7 @@ export default function Utilizatori() {
       <PageHeader
         badge="configurare"
         title="Utilizatori ERP"
-        subtitle="Administrezi utilizatorii ERP, rolurile, accesul pe firme, avatarul si credentialele folosite mai departe in POS sau KDS."
+        subtitle="Administrezi utilizatorii ERP, rolurile, accesul pe firme, avatarul si credentialele folosite mai departe in POS, KDS si operarea curenta."
       />
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-5">
@@ -438,7 +438,7 @@ export default function Utilizatori() {
                             <span>
                               <span className="font-medium text-slate-900">{company.name}</span>
                               <span className="mt-0.5 block text-[11px] text-slate-500">
-                                {[company.code, company.cui].filter(Boolean).join(" • ") || "Firma ERP"}
+                                {[company.code, company.cui].filter(Boolean).join(" · ") || "Firma ERP"}
                               </span>
                             </span>
                           </label>
@@ -653,7 +653,7 @@ export default function Utilizatori() {
                   onChange={(e) => setForm((current) => ({ ...current, posPin: e.target.value }))}
                   placeholder={editingUserId ? "Lasa gol pentru stergere sau neschimbat prin butonul dedicat" : "Ex: 1234"}
                 />
-                <div className="mt-1 text-xs text-slate-500">Atat GuFo POS, cat si GuFo KDS folosesc numele utilizatorului din ERP si PIN-ul de aici.</div>
+                <div className="mt-1 text-xs text-slate-500">Atat POS, cat si KDS folosesc numele utilizatorului din ERP si PIN-ul configurat aici.</div>
               </div>
 
               <div>
@@ -684,7 +684,7 @@ export default function Utilizatori() {
                           <span>
                             <span className="font-medium text-slate-900">{company.name}</span>
                             <span className="mt-0.5 block text-xs text-slate-500">
-                              {[company.code, company.cui].filter(Boolean).join(" • ") || "Firma ERP"}
+                              {[company.code, company.cui].filter(Boolean).join(" · ") || "Firma ERP"}
                             </span>
                           </span>
                         </label>
