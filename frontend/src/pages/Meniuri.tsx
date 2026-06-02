@@ -823,7 +823,7 @@ export default function MeniuriPage() {
       <PageHeader
         badge="nomenclator"
         title="Meniuri"
-        subtitle="Definesti meniurile vandabile si alegi ce produse finite sau produse de vanzare din ERP intra in fiecare meniu."
+        subtitle="Configurezi meniurile vandabile, pretul, publicarea si compozitia lor, folosind produse finite si articole de vanzare deja existente in ERP."
       />
 
       {error ? <div style={errorBox}>{error}</div> : null}

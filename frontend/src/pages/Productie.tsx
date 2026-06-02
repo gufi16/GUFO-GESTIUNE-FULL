@@ -312,7 +312,11 @@ export default function ProductiePage() {
 
   return (
     <div className="w-full space-y-4">
-      <PageHeader badge="document" title="Productie" />
+      <PageHeader
+        badge="document"
+        title="Productie"
+        subtitle="Generezi documente de productie din produse finite si semifabricate, cu control clar pe locatie, cantitati si pozitii."
+      />
 
       {loading ? <InlineNotice>Se incarca datele pentru productie...</InlineNotice> : null}
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
@@ -327,7 +331,10 @@ export default function ProductiePage() {
 
       <div className="grid grid-cols-1 items-start gap-3 2xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-3">
-          <DocumentSection title="Adauga produs in productie">
+          <DocumentSection
+            title="Adauga produs in productie"
+            description="Selectezi produsul finit sau semifabricatul, alegi locatia si construiesti documentul direct din pozitii validate."
+          >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="text-sm text-slate-500">Cauta produsul dupa nume sau cod si adauga-l rapid in document.</div>
               {(productId || productSearch) ? (
@@ -420,7 +427,10 @@ export default function ProductiePage() {
             </div>
           </DocumentSection>
 
-          <DocumentSection title="Pozitii productie">
+          <DocumentSection
+            title="Pozitii productie"
+            description="Revizuiesti pozitiile adaugate, ajustezi cantitatile si verifici rapid ce intra efectiv in documentul de productie."
+          >
             <div>
               {items.length === 0 ? (
                 <div className="rounded-[14px] border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center">
@@ -476,7 +486,10 @@ export default function ProductiePage() {
           </DocumentSection>
         </div>
 
-        <DocumentSection title="Detalii document">
+        <DocumentSection
+          title="Detalii document"
+          description="Completezi observatiile, verifici contextul curent si finalizezi generarea documentului de productie."
+        >
           <div className="space-y-3">
             <DocumentField label="Observatii document">
               <textarea
