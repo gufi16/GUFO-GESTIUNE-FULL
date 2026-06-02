@@ -218,7 +218,7 @@ export default function Sidebar() {
 
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-lg font-semibold tracking-tight text-slate-900">
-                    GuFo GesTiuNe
+                    Gufo Gestiune
                   </div>
 
                   <div className="mt-1 text-xs leading-5 text-slate-500">

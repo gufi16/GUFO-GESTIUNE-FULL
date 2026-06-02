@@ -74,7 +74,7 @@ export default function SetariKds() {
 
       setDevices(kdsDevices)
       setUsers(allUsers)
-      setMessage(kdsDevices.length ? "Device-urile GuFo KDS sunt sincronizate din ERP." : "Nu exista inca device-uri KDS imperecheate.")
+      setMessage(kdsDevices.length ? "Device-urile Gufo KDS sunt sincronizate din ERP." : "Nu exista inca device-uri KDS imperecheate.")
     } catch (err: any) {
       setError(err?.message || "Nu am putut incarca setarile KDS.")
       setDevices([])
@@ -120,7 +120,7 @@ export default function SetariKds() {
       {!error && message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
 
       <DocumentSection
-        title="Flux GuFo KDS"
+        title="Flux Gufo KDS"
         description="Aici vezi ordinea corecta pentru conectarea device-urilor, loginul operatorilor si confirmarea ca fluxul KDS este pregatit de lucru cap-coada."
         actions={
           <>
@@ -141,7 +141,7 @@ export default function SetariKds() {
               <div className="text-sm font-semibold">1. Pair device</div>
             </div>
             <div className="text-sm text-slate-600">
-              In aplicatia GuFo KDS intri la <strong>Setari KDS</strong>, completezi URL-ul ERP si cheia de licenta, apoi apesi <strong>Conecteaza KDS</strong>.
+              In aplicatia Gufo KDS intri la <strong>Setari KDS</strong>, completezi URL-ul ERP si cheia de licenta, apoi apesi <strong>Conecteaza KDS</strong>.
             </div>
           </div>
 
@@ -166,7 +166,7 @@ export default function SetariKds() {
       </DocumentSection>
 
       <DocumentSection
-        title="Device-uri GuFo KDS salvate"
+        title="Device-uri Gufo KDS salvate"
         description="Monitorizezi device-urile deja pairuite si verifici rapid pe ce locatie ruleaza fiecare ecran KDS activ."
       >
         {devices.length ? (
@@ -175,7 +175,7 @@ export default function SetariKds() {
               <div key={item.id} className="rounded-[18px] border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-[16px] font-semibold text-slate-900">{item.label || "GuFo KDS"}</div>
+                    <div className="text-[16px] font-semibold text-slate-900">{item.label || "Gufo KDS"}</div>
                     <div className="mt-1 text-sm text-slate-500">Device KDS conectat</div>
                   </div>
                   <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
@@ -193,7 +193,7 @@ export default function SetariKds() {
           </div>
         ) : (
           <div className="rounded-[16px] border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-            Inca nu exista device-uri KDS imperecheate. Deschide aplicatia GuFo KDS si fa pairing din butonul <strong>Setari KDS</strong>.
+            Inca nu exista device-uri KDS imperecheate. Deschide aplicatia Gufo KDS si fa pairing din butonul <strong>Setari KDS</strong>.
           </div>
         )}
       </DocumentSection>
