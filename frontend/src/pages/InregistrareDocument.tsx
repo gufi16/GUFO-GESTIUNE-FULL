@@ -58,7 +58,11 @@ export default function InregistrareDocument() {
 
   return (
     <div className="space-y-6">
-      <PageHeader badge="operatiuni" title="Inregistrare documente" />
+      <PageHeader
+        badge="operatiuni"
+        title="Inregistrare documente"
+        subtitle="Alege rapid tipul de document pe care vrei sa il creezi si intra direct in fluxul operational potrivit pentru receptii, transferuri, consum sau productie."
+      />
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
         {cards.map((card) => {

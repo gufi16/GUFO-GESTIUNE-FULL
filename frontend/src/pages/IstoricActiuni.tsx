@@ -99,7 +99,11 @@ export default function IstoricActiuni() {
 
   return (
     <div className="space-y-3">
-      <PageHeader badge="control" title="Istoric actiuni ERP" />
+      <PageHeader
+        badge="control"
+        title="Istoric actiuni ERP"
+        subtitle="Verifici rapid cine a lucrat in ERP, ce a schimbat si in ce zona, cu filtre simple pentru audit operational si urmarirea activitatii."
+      />
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
         <DocumentMetric title="Evenimente" value={summary.total} tone="slate" />
@@ -114,6 +118,7 @@ export default function IstoricActiuni() {
 
       <DocumentSection
         title="Filtre"
+        description="Foloseste cautarea si intervalul pentru a restrange rapid istoricul la utilizatorii, actiunile sau zonele care te intereseaza."
         actions={
           <button className={documentButtonSecondaryClass} onClick={load} disabled={loading}>
             <RefreshCw size={16} className="mr-2" />
@@ -142,7 +147,7 @@ export default function IstoricActiuni() {
         </div>
       </DocumentSection>
 
-      <DocumentSection title="Istoric activitate">
+      <DocumentSection title="Istoric activitate" description="Registrul de mai jos aduna evenimentele relevante din ERP si le afiseaza in ordinea in care au fost inregistrate.">
         <div className="max-h-[70vh] overflow-auto rounded-[10px] border border-slate-200">
           <table className="min-w-full text-sm">
             <thead>

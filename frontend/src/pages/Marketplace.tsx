@@ -658,7 +658,11 @@ export default function MarketplacePage() {
 
   return (
     <div className="space-y-3">
-      <PageHeader badge="marketplace" title="Marketplace" />
+      <PageHeader
+        badge="marketplace"
+        title="Marketplace"
+        subtitle="Controlezi integrarile, maparile de produse si comenzile care intra din platforme externe, totul din acelasi registru operational."
+      />
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-4">
         <DocumentMetric title="Integrari active" value={activeIntegrations.length} tone="emerald" />
@@ -755,6 +759,7 @@ export default function MarketplacePage() {
             <div className="space-y-3">
               <DocumentSection
                 title={`Rutare si conectare ${platforms.find((item) => item.code === selectedPlatform)?.label || selectedPlatform}`}
+                description="Configurezi locatia, device-ul tinta si credentialele platformei, apoi verifici rapid daca integrarea este pregatita pentru comenzi reale."
                 actions={
                   <button type="button" className={documentButtonSecondaryClass} onClick={initialLoad} disabled={loading || saving}>
                     <RefreshCcw size={14} className="mr-1.5" />
@@ -1092,7 +1097,10 @@ export default function MarketplacePage() {
 
       {activeTab === "mapari" ? (
         <div className="space-y-3">
-          <DocumentSection title={`Catalog merchant ${selectedPlatformMeta?.label || selectedPlatform}`}>
+          <DocumentSection
+            title={`Catalog merchant ${selectedPlatformMeta?.label || selectedPlatform}`}
+            description="Filtrezi produsele detectate in merchant si pregatesti zona de mapare dintre platforma si produsele ERP."
+          >
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,260px)_minmax(0,260px)_auto]">
               <select value={mappingIntegrationId} onChange={(e) => setMappingIntegrationId(e.target.value)} className={documentInputClass}>
                 <option value="">Toate integrările</option>
@@ -1121,7 +1129,7 @@ export default function MarketplacePage() {
             </div>
           </DocumentSection>
 
-          <DocumentSection title="Produse merchant pentru mapare">
+          <DocumentSection title="Produse merchant pentru mapare" description="Alegi produsul ERP potrivit pentru fiecare produs extern si elimini rapid zonele nemapate care blocheaza fluxul.">
             <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
               {!filteredPlatformRecentExternalProducts.length ? (
                 <InlineNotice>Nu exista produse detectate pentru platforma selectata sau filtrul ales.</InlineNotice>
@@ -1173,7 +1181,7 @@ export default function MarketplacePage() {
             </div>
           </DocumentSection>
 
-          <DocumentSection title="Mapari salvate">
+          <DocumentSection title="Mapari salvate" description="Revizuiesti maparile deja create si confirmi rapid ce produs ERP este folosit in fiecare integrare activa.">
             <div className="space-y-2.5">
               {!platformMappings.length ? (
                 <InlineNotice>Nu exista mapari salvate inca.</InlineNotice>
@@ -1209,6 +1217,7 @@ export default function MarketplacePage() {
         <div className="space-y-3">
           <DocumentSection
             title="Comenzi marketplace"
+            description="Monitorizezi comenzile venite din platforme, vezi starea lor curenta si intri rapid in istoricul de procesare."
             actions={
               <button type="button" className={documentButtonSecondaryClass} onClick={loadOrders} disabled={loadingOrders}>
                 <RefreshCcw size={14} className="mr-1.5" />
