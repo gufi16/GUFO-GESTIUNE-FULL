@@ -34,7 +34,7 @@ This ERP should run as a multi-tenant SaaS with four clear layers:
 - The database is managed and backed up separately.
 - The system can scale per service, not as one large box.
 
-## Railway Layout
+## Self-Hosted Layout
 
 Recommended services:
 
@@ -130,11 +130,9 @@ Before onboarding larger tenants:
 
 ## Recommendation
 
-Railway is a good fit for the first serious SaaS rollout if this service split is respected.
+Best production shape:
 
-Best first production shape:
-
-- frontend on Railway
-- API on Railway
-- PostgreSQL on Railway
+- frontend static behind reverse proxy
+- API in its own container or service
+- PostgreSQL managed or self-hosted with backups
 - worker added immediately after staging is stable

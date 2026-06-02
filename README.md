@@ -51,22 +51,11 @@ npm run build
 npm run preview
 ```
 
-## Deploy pe Railway
-
-Stack recomandat:
-- `gufo-db` -> PostgreSQL
-- `gufo-api` -> API ERP
-- `gufo-worker` -> joburi async
-- `gufo-frontend` -> ERP + Control Panel
-
-Documentatie Railway:
-- [docs/railway-deployment.md](C:\Users\POSHARD\Desktop\poshard-saas-starter\poshard-saas-starter\docs\railway-deployment.md)
-- [docs/railway-env-example.md](C:\Users\POSHARD\Desktop\poshard-saas-starter\poshard-saas-starter\docs\railway-env-example.md)
+## Deploy
 
 Arhitectura recomandata:
 - [docs/deployment-architecture.md](C:\Users\POSHARD\Desktop\poshard-saas-starter\poshard-saas-starter\docs\deployment-architecture.md)
 
 ## Note
 
-- fisierele `render.yaml` si documentatia Render au ramas doar ca referinta veche
-- directia activa pentru deploy este acum Railway
+- directia activa pentru deploy este self-hosted, cu frontend static, API separat si worker separat

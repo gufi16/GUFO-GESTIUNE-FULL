@@ -11,10 +11,6 @@ function resolveHostedApiBase() {
     return "https://api.gufo.ink"
   }
 
-  if (hostname.endsWith(".up.railway.app")) {
-    return "https://gufo-gestiune-full-production.up.railway.app"
-  }
-
   return "https://api.gufo.ink"
 }
 
