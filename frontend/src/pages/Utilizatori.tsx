@@ -328,7 +328,11 @@ export default function Utilizatori() {
 
   return (
     <div className="space-y-3">
-      <PageHeader badge="configurare" title="Utilizatori ERP" />
+      <PageHeader
+        badge="configurare"
+        title="Utilizatori ERP"
+        subtitle="Administrezi utilizatorii ERP, rolurile lor, accesul pe firme, avatarul si credentialele folosite in POS sau KDS."
+      />
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-5">
         <DocumentMetric title="Total" value={summary.total} tone="slate" />
@@ -348,6 +352,7 @@ export default function Utilizatori() {
 
       <DocumentSection
         title="Lista utilizatori"
+        description="Vezi rapid toti utilizatorii activi sau inactivi, accesul pe firme si actiunile esentiale de administrare."
         actions={
           <>
             <button className={documentButtonSecondaryClass} onClick={loadUsers} disabled={loading}>

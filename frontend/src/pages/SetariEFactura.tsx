@@ -1173,6 +1173,7 @@ export default function SetariEFacturaPage() {
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
         <DocumentSection
           title="Flux firma"
+          description="Aici verifici daca firma este activata pentru SPV si in ce mediu ANAF functioneaza."
           actions={
             <button type="button" onClick={() => setActiveModal("flow")} className={documentButtonPrimaryClass}>
               Configureaza
@@ -1194,6 +1195,7 @@ export default function SetariEFacturaPage() {
 
         <DocumentSection
           title="Conectare ANAF"
+          description="Gestionezi tokenul OAuth ANAF si verifici rapid daca firma curenta este conectata corect pentru SPV."
           actions={
             <div className="flex gap-2">
               <button type="button" onClick={testOauthConnection} className={documentButtonSecondaryClass} disabled={testing || loading || !oauthStatus.connected}>
@@ -1324,6 +1326,9 @@ export default function SetariEFacturaPage() {
             </div>
           ) : (
             <div className="space-y-4">
+              <InlineNotice>
+                Configurezi doar contextul firmei curente. Autorizarea efectiva ANAF se face separat din zona de conectare.
+              </InlineNotice>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <DocumentField label="Activare flux SPV">
                   <label className="flex min-h-10 items-center gap-3 rounded-[14px] border border-slate-200 bg-slate-50 px-3 text-[13px] text-slate-700">

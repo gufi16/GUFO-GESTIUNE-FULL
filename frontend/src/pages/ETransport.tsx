@@ -1143,7 +1143,7 @@ export default function ETransportPage() {
       <DocumentTabs items={formPanels.map((panel) => ({ id: panel.key, title: panel.title }))} activeId={activePanel} onChange={setActivePanel} />
 
       {activePanel === "date" ? (
-      <DocumentSection title="Date notificare">
+      <DocumentSection title="Date notificare" description="Completezi documentul de transport, operatiunea si informatiile logistice de baza pentru notificare.">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <div className="space-y-1">
             <label className="block text-xs font-medium text-[#17324D]">Tip document transport</label>
@@ -1198,7 +1198,7 @@ export default function ETransportPage() {
       ) : null}
 
       {activePanel === "parties" ? (
-      <DocumentSection title="Organizator si partener">
+      <DocumentSection title="Organizator si partener" description="Stabilesti clar cine organizeaza transportul si cine este partenerul comercial implicat in operatiune.">
         <div className="grid gap-4 xl:grid-cols-2">
           <AddressEditor
             title="Organizator transport"
@@ -1253,7 +1253,7 @@ export default function ETransportPage() {
       ) : null}
 
       {activePanel === "route" ? (
-      <DocumentSection title="Loc start si loc final traseu">
+      <DocumentSection title="Loc start si loc final traseu" description="Definesti capetele rutei, fie ca sunt adrese complete, fie puncte de frontiera.">
         <div className="grid gap-4 xl:grid-cols-2">
           <div className="space-y-3 rounded-[16px] border border-slate-200 bg-white p-4">
             <div className="text-sm font-semibold text-slate-900">Loc start</div>
@@ -1319,6 +1319,7 @@ export default function ETransportPage() {
       {activePanel === "items" ? (
       <DocumentSection
         title="Bunuri transportate"
+        description="Adaugi bunurile din notificare, cantitatile si greutatile folosite pentru calculul si validarea e-Transport."
         actions={
           <button type="button" onClick={addLine} className={documentButtonSecondaryClass}>
             <Plus size={16} className="mr-2" />
@@ -1432,7 +1433,7 @@ export default function ETransportPage() {
             <DocumentMetric title="Valoare fara TVA" value={`${totals.totalValueRon.toLocaleString("ro-RO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON`} tone="amber" />
           </div>
 
-          <DocumentSection title="Verificare ANAF">
+          <DocumentSection title="Verificare ANAF" description="Controlezi starea tehnica a notificarii, XML-ul pregatit si raspunsurile ANAF dupa trimitere.">
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               {labelValue("Upload index", header.uploadIndex)}
               {labelValue("Download ID", header.downloadId)}
