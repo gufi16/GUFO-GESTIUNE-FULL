@@ -10,6 +10,7 @@ type HubModuleCardProps = {
   iconClassName?: string
   ctaLabel?: string
   className?: string
+  disabled?: boolean
 }
 
 export default function HubModuleCard({
@@ -21,12 +22,14 @@ export default function HubModuleCard({
   iconClassName = "bg-[#EAF0F6] text-[#17324D]",
   ctaLabel = "Deschide",
   className = "",
+  disabled = false,
 }: HubModuleCardProps) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`group rounded-[20px] border border-slate-200 bg-white p-4 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${className}`.trim()}
+      disabled={disabled}
+      className={`group rounded-[20px] border border-slate-200 bg-white p-4 text-left shadow-sm transition-all duration-200 ${disabled ? "cursor-not-allowed opacity-70" : "hover:-translate-y-0.5 hover:shadow-md"} ${className}`.trim()}
     >
       <div className="flex items-start justify-between gap-4">
         <span className={`flex h-10 w-10 items-center justify-center rounded-[14px] ${iconClassName}`}>
@@ -43,10 +46,14 @@ export default function HubModuleCard({
         <div className="mt-1.5 text-sm leading-6 text-slate-500">{description}</div>
       </div>
 
-      <div className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[#17324D]">
-        {ctaLabel}
-        <ArrowRight size={16} className="transition-transform duration-200 group-hover:translate-x-1" />
-      </div>
+      {disabled ? (
+        <div className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-slate-400">In curand</div>
+      ) : (
+        <div className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[#17324D]">
+          {ctaLabel}
+          <ArrowRight size={16} className="transition-transform duration-200 group-hover:translate-x-1" />
+        </div>
+      )}
     </button>
   )
 }
