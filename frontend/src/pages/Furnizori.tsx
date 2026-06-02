@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react"
 import PageHeader from "../components/PageHeader"
 import {
+  DocumentMetric,
+  DocumentSection,
   InlineNotice,
   documentButtonPrimaryClass,
   documentButtonSecondaryClass,
@@ -164,21 +166,44 @@ export default function FurnizoriPage() {
   }
 
   const filtered = useMemo(() => items, [items])
+  const stats = useMemo(
+    () => ({
+      total: items.length,
+      cuCif: items.filter((item) => String(item.cif || "").trim()).length,
+      cuContact: items.filter((item) => String(item.phone || item.email || "").trim()).length,
+    }),
+    [items],
+  )
 
   return (
     <div className="space-y-3">
       <PageHeader
         badge="nomenclator"
         title="Furnizori"
+        subtitle="Gestionezi partenerii de achizitie, datele fiscale si contactele folosite in receptii si documente."
       />
+
+      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
+        <DocumentMetric title="Furnizori" value={stats.total} tone="slate" />
+        <DocumentMetric title="Cu CIF" value={stats.cuCif} tone="blue" />
+        <DocumentMetric title="Cu date contact" value={stats.cuContact} tone="emerald" />
+      </div>
 
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+      <DocumentSection
+        title="Registru furnizori"
+        description="Vezi rapid baza de furnizori si deschizi direct fisa completa pentru actualizare sau completare dupa CUI."
+        actions={
+          <button type="button" onClick={openNewModal} className={documentButtonPrimaryClass}>
+            Adauga furnizor
+          </button>
+        }
+      >
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
             <div className="text-[16px] font-semibold text-[#17324D]">Lista furnizori</div>
-            <div className="mt-1 text-xs text-slate-500">{filtered.length} furnizori</div>
+            <div className="mt-1 text-xs text-slate-500">{filtered.length} rezultate in contextul curent</div>
           </div>
 
           <div className="flex w-full max-w-xl gap-2">
@@ -190,9 +215,6 @@ export default function FurnizoriPage() {
             />
             <button type="button" onClick={() => loadSuppliers(query.trim())} className={documentButtonSecondaryClass}>
               Cauta
-            </button>
-            <button type="button" onClick={openNewModal} className={documentButtonPrimaryClass}>
-              Adauga furnizor
             </button>
           </div>
         </div>
@@ -225,7 +247,7 @@ export default function FurnizoriPage() {
             ))
           )}
         </div>
-      </div>
+      </DocumentSection>
 
       {modalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">

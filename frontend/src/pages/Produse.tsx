@@ -253,7 +253,7 @@ function normalizeHostedImageUrl(value: any) {
 
 export function ProductsCatalogPage({
   title = "Produse",
-  subtitle = "Lista produselor simple, configurarea lor, clasificari, POS, SGR si retetare.",
+  subtitle = "Controlezi catalogul complet de produse, clasificarea operationala, setarile POS, SGR si logica de lot, expirare sau retetare.",
   fixedClassValue = null,
   addButtonLabel = "Adauga produs",
   searchPlaceholder = "Cauta rapid dupa produs, cod, categorie, departament sau ambalaj...",

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react"
 import PageHeader from "../components/PageHeader"
 import {
+  DocumentMetric,
+  DocumentSection,
   InlineNotice,
   documentButtonPrimaryClass,
   documentButtonSecondaryClass,
@@ -241,20 +243,44 @@ export default function ClientiPage() {
     )
   }, [items, search])
 
+  const stats = useMemo(
+    () => ({
+      total: items.length,
+      efacturaReady: items.filter((item) => isCustomerReadyForEfactura(item)).length,
+      active: items.filter((item) => item.isActive !== false).length,
+    }),
+    [items],
+  )
+
   return (
     <div className="space-y-3">
       <PageHeader
         badge="nomenclator"
         title="Clienti"
+        subtitle="Administrezi baza de clienti, datele comerciale si informatiile utile pentru facturare si e-Factura."
       />
+
+      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
+        <DocumentMetric title="Clienti" value={stats.total} tone="slate" />
+        <DocumentMetric title="Activi" value={stats.active} tone="blue" />
+        <DocumentMetric title="Pregatiti e-Factura" value={stats.efacturaReady} tone="emerald" />
+      </div>
 
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+      <DocumentSection
+        title="Registru clienti"
+        description="Cauti rapid dupa nume, CIF, cod, oras sau telefon si deschizi direct fisa pentru editare."
+        actions={
+          <button type="button" onClick={openNewModal} className={documentButtonPrimaryClass}>
+            Adauga client
+          </button>
+        }
+      >
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
             <div className="text-[16px] font-semibold text-[#17324D]">Lista clienti</div>
-            <div className="mt-1 text-xs text-slate-500">{filtered.length} clienti</div>
+            <div className="mt-1 text-xs text-slate-500">{filtered.length} rezultate in contextul curent</div>
           </div>
 
           <div className="flex w-full max-w-xl gap-2">
@@ -264,9 +290,6 @@ export default function ClientiPage() {
               placeholder="Cauta dupa nume, CIF, cod, oras sau telefon..."
               className={documentInputClass}
             />
-            <button type="button" onClick={openNewModal} className={documentButtonPrimaryClass}>
-              Adauga client
-            </button>
           </div>
         </div>
 
@@ -311,7 +334,7 @@ export default function ClientiPage() {
             })
           )}
         </div>
-      </div>
+      </DocumentSection>
 
       {modalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">

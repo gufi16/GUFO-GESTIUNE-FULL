@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react"
 import PageHeader from "../components/PageHeader"
 import {
   DocumentField,
+  DocumentMetric,
   DocumentSection,
   InlineNotice,
   documentButtonDangerClass,
@@ -311,34 +312,33 @@ export default function GestiuniPage() {
 
   const defaultWarehouse = warehouses.find((warehouse) => warehouse.isDefault)
   const activeCount = warehouses.filter((warehouse) => warehouse.isActive).length
+  const typedCount = useMemo(
+    () => ({
+      raw: warehouses.filter((warehouse) => warehouse.type === "RAW_MATERIALS").length,
+      finished: warehouses.filter((warehouse) => warehouse.type === "FINISHED_GOODS").length,
+    }),
+    [warehouses],
+  )
 
   return (
     <div className="space-y-3">
-      <PageHeader badge="operational" title="Gestiuni" />
+      <PageHeader
+        badge="operational"
+        title="Gestiuni"
+        subtitle="Configurezi gestiunile pe locatie, alegi default-ul operational si mentii clar separate materiile prime, produsele finite si stocurile auxiliare."
+      />
 
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-4">
-        <div className="rounded-[16px] border border-slate-200 bg-white px-4 py-3 shadow-sm">
-          <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Mod</div>
-          <div className="mt-1 text-sm font-semibold text-[#17324D]">{warehouseConfig.multiWarehouseEnabled ? "Multi-gestiune" : "Simplu"}</div>
-        </div>
-        <div className="rounded-[16px] border border-slate-200 bg-white px-4 py-3 shadow-sm">
-          <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Locatie activa</div>
-          <div className="mt-1 text-sm font-semibold text-[#17324D]">{selectedLocationName}</div>
-        </div>
-        <div className="rounded-[16px] border border-slate-200 bg-white px-4 py-3 shadow-sm">
-          <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Gestiuni active</div>
-          <div className="mt-1 text-sm font-semibold text-[#17324D]">{activeCount}</div>
-        </div>
-        <div className="rounded-[16px] border border-slate-200 bg-white px-4 py-3 shadow-sm">
-          <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Default</div>
-          <div className="mt-1 text-sm font-semibold text-[#17324D]">{defaultWarehouse?.name || "-"}</div>
-        </div>
+        <DocumentMetric title="Mod" value={warehouseConfig.multiWarehouseEnabled ? "Multi-gestiune" : "Simplu"} tone="slate" />
+        <DocumentMetric title="Locatie activa" value={selectedLocationName} tone="blue" />
+        <DocumentMetric title="Gestiuni active" value={activeCount} tone="emerald" />
+        <DocumentMetric title="Default" value={defaultWarehouse?.name || "-"} tone="amber" />
       </div>
 
-      <DocumentSection title="Locatii">
+      <DocumentSection title="Locatii" description="Alegi rapid contextul activ pe care lucrezi si vezi doar gestiunile relevante pentru locatia selectata.">
         <div className="flex flex-wrap gap-2">
           {locations.map((location) => {
             const active = location.id === selectedLocationId
@@ -369,6 +369,7 @@ export default function GestiuniPage() {
 
       <DocumentSection
         title={`Lista gestiuni - ${selectedLocationName}`}
+        description={`In contextul curent ai ${warehouses.length} gestiuni, dintre care ${typedCount.raw} pentru materii prime si ${typedCount.finished} pentru produse finite.`}
         actions={
           <>
             <button type="button" className={documentButtonSecondaryClass} onClick={() => selectedLocationId && loadWarehouses(selectedLocationId)} disabled={!selectedLocationId}>

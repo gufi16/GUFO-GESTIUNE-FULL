@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from "react"
 
 export function DocumentSection({
   title,
+  description,
   actions,
   children,
 }: {
@@ -15,6 +16,7 @@ export function DocumentSection({
       <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="text-[17px] font-semibold tracking-[-0.01em] text-[#17324D]">{title}</h2>
+          {description ? <p className="mt-1 text-sm leading-6 text-slate-500">{description}</p> : null}
         </div>
         {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
       </div>
