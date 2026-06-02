@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { RefreshCcw, Save } from "lucide-react"
 import PageHeader from "../components/PageHeader"
 import {
+  DocumentMetric,
   DocumentSection,
   InlineNotice,
   documentButtonPrimaryClass,
@@ -273,17 +274,24 @@ export default function SetariNumerotare() {
   return (
     <div className="space-y-3">
       <PageHeader
-        badge="simplificat"
+        badge="configurare"
         title="Serii si numerotare"
-        subtitle="Schimbi rapid seria si urmatorul numar, fara carduri mari si fara pasi inutili."
+        subtitle="Schimbi rapid seriile si urmatoarele numere pentru documente si coduri interne, fara sa pierzi claritatea configurarii."
       />
+
+      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-4">
+        <DocumentMetric title="Documente" value={documentRows.length} tone="slate" />
+        <DocumentMetric title="Coduri automate" value={codeRows.length} tone="blue" />
+        <DocumentMetric title="Status" value={loading ? "Se incarca" : "Pregatit"} tone="emerald" />
+        <DocumentMetric title="Actiune" value={saving ? "Se salveaza" : "Editabil"} tone="amber" />
+      </div>
 
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
 
       <DocumentSection
         title="Documente numerotate local"
-        description="Aici configurezi seriile si numerele pentru documentele generate in aplicatie."
+        description="Aici configurezi seriile si numerele pentru documentele generate in aplicatie, astfel incat fluxurile comerciale si operationale sa ramana coerente."
         actions={
           <>
             <button type="button" className={documentButtonSecondaryClass} onClick={load} disabled={loading || saving}>
@@ -300,7 +308,7 @@ export default function SetariNumerotare() {
         <NumberingTable rows={documentRows} form={form} loading={loading} saving={saving} onChange={update} />
       </DocumentSection>
 
-      <DocumentSection title="Coduri automate" description="Gestionezi seriile automate pentru parteneri si alte coduri interne care trebuie sa ramana coerente in toata compania.">
+      <DocumentSection title="Coduri automate" description="Gestionezi prefixele si seriile automate pentru parteneri, astfel incat codurile interne sa ramana coerente in toata compania.">
         <NumberingTable rows={codeRows} form={form} loading={loading} saving={saving} onChange={update} />
       </DocumentSection>
     </div>

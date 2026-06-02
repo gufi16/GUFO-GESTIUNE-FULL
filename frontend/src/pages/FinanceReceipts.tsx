@@ -7,7 +7,7 @@ export default function FinanceReceipts() {
       <PageHeader
         badge="financiar"
         title="Vanzari / Bon"
-        subtitle="Monitorizezi bonurile emise din Android POS intr-o pagina simpla, clara si potrivita pentru verificarea rapida a incasarilor si documentelor."
+        subtitle="Monitorizezi bonurile emise din Android POS intr-un registru clar, potrivit pentru verificarea rapida a incasarilor, produselor si documentelor fiscale."
       />
       <div className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm shadow-slate-900/[0.03] md:p-5">
         <PosReceiptsView />
