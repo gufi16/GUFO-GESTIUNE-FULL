@@ -385,19 +385,7 @@ export default function StocPage() {
 
   const filteredGlobalStock = useMemo(() => globalStock.filter((item) => matchesStockClassFilter(item, stockClassFilter)), [globalStock, stockClassFilter])
   const filteredLocationStock = useMemo(() => stock.filter((item) => matchesStockClassFilter(item, stockClassFilter)), [stock, stockClassFilter])
-  const filteredLots = useMemo(() => {
-    const fromTs = fromDate ? new Date(`${fromDate}T00:00:00`).getTime() : null
-    const toTs = toDate ? new Date(`${toDate}T23:59:59`).getTime() : null
-    return lots.filter((item) => {
-      if (!matchesStockClassFilter(item, stockClassFilter)) return false
-      if (!item?.expiryDate || (!fromTs && !toTs)) return true
-      const expiryTs = new Date(item.expiryDate).getTime()
-      if (Number.isNaN(expiryTs)) return true
-      if (fromTs !== null && expiryTs < fromTs) return false
-      if (toTs !== null && expiryTs > toTs) return false
-      return true
-    })
-  }, [lots, stockClassFilter, fromDate, toDate])
+  const filteredLots = useMemo(() => lots.filter((item) => matchesStockClassFilter(item, stockClassFilter)), [lots, stockClassFilter])
   const filteredMoves = useMemo(() => moves.filter((item) => matchesStockClassFilter(item, stockClassFilter)), [moves, stockClassFilter])
   const lowStockCount = useMemo(
     () => filteredLocationStock.filter((item) => Number(item?.qty || 0) <= 0).length,
@@ -455,7 +443,15 @@ export default function StocPage() {
   )
 
   const pagedLots = useMemo(
-    () => filteredLots.slice((lotPage - 1) * pageSize, lotPage * pageSize),
+    () =>
+      [...filteredLots]
+        .sort((a, b) => {
+          const aExpiry = a.expiryDate ? new Date(a.expiryDate).getTime() : Number.MAX_SAFE_INTEGER
+          const bExpiry = b.expiryDate ? new Date(b.expiryDate).getTime() : Number.MAX_SAFE_INTEGER
+          if (aExpiry !== bExpiry) return aExpiry - bExpiry
+          return new Date(a.receivedAt || 0).getTime() - new Date(b.receivedAt || 0).getTime()
+        })
+        .slice((lotPage - 1) * pageSize, lotPage * pageSize),
     [filteredLots, lotPage]
   )
 
@@ -547,40 +543,14 @@ export default function StocPage() {
 
       <div className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm">
         <div className="grid gap-3 lg:grid-cols-[1.3fr,1fr]">
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-5">
             <div style={filterField}>
               <label style={filterLabel}>Locatie activa</label>
-              <select
-                value={locationId}
-                onChange={(e) => setLocationId(e.target.value)}
-                style={filterInput}
-              >
-                <option value="">Toate locatiile</option>
-                {locations.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
+              <div style={readOnlyFilterField}>{activeLocationName}</div>
             </div>
             <div style={filterField}>
               <label style={filterLabel}>Gestiune activa</label>
-              <select
-                value={warehouseId}
-                onChange={(e) => {
-                  setWarehouseId(e.target.value)
-                  setActiveWarehouseId(e.target.value)
-                }}
-                style={filterInput}
-                disabled={!warehouseEnabled || !locationId}
-              >
-                <option value="">Toate gestiunile</option>
-                {warehouses.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.code ? `${item.name} (${item.code})` : item.name}
-                  </option>
-                ))}
-              </select>
+              <div style={readOnlyFilterField}>{activeWarehouseName}</div>
             </div>
             <div style={filterField}>
               <label style={filterLabel}>Cautare</label>
@@ -810,17 +780,18 @@ export default function StocPage() {
               <div className="mb-3 grid grid-cols-1 gap-2.5 md:grid-cols-3">
                 <SummaryMetric label="Loturi active" value={filteredLots.length} hint="pe filtre" />
                 <SummaryMetric label="Expira curand" value={expiringLotsSoonCount} hint="in 7 zile" />
-                <SummaryMetric label="Gestiune" value={warehouseEnabled ? activeWarehouseName : "Toate"} hint="context activ" />
+                <SummaryMetric label="Ordine consum" value="FIFO / FEFO" hint="dupa expirare si receptie" />
               </div>
               <Table
-                headers={["Produs", "Control", "Lot", "Expira", "Locatie", "Gestiune", "Cant. initiala", "Cant. ramasa", "Cost unitar", "Valoare ramasa"]}
-                rows={pagedLots.map((lot) => [
+                headers={["Produs", "Control", "Lot", "Ordine", "Expira", "Locatie", "Gestiune", "Cant. initiala", "Cant. ramasa", "Cost unitar", "Valoare ramasa"]}
+                rows={pagedLots.map((lot, index) => [
                   <button type="button" style={lotProductButton} onClick={() => setSelectedLot(lot)}>
                     <div style={{ fontWeight: 700 }}>{lot.productName}</div>
                     <div style={{ color: "#64748b", fontSize: 12 }}>{lot.sku || "-"}</div>
                   </button>,
                   <ProductControlBadges item={lot} />,
                   lot.lotNo,
+                  <span style={{ ...miniBadge, ...miniBadgeSlate }}>FIFO {((lotPage - 1) * pageSize) + index + 1}</span>,
                   <div>
                     <div>{formatShortDate(lot.expiryDate)}</div>
                     {lot.expiryDate ? (
