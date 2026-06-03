@@ -820,13 +820,14 @@ app.post("/api/v1/auth/login", async (req, res) => {
     return res.status(401).json({ ok: false, error: "Invalid credentials" })
   }
 
+  let loginTenantSubdomain = ""
   const requestedSubdomain = getTenantSubdomainFromRequest(req)
   if (requestedSubdomain) {
     const loginTenant = await prisma.tenant.findUnique({
       where: { id: user.tenantId },
       select: { subdomain: true },
     })
-    const loginTenantSubdomain = String(loginTenant?.subdomain || "").trim().toLowerCase()
+    loginTenantSubdomain = String(loginTenant?.subdomain || "").trim().toLowerCase()
     if (!loginTenantSubdomain || loginTenantSubdomain !== requestedSubdomain) {
       return res.status(403).json({
         ok: false,
@@ -856,7 +857,6 @@ app.post("/api/v1/auth/login", async (req, res) => {
   })
   setErpAuthCookie(req, res, token)
   setErpCsrfCookie(req, res, csrfToken)
-  const loginTenantSubdomain = String(loginTenant?.subdomain || "").trim().toLowerCase()
   if (loginTenantSubdomain) {
     setErpTenantCookie(req, res, loginTenantSubdomain)
   }
