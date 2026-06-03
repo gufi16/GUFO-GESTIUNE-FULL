@@ -9,7 +9,7 @@ import { z } from "zod"
 import fs from "fs"
 import path from "path"
 import crypto from "crypto"
-import { ensureUploadSubdir, getUploadsRoot } from "./lib/uploads"
+import { assertPersistentUploadsConfig, ensureUploadSubdir, getUploadsRoot } from "./lib/uploads"
 import { loadEnv } from "./lib/loadEnv"
 
 import { prisma } from "./lib/prisma"
@@ -70,6 +70,7 @@ const AUTH_RATE_LIMITS = {
 } as const
 
 const uploadsDir = getUploadsRoot()
+const uploadsConfig = assertPersistentUploadsConfig()
 ensureUploadSubdir("products")
 ensureUploadSubdir("categories")
 
@@ -84,6 +85,8 @@ if (!String(process.env.UPLOADS_DIR || "").trim()) {
     `[uploads] UPLOADS_DIR is not set. Files are stored in ${uploadsDir}. ` +
       `In Docker production you should mount this path persistently, otherwise rebuilds can remove uploaded files.`
   )
+} else {
+  console.info(`[uploads] Persistent storage root: ${uploadsConfig.effectiveRoot}`)
 }
 
 function isSecureCookieRequest(req: express.Request) {

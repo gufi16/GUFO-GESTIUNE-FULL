@@ -1,6 +1,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import { prisma } from "../lib/prisma"
+import { getUploadsConfig } from "../lib/uploads"
 
 type CheckResult = {
   name: string
@@ -38,6 +39,15 @@ function assertEnvBasics() {
     "Dev bypass flags disabled",
     !allowDevLogin && !allowDevToken,
     "Disable ALLOW_DEV_CONTROL_PANEL_LOGIN and ALLOW_DEV_CONTROL_PANEL_TOKEN in production."
+  )
+
+  const uploadsConfig = getUploadsConfig()
+  addResult(
+    "Persistent uploads storage configured",
+    !uploadsConfig.usingFallbackRoot || uploadsConfig.allowEphemeralUploads,
+    uploadsConfig.allowEphemeralUploads
+      ? "ALLOW_EPHEMERAL_UPLOADS=true bypass is active. Remove it before selling to clients."
+      : "Set UPLOADS_DIR to a persistent mounted path. Fallback uploads inside app/container are unsafe on redeploy."
   )
 }
 

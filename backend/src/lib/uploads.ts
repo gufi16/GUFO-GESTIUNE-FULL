@@ -12,6 +12,36 @@ export function getUploadsRoot() {
   return configured || path.resolve(process.cwd(), "uploads")
 }
 
+export function getUploadsConfig() {
+  const configuredRoot = normalizeAbsolutePath(process.env.UPLOADS_DIR)
+  const effectiveRoot = configuredRoot || path.resolve(process.cwd(), "uploads")
+  const usingFallbackRoot = !configuredRoot
+  const allowEphemeralUploads = process.env.ALLOW_EPHEMERAL_UPLOADS === "true"
+  const isProduction = process.env.NODE_ENV === "production"
+
+  return {
+    configuredRoot,
+    effectiveRoot,
+    usingFallbackRoot,
+    allowEphemeralUploads,
+    isProduction,
+  }
+}
+
+export function assertPersistentUploadsConfig() {
+  const config = getUploadsConfig()
+
+  if (config.isProduction && config.usingFallbackRoot && !config.allowEphemeralUploads) {
+    throw new Error(
+      `UPLOADS_DIR is required in production. ` +
+        `Refusing to start with ephemeral uploads at ${config.effectiveRoot}. ` +
+        `Set UPLOADS_DIR to a persistent mounted path or explicitly set ALLOW_EPHEMERAL_UPLOADS=true only for temporary use.`
+    )
+  }
+
+  return config
+}
+
 export function ensureUploadsRoot() {
   const root = getUploadsRoot()
   fs.mkdirSync(root, { recursive: true })
@@ -62,4 +92,3 @@ export function normalizeStoredUploadUrl(value: any) {
 
   return text
 }
-
