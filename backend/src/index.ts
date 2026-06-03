@@ -59,7 +59,6 @@ app.set("trust proxy", true)
 const PORT = Number(process.env.PORT || 3001)
 const CORS_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:5173"
 const CORS_ORIGINS = CORS_ORIGIN.split(",").map((value) => value.trim()).filter(Boolean)
-const ALLOW_TEST_ORIGIN = process.env.ALLOW_TEST_ORIGIN === "true"
 const ALLOW_API_ORIGIN = process.env.ALLOW_API_ORIGIN === "true"
 const ALLOW_DEV_CONTROL_PANEL_LOGIN = process.env.ALLOW_DEV_CONTROL_PANEL_LOGIN === "true"
 const JWT_SECRET = getJwtSecret()
@@ -255,7 +254,7 @@ async function isAllowedOrigin(origin?: string) {
 
   if (/^(localhost|127\.0\.0\.1)$/i.test(hostname)) return true
   if (hostname === "app.gufo.ink") return true
-  if (hostname === "test.gufo.ink") return ALLOW_TEST_ORIGIN
+  if (hostname === "test.gufo.ink") return true
   if (hostname === "api.gufo.ink") return ALLOW_API_ORIGIN
 
   const subdomain = getTenantSubdomainFromHostname(hostname)
