@@ -79,6 +79,12 @@ Short term:
 - keep uploads on persistent disk, never only inside a disposable container layer
 - set `UPLOADS_DIR` to the mounted path used by the API container
 - mount the same host folder back into the container on every deploy
+- keep all ERP file artifacts there:
+  - product images
+  - category images
+  - e-Factura agent installers
+  - certificates
+  - exported XML/PDF/document bundles
 
 Safer target:
 - object storage or CDN-backed storage for:
@@ -94,12 +100,28 @@ If API runs in Docker, uploaded files must be on a persistent volume. Example:
 services:
   api:
     volumes:
-      - /opt/poshard/gufo-gestiune-full/uploads:/app/uploads
+      - /opt/poshard/gufo-gestiune-storage/uploads:/app/uploads
     environment:
       UPLOADS_DIR: /app/uploads
 ```
 
 Without this, image files can disappear after rebuilds even if `imageUrl` remains saved in the database.
+
+### Hetzner Practical Rule
+
+For the current Hetzner layout, keep a dedicated host folder such as:
+
+```bash
+/opt/poshard/gufo-gestiune-storage/uploads
+```
+
+and always mount it into the API container as:
+
+```bash
+/app/uploads
+```
+
+This mount must survive every API rebuild/recreate. If the container starts without it, production startup should fail rather than accept ephemeral uploads.
 
 ## Database Stability
 

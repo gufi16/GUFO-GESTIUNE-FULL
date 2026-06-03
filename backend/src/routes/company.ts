@@ -48,7 +48,6 @@ const certUploadsDir = ensureEfacturaCertDir()
 const efacturaAgentDownloadDirs = Array.from(new Set([
   String(process.env.GUFO_EFACTURA_AGENT_DOWNLOAD_DIR || "").trim(),
   efacturaAgentUploadsDir,
-  path.join(process.cwd(), "..", "uploads", "efactura-agent"),
 ].filter(Boolean)))
 
 const certStorage = multer.diskStorage({
