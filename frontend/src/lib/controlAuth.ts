@@ -1,4 +1,4 @@
-import { api, clearControlToken } from "./api"
+import { api, clearControlToken, setControlToken } from "./api"
 
 type ControlLoginResponse = {
   ok: boolean
@@ -8,6 +8,7 @@ type ControlLoginResponse = {
 
 type ControlMeResponse = {
   ok: boolean
+  access_token?: string
   user_id: string
   role: string
   email: string
@@ -24,14 +25,21 @@ export async function controlLogin(email: string, password: string) {
     throw new Error("Token lipsa in raspunsul de login")
   }
 
-  localStorage.setItem("control_token", token)
+  setControlToken(token)
   return data
 }
 
 export async function controlMe() {
-  return await api<ControlMeResponse>("/api/v1/admin/me")
+  const data = await api<ControlMeResponse>("/api/v1/admin/me")
+  if (data.access_token) {
+    setControlToken(data.access_token)
+  }
+  return data
 }
 
-export function controlLogout() {
+export async function controlLogout() {
+  await api("/api/v1/admin/auth/logout", {
+    method: "POST",
+  }).catch(() => null)
   clearControlToken()
 }

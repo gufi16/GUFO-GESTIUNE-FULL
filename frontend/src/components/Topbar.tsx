@@ -343,8 +343,8 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
     setActiveWarehouseId(normalized)
   }
 
-  function handleIesire() {
-    logout()
+  async function handleIesire() {
+    await logout()
     navigate("/login")
   }
 

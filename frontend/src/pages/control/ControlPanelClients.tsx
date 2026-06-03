@@ -324,7 +324,7 @@ export default function ControlPanelClients() {
   async function handleIesire() {
     try {
       setLoggingOut(true)
-    controlLogout()
+      await controlLogout()
       navigate("/cp/login", { replace: true })
     } finally {
       setLoggingOut(false)

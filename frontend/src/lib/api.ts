@@ -1,5 +1,10 @@
 import { repairDeepStrings, repairText } from "./textRepair"
 
+const ERP_TOKEN_KEY = "erp_session_token"
+const CONTROL_TOKEN_KEY = "control_session_token"
+const LEGACY_ERP_TOKEN_KEYS = ["access_token", "token"] as const
+const LEGACY_CONTROL_TOKEN_KEYS = ["control_token"] as const
+
 const envApiBase = (import.meta as any)?.env?.VITE_API_URL?.replace(/\/+$/, "")
 const hostname = typeof window !== "undefined" ? window.location.hostname || "" : ""
 const isLocalHost = /^(localhost|127\.0\.0\.1)$/i.test(hostname)
@@ -15,6 +20,37 @@ function resolveHostedApiBase() {
 }
 
 export const API_BASE = envApiBase || (isLocalHost ? "http://localhost:3001" : resolveHostedApiBase())
+
+function readSessionStorage(key: string) {
+  if (typeof window === "undefined") return ""
+  return window.sessionStorage.getItem(key) || ""
+}
+
+function writeSessionStorage(key: string, value: string) {
+  if (typeof window === "undefined") return
+  if (value) {
+    window.sessionStorage.setItem(key, value)
+  } else {
+    window.sessionStorage.removeItem(key)
+  }
+}
+
+function migrateLegacyToken(sessionKey: string, legacyKeys: readonly string[]) {
+  if (typeof window === "undefined") return ""
+
+  const existing = readSessionStorage(sessionKey)
+  if (existing) return existing
+
+  for (const legacyKey of legacyKeys) {
+    const legacyValue = window.localStorage.getItem(legacyKey) || ""
+    if (!legacyValue) continue
+    writeSessionStorage(sessionKey, legacyValue)
+    window.localStorage.removeItem(legacyKey)
+    return legacyValue
+  }
+
+  return ""
+}
 
 export function resolvePublicAssetUrl(value?: string | null): string {
   const text = String(value || "").trim()
@@ -45,7 +81,7 @@ function resolveTokenByPath(path?: string): string {
 
   const isAdminApi = normalizedPath.startsWith("/api/v1/admin/")
   if (isAdminApi) {
-    return localStorage.getItem("control_token") || ""
+    return readSessionStorage(CONTROL_TOKEN_KEY) || migrateLegacyToken(CONTROL_TOKEN_KEY, LEGACY_CONTROL_TOKEN_KEYS)
   }
 
   const pathname =
@@ -54,14 +90,14 @@ function resolveTokenByPath(path?: string): string {
     pathname.startsWith("/control-panel") || pathname.startsWith("/cp")
 
   if (isControlPanelRoute && normalizedPath) {
-    return localStorage.getItem("access_token") || localStorage.getItem("token") || ""
+    return readSessionStorage(ERP_TOKEN_KEY) || migrateLegacyToken(ERP_TOKEN_KEY, LEGACY_ERP_TOKEN_KEYS)
   }
 
   if (isControlPanelRoute) {
-    return localStorage.getItem("control_token") || ""
+    return readSessionStorage(CONTROL_TOKEN_KEY) || migrateLegacyToken(CONTROL_TOKEN_KEY, LEGACY_CONTROL_TOKEN_KEYS)
   }
 
-  return localStorage.getItem("access_token") || localStorage.getItem("token") || ""
+  return readSessionStorage(ERP_TOKEN_KEY) || migrateLegacyToken(ERP_TOKEN_KEY, LEGACY_ERP_TOKEN_KEYS)
 }
 
 export function getToken(path?: string): string {
@@ -69,17 +105,39 @@ export function getToken(path?: string): string {
 }
 
 export function setToken(token: string) {
-  localStorage.setItem("access_token", token)
-  localStorage.setItem("token", token)
+  writeSessionStorage(ERP_TOKEN_KEY, token)
+  LEGACY_ERP_TOKEN_KEYS.forEach((key) => {
+    if (typeof window !== "undefined") window.localStorage.removeItem(key)
+  })
 }
 
 export function clearErpToken() {
-  localStorage.removeItem("access_token")
-  localStorage.removeItem("token")
+  writeSessionStorage(ERP_TOKEN_KEY, "")
+  LEGACY_ERP_TOKEN_KEYS.forEach((key) => {
+    if (typeof window !== "undefined") window.localStorage.removeItem(key)
+  })
 }
 
 export function clearControlToken() {
-  localStorage.removeItem("control_token")
+  writeSessionStorage(CONTROL_TOKEN_KEY, "")
+  LEGACY_CONTROL_TOKEN_KEYS.forEach((key) => {
+    if (typeof window !== "undefined") window.localStorage.removeItem(key)
+  })
+}
+
+export function setControlToken(token: string) {
+  writeSessionStorage(CONTROL_TOKEN_KEY, token)
+  LEGACY_CONTROL_TOKEN_KEYS.forEach((key) => {
+    if (typeof window !== "undefined") window.localStorage.removeItem(key)
+  })
+}
+
+export function hasErpSession() {
+  return Boolean(readSessionStorage(ERP_TOKEN_KEY) || migrateLegacyToken(ERP_TOKEN_KEY, LEGACY_ERP_TOKEN_KEYS))
+}
+
+export function hasControlSession() {
+  return Boolean(readSessionStorage(CONTROL_TOKEN_KEY) || migrateLegacyToken(CONTROL_TOKEN_KEY, LEGACY_CONTROL_TOKEN_KEYS))
 }
 
 export function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
@@ -111,6 +169,7 @@ export async function api<T = any>(path: string, options: ApiOptions = {}): Prom
     ...options,
     headers,
     cache: "no-store",
+    credentials: "include",
   })
 
   if (options.raw) {

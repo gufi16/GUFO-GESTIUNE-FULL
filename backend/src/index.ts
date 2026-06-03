@@ -14,7 +14,7 @@ import { loadEnv } from "./lib/loadEnv"
 
 import { prisma } from "./lib/prisma"
 import { getPrimaryTenantCompany } from "./lib/companyResolver"
-import { hashSecret, signAccessToken, verifySecret } from "./lib/auth"
+import { getJwtSecret, hashSecret, signAccessToken, verifySecret } from "./lib/auth"
 import { writeAuditLogFromRequest, writeExplicitAuditLog } from "./lib/audit"
 import { requireAuth, AuthedRequest } from "./middleware/requireAuth"
 import { hasSmtpConfig, sendMail } from "./lib/mailer"
@@ -59,9 +59,8 @@ app.set("trust proxy", true)
 const PORT = Number(process.env.PORT || 3001)
 const CORS_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:5173"
 const CORS_ORIGINS = CORS_ORIGIN.split(",").map((value) => value.trim()).filter(Boolean)
-const JWT_SECRET =
-  process.env.JWT_SECRET || (process.env.NODE_ENV !== "production" ? "dev_secret" : "")
 const ALLOW_DEV_CONTROL_PANEL_LOGIN = process.env.ALLOW_DEV_CONTROL_PANEL_LOGIN === "true"
+const JWT_SECRET = getJwtSecret()
 const authRateLimitBuckets = new Map<string, { count: number; resetAt: number }>()
 const AUTH_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000
 const AUTH_RATE_LIMITS = {
@@ -74,11 +73,54 @@ const uploadsDir = getUploadsRoot()
 ensureUploadSubdir("products")
 ensureUploadSubdir("categories")
 
+const ERP_AUTH_COOKIE = "gufo_erp_session"
+const CONTROL_AUTH_COOKIE = "gufo_control_session"
+
 if (!String(process.env.UPLOADS_DIR || "").trim()) {
   console.warn(
     `[uploads] UPLOADS_DIR is not set. Files are stored in ${uploadsDir}. ` +
       `In Docker production you should mount this path persistently, otherwise rebuilds can remove uploaded files.`
   )
+}
+
+function isSecureCookieRequest(req: express.Request) {
+  const originHost = getOriginHostname(req)
+  const requestHost = getRequestHostname(req)
+  const host = originHost || requestHost
+  return !/^(localhost|127\.0\.0\.1)$/i.test(host)
+}
+
+function buildAuthCookieOptions(req: express.Request) {
+  const secure = isSecureCookieRequest(req)
+  return {
+    httpOnly: true,
+    secure,
+    sameSite: "lax" as const,
+    path: "/",
+    maxAge: 1000 * 60 * 60 * 24 * 30,
+  }
+}
+
+function setErpAuthCookie(req: express.Request, res: express.Response, token: string) {
+  res.cookie(ERP_AUTH_COOKIE, token, buildAuthCookieOptions(req))
+}
+
+function clearErpAuthCookie(req: express.Request, res: express.Response) {
+  res.clearCookie(ERP_AUTH_COOKIE, {
+    ...buildAuthCookieOptions(req),
+    maxAge: undefined,
+  })
+}
+
+function setControlAuthCookie(req: express.Request, res: express.Response, token: string) {
+  res.cookie(CONTROL_AUTH_COOKIE, token, buildAuthCookieOptions(req))
+}
+
+function clearControlAuthCookie(req: express.Request, res: express.Response) {
+  res.clearCookie(CONTROL_AUTH_COOKIE, {
+    ...buildAuthCookieOptions(req),
+    maxAge: undefined,
+  })
 }
 
 app.disable("etag")
@@ -142,9 +184,6 @@ app.use((req, res, next) => {
 })
 
 function signPosToken(payload: { tenantId: string; terminalId: string; deviceId: string }) {
-  if (!JWT_SECRET) {
-    throw new Error("JWT_SECRET is required in production")
-  }
   return jwt.sign(payload, JWT_SECRET, { expiresIn: "30d" })
 }
 
@@ -592,6 +631,7 @@ app.post("/api/v1/auth/login", async (req, res) => {
     email: user.email,
     activeCompanyId: companies.length === 1 ? activeCompany?.id || null : null,
   })
+  setErpAuthCookie(req, res, token)
 
   void writeExplicitAuditLog({
     tenantId: user.tenantId,
@@ -672,6 +712,7 @@ app.post("/api/v1/auth/select-company", requireAuth, async (req: AuthedRequest, 
     email: auth.email || undefined,
     activeCompanyId: company.id,
   })
+  setErpAuthCookie(req, res, token)
 
   return res.json({
     ok: true,
@@ -751,11 +792,22 @@ app.post("/api/v1/admin/auth/login", async (req, res) => {
     email: controlEmail,
     controlPanel: true,
   })
+  setControlAuthCookie(req, res, token)
 
   return res.json({
     ok: true,
     access_token: token,
   })
+})
+
+app.post("/api/v1/auth/logout", (_req, res) => {
+  clearErpAuthCookie(_req, res)
+  return res.json({ ok: true })
+})
+
+app.post("/api/v1/admin/auth/logout", (_req, res) => {
+  clearControlAuthCookie(_req, res)
+  return res.json({ ok: true })
 })
 
 app.post("/api/v1/auth/forgot-password", async (req, res) => {
@@ -938,9 +990,18 @@ app.get("/api/v1/admin/me", requireAuth, async (req: AuthedRequest, res) => {
   }
 
   const auth = req.auth!
+  const token = signAccessToken({
+    tenantId: null,
+    userId: auth.userId,
+    role: auth.role,
+    email: auth.email || undefined,
+    controlPanel: true,
+  })
+  setControlAuthCookie(req, res, token)
 
   return res.json({
     ok: true,
+    access_token: token,
     user_id: auth.userId,
     role: auth.role,
     email: auth.email || process.env.CONTROL_PANEL_EMAIL || "owner",
@@ -1024,9 +1085,18 @@ app.get("/api/v1/me", requireAuth, async (req: AuthedRequest, res) => {
     { id: auth.userId, tenantId: auth.tenantId, role: auth.role },
     auth.activeCompanyId
   )
+  const token = signAccessToken({
+    tenantId: auth.tenantId,
+    userId: auth.userId,
+    role: auth.role,
+    email: user.email,
+    activeCompanyId: activeCompany?.id || null,
+  })
+  setErpAuthCookie(req, res, token)
 
   return res.json({
     ok: true,
+    access_token: token,
     tenant_id: auth.tenantId,
     user_id: auth.userId,
     role: auth.role,

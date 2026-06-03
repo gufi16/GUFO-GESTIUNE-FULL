@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react"
 import { Navigate } from "react-router-dom"
-import { clearErpToken } from "../lib/api"
-import { getToken } from "../lib/api"
+import { clearErpToken, hasErpSession } from "../lib/api"
 import { me, selectCompany } from "../lib/auth"
 
 type CompanyChoice = {
@@ -13,7 +12,6 @@ type CompanyChoice = {
 }
 
 export default function RequireAuth({ children }: { children: React.ReactNode }) {
-  const token = getToken()
   const [loading, setLoading] = useState(true)
   const [ok, setOk] = useState(false)
   const [, setModuleStamp] = useState("")
@@ -24,13 +22,6 @@ export default function RequireAuth({ children }: { children: React.ReactNode })
   useEffect(() => {
     let mounted = true
     const loadProfile = async () => {
-      if (!token) {
-        if (mounted) {
-          setOk(false)
-          setLoading(false)
-        }
-        return
-      }
       try {
         const profile = await me()
         const modules = Array.isArray((profile as any)?.modules) ? (profile as any).modules : []
@@ -68,7 +59,7 @@ export default function RequireAuth({ children }: { children: React.ReactNode })
       document.removeEventListener("visibilitychange", onFocus)
       mounted = false
     }
-  }, [token])
+  }, [])
 
   async function handleSelectCompany(companyId: string) {
     try {
@@ -89,7 +80,8 @@ export default function RequireAuth({ children }: { children: React.ReactNode })
   }
 
   if (loading) return <div className="p-6">Se incarca...</div>
-  if (!token || !ok) return <Navigate to="/login" replace />
+  if (!hasErpSession() && !ok) return <Navigate to="/login" replace />
+  if (!ok) return <Navigate to="/login" replace />
 
   return (
     <>

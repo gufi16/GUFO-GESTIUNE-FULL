@@ -34,7 +34,7 @@ type NirLine = {
 }
 
 function rawToken() {
-  return getToken() || localStorage.getItem("token") || localStorage.getItem("access_token") || ""
+  return getToken() || ""
 }
 
 function toNumberSafe(value: any) {

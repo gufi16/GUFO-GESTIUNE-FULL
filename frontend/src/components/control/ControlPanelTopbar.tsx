@@ -5,8 +5,8 @@ import { controlLogout } from "../../lib/controlAuth"
 export default function ControlPanelTopbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
   const navigate = useNavigate()
 
-  function handleLogout() {
-    controlLogout()
+  async function handleLogout() {
+    await controlLogout()
     navigate("/cp/login")
   }
 

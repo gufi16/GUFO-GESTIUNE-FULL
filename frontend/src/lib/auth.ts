@@ -19,6 +19,7 @@ type LoginResponse = {
 
 type MeResponse = {
   ok: boolean
+  access_token?: string
   tenant_id: string
   user_id: string
   role: string
@@ -74,7 +75,11 @@ export async function login(email: string, password: string) {
 }
 
 export async function me() {
-  return await api<MeResponse>("/api/v1/me")
+  const data = await api<MeResponse>("/api/v1/me")
+  if (data.access_token) {
+    setToken(data.access_token)
+  }
+  return data
 }
 
 export async function selectCompany(companyId: string) {
@@ -95,7 +100,10 @@ export async function selectCompany(companyId: string) {
   return data
 }
 
-export function logout() {
+export async function logout() {
+  await api("/api/v1/auth/logout", {
+    method: "POST",
+  }).catch(() => null)
   localStorage.removeItem("active_company_id")
   clearErpToken()
 }

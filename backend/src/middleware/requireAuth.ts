@@ -1,6 +1,9 @@
 import { Request, Response, NextFunction } from "express"
 import { verifyAccessToken } from "../lib/auth"
 
+const ERP_AUTH_COOKIE = "gufo_erp_session"
+const CONTROL_AUTH_COOKIE = "gufo_control_session"
+
 export interface AuthedRequest extends Request {
   auth?: {
     userId: string
@@ -30,12 +33,11 @@ export function requireAuth(req: AuthedRequest, res: Response, next: NextFunctio
   }
 
   const authHeader = req.headers.authorization
-
-  if (!authHeader?.startsWith("Bearer ")) {
-    return res.status(401).json({ ok: false, error: "Missing token" })
-  }
-
-  const token = authHeader.slice(7).trim()
+  const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : ""
+  const cookieToken =
+    String(req.cookies?.[ERP_AUTH_COOKIE] || "").trim() ||
+    String(req.cookies?.[CONTROL_AUTH_COOKIE] || "").trim()
+  const token = bearerToken || cookieToken
 
   if (!token) {
     return res.status(401).json({ ok: false, error: "Missing token" })
