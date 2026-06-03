@@ -68,6 +68,14 @@ Optional but recommended:
 - `ANAF_CLIENT_ID`
 - `ANAF_CLIENT_SECRET`
 - `ANAF_REDIRECT_URI`
+- `ALLOW_TEST_ORIGIN=false`
+- `ALLOW_API_ORIGIN=false`
+
+Production CORS rule:
+- trust `app.gufo.ink`
+- trust tenant subdomains only if they exist in the `Tenant.subdomain` table
+- do not trust `test.gufo.ink` unless intentionally enabled
+- do not trust `api.gufo.ink` as browser origin unless intentionally enabled
 
 ### Frontend
 

@@ -41,6 +41,19 @@ function assertEnvBasics() {
     "Disable ALLOW_DEV_CONTROL_PANEL_LOGIN and ALLOW_DEV_CONTROL_PANEL_TOKEN in production."
   )
 
+  const allowTestOrigin = process.env.ALLOW_TEST_ORIGIN === "true"
+  const allowApiOrigin = process.env.ALLOW_API_ORIGIN === "true"
+  addResult(
+    "Staging/test browser origins disabled in production",
+    !allowTestOrigin,
+    "Disable ALLOW_TEST_ORIGIN in production unless you intentionally expose staging to the live API."
+  )
+  addResult(
+    "API origin not trusted as browser origin by default",
+    !allowApiOrigin,
+    "Disable ALLOW_API_ORIGIN unless a browser app truly runs from api.gufo.ink."
+  )
+
   const uploadsConfig = getUploadsConfig()
   addResult(
     "Persistent uploads storage configured",

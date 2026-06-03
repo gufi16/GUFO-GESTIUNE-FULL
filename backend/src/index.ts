@@ -59,10 +59,14 @@ app.set("trust proxy", true)
 const PORT = Number(process.env.PORT || 3001)
 const CORS_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:5173"
 const CORS_ORIGINS = CORS_ORIGIN.split(",").map((value) => value.trim()).filter(Boolean)
+const ALLOW_TEST_ORIGIN = process.env.ALLOW_TEST_ORIGIN === "true"
+const ALLOW_API_ORIGIN = process.env.ALLOW_API_ORIGIN === "true"
 const ALLOW_DEV_CONTROL_PANEL_LOGIN = process.env.ALLOW_DEV_CONTROL_PANEL_LOGIN === "true"
 const JWT_SECRET = getJwtSecret()
 const authRateLimitBuckets = new Map<string, { count: number; resetAt: number }>()
+const corsOriginTenantCache = new Map<string, { allowed: boolean; expiresAt: number }>()
 const AUTH_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000
+const CORS_TENANT_CACHE_TTL_MS = 1000 * 60 * 5
 const AUTH_RATE_LIMITS = {
   erpLogin: 10,
   controlPanelLogin: 8,
@@ -242,7 +246,7 @@ function getHostnameFromUrl(value: string) {
   }
 }
 
-function isAllowedOrigin(origin?: string) {
+async function isAllowedOrigin(origin?: string) {
   if (!origin) return true
   if (CORS_ORIGINS.includes(origin)) return true
 
@@ -250,16 +254,40 @@ function isAllowedOrigin(origin?: string) {
   if (!hostname) return false
 
   if (/^(localhost|127\.0\.0\.1)$/i.test(hostname)) return true
-  if (hostname === "app.gufo.ink" || hostname === "test.gufo.ink" || hostname === "api.gufo.ink") return true
-  if (hostname.endsWith(".gufo.ink")) return true
+  if (hostname === "app.gufo.ink") return true
+  if (hostname === "test.gufo.ink") return ALLOW_TEST_ORIGIN
+  if (hostname === "api.gufo.ink") return ALLOW_API_ORIGIN
 
-  return false
+  const subdomain = getTenantSubdomainFromHostname(hostname)
+  if (!subdomain) return false
+
+  const cached = corsOriginTenantCache.get(subdomain)
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.allowed
+  }
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { subdomain },
+    select: { id: true },
+  })
+
+  const allowed = Boolean(tenant?.id)
+  corsOriginTenantCache.set(subdomain, {
+    allowed,
+    expiresAt: Date.now() + CORS_TENANT_CACHE_TTL_MS,
+  })
+  return allowed
 }
 
 app.use(
   cors({
     origin(origin, callback) {
-      callback(null, isAllowedOrigin(origin))
+      void isAllowedOrigin(origin)
+        .then((allowed) => callback(null, allowed))
+        .catch((error) => {
+          console.error("cors-origin-check-failed", error)
+          callback(null, false)
+        })
     },
     credentials: true,
     exposedHeaders: ["Content-Disposition"],
