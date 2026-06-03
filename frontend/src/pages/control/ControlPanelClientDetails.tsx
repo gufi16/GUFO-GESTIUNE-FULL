@@ -143,6 +143,17 @@ type CreateDeviceResponse = {
   }
 }
 
+type UpdateDeviceResponse = {
+  item?: {
+    id: string
+    label?: string | null
+    deviceId: string
+    deviceType?: string | null
+    licenseKey?: string
+    companyId?: string | null
+  }
+}
+
 type CreateCompanyResponse = {
   item?: {
     id: string
@@ -392,6 +403,7 @@ export default function ControlPanelClientDetails() {
   const [deletingLocationId, setDeletingLocationId] = useState<string | null>(null)
   const [creatingLocation, setCreatingLocation] = useState(false)
   const [creatingDeviceFor, setCreatingDeviceFor] = useState<string | null>(null)
+  const [savingDeviceId, setSavingDeviceId] = useState<string | null>(null)
   const [savingUser, setSavingUser] = useState(false)
   const [exportingClient, setExportingClient] = useState(false)
   const [editingUserId, setEditingUserId] = useState<string | null>(null)
@@ -401,6 +413,7 @@ export default function ControlPanelClientDetails() {
   const [editingLocationId, setEditingLocationId] = useState<string | null>(null)
   const [deviceForms, setDeviceForms] = useState<Record<string, { label: string; deviceType: "POS" | "KDS" }>>({})
   const [openDeviceLocationId, setOpenDeviceLocationId] = useState<string | null>(null)
+  const [editingDeviceId, setEditingDeviceId] = useState<string | null>(null)
   const [locationError, setLocationError] = useState<string | null>(null)
   const [deviceError, setDeviceError] = useState<string | null>(null)
   const [userError, setUserError] = useState<string | null>(null)
@@ -825,6 +838,44 @@ export default function ControlPanelClientDetails() {
       setError(err?.message || "Nu am putut sterge device-ul.")
     } finally {
       setDeletingTerminalId(null)
+    }
+  }
+
+  function beginEditTerminal(device: LocationDevice) {
+    setDeviceError(null)
+    setEditingDeviceId(device.id)
+    setDeviceForms((prev) => ({
+      ...prev,
+      [device.id]: {
+        label: String(device.label || device.deviceId || "").trim(),
+        deviceType: (String(device.deviceType || "POS").toUpperCase() === "KDS" ? "KDS" : "POS") as "POS" | "KDS",
+      },
+    }))
+  }
+
+  async function handleUpdateTerminal(device: LocationDevice) {
+    const form = deviceForms[device.id]
+    const label = (form?.label || "").trim()
+    const deviceType = form?.deviceType || "POS"
+    if (!label) {
+      setDeviceError("Introdu label-ul device-ului.")
+      return
+    }
+
+    try {
+      setSavingDeviceId(device.id)
+      setDeviceError(null)
+      await api<UpdateDeviceResponse>(`/api/v1/admin/terminals/${device.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ label, deviceType }),
+      })
+      setMessage("Device-ul a fost actualizat.")
+      setEditingDeviceId(null)
+      await load()
+    } catch (err: any) {
+      setDeviceError(err?.message || "Nu am putut actualiza device-ul.")
+    } finally {
+      setSavingDeviceId(null)
     }
   }
 
@@ -1511,19 +1562,89 @@ export default function ControlPanelClientDetails() {
                         {location.devices.map((device) => (
                             <tr key={device.id} className="border-t border-slate-200">
                               <td className="px-2 py-2 text-slate-800">
-                                <div className="font-medium">{device.label || device.deviceId || "-"}</div>
+                                {editingDeviceId === device.id ? (
+                                  <input
+                                    value={deviceForms[device.id]?.label || ""}
+                                    onChange={(e) =>
+                                      setDeviceForms((prev) => ({
+                                        ...prev,
+                                        [device.id]: {
+                                          ...(prev[device.id] || {
+                                            label: String(device.label || device.deviceId || "").trim(),
+                                            deviceType: (String(device.deviceType || "POS").toUpperCase() === "KDS" ? "KDS" : "POS") as "POS" | "KDS",
+                                          }),
+                                          label: e.target.value,
+                                        },
+                                      }))
+                                    }
+                                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+                                  />
+                                ) : (
+                                  <div className="font-medium">{device.label || device.deviceId || "-"}</div>
+                                )}
                                 <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                                   <span>{device.company?.name || "Device activ"}</span>
                                   <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-600">
-                                    {device.deviceType || "POS"}
+                                    {(editingDeviceId === device.id ? deviceForms[device.id]?.deviceType : device.deviceType) || "POS"}
                                   </span>
                                 </div>
                               </td>
-                            <td className="px-2 py-2 text-slate-600">{device.deviceType || "POS"}</td>
+                            <td className="px-2 py-2 text-slate-600">
+                              {editingDeviceId === device.id ? (
+                                <select
+                                  value={deviceForms[device.id]?.deviceType || "POS"}
+                                  onChange={(e) =>
+                                    setDeviceForms((prev) => ({
+                                      ...prev,
+                                      [device.id]: {
+                                        ...(prev[device.id] || {
+                                          label: String(device.label || device.deviceId || "").trim(),
+                                          deviceType: "POS",
+                                        }),
+                                        deviceType: e.target.value as "POS" | "KDS",
+                                      },
+                                    }))
+                                  }
+                                  className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+                                >
+                                  <option value="POS">POS</option>
+                                  <option value="KDS">KDS</option>
+                                </select>
+                              ) : (
+                                device.deviceType || "POS"
+                              )}
+                            </td>
                             <td className="px-2 py-2 font-mono text-slate-600">{device.licenseKey || device.deviceId || "-"}</td>
                             <td className="px-2 py-2 text-slate-500">{formatDate(device.createdAt)}</td>
                             <td className="px-2 py-2">
                               <div className="flex flex-wrap gap-2">
+                                {editingDeviceId === device.id ? (
+                                  <>
+                                    <button
+                                      onClick={() => handleUpdateTerminal(device)}
+                                      disabled={savingDeviceId === device.id}
+                                      className="inline-flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                      <Save size={12} />
+                                      {savingDeviceId === device.id ? "..." : "Salveaza"}
+                                    </button>
+                                    <button
+                                      onClick={() => setEditingDeviceId(null)}
+                                      disabled={savingDeviceId === device.id}
+                                      className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                      Anuleaza
+                                    </button>
+                                  </>
+                                ) : (
+                                  <button
+                                    onClick={() => beginEditTerminal(device)}
+                                    className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700"
+                                  >
+                                    <Pencil size={12} />
+                                    Edit
+                                  </button>
+                                )}
                                 <button
                                   onClick={() => copy(device.licenseKey || device.deviceId || "", "Licenta")}
                                   className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700"

@@ -341,6 +341,11 @@ const CreateDeviceSchema = z.object({
   deviceType: z.nativeEnum(TerminalDeviceType).default(TerminalDeviceType.POS),
 })
 
+const UpdateDeviceSchema = z.object({
+  label: z.string().min(2),
+  deviceType: z.nativeEnum(TerminalDeviceType).default(TerminalDeviceType.POS),
+})
+
 const PosLicenseValidateSchema = z.object({
   licenseKey: z.string().min(3),
 })
@@ -2151,6 +2156,120 @@ router.post("/api/v1/pos/validate", async (req, res) => {
     },
   })
 })
+
+router.patch(
+  "/api/v1/admin/terminals/:id",
+  requireAuth,
+  requireOwner,
+  async (req: AuthedRequest, res) => {
+    const parsed = UpdateDeviceSchema.safeParse(req.body)
+    if (!parsed.success) {
+      return res.status(400).json({ ok: false, error: parsed.error.flatten() })
+    }
+
+    const terminal = await prisma.terminal.findUnique({
+      where: { id: req.params.id },
+      include: {
+        tenant: {
+          include: {
+            licenses: {
+              orderBy: { createdAt: "desc" },
+              take: 1,
+            },
+            terminals: true,
+          },
+        },
+        location: true,
+      },
+    })
+
+    if (!terminal) {
+      return res.status(404).json({
+        ok: false,
+        error: "Terminal inexistent",
+      })
+    }
+
+    const license = terminal.tenant.licenses[0]
+    if (!license) {
+      return res.status(404).json({
+        ok: false,
+        error: "Licenta ERP inexistenta",
+      })
+    }
+
+    const nextLabel = parsed.data.label.trim()
+    const nextDeviceType = parsed.data.deviceType || TerminalDeviceType.POS
+    const switchingType = terminal.deviceType !== nextDeviceType
+
+    if (switchingType) {
+      const isKds = nextDeviceType === TerminalDeviceType.KDS
+      if (isKds ? !license.modKds : !license.modPos) {
+        return res.status(400).json({
+          ok: false,
+          error: isKds ? "KDS nu este activ pe licenta clientului" : "POS nu este activ pe licenta clientului",
+        })
+      }
+
+      const sameTypeDevices = terminal.tenant.terminals.filter(
+        (item) => item.id !== terminal.id && item.deviceType === nextDeviceType,
+      )
+      const maxDevices = isKds ? license.limitKdsDevices : license.limitTerminals
+      if (sameTypeDevices.length >= maxDevices) {
+        return res.status(400).json({
+          ok: false,
+          error: isKds
+            ? `Clientul a atins limita de device-uri KDS (${license.limitKdsDevices})`
+            : `Clientul a atins limita de device-uri POS (${license.limitTerminals})`,
+        })
+      }
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const next = await tx.terminal.update({
+        where: { id: terminal.id },
+        data: {
+          label: nextLabel,
+          deviceType: nextDeviceType,
+        },
+      })
+
+      await tx.auditLog.create({
+        data: {
+          tenantId: terminal.tenantId,
+          actorType: "OWNER",
+          actorId: req.auth?.userId,
+          action: "DEVICE_UPDATED",
+          entityType: "Terminal",
+          entityId: terminal.id,
+          payload: {
+            deviceId: terminal.deviceId,
+            previousLabel: terminal.label,
+            label: nextLabel,
+            previousDeviceType: terminal.deviceType,
+            deviceType: nextDeviceType,
+            locationId: terminal.locationId,
+            locationName: terminal.location?.name || null,
+          },
+        },
+      })
+
+      return next
+    })
+
+    return res.json({
+      ok: true,
+      item: {
+        id: updated.id,
+        label: updated.label,
+        deviceId: updated.deviceId,
+        deviceType: updated.deviceType,
+        licenseKey: updated.deviceId,
+        companyId: updated.companyId,
+      },
+    })
+  },
+)
 
 router.delete(
   "/api/v1/admin/terminals/:id",
