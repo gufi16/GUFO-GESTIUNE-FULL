@@ -4,11 +4,13 @@ type ControlLoginResponse = {
   ok: boolean
   access_token?: string
   token?: string
+  csrf_token?: string
 }
 
 type ControlMeResponse = {
   ok: boolean
   access_token?: string
+  csrf_token?: string
   user_id: string
   role: string
   email: string

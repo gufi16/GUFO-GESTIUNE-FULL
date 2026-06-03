@@ -2,6 +2,8 @@ import { repairDeepStrings, repairText } from "./textRepair"
 
 const ERP_TOKEN_KEY = "erp_session_token"
 const CONTROL_TOKEN_KEY = "control_session_token"
+const ERP_CSRF_COOKIE = "gufo_erp_csrf"
+const CONTROL_CSRF_COOKIE = "gufo_control_csrf"
 const LEGACY_ERP_TOKEN_KEYS = ["access_token", "token"] as const
 const LEGACY_CONTROL_TOKEN_KEYS = ["control_token"] as const
 
@@ -50,6 +52,23 @@ function migrateLegacyToken(sessionKey: string, legacyKeys: readonly string[]) {
   }
 
   return ""
+}
+
+function readCookieValue(name: string) {
+  if (typeof document === "undefined") return ""
+  const pattern = `${name}=`
+  const match = document.cookie
+    .split(";")
+    .map((item) => item.trim())
+    .find((item) => item.startsWith(pattern))
+  if (!match) return ""
+  return decodeURIComponent(match.slice(pattern.length))
+}
+
+function resolveCsrfTokenByPath(path?: string) {
+  const normalizedPath = String(path || "").trim()
+  const isAdminApi = normalizedPath.startsWith("/api/v1/admin/")
+  return isAdminApi ? readCookieValue(CONTROL_CSRF_COOKIE) : readCookieValue(ERP_CSRF_COOKIE)
 }
 
 export function resolvePublicAssetUrl(value?: string | null): string {
@@ -163,6 +182,14 @@ export async function api<T = any>(path: string, options: ApiOptions = {}): Prom
 
   if (token) {
     headers.set("Authorization", `Bearer ${token}`)
+  }
+
+  const method = String(options.method || "GET").toUpperCase()
+  if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
+    const csrfToken = resolveCsrfTokenByPath(path)
+    if (csrfToken && !headers.has("X-CSRF-Token")) {
+      headers.set("X-CSRF-Token", csrfToken)
+    }
   }
 
   const response = await fetch(`${API_BASE}${path}`, {

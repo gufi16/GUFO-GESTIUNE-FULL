@@ -75,6 +75,9 @@ ensureUploadSubdir("categories")
 
 const ERP_AUTH_COOKIE = "gufo_erp_session"
 const CONTROL_AUTH_COOKIE = "gufo_control_session"
+const ERP_CSRF_COOKIE = "gufo_erp_csrf"
+const CONTROL_CSRF_COOKIE = "gufo_control_csrf"
+const WEB_SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30
 
 if (!String(process.env.UPLOADS_DIR || "").trim()) {
   console.warn(
@@ -101,6 +104,17 @@ function buildAuthCookieOptions(req: express.Request) {
   }
 }
 
+function buildCsrfCookieOptions(req: express.Request) {
+  const secure = isSecureCookieRequest(req)
+  return {
+    httpOnly: false,
+    secure,
+    sameSite: "lax" as const,
+    path: "/",
+    maxAge: WEB_SESSION_TTL_MS,
+  }
+}
+
 function setErpAuthCookie(req: express.Request, res: express.Response, token: string) {
   res.cookie(ERP_AUTH_COOKIE, token, buildAuthCookieOptions(req))
 }
@@ -108,6 +122,17 @@ function setErpAuthCookie(req: express.Request, res: express.Response, token: st
 function clearErpAuthCookie(req: express.Request, res: express.Response) {
   res.clearCookie(ERP_AUTH_COOKIE, {
     ...buildAuthCookieOptions(req),
+    maxAge: undefined,
+  })
+}
+
+function setErpCsrfCookie(req: express.Request, res: express.Response, token: string) {
+  res.cookie(ERP_CSRF_COOKIE, token, buildCsrfCookieOptions(req))
+}
+
+function clearErpCsrfCookie(req: express.Request, res: express.Response) {
+  res.clearCookie(ERP_CSRF_COOKIE, {
+    ...buildCsrfCookieOptions(req),
     maxAge: undefined,
   })
 }
@@ -121,6 +146,87 @@ function clearControlAuthCookie(req: express.Request, res: express.Response) {
     ...buildAuthCookieOptions(req),
     maxAge: undefined,
   })
+}
+
+function setControlCsrfCookie(req: express.Request, res: express.Response, token: string) {
+  res.cookie(CONTROL_CSRF_COOKIE, token, buildCsrfCookieOptions(req))
+}
+
+function clearControlCsrfCookie(req: express.Request, res: express.Response) {
+  res.clearCookie(CONTROL_CSRF_COOKIE, {
+    ...buildCsrfCookieOptions(req),
+    maxAge: undefined,
+  })
+}
+
+function createBrowserCsrfToken() {
+  return crypto.randomBytes(24).toString("hex")
+}
+
+async function createWebSession(input: {
+  tenantId?: string | null
+  userId?: string | null
+  role: string
+  email?: string | null
+  activeCompanyId?: string | null
+  controlPanel?: boolean
+}) {
+  return prisma.webSession.create({
+    data: {
+      tenantId: input.tenantId || null,
+      userId: input.userId || null,
+      role: input.role,
+      email: input.email || null,
+      activeCompanyId: input.activeCompanyId || null,
+      controlPanel: Boolean(input.controlPanel),
+      expiresAt: new Date(Date.now() + WEB_SESSION_TTL_MS),
+    },
+  })
+}
+
+async function touchWebSession(sessionId?: string | null, patch?: { activeCompanyId?: string | null }) {
+  if (!sessionId) return null
+  return prisma.webSession.updateMany({
+    where: {
+      id: sessionId,
+      revokedAt: null,
+      expiresAt: { gt: new Date() },
+    },
+    data: {
+      ...(patch && Object.prototype.hasOwnProperty.call(patch, "activeCompanyId")
+        ? { activeCompanyId: patch.activeCompanyId ?? null }
+        : {}),
+      expiresAt: new Date(Date.now() + WEB_SESSION_TTL_MS),
+    },
+  })
+}
+
+async function revokeWebSession(sessionId?: string | null) {
+  if (!sessionId) return
+  await prisma.webSession.updateMany({
+    where: {
+      id: sessionId,
+      revokedAt: null,
+    },
+    data: {
+      revokedAt: new Date(),
+    },
+  })
+}
+
+function shouldValidateCsrf(req: express.Request) {
+  if (["GET", "HEAD", "OPTIONS"].includes(req.method.toUpperCase())) return false
+  if (!req.path.startsWith("/api/")) return false
+  if (
+    req.path === "/api/v1/auth/login" ||
+    req.path === "/api/v1/admin/auth/login" ||
+    req.path === "/api/v1/auth/forgot-password" ||
+    req.path === "/api/v1/auth/reset-password"
+  ) {
+    return false
+  }
+  if (String(req.headers.authorization || "").startsWith("Bearer ")) return false
+  return Boolean(req.cookies?.[ERP_AUTH_COOKIE] || req.cookies?.[CONTROL_AUTH_COOKIE])
 }
 
 app.disable("etag")
@@ -181,6 +287,25 @@ app.use((req, res, next) => {
     })
   })
   next()
+})
+app.use((req, res, next) => {
+  if (!shouldValidateCsrf(req)) {
+    return next()
+  }
+
+  const expectedToken =
+    String(req.cookies?.[ERP_CSRF_COOKIE] || "").trim() ||
+    String(req.cookies?.[CONTROL_CSRF_COOKIE] || "").trim()
+  const providedToken = String(req.headers["x-csrf-token"] || "").trim()
+
+  if (!expectedToken || !providedToken || expectedToken !== providedToken) {
+    return res.status(403).json({
+      ok: false,
+      error: "CSRF validation failed",
+    })
+  }
+
+  return next()
 })
 
 function signPosToken(payload: { tenantId: string; terminalId: string; deviceId: string }) {
@@ -623,6 +748,15 @@ app.post("/api/v1/auth/login", async (req, res) => {
   }
 
   const { companies, activeCompany } = await resolveActiveCompanyForUser(user, null)
+  const session = await createWebSession({
+    tenantId: user.tenantId,
+    userId: user.id,
+    role: user.role,
+    email: user.email,
+    activeCompanyId: companies.length === 1 ? activeCompany?.id || null : null,
+    controlPanel: false,
+  })
+  const csrfToken = createBrowserCsrfToken()
 
   const token = signAccessToken({
     tenantId: user.tenantId,
@@ -630,8 +764,10 @@ app.post("/api/v1/auth/login", async (req, res) => {
     role: user.role,
     email: user.email,
     activeCompanyId: companies.length === 1 ? activeCompany?.id || null : null,
+    sessionId: session.id,
   })
   setErpAuthCookie(req, res, token)
+  setErpCsrfCookie(req, res, csrfToken)
 
   void writeExplicitAuditLog({
     tenantId: user.tenantId,
@@ -654,6 +790,7 @@ app.post("/api/v1/auth/login", async (req, res) => {
   return res.json({
     ok: true,
     access_token: token,
+    csrf_token: csrfToken,
     active_company_id: companies.length === 1 ? activeCompany?.id || null : null,
     requires_company_selection: companies.length > 1,
     companies: companies.map((company) => ({
@@ -711,12 +848,17 @@ app.post("/api/v1/auth/select-company", requireAuth, async (req: AuthedRequest, 
     role: auth.role,
     email: auth.email || undefined,
     activeCompanyId: company.id,
+    sessionId: auth.sessionId || null,
   })
+  await touchWebSession(auth.sessionId, { activeCompanyId: company.id })
+  const csrfToken = String(req.cookies?.[ERP_CSRF_COOKIE] || "").trim() || createBrowserCsrfToken()
   setErpAuthCookie(req, res, token)
+  setErpCsrfCookie(req, res, csrfToken)
 
   return res.json({
     ok: true,
     access_token: token,
+    csrf_token: csrfToken,
     active_company_id: company.id,
     company: {
       id: company.id,
@@ -791,22 +933,56 @@ app.post("/api/v1/admin/auth/login", async (req, res) => {
     role: "OWNER",
     email: controlEmail,
     controlPanel: true,
+    sessionId: (
+      await createWebSession({
+        tenantId: null,
+        userId: null,
+        role: "OWNER",
+        email: controlEmail,
+        controlPanel: true,
+      })
+    ).id,
   })
+  const csrfToken = createBrowserCsrfToken()
   setControlAuthCookie(req, res, token)
+  setControlCsrfCookie(req, res, csrfToken)
 
   return res.json({
     ok: true,
     access_token: token,
+    csrf_token: csrfToken,
   })
 })
 
-app.post("/api/v1/auth/logout", (_req, res) => {
-  clearErpAuthCookie(_req, res)
+app.post("/api/v1/auth/logout", async (req: AuthedRequest, res) => {
+  const authHeader = String(req.headers.authorization || "")
+  const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : ""
+  const cookieToken = String(req.cookies?.[ERP_AUTH_COOKIE] || "").trim()
+  const token = bearerToken || cookieToken
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as { sessionId?: string | null }
+      await revokeWebSession(decoded.sessionId || null)
+    } catch {}
+  }
+  clearErpAuthCookie(req, res)
+  clearErpCsrfCookie(req, res)
   return res.json({ ok: true })
 })
 
-app.post("/api/v1/admin/auth/logout", (_req, res) => {
-  clearControlAuthCookie(_req, res)
+app.post("/api/v1/admin/auth/logout", async (req: AuthedRequest, res) => {
+  const authHeader = String(req.headers.authorization || "")
+  const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : ""
+  const cookieToken = String(req.cookies?.[CONTROL_AUTH_COOKIE] || "").trim()
+  const token = bearerToken || cookieToken
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as { sessionId?: string | null }
+      await revokeWebSession(decoded.sessionId || null)
+    } catch {}
+  }
+  clearControlAuthCookie(req, res)
+  clearControlCsrfCookie(req, res)
   return res.json({ ok: true })
 })
 
@@ -990,18 +1166,23 @@ app.get("/api/v1/admin/me", requireAuth, async (req: AuthedRequest, res) => {
   }
 
   const auth = req.auth!
+  await touchWebSession(auth.sessionId, { activeCompanyId: null })
   const token = signAccessToken({
     tenantId: null,
     userId: auth.userId,
     role: auth.role,
     email: auth.email || undefined,
     controlPanel: true,
+    sessionId: auth.sessionId || null,
   })
+  const csrfToken = String(req.cookies?.[CONTROL_CSRF_COOKIE] || "").trim() || createBrowserCsrfToken()
   setControlAuthCookie(req, res, token)
+  setControlCsrfCookie(req, res, csrfToken)
 
   return res.json({
     ok: true,
     access_token: token,
+    csrf_token: csrfToken,
     user_id: auth.userId,
     role: auth.role,
     email: auth.email || process.env.CONTROL_PANEL_EMAIL || "owner",
@@ -1091,12 +1272,17 @@ app.get("/api/v1/me", requireAuth, async (req: AuthedRequest, res) => {
     role: auth.role,
     email: user.email,
     activeCompanyId: activeCompany?.id || null,
+    sessionId: auth.sessionId || null,
   })
+  await touchWebSession(auth.sessionId, { activeCompanyId: activeCompany?.id || null })
+  const csrfToken = String(req.cookies?.[ERP_CSRF_COOKIE] || "").trim() || createBrowserCsrfToken()
   setErpAuthCookie(req, res, token)
+  setErpCsrfCookie(req, res, csrfToken)
 
   return res.json({
     ok: true,
     access_token: token,
+    csrf_token: csrfToken,
     tenant_id: auth.tenantId,
     user_id: auth.userId,
     role: auth.role,

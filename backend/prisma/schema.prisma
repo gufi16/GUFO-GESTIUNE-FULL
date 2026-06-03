@@ -501,9 +501,31 @@ model User {
   tenant Tenant @relation(fields: [tenantId], references: [id])
   companyAccesses UserCompanyAccess[]
   passwordResetTokens PasswordResetToken[]
+  webSessions WebSession[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
+}
+
+model WebSession {
+  id              String   @id @default(cuid())
+  tenantId        String?
+  userId          String?
+  role            String
+  email           String?
+  activeCompanyId String?
+  controlPanel    Boolean  @default(false)
+  expiresAt       DateTime
+  revokedAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([revokedAt])
 }
 
 model UserCompanyAccess {

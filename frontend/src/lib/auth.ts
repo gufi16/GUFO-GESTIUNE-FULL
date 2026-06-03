@@ -12,6 +12,7 @@ type LoginResponse = {
   ok: boolean
   access_token?: string
   token?: string
+  csrf_token?: string
   active_company_id?: string | null
   requires_company_selection?: boolean
   companies?: CompanyChoice[]
@@ -20,6 +21,7 @@ type LoginResponse = {
 type MeResponse = {
   ok: boolean
   access_token?: string
+  csrf_token?: string
   tenant_id: string
   user_id: string
   role: string
@@ -41,6 +43,7 @@ type MeResponse = {
 type SelectCompanyResponse = {
   ok: boolean
   access_token?: string
+  csrf_token?: string
   active_company_id?: string | null
   company?: CompanyChoice
 }

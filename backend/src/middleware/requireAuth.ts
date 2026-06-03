@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express"
 import { verifyAccessToken } from "../lib/auth"
+import { prisma } from "../lib/prisma"
 
 const ERP_AUTH_COOKIE = "gufo_erp_session"
 const CONTROL_AUTH_COOKIE = "gufo_control_session"
@@ -12,10 +13,11 @@ export interface AuthedRequest extends Request {
     email?: string | null
     activeCompanyId?: string | null
     controlPanel?: boolean
+    sessionId?: string | null
   }
 }
 
-export function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
+export async function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
   if (req.path === "/api/v1/company/efactura/oauth/callback") {
     return next()
   }
@@ -61,6 +63,39 @@ export function requireAuth(req: AuthedRequest, res: Response, next: NextFunctio
   try {
     const decoded = verifyAccessToken(token) as any
 
+    if (decoded.sessionId) {
+      const session = await (prisma as any).webSession.findUnique({
+        where: { id: String(decoded.sessionId) },
+        select: {
+          id: true,
+          userId: true,
+          tenantId: true,
+          role: true,
+          email: true,
+          activeCompanyId: true,
+          controlPanel: true,
+          expiresAt: true,
+          revokedAt: true,
+        },
+      })
+
+      if (!session || session.revokedAt || session.expiresAt <= new Date()) {
+        return res.status(401).json({ ok: false, error: "Invalid session" })
+      }
+
+      const decodedUserId = String(decoded.userId || decoded.user_id || decoded.id || "").trim()
+      const decodedEmail = String(decoded.email || "").trim().toLowerCase()
+      const sessionEmail = String(session.email || "").trim().toLowerCase()
+
+      if (session.controlPanel) {
+        if (!Boolean(decoded.controlPanel) || (sessionEmail && decodedEmail && sessionEmail !== decodedEmail)) {
+          return res.status(401).json({ ok: false, error: "Invalid session" })
+        }
+      } else if (session.userId !== decodedUserId) {
+        return res.status(401).json({ ok: false, error: "Invalid session" })
+      }
+    }
+
     req.auth = {
       userId: decoded.userId || decoded.user_id || decoded.id,
       tenantId: decoded.tenantId || decoded.tenant_id || null,
@@ -68,6 +103,7 @@ export function requireAuth(req: AuthedRequest, res: Response, next: NextFunctio
       email: decoded.email || null,
       activeCompanyId: decoded.activeCompanyId || decoded.active_company_id || null,
       controlPanel: Boolean(decoded.controlPanel),
+      sessionId: decoded.sessionId || null,
     }
 
     if (!req.auth.userId || !req.auth.role) {
