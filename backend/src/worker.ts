@@ -1,6 +1,6 @@
 import { prisma } from "./lib/prisma"
 import { loadEnv } from "./lib/loadEnv"
-import { getWorkerIntervalMs, runWorkerCycle } from "./lib/workerJobs"
+import { getWorkerHeartbeatFile, getWorkerIntervalMs, runWorkerCycle } from "./lib/workerJobs"
 
 loadEnv()
 
@@ -10,6 +10,9 @@ const intervalMs = getWorkerIntervalMs()
 async function main() {
   console.log(`[worker] started at ${startedAt.toISOString()}`)
   console.log(`[worker] interval ${intervalMs}ms`)
+  if (getWorkerHeartbeatFile()) {
+    console.log(`[worker] heartbeat file ${getWorkerHeartbeatFile()}`)
+  }
 
   await runWorkerCycle({ startedAt })
 

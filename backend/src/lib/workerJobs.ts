@@ -1,3 +1,5 @@
+import fs from "node:fs"
+import path from "node:path"
 import { prisma } from "./prisma"
 
 function toPositiveInt(value: string | undefined, fallback: number) {
@@ -10,6 +12,22 @@ export type WorkerContext = {
   startedAt: Date
 }
 
+function ensureParentDir(filePath: string) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true })
+}
+
+export function getWorkerHeartbeatFile() {
+  return String(process.env.WORKER_HEARTBEAT_FILE || "").trim()
+}
+
+function writeWorkerHeartbeat(payload: Record<string, unknown>) {
+  const heartbeatFile = getWorkerHeartbeatFile()
+  if (!heartbeatFile) return
+
+  ensureParentDir(heartbeatFile)
+  fs.writeFileSync(heartbeatFile, JSON.stringify(payload, null, 2))
+}
+
 export async function runWorkerCycle(ctx: WorkerContext) {
   const now = new Date()
   const tenantCount = await prisma.tenant.count().catch(() => 0)
@@ -19,6 +37,14 @@ export async function runWorkerCycle(ctx: WorkerContext) {
       (now.getTime() - ctx.startedAt.getTime()) / 1000
     )}`
   )
+
+  writeWorkerHeartbeat({
+    ok: true,
+    now: now.toISOString(),
+    startedAt: ctx.startedAt.toISOString(),
+    uptimeSec: Math.floor((now.getTime() - ctx.startedAt.getTime()) / 1000),
+    tenantCount,
+  })
 
   // Future worker jobs:
   // - outgoing e-Factura status polling

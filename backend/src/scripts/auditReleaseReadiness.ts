@@ -56,6 +56,13 @@ function assertEnvBasics() {
       ? "ALLOW_EPHEMERAL_UPLOADS=true bypass is active. Remove it before selling to clients."
       : "Set UPLOADS_DIR to a persistent mounted path. Fallback uploads inside app/container are unsafe on redeploy."
   )
+
+  const workerHeartbeatFile = String(process.env.WORKER_HEARTBEAT_FILE || "").trim()
+  addResult(
+    "Worker heartbeat file configured",
+    workerHeartbeatFile.length > 0,
+    "Set WORKER_HEARTBEAT_FILE so worker liveness can be checked outside request traffic."
+  )
 }
 
 function readFileSafe(relativePath: string) {
@@ -104,6 +111,28 @@ function assertRouteHardening() {
       indexRoutes.includes("Contul nu are acces pe acest subdomeniu."),
     "ERP login and authenticated requests should be blocked when tenant session is used on another tenant subdomain."
   )
+}
+
+function assertOpsAssets() {
+  const repoRoot = path.resolve(process.cwd(), "..")
+  const requiredAssets = [
+    "docs/production-ops-runbook.md",
+    "ops/hetzner/backup-db.sh",
+    "ops/hetzner/restore-db.sh",
+    "ops/hetzner/test-restore-db.sh",
+    "ops/hetzner/health-check.sh",
+    "ops/hetzner/rollback-release.sh",
+    "ops/monitoring/docker-compose.monitoring.yml",
+  ]
+
+  for (const relativePath of requiredAssets) {
+    const fullPath = path.join(repoRoot, relativePath)
+    addResult(
+      `Ops asset present: ${relativePath}`,
+      fs.existsSync(fullPath),
+      `Missing required ops asset ${relativePath}.`
+    )
+  }
 }
 
 async function assertStockBalanceConsistency() {
@@ -176,6 +205,7 @@ function printResultsAndExit() {
 async function main() {
   assertEnvBasics()
   assertRouteHardening()
+  assertOpsAssets()
   try {
     await assertStockBalanceConsistency()
   } catch (error: any) {

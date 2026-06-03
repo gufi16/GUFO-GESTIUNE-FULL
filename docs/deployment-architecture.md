@@ -165,3 +165,15 @@ Best production shape:
 - API in its own container or service
 - PostgreSQL managed or self-hosted with backups
 - worker added immediately after staging is stable
+
+## Required Ops Assets
+
+This repo now includes the minimum operations package that should be active before sale:
+
+- [docs/production-ops-runbook.md](/C:/Users/POSHARD/Desktop/poshard-saas-starter/poshard-saas-starter/docs/production-ops-runbook.md)
+- [ops/hetzner/backup-db.sh](/C:/Users/POSHARD/Desktop/poshard-saas-starter/poshard-saas-starter/ops/hetzner/backup-db.sh)
+- [ops/hetzner/restore-db.sh](/C:/Users/POSHARD/Desktop/poshard-saas-starter/poshard-saas-starter/ops/hetzner/restore-db.sh)
+- [ops/hetzner/test-restore-db.sh](/C:/Users/POSHARD/Desktop/poshard-saas-starter/poshard-saas-starter/ops/hetzner/test-restore-db.sh)
+- [ops/hetzner/health-check.sh](/C:/Users/POSHARD/Desktop/poshard-saas-starter/poshard-saas-starter/ops/hetzner/health-check.sh)
+- [ops/hetzner/rollback-release.sh](/C:/Users/POSHARD/Desktop/poshard-saas-starter/poshard-saas-starter/ops/hetzner/rollback-release.sh)
+- [ops/monitoring/docker-compose.monitoring.yml](/C:/Users/POSHARD/Desktop/poshard-saas-starter/poshard-saas-starter/ops/monitoring/docker-compose.monitoring.yml)
