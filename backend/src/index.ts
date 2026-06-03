@@ -580,6 +580,11 @@ function getTenantSubdomainFromHostname(hostname: string) {
 }
 
 function getTenantSubdomainFromRequest(req: express.Request) {
+  const explicitHeader = String(req.headers["x-tenant-subdomain"] || "").trim().toLowerCase()
+  if (explicitHeader && /^[a-z0-9-]+$/.test(explicitHeader)) {
+    return explicitHeader
+  }
+
   const hostnames = [getRequestHostname(req), getOriginHostname(req)]
 
   for (const hostname of hostnames) {

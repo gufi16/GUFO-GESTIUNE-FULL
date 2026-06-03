@@ -11,6 +11,12 @@ const envApiBase = (import.meta as any)?.env?.VITE_API_URL?.replace(/\/+$/, "")
 const hostname = typeof window !== "undefined" ? window.location.hostname || "" : ""
 const isLocalHost = /^(localhost|127\.0\.0\.1)$/i.test(hostname)
 
+function resolveBrowserTenantSubdomain() {
+  if (!hostname || !hostname.endsWith(".gufo.ink")) return ""
+  if (hostname === "app.gufo.ink" || hostname === "test.gufo.ink" || hostname === "api.gufo.ink") return ""
+  return hostname.split(".")[0] || ""
+}
+
 function resolveHostedApiBase() {
   if (!hostname) return "https://api.gufo.ink"
 
@@ -178,6 +184,11 @@ export async function api<T = any>(path: string, options: ApiOptions = {}): Prom
 
   if (!headers.has("Content-Type") && options.body && !(options.body instanceof FormData)) {
     headers.set("Content-Type", "application/json")
+  }
+
+  const tenantSubdomain = resolveBrowserTenantSubdomain()
+  if (tenantSubdomain && !headers.has("X-Tenant-Subdomain")) {
+    headers.set("X-Tenant-Subdomain", tenantSubdomain)
   }
 
   if (token) {
