@@ -1163,7 +1163,7 @@ router.post("/api/v1/pos/pair", async (req: Request, res: Response) => {
       });
     }
 
-    if (terminalLabel && terminal.label !== terminalLabel) {
+    if (terminalLabel && !normalizeText(terminal.label) && terminal.label !== terminalLabel) {
       await prisma.terminal.update({
         where: { id: terminal.id },
         data: {
@@ -1201,7 +1201,7 @@ router.post("/api/v1/pos/pair", async (req: Request, res: Response) => {
       tenantId: terminal.tenantId,
       terminal: {
         id: terminal.id,
-        label: terminalLabel || terminal.label,
+        label: terminal.label || terminalLabel,
         deviceId: terminal.deviceId,
         deviceType: terminal.deviceType,
         locationId: terminal.locationId,

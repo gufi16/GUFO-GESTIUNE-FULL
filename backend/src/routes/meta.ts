@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { Router } from "express"
+import { TerminalDeviceType } from "@prisma/client"
 import path from "path"
 import fs from "fs"
 import multer from "multer"
@@ -501,6 +502,7 @@ router.get("/api/v1/meta/terminals", async (req: AuthedRequest, res) => {
     where: {
       tenantId,
       companyId,
+      deviceType: TerminalDeviceType.POS,
       ...(locationId ? { locationId } : {}),
     },
     select: {
