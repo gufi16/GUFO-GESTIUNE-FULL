@@ -81,6 +81,7 @@ const ERP_AUTH_COOKIE = "gufo_erp_session"
 const CONTROL_AUTH_COOKIE = "gufo_control_session"
 const ERP_CSRF_COOKIE = "gufo_erp_csrf"
 const CONTROL_CSRF_COOKIE = "gufo_control_csrf"
+const ERP_TENANT_COOKIE = "gufo_erp_tenant"
 const WEB_SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30
 
 if (!String(process.env.UPLOADS_DIR || "").trim()) {
@@ -138,6 +139,17 @@ function setErpCsrfCookie(req: express.Request, res: express.Response, token: st
 
 function clearErpCsrfCookie(req: express.Request, res: express.Response) {
   res.clearCookie(ERP_CSRF_COOKIE, {
+    ...buildCsrfCookieOptions(req),
+    maxAge: undefined,
+  })
+}
+
+function setErpTenantCookie(req: express.Request, res: express.Response, subdomain: string) {
+  res.cookie(ERP_TENANT_COOKIE, subdomain, buildCsrfCookieOptions(req))
+}
+
+function clearErpTenantCookie(req: express.Request, res: express.Response) {
+  res.clearCookie(ERP_TENANT_COOKIE, {
     ...buildCsrfCookieOptions(req),
     maxAge: undefined,
   })
@@ -586,15 +598,29 @@ function getTenantSubdomainFromHostname(hostname: string) {
 
 function getTenantSubdomainFromRequest(req: express.Request) {
   const explicitHeader = String(req.headers["x-tenant-subdomain"] || "").trim().toLowerCase()
-  if (explicitHeader && /^[a-z0-9-]+$/.test(explicitHeader)) {
-    return explicitHeader
-  }
+  const validExplicitHeader = explicitHeader && /^[a-z0-9-]+$/.test(explicitHeader) ? explicitHeader : ""
 
   const hostnames = [getRequestHostname(req), getOriginHostname(req)]
+  let hostDerivedSubdomain: string | null = null
 
   for (const hostname of hostnames) {
     const subdomain = getTenantSubdomainFromHostname(hostname)
-    if (subdomain) return subdomain
+    if (subdomain) {
+      hostDerivedSubdomain = subdomain
+      break
+    }
+  }
+
+  if (validExplicitHeader && hostDerivedSubdomain && validExplicitHeader !== hostDerivedSubdomain) {
+    return null
+  }
+
+  if (validExplicitHeader) return validExplicitHeader
+  if (hostDerivedSubdomain) return hostDerivedSubdomain
+
+  const cookieSubdomain = String(req.cookies?.[ERP_TENANT_COOKIE] || "").trim().toLowerCase()
+  if (cookieSubdomain && /^[a-z0-9-]+$/.test(cookieSubdomain)) {
+    return cookieSubdomain
   }
 
   return null
@@ -830,6 +856,10 @@ app.post("/api/v1/auth/login", async (req, res) => {
   })
   setErpAuthCookie(req, res, token)
   setErpCsrfCookie(req, res, csrfToken)
+  const loginTenantSubdomain = String(loginTenant?.subdomain || "").trim().toLowerCase()
+  if (loginTenantSubdomain) {
+    setErpTenantCookie(req, res, loginTenantSubdomain)
+  }
 
   void writeExplicitAuditLog({
     tenantId: user.tenantId,
@@ -916,6 +946,14 @@ app.post("/api/v1/auth/select-company", requireAuth, async (req: AuthedRequest, 
   const csrfToken = String(req.cookies?.[ERP_CSRF_COOKIE] || "").trim() || createBrowserCsrfToken()
   setErpAuthCookie(req, res, token)
   setErpCsrfCookie(req, res, csrfToken)
+  const authTenant = await prisma.tenant.findUnique({
+    where: { id: auth.tenantId },
+    select: { subdomain: true },
+  })
+  const authTenantSubdomain = String(authTenant?.subdomain || "").trim().toLowerCase()
+  if (authTenantSubdomain) {
+    setErpTenantCookie(req, res, authTenantSubdomain)
+  }
 
   return res.json({
     ok: true,
@@ -1029,6 +1067,7 @@ app.post("/api/v1/auth/logout", async (req: AuthedRequest, res) => {
   }
   clearErpAuthCookie(req, res)
   clearErpCsrfCookie(req, res)
+  clearErpTenantCookie(req, res)
   return res.json({ ok: true })
 })
 

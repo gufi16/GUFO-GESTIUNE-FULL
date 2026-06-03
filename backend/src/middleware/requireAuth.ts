@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma"
 
 const ERP_AUTH_COOKIE = "gufo_erp_session"
 const CONTROL_AUTH_COOKIE = "gufo_control_session"
+const ERP_TENANT_COOKIE = "gufo_erp_tenant"
 
 export interface AuthedRequest extends Request {
   auth?: {
@@ -64,15 +65,29 @@ function getTenantSubdomainFromHostname(hostname: string) {
 
 function getTenantSubdomainFromRequest(req: Request) {
   const explicitHeader = String(req.headers["x-tenant-subdomain"] || "").trim().toLowerCase()
-  if (explicitHeader && /^[a-z0-9-]+$/.test(explicitHeader)) {
-    return explicitHeader
-  }
+  const validExplicitHeader = explicitHeader && /^[a-z0-9-]+$/.test(explicitHeader) ? explicitHeader : ""
 
   const hostnames = [getRequestHostname(req), getOriginHostname(req)]
+  let hostDerivedSubdomain: string | null = null
   for (const hostname of hostnames) {
     const subdomain = getTenantSubdomainFromHostname(hostname)
-    if (subdomain) return subdomain
+    if (subdomain) {
+      hostDerivedSubdomain = subdomain
+      break
+    }
   }
+
+  if (validExplicitHeader && hostDerivedSubdomain && validExplicitHeader !== hostDerivedSubdomain) {
+    return null
+  }
+  if (validExplicitHeader) return validExplicitHeader
+  if (hostDerivedSubdomain) return hostDerivedSubdomain
+
+  const cookieSubdomain = String((req as any).cookies?.[ERP_TENANT_COOKIE] || "").trim().toLowerCase()
+  if (cookieSubdomain && /^[a-z0-9-]+$/.test(cookieSubdomain)) {
+    return cookieSubdomain
+  }
+
   return null
 }
 
