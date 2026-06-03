@@ -2268,6 +2268,7 @@ async function updateTerminalHandler(req: AuthedRequest, res: any) {
 
 router.patch("/api/v1/admin/terminals/:id", requireAuth, requireOwner, updateTerminalHandler)
 router.put("/api/v1/admin/terminals/:id", requireAuth, requireOwner, updateTerminalHandler)
+router.post("/api/v1/admin/terminals/:id/update", requireAuth, requireOwner, updateTerminalHandler)
 
 router.delete(
   "/api/v1/admin/terminals/:id",

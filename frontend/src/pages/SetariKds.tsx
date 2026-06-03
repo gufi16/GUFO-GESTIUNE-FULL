@@ -64,7 +64,7 @@ export default function SetariKds() {
 
     try {
       const [terminalsRes, usersRes] = await Promise.all([
-        api<{ ok: boolean; terminals?: TerminalItem[] }>("/api/v1/meta/terminals"),
+        api<{ ok: boolean; terminals?: TerminalItem[] }>("/api/v1/meta/terminals?deviceType=KDS"),
         api<{ ok: boolean; items?: UserItem[] }>("/api/v1/users"),
       ])
 

@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { Router } from "express"
+import { TerminalDeviceType } from "@prisma/client"
 import path from "path"
 import fs from "fs"
 import multer from "multer"
@@ -496,11 +497,19 @@ router.get("/api/v1/meta/terminals", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
   const companyId = await requireRequestCompanyId(req)
   const locationId = String(req.query.locationId || "").trim()
+  const requestedDeviceType = String(req.query.deviceType || "").trim().toUpperCase()
+  const deviceType =
+    requestedDeviceType === "KDS"
+      ? TerminalDeviceType.KDS
+      : requestedDeviceType === "POS"
+        ? TerminalDeviceType.POS
+        : TerminalDeviceType.POS
 
   const terminals = await prisma.terminal.findMany({
     where: {
       tenantId,
       companyId,
+      deviceType,
       ...(locationId ? { locationId } : {}),
     },
     select: {
