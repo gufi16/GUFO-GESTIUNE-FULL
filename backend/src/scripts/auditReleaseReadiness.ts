@@ -66,6 +66,8 @@ function readFileSafe(relativePath: string) {
 function assertRouteHardening() {
   const companyRoutes = readFileSafe("src/routes/company.ts")
   const backupsRoutes = readFileSafe("src/routes/backups.ts")
+  const authMiddleware = readFileSafe("src/middleware/requireAuth.ts")
+  const indexRoutes = readFileSafe("src/index.ts")
 
   addResult(
     "Backup routes protected by tenant admin guard",
@@ -94,6 +96,14 @@ function assertRouteHardening() {
       "Route should enforce ensureTenantAdminAccess near handler start."
     )
   }
+
+  addResult(
+    "ERP session restricted to tenant subdomain",
+    authMiddleware.includes("Contul nu are acces pe acest subdomeniu.") &&
+      authMiddleware.includes("getTenantSubdomainFromRequest(req)") &&
+      indexRoutes.includes("Contul nu are acces pe acest subdomeniu."),
+    "ERP login and authenticated requests should be blocked when tenant session is used on another tenant subdomain."
+  )
 }
 
 async function assertStockBalanceConsistency() {

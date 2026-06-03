@@ -777,6 +777,21 @@ app.post("/api/v1/auth/login", async (req, res) => {
     return res.status(401).json({ ok: false, error: "Invalid credentials" })
   }
 
+  const requestedSubdomain = getTenantSubdomainFromRequest(req)
+  if (requestedSubdomain) {
+    const loginTenant = await prisma.tenant.findUnique({
+      where: { id: user.tenantId },
+      select: { subdomain: true },
+    })
+    const loginTenantSubdomain = String(loginTenant?.subdomain || "").trim().toLowerCase()
+    if (!loginTenantSubdomain || loginTenantSubdomain !== requestedSubdomain) {
+      return res.status(403).json({
+        ok: false,
+        error: "Contul nu are acces pe acest subdomeniu.",
+      })
+    }
+  }
+
   const { companies, activeCompany } = await resolveActiveCompanyForUser(user, null)
   const session = await createWebSession({
     tenantId: user.tenantId,

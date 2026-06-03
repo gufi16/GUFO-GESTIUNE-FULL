@@ -17,6 +17,55 @@ export interface AuthedRequest extends Request {
   }
 }
 
+function getHostnameFromUrl(value?: string | null) {
+  try {
+    return new URL(String(value || "").trim()).hostname.toLowerCase()
+  } catch {
+    return ""
+  }
+}
+
+function getRequestHostname(req: Request) {
+  const forwardedHost = String(req.headers["x-forwarded-host"] || req.get("host") || "")
+    .split(",")[0]
+    .trim()
+    .toLowerCase()
+  return forwardedHost.replace(/:\d+$/, "")
+}
+
+function getOriginHostname(req: Request) {
+  const origin = String(req.headers.origin || "").trim()
+  if (origin) return getHostnameFromUrl(origin)
+
+  const referer = String(req.headers.referer || "").trim()
+  if (referer) return getHostnameFromUrl(referer)
+
+  return ""
+}
+
+function getTenantSubdomainFromHostname(hostname: string) {
+  if (!hostname) return null
+  if (/^(localhost|127\.0\.0\.1)$/i.test(hostname)) return null
+  if (hostname === "gufo.ink" || hostname === "app.gufo.ink" || hostname === "test.gufo.ink" || hostname === "api.gufo.ink") return null
+  if (!hostname.endsWith(".gufo.ink")) return null
+
+  const parts = hostname.split(".")
+  if (parts.length < 3) return null
+
+  const subdomain = parts[0]
+  if (!subdomain || ["app", "api", "www", "admin", "cp"].includes(subdomain)) return null
+  return subdomain
+}
+
+function getTenantSubdomainFromRequest(req: Request) {
+  const hostnames = [getRequestHostname(req), getOriginHostname(req)]
+  for (const hostname of hostnames) {
+    const subdomain = getTenantSubdomainFromHostname(hostname)
+    if (subdomain) return subdomain
+  }
+  return null
+}
+
 export async function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
   if (req.path === "/api/v1/company/efactura/oauth/callback") {
     return next()
@@ -108,6 +157,21 @@ export async function requireAuth(req: AuthedRequest, res: Response, next: NextF
 
     if (!req.auth.userId || !req.auth.role) {
       return res.status(401).json({ ok: false, error: "Invalid token" })
+    }
+
+    if (!req.auth.controlPanel && req.auth.tenantId) {
+      const requestedSubdomain = getTenantSubdomainFromRequest(req)
+      if (requestedSubdomain) {
+        const tenant = await prisma.tenant.findUnique({
+          where: { id: String(req.auth.tenantId) },
+          select: { subdomain: true },
+        })
+
+        const tokenSubdomain = String(tenant?.subdomain || "").trim().toLowerCase()
+        if (!tokenSubdomain || tokenSubdomain !== requestedSubdomain) {
+          return res.status(403).json({ ok: false, error: "Contul nu are acces pe acest subdomeniu." })
+        }
+      }
     }
 
     return next()
