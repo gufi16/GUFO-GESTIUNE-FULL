@@ -20,7 +20,6 @@ export default function ForgotPassword() {
         hostname &&
         hostname.endsWith(".gufo.ink") &&
         hostname !== "app.gufo.ink" &&
-        hostname !== "test.gufo.ink" &&
         hostname !== "api.gufo.ink"
           ? hostname.split(".")[0]
           : undefined

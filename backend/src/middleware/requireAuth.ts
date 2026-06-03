@@ -52,7 +52,7 @@ function isHostedGufoBrowserRequest(req: Request) {
 function getTenantSubdomainFromHostname(hostname: string) {
   if (!hostname) return null
   if (/^(localhost|127\.0\.0\.1)$/i.test(hostname)) return null
-  if (hostname === "gufo.ink" || hostname === "app.gufo.ink" || hostname === "test.gufo.ink" || hostname === "api.gufo.ink") return null
+  if (hostname === "gufo.ink" || hostname === "app.gufo.ink" || hostname === "api.gufo.ink") return null
   if (!hostname.endsWith(".gufo.ink")) return null
 
   const parts = hostname.split(".")

@@ -13,7 +13,7 @@ const isLocalHost = /^(localhost|127\.0\.0\.1)$/i.test(hostname)
 
 function resolveBrowserTenantSubdomain() {
   if (!hostname || !hostname.endsWith(".gufo.ink")) return ""
-  if (hostname === "app.gufo.ink" || hostname === "test.gufo.ink" || hostname === "api.gufo.ink") return ""
+  if (hostname === "app.gufo.ink" || hostname === "api.gufo.ink") return ""
   return hostname.split(".")[0] || ""
 }
 
