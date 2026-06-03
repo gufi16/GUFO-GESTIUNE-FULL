@@ -795,6 +795,34 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
     terminalsByLocation.set(key, list)
   }
 
+  const terminalIds = tenant.terminals.map((terminal) => terminal.id)
+  const terminalLabelLogs = terminalIds.length
+    ? await prisma.auditLog.findMany({
+        where: {
+          tenantId: tenant.id,
+          entityType: "Terminal",
+          entityId: { in: terminalIds },
+          action: { in: ["POS_DEVICE_CREATED", "KDS_DEVICE_CREATED", "DEVICE_UPDATED"] },
+        },
+        select: {
+          entityId: true,
+          payload: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: "desc" },
+      })
+    : []
+  const terminalLabelById = new Map<string, string>()
+  for (const log of terminalLabelLogs) {
+    const terminalId = String(log.entityId || "").trim()
+    if (!terminalId || terminalLabelById.has(terminalId)) continue
+    const payload = log.payload as Record<string, unknown> | null
+    const label = typeof payload?.label === "string" ? payload.label.trim() : ""
+    if (label) {
+      terminalLabelById.set(terminalId, label)
+    }
+  }
+
   return res.json({
     ok: true,
     item: {
@@ -863,10 +891,10 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
           devices: devices.map((device) => ({
             id: device.id,
             deviceId: device.deviceId,
-            label: device.label,
+            label: resolveTerminalDisplayLabel(device, terminalLabelById),
             createdAt: device.createdAt,
             isLockedToLocation: device.isLockedToLocation,
-            deviceType: device.deviceType,
+            deviceType: inferTerminalDeviceType(device),
             licenseKey: device.deviceId,
             companyId: device.companyId,
             company: serializeCompanySummary(device.company),
@@ -876,8 +904,8 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
       terminals: tenant.terminals.map((terminal) => ({
         id: terminal.id,
         deviceId: terminal.deviceId,
-        label: terminal.label,
-        deviceType: terminal.deviceType,
+        label: resolveTerminalDisplayLabel(terminal, terminalLabelById),
+        deviceType: inferTerminalDeviceType(terminal),
         isLockedToLocation: terminal.isLockedToLocation,
         createdAt: terminal.createdAt,
         companyId: terminal.companyId,
@@ -2266,8 +2294,45 @@ async function updateTerminalHandler(req: AuthedRequest, res: any) {
     })
 }
 
+function normalizeTerminalLabel(value: unknown) {
+  return String(value || "").trim()
+}
+
+function inferTerminalDeviceType(terminal: {
+  deviceType?: TerminalDeviceType | string | null
+  label?: string | null
+  deviceId?: string | null
+}) {
+  const explicit = String(terminal.deviceType || "").trim().toUpperCase()
+  if (explicit === "KDS") return TerminalDeviceType.KDS
+  if (explicit === "POS") return TerminalDeviceType.POS
+
+  const label = normalizeTerminalLabel(terminal.label).toUpperCase()
+  const deviceId = String(terminal.deviceId || "").trim().toUpperCase()
+  if (label.includes("KDS") || deviceId.startsWith("KDS-")) {
+    return TerminalDeviceType.KDS
+  }
+
+  return TerminalDeviceType.POS
+}
+
+function resolveTerminalDisplayLabel(
+  terminal: { id: string; label?: string | null; deviceId?: string | null },
+  labelByTerminalId: Map<string, string>,
+) {
+  const currentLabel = normalizeTerminalLabel(terminal.label)
+  const genericLabel =
+    currentLabel === "Android POS" ||
+    currentLabel === "GuFo POS" ||
+    currentLabel === "GuFo KDS"
+  const restoredLabel = labelByTerminalId.get(terminal.id) || ""
+
+  return genericLabel && restoredLabel ? restoredLabel : currentLabel
+}
+
 router.patch("/api/v1/admin/terminals/:id", requireAuth, requireOwner, updateTerminalHandler)
 router.put("/api/v1/admin/terminals/:id", requireAuth, requireOwner, updateTerminalHandler)
+router.post("/api/v1/admin/terminals/:id", requireAuth, requireOwner, updateTerminalHandler)
 router.post("/api/v1/admin/terminals/:id/update", requireAuth, requireOwner, updateTerminalHandler)
 
 router.delete(

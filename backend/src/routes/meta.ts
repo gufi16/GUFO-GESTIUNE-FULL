@@ -15,6 +15,27 @@ const router = Router()
 
 const WAREHOUSE_TYPES = ["GENERAL", "RAW_MATERIALS", "FINISHED_GOODS", "BAR", "KITCHEN", "PACKAGING"] as const
 
+function normalizeTerminalLabel(value: unknown) {
+  return String(value || "").trim()
+}
+
+function inferTerminalDeviceType(terminal: {
+  deviceType?: TerminalDeviceType | string | null
+  label?: string | null
+  deviceId?: string | null
+}) {
+  const explicit = String(terminal.deviceType || "").trim().toUpperCase()
+  if (explicit === "KDS") return TerminalDeviceType.KDS
+  if (explicit === "POS") return TerminalDeviceType.POS
+
+  const label = normalizeTerminalLabel(terminal.label).toUpperCase()
+  const deviceId = String(terminal.deviceId || "").trim().toUpperCase()
+  if (label.includes("KDS") || deviceId.startsWith("KDS-")) {
+    return TerminalDeviceType.KDS
+  }
+  return TerminalDeviceType.POS
+}
+
 
 const DEFAULT_UOMS = [
   { code: "buc", name: "Bucata", standardCode: "C62" },
@@ -509,7 +530,6 @@ router.get("/api/v1/meta/terminals", async (req: AuthedRequest, res) => {
     where: {
       tenantId,
       companyId,
-      deviceType,
       ...(locationId ? { locationId } : {}),
     },
     select: {
@@ -536,7 +556,7 @@ router.get("/api/v1/meta/terminals", async (req: AuthedRequest, res) => {
           tenantId,
           entityType: "Terminal",
           entityId: { in: terminalIds },
-          action: { in: ["POS_DEVICE_CREATED", "KDS_DEVICE_CREATED"] },
+          action: { in: ["POS_DEVICE_CREATED", "KDS_DEVICE_CREATED", "DEVICE_UPDATED"] },
         },
         select: {
           entityId: true,
@@ -567,11 +587,14 @@ router.get("/api/v1/meta/terminals", async (req: AuthedRequest, res) => {
     const restoredLabel = createdLabelByTerminalId.get(terminal.id) || ""
     return {
       ...terminal,
+      deviceType: inferTerminalDeviceType(terminal),
       label: genericLabel && restoredLabel ? restoredLabel : currentLabel,
     }
   })
 
-  res.json({ ok: true, terminals: normalized })
+  const filtered = normalized.filter((terminal) => inferTerminalDeviceType(terminal) === deviceType)
+
+  res.json({ ok: true, terminals: filtered })
 })
 
 router.post("/api/v1/meta/locations", async (req: AuthedRequest, res) => {

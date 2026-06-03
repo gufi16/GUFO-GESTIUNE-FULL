@@ -154,6 +154,11 @@ type UpdateDeviceResponse = {
   }
 }
 
+function isRouteMissingError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "")
+  return /Cannot\s+(PATCH|PUT|POST)\s+/i.test(message) || /not found/i.test(message)
+}
+
 type CreateCompanyResponse = {
   item?: {
     id: string
@@ -865,10 +870,18 @@ export default function ControlPanelClientDetails() {
     try {
       setSavingDeviceId(device.id)
       setDeviceError(null)
-      await api<UpdateDeviceResponse>(`/api/v1/admin/terminals/${device.id}/update`, {
-        method: "POST",
-        body: JSON.stringify({ label, deviceType }),
-      })
+      try {
+        await api<UpdateDeviceResponse>(`/api/v1/admin/terminals/${device.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ label, deviceType }),
+        })
+      } catch (err) {
+        if (!isRouteMissingError(err)) throw err
+        await api<UpdateDeviceResponse>(`/api/v1/admin/terminals/${device.id}/update`, {
+          method: "POST",
+          body: JSON.stringify({ label, deviceType }),
+        })
+      }
       setMessage("Device-ul a fost actualizat.")
       setEditingDeviceId(null)
       await load()
@@ -1536,6 +1549,7 @@ export default function ControlPanelClientDetails() {
                       <option value="KDS">KDS</option>
                     </select>
                     <button
+                      type="button"
                       onClick={() => handleCreateDevice(location.id, location.name)}
                       disabled={creatingDeviceFor === location.id}
                       className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
@@ -1621,6 +1635,7 @@ export default function ControlPanelClientDetails() {
                                 {editingDeviceId === device.id ? (
                                   <>
                                     <button
+                                      type="button"
                                       onClick={() => handleUpdateTerminal(device)}
                                       disabled={savingDeviceId === device.id}
                                       className="inline-flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
@@ -1629,6 +1644,7 @@ export default function ControlPanelClientDetails() {
                                       {savingDeviceId === device.id ? "..." : "Salveaza"}
                                     </button>
                                     <button
+                                      type="button"
                                       onClick={() => setEditingDeviceId(null)}
                                       disabled={savingDeviceId === device.id}
                                       className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
@@ -1638,6 +1654,7 @@ export default function ControlPanelClientDetails() {
                                   </>
                                 ) : (
                                   <button
+                                    type="button"
                                     onClick={() => beginEditTerminal(device)}
                                     className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700"
                                   >
@@ -1646,6 +1663,7 @@ export default function ControlPanelClientDetails() {
                                   </button>
                                 )}
                                 <button
+                                  type="button"
                                   onClick={() => copy(device.licenseKey || device.deviceId || "", "Licenta")}
                                   className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700"
                                 >
@@ -1653,6 +1671,7 @@ export default function ControlPanelClientDetails() {
                                   Copiaza
                                 </button>
                                 <button
+                                  type="button"
                                   onClick={() => handleDeleteTerminal(device.id, device.label || device.deviceId || "Device POS")}
                                   disabled={deletingTerminalId === device.id}
                                   className="inline-flex items-center gap-1 rounded-xl border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"

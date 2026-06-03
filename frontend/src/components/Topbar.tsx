@@ -19,6 +19,15 @@ function toInputDate(value: Date) {
   return `${year}-${month}-${day}`
 }
 
+function isKdsTerminalLike(item: { deviceType?: string; label?: string; deviceId?: string }) {
+  const explicitType = String(item.deviceType || "").trim().toUpperCase()
+  if (explicitType === "KDS") return true
+
+  const label = String(item.label || "").trim().toUpperCase()
+  const deviceId = String(item.deviceId || "").trim().toUpperCase()
+  return label.includes("KDS") || deviceId.startsWith("KDS-")
+}
+
 export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
   const navigate = useNavigate()
   const location = useLocation()
@@ -211,7 +220,7 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
             locationName: item.location?.name ? String(item.location.name) : undefined,
             locationCode: item.location?.code ? String(item.location.code) : undefined,
           }))
-          .filter((item: { deviceType?: string }) => String(item.deviceType || "POS").toUpperCase() !== "KDS")
+          .filter((item: { deviceType?: string; label?: string; deviceId?: string }) => !isKdsTerminalLike(item))
 
         setTerminals(normalized)
 
