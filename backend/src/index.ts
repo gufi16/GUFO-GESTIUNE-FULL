@@ -565,6 +565,11 @@ function getOriginHostname(req: express.Request) {
   return ""
 }
 
+function isHostedGufoBrowserRequest(req: express.Request) {
+  const hostnames = [getRequestHostname(req), getOriginHostname(req)].filter(Boolean)
+  return hostnames.some((hostname) => hostname.endsWith(".gufo.ink"))
+}
+
 function getTenantSubdomainFromHostname(hostname: string) {
   if (!hostname) return null
   if (/^(localhost|127\.0\.0\.1)$/i.test(hostname)) return null
@@ -744,6 +749,13 @@ app.post("/api/v1/auth/login", async (req, res) => {
     scopedTenantId = await resolveRequestedTenantId(req, tenantId, tenantSubdomain)
   } catch (error: any) {
     return res.status(403).json({ ok: false, error: error?.message || "Tenant invalid." })
+  }
+
+  if (!scopedTenantId && isHostedGufoBrowserRequest(req)) {
+    return res.status(403).json({
+      ok: false,
+      error: "Autentificarea ERP este permisa doar pe subdomeniul clientului.",
+    })
   }
 
   const candidates = await prisma.user.findMany({
