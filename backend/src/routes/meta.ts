@@ -1,6 +1,5 @@
 // @ts-nocheck
 import { Router } from "express"
-import { TerminalDeviceType } from "@prisma/client"
 import path from "path"
 import fs from "fs"
 import multer from "multer"
@@ -502,13 +501,13 @@ router.get("/api/v1/meta/terminals", async (req: AuthedRequest, res) => {
     where: {
       tenantId,
       companyId,
-      deviceType: TerminalDeviceType.POS,
       ...(locationId ? { locationId } : {}),
     },
     select: {
       id: true,
       label: true,
       deviceId: true,
+      deviceType: true,
       locationId: true,
       location: {
         select: {
@@ -521,7 +520,49 @@ router.get("/api/v1/meta/terminals", async (req: AuthedRequest, res) => {
     orderBy: [{ label: "asc" }, { deviceId: "asc" }],
   })
 
-  res.json({ ok: true, terminals })
+  const terminalIds = terminals.map((item) => item.id)
+  const creationLogs = terminalIds.length
+    ? await prisma.auditLog.findMany({
+        where: {
+          tenantId,
+          entityType: "Terminal",
+          entityId: { in: terminalIds },
+          action: { in: ["POS_DEVICE_CREATED", "KDS_DEVICE_CREATED"] },
+        },
+        select: {
+          entityId: true,
+          payload: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: "desc" },
+      })
+    : []
+
+  const createdLabelByTerminalId = new Map<string, string>()
+  for (const log of creationLogs) {
+    const terminalId = String(log.entityId || "").trim()
+    if (!terminalId || createdLabelByTerminalId.has(terminalId)) continue
+    const payload = log.payload as Record<string, unknown> | null
+    const label = typeof payload?.label === "string" ? payload.label.trim() : ""
+    if (label) {
+      createdLabelByTerminalId.set(terminalId, label)
+    }
+  }
+
+  const normalized = terminals.map((terminal) => {
+    const currentLabel = String(terminal.label || "").trim()
+    const genericLabel =
+      currentLabel === "Android POS" ||
+      currentLabel === "GuFo POS" ||
+      currentLabel === "GuFo KDS"
+    const restoredLabel = createdLabelByTerminalId.get(terminal.id) || ""
+    return {
+      ...terminal,
+      label: genericLabel && restoredLabel ? restoredLabel : currentLabel,
+    }
+  })
+
+  res.json({ ok: true, terminals: normalized })
 })
 
 router.post("/api/v1/meta/locations", async (req: AuthedRequest, res) => {

@@ -25,7 +25,7 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const [locations, setLocations] = useState<Array<{ id: string; name: string; code?: string }>>([])
   const [terminals, setTerminals] = useState<
-    Array<{ id: string; label: string; deviceId: string; locationId?: string; locationName?: string; locationCode?: string }>
+    Array<{ id: string; label: string; deviceId: string; deviceType?: string; locationId?: string; locationName?: string; locationCode?: string }>
   >([])
   const [warehouses, setWarehouses] = useState<Array<{ id: string; name: string; code?: string; isDefault?: boolean }>>([])
   const [locationId, setLocationIdState] = useState(getActiveLocationId())
@@ -201,14 +201,17 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu?: () => void }) {
 
         if (cancelled) return
 
-        const normalized = items.map((item: any) => ({
-          id: String(item.id || ""),
-          label: String(item.label || item.deviceId || "POS"),
-          deviceId: String(item.deviceId || ""),
-          locationId: item.locationId ? String(item.locationId) : undefined,
-          locationName: item.location?.name ? String(item.location.name) : undefined,
-          locationCode: item.location?.code ? String(item.location.code) : undefined,
-        }))
+        const normalized = items
+          .map((item: any) => ({
+            id: String(item.id || ""),
+            label: String(item.label || item.deviceId || "POS"),
+            deviceId: String(item.deviceId || ""),
+            deviceType: item.deviceType ? String(item.deviceType) : undefined,
+            locationId: item.locationId ? String(item.locationId) : undefined,
+            locationName: item.location?.name ? String(item.location.name) : undefined,
+            locationCode: item.location?.code ? String(item.location.code) : undefined,
+          }))
+          .filter((item: { deviceType?: string }) => String(item.deviceType || "POS").toUpperCase() !== "KDS")
 
         setTerminals(normalized)
 
