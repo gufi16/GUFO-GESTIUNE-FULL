@@ -2157,11 +2157,7 @@ router.post("/api/v1/pos/validate", async (req, res) => {
   })
 })
 
-router.patch(
-  "/api/v1/admin/terminals/:id",
-  requireAuth,
-  requireOwner,
-  async (req: AuthedRequest, res) => {
+async function updateTerminalHandler(req: AuthedRequest, res: any) {
     const parsed = UpdateDeviceSchema.safeParse(req.body)
     if (!parsed.success) {
       return res.status(400).json({ ok: false, error: parsed.error.flatten() })
@@ -2268,8 +2264,10 @@ router.patch(
         companyId: updated.companyId,
       },
     })
-  },
-)
+}
+
+router.patch("/api/v1/admin/terminals/:id", requireAuth, requireOwner, updateTerminalHandler)
+router.put("/api/v1/admin/terminals/:id", requireAuth, requireOwner, updateTerminalHandler)
 
 router.delete(
   "/api/v1/admin/terminals/:id",

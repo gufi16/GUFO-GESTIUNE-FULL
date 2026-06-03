@@ -866,7 +866,7 @@ export default function ControlPanelClientDetails() {
       setSavingDeviceId(device.id)
       setDeviceError(null)
       await api<UpdateDeviceResponse>(`/api/v1/admin/terminals/${device.id}`, {
-        method: "PATCH",
+        method: "PUT",
         body: JSON.stringify({ label, deviceType }),
       })
       setMessage("Device-ul a fost actualizat.")
