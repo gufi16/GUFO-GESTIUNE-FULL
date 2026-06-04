@@ -129,6 +129,7 @@ function assertRouteHardening() {
 
 function assertTypedSensitiveModules() {
   const indexRoutes = readFileSafe("src/index.ts")
+  const usersRoutes = readFileSafe("src/routes/users.ts")
   const tenantRequest = readFileSafe("src/lib/tenantRequest.ts")
   const passwordReset = readFileSafe("src/lib/passwordReset.ts")
   const browserAuthCookies = readFileSafe("src/lib/browserAuthCookies.ts")
@@ -172,6 +173,14 @@ function assertTypedSensitiveModules() {
       !indexRoutes.includes('app.post("/api/v1/pos/pair"') &&
       !indexRoutes.includes('app.post("/api/v1/pos/validate"'),
     "Keep POS pairing and license activation in the typed POS router instead of index.ts."
+  )
+
+  addResult(
+    "Users management routes no longer bypass TypeScript",
+    !usersRoutes.startsWith("// @ts-nocheck") &&
+      usersRoutes.includes('router.post("/api/v1/users/:id/reset-password"') &&
+      usersRoutes.includes("mustChangePassword"),
+    "Keep user creation/update/reset flows in typed routes because they control temporary passwords and forced password change."
   )
 }
 

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { UserRole } from "@prisma/client"
 import { Router } from "express"
 import path from "path"
