@@ -131,6 +131,7 @@ function assertTypedSensitiveModules() {
   const indexRoutes = readFileSafe("src/index.ts")
   const usersRoutes = readFileSafe("src/routes/users.ts")
   const dashboardRoutes = readFileSafe("src/routes/dashboard.ts")
+  const customersRoutes = readFileSafe("src/routes/customers.ts")
   const metaRoutes = readFileSafe("src/routes/meta.ts")
   const productRoutes = readFileSafe("src/routes/products.ts")
   const tenantRequest = readFileSafe("src/lib/tenantRequest.ts")
@@ -193,6 +194,14 @@ function assertTypedSensitiveModules() {
     !dashboardRoutes.startsWith("// @ts-nocheck") &&
       dashboardRoutes.includes('router.get("/api/v1/dashboard"'),
     "Keep dashboard aggregation logic type-checked because it mixes Prisma queries, raw SQL, and response shaping."
+  )
+
+  addResult(
+    "Customers route no longer bypasses TypeScript",
+    !customersRoutes.startsWith("// @ts-nocheck") &&
+      customersRoutes.includes('router.post("/api/v1/customers"') &&
+      customersRoutes.includes("reserveUniqueCustomerCode"),
+    "Keep customer CRUD and code reservation type-checked because they affect commercial documents and partner master data."
   )
 
   addResult(
