@@ -133,8 +133,10 @@ function assertTypedSensitiveModules() {
   const dashboardRoutes = readFileSafe("src/routes/dashboard.ts")
   const customersRoutes = readFileSafe("src/routes/customers.ts")
   const backupsTypedRoutes = readFileSafe("src/routes/backups.ts")
+  const adminRoutes = readFileSafe("src/routes/admin.ts")
   const metaRoutes = readFileSafe("src/routes/meta.ts")
   const productRoutes = readFileSafe("src/routes/products.ts")
+  const adminRouteSupport = readFileSafe("src/lib/adminRouteSupport.ts")
   const tenantRequest = readFileSafe("src/lib/tenantRequest.ts")
   const passwordReset = readFileSafe("src/lib/passwordReset.ts")
   const browserAuthCookies = readFileSafe("src/lib/browserAuthCookies.ts")
@@ -211,6 +213,16 @@ function assertTypedSensitiveModules() {
       backupsTypedRoutes.includes('router.post("/api/v1/settings/backups/upload-restore"') &&
       backupsTypedRoutes.includes("persistTenantBackupSnapshot"),
     "Keep tenant backup and restore flows type-checked because they manipulate recovery files and safety snapshots."
+  )
+
+  addResult(
+    "Admin route helpers extracted from ts-nocheck route",
+    adminRoutes.includes('from "../lib/adminRouteSupport"') &&
+      adminRouteSupport.includes("export function slugify") &&
+      adminRouteSupport.includes("export async function generateUniqueTenantSubdomain") &&
+      adminRouteSupport.includes("export async function generateUniqueDeviceId") &&
+      adminRouteSupport.includes("export function moduleMapFromLicense"),
+    "Keep client onboarding, subdomain generation, temporary passwords, and terminal provisioning helpers in a typed helper module."
   )
 
   addResult(

@@ -7,6 +7,23 @@ import { z } from "zod"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { hashSecret } from "../lib/auth"
+import {
+  addDays,
+  buildStructuredLocationAddress,
+  buildTenantPortalUrl,
+  generateTemporaryPassword,
+  generateUniqueDeviceId,
+  generateUniqueLocationCode,
+  generateUniqueTenantSubdomain,
+  moduleMapFromLicense,
+  normalizeSubdomain,
+  parseOptionalDate,
+  pickPrimaryCompany,
+  resolveOwnedCompany,
+  serializeCompanySummary,
+  slugify,
+  toNullableText,
+} from "../lib/adminRouteSupport"
 import { buildTenantExportZip } from "../lib/tenantExport"
 import { hasGlobalControlPanelOwnerAccess } from "../lib/tenantAdmin"
 
@@ -22,144 +39,6 @@ function requireOwner(req: AuthedRequest, res: any, next: any) {
   }
 
   next()
-}
-
-function slugify(value: string) {
-  return (
-    value
-      .normalize("NFKD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 50) || "client"
-  )
-}
-
-const RESERVED_SUBDOMAINS = new Set(["app", "api", "www", "admin", "cp", "mail", "docs", "support"])
-
-function normalizeSubdomain(value?: string | null) {
-  const normalized = slugify(String(value || ""))
-  return normalized || "client"
-}
-
-function buildTenantPortalUrl(subdomain?: string | null) {
-  if (!subdomain) return null
-  return `https://${subdomain}.gufo.ink`
-}
-
-function pickPrimaryCompany(companies?: Array<any> | null) {
-  if (!Array.isArray(companies) || !companies.length) return null
-  return companies.find((company) => company?.isDefault) || companies[0] || null
-}
-
-function serializeCompanySummary(company?: any | null) {
-  if (!company) return null
-  return {
-    id: company.id,
-    name: company.name,
-    code: company.code,
-    cui: company.cui,
-    regNo: company.regNo,
-    address: company.address,
-    email: company.email,
-    phone: company.phone,
-    isDefault: company.isDefault,
-    createdAt: company.createdAt,
-  }
-}
-
-function toNullableText(value: unknown) {
-  const text = String(value ?? "").trim()
-  return text || null
-}
-
-function buildStructuredLocationAddress(data: {
-  street?: string | null
-  streetNo?: string | null
-  building?: string | null
-  staircase?: string | null
-  floor?: string | null
-  apartment?: string | null
-  details?: string | null
-}) {
-  const streetLine = [data.street, data.streetNo ? `Nr. ${data.streetNo}` : null].filter(Boolean).join(" ").trim()
-  const secondaryLine = [
-    data.building ? `Bl. ${data.building}` : null,
-    data.staircase ? `Sc. ${data.staircase}` : null,
-    data.floor ? `Et. ${data.floor}` : null,
-    data.apartment ? `Ap. ${data.apartment}` : null,
-  ]
-    .filter(Boolean)
-    .join(", ")
-    .trim()
-  return [streetLine, secondaryLine, data.details].filter(Boolean).join(", ").trim() || null
-}
-
-function resolveOwnedCompany(companies: Array<any>, requestedCompanyId?: string | null) {
-  if (!Array.isArray(companies) || !companies.length) return null
-  if (requestedCompanyId) {
-    return companies.find((company) => company.id === requestedCompanyId) || null
-  }
-  return pickPrimaryCompany(companies)
-}
-
-async function generateUniqueTenantSubdomain(value: string) {
-  const base = normalizeSubdomain(value)
-  let candidate = RESERVED_SUBDOMAINS.has(base) ? `${base}-client` : base
-  let index = 1
-
-  while (await prisma.tenant.findFirst({ where: { subdomain: candidate } })) {
-    candidate = `${base}-${index}`.slice(0, 50)
-    index += 1
-  }
-
-  if (RESERVED_SUBDOMAINS.has(candidate)) {
-    candidate = `${candidate}-1`.slice(0, 50)
-  }
-
-  return candidate
-}
-
-function addDays(base: Date, days: number) {
-  const next = new Date(base)
-  next.setDate(next.getDate() + days)
-  return next
-}
-
-function parseOptionalDate(value?: string | null) {
-  if (!value || !value.trim()) return undefined
-
-  const normalized = value.length === 10 ? `${value}T00:00:00.000Z` : value
-  const date = new Date(normalized)
-
-  if (Number.isNaN(date.getTime())) {
-    return undefined
-  }
-
-  return date
-}
-
-function moduleMapFromLicense(license: {
-  modDashboard: boolean
-  modDocuments: boolean
-  modInventory: boolean
-  modNomenclature: boolean
-  modSettings: boolean
-  modPos: boolean
-  modKds: boolean
-  modReports: boolean
-}) {
-  return {
-    dashboard: Boolean(license.modDashboard),
-    documents: Boolean(license.modDocuments),
-    inventory: Boolean(license.modInventory),
-    nomenclature: Boolean(license.modNomenclature),
-    settings: Boolean(license.modSettings),
-    pos: Boolean(license.modPos),
-    kds: Boolean(license.modKds),
-    reports: Boolean(license.modReports),
-  }
 }
 
 async function ensureTenantEfacturaModuleEnabled(tx: any, tenantId: string) {
@@ -201,46 +80,6 @@ async function ensureTenantEfacturaModuleEnabled(tx: any, tenantId: string) {
   })
 }
 
-function randomChunk(length = 4) {
-  return Math.random().toString(36).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, length)
-}
-
-function generateTemporaryPassword(length = 10) {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
-  let value = ""
-  for (let index = 0; index < length; index += 1) {
-    value += alphabet[Math.floor(Math.random() * alphabet.length)]
-  }
-  return value
-}
-
-async function generateUniqueLocationCode(tenantId: string, companyId: string | null | undefined, name: string) {
-  const base = slugify(name).replace(/-/g, "").toUpperCase().slice(0, 6) || "LOC"
-  let code = base
-  let index = 1
-
-  while (await prisma.location.findFirst({ where: { tenantId, companyId: companyId ?? null, code } })) {
-    code = `${base}${index}`.slice(0, 10)
-    index += 1
-  }
-
-  return code
-}
-
-async function generateUniqueDeviceId(
-  tenantId: string,
-  companyId: string | null | undefined,
-  deviceType: TerminalDeviceType = TerminalDeviceType.POS,
-) {
-  const prefix = deviceType === TerminalDeviceType.KDS ? "KDS" : "POS"
-  let deviceId = `${prefix}-${randomChunk(4)}-${randomChunk(4)}`
-
-  while (await prisma.terminal.findFirst({ where: { tenantId, companyId: companyId ?? null, deviceId } })) {
-    deviceId = `${prefix}-${randomChunk(4)}-${randomChunk(4)}`
-  }
-
-  return deviceId
-}
 
 const CreateClientSchema = z.object({
   companyName: z.string().min(2),
