@@ -130,9 +130,11 @@ function assertRouteHardening() {
 function assertTypedSensitiveModules() {
   const indexRoutes = readFileSafe("src/index.ts")
   const usersRoutes = readFileSafe("src/routes/users.ts")
+  const metaRoutes = readFileSafe("src/routes/meta.ts")
   const tenantRequest = readFileSafe("src/lib/tenantRequest.ts")
   const passwordReset = readFileSafe("src/lib/passwordReset.ts")
   const browserAuthCookies = readFileSafe("src/lib/browserAuthCookies.ts")
+  const metaRouteSupport = readFileSafe("src/lib/metaRouteSupport.ts")
   const posRoutes = readFileSafe("src/routes/pos.ts")
 
   addResult(
@@ -181,6 +183,15 @@ function assertTypedSensitiveModules() {
       usersRoutes.includes('router.post("/api/v1/users/:id/reset-password"') &&
       usersRoutes.includes("mustChangePassword"),
     "Keep user creation/update/reset flows in typed routes because they control temporary passwords and forced password change."
+  )
+
+  addResult(
+    "Meta route helpers extracted from ts-nocheck route",
+    metaRoutes.includes('from "../lib/metaRouteSupport"') &&
+      metaRouteSupport.includes("export async function ensureDefaultUoms") &&
+      metaRouteSupport.includes("export function inferTerminalDeviceType") &&
+      metaRouteSupport.includes("export function normalizeWarehouseType"),
+    "Keep terminal classification, default UOM bootstrap, and warehouse type normalization in a typed helper module."
   )
 }
 
