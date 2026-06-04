@@ -130,6 +130,7 @@ function assertRouteHardening() {
 function assertTypedSensitiveModules() {
   const indexRoutes = readFileSafe("src/index.ts")
   const usersRoutes = readFileSafe("src/routes/users.ts")
+  const dashboardRoutes = readFileSafe("src/routes/dashboard.ts")
   const metaRoutes = readFileSafe("src/routes/meta.ts")
   const productRoutes = readFileSafe("src/routes/products.ts")
   const tenantRequest = readFileSafe("src/lib/tenantRequest.ts")
@@ -185,6 +186,13 @@ function assertTypedSensitiveModules() {
       usersRoutes.includes('router.post("/api/v1/users/:id/reset-password"') &&
       usersRoutes.includes("mustChangePassword"),
     "Keep user creation/update/reset flows in typed routes because they control temporary passwords and forced password change."
+  )
+
+  addResult(
+    "Dashboard route no longer bypasses TypeScript",
+    !dashboardRoutes.startsWith("// @ts-nocheck") &&
+      dashboardRoutes.includes('router.get("/api/v1/dashboard"'),
+    "Keep dashboard aggregation logic type-checked because it mixes Prisma queries, raw SQL, and response shaping."
   )
 
   addResult(
