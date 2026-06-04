@@ -11,6 +11,33 @@ import path from "path"
 import crypto from "crypto"
 import { assertPersistentUploadsConfig, ensureUploadSubdir, getUploadsRoot } from "./lib/uploads"
 import { loadEnv } from "./lib/loadEnv"
+import {
+  clearControlAuthCookie,
+  clearControlCsrfCookie,
+  clearErpAuthCookie,
+  clearErpCsrfCookie,
+  clearErpTenantCookie,
+  CONTROL_AUTH_COOKIE,
+  CONTROL_CSRF_COOKIE,
+  ERP_AUTH_COOKIE,
+  ERP_CSRF_COOKIE,
+  setControlAuthCookie,
+  setControlCsrfCookie,
+  setErpAuthCookie,
+  setErpCsrfCookie,
+  setErpTenantCookie,
+  WEB_SESSION_TTL_MS,
+} from "./lib/browserAuthCookies"
+import {
+  getHostnameFromUrl,
+  getOriginHostname,
+  getRequestHostname,
+  getTenantSubdomainFromHostname,
+  getTenantSubdomainFromRequest,
+  isHostedGufoBrowserRequest,
+  resolveRequestedTenantId,
+} from "./lib/tenantRequest"
+import { createBrowserCsrfToken, issuePasswordResetToken } from "./lib/passwordReset"
 
 import { prisma } from "./lib/prisma"
 import { getPrimaryTenantCompany } from "./lib/companyResolver"
@@ -77,13 +104,6 @@ const uploadsConfig = assertPersistentUploadsConfig()
 ensureUploadSubdir("products")
 ensureUploadSubdir("categories")
 
-const ERP_AUTH_COOKIE = "gufo_erp_session"
-const CONTROL_AUTH_COOKIE = "gufo_control_session"
-const ERP_CSRF_COOKIE = "gufo_erp_csrf"
-const CONTROL_CSRF_COOKIE = "gufo_control_csrf"
-const ERP_TENANT_COOKIE = "gufo_erp_tenant"
-const WEB_SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30
-
 if (!String(process.env.UPLOADS_DIR || "").trim()) {
   console.warn(
     `[uploads] UPLOADS_DIR is not set. Files are stored in ${uploadsDir}. ` +
@@ -91,122 +111,6 @@ if (!String(process.env.UPLOADS_DIR || "").trim()) {
   )
 } else {
   console.info(`[uploads] Persistent storage root: ${uploadsConfig.effectiveRoot}`)
-}
-
-function isSecureCookieRequest(req: express.Request) {
-  const originHost = getOriginHostname(req)
-  const requestHost = getRequestHostname(req)
-  const host = originHost || requestHost
-  return !/^(localhost|127\.0\.0\.1)$/i.test(host)
-}
-
-function buildAuthCookieOptions(req: express.Request) {
-  const secure = isSecureCookieRequest(req)
-  return {
-    httpOnly: true,
-    secure,
-    sameSite: "lax" as const,
-    path: "/",
-    maxAge: 1000 * 60 * 60 * 24 * 30,
-  }
-}
-
-function buildCsrfCookieOptions(req: express.Request) {
-  const secure = isSecureCookieRequest(req)
-  return {
-    httpOnly: false,
-    secure,
-    sameSite: "lax" as const,
-    path: "/",
-    maxAge: WEB_SESSION_TTL_MS,
-  }
-}
-
-function setErpAuthCookie(req: express.Request, res: express.Response, token: string) {
-  res.cookie(ERP_AUTH_COOKIE, token, buildAuthCookieOptions(req))
-}
-
-function clearErpAuthCookie(req: express.Request, res: express.Response) {
-  res.clearCookie(ERP_AUTH_COOKIE, {
-    ...buildAuthCookieOptions(req),
-    maxAge: undefined,
-  })
-}
-
-function setErpCsrfCookie(req: express.Request, res: express.Response, token: string) {
-  res.cookie(ERP_CSRF_COOKIE, token, buildCsrfCookieOptions(req))
-}
-
-function clearErpCsrfCookie(req: express.Request, res: express.Response) {
-  res.clearCookie(ERP_CSRF_COOKIE, {
-    ...buildCsrfCookieOptions(req),
-    maxAge: undefined,
-  })
-}
-
-function setErpTenantCookie(req: express.Request, res: express.Response, subdomain: string) {
-  res.cookie(ERP_TENANT_COOKIE, subdomain, buildCsrfCookieOptions(req))
-}
-
-function clearErpTenantCookie(req: express.Request, res: express.Response) {
-  res.clearCookie(ERP_TENANT_COOKIE, {
-    ...buildCsrfCookieOptions(req),
-    maxAge: undefined,
-  })
-}
-
-function setControlAuthCookie(req: express.Request, res: express.Response, token: string) {
-  res.cookie(CONTROL_AUTH_COOKIE, token, buildAuthCookieOptions(req))
-}
-
-function clearControlAuthCookie(req: express.Request, res: express.Response) {
-  res.clearCookie(CONTROL_AUTH_COOKIE, {
-    ...buildAuthCookieOptions(req),
-    maxAge: undefined,
-  })
-}
-
-function setControlCsrfCookie(req: express.Request, res: express.Response, token: string) {
-  res.cookie(CONTROL_CSRF_COOKIE, token, buildCsrfCookieOptions(req))
-}
-
-function clearControlCsrfCookie(req: express.Request, res: express.Response) {
-  res.clearCookie(CONTROL_CSRF_COOKIE, {
-    ...buildCsrfCookieOptions(req),
-    maxAge: undefined,
-  })
-}
-
-function createBrowserCsrfToken() {
-  return crypto.randomBytes(24).toString("hex")
-}
-
-async function issuePasswordResetToken(userId: string, tenantId: string) {
-  await prisma.passwordResetToken.updateMany({
-    where: {
-      userId,
-      usedAt: null,
-      expiresAt: { gt: new Date() },
-    },
-    data: {
-      usedAt: new Date(),
-    },
-  })
-
-  const rawToken = crypto.randomBytes(32).toString("hex")
-  const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex")
-  const expiresAt = new Date(Date.now() + 1000 * 60 * 60)
-
-  await prisma.passwordResetToken.create({
-    data: {
-      tenantId,
-      userId,
-      tokenHash,
-      expiresAt,
-    },
-  })
-
-  return rawToken
 }
 
 async function createWebSession(input: {
@@ -276,14 +180,6 @@ function shouldValidateCsrf(req: express.Request) {
 }
 
 app.disable("etag")
-
-function getHostnameFromUrl(value: string) {
-  try {
-    return new URL(value).hostname.toLowerCase()
-  } catch {
-    return ""
-  }
-}
 
 async function isAllowedOrigin(origin?: string) {
   if (!origin) return true
@@ -534,16 +430,6 @@ function computeMarketplaceVisibility(
   }
 }
 
-function normalizeSubdomain(value: unknown) {
-  return String(value ?? "")
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 50)
-}
-
 function getRateLimitKey(req: express.Request, scope: string, identifier?: string | null) {
   const forwardedFor = String(req.headers["x-forwarded-for"] || "")
     .split(",")[0]
@@ -585,73 +471,6 @@ function checkSimpleRateLimit(
   bucket.count += 1
   authRateLimitBuckets.set(key, bucket)
   return true
-}
-
-function getRequestHostname(req: express.Request) {
-  const forwardedHost = String(req.headers["x-forwarded-host"] || req.get("host") || "")
-    .split(",")[0]
-    .trim()
-    .toLowerCase()
-  return forwardedHost.replace(/:\d+$/, "")
-}
-
-function getOriginHostname(req: express.Request) {
-  const origin = String(req.headers.origin || "").trim()
-  if (origin) return getHostnameFromUrl(origin)
-
-  const referer = String(req.headers.referer || "").trim()
-  if (referer) return getHostnameFromUrl(referer)
-
-  return ""
-}
-
-function isHostedGufoBrowserRequest(req: express.Request) {
-  const hostnames = [getRequestHostname(req), getOriginHostname(req)].filter(Boolean)
-  return hostnames.some((hostname) => hostname.endsWith(".gufo.ink"))
-}
-
-function getTenantSubdomainFromHostname(hostname: string) {
-  if (!hostname) return null
-  if (/^(localhost|127\.0\.0\.1)$/i.test(hostname)) return null
-  if (hostname === "gufo.ink" || hostname === "app.gufo.ink" || hostname === "api.gufo.ink") return null
-  if (!hostname.endsWith(".gufo.ink")) return null
-
-  const parts = hostname.split(".")
-  if (parts.length < 3) return null
-
-  const subdomain = parts[0]
-  if (!subdomain || ["app", "api", "www", "admin", "cp"].includes(subdomain)) return null
-  return subdomain
-}
-
-function getTenantSubdomainFromRequest(req: express.Request) {
-  const explicitHeader = String(req.headers["x-tenant-subdomain"] || "").trim().toLowerCase()
-  const validExplicitHeader = explicitHeader && /^[a-z0-9-]+$/.test(explicitHeader) ? explicitHeader : ""
-
-  const hostnames = [getRequestHostname(req), getOriginHostname(req)]
-  let hostDerivedSubdomain: string | null = null
-
-  for (const hostname of hostnames) {
-    const subdomain = getTenantSubdomainFromHostname(hostname)
-    if (subdomain) {
-      hostDerivedSubdomain = subdomain
-      break
-    }
-  }
-
-  if (validExplicitHeader && hostDerivedSubdomain && validExplicitHeader !== hostDerivedSubdomain) {
-    return null
-  }
-
-  if (validExplicitHeader) return validExplicitHeader
-  if (hostDerivedSubdomain) return hostDerivedSubdomain
-
-  const cookieSubdomain = String(req.cookies?.[ERP_TENANT_COOKIE] || "").trim().toLowerCase()
-  if (cookieSubdomain && /^[a-z0-9-]+$/.test(cookieSubdomain)) {
-    return cookieSubdomain
-  }
-
-  return null
 }
 
 async function listTenantCompanies(tenantId?: string | null) {
@@ -716,41 +535,6 @@ async function resolveActiveCompanyForUser(
     companies,
     activeCompany,
   }
-}
-
-async function resolveTenantIdFromRequestHost(req: express.Request) {
-  const subdomain = getTenantSubdomainFromRequest(req)
-  if (!subdomain) return null
-
-  const tenant = await prisma.tenant.findFirst({
-    where: { subdomain },
-    select: { id: true },
-  })
-
-  return tenant?.id || null
-}
-
-async function resolveRequestedTenantId(
-  req: express.Request,
-  tenantId?: string | null,
-  tenantSubdomain?: string | null
-) {
-  const hostTenantId = await resolveTenantIdFromRequestHost(req)
-  let requestedTenantId = String(tenantId || "").trim() || undefined
-
-  if (!requestedTenantId && tenantSubdomain) {
-    const tenant = await prisma.tenant.findFirst({
-      where: { subdomain: normalizeSubdomain(tenantSubdomain) },
-      select: { id: true },
-    })
-    requestedTenantId = tenant?.id || undefined
-  }
-
-  if (requestedTenantId && hostTenantId && requestedTenantId !== hostTenantId) {
-    throw new Error("Tenantul nu corespunde subdomeniului.")
-  }
-
-  return requestedTenantId || hostTenantId || undefined
 }
 
 app.get("/health", (_req, res) => {

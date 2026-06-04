@@ -126,6 +126,36 @@ function assertRouteHardening() {
   )
 }
 
+function assertTypedSensitiveModules() {
+  const indexRoutes = readFileSafe("src/index.ts")
+  const tenantRequest = readFileSafe("src/lib/tenantRequest.ts")
+  const passwordReset = readFileSafe("src/lib/passwordReset.ts")
+  const browserAuthCookies = readFileSafe("src/lib/browserAuthCookies.ts")
+
+  addResult(
+    "Tenant request logic extracted from ts-nocheck entrypoint",
+    indexRoutes.includes('from "./lib/tenantRequest"') &&
+      tenantRequest.includes("export async function resolveRequestedTenantId") &&
+      tenantRequest.includes("export function getTenantSubdomainFromRequest"),
+    "Keep tenant/subdomain resolution in a typed helper module instead of growing index.ts."
+  )
+
+  addResult(
+    "Password reset token flow extracted from ts-nocheck entrypoint",
+    indexRoutes.includes('from "./lib/passwordReset"') &&
+      passwordReset.includes("export async function issuePasswordResetToken"),
+    "Keep password reset token issuance in a typed helper module."
+  )
+
+  addResult(
+    "Browser auth cookie helpers extracted from ts-nocheck entrypoint",
+    indexRoutes.includes('from "./lib/browserAuthCookies"') &&
+      browserAuthCookies.includes("export function setErpAuthCookie") &&
+      browserAuthCookies.includes("export function setControlAuthCookie"),
+    "Keep cookie/session helper logic in a typed helper module."
+  )
+}
+
 function assertOpsAssets() {
   const repoRoot = path.resolve(process.cwd(), "..")
   const requiredAssets = [
@@ -254,6 +284,7 @@ function printResultsAndExit() {
 async function main() {
   assertEnvBasics()
   assertRouteHardening()
+  assertTypedSensitiveModules()
   assertOpsAssets()
   try {
     await assertStockBalanceConsistency()
