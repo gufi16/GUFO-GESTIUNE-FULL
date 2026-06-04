@@ -31,11 +31,11 @@ docker run --rm \
     export BASE_URL="${DATABASE_URL%/*}"
     export ADMIN_URL="${BASE_URL}/postgres"
     export TARGET_URL="${BASE_URL}/${RESTORE_TEST_DB}"
-    dropdb --if-exists --dbname "${ADMIN_URL}" "${RESTORE_TEST_DB}" || true
-    createdb --dbname "${ADMIN_URL}" "${RESTORE_TEST_DB}"
+    psql "${ADMIN_URL}" -c "DROP DATABASE IF EXISTS \"${RESTORE_TEST_DB}\";"
+    psql "${ADMIN_URL}" -c "CREATE DATABASE \"${RESTORE_TEST_DB}\";"
     pg_restore --clean --if-exists --no-owner --no-privileges -d "${TARGET_URL}" "'"${BACKUP_MOUNT_DIR}"'/$(basename "'"${BACKUP_FILE}"'")"
     psql "${TARGET_URL}" -c "SELECT NOW();"
-    dropdb --dbname "${ADMIN_URL}" "${RESTORE_TEST_DB}"
+    psql "${ADMIN_URL}" -c "DROP DATABASE IF EXISTS \"${RESTORE_TEST_DB}\";"
   '
 
 echo "Restore test completed for ${BACKUP_FILE}"
