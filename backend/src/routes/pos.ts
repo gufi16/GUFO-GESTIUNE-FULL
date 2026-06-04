@@ -3,6 +3,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import jwt from "jsonwebtoken";
 import { Prisma, UserRole } from "@prisma/client";
+import bcrypt from "bcryptjs";
 import { prisma } from "../lib/prisma";
 import { decrementStockBalanceAllowNegative } from "../lib/stock";
 import { getPrimaryTenantCompany } from "../lib/companyResolver";
@@ -824,6 +825,13 @@ const PosLicenseValidateSchema = z.object({
   license_key: z.string().min(3).optional(),
 });
 
+const LicenseActivateSchema = z.object({
+  license_key: z.string().min(6),
+  device_id: z.string().min(3),
+  app_version: z.string().min(1),
+  location_code: z.string().optional(),
+});
+
 const PosDailyClosureSchema = z.object({
   reportType: z.string().optional().default("Z"),
   reportNo: z.string().optional().nullable(),
@@ -1065,6 +1073,100 @@ router.post("/api/v1/pos/validate", async (req: Request, res: Response) => {
       error: "Eroare interna la validarea POS",
     });
   }
+});
+
+router.post("/api/v1/license/activate", async (req: Request, res: Response) => {
+  const parsed = LicenseActivateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ ok: false, error: parsed.error.flatten() });
+  }
+
+  const license_key = parsed.data.license_key.trim();
+  const device_id = parsed.data.device_id.trim();
+  const app_version = parsed.data.app_version.trim();
+  const location_code = parsed.data.location_code?.trim();
+
+  const candidates = await prisma.license.findMany({
+    where: {
+      isSuspended: false,
+      expiresAt: { gt: new Date() },
+    },
+    include: {
+      tenant: true,
+    },
+    take: 100,
+  });
+
+  let found: (typeof candidates)[number] | null = null;
+
+  for (const candidate of candidates) {
+    const matches = await bcrypt.compare(license_key, candidate.keyHash);
+    if (matches) {
+      found = candidate;
+      break;
+    }
+  }
+
+  if (!found) {
+    return res.status(401).json({
+      ok: false,
+      valid: false,
+      error: "Invalid or expired license",
+    });
+  }
+
+  let locationId: string | null = null;
+
+  if (location_code) {
+    const location = await prisma.location.findFirst({
+      where: {
+        tenantId: found.tenantId,
+        code: location_code,
+      },
+    });
+    if (location) {
+      locationId = location.id;
+    }
+  }
+
+  const terminal = await prisma.terminal.upsert({
+    where: {
+      tenantId_deviceId: {
+        tenantId: found.tenantId,
+        deviceId: device_id,
+      },
+    },
+    update: {
+      locationId: locationId ?? undefined,
+      label: `Android POS (${app_version})`,
+    },
+    create: {
+      tenantId: found.tenantId,
+      deviceId: device_id,
+      locationId: locationId ?? undefined,
+      label: `Android POS (${app_version})`,
+      isLockedToLocation: true,
+    },
+  });
+
+  const pos_token = signPosToken({
+    tenantId: found.tenantId,
+    terminalId: terminal.id,
+    deviceId: terminal.deviceId,
+  });
+
+  return res.json({
+    ok: true,
+    valid: true,
+    tenant_id: found.tenantId,
+    terminal_id: terminal.id,
+    pos_token,
+    modules: {
+      pos: found.modPos,
+      inventory: found.modInventory,
+      documents: found.modDocuments,
+    },
+  });
 });
 
 router.post("/api/v1/pos/pair", async (req: Request, res: Response) => {

@@ -132,6 +132,7 @@ function assertTypedSensitiveModules() {
   const tenantRequest = readFileSafe("src/lib/tenantRequest.ts")
   const passwordReset = readFileSafe("src/lib/passwordReset.ts")
   const browserAuthCookies = readFileSafe("src/lib/browserAuthCookies.ts")
+  const posRoutes = readFileSafe("src/routes/pos.ts")
 
   addResult(
     "Tenant request logic extracted from ts-nocheck entrypoint",
@@ -154,6 +155,17 @@ function assertTypedSensitiveModules() {
       browserAuthCookies.includes("export function setErpAuthCookie") &&
       browserAuthCookies.includes("export function setControlAuthCookie"),
     "Keep cookie/session helper logic in a typed helper module."
+  )
+
+  addResult(
+    "POS public auth routes extracted from ts-nocheck entrypoint",
+    posRoutes.includes('router.post("/api/v1/license/activate"') &&
+      posRoutes.includes('router.post("/api/v1/pos/pair"') &&
+      posRoutes.includes('router.post("/api/v1/pos/validate"') &&
+      !indexRoutes.includes('app.post("/api/v1/license/activate"') &&
+      !indexRoutes.includes('app.post("/api/v1/pos/pair"') &&
+      !indexRoutes.includes('app.post("/api/v1/pos/validate"'),
+    "Keep POS pairing and license activation in the typed POS router instead of index.ts."
   )
 }
 
