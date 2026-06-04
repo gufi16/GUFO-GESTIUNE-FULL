@@ -221,7 +221,9 @@ function assertTypedSensitiveModules() {
       adminRouteSupport.includes("export function slugify") &&
       adminRouteSupport.includes("export async function generateUniqueTenantSubdomain") &&
       adminRouteSupport.includes("export async function generateUniqueDeviceId") &&
-      adminRouteSupport.includes("export function moduleMapFromLicense"),
+      adminRouteSupport.includes("export function moduleMapFromLicense") &&
+      adminRouteSupport.includes("export function inferTerminalDeviceType") &&
+      adminRouteSupport.includes("export function resolveTerminalDisplayLabel"),
     "Keep client onboarding, subdomain generation, temporary passwords, and terminal provisioning helpers in a typed helper module."
   )
 

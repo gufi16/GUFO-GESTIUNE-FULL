@@ -15,11 +15,14 @@ import {
   generateUniqueDeviceId,
   generateUniqueLocationCode,
   generateUniqueTenantSubdomain,
+  inferTerminalDeviceType,
   moduleMapFromLicense,
   normalizeSubdomain,
+  normalizeTerminalLabel,
   parseOptionalDate,
   pickPrimaryCompany,
   resolveOwnedCompany,
+  resolveTerminalDisplayLabel,
   serializeCompanySummary,
   slugify,
   toNullableText,
@@ -2159,42 +2162,6 @@ async function updateTerminalHandler(req: AuthedRequest, res: any) {
         companyId: updated.companyId,
       },
     })
-}
-
-function normalizeTerminalLabel(value: unknown) {
-  return String(value || "").trim()
-}
-
-function inferTerminalDeviceType(terminal: {
-  deviceType?: TerminalDeviceType | string | null
-  label?: string | null
-  deviceId?: string | null
-}) {
-  const explicit = String(terminal.deviceType || "").trim().toUpperCase()
-  if (explicit === "KDS") return TerminalDeviceType.KDS
-  if (explicit === "POS") return TerminalDeviceType.POS
-
-  const label = normalizeTerminalLabel(terminal.label).toUpperCase()
-  const deviceId = String(terminal.deviceId || "").trim().toUpperCase()
-  if (label.includes("KDS") || deviceId.startsWith("KDS-")) {
-    return TerminalDeviceType.KDS
-  }
-
-  return TerminalDeviceType.POS
-}
-
-function resolveTerminalDisplayLabel(
-  terminal: { id: string; label?: string | null; deviceId?: string | null },
-  labelByTerminalId: Map<string, string>,
-) {
-  const currentLabel = normalizeTerminalLabel(terminal.label)
-  const genericLabel =
-    currentLabel === "Android POS" ||
-    currentLabel === "GuFo POS" ||
-    currentLabel === "GuFo KDS"
-  const restoredLabel = labelByTerminalId.get(terminal.id) || ""
-
-  return genericLabel && restoredLabel ? restoredLabel : currentLabel
 }
 
 router.patch("/api/v1/admin/terminals/:id", requireAuth, requireOwner, updateTerminalHandler)

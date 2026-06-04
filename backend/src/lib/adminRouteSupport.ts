@@ -35,6 +35,13 @@ type StructuredLocationAddressInput = {
   details?: string | null
 }
 
+type TerminalLike = {
+  id: string
+  label?: string | null
+  deviceType?: TerminalDeviceType | null
+  deviceId?: string | null
+}
+
 const RESERVED_SUBDOMAINS = new Set(["app", "api", "www", "admin", "cp", "mail", "docs", "support"])
 
 export function slugify(value: string) {
@@ -198,4 +205,34 @@ export async function generateUniqueDeviceId(
   }
 
   return deviceId
+}
+
+export function normalizeTerminalLabel(value: unknown) {
+  return String(value || "").trim()
+}
+
+export function inferTerminalDeviceType(terminal: {
+  deviceType?: TerminalDeviceType | string | null
+  label?: string | null
+  deviceId?: string | null
+}) {
+  const explicit = String(terminal.deviceType || "").trim().toUpperCase()
+  if (explicit === "KDS") return TerminalDeviceType.KDS
+  if (explicit === "POS") return TerminalDeviceType.POS
+
+  const label = normalizeTerminalLabel(terminal.label).toUpperCase()
+  const deviceId = String(terminal.deviceId || "").trim().toUpperCase()
+  if (label.includes("KDS") || deviceId.startsWith("KDS-")) {
+    return TerminalDeviceType.KDS
+  }
+
+  return TerminalDeviceType.POS
+}
+
+export function resolveTerminalDisplayLabel(terminal: TerminalLike, labelByTerminalId: Map<string, string>) {
+  const currentLabel = normalizeTerminalLabel(terminal.label)
+  const genericLabel = currentLabel === "Android POS" || currentLabel === "GuFo POS" || currentLabel === "GuFo KDS"
+  const restoredLabel = labelByTerminalId.get(terminal.id) || ""
+
+  return genericLabel && restoredLabel ? restoredLabel : currentLabel
 }
