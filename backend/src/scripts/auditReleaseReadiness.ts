@@ -131,10 +131,12 @@ function assertTypedSensitiveModules() {
   const indexRoutes = readFileSafe("src/index.ts")
   const usersRoutes = readFileSafe("src/routes/users.ts")
   const metaRoutes = readFileSafe("src/routes/meta.ts")
+  const productRoutes = readFileSafe("src/routes/products.ts")
   const tenantRequest = readFileSafe("src/lib/tenantRequest.ts")
   const passwordReset = readFileSafe("src/lib/passwordReset.ts")
   const browserAuthCookies = readFileSafe("src/lib/browserAuthCookies.ts")
   const metaRouteSupport = readFileSafe("src/lib/metaRouteSupport.ts")
+  const productRouteSupport = readFileSafe("src/lib/productRouteSupport.ts")
   const posRoutes = readFileSafe("src/routes/pos.ts")
 
   addResult(
@@ -192,6 +194,15 @@ function assertTypedSensitiveModules() {
       metaRouteSupport.includes("export function inferTerminalDeviceType") &&
       metaRouteSupport.includes("export function normalizeWarehouseType"),
     "Keep terminal classification, default UOM bootstrap, and warehouse type normalization in a typed helper module."
+  )
+
+  addResult(
+    "Product route helpers extracted from ts-nocheck route",
+    productRoutes.includes('from "../lib/productRouteSupport"') &&
+      productRouteSupport.includes("export function normalizeProductFlags") &&
+      productRouteSupport.includes("export function serializeProduct") &&
+      productRouteSupport.includes("export async function getNextAvailableProductSkuValue"),
+    "Keep SKU generation, class normalization, and product/recipe serialization in a typed helper module."
   )
 }
 

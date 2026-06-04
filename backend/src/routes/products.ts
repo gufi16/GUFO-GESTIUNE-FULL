@@ -3,12 +3,25 @@ import { Router } from "express"
 import path from "path"
 import fs from "fs"
 import multer from "multer"
-import { Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { buildCompanyScopedTenantWhere, requireRequestCompanyId, resolveRequestCompany } from "../lib/companyScope"
 import { suggestNcCodes } from "../lib/ncSuggest"
 import { buildPublicUploadUrl, ensureUploadSubdir, normalizeStoredUploadUrl } from "../lib/uploads"
+import {
+  ALL_PRODUCT_CLASSES,
+  MENU_COMPONENT_CLASSES,
+  RECIPE_INGREDIENT_CLASSES,
+  RECIPE_REQUIRED_CLASSES,
+  getNextAvailableProductSkuValue,
+  normalizeBoolean,
+  normalizeProductFlags,
+  normalizeProductionMode,
+  normalizeStockCostMethod,
+  serializeProduct,
+  serializeRecipe,
+  toNumber,
+} from "../lib/productRouteSupport"
 
 const router = Router()
 
@@ -48,170 +61,9 @@ const upload = multer({
 
 router.use(requireAuth)
 
-const RECIPE_REQUIRED_CLASSES = ["PRODUS_FIN", "SEMIFABRICATE"]
-const RECIPE_INGREDIENT_CLASSES = ["MATERIE_PRIMA", "MARFA", "SEMIFABRICATE"]
-const MENU_COMPONENT_CLASSES = ["PRODUS_FIN", "MARFA", "SEMIFABRICATE"]
-const PRODUCTION_MODE_VALUES = ["AUTO", "MANUAL"]
-const STOCK_COST_METHOD_VALUES = ["AVG", "FIFO", "FEFO"]
-
-const PRODUCT_CLASS_RULES: Record<
-  string,
-  {
-    allowPrice: boolean
-    allowPos: boolean
-    allowSgr: boolean
-  }
-> = {
-  MATERIE_PRIMA: { allowPrice: true, allowPos: true, allowSgr: true },
-  SEMIFABRICATE: { allowPrice: true, allowPos: true, allowSgr: true },
-  PRODUS_FIN: { allowPrice: true, allowPos: true, allowSgr: true },
-  MARFA: { allowPrice: true, allowPos: true, allowSgr: true },
-  AMBALAJE: { allowPrice: true, allowPos: true, allowSgr: true },
-  AMBALAJ_SGR: { allowPrice: true, allowPos: true, allowSgr: true },
-  CONSUMABILE: { allowPrice: true, allowPos: true, allowSgr: true },
-  REZIDUALE: { allowPrice: true, allowPos: true, allowSgr: true },
-  ALTE_MATERIALE: { allowPrice: true, allowPos: true, allowSgr: true },
-  SERVICIU_VANDUT: { allowPrice: true, allowPos: true, allowSgr: false },
-  DISCOUNT_FINANCIAR_IESIRI: { allowPrice: true, allowPos: true, allowSgr: true },
-  DISCOUNT_COMERCIAL_IESIRI: { allowPrice: true, allowPos: true, allowSgr: true },
-  TAXA_VERDE: { allowPrice: true, allowPos: true, allowSgr: true }
-}
-const ALL_PRODUCT_CLASSES = Object.keys(PRODUCT_CLASS_RULES)
-
-function getClassRules(classValue: string) {
-  return PRODUCT_CLASS_RULES[classValue] || null
-}
-
-function normalizeProductFlags(classValue: string, payload: { price: number; isVisibleInPos: boolean; isSgr: boolean }) {
-  const rules = getClassRules(classValue)
-
-  if (!rules) {
-    throw new Error("Clasificare produs invalida.")
-  }
-
-  return {
-    price: payload.price,
-    isVisibleInPos: rules.allowPos ? payload.isVisibleInPos : false,
-    isSgr: rules.allowSgr ? payload.isSgr : false
-  }
-}
-
-function normalizeProductionMode(value: any) {
-  const mode = String(value || "AUTO").trim().toUpperCase()
-  return PRODUCTION_MODE_VALUES.includes(mode) ? mode : null
-}
-
-function normalizeStockCostMethod(value: any) {
-  const method = String(value || "AVG").trim().toUpperCase()
-  return STOCK_COST_METHOD_VALUES.includes(method) ? method : null
-}
-
-function toNumber(value: any) {
-  const normalized = String(value ?? "").replace(/\s/g, "").replace(",", ".").trim()
-  if (!normalized) return 0
-  const n = Number(normalized)
-  return Number.isFinite(n) ? n : 0
-}
-
-function serializeProduct(item: any) {
-  if (!item) return item
-
-  return {
-    ...item,
-    price: toNumber(item.price),
-    costPrice: toNumber(item.costPrice),
-    purchaseFactor: toNumber(item.purchaseFactor || 1),
-    netWeightKg: toNumber(item.netWeightKg || 0),
-    grossWeightKg: toNumber(item.grossWeightKg || 0),
-    sgrValue: toNumber(item.sgrValue || 0),
-    trackLot: item.trackLot === true,
-    trackExpiry: item.trackExpiry === true,
-    costMethod: item.costMethod || "AVG",
-    vatRate: item.vatRate
-      ? {
-          ...item.vatRate,
-          rate: toNumber(item.vatRate.rate),
-        }
-      : item.vatRate,
-  }
-}
-
-function serializeRecipe(recipe: any) {
-  if (!recipe) return recipe
-
-  return {
-    ...recipe,
-    yieldQty: toNumber(recipe.yieldQty || 1),
-    items: Array.isArray(recipe.items)
-      ? recipe.items.map((item: any) => ({
-          ...item,
-          qty: toNumber(item.qty || 0),
-          lossPercent: toNumber(item.lossPercent || 0),
-          ingredient: item.ingredient
-            ? {
-                ...serializeProduct(item.ingredient),
-                uom: item.ingredient.uom
-                  ? {
-                      ...item.ingredient.uom,
-                    }
-                  : item.ingredient.uom,
-              }
-            : item.ingredient,
-        }))
-      : [],
-  }
-}
-
 function toNullableText(value: any) {
   const text = String(value || "").trim()
   return text || null
-}
-
-function normalizeBoolean(value: any, fallback: boolean) {
-  if (value === undefined) return fallback
-  return Boolean(value)
-}
-
-function padNumber(value: number, size = 6) {
-  return String(value).padStart(size, "0")
-}
-
-async function getNextAvailableProductSkuValue(
-  client: typeof prisma | Prisma.TransactionClient,
-  tenantId: string,
-  companyId: string
-) {
-  const counter = await client.skuCounter.findUnique({
-    where: {
-      tenantId_key: {
-        tenantId,
-        key: "product"
-      }
-    }
-  })
-
-  let nextValue = (counter?.value || 0) + 1
-
-  for (let attempt = 0; attempt < 1000; attempt += 1) {
-    const candidate = padNumber(nextValue + attempt)
-    const existing = await client.product.findFirst({
-      where: {
-        tenantId,
-        companyId,
-        sku: candidate
-      },
-      select: { id: true }
-    })
-
-    if (!existing) {
-      return {
-        sku: candidate,
-        value: nextValue + attempt
-      }
-    }
-  }
-
-  throw new Error("Nu pot genera urmatorul SKU disponibil.")
 }
 
 function normalizeImageUrl(value: any) {
