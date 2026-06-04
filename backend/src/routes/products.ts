@@ -14,12 +14,15 @@ import {
   RECIPE_INGREDIENT_CLASSES,
   RECIPE_REQUIRED_CLASSES,
   getNextAvailableProductSkuValue,
+  mergeImageUrl,
   normalizeBoolean,
+  normalizeImageUrl,
   normalizeProductFlags,
   normalizeProductionMode,
   normalizeStockCostMethod,
   serializeProduct,
   serializeRecipe,
+  toNullableText,
   toNumber,
 } from "../lib/productRouteSupport"
 
@@ -60,24 +63,6 @@ const upload = multer({
 })
 
 router.use(requireAuth)
-
-function toNullableText(value: any) {
-  const text = String(value || "").trim()
-  return text || null
-}
-
-function normalizeImageUrl(value: any) {
-  return normalizeStoredUploadUrl(value)
-}
-
-function mergeImageUrl(requestedImageUrl: string | null, currentImageUrl: string | null) {
-  if (!requestedImageUrl) return currentImageUrl || null
-
-  const normalized = normalizeStoredUploadUrl(requestedImageUrl)
-  if (normalized) return normalized
-
-  return currentImageUrl || null
-}
 
 router.post(
   "/api/v1/products/upload-image",
@@ -173,7 +158,7 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
   const isVatPayer = company?.isVatPayer ?? true
 
   const name = String(req.body?.name || "").trim()
-  const imageUrl = normalizeImageUrl(req.body?.imageUrl)
+  const imageUrl = normalizeImageUrl(req.body?.imageUrl, normalizeStoredUploadUrl)
   const vatRateIdRaw = String(req.body?.vatRateId || "").trim()
   const vatRateId = isVatPayer ? vatRateIdRaw : null
   const uomId = String(req.body?.uomId || "").trim()
@@ -470,7 +455,7 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   const isVatPayer = company?.isVatPayer ?? true
 
   const name = String(req.body?.name || "").trim()
-  const requestedImageUrl = normalizeImageUrl(req.body?.imageUrl)
+  const requestedImageUrl = normalizeImageUrl(req.body?.imageUrl, normalizeStoredUploadUrl)
   const vatRateIdRaw = String(req.body?.vatRateId || "").trim()
   const vatRateId = isVatPayer ? vatRateIdRaw : null
   const uomId = String(req.body?.uomId || "").trim()
@@ -572,7 +557,7 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
     return res.status(404).json({ ok: false, error: "Produsul nu exista." })
   }
 
-  const imageUrl = mergeImageUrl(requestedImageUrl, current.imageUrl)
+  const imageUrl = mergeImageUrl(requestedImageUrl, current.imageUrl, normalizeStoredUploadUrl)
 
   productionMode = normalizeProductionMode(
     req.body?.productionMode ?? current.productionMode ?? "AUTO"
@@ -1004,6 +989,7 @@ router.delete("/api/v1/products/:id", async (req: AuthedRequest, res) => {
 })
 
 export default router
+
 
 
 

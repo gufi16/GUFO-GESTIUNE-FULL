@@ -203,8 +203,10 @@ function assertTypedSensitiveModules() {
     productRoutes.includes('from "../lib/productRouteSupport"') &&
       productRouteSupport.includes("export function normalizeProductFlags") &&
       productRouteSupport.includes("export function serializeProduct") &&
-      productRouteSupport.includes("export async function getNextAvailableProductSkuValue"),
-    "Keep SKU generation, class normalization, and product/recipe serialization in a typed helper module."
+      productRouteSupport.includes("export async function getNextAvailableProductSkuValue") &&
+      productRouteSupport.includes("export function normalizeImageUrl") &&
+      productRouteSupport.includes("export function toNullableText"),
+    "Keep SKU generation, class normalization, image normalization, and product/recipe serialization in a typed helper module."
   )
 }
 

@@ -126,6 +126,28 @@ export function normalizeBoolean(value: unknown, fallback: boolean) {
   return Boolean(value)
 }
 
+export function toNullableText(value: unknown) {
+  const text = String(value || "").trim()
+  return text || null
+}
+
+export function normalizeImageUrl(value: unknown, normalizeStoredUploadUrl: (value: unknown) => string | null) {
+  return normalizeStoredUploadUrl(value)
+}
+
+export function mergeImageUrl(
+  requestedImageUrl: string | null,
+  currentImageUrl: string | null,
+  normalizeStoredUploadUrl: (value: unknown) => string | null
+) {
+  if (!requestedImageUrl) return currentImageUrl || null
+
+  const normalized = normalizeStoredUploadUrl(requestedImageUrl)
+  if (normalized) return normalized
+
+  return currentImageUrl || null
+}
+
 function padNumber(value: number, size = 6) {
   return String(value).padStart(size, "0")
 }
