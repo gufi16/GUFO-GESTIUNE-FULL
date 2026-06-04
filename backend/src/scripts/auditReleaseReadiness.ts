@@ -134,6 +134,7 @@ function assertTypedSensitiveModules() {
   const customersRoutes = readFileSafe("src/routes/customers.ts")
   const backupsTypedRoutes = readFileSafe("src/routes/backups.ts")
   const adminRoutes = readFileSafe("src/routes/admin.ts")
+  const ownerMiddleware = readFileSafe("src/middleware/requireOwner.ts")
   const metaRoutes = readFileSafe("src/routes/meta.ts")
   const productRoutes = readFileSafe("src/routes/products.ts")
   const adminRouteSupport = readFileSafe("src/lib/adminRouteSupport.ts")
@@ -226,6 +227,14 @@ function assertTypedSensitiveModules() {
       adminRouteSupport.includes("export function inferTerminalDeviceType") &&
       adminRouteSupport.includes("export function resolveTerminalDisplayLabel"),
     "Keep client onboarding, subdomain generation, temporary passwords, and terminal provisioning helpers in a typed helper module."
+  )
+
+  addResult(
+    "Admin owner guard extracted from ts-nocheck route",
+    adminRoutes.includes('from "../middleware/requireOwner"') &&
+      ownerMiddleware.includes("export function requireOwner") &&
+      ownerMiddleware.includes("hasGlobalControlPanelOwnerAccess"),
+    "Keep the control-panel owner authorization guard in typed middleware instead of re-declaring it inside the large admin route."
   )
 
   addResult(

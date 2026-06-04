@@ -6,6 +6,7 @@ import { z } from "zod"
 
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
+import { requireOwner } from "../middleware/requireOwner"
 import { hashSecret } from "../lib/auth"
 import {
   addDays,
@@ -29,21 +30,8 @@ import {
   toNullableText,
 } from "../lib/adminRouteSupport"
 import { buildTenantExportZip } from "../lib/tenantExport"
-import { hasGlobalControlPanelOwnerAccess } from "../lib/tenantAdmin"
 
 const router = Router()
-
-function requireOwner(req: AuthedRequest, res: any, next: any) {
-  if (!req.auth) {
-    return res.status(401).json({ ok: false, error: "Missing token" })
-  }
-
-  if (!hasGlobalControlPanelOwnerAccess(req)) {
-    return res.status(403).json({ ok: false, error: "Acces permis doar owner-ului" })
-  }
-
-  next()
-}
 
 const CreateClientSchema = z.object({
   companyName: z.string().min(2),
