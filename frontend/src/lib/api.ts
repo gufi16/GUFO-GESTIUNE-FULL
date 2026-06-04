@@ -222,7 +222,11 @@ export async function api<T = any>(path: string, options: ApiOptions = {}): Prom
 
   if (!response.ok) {
     if (isJson && payload && typeof payload === "object") {
-      throw new Error(repairText((payload as any).error || "Request failed"))
+      const enrichedError = Object.assign(
+        new Error(repairText((payload as any).error || "Request failed")),
+        payload as Record<string, unknown>
+      )
+      throw enrichedError
     }
 
     throw new Error(typeof payload === "string" ? repairText(payload) : "Request failed")

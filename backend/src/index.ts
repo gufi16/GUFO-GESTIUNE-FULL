@@ -181,6 +181,34 @@ function createBrowserCsrfToken() {
   return crypto.randomBytes(24).toString("hex")
 }
 
+async function issuePasswordResetToken(userId: string, tenantId: string) {
+  await prisma.passwordResetToken.updateMany({
+    where: {
+      userId,
+      usedAt: null,
+      expiresAt: { gt: new Date() },
+    },
+    data: {
+      usedAt: new Date(),
+    },
+  })
+
+  const rawToken = crypto.randomBytes(32).toString("hex")
+  const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex")
+  const expiresAt = new Date(Date.now() + 1000 * 60 * 60)
+
+  await prisma.passwordResetToken.create({
+    data: {
+      tenantId,
+      userId,
+      tokenHash,
+      expiresAt,
+    },
+  })
+
+  return rawToken
+}
+
 async function createWebSession(input: {
   tenantId?: string | null
   userId?: string | null
@@ -836,6 +864,16 @@ app.post("/api/v1/auth/login", async (req, res) => {
     }
   }
 
+  if (user.mustChangePassword) {
+    const resetToken = await issuePasswordResetToken(user.id, user.tenantId)
+    return res.status(403).json({
+      ok: false,
+      error: "Contul necesita schimbarea parolei inainte de autentificare.",
+      requiresPasswordChange: true,
+      resetToken,
+    })
+  }
+
   const { companies, activeCompany } = await resolveActiveCompanyForUser(user, null)
   const session = await createWebSession({
     tenantId: user.tenantId,
@@ -1138,29 +1176,7 @@ app.post("/api/v1/auth/forgot-password", async (req, res) => {
 
   try {
     for (const user of users) {
-      await prisma.passwordResetToken.updateMany({
-        where: {
-          userId: user.id,
-          usedAt: null,
-          expiresAt: { gt: new Date() },
-        },
-        data: {
-          usedAt: new Date(),
-        },
-      })
-
-      const rawToken = crypto.randomBytes(32).toString("hex")
-      const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex")
-      const expiresAt = new Date(Date.now() + 1000 * 60 * 60)
-
-      await prisma.passwordResetToken.create({
-        data: {
-          tenantId: user.tenantId,
-          userId: user.id,
-          tokenHash,
-          expiresAt,
-        },
-      })
+      const rawToken = await issuePasswordResetToken(user.id, user.tenantId)
 
       const publicBase =
         (user.tenant?.subdomain ? `https://${user.tenant.subdomain}.gufo.ink` : "") ||
@@ -1247,11 +1263,27 @@ app.post("/api/v1/auth/reset-password", async (req, res) => {
       where: { id: resetToken.userId },
       data: {
         passwordHash: await hashSecret(parsed.data.password),
+        mustChangePassword: false,
       },
     }),
     prisma.passwordResetToken.update({
       where: { id: resetToken.id },
       data: { usedAt: new Date() },
+    }),
+    prisma.passwordResetToken.updateMany({
+      where: {
+        userId: resetToken.userId,
+        usedAt: null,
+        NOT: { id: resetToken.id },
+      },
+      data: { usedAt: new Date() },
+    }),
+    prisma.webSession.updateMany({
+      where: {
+        userId: resetToken.userId,
+        revokedAt: null,
+      },
+      data: { revokedAt: new Date() },
     }),
   ])
 

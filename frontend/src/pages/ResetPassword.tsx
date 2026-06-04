@@ -6,6 +6,7 @@ export default function ResetPassword() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const token = useMemo(() => searchParams.get("token") || "", [searchParams])
+  const requiresPasswordChange = useMemo(() => searchParams.get("required") === "1", [searchParams])
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [message, setMessage] = useState<string | null>(null)
@@ -52,6 +53,11 @@ export default function ResetPassword() {
       <div className="card w-full max-w-md p-6">
         <h1 className="text-xl font-semibold">Seteaza parola noua</h1>
         <p className="mt-1 text-sm text-neutral-600">Alege o parola noua pentru contul tau.</p>
+        {requiresPasswordChange ? (
+          <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            Contul tau foloseste o parola temporara. Inainte de continuare trebuie sa setezi una noua.
+          </div>
+        ) : null}
 
         <form className="mt-6 space-y-3" onSubmit={onSubmit}>
           <div>

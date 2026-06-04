@@ -1313,6 +1313,7 @@ router.post("/api/v1/admin/clients/:id/users", requireAuth, requireOwner, async 
   }
 
   const rawPassword = parsed.data.password?.trim() || generateTemporaryPassword()
+  const mustChangePassword = !Boolean(parsed.data.password?.trim())
 
   try {
     const user = await prisma.$transaction(async (tx) => {
@@ -1324,6 +1325,7 @@ router.post("/api/v1/admin/clients/:id/users", requireAuth, requireOwner, async 
           role: parsed.data.role,
           isActive: true,
           passwordHash: await hashSecret(rawPassword),
+          mustChangePassword,
           posPinHash: parsed.data.posPin?.trim() ? await hashSecret(parsed.data.posPin.trim()) : null,
         },
         select: {
@@ -1428,7 +1430,10 @@ router.patch("/api/v1/admin/users/:userId", requireAuth, requireOwner, async (re
           role: parsed.data.role,
           isActive: parsed.data.isActive,
           ...(parsed.data.password?.trim()
-            ? { passwordHash: await hashSecret(parsed.data.password.trim()) }
+            ? {
+                passwordHash: await hashSecret(parsed.data.password.trim()),
+                mustChangePassword: false,
+              }
             : {}),
           ...(parsed.data.posPin !== undefined
             ? { posPinHash: parsed.data.posPin.trim() ? await hashSecret(parsed.data.posPin.trim()) : null }
@@ -1443,6 +1448,18 @@ router.patch("/api/v1/admin/users/:userId", requireAuth, requireOwner, async (re
           createdAt: true,
         },
       })
+
+      if (parsed.data.password?.trim()) {
+        await tx.webSession.updateMany({
+          where: {
+            userId: user.id,
+            revokedAt: null,
+          },
+          data: {
+            revokedAt: new Date(),
+          },
+        })
+      }
 
       await tx.auditLog.create({
         data: {
@@ -2008,6 +2025,17 @@ router.post(
           where: { id: userId },
           data: {
             passwordHash,
+            mustChangePassword: true,
+          },
+        })
+
+        await tx.webSession.updateMany({
+          where: {
+            userId,
+            revokedAt: null,
+          },
+          data: {
+            revokedAt: new Date(),
           },
         })
 

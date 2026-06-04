@@ -492,6 +492,7 @@ model User {
   name         String
   imageUrl     String?
   passwordHash String
+  mustChangePassword Boolean @default(false)
   posPinHash   String?
   role         UserRole @default(ADMIN)
   isActive     Boolean  @default(true)

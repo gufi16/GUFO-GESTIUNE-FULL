@@ -63,6 +63,19 @@ function assertEnvBasics() {
     workerHeartbeatFile.length > 0,
     "Set WORKER_HEARTBEAT_FILE so worker liveness can be checked outside request traffic."
   )
+
+  const demoSeedEnabled = process.env.ENABLE_DEMO_SEED === "true"
+  const allowProductionDemoSeed = process.env.ALLOW_PRODUCTION_DEMO_SEED === "true"
+  addResult(
+    "Demo seed disabled by default",
+    !demoSeedEnabled,
+    "Disable ENABLE_DEMO_SEED in production/client environments."
+  )
+  addResult(
+    "Production demo seed bypass disabled",
+    !allowProductionDemoSeed,
+    "Disable ALLOW_PRODUCTION_DEMO_SEED outside explicit demo-only maintenance."
+  )
 }
 
 function readFileSafe(relativePath: string) {
@@ -185,6 +198,37 @@ async function assertStockBalanceConsistency() {
   )
 }
 
+async function assertNoDefaultDemoData() {
+  const [demoTenantCount, demoUserCount] = await Promise.all([
+    prisma.tenant.count({
+      where: {
+        OR: [{ name: "Demo Tenant" }, { subdomain: "demo" }],
+      },
+    }),
+    prisma.user.count({
+      where: {
+        email: "admin@demo.local",
+      },
+    }),
+  ])
+
+  addResult(
+    "Default demo tenant absent from production data",
+    demoTenantCount === 0,
+    demoTenantCount
+      ? `Found ${demoTenantCount} tenant record(s) matching default demo identifiers.`
+      : undefined
+  )
+
+  addResult(
+    "Default demo user absent from production data",
+    demoUserCount === 0,
+    demoUserCount
+      ? `Found ${demoUserCount} user record(s) with admin@demo.local.`
+      : undefined
+  )
+}
+
 function printResultsAndExit() {
   let failed = 0
   for (const result of results) {
@@ -218,6 +262,15 @@ async function main() {
       "StockBalance DB checks executed",
       false,
       error?.message || "Could not run DB consistency checks."
+    )
+  }
+  try {
+    await assertNoDefaultDemoData()
+  } catch (error: any) {
+    addResult(
+      "Default demo data audit executed",
+      false,
+      error?.message || "Could not verify default demo data absence."
     )
   }
   printResultsAndExit()

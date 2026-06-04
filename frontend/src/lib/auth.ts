@@ -13,6 +13,8 @@ type LoginResponse = {
   access_token?: string
   token?: string
   csrf_token?: string
+  requiresPasswordChange?: boolean
+  resetToken?: string
   active_company_id?: string | null
   requires_company_selection?: boolean
   companies?: CompanyChoice[]

@@ -17,6 +17,10 @@ export default function Login() {
       await login(email, password)
       nav("/dashboard")
     } catch (error: any) {
+      if (error?.requiresPasswordChange && error?.resetToken) {
+        nav(`/reset-password?token=${encodeURIComponent(String(error.resetToken))}&required=1`)
+        return
+      }
       const message =
         typeof error?.message === "string" && error.message.trim()
           ? error.message

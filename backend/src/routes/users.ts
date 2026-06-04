@@ -128,6 +128,7 @@ const userListSelect = {
   imageUrl: true,
   role: true,
   isActive: true,
+  mustChangePassword: true,
   posPinHash: true,
   createdAt: true,
   updatedAt: true,
@@ -249,6 +250,7 @@ router.patch("/api/v1/users/:id", requireAuth, async (req: AuthedRequest, res) =
       return res.status(400).json({ ok: false, error: "Parola trebuie sa aiba minimum 6 caractere." })
     }
     updateData.passwordHash = await hashSecret(rawPassword)
+    updateData.mustChangePassword = false
   }
 
   if (parsed.data.posPin !== undefined) {
@@ -260,6 +262,18 @@ router.patch("/api/v1/users/:id", requireAuth, async (req: AuthedRequest, res) =
     where: { id: user.id },
     data: updateData,
   })
+
+  if (rawPassword) {
+    await prisma.webSession.updateMany({
+      where: {
+        userId: user.id,
+        revokedAt: null,
+      },
+      data: {
+        revokedAt: new Date(),
+      },
+    })
+  }
 
   if (requestedRole === UserRole.OWNER || requestedRole === UserRole.ADMIN) {
     await syncUserCompanyAccess(user.id, [])
@@ -323,6 +337,7 @@ router.post("/api/v1/users", requireAuth, async (req: AuthedRequest, res) => {
   }
 
   const rawPassword = parsed.data.password?.trim() || generateTemporaryPassword()
+  const mustChangePassword = !Boolean(parsed.data.password?.trim())
   const created = await prisma.user.create({
     data: {
       tenantId,
@@ -332,6 +347,7 @@ router.post("/api/v1/users", requireAuth, async (req: AuthedRequest, res) => {
       role: requestedRole,
       isActive: true,
       passwordHash: await hashSecret(rawPassword),
+      mustChangePassword,
       posPinHash: parsed.data.posPin?.trim() ? await hashSecret(parsed.data.posPin.trim()) : null,
     },
     select: {
@@ -341,6 +357,7 @@ router.post("/api/v1/users", requireAuth, async (req: AuthedRequest, res) => {
       imageUrl: true,
       role: true,
       isActive: true,
+      mustChangePassword: true,
       posPinHash: true,
       createdAt: true,
     },
@@ -487,12 +504,25 @@ router.post("/api/v1/users/:id/reset-password", requireAuth, async (req: AuthedR
 
   await prisma.user.update({
     where: { id: user.id },
-    data: { passwordHash: await hashSecret(temporaryPassword) },
+    data: {
+      passwordHash: await hashSecret(temporaryPassword),
+      mustChangePassword: true,
+    },
   })
 
   await prisma.passwordResetToken.updateMany({
     where: { userId: user.id, usedAt: null },
     data: { usedAt: new Date() },
+  })
+
+  await prisma.webSession.updateMany({
+    where: {
+      userId: user.id,
+      revokedAt: null,
+    },
+    data: {
+      revokedAt: new Date(),
+    },
   })
 
   return res.json({

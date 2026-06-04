@@ -6,17 +6,50 @@ import { ensureTenantCompany } from "./lib/companyResolver"
 
 loadEnv()
 
+function generateSeedPassword() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
+  let value = ""
+  for (let index = 0; index < 14; index += 1) {
+    value += alphabet[Math.floor(Math.random() * alphabet.length)]
+  }
+  return value
+}
+
 async function main() {
-  const demoEmail = "admin@demo.local"
-  const demoPassword = "admin1234"
+  const nodeEnv = String(process.env.NODE_ENV || "").trim().toLowerCase()
+  const demoSeedEnabled = process.env.ENABLE_DEMO_SEED === "true"
+  const allowProductionDemoSeed = process.env.ALLOW_PRODUCTION_DEMO_SEED === "true"
+
+  if (!demoSeedEnabled) {
+    console.log("Demo seed skipped. Set ENABLE_DEMO_SEED=true when you intentionally want demo data.")
+    return
+  }
+
+  if (nodeEnv === "production" && !allowProductionDemoSeed) {
+    throw new Error("Refuz seed demo in productie. Seteaza ALLOW_PRODUCTION_DEMO_SEED=true doar daca vrei explicit asta.")
+  }
+
+  const demoEmail = String(process.env.DEMO_SEED_EMAIL || "admin@demo.local").trim().toLowerCase()
+  const demoTenantName = String(process.env.DEMO_SEED_TENANT_NAME || "Demo Tenant").trim() || "Demo Tenant"
+  const demoSubdomain = String(process.env.DEMO_SEED_SUBDOMAIN || "demo").trim().toLowerCase() || "demo"
+  const demoPassword = String(process.env.DEMO_SEED_PASSWORD || "").trim() || generateSeedPassword()
+  const demoPasswordProvidedByEnv = Boolean(String(process.env.DEMO_SEED_PASSWORD || "").trim())
 
   let tenant = await prisma.tenant.findFirst({
-    where: { name: "Demo Tenant" }
+    where: { name: demoTenantName },
   })
 
   if (!tenant) {
     tenant = await prisma.tenant.create({
-      data: { name: "Demo Tenant" }
+      data: {
+        name: demoTenantName,
+        subdomain: demoSubdomain,
+      },
+    })
+  } else if (tenant.subdomain !== demoSubdomain) {
+    tenant = await prisma.tenant.update({
+      where: { id: tenant.id },
+      data: { subdomain: demoSubdomain },
     })
   }
 
@@ -25,8 +58,8 @@ async function main() {
   const existingUser = await prisma.user.findFirst({
     where: {
       tenantId: tenant.id,
-      email: demoEmail
-    }
+      email: demoEmail,
+    },
   })
 
   let user
@@ -37,9 +70,10 @@ async function main() {
         email: demoEmail,
         name: "Admin Demo",
         passwordHash,
+        mustChangePassword: true,
         role: "OWNER",
-        isActive: true
-      }
+        isActive: true,
+      },
     })
   } else {
     user = await prisma.user.update({
@@ -47,9 +81,10 @@ async function main() {
       data: {
         name: "Admin Demo",
         passwordHash,
+        mustChangePassword: true,
         role: "OWNER",
-        isActive: true
-      }
+        isActive: true,
+      },
     })
   }
 
@@ -61,7 +96,7 @@ async function main() {
     bank: "Transilvania Cluj",
     iban: "RO74BTRLRONCRT0557477501",
     email: "demo@gufo.ro",
-    phone: "0733985881"
+    phone: "0733985881",
   })
 
   await prisma.company.update({
@@ -74,15 +109,15 @@ async function main() {
       bank: "Transilvania Cluj",
       iban: "RO74BTRLRONCRT0557477501",
       email: "demo@gufo.ro",
-      phone: "0733985881"
-    }
+      phone: "0733985881",
+    },
   })
 
   let location = await prisma.location.findFirst({
     where: {
       tenantId: tenant.id,
-      code: "MAG1"
-    }
+      code: "MAG1",
+    },
   })
 
   if (!location) {
@@ -91,16 +126,16 @@ async function main() {
         tenantId: tenant.id,
         name: "Magazin 1",
         code: "MAG1",
-        isActive: true
-      }
+        isActive: true,
+      },
     })
   }
 
   const existingVat19 = await prisma.vatRate.findFirst({
     where: {
       tenantId: tenant.id,
-      rate: 19
-    }
+      rate: 19,
+    },
   })
 
   if (!existingVat19) {
@@ -110,16 +145,16 @@ async function main() {
         name: "TVA 19%",
         rate: 19,
         fiscalCode: "A",
-        isActive: true
-      }
+        isActive: true,
+      },
     })
   }
 
   const existingVat9 = await prisma.vatRate.findFirst({
     where: {
       tenantId: tenant.id,
-      rate: 9
-    }
+      rate: 9,
+    },
   })
 
   if (!existingVat9) {
@@ -129,16 +164,16 @@ async function main() {
         name: "TVA 9%",
         rate: 9,
         fiscalCode: "B",
-        isActive: true
-      }
+        isActive: true,
+      },
     })
   }
 
   const existingVat5 = await prisma.vatRate.findFirst({
     where: {
       tenantId: tenant.id,
-      rate: 5
-    }
+      rate: 5,
+    },
   })
 
   if (!existingVat5) {
@@ -148,16 +183,16 @@ async function main() {
         name: "TVA 5%",
         rate: 5,
         fiscalCode: "C",
-        isActive: true
-      }
+        isActive: true,
+      },
     })
   }
 
   const existingVat0 = await prisma.vatRate.findFirst({
     where: {
       tenantId: tenant.id,
-      rate: 0
-    }
+      rate: 0,
+    },
   })
 
   if (!existingVat0) {
@@ -167,8 +202,8 @@ async function main() {
         name: "TVA 0%",
         rate: 0,
         fiscalCode: "D",
-        isActive: true
-      }
+        isActive: true,
+      },
     })
   }
 
@@ -187,13 +222,13 @@ async function main() {
     { code: "pachet", name: "Pachet" },
     { code: "bidon", name: "Bidon" },
     { code: "sticla", name: "Sticla" },
-    { code: "doza", name: "Doza" }
+    { code: "doza", name: "Doza" },
   ]
 
   const existingUoms = await prisma.uom.findMany({
-    where: { tenantId: tenant.id }
+    where: { tenantId: tenant.id },
   })
-  const uomsByCode = new Map(existingUoms.map(item => [item.code.trim().toLowerCase(), item]))
+  const uomsByCode = new Map(existingUoms.map((item) => [item.code.trim().toLowerCase(), item]))
 
   for (const unit of defaultUoms) {
     const existing = uomsByCode.get(unit.code)
@@ -204,8 +239,8 @@ async function main() {
         data: {
           code: unit.code,
           name: unit.name,
-          isActive: true
-        }
+          isActive: true,
+        },
       })
       continue
     }
@@ -215,8 +250,8 @@ async function main() {
         tenantId: tenant.id,
         code: unit.code,
         name: unit.name,
-        isActive: true
-      }
+        isActive: true,
+      },
     })
   }
 
@@ -224,9 +259,9 @@ async function main() {
     where: {
       tenantId: tenant.id,
       isSuspended: false,
-      expiresAt: { gt: new Date() }
+      expiresAt: { gt: new Date() },
     },
-    orderBy: { createdAt: "desc" }
+    orderBy: { createdAt: "desc" },
   })
 
   let printedLicenseKey = "(licenta existenta pastrata)"
@@ -248,17 +283,19 @@ async function main() {
         modPos: true,
         modReports: true,
         limitLocations: 10,
-        limitTerminals: 20
-      }
+        limitTerminals: 20,
+      },
     })
 
     printedLicenseKey = licenseKey
   }
 
-  console.log("✅ Seed OK")
+  console.log("Seed OK")
   console.log("Tenant:", tenant.id)
   console.log("User:", user.email)
   console.log("Password:", demoPassword)
+  console.log("Password source:", demoPasswordProvidedByEnv ? "DEMO_SEED_PASSWORD" : "generated")
+  console.log("mustChangePassword:", true)
   console.log("Location:", location.id, location.code)
   console.log("LICENSE KEY:", printedLicenseKey)
 }
