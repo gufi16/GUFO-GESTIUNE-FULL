@@ -132,6 +132,7 @@ function assertTypedSensitiveModules() {
   const usersRoutes = readFileSafe("src/routes/users.ts")
   const dashboardRoutes = readFileSafe("src/routes/dashboard.ts")
   const customersRoutes = readFileSafe("src/routes/customers.ts")
+  const backupsTypedRoutes = readFileSafe("src/routes/backups.ts")
   const metaRoutes = readFileSafe("src/routes/meta.ts")
   const productRoutes = readFileSafe("src/routes/products.ts")
   const tenantRequest = readFileSafe("src/lib/tenantRequest.ts")
@@ -202,6 +203,14 @@ function assertTypedSensitiveModules() {
       customersRoutes.includes('router.post("/api/v1/customers"') &&
       customersRoutes.includes("reserveUniqueCustomerCode"),
     "Keep customer CRUD and code reservation type-checked because they affect commercial documents and partner master data."
+  )
+
+  addResult(
+    "Backups route no longer bypasses TypeScript",
+    !backupsTypedRoutes.startsWith("// @ts-nocheck") &&
+      backupsTypedRoutes.includes('router.post("/api/v1/settings/backups/upload-restore"') &&
+      backupsTypedRoutes.includes("persistTenantBackupSnapshot"),
+    "Keep tenant backup and restore flows type-checked because they manipulate recovery files and safety snapshots."
   )
 
   addResult(

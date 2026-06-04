@@ -1,8 +1,8 @@
-// @ts-nocheck
 import fs from "fs"
 import path from "path"
 import { Router } from "express"
 import multer from "multer"
+import { Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { buildTenantBackupStats, buildTenantExportZip, ensureTenantBackupDir } from "../lib/tenantExport"
@@ -292,7 +292,7 @@ router.post("/api/v1/settings/backups/upload-restore", upload.single("backup"), 
         fileName: finalFileName,
         filePath: absolutePath,
         fileSizeBytes: req.file.buffer.length,
-        tableCounts: null,
+        tableCounts: Prisma.JsonNull,
       },
     })
 
