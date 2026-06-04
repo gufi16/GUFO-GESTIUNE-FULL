@@ -135,6 +135,12 @@ function assertTypedSensitiveModules() {
   const posRoutes = readFileSafe("src/routes/pos.ts")
 
   addResult(
+    "Backend entrypoint no longer bypasses TypeScript",
+    !indexRoutes.startsWith("// @ts-nocheck"),
+    "Remove // @ts-nocheck from src/index.ts once extracted helpers and route ordering are stable."
+  )
+
+  addResult(
     "Tenant request logic extracted from ts-nocheck entrypoint",
     indexRoutes.includes('from "./lib/tenantRequest"') &&
       tenantRequest.includes("export async function resolveRequestedTenantId") &&
