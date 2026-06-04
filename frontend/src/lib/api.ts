@@ -96,6 +96,7 @@ function resolveTokenByPath(path?: string): string {
   const normalizedPath = String(path || "").trim()
   const isPublicAuthRoute =
     normalizedPath.startsWith("/api/v1/auth/login") ||
+    normalizedPath.startsWith("/api/v1/admin/auth/login") ||
     normalizedPath.startsWith("/api/v1/auth/forgot-password") ||
     normalizedPath.startsWith("/api/v1/auth/reset-password") ||
     normalizedPath.startsWith("/api/v1/public/")
@@ -113,10 +114,6 @@ function resolveTokenByPath(path?: string): string {
     typeof window !== "undefined" ? window.location.pathname || "" : ""
   const isControlPanelRoute =
     pathname.startsWith("/control-panel") || pathname.startsWith("/cp")
-
-  if (isControlPanelRoute && normalizedPath) {
-    return readSessionStorage(ERP_TOKEN_KEY) || migrateLegacyToken(ERP_TOKEN_KEY, LEGACY_ERP_TOKEN_KEYS)
-  }
 
   if (isControlPanelRoute) {
     return readSessionStorage(CONTROL_TOKEN_KEY) || migrateLegacyToken(CONTROL_TOKEN_KEY, LEGACY_CONTROL_TOKEN_KEYS)

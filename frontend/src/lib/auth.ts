@@ -51,6 +51,7 @@ type SelectCompanyResponse = {
 }
 
 export async function login(email: string, password: string) {
+  clearErpToken()
   const hostname = typeof window !== "undefined" ? window.location.hostname || "" : ""
   const tenantSubdomain =
     hostname &&
