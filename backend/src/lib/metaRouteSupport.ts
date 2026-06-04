@@ -57,6 +57,36 @@ export function normalizeWarehouseType(value: unknown) {
   return WAREHOUSE_TYPES.includes(text as (typeof WAREHOUSE_TYPES)[number]) ? text : "GENERAL"
 }
 
+export function normalizeImageUrl(value: unknown, normalizeStoredUploadUrl: (value: unknown) => string | null) {
+  return normalizeStoredUploadUrl(value)
+}
+
+export function mergeImageUrl(
+  requestedImageUrl: string | null,
+  currentImageUrl: string | null,
+  normalizeStoredUploadUrl: (value: unknown) => string | null
+) {
+  if (!requestedImageUrl) return currentImageUrl || null
+
+  const normalized = normalizeStoredUploadUrl(requestedImageUrl)
+  if (normalized) return normalized
+
+  return currentImageUrl || null
+}
+
+export function toNullableText(value: unknown) {
+  const text = String(value || "").trim()
+  return text || null
+}
+
+export const FISCAL_CODES = ["A", "B", "C", "D", "E", "F", "G"] as const
+
+export function normalizeFiscalCode(value: unknown) {
+  const code = String(value || "").trim().toUpperCase()
+  if (!code) return null
+  return FISCAL_CODES.includes(code as (typeof FISCAL_CODES)[number]) ? code : null
+}
+
 export async function ensureDefaultUoms(client: UomClient, tenantId: string, companyId: string) {
   const existing = await client.uom.findMany({
     where: {

@@ -192,8 +192,10 @@ function assertTypedSensitiveModules() {
     metaRoutes.includes('from "../lib/metaRouteSupport"') &&
       metaRouteSupport.includes("export async function ensureDefaultUoms") &&
       metaRouteSupport.includes("export function inferTerminalDeviceType") &&
-      metaRouteSupport.includes("export function normalizeWarehouseType"),
-    "Keep terminal classification, default UOM bootstrap, and warehouse type normalization in a typed helper module."
+      metaRouteSupport.includes("export function normalizeWarehouseType") &&
+      metaRouteSupport.includes("export function normalizeFiscalCode") &&
+      metaRouteSupport.includes("export function mergeImageUrl"),
+    "Keep terminal classification, default UOM bootstrap, image normalization, and warehouse/TVA helpers in a typed helper module."
   )
 
   addResult(

@@ -12,9 +12,14 @@ import { buildPublicUploadUrl, ensureUploadSubdir, normalizeStoredUploadUrl } fr
 import {
   buildCompanyScope,
   ensureDefaultUoms,
+  FISCAL_CODES,
   inferTerminalDeviceType,
+  mergeImageUrl,
+  normalizeFiscalCode,
+  normalizeImageUrl,
   normalizeStandardUomCode,
   normalizeWarehouseType,
+  toNullableText,
 } from "../lib/metaRouteSupport"
 import { ensureDefaultWarehouseForLocation, ensureDefaultWarehousesForCompany } from "../lib/warehouse"
 
@@ -55,24 +60,6 @@ const upload = multer({
 })
 
 router.use(requireAuth)
-
-function normalizeImageUrl(value: any) {
-  return normalizeStoredUploadUrl(value)
-}
-
-function mergeImageUrl(requestedImageUrl: string | null, currentImageUrl: string | null) {
-  if (!requestedImageUrl) return currentImageUrl || null
-
-  const normalized = normalizeStoredUploadUrl(requestedImageUrl)
-  if (normalized) return normalized
-
-  return currentImageUrl || null
-}
-
-function toNullableText(value: any) {
-  const text = String(value || "").trim()
-  return text || null
-}
 
 router.post(
   "/api/v1/meta/categories/upload-image",
@@ -1058,14 +1045,6 @@ router.delete("/api/v1/meta/uom/:id", async (req: AuthedRequest, res) => {
    VAT
 ========================= */
 
-const FISCAL_CODES = ["A", "B", "C", "D", "E", "F", "G"] as const
-
-function normalizeFiscalCode(value: unknown) {
-  const code = String(value || "").trim().toUpperCase()
-  if (!code) return null
-  return FISCAL_CODES.includes(code as (typeof FISCAL_CODES)[number]) ? code : null
-}
-
 router.get("/api/v1/meta/vat", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
   const companyId = await requireRequestCompanyId(req)
@@ -1470,7 +1449,7 @@ router.post("/api/v1/meta/categories", async (req: AuthedRequest, res) => {
   const companyId = await requireRequestCompanyId(req)
 
   const name = String(req.body?.name || "").trim()
-  const imageUrl = normalizeImageUrl(req.body?.imageUrl)
+  const imageUrl = normalizeImageUrl(req.body?.imageUrl, normalizeStoredUploadUrl)
   const departmentIdRaw = String(req.body?.departmentId || "").trim()
   const departmentId = departmentIdRaw || null
   const isVisibleInPos = req.body?.isVisibleInPos === undefined ? true : Boolean(req.body?.isVisibleInPos)
@@ -1530,7 +1509,7 @@ router.put("/api/v1/meta/categories/:id", async (req: AuthedRequest, res) => {
   const id = String(req.params.id)
 
   const name = String(req.body?.name || "").trim()
-  const requestedImageUrl = normalizeImageUrl(req.body?.imageUrl)
+  const requestedImageUrl = normalizeImageUrl(req.body?.imageUrl, normalizeStoredUploadUrl)
   const departmentIdRaw = String(req.body?.departmentId || "").trim()
   const departmentId = departmentIdRaw || null
   const isActive = Boolean(req.body?.isActive)
@@ -1559,7 +1538,7 @@ router.put("/api/v1/meta/categories/:id", async (req: AuthedRequest, res) => {
       })
     }
 
-    const imageUrl = mergeImageUrl(requestedImageUrl, current.imageUrl)
+    const imageUrl = mergeImageUrl(requestedImageUrl, current.imageUrl, normalizeStoredUploadUrl)
 
     if (departmentId) {
       const dep = await prisma.department.findFirst({
