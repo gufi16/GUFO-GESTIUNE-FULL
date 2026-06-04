@@ -56,6 +56,7 @@ npm run preview
 Arhitectura recomandata:
 - [docs/deployment-architecture.md](C:\Users\POSHARD\Desktop\poshard-saas-starter\poshard-saas-starter\docs\deployment-architecture.md)
 - [docs/production-ops-runbook.md](C:\Users\POSHARD\Desktop\poshard-saas-starter\poshard-saas-starter\docs\production-ops-runbook.md)
+- [docs/staging-production-cutover.md](C:\Users\POSHARD\Desktop\poshard-saas-starter\poshard-saas-starter\docs\staging-production-cutover.md)
 
 ## Note
 

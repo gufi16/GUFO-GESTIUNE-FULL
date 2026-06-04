@@ -80,6 +80,7 @@ Minimum rule:
 Use:
 
 - [health-check.sh](/C:/Users/POSHARD/Desktop/poshard-saas-starter/poshard-saas-starter/ops/hetzner/health-check.sh)
+- [health-check-worker.sh](/C:/Users/POSHARD/Desktop/poshard-saas-starter/poshard-saas-starter/ops/hetzner/health-check-worker.sh)
 
 Checks:
 
@@ -87,7 +88,7 @@ Checks:
 - API `/health` responds
 - frontend container is running
 - API container is running
-- worker heartbeat file is fresh
+- worker heartbeat is checked separately on the worker host
 
 ## Uptime Monitoring
 
@@ -121,6 +122,7 @@ Files:
 Use:
 
 - [rollback-release.sh](/C:/Users/POSHARD/Desktop/poshard-saas-starter/poshard-saas-starter/ops/hetzner/rollback-release.sh)
+- [smoke-test.sh](/C:/Users/POSHARD/Desktop/poshard-saas-starter/poshard-saas-starter/ops/hetzner/smoke-test.sh)
 
 Rollback sequence:
 
@@ -128,8 +130,9 @@ Rollback sequence:
 2. run rollback script
 3. check API `/health`
 4. check frontend root
-5. validate login
-6. validate one document save flow
+5. run smoke test
+6. validate login
+7. validate one document save flow
 
 ## Cron Jobs
 
@@ -148,3 +151,4 @@ Before every production deploy:
 5. run health-check script
 6. verify logs
 7. verify restore test is still green
+8. keep last known good commit ready for rollback

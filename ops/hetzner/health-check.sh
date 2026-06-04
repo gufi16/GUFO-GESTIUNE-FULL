@@ -3,7 +3,7 @@ set -euo pipefail
 
 FRONTEND_URL="${FRONTEND_URL:-https://app.gufo.ink}"
 API_URL="${API_URL:-https://api.gufo.ink/health}"
-WORKER_HEARTBEAT_FILE="${WORKER_HEARTBEAT_FILE:-/opt/poshard/gufo-gestiune-full/uploads/ops/worker-heartbeat.json}"
+WORKER_HEARTBEAT_FILE="${WORKER_HEARTBEAT_FILE:-}"
 WORKER_MAX_AGE_SECONDS="${WORKER_MAX_AGE_SECONDS:-180}"
 API_CONTAINER="${API_CONTAINER:-gufo-gestiune-full-api-1}"
 FRONTEND_CONTAINER="${FRONTEND_CONTAINER:-gufo-gestiune-full-frontend-1}"

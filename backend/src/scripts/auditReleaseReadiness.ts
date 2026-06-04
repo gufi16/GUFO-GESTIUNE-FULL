@@ -117,11 +117,16 @@ function assertOpsAssets() {
   const repoRoot = path.resolve(process.cwd(), "..")
   const requiredAssets = [
     "docs/production-ops-runbook.md",
+    "docs/staging-production-cutover.md",
     "ops/hetzner/backup-db.sh",
     "ops/hetzner/restore-db.sh",
     "ops/hetzner/test-restore-db.sh",
     "ops/hetzner/health-check.sh",
+    "ops/hetzner/health-check-worker.sh",
+    "ops/hetzner/smoke-test.sh",
     "ops/hetzner/rollback-release.sh",
+    "ops/hetzner/staging.env.example",
+    "ops/hetzner/production.env.example",
     "ops/monitoring/docker-compose.monitoring.yml",
   ]
 

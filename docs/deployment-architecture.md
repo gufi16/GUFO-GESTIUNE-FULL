@@ -175,5 +175,8 @@ This repo now includes the minimum operations package that should be active befo
 - [ops/hetzner/restore-db.sh](/C:/Users/POSHARD/Desktop/poshard-saas-starter/poshard-saas-starter/ops/hetzner/restore-db.sh)
 - [ops/hetzner/test-restore-db.sh](/C:/Users/POSHARD/Desktop/poshard-saas-starter/poshard-saas-starter/ops/hetzner/test-restore-db.sh)
 - [ops/hetzner/health-check.sh](/C:/Users/POSHARD/Desktop/poshard-saas-starter/poshard-saas-starter/ops/hetzner/health-check.sh)
+- [ops/hetzner/health-check-worker.sh](/C:/Users/POSHARD/Desktop/poshard-saas-starter/poshard-saas-starter/ops/hetzner/health-check-worker.sh)
+- [ops/hetzner/smoke-test.sh](/C:/Users/POSHARD/Desktop/poshard-saas-starter/poshard-saas-starter/ops/hetzner/smoke-test.sh)
 - [ops/hetzner/rollback-release.sh](/C:/Users/POSHARD/Desktop/poshard-saas-starter/poshard-saas-starter/ops/hetzner/rollback-release.sh)
 - [ops/monitoring/docker-compose.monitoring.yml](/C:/Users/POSHARD/Desktop/poshard-saas-starter/poshard-saas-starter/ops/monitoring/docker-compose.monitoring.yml)
+- [docs/staging-production-cutover.md](/C:/Users/POSHARD/Desktop/poshard-saas-starter/poshard-saas-starter/docs/staging-production-cutover.md)
