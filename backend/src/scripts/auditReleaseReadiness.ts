@@ -88,6 +88,7 @@ function assertRouteHardening() {
   const backupsRoutes = readFileSafe("src/routes/backups.ts")
   const authMiddleware = readFileSafe("src/middleware/requireAuth.ts")
   const indexRoutes = readFileSafe("src/index.ts")
+  const webAuthRoutes = readFileSafe("src/routes/webAuth.ts")
 
   addResult(
     "Backup routes protected by tenant admin guard",
@@ -121,7 +122,7 @@ function assertRouteHardening() {
     "ERP session restricted to tenant subdomain",
     authMiddleware.includes("Contul nu are acces pe acest subdomeniu.") &&
       authMiddleware.includes("getTenantSubdomainFromRequest(req)") &&
-      indexRoutes.includes("Contul nu are acces pe acest subdomeniu."),
+      webAuthRoutes.includes("Contul nu are acces pe acest subdomeniu."),
     "ERP login and authenticated requests should be blocked when tenant session is used on another tenant subdomain."
   )
 }
