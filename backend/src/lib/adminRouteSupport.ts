@@ -207,6 +207,45 @@ export async function generateUniqueDeviceId(
   return deviceId
 }
 
+export async function ensureTenantEfacturaModuleEnabled(tx: any, tenantId: string) {
+  const moduleRecord = await tx.appModule.upsert({
+    where: { code: "efactura" },
+    update: {
+      name: "e-Factura",
+      description: "Integrare ANAF e-Factura",
+      target: "GESTIUNE",
+      isActive: true,
+    },
+    create: {
+      code: "efactura",
+      name: "e-Factura",
+      description: "Integrare ANAF e-Factura",
+      target: "GESTIUNE",
+      isCore: false,
+      isActive: true,
+    },
+  })
+
+  return tx.tenantModule.upsert({
+    where: {
+      tenantId_moduleId: {
+        tenantId,
+        moduleId: moduleRecord.id,
+      },
+    },
+    update: {
+      enabled: true,
+      source: "client_create",
+    },
+    create: {
+      tenantId,
+      moduleId: moduleRecord.id,
+      enabled: true,
+      source: "client_create",
+    },
+  })
+}
+
 export function normalizeTerminalLabel(value: unknown) {
   return String(value || "").trim()
 }

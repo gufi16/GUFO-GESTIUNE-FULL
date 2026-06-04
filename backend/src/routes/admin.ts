@@ -11,6 +11,7 @@ import {
   addDays,
   buildStructuredLocationAddress,
   buildTenantPortalUrl,
+  ensureTenantEfacturaModuleEnabled,
   generateTemporaryPassword,
   generateUniqueDeviceId,
   generateUniqueLocationCode,
@@ -43,46 +44,6 @@ function requireOwner(req: AuthedRequest, res: any, next: any) {
 
   next()
 }
-
-async function ensureTenantEfacturaModuleEnabled(tx: any, tenantId: string) {
-  const moduleRecord = await tx.appModule.upsert({
-    where: { code: "efactura" },
-    update: {
-      name: "e-Factura",
-      description: "Integrare ANAF e-Factura",
-      target: "GESTIUNE",
-      isActive: true,
-    },
-    create: {
-      code: "efactura",
-      name: "e-Factura",
-      description: "Integrare ANAF e-Factura",
-      target: "GESTIUNE",
-      isCore: false,
-      isActive: true,
-    },
-  })
-
-  return tx.tenantModule.upsert({
-    where: {
-      tenantId_moduleId: {
-        tenantId,
-        moduleId: moduleRecord.id,
-      },
-    },
-    update: {
-      enabled: true,
-      source: "client_create",
-    },
-    create: {
-      tenantId,
-      moduleId: moduleRecord.id,
-      enabled: true,
-      source: "client_create",
-    },
-  })
-}
-
 
 const CreateClientSchema = z.object({
   companyName: z.string().min(2),
