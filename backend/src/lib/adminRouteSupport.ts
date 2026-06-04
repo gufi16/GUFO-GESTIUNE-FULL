@@ -44,6 +44,10 @@ type TerminalLike = {
 
 const RESERVED_SUBDOMAINS = new Set(["app", "api", "www", "admin", "cp", "mail", "docs", "support"])
 
+export function isReservedSubdomain(value?: string | null) {
+  return RESERVED_SUBDOMAINS.has(normalizeSubdomain(value))
+}
+
 export function slugify(value: string) {
   return (
     value
@@ -115,6 +119,10 @@ export function resolveOwnedCompany<T extends { id: string; isDefault?: boolean 
     return companies.find((company) => company.id === requestedCompanyId) || null
   }
   return pickPrimaryCompany(companies)
+}
+
+export function collectDefinedStrings(values: Array<string | null | undefined>) {
+  return values.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
 }
 
 export async function generateUniqueTenantSubdomain(value: string) {

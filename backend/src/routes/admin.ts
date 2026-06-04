@@ -12,12 +12,14 @@ import {
   addDays,
   buildStructuredLocationAddress,
   buildTenantPortalUrl,
+  collectDefinedStrings,
   ensureTenantEfacturaModuleEnabled,
   generateTemporaryPassword,
   generateUniqueDeviceId,
   generateUniqueLocationCode,
   generateUniqueTenantSubdomain,
   inferTerminalDeviceType,
+  isReservedSubdomain,
   moduleMapFromLicense,
   normalizeSubdomain,
   normalizeTerminalLabel,
@@ -562,7 +564,7 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
   const latestLicense = tenant.licenses[0] || null
   const primaryCompany = pickPrimaryCompany((tenant as any).companies)
   const latestSubscription = tenant.subscriptions[0] || null
-  const actorIds = Array.from(new Set(tenant.auditLogs.map((row) => row.actorId).filter(Boolean)))
+  const actorIds = Array.from(new Set(collectDefinedStrings(tenant.auditLogs.map((row) => row.actorId))))
   const actorUsers = actorIds.length
     ? await prisma.user.findMany({
         where: {
@@ -778,7 +780,7 @@ router.patch("/api/v1/admin/clients/:id/subdomain", requireAuth, requireOwner, a
 
   const requestedSubdomain = normalizeSubdomain(parsed.data.subdomain)
 
-  if (RESERVED_SUBDOMAINS.has(requestedSubdomain)) {
+  if (isReservedSubdomain(requestedSubdomain)) {
     return res.status(409).json({ ok: false, error: "Subdomeniul este rezervat." })
   }
 

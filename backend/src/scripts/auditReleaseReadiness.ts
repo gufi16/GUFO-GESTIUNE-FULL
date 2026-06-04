@@ -220,6 +220,8 @@ function assertTypedSensitiveModules() {
     "Admin route helpers extracted from ts-nocheck route",
     adminRoutes.includes('from "../lib/adminRouteSupport"') &&
       adminRouteSupport.includes("export function slugify") &&
+      adminRouteSupport.includes("export function isReservedSubdomain") &&
+      adminRouteSupport.includes("export function collectDefinedStrings") &&
       adminRouteSupport.includes("export async function generateUniqueTenantSubdomain") &&
       adminRouteSupport.includes("export async function generateUniqueDeviceId") &&
       adminRouteSupport.includes("export async function ensureTenantEfacturaModuleEnabled") &&
