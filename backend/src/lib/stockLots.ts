@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Prisma } from "@prisma/client"
 
 function toNumber(value: Prisma.Decimal | number | string | null | undefined) {
@@ -14,11 +13,15 @@ function zeroIfNegative(value: Prisma.Decimal) {
   return value.lessThan(0) ? new Prisma.Decimal(0) : value
 }
 
-function lotOrderBy(costMethod?: string | null) {
+function lotOrderBy(costMethod?: string | null): Prisma.StockLotOrderByWithRelationInput[] {
   if (costMethod === "FEFO") {
-    return [{ expiryDate: "asc" }, { receivedAt: "asc" }, { createdAt: "asc" }]
+    return [
+      { expiryDate: Prisma.SortOrder.asc },
+      { receivedAt: Prisma.SortOrder.asc },
+      { createdAt: Prisma.SortOrder.asc },
+    ]
   }
-  return [{ receivedAt: "asc" }, { createdAt: "asc" }]
+  return [{ receivedAt: Prisma.SortOrder.asc }, { createdAt: Prisma.SortOrder.asc }]
 }
 
 export async function listAvailableLots(
