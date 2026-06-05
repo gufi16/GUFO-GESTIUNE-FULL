@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { Router } from "express"
+import { Response, Router } from "express"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { requireTenantModule } from "../lib/tenantModules"
@@ -11,8 +10,18 @@ const router = Router()
 
 router.use(requireAuth)
 
+function getRequiredTenantId(req: AuthedRequest, res: Response) {
+  const tenantId = req.auth?.tenantId
+  if (!tenantId) {
+    res.status(400).json({ ok: false, error: "Tenant lipsa din sesiune" })
+    return null
+  }
+  return tenantId
+}
+
 router.get("/api/v1/spv-classic/status", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = getRequiredTenantId(req, res)
+  if (!tenantId) return
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
   if (!moduleCheck.enabled) {
     return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
@@ -38,7 +47,8 @@ router.get("/api/v1/spv-classic/status", async (req: AuthedRequest, res) => {
 })
 
 router.post("/api/v1/spv-classic/sync", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = getRequiredTenantId(req, res)
+  if (!tenantId) return
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
   if (!moduleCheck.enabled) {
     return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
@@ -51,7 +61,8 @@ router.post("/api/v1/spv-classic/sync", async (req: AuthedRequest, res) => {
 })
 
 router.post("/api/v1/spv-classic/test-list-messages", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = getRequiredTenantId(req, res)
+  if (!tenantId) return
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
   if (!moduleCheck.enabled) {
     return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })

@@ -134,6 +134,7 @@ function assertTypedSensitiveModules() {
   const customersRoutes = readFileSafe("src/routes/customers.ts")
   const backupsTypedRoutes = readFileSafe("src/routes/backups.ts")
   const adminRoutes = readFileSafe("src/routes/admin.ts")
+  const spvClassicRoutes = readFileSafe("src/routes/spvClassic.ts")
   const ownerMiddleware = readFileSafe("src/middleware/requireOwner.ts")
   const metaRoutes = readFileSafe("src/routes/meta.ts")
   const productRoutes = readFileSafe("src/routes/products.ts")
@@ -214,6 +215,14 @@ function assertTypedSensitiveModules() {
       backupsTypedRoutes.includes('router.post("/api/v1/settings/backups/upload-restore"') &&
       backupsTypedRoutes.includes("persistTenantBackupSnapshot"),
     "Keep tenant backup and restore flows type-checked because they manipulate recovery files and safety snapshots."
+  )
+
+  addResult(
+    "SPV classic route no longer bypasses TypeScript",
+    !spvClassicRoutes.startsWith("// @ts-nocheck") &&
+      spvClassicRoutes.includes('router.get("/api/v1/spv-classic/status"') &&
+      spvClassicRoutes.includes("getRequiredTenantId"),
+    "Keep SPV classic status and diagnostics routes type-checked because they touch fiscal integration state."
   )
 
   addResult(
