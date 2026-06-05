@@ -51,6 +51,40 @@ type TerminalLike = {
   deviceId?: string | null
 }
 
+type DeviceCompanyLike = CompanyLike | null | undefined
+
+type AdminDeviceLike = TerminalLike & {
+  createdAt?: Date | null
+  isLockedToLocation?: boolean | null
+  companyId?: string | null
+  company?: DeviceCompanyLike
+}
+
+type AdminLocationLike = {
+  id: string
+  name: string
+  code: string
+  isActive: boolean
+  address?: string | null
+  street?: string | null
+  streetNo?: string | null
+  building?: string | null
+  staircase?: string | null
+  floor?: string | null
+  apartment?: string | null
+  details?: string | null
+  city?: string | null
+  county?: string | null
+  country?: string | null
+  postalCode?: string | null
+  companyId?: string | null
+  company?: DeviceCompanyLike
+}
+
+type AdminTerminalLike = AdminDeviceLike & {
+  location?: unknown
+}
+
 const RESERVED_SUBDOMAINS = new Set(["app", "api", "www", "admin", "cp", "mail", "docs", "support"])
 
 export function isReservedSubdomain(value?: string | null) {
@@ -336,4 +370,61 @@ export function resolveTerminalDisplayLabel(terminal: TerminalLike, labelByTermi
   const restoredLabel = labelByTerminalId.get(terminal.id) || ""
 
   return genericLabel && restoredLabel ? restoredLabel : currentLabel
+}
+
+export function serializeAdminDeviceSummary(device: AdminDeviceLike, labelByTerminalId: Map<string, string>) {
+  return {
+    id: device.id,
+    deviceId: device.deviceId,
+    label: resolveTerminalDisplayLabel(device, labelByTerminalId),
+    createdAt: device.createdAt,
+    isLockedToLocation: device.isLockedToLocation,
+    deviceType: inferTerminalDeviceType(device),
+    licenseKey: device.deviceId,
+    companyId: device.companyId,
+    company: serializeCompanySummary(device.company),
+  }
+}
+
+export function serializeAdminLocationSummary(
+  location: AdminLocationLike,
+  devices: AdminDeviceLike[],
+  labelByTerminalId: Map<string, string>
+) {
+  return {
+    id: location.id,
+    name: location.name,
+    code: location.code,
+    isActive: location.isActive,
+    address: location.address,
+    street: location.street,
+    streetNo: location.streetNo,
+    building: location.building,
+    staircase: location.staircase,
+    floor: location.floor,
+    apartment: location.apartment,
+    details: location.details,
+    city: location.city,
+    county: location.county,
+    country: location.country,
+    postalCode: location.postalCode,
+    companyId: location.companyId,
+    company: serializeCompanySummary(location.company),
+    terminalsCount: devices.length,
+    devices: devices.map((device) => serializeAdminDeviceSummary(device, labelByTerminalId)),
+  }
+}
+
+export function serializeAdminTerminalSummary(terminal: AdminTerminalLike, labelByTerminalId: Map<string, string>) {
+  return {
+    id: terminal.id,
+    deviceId: terminal.deviceId,
+    label: resolveTerminalDisplayLabel(terminal, labelByTerminalId),
+    deviceType: inferTerminalDeviceType(terminal),
+    isLockedToLocation: terminal.isLockedToLocation,
+    createdAt: terminal.createdAt,
+    companyId: terminal.companyId,
+    company: serializeCompanySummary(terminal.company),
+    location: terminal.location,
+  }
 }
