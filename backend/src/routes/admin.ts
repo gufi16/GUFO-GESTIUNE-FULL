@@ -11,6 +11,7 @@ import { hashSecret } from "../lib/auth"
 import {
   addDays,
   buildLicenseSummary,
+  buildPosLicenseValidationResponse,
   buildStructuredLocationAddress,
   buildTenantStatus,
   buildTenantPortalUrl,
@@ -28,6 +29,7 @@ import {
   parseOptionalDate,
   pickPrimaryCompany,
   resolveOwnedCompany,
+  serializeCreatedAdminTerminalItem,
   serializeAdminDeviceSummary,
   serializeAdminLocationSummary,
   serializeAdminTerminalSummary,
@@ -1584,18 +1586,7 @@ router.post("/api/v1/admin/locations/:id/devices", requireAuth, requireOwner, as
 
     return res.status(201).json({
       ok: true,
-      item: {
-        id: terminal.id,
-        label: terminal.label,
-        deviceId: terminal.deviceId,
-        deviceType: terminal.deviceType,
-        licenseKey: terminal.deviceId,
-        locationId: location.id,
-        locationName: location.name,
-        companyId: location.companyId,
-        company: serializeCompanySummary(location.company),
-        createdAt: terminal.createdAt,
-      },
+      item: serializeCreatedAdminTerminalItem(terminal, location),
     })
   } catch (error: any) {
     return res.status(500).json({
@@ -1898,23 +1889,7 @@ router.post("/api/v1/pos/validate", async (req, res) => {
 
   const withinLimit = terminalsCount <= license.limitTerminals
 
-  return res.json({
-    ok: true,
-    allowed: withinLimit,
-    tenantId: terminal.tenantId,
-    terminal: {
-      id: terminal.id,
-      deviceId: terminal.deviceId,
-      label: terminal.label,
-      locationId: terminal.locationId,
-      locationName: terminal.location?.name || null,
-    },
-    license: {
-      expiresAt: license.expiresAt,
-      posEnabled: license.modPos,
-      licenseKey,
-    },
-  })
+  return res.json(buildPosLicenseValidationResponse(terminal, license, withinLimit, licenseKey))
 })
 
 async function updateTerminalHandler(req: AuthedRequest, res: any) {

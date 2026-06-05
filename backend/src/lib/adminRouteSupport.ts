@@ -85,6 +85,22 @@ type AdminTerminalLike = AdminDeviceLike & {
   location?: unknown
 }
 
+type LocationCompanyLike = {
+  id: string
+  name: string
+  companyId?: string | null
+  company?: CompanyLike | null
+}
+
+type PosLicenseTerminalLike = {
+  id: string
+  tenantId: string
+  deviceId: string
+  label?: string | null
+  locationId?: string | null
+  location?: { name?: string | null } | null
+}
+
 const RESERVED_SUBDOMAINS = new Set(["app", "api", "www", "admin", "cp", "mail", "docs", "support"])
 
 export function isReservedSubdomain(value?: string | null) {
@@ -426,5 +442,54 @@ export function serializeAdminTerminalSummary(terminal: AdminTerminalLike, label
     companyId: terminal.companyId,
     company: serializeCompanySummary(terminal.company),
     location: terminal.location,
+  }
+}
+
+export function serializeCreatedAdminTerminalItem(
+  terminal: {
+    id: string
+    label?: string | null
+    deviceId: string
+    deviceType: TerminalDeviceType
+    createdAt: Date
+  },
+  location: LocationCompanyLike
+) {
+  return {
+    id: terminal.id,
+    label: terminal.label,
+    deviceId: terminal.deviceId,
+    deviceType: terminal.deviceType,
+    licenseKey: terminal.deviceId,
+    locationId: location.id,
+    locationName: location.name,
+    companyId: location.companyId,
+    company: serializeCompanySummary(location.company),
+    createdAt: terminal.createdAt,
+  }
+}
+
+export function buildPosLicenseValidationResponse(
+  terminal: PosLicenseTerminalLike,
+  license: { expiresAt: Date; modPos: boolean },
+  withinLimit: boolean,
+  licenseKey: string
+) {
+  return {
+    ok: true,
+    allowed: withinLimit,
+    tenantId: terminal.tenantId,
+    terminal: {
+      id: terminal.id,
+      deviceId: terminal.deviceId,
+      label: terminal.label,
+      locationId: terminal.locationId,
+      locationName: terminal.location?.name || null,
+    },
+    license: {
+      expiresAt: license.expiresAt,
+      posEnabled: license.modPos,
+      licenseKey,
+    },
   }
 }
