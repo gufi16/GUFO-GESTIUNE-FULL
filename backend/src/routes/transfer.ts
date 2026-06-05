@@ -15,6 +15,19 @@ import { requireRequestCompanyId, resolveRequestCompany } from "../lib/companySc
 import { generateTransferETransportXml, validateTransferForETransport } from "../lib/etransport"
 import { resolveWarehouseForLocation } from "../lib/warehouse"
 import {
+  buildETransportSummary,
+  classifyEtransportStatus,
+  explainEtransportAnafError,
+  extractUit,
+  safeTransferFilePart,
+  serializeTransferDoc,
+  transferRouteDate,
+  transferRouteDateTime,
+  transferRouteFixed,
+  transferRouteNumber,
+  transferRouteText,
+} from "../lib/transferRouteSupport"
+import {
   anafCheckEtransportStatus,
   anafDownloadEtransportById,
   anafListEtransportMessages,
@@ -37,55 +50,23 @@ function toNumber(value: any) {
 }
 
 function fmt(value: any, digits = 2) {
-  return toNumber(value).toFixed(digits)
+  return transferRouteFixed(value, digits)
 }
 
 function fmtDate(value: any) {
-  if (!value) return "-"
-  const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return "-"
-  return d.toLocaleDateString("ro-RO")
+  return transferRouteDate(value)
 }
 
 function fmtDateTime(value: any) {
-  if (!value) return "-"
-  const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return "-"
-  return d.toLocaleString("ro-RO")
+  return transferRouteDateTime(value)
 }
 
 function safeFilePart(value: string) {
-  return String(value || "")
-    .trim()
-    .replace(/\s+/g, "-")
-    .replace(/[^a-zA-Z0-9\-_.]/g, "")
-    .replace(/\-+/g, "-")
-    .replace(/^[-_.]+|[-_.]+$/g, "")
+  return safeTransferFilePart(value)
 }
 
 function text(value: any) {
-  const t = String(value || "").trim()
-  return t || "-"
-}
-
-function classifyEtransportStatus(payload: any, rawText: string) {
-  const textBlob = `${JSON.stringify(payload || {})} ${rawText}`.toLowerCase()
-  if (/(nok|respins|rejected|eroare|error|invalid)/i.test(textBlob)) return "REJECTED"
-  if (/(ok|acceptat|accepted|validat|uit|disponibil|descarcare)/i.test(textBlob)) return "ACCEPTED"
-  return "SENT"
-}
-
-function explainEtransportAnafError(status: number, summary: string) {
-  const message = String(summary || "").trim()
-  if (status === 403 || /^forbidden$/i.test(message)) {
-    return "ANAF a refuzat cererea RO e-Transport. Cel mai probabil aplicatia OAuth/tokenul curent nu are serviciul E-Transport activat in ANAF."
-  }
-  return message || "ANAF a respins operatiunea RO e-Transport."
-}
-
-function extractUit(raw: string) {
-  const match = String(raw || "").match(/\bUIT\b[^A-Z0-9]*([A-Z0-9\-]{6,})/i)
-  return match?.[1] || ""
+  return transferRouteText(value)
 }
 
 async function resolveEtransportDownloadId(company: any, doc: any) {
@@ -104,101 +85,6 @@ async function resolveEtransportDownloadId(company: any, doc: any) {
     extractDownloadId(matched, JSON.stringify(matched || {})) ||
     extractDownloadId(listResult.payload, listResult.rawText)
   )
-}
-
-function serializeTransferDoc(doc: any) {
-  if (!doc) return doc
-
-  const serializeProduct = (product: any) => {
-    if (!product) return product
-    return {
-      ...product,
-      price: toNumber(product.price),
-      costPrice: toNumber(product.costPrice),
-      purchaseFactor: toNumber(product.purchaseFactor || 1),
-      grossWeightKg: toNumber(product.grossWeightKg || 0),
-      sgrValue: toNumber(product.sgrValue),
-      vatRate: product.vatRate
-        ? {
-            ...product.vatRate,
-            rate: toNumber(product.vatRate.rate)
-          }
-        : product.vatRate
-    }
-  }
-
-  const items = Array.isArray(doc.items)
-    ? doc.items.map((item: any) => ({
-        ...item,
-        qty: toNumber(item.qty),
-        unitPrice: toNumber(item.unitPrice),
-        lineValue: toNumber(item.lineValue),
-        vatRateValue: toNumber(item.vatRateValue),
-        lotAllocations: Array.isArray(item.lotAllocations)
-          ? item.lotAllocations.map((allocation: any) => ({
-              id: allocation.id,
-              qty: toNumber(allocation.qty),
-              unitCost: toNumber(allocation.unitCost),
-              totalValue: toNumber(allocation.totalValue),
-              lotNo: allocation.lotNo || "-",
-              expiryDate: allocation.expiryDate || null,
-              sourceStockLotId: allocation.sourceStockLotId,
-              destinationStockLotId: allocation.destinationStockLotId || null,
-            }))
-          : [],
-        product: serializeProduct(item.product),
-        vatRate: item.vatRate
-          ? {
-              ...item.vatRate,
-              rate: toNumber(item.vatRate.rate)
-            }
-          : item.vatRate
-      }))
-    : doc.items
-
-  return {
-    ...doc,
-    eTransportVehicleMaxMassKg: toNumber(doc.eTransportVehicleMaxMassKg || 0),
-    eTransportStartAddress: String(doc.eTransportStartAddress || ""),
-    eTransportEndAddress: String(doc.eTransportEndAddress || ""),
-    eTransportStartBorderPoint: String(doc.eTransportStartBorderPoint || ""),
-    eTransportEndBorderPoint: String(doc.eTransportEndBorderPoint || ""),
-    eTransportTransportDocType: String(doc.eTransportTransportDocType || ""),
-    eTransportTransportDocNo: String(doc.eTransportTransportDocNo || ""),
-    eTransportTransportDocDate: doc.eTransportTransportDocDate ? new Date(doc.eTransportTransportDocDate).toISOString() : "",
-    eTransportTransportDocNotes: String(doc.eTransportTransportDocNotes || ""),
-    eTransportExtraInfo: String(doc.eTransportExtraInfo || ""),
-    totalQty: toNumber(doc.totalQty),
-    totalValue: toNumber(doc.totalValue),
-    items
-  }
-}
-
-function buildETransportSummary(items: any[], vehicleMaxMassKg: number) {
-  const normalizedItems = Array.isArray(items) ? items : []
-  const totalGrossWeightKg = normalizedItems.reduce((sum, item) => {
-    const qty = toNumber(item?.qty)
-    const grossWeightKg = toNumber(item?.product?.grossWeightKg || 0)
-    return sum + qty * grossWeightKg
-  }, 0)
-  const totalValueRon = normalizedItems.reduce((sum, item) => {
-    return sum + toNumber(item?.lineValue)
-  }, 0)
-  const hasFiscalRiskProducts = normalizedItems.some((item) => item?.product?.isFiscalRiskProduct === true)
-  const thresholdsReached = totalGrossWeightKg > 500 || totalValueRon > 10000
-  const vehicleEligible = vehicleMaxMassKg >= 2500
-  const candidate = hasFiscalRiskProducts && thresholdsReached
-  const required = candidate && vehicleEligible
-
-  return {
-    candidate,
-    required,
-    hasFiscalRiskProducts,
-    thresholdsReached,
-    vehicleEligible,
-    totalGrossWeightKg,
-    totalValueRon,
-  }
 }
 
 function registerFonts(doc: PDFKit.PDFDocument) {

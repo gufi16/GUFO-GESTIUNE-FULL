@@ -151,12 +151,14 @@ function assertTypedSensitiveModules() {
   const inventoryRoutes = readFileSafe("src/routes/inventory.ts")
   const stockRoutes = readFileSafe("src/routes/stock.ts")
   const purchaseRoutes = readFileSafe("src/routes/purchase.ts")
+  const transferRoutes = readFileSafe("src/routes/transfer.ts")
   const consumptionDocsPdfRoutes = readFileSafe("src/routes/consumptionDocsPdf.ts")
   const consumptionRoutes = readFileSafe("src/routes/consumption.ts")
   const productionDocsRoutes = readFileSafe("src/routes/productionDocs.ts")
   const productionDocPdfSupport = readFileSafe("src/lib/productionDocPdfSupport.ts")
   const minutesDocsRoutes = readFileSafe("src/routes/minutesDocs.ts")
   const minutesDocSupport = readFileSafe("src/lib/minutesDocSupport.ts")
+  const transferRouteSupport = readFileSafe("src/lib/transferRouteSupport.ts")
   const ownerMiddleware = readFileSafe("src/middleware/requireOwner.ts")
   const metaRoutes = readFileSafe("src/routes/meta.ts")
   const productRoutes = readFileSafe("src/routes/products.ts")
@@ -382,6 +384,16 @@ function assertTypedSensitiveModules() {
       purchaseRoutes.includes("type PurchaseReceiptItemInput") &&
       purchaseRoutes.includes("async function createOrReplaceReceiptItems"),
     "Keep purchase receipt draft/post flows type-checked because they generate inbound stock, supplier reception values, and source invoice linking."
+  )
+
+  addResult(
+    "Transfer route helpers extracted from ts-nocheck route",
+    transferRoutes.includes('from "../lib/transferRouteSupport"') &&
+      transferRouteSupport.includes("export function serializeTransferDoc") &&
+      transferRouteSupport.includes("export function buildETransportSummary") &&
+      transferRouteSupport.includes("export function classifyEtransportStatus") &&
+      transferRouteSupport.includes("export function safeTransferFilePart"),
+    "Keep transfer serialization, e-Transport summary/status helpers, and file-safe formatting in a typed helper module before removing // @ts-nocheck from the large transfer route."
   )
 
   addResult(
