@@ -137,6 +137,7 @@ function assertTypedSensitiveModules() {
   const spvClassicRoutes = readFileSafe("src/routes/spvClassic.ts")
   const productionRoutes = readFileSafe("src/routes/production.ts")
   const stockLotsLib = readFileSafe("src/lib/stockLots.ts")
+  const stockLib = readFileSafe("src/lib/stock.ts")
   const warehouseLib = readFileSafe("src/lib/warehouse.ts")
   const companyResolverLib = readFileSafe("src/lib/companyResolver.ts")
   const ownerMiddleware = readFileSafe("src/middleware/requireOwner.ts")
@@ -243,6 +244,14 @@ function assertTypedSensitiveModules() {
       stockLotsLib.includes("export async function allocateProductLots") &&
       stockLotsLib.includes("Prisma.StockLotOrderByWithRelationInput"),
     "Keep FIFO/FEFO lot allocation logic type-checked because it directly mutates remaining quantities and costs."
+  )
+
+  addResult(
+    "Stock balance helpers no longer bypass TypeScript",
+    !stockLib.startsWith("// @ts-nocheck") &&
+      stockLib.includes("export async function decrementStockBalanceStrict") &&
+      stockLib.includes("type StockMutationParams"),
+    "Keep stock balance increment/decrement helpers type-checked because they directly control inventory availability and negative stock behavior."
   )
 
   addResult(

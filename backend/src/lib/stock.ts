@@ -1,6 +1,28 @@
-// @ts-nocheck
 import { Prisma } from "@prisma/client"
 const NO_WAREHOUSE_SCOPE = "__NO_WAREHOUSE__"
+
+type StockBalanceParams = {
+  tenantId: string
+  companyId: string
+  locationId: string
+  warehouseId?: string
+  productId: string
+}
+
+type StockAvailabilityParams = StockBalanceParams & {
+  requiredQty: Prisma.Decimal | number
+  productName: string
+  uomCode?: string | null
+}
+
+type StockMutationParams = StockBalanceParams & {
+  qty: Prisma.Decimal | number
+}
+
+type StrictStockMutationParams = StockMutationParams & {
+  productName: string
+  uomCode?: string | null
+}
 
 function stockWarehouseScope(warehouseId?: string | null) {
   const trimmed = String(warehouseId || "").trim()
@@ -18,7 +40,7 @@ export async function getAvailableStockQty(
   companyId: string,
   locationId: string,
   productId: string,
-  warehouseId?: string
+  warehouseId?: string,
 ) {
   const balance = await tx.stockBalance.findFirst({
     where: {
@@ -38,16 +60,7 @@ export async function getAvailableStockQty(
 
 export async function assertSufficientStock(
   tx: Prisma.TransactionClient,
-  params: {
-    tenantId: string
-    companyId: string
-    locationId: string
-    warehouseId?: string
-    productId: string
-    requiredQty: Prisma.Decimal | number
-    productName: string
-    uomCode?: string | null
-  }
+  params: StockAvailabilityParams,
 ) {
   const requiredQty = toNumber(params.requiredQty)
   const { qty } = await getAvailableStockQty(tx, params.tenantId, params.companyId, params.locationId, params.productId, params.warehouseId)
@@ -61,16 +74,7 @@ export async function assertSufficientStock(
 
 export async function decrementStockBalanceStrict(
   tx: Prisma.TransactionClient,
-  params: {
-    tenantId: string
-    companyId: string
-    locationId: string
-    warehouseId?: string
-    productId: string
-    qty: Prisma.Decimal | number
-    productName: string
-    uomCode?: string | null
-  }
+  params: StrictStockMutationParams,
 ) {
   await assertSufficientStock(tx, {
     tenantId: params.tenantId,
@@ -105,14 +109,7 @@ export async function decrementStockBalanceStrict(
 
 export async function decrementStockBalanceAllowNegative(
   tx: Prisma.TransactionClient,
-  params: {
-    tenantId: string
-    companyId: string
-    locationId: string
-    warehouseId?: string
-    productId: string
-    qty: Prisma.Decimal | number
-  }
+  params: StockMutationParams,
 ) {
   return tx.stockBalance.upsert({
     where: {
@@ -145,14 +142,7 @@ export async function decrementStockBalanceAllowNegative(
 
 export async function incrementStockBalance(
   tx: Prisma.TransactionClient,
-  params: {
-    tenantId: string
-    companyId: string
-    locationId: string
-    warehouseId?: string
-    productId: string
-    qty: Prisma.Decimal | number
-  }
+  params: StockMutationParams,
 ) {
   return tx.stockBalance.upsert({
     where: {
