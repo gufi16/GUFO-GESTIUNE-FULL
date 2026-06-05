@@ -1,4 +1,3 @@
-// @ts-nocheck
 import fs from "fs"
 import PDFDocument from "pdfkit"
 import { repairText } from "./textRepair"
@@ -24,14 +23,14 @@ export function registerPdfFonts(doc: PDFKit.PDFDocument): Fonts {
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     "/usr/share/fonts/dejavu/DejaVuSans.ttf",
     "/Library/Fonts/Arial Unicode.ttf",
-    "C:\Windows\Fonts\arial.ttf",
+    "C:\\Windows\\Fonts\\arial.ttf",
   ]
 
   const boldCandidates = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
     "/Library/Fonts/Arial Bold.ttf",
-    "C:\Windows\Fonts\arialbd.ttf",
+    "C:\\Windows\\Fonts\\arialbd.ttf",
   ]
 
   const regularPath = regularCandidates.find((p) => fs.existsSync(p))
@@ -46,7 +45,7 @@ export function registerPdfFonts(doc: PDFKit.PDFDocument): Fonts {
   }
 }
 
-export function pdfText(value: any) {
+export function pdfText(value: unknown) {
   const raw = repairText(value).trim()
   if (!raw) return "-"
 
@@ -60,26 +59,35 @@ export function pdfText(value: any) {
   return repaired || "-"
 }
 
-export function pdfNum(value: any) {
+export function pdfNum(value: unknown) {
   const n = Number(value ?? 0)
   return Number.isFinite(n) ? n : 0
 }
 
-export function pdfDate(value: any) {
-  if (!value) return "-"
-  const d = new Date(value)
+function toPdfDateInput(value: unknown): string | number | Date | null {
+  if (value == null) return null
+  if (value instanceof Date) return value
+  if (typeof value === "string" || typeof value === "number") return value
+  return null
+}
+
+export function pdfDate(value: unknown) {
+  const dateInput = toPdfDateInput(value)
+  if (!dateInput) return "-"
+  const d = new Date(dateInput)
   if (Number.isNaN(d.getTime())) return "-"
   return d.toLocaleDateString("ro-RO")
 }
 
-export function pdfDateTime(value: any) {
-  if (!value) return "-"
-  const d = new Date(value)
+export function pdfDateTime(value: unknown) {
+  const dateInput = toPdfDateInput(value)
+  if (!dateInput) return "-"
+  const d = new Date(dateInput)
   if (Number.isNaN(d.getTime())) return "-"
   return d.toLocaleString("ro-RO")
 }
 
-export function pdfFmt(value: any, digits = 2) {
+export function pdfFmt(value: unknown, digits = 2) {
   return pdfNum(value).toLocaleString("ro-RO", {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
@@ -192,7 +200,8 @@ export function drawInfoCards(doc: PDFKit.PDFDocument, fonts: Fonts, options: {
 export function ensurePdfPage(doc: PDFKit.PDFDocument, y: number, needed: number, margin: number, drawHeader?: () => number) {
   const limit = doc.page.height - margin - 64
   if (y + needed <= limit) return y
-  doc.addPage({ size: doc.page.size, layout: doc.page.layout, margin })
+  const layout = doc.page.layout === "landscape" ? "landscape" : "portrait"
+  doc.addPage({ size: doc.page.size, layout, margin })
   return drawHeader ? drawHeader() : margin
 }
 

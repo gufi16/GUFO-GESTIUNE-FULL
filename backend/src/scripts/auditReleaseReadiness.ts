@@ -140,6 +140,7 @@ function assertTypedSensitiveModules() {
   const stockLib = readFileSafe("src/lib/stock.ts")
   const warehouseLib = readFileSafe("src/lib/warehouse.ts")
   const companyResolverLib = readFileSafe("src/lib/companyResolver.ts")
+  const professionalPdfLib = readFileSafe("src/lib/professionalPdf.ts")
   const ownerMiddleware = readFileSafe("src/middleware/requireOwner.ts")
   const metaRoutes = readFileSafe("src/routes/meta.ts")
   const productRoutes = readFileSafe("src/routes/products.ts")
@@ -268,6 +269,14 @@ function assertTypedSensitiveModules() {
       companyResolverLib.includes("export async function resolveTenantCompanyForAuth") &&
       companyResolverLib.includes("function collectAllowedCompanyIds"),
     "Keep tenant company resolution and allowed company filtering type-checked because they decide which legal entity a user can operate on."
+  )
+
+  addResult(
+    "Professional PDF helpers no longer bypass TypeScript",
+    !professionalPdfLib.startsWith("// @ts-nocheck") &&
+      professionalPdfLib.includes("export function registerPdfFonts") &&
+      professionalPdfLib.includes("export function drawSimpleTable"),
+    "Keep shared PDF rendering helpers type-checked because they are reused across inventory, transfer, and accounting documents."
   )
 
   addResult(
