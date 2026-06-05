@@ -141,6 +141,7 @@ function assertTypedSensitiveModules() {
   const warehouseLib = readFileSafe("src/lib/warehouse.ts")
   const companyResolverLib = readFileSafe("src/lib/companyResolver.ts")
   const professionalPdfLib = readFileSafe("src/lib/professionalPdf.ts")
+  const purchaseReceiptsPdfRoutes = readFileSafe("src/routes/purchaseReceiptsPdf.ts")
   const ownerMiddleware = readFileSafe("src/middleware/requireOwner.ts")
   const metaRoutes = readFileSafe("src/routes/meta.ts")
   const productRoutes = readFileSafe("src/routes/products.ts")
@@ -277,6 +278,14 @@ function assertTypedSensitiveModules() {
       professionalPdfLib.includes("export function registerPdfFonts") &&
       professionalPdfLib.includes("export function drawSimpleTable"),
     "Keep shared PDF rendering helpers type-checked because they are reused across inventory, transfer, and accounting documents."
+  )
+
+  addResult(
+    "Purchase receipt PDF route no longer bypasses TypeScript",
+    !purchaseReceiptsPdfRoutes.startsWith("// @ts-nocheck") &&
+      purchaseReceiptsPdfRoutes.includes('router.get("/:id/pdf"') &&
+      purchaseReceiptsPdfRoutes.includes("const columns: PdfColumn[]"),
+    "Keep purchase receipt PDF rendering type-checked because it generates accounting-supporting reception documents from live receipt data."
   )
 
   addResult(

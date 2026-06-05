@@ -1,4 +1,3 @@
-// @ts-nocheck
 import fs from "fs"
 import { Router } from "express"
 import PDFDocument from "pdfkit"
@@ -12,27 +11,41 @@ const router = Router()
 
 router.use(requireAuth)
 
-function num(v: any) {
+type PdfColumn = {
+  label: string
+  width: number
+  align: "left" | "center" | "right"
+}
+
+function num(v: unknown) {
   return Number(v || 0)
 }
 
-function fmt(v: any, d = 2) {
+function fmt(v: unknown, d = 2) {
   return num(v).toFixed(d)
 }
 
-function fmtDate(v: any) {
-  if (!v) return "-"
-  const d = new Date(v)
+function toDateInput(v: unknown): string | number | Date | null {
+  if (v == null) return null
+  if (v instanceof Date) return v
+  if (typeof v === "string" || typeof v === "number") return v
+  return null
+}
+
+function fmtDate(v: unknown) {
+  const dateInput = toDateInput(v)
+  if (!dateInput) return "-"
+  const d = new Date(dateInput)
   if (Number.isNaN(d.getTime())) return "-"
   return d.toLocaleDateString("ro-RO")
 }
 
-function text(v: any) {
+function text(v: unknown) {
   const t = String(v || "").trim()
   return t || "-"
 }
 
-function safeFilePart(value: string) {
+function safeFilePart(value: unknown) {
   return String(value || "")
     .trim()
     .replace(/\s+/g, "-")
@@ -115,8 +128,16 @@ function drawCell(
 }
 
 router.get("/:id/pdf", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const tenantId = String(req.auth?.tenantId || "").trim()
+  if (!tenantId) {
+    return res.status(401).json({ ok: false, error: "Tenant lipsa in sesiune." })
+  }
+
+  const companyId = String((await requireRequestCompanyId(req)) || "").trim()
+  if (!companyId) {
+    return res.status(400).json({ ok: false, error: "Firma activa lipsa." })
+  }
+
   const { id } = req.params
 
   const receipt = await prisma.purchaseReceipt.findFirst({
@@ -189,7 +210,7 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
   y += 34
 
   const isRon = receipt.currency === 'RON'
-  const columns = isRon
+  const columns: PdfColumn[] = isRon
     ? [
         { label: 'Produs', width: 170, align: 'left' },
         { label: 'Cant. doc.\nintrare', width: 68, align: 'center' },
