@@ -1,5 +1,4 @@
 // @ts-nocheck
-import fs from "fs"
 import { Router } from "express"
 import PDFDocument from "pdfkit"
 import { Prisma } from "@prisma/client"
@@ -19,13 +18,10 @@ import {
   classifyEtransportStatus,
   explainEtransportAnafError,
   extractUit,
+  resolveEtransportDownloadId,
   safeTransferFilePart,
   serializeTransferDoc,
-  transferRouteDate,
-  transferRouteDateTime,
-  transferRouteFixed,
   transferRouteNumber,
-  transferRouteText,
 } from "../lib/transferRouteSupport"
 import {
   anafCheckEtransportStatus,
@@ -44,79 +40,13 @@ import {
 const router = Router()
 router.use(requireAuth)
 
-function toNumber(value: any) {
-  const n = Number(value)
-  return Number.isFinite(n) ? n : 0
-}
-
-function fmt(value: any, digits = 2) {
-  return transferRouteFixed(value, digits)
-}
-
-function fmtDate(value: any) {
-  return transferRouteDate(value)
-}
-
-function fmtDateTime(value: any) {
-  return transferRouteDateTime(value)
-}
-
-function safeFilePart(value: string) {
-  return safeTransferFilePart(value)
-}
-
-function text(value: any) {
-  return transferRouteText(value)
-}
-
-async function resolveEtransportDownloadId(company: any, doc: any) {
-  const cif = normalizeCompanyCui(company?.cui)
-  if (!cif || !company?.efacturaOauthAccessToken || !doc?.eTransportUploadIndex) {
-    return ""
-  }
-
-  const listResult = await anafListEtransportMessages(company, { days: 60, cif })
-  const matched = listResult.items.find((item: any) => {
-    const blob = JSON.stringify(item || {}).toLowerCase()
-    return blob.includes(String(doc.eTransportUploadIndex).toLowerCase()) || blob.includes(String(doc.docNo || "").toLowerCase())
-  })
-
-  return (
-    extractDownloadId(matched, JSON.stringify(matched || {})) ||
-    extractDownloadId(listResult.payload, listResult.rawText)
-  )
-}
-
-function registerFonts(doc: PDFKit.PDFDocument) {
-  const regularCandidates = [
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    "/usr/share/fonts/dejavu/DejaVuSans.ttf"
-  ]
-
-  const boldCandidates = [
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-    "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf"
-  ]
-
-  const regularPath = regularCandidates.find((p) => fs.existsSync(p))
-  const boldPath = boldCandidates.find((p) => fs.existsSync(p))
-
-  if (regularPath) doc.registerFont("AppRegular", regularPath)
-  if (boldPath) doc.registerFont("AppBold", boldPath)
-
-  return {
-    regular: regularPath ? "AppRegular" : "Helvetica",
-    bold: boldPath ? "AppBold" : "Helvetica-Bold"
-  }
-}
-
 async function recalcTransfer(transferId: string) {
   const items = await prisma.transferDocItem.findMany({
     where: { transferId }
   })
 
-  const totalQty = items.reduce((sum, item) => sum + toNumber(item.qty), 0)
-  const totalValue = items.reduce((sum, item) => sum + toNumber(item.lineValue), 0)
+  const totalQty = items.reduce((sum, item) => sum + transferRouteNumber(item.qty), 0)
+  const totalValue = items.reduce((sum, item) => sum + transferRouteNumber(item.lineValue), 0)
 
   return prisma.transferDoc.update({
     where: { id: transferId },
@@ -499,7 +429,7 @@ router.patch("/api/v1/transfers/:id/etransport-fields", async (req: AuthedReques
     return res.status(404).json({ ok: false, error: "Transferul nu a fost gasit." })
   }
 
-  const eTransportVehicleMaxMassKg = Math.max(0, toNumber(header?.eTransportVehicleMaxMassKg || 0))
+  const eTransportVehicleMaxMassKg = Math.max(0, transferRouteNumber(header?.eTransportVehicleMaxMassKg || 0))
   const requestedETransportRequired = Boolean(header?.eTransportRequired)
   const eTransport = buildETransportSummary(existing.items || [], eTransportVehicleMaxMassKg)
 
@@ -582,7 +512,7 @@ router.get("/api/v1/transfers/:id/etransport/xml", async (req: AuthedRequest, re
     return res.status(400).json({ ok: false, error: "Genereaza mai intai XML-ul RO e-Transport." })
   }
 
-  const filename = safeFilePart(`ro-e-transport-${doc.docNo || doc.id}.xml`) || `ro-e-transport-${doc.id}.xml`
+  const filename = safeTransferFilePart(`ro-e-transport-${doc.docNo || doc.id}.xml`) || `ro-e-transport-${doc.id}.xml`
   res.setHeader("Content-Type", "application/xml; charset=utf-8")
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`)
   return res.send(doc.eTransportPreparedXml)
@@ -848,7 +778,11 @@ router.get("/api/v1/transfers/:id/etransport/receipt", async (req: AuthedRequest
 
   let downloadId = doc.eTransportDownloadId || ""
   if (!downloadId) {
-    downloadId = await resolveEtransportDownloadId(company, doc)
+    downloadId = await resolveEtransportDownloadId(company, doc, {
+      normalizeCompanyCui,
+      anafListEtransportMessages,
+      extractDownloadId,
+    })
   }
 
   if (!downloadId) {
@@ -877,7 +811,7 @@ router.get("/api/v1/transfers/:id/etransport/receipt", async (req: AuthedRequest
       },
     })
 
-    const fileNameBase = safeFilePart(`Raspuns_RO_eTransport_${doc.docNo}`) || `Raspuns_RO_eTransport_${doc.id}`
+    const fileNameBase = safeTransferFilePart(`Raspuns_RO_eTransport_${doc.docNo}`) || `Raspuns_RO_eTransport_${doc.id}`
     const contentType = readAnafHeader(receiptResult.response.headers, "content-type") || "application/octet-stream"
     const extension =
       contentType.includes("zip") ? "zip" :
@@ -1024,7 +958,7 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
   const eTransportTransportDocNotes = String(header?.eTransportTransportDocNotes || "").trim()
   const eTransportExtraInfo = String(header?.eTransportExtraInfo || "").trim()
   const eTransportDeclaredStartRaw = String(header?.eTransportDeclaredStart || "").trim()
-  const eTransportVehicleMaxMassKg = Math.max(0, toNumber(header?.eTransportVehicleMaxMassKg || 0))
+  const eTransportVehicleMaxMassKg = Math.max(0, transferRouteNumber(header?.eTransportVehicleMaxMassKg || 0))
   const eTransportOrganizer = String(header?.eTransportOrganizer || "").trim()
   const eTransportOperator = String(header?.eTransportOperator || "").trim()
   const requestedETransportRequired = Boolean(header?.eTransportRequired)
@@ -1215,8 +1149,8 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
 
     for (const raw of items) {
       const productId = String(raw.productId || "").trim()
-      const qty = toNumber(raw.qty)
-      const unitPrice = toNumber(raw.unitPrice || 0)
+      const qty = transferRouteNumber(raw.qty)
+      const unitPrice = transferRouteNumber(raw.unitPrice || 0)
 
       if (!productId) {
         throw new Error("Fiecare linie trebuie sa aiba produs.")
@@ -1372,7 +1306,7 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
     : null
 
   const company = await resolveRequestCompany(req)
-  const filename = `TRANSFER_${safeFilePart(docData.docNo)}_${safeFilePart(docData.fromLocation.name)}_${safeFilePart(docData.toLocation.name)}.pdf`
+  const filename = `TRANSFER_${safeTransferFilePart(docData.docNo)}_${safeTransferFilePart(docData.fromLocation.name)}_${safeTransferFilePart(docData.toLocation.name)}.pdf`
   res.setHeader("Content-Type", "application/pdf")
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`)
 

@@ -1,5 +1,11 @@
 type TransferRouteRecord = Record<string, unknown>
 
+type EtransportMessageListResult = {
+  items: unknown[]
+  payload: unknown
+  rawText: string
+}
+
 export function transferRouteNumber(value: unknown) {
   const n = Number(value)
   return Number.isFinite(n) ? n : 0
@@ -208,4 +214,36 @@ export function buildETransportSummary(items: unknown[], vehicleMaxMassKg: numbe
     totalGrossWeightKg,
     totalValueRon,
   }
+}
+
+export async function resolveEtransportDownloadId(
+  company: { cui?: string | null; efacturaOauthAccessToken?: string | null } | null | undefined,
+  doc: { eTransportUploadIndex?: string | null; docNo?: string | null } | null | undefined,
+  deps: {
+    normalizeCompanyCui: (value: string | null | undefined) => string
+    anafListEtransportMessages: (
+      companyContext: { cui?: string | null; efacturaOauthAccessToken?: string | null },
+      options: { days: number; cif: string }
+    ) => Promise<EtransportMessageListResult>
+    extractDownloadId: (payload: unknown, rawText: string) => string
+  }
+) {
+  const cif = deps.normalizeCompanyCui(company?.cui)
+  if (!cif || !company?.efacturaOauthAccessToken || !doc?.eTransportUploadIndex) {
+    return ""
+  }
+
+  const listResult = await deps.anafListEtransportMessages(company, { days: 60, cif })
+  const uploadIndex = String(doc.eTransportUploadIndex).toLowerCase()
+  const docNo = String(doc.docNo || "").toLowerCase()
+
+  const matched = listResult.items.find((item) => {
+    const blob = JSON.stringify(item || {}).toLowerCase()
+    return blob.includes(uploadIndex) || (docNo ? blob.includes(docNo) : false)
+  })
+
+  return (
+    deps.extractDownloadId(matched, JSON.stringify(matched || {})) ||
+    deps.extractDownloadId(listResult.payload, listResult.rawText)
+  )
 }
