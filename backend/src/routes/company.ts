@@ -33,6 +33,18 @@ import {
 import { ensureUploadSubdir } from "../lib/uploads"
 import { getJwtSecret } from "../lib/auth"
 import { ensureTenantAdminAccess } from "../lib/tenantAdmin"
+import {
+  createEfacturaAgentDownloadTicket,
+  createEfacturaAgentPairingCode,
+  getActiveCompanyId,
+  getDefaultEfacturaAppUrl,
+  getEfacturaAgentDownloadFileName,
+  getEfacturaAgentDownloadSource,
+  getRequestedCompanyId,
+  getRequestedCredentialId,
+  getLatestEfacturaAgentFile,
+  normalizeOptionalText,
+} from "../lib/companyRouteSupport"
 
 const router = Router()
 
@@ -76,132 +88,6 @@ const certUpload = multer({
   },
 })
 
-function normalizeOptionalText(value: unknown) {
-  const text = String(value || "").trim()
-  return text || null
-}
-
-function getLatestEfacturaAgentFile() {
-  const files = efacturaAgentDownloadDirs.flatMap((dirPath) => {
-    if (!fs.existsSync(dirPath)) {
-      return []
-    }
-
-    return fs
-      .readdirSync(dirPath)
-      .filter((entry) => entry.toLowerCase().endsWith(".exe"))
-      .map((entry) => {
-        const fullPath = path.join(dirPath, entry)
-        const stats = fs.statSync(fullPath)
-        return {
-          fileName: entry,
-          fullPath,
-          size: stats.size,
-          updatedAt: stats.mtime.toISOString(),
-          mtimeMs: stats.mtimeMs,
-        }
-      })
-  })
-
-  files.sort((a, b) => b.mtimeMs - a.mtimeMs)
-  return files[0] || null
-}
-
-function getEfacturaAgentDownloadSource() {
-  const externalUrl = String(process.env.GUFO_EFACTURA_AGENT_DOWNLOAD_URL || "").trim()
-  if (externalUrl) {
-    return {
-      available: true,
-      type: "external" as const,
-      url: externalUrl,
-      fileName:
-        String(process.env.GUFO_EFACTURA_AGENT_FILE_NAME || "").trim() || "Gufo-eFactura-Setup.exe",
-      updatedAt: null,
-      size: null,
-    }
-  }
-
-  const latestFile = getLatestEfacturaAgentFile()
-  if (!latestFile) {
-    return {
-      available: false,
-      type: "missing" as const,
-      error:
-        "Nu exista inca un installer Gufo e-Factura publicat pe server. Pune fisierul .exe in uploads/efactura-agent sau configureaza GUFO_EFACTURA_AGENT_DOWNLOAD_URL / GUFO_EFACTURA_AGENT_DOWNLOAD_DIR.",
-    }
-  }
-
-  return {
-    available: true,
-    type: "local" as const,
-    url: null,
-    fileName: latestFile.fileName,
-    fullPath: latestFile.fullPath,
-    updatedAt: latestFile.updatedAt,
-    size: latestFile.size,
-  }
-}
-
-function getEfacturaAgentDownloadFileName(source: {
-  fileName?: string | null
-  updatedAt?: string | null
-}) {
-  const originalName = String(source.fileName || "Gufo-eFactura-Setup.exe").trim() || "Gufo-eFactura-Setup.exe"
-  const extension = path.extname(originalName) || ".exe"
-  const baseName = path.basename(originalName, extension) || "Gufo-eFactura-Setup"
-  const updatedAt = String(source.updatedAt || "").trim()
-
-  if (!updatedAt) {
-    return `${baseName}${extension}`
-  }
-
-  const compactStamp = updatedAt
-    .replace(/[-:]/g, "")
-    .replace("T", "-")
-    .replace(/\.\d+Z$/, "")
-    .replace(/Z$/, "")
-
-  return `${baseName}-${compactStamp}${extension}`
-}
-
-function createEfacturaAgentDownloadTicket(tenantId: string) {
-  return jwt.sign(
-    {
-      tenantId,
-      purpose: "efactura-agent-download",
-    },
-    JWT_SECRET,
-    { expiresIn: "10m" },
-  )
-}
-
-function getDefaultEfacturaAppUrl() {
-  return String(process.env.GUFO_EFACTURA_APP_URL || process.env.CORS_ORIGIN || "https://app.gufo.ink")
-    .trim()
-    .replace(/\/+$/, "")
-}
-
-function createEfacturaAgentPairingCode(payload: {
-  tenantId: string
-  companyId: string
-  credentialId: string | null
-  erpUrl: string
-  certSerial: string | null
-}) {
-  return jwt.sign(
-    {
-      sub: payload.tenantId,
-      p: "efactura-agent-pairing",
-      companyId: payload.companyId,
-      credentialId: payload.credentialId,
-      erpUrl: payload.erpUrl,
-      certSerial: payload.certSerial,
-    },
-    JWT_SECRET,
-    { expiresIn: "7d" },
-  )
-}
-
 function mapCompanyResponse(company: any, oauthConfig: any) {
   const hasStoredCertificate = hasEfacturaCertificateFile(
     company?.tenantId,
@@ -227,25 +113,6 @@ function mapCompanyResponse(company: any, oauthConfig: any) {
   }
 }
 
-function getActiveCompanyId(req: AuthedRequest) {
-  return req.auth?.activeCompanyId || null
-}
-
-function getRequestedCredentialId(req: AuthedRequest) {
-  const bodyValue = String(req.body?.credentialId || "").trim()
-  if (bodyValue) return bodyValue
-  const queryValue = String(req.query?.credentialId || "").trim()
-  if (queryValue) return queryValue
-  return null
-}
-
-function getRequestedCompanyId(req: AuthedRequest) {
-  const bodyValue = String(req.body?.companyId || "").trim()
-  if (bodyValue) return bodyValue
-  const queryValue = String(req.query?.companyId || "").trim()
-  if (queryValue) return queryValue
-  return null
-}
 
 async function requireExplicitAnafCompanyContext(
   tenantId: string,
@@ -778,7 +645,7 @@ router.get("/api/v1/public/efactura/agent-download", async (req, res) => {
     })
   }
 
-  const source = getEfacturaAgentDownloadSource()
+  const source = getEfacturaAgentDownloadSource(efacturaAgentDownloadDirs)
 
   if (!source.available) {
     return res.status(404).json({
@@ -1567,7 +1434,7 @@ router.get("/api/v1/company/efactura/agent-download-info", requireAuth, async (r
     })
   }
 
-  const source = getEfacturaAgentDownloadSource()
+  const source = getEfacturaAgentDownloadSource(efacturaAgentDownloadDirs)
   return res.json({
     ok: true,
     agent: source,
@@ -1755,7 +1622,7 @@ router.get("/api/v1/company/efactura/agent-download", requireAuth, async (req: A
     })
   }
 
-  const source = getEfacturaAgentDownloadSource()
+  const source = getEfacturaAgentDownloadSource(efacturaAgentDownloadDirs)
 
   if (!source.available) {
     return res.status(404).json({
@@ -1795,7 +1662,7 @@ router.get("/api/v1/company/efactura/agent-download-link", requireAuth, async (r
     })
   }
 
-  const source = getEfacturaAgentDownloadSource()
+  const source = getEfacturaAgentDownloadSource(efacturaAgentDownloadDirs)
 
   if (!source.available) {
     return res.status(404).json({
@@ -1814,7 +1681,7 @@ router.get("/api/v1/company/efactura/agent-download-link", requireAuth, async (r
 
   return res.json({
     ok: true,
-    url: `/api/v1/public/efactura/agent-download?ticket=${encodeURIComponent(createEfacturaAgentDownloadTicket(tenantId || ""))}`,
+    url: `/api/v1/public/efactura/agent-download?ticket=${encodeURIComponent(createEfacturaAgentDownloadTicket(tenantId || "", JWT_SECRET))}`,
     fileName: getEfacturaAgentDownloadFileName(source),
   })
 })
@@ -1841,7 +1708,7 @@ router.post("/api/v1/company/efactura/agent-pairing-code", requireAuth, async (r
     credentialId: credential?.anafCredentialId || null,
     erpUrl,
     certSerial,
-  })
+  }, JWT_SECRET)
   const decoded = jwt.decode(code) as { exp?: number } | null
 
   return res.json({

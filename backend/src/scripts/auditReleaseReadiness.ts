@@ -128,6 +128,7 @@ function assertRouteHardening() {
 }
 
 function assertTypedSensitiveModules() {
+  const companyRoutes = readFileSafe("src/routes/company.ts")
   const indexRoutes = readFileSafe("src/index.ts")
   const usersRoutes = readFileSafe("src/routes/users.ts")
   const dashboardRoutes = readFileSafe("src/routes/dashboard.ts")
@@ -140,6 +141,7 @@ function assertTypedSensitiveModules() {
   const stockLib = readFileSafe("src/lib/stock.ts")
   const warehouseLib = readFileSafe("src/lib/warehouse.ts")
   const companyResolverLib = readFileSafe("src/lib/companyResolver.ts")
+  const companyRouteSupportLib = readFileSafe("src/lib/companyRouteSupport.ts")
   const companyAnafCredentialsLib = readFileSafe("src/lib/companyAnafCredentials.ts")
   const anafClientLib = readFileSafe("src/lib/anafClient.ts")
   const incomingEfacturaLib = readFileSafe("src/lib/incomingEfactura.ts")
@@ -292,6 +294,16 @@ function assertTypedSensitiveModules() {
       companyResolverLib.includes("export async function resolveTenantCompanyForAuth") &&
       companyResolverLib.includes("function collectAllowedCompanyIds"),
     "Keep tenant company resolution and allowed company filtering type-checked because they decide which legal entity a user can operate on."
+  )
+
+  addResult(
+    "Company route helpers extracted from ts-nocheck route",
+    companyRoutes.includes('from "../lib/companyRouteSupport"') &&
+      companyRouteSupportLib.includes("export function normalizeOptionalText") &&
+      companyRouteSupportLib.includes("export function getEfacturaAgentDownloadSource") &&
+      companyRouteSupportLib.includes("export function createEfacturaAgentPairingCode") &&
+      companyRouteSupportLib.includes("export function getRequestedCredentialId"),
+    "Keep e-Factura agent download, pairing, and request parsing helpers in a typed module while the large company route is being reduced incrementally."
   )
 
   addResult(
