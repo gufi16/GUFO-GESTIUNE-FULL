@@ -152,6 +152,7 @@ function assertTypedSensitiveModules() {
   const stockRoutes = readFileSafe("src/routes/stock.ts")
   const purchaseRoutes = readFileSafe("src/routes/purchase.ts")
   const transferRoutes = readFileSafe("src/routes/transfer.ts")
+  const incomingEfacturaRoutes = readFileSafe("src/routes/incomingEfactura.ts")
   const consumptionDocsPdfRoutes = readFileSafe("src/routes/consumptionDocsPdf.ts")
   const consumptionRoutes = readFileSafe("src/routes/consumption.ts")
   const productionDocsRoutes = readFileSafe("src/routes/productionDocs.ts")
@@ -159,6 +160,7 @@ function assertTypedSensitiveModules() {
   const minutesDocsRoutes = readFileSafe("src/routes/minutesDocs.ts")
   const minutesDocSupport = readFileSafe("src/lib/minutesDocSupport.ts")
   const transferRouteSupport = readFileSafe("src/lib/transferRouteSupport.ts")
+  const incomingEfacturaRouteSupport = readFileSafe("src/lib/incomingEfacturaRouteSupport.ts")
   const ownerMiddleware = readFileSafe("src/middleware/requireOwner.ts")
   const metaRoutes = readFileSafe("src/routes/meta.ts")
   const productRoutes = readFileSafe("src/routes/products.ts")
@@ -394,6 +396,16 @@ function assertTypedSensitiveModules() {
       transferRouteSupport.includes("export function classifyEtransportStatus") &&
       transferRouteSupport.includes("export function safeTransferFilePart"),
     "Keep transfer serialization, e-Transport summary/status helpers, and file-safe formatting in a typed helper module before removing // @ts-nocheck from the large transfer route."
+  )
+
+  addResult(
+    "Incoming e-Factura route helpers extracted from ts-nocheck route",
+    incomingEfacturaRoutes.includes('from "../lib/incomingEfacturaRouteSupport"') &&
+      incomingEfacturaRouteSupport.includes("export function incomingEfacturaMoney") &&
+      incomingEfacturaRouteSupport.includes("export function incomingEfacturaDateRo") &&
+      incomingEfacturaRouteSupport.includes("export function joinIncomingEfacturaAddressParts") &&
+      incomingEfacturaRouteSupport.includes("export function normalizeIncomingEfacturaCurrency"),
+    "Keep incoming e-Factura formatting, address joining, currency normalization, and safe filename/date helpers in a typed helper module before removing // @ts-nocheck from the large route."
   )
 
   addResult(

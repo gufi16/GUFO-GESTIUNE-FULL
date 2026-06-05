@@ -12,6 +12,17 @@ import { requireTenantModule } from "../lib/tenantModules"
 import { reserveNextNumber } from "../lib/numbering"
 import { resolveTenantCompany } from "../lib/companyResolver"
 import { requireRequestCompanyId } from "../lib/companyScope"
+import {
+  incomingEfacturaDateRo,
+  incomingEfacturaMoney,
+  incomingEfacturaMoneyRo,
+  incomingEfacturaNumber,
+  incomingEfacturaQtyRo,
+  joinIncomingEfacturaAddressParts,
+  normalizeIncomingEfacturaCurrency,
+  safeIncomingEfacturaFilePart,
+  toIncomingEfacturaDateOrNull,
+} from "../lib/incomingEfacturaRouteSupport"
 import { ensureUploadSubdir } from "../lib/uploads"
 import {
   extractDownloadId,
@@ -58,41 +69,23 @@ function registerFonts(doc: PDFKit.PDFDocument) {
 }
 
 function fmtMoney(value: any) {
-  return Number(value || 0).toFixed(2)
+  return incomingEfacturaMoney(value)
 }
 
 function fmtMoneyRo(value: any) {
-  return new Intl.NumberFormat("ro-RO", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(Number(value || 0))
+  return incomingEfacturaMoneyRo(value)
 }
 
 function fmtQtyRo(value: any) {
-  return new Intl.NumberFormat("ro-RO", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 3,
-  }).format(Number(value || 0))
+  return incomingEfacturaQtyRo(value)
 }
 
 function fmtDateRo(value: any) {
-  const date = toDateOrNull(value)
-  return date ? date.toLocaleDateString("ro-RO") : "-"
+  return incomingEfacturaDateRo(value)
 }
 
 function joinAddressParts(address: any) {
-  if (!address) return "-"
-  return [
-    address.street,
-    address.additionalStreet,
-    address.city,
-    address.postalCode,
-    address.region,
-    address.country,
-  ]
-    .map((part) => String(part || "").trim())
-    .filter(Boolean)
-    .join(", ")
+  return joinIncomingEfacturaAddressParts(address)
 }
 
 function getIncomingInvoicePdfPath(tenantId: string, invoiceId: string) {
@@ -102,33 +95,19 @@ function getIncomingInvoicePdfPath(tenantId: string, invoiceId: string) {
 }
 
 function safeFilePart(value: string) {
-  return String(value || "")
-    .trim()
-    .replace(/\s+/g, "-")
-    .replace(/[^a-zA-Z0-9\-_.]/g, "")
-    .replace(/\-+/g, "-")
-    .replace(/^[-_.]+|[-_.]+$/g, "")
+  return safeIncomingEfacturaFilePart(value)
 }
 
 function toDateOrNull(value: any) {
-  if (!value) return null
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? null : date
+  return toIncomingEfacturaDateOrNull(value)
 }
 
 function toNumber(value: any) {
-  if (value && typeof value === "object" && typeof value.toString === "function") {
-    const parsedFromString = Number(String(value))
-    if (Number.isFinite(parsedFromString)) return parsedFromString
-  }
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : 0
+  return incomingEfacturaNumber(value)
 }
 
 function normalizeCurrency(value: any): "RON" | "EUR" | "USD" | "HUF" {
-  const current = String(value || "RON").toUpperCase()
-  if (current === "EUR" || current === "USD" || current === "HUF") return current
-  return "RON"
+  return normalizeIncomingEfacturaCurrency(value)
 }
 
 async function matchSupplier(tenantId: string, companyId: string, supplierCif: string, supplierName: string) {
