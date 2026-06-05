@@ -146,6 +146,8 @@ function assertTypedSensitiveModules() {
   const consumptionDocsPdfRoutes = readFileSafe("src/routes/consumptionDocsPdf.ts")
   const productionDocsRoutes = readFileSafe("src/routes/productionDocs.ts")
   const productionDocPdfSupport = readFileSafe("src/lib/productionDocPdfSupport.ts")
+  const minutesDocsRoutes = readFileSafe("src/routes/minutesDocs.ts")
+  const minutesDocSupport = readFileSafe("src/lib/minutesDocSupport.ts")
   const ownerMiddleware = readFileSafe("src/middleware/requireOwner.ts")
   const metaRoutes = readFileSafe("src/routes/meta.ts")
   const productRoutes = readFileSafe("src/routes/products.ts")
@@ -322,6 +324,16 @@ function assertTypedSensitiveModules() {
       productionDocsRoutes.includes('router.get("/api/v1/production-docs/:id/pdf"') &&
       productionDocsRoutes.includes("type ProductionDocDetailData"),
     "Keep production document list/detail/PDF routes type-checked because they combine production output, recipe ingredients, and document exports."
+  )
+
+  addResult(
+    "Minutes doc helpers extracted from ts-nocheck route",
+    minutesDocsRoutes.includes('from "../lib/minutesDocSupport"') &&
+      minutesDocSupport.includes("export function minutesReasonLabel") &&
+      minutesDocSupport.includes("export function minutesFindingLabel") &&
+      minutesDocSupport.includes("export function minutesDocTypeLabel") &&
+      minutesDocSupport.includes("export function formatMinutesMoney"),
+    "Keep minute document parsing, reason/finding labels, and money/qty formatting in a typed helper module before removing // @ts-nocheck from the large route."
   )
 
   addResult(

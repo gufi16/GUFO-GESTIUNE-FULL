@@ -9,35 +9,22 @@ import { getNextNumberPreview, reserveNextNumber } from "../lib/numbering"
 import { assertSufficientStock, decrementStockBalanceStrict } from "../lib/stock"
 import { requireRequestCompanyId, resolveRequestCompany } from "../lib/companyScope"
 import { drawSimpleTable, drawSignatureRow, drawTotalsBox, ensurePdfPage, pdfDate, pdfFmt, pdfText, registerPdfFonts } from "../lib/professionalPdf"
+import {
+  formatMinutesMoney,
+  formatMinutesQty,
+  minutesDocNumber,
+  minutesDocText,
+  minutesDocTypeLabel,
+  minutesDocTypeShortLabel,
+  minutesFindingLabel,
+  minutesReasonLabel,
+  parseMinutesDocDate,
+  safeMinutesDocFilePart,
+} from "../lib/minutesDocSupport"
 
 const router = Router()
 
 router.use(requireAuth)
-
-function num(value: any) {
-  const n = Number(value ?? 0)
-  return Number.isFinite(n) ? n : 0
-}
-
-function text(value: any) {
-  const t = String(value ?? "").trim()
-  return t || null
-}
-
-function parseDate(value: any) {
-  if (!value) return null
-  const d = new Date(value)
-  return Number.isNaN(d.getTime()) ? null : d
-}
-
-function safeFilePart(value: string) {
-  return String(value || "")
-    .trim()
-    .replace(/\s+/g, "-")
-    .replace(/[^a-zA-Z0-9\-_.]/g, "")
-    .replace(/\-+/g, "-")
-    .replace(/^[-_.]+|[-_.]+$/g, "")
-}
 
 function registerFonts(doc: PDFKit.PDFDocument) {
   const regularCandidates = [
@@ -64,46 +51,6 @@ function registerFonts(doc: PDFKit.PDFDocument) {
     regular: regularPath ? "AppRegular" : "Helvetica",
     bold: boldPath ? "AppBold" : "Helvetica-Bold",
   }
-}
-
-function reasonLabel(code?: string | null) {
-  if (code === "EXPIRED") return "Expirat"
-  if (code === "DAMAGE") return "Deteriorat"
-  if (code === "LOSS") return "Pierdere"
-  if (code === "PRICE_UPDATE") return "Schimbare pret"
-  return "Alt motiv"
-}
-
-function findingLabel(code?: string | null, reasonCode?: string | null) {
-  if (code === "DAMAGE_PARTIAL") return "S-a constatat deteriorarea partiala a produselor mentionate in prezentul document."
-  if (code === "DAMAGE_TOTAL") return "S-a constatat deteriorarea totala a produselor mentionate in prezentul document."
-  if (code === "EXPIRED_FOUND") return "S-a constatat expirarea produselor mentionate in prezentul document, fara posibilitatea mentinerii lor la vanzare."
-  if (code === "LOSS_FOUND") return "S-a constatat lipsa in gestiune pentru produsele mentionate in prezentul document."
-  if (reasonCode === "EXPIRED") return "S-a constatat expirarea produselor mentionate in prezentul document."
-  if (reasonCode === "LOSS") return "S-a constatat lipsa in gestiune pentru produsele mentionate in prezentul document."
-  return "S-a constatat deprecierea produselor mentionate in prezentul document."
-}
-
-function docTypeLabel(type: MinutesDocType) {
-  return type === "PRICE_CHANGE" ? "PROCES VERBAL DE SCHIMBARE PRET" : "PROCES VERBAL DE DETERIORARE"
-}
-
-function docTypeShortLabel(type: MinutesDocType) {
-  return type === "PRICE_CHANGE" ? "Schimbare pret" : "Deteriorare"
-}
-
-function fmtQty(value: any) {
-  return num(value).toLocaleString("ro-RO", {
-    minimumFractionDigits: 3,
-    maximumFractionDigits: 3,
-  })
-}
-
-function fmtMoney(value: any) {
-  return num(value).toLocaleString("ro-RO", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
 }
 
 function drawBox(doc: PDFKit.PDFDocument, x: number, y: number, w: number, h: number, fillColor?: string | null) {
@@ -148,8 +95,8 @@ async function recalcMinutesDoc(docId: string) {
     where: { minutesDocId: docId },
   })
 
-  const totalQty = items.reduce((sum, item) => sum + num(item.qty), 0)
-  const totalValue = items.reduce((sum, item) => sum + num(item.lineValue), 0)
+  const totalQty = items.reduce((sum, item) => sum + minutesDocNumber(item.qty), 0)
+  const totalValue = items.reduce((sum, item) => sum + minutesDocNumber(item.lineValue), 0)
 
   return prisma.minutesDoc.update({
     where: { id: docId },
@@ -211,7 +158,7 @@ async function applyMinutesDoc(tenantId: string, companyId: string, docId: strin
             qty: item.qty,
             refType: "MINUTES",
             refId: doc.id,
-            note: `${doc.docNo} - ${reasonLabel(doc.reasonCode)}`,
+            note: `${doc.docNo} - ${minutesReasonLabel(doc.reasonCode)}`,
           },
         })
       }
@@ -335,11 +282,11 @@ router.post("/api/v1/minutes-docs/full", async (req: AuthedRequest, res) => {
 
   try {
     const type = String(header?.type || "").trim().toUpperCase()
-    const locationId = text(header?.locationId)
-    const docDate = parseDate(header?.docDate)
-    const reasonCode = text(header?.reasonCode)
-    const findingCode = text(header?.findingCode)
-    const note = text(header?.note)
+    const locationId = minutesDocText(header?.locationId)
+    const docDate = parseMinutesDocDate(header?.docDate)
+    const reasonCode = minutesDocText(header?.reasonCode)
+    const findingCode = minutesDocText(header?.findingCode)
+    const note = minutesDocText(header?.note)
     const rawDocNo = String(header?.docNo || "").trim()
 
     if (type !== "DETERIORATION" && type !== "PRICE_CHANGE") {
@@ -412,10 +359,10 @@ router.post("/api/v1/minutes-docs/full", async (req: AuthedRequest, res) => {
 
     for (const raw of items) {
       const productId = String(raw?.productId || "").trim()
-      const qty = Math.max(0, num(raw?.qty))
-      const unitValue = Math.max(0, num(raw?.unitValue))
-      const oldPrice = raw?.oldPrice == null ? null : Math.max(0, num(raw?.oldPrice))
-      const newPrice = raw?.newPrice == null ? null : Math.max(0, num(raw?.newPrice))
+      const qty = Math.max(0, minutesDocNumber(raw?.qty))
+      const unitValue = Math.max(0, minutesDocNumber(raw?.unitValue))
+      const oldPrice = raw?.oldPrice == null ? null : Math.max(0, minutesDocNumber(raw?.oldPrice))
+      const newPrice = raw?.newPrice == null ? null : Math.max(0, minutesDocNumber(raw?.newPrice))
 
       if (!productId) throw new Error("Fiecare linie trebuie sa aiba produs.")
       if (type === "DETERIORATION" && qty <= 0) throw new Error("Cantitatea trebuie sa fie mai mare decat 0.")
@@ -429,8 +376,8 @@ router.post("/api/v1/minutes-docs/full", async (req: AuthedRequest, res) => {
           unitValue,
           oldPrice,
           newPrice,
-          lineValue: type === "DETERIORATION" ? qty * unitValue : qty * Math.max(0, num(newPrice)),
-          note: text(raw?.note),
+          lineValue: type === "DETERIORATION" ? qty * unitValue : qty * Math.max(0, minutesDocNumber(newPrice)),
+          note: minutesDocText(raw?.note),
         },
       })
     }
@@ -490,7 +437,7 @@ router.get("/api/v1/minutes-docs/:id/pdf", async (req: AuthedRequest, res) => {
   }
 
   const company = await resolveRequestCompany(req)
-  const filename = `${safeFilePart(docData.docNo)}.pdf`
+  const filename = `${safeMinutesDocFilePart(docData.docNo)}.pdf`
   res.setHeader("Content-Type", "application/pdf")
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`)
 
@@ -508,7 +455,7 @@ router.get("/api/v1/minutes-docs/:id/pdf", async (req: AuthedRequest, res) => {
     const centerWidth = contentWidth - leftWidth - rightWidth
     const centerX = margin + leftWidth
     const rightX = centerX + centerWidth
-    const titleText = docTypeLabel(docData.type)
+    const titleText = minutesDocTypeLabel(docData.type)
 
     doc.font(fonts.bold).fontSize(12).fillColor('#111827').text(pdfText(company?.name), margin, y + 8, {
       width: leftWidth - 16,
@@ -617,13 +564,13 @@ router.get("/api/v1/minutes-docs/:id/pdf", async (req: AuthedRequest, res) => {
   const infoWidth = (contentWidth - infoGap) / 2
   const leftBottom = drawInfoTable(margin, y, infoWidth, 'Date document', [
     { label: 'Locatie', value: pdfText(docData.location.name) },
-    { label: 'Motiv', value: reasonLabel(docData.reasonCode) },
-    { label: 'Tip', value: docTypeShortLabel(docData.type) },
+    { label: 'Motiv', value: minutesReasonLabel(docData.reasonCode) },
+    { label: 'Tip', value: minutesDocTypeShortLabel(docData.type) },
     { label: 'Cantitate totala', value: pdfFmt(docData.totalQty, 3) },
   ])
   const rightBottom = drawInfoTable(margin + infoWidth + infoGap, y, infoWidth, 'Constatare / observatii', [
     { label: 'Valoare totala', value: `${pdfFmt(docData.totalValue)} RON` },
-    { label: 'Constatare', value: docData.type === 'DETERIORATION' ? findingLabel(docData.findingCode, docData.reasonCode) : 'Actualizare preturi comerciale' },
+    { label: 'Constatare', value: docData.type === 'DETERIORATION' ? minutesFindingLabel(docData.findingCode, docData.reasonCode) : 'Actualizare preturi comerciale' },
     { label: 'Nota', value: pdfText(docData.note) },
   ])
   y = Math.max(leftBottom, rightBottom) + 18
