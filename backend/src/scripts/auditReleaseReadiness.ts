@@ -137,6 +137,7 @@ function assertTypedSensitiveModules() {
   const spvClassicRoutes = readFileSafe("src/routes/spvClassic.ts")
   const productionRoutes = readFileSafe("src/routes/production.ts")
   const stockLotsLib = readFileSafe("src/lib/stockLots.ts")
+  const warehouseLib = readFileSafe("src/lib/warehouse.ts")
   const ownerMiddleware = readFileSafe("src/middleware/requireOwner.ts")
   const metaRoutes = readFileSafe("src/routes/meta.ts")
   const productRoutes = readFileSafe("src/routes/products.ts")
@@ -241,6 +242,14 @@ function assertTypedSensitiveModules() {
       stockLotsLib.includes("export async function allocateProductLots") &&
       stockLotsLib.includes("Prisma.StockLotOrderByWithRelationInput"),
     "Keep FIFO/FEFO lot allocation logic type-checked because it directly mutates remaining quantities and costs."
+  )
+
+  addResult(
+    "Warehouse helpers no longer bypass TypeScript",
+    !warehouseLib.startsWith("// @ts-nocheck") &&
+      warehouseLib.includes("export async function ensureDefaultWarehouseForLocation") &&
+      warehouseLib.includes("export async function resolveWarehouseForLocation"),
+    "Keep default warehouse bootstrap and warehouse selection logic type-checked because they affect every stock movement scope."
   )
 
   addResult(

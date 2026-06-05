@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Prisma } from "@prisma/client"
 
 function normalizeCode(value: string) {
