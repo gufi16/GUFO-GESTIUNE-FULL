@@ -427,6 +427,14 @@ function assertTypedSensitiveModules() {
   )
 
   addResult(
+    "Incoming e-Factura route no longer bypasses TypeScript",
+    !incomingEfacturaRoutes.startsWith("// @ts-nocheck") &&
+      incomingEfacturaRoutes.includes('router.get("/api/v1/efactura/incoming"') &&
+      incomingEfacturaRoutes.includes("errorMessage(error"),
+    "Keep incoming/outgoing e-Factura list, sync, PDF/XML export, and supplier-creation flows type-checked because they import ANAF documents into purchasing workflows."
+  )
+
+  addResult(
     "Consumption PDF route no longer bypasses TypeScript",
     !consumptionDocsPdfRoutes.startsWith("// @ts-nocheck") &&
       consumptionDocsPdfRoutes.includes('router.get("/:id/pdf"') &&

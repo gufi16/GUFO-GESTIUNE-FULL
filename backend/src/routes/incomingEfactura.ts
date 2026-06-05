@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { execFile } from "child_process"
 import fs from "fs"
 import path from "path"
@@ -108,6 +107,10 @@ function toNumber(value: any) {
 
 function normalizeCurrency(value: any): "RON" | "EUR" | "USD" | "HUF" {
   return normalizeIncomingEfacturaCurrency(value)
+}
+
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback
 }
 
 async function matchSupplier(tenantId: string, companyId: string, supplierCif: string, supplierName: string) {
@@ -852,8 +855,10 @@ async function ensureIncomingInvoicePdfSaved(item: any) {
 }
 
 router.get("/api/v1/efactura/incoming", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = String(req.auth?.tenantId || "").trim()
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Unauthorized" })
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ ok: false, error: "Compania activa lipseste." })
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
   if (!moduleCheck.enabled) {
     return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
@@ -884,8 +889,10 @@ router.get("/api/v1/efactura/incoming", async (req: AuthedRequest, res) => {
 })
 
 router.get("/api/v1/efactura/outgoing", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = String(req.auth?.tenantId || "").trim()
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Unauthorized" })
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ ok: false, error: "Compania activa lipseste." })
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
   if (!moduleCheck.enabled) {
     return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
@@ -911,13 +918,15 @@ router.get("/api/v1/efactura/outgoing", async (req: AuthedRequest, res) => {
 })
 
 router.get("/api/v1/efactura/incoming/bridge-config", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = String(req.auth?.tenantId || "").trim()
+  const auth = req.auth
+  if (!tenantId || !auth) return res.status(401).json({ ok: false, error: "Unauthorized" })
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
   if (!moduleCheck.enabled) {
     return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
   }
 
-  const company = await loadAnafCompanyContext(req.auth)
+  const company = await loadAnafCompanyContext(auth)
 
   const cif = normalizeCompanyCui(company?.cui)
   if (!cif) {
@@ -940,8 +949,10 @@ router.get("/api/v1/efactura/incoming/bridge-config", async (req: AuthedRequest,
 })
 
 router.post("/api/v1/efactura/incoming/sync", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = String(req.auth?.tenantId || "").trim()
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Unauthorized" })
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ ok: false, error: "Compania activa lipseste." })
   const credentialId = getRequestedCredentialId(req)
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
   if (!moduleCheck.enabled) {
@@ -1023,11 +1034,11 @@ router.post("/api/v1/efactura/incoming/sync", async (req: AuthedRequest, res) =>
         } else {
           importedIncoming += 1
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         skipped += 1
         if (errors.length < 3) {
           errors.push(
-            `Mesaj ${String(downloadId)}: ${error?.message || "Nu am putut importa factura din ANAF."}`
+            `Mesaj ${String(downloadId)}: ${errorMessage(error, "Nu am putut importa factura din ANAF.")}`
           )
         }
       }
@@ -1054,7 +1065,7 @@ router.post("/api/v1/efactura/incoming/sync", async (req: AuthedRequest, res) =>
       },
       summary: listResult.summary,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     return res.status(400).json({
       ok: false,
       error: mapIncomingSyncError(error, company),
@@ -1063,8 +1074,10 @@ router.post("/api/v1/efactura/incoming/sync", async (req: AuthedRequest, res) =>
 })
 
 router.get("/api/v1/efactura/outgoing/:id/pdf", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = String(req.auth?.tenantId || "").trim()
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Unauthorized" })
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ ok: false, error: "Compania activa lipseste." })
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
   if (!moduleCheck.enabled) {
     return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
@@ -1094,8 +1107,10 @@ router.get("/api/v1/efactura/outgoing/:id/pdf", async (req: AuthedRequest, res) 
 })
 
 router.get("/api/v1/efactura/outgoing/:id/xml", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = String(req.auth?.tenantId || "").trim()
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Unauthorized" })
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ ok: false, error: "Compania activa lipseste." })
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
   if (!moduleCheck.enabled) {
     return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
@@ -1125,8 +1140,10 @@ router.get("/api/v1/efactura/outgoing/:id/xml", async (req: AuthedRequest, res) 
 })
 
 router.get("/api/v1/efactura/incoming/:id", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = String(req.auth?.tenantId || "").trim()
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Unauthorized" })
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ ok: false, error: "Compania activa lipseste." })
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
   if (!moduleCheck.enabled) {
     return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
@@ -1162,8 +1179,10 @@ router.get("/api/v1/efactura/incoming/:id", async (req: AuthedRequest, res) => {
 })
 
 router.get("/api/v1/efactura/incoming/:id/pdf", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = String(req.auth?.tenantId || "").trim()
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Unauthorized" })
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ ok: false, error: "Compania activa lipseste." })
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
   if (!moduleCheck.enabled) {
     return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
@@ -1192,8 +1211,10 @@ router.get("/api/v1/efactura/incoming/:id/pdf", async (req: AuthedRequest, res) 
 })
 
 router.get("/api/v1/efactura/incoming/:id/xml", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = String(req.auth?.tenantId || "").trim()
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Unauthorized" })
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ ok: false, error: "Compania activa lipseste." })
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
   if (!moduleCheck.enabled) {
     return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
@@ -1221,8 +1242,10 @@ router.get("/api/v1/efactura/incoming/:id/xml", async (req: AuthedRequest, res) 
 })
 
 router.post("/api/v1/efactura/incoming/import-from-spv-bridge", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = String(req.auth?.tenantId || "").trim()
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Unauthorized" })
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ ok: false, error: "Compania activa lipseste." })
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
   if (!moduleCheck.enabled) {
     return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
@@ -1252,17 +1275,19 @@ router.post("/api/v1/efactura/incoming/import-from-spv-bridge", async (req: Auth
       supplierName: parsedInvoice.supplierName || null,
       spvDownloadId: item?.spvDownloadId || extractDownloadId(rawMessage, JSON.stringify(rawMessage || {})) || null,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     return res.status(400).json({
       ok: false,
-      error: error?.message || "Nu am putut importa factura din bridge-ul SPV.",
+      error: errorMessage(error, "Nu am putut importa factura din bridge-ul SPV."),
     })
   }
 })
 
 router.post("/api/v1/efactura/incoming/:id/create-supplier", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = String(req.auth?.tenantId || "").trim()
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Unauthorized" })
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ ok: false, error: "Compania activa lipseste." })
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
   if (!moduleCheck.enabled) {
     return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
@@ -1295,14 +1320,15 @@ router.post("/api/v1/efactura/incoming/:id/create-supplier", async (req: AuthedR
 
   try {
     const supplier = await prisma.$transaction(async (tx) => {
+      const supplierCif = String(invoice.supplierCif || "").trim()
       const existingByCif =
-        invoice.supplierCif
+        supplierCif
           ? await tx.supplier.findFirst({
               where: {
                 tenantId,
                 companyId,
                 cif: {
-                  contains: invoice.supplierCif,
+                  contains: supplierCif,
                   mode: "insensitive",
                 },
               },
@@ -1344,10 +1370,10 @@ router.post("/api/v1/efactura/incoming/:id/create-supplier", async (req: AuthedR
     })
 
     return res.json({ ok: true, supplier })
-  } catch (error: any) {
+  } catch (error: unknown) {
     return res.status(400).json({
       ok: false,
-      error: error?.message || "Nu am putut crea furnizorul din factura SPV.",
+      error: errorMessage(error, "Nu am putut crea furnizorul din factura SPV."),
     })
   }
 })
