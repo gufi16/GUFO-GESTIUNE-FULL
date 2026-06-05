@@ -217,6 +217,14 @@ function assertTypedSensitiveModules() {
   )
 
   addResult(
+    "Admin route no longer bypasses TypeScript",
+    !adminRoutes.startsWith("// @ts-nocheck") &&
+      adminRoutes.includes('router.get("/api/v1/admin/clients"') &&
+      adminRoutes.includes("requireOwner"),
+    "Keep control-panel tenant onboarding, licensing, and terminal management flows type-checked because they drive production provisioning."
+  )
+
+  addResult(
     "Admin route helpers extracted from ts-nocheck route",
     adminRoutes.includes('from "../lib/adminRouteSupport"') &&
       adminRouteSupport.includes("export function slugify") &&

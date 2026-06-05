@@ -1,7 +1,7 @@
 import { TerminalDeviceType } from "@prisma/client"
 import { prisma } from "./prisma"
 
-type CompanyLike = {
+export type CompanyLike = {
   id: string
   name: string
   code?: string | null

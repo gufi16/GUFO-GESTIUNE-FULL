@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Router } from "express"
 import bcrypt from "bcryptjs"
 import { TerminalDeviceType, UserRole } from "@prisma/client"
@@ -33,6 +32,7 @@ import {
   serializeAdminDeviceSummary,
   serializeAdminLocationSummary,
   serializeAdminTerminalSummary,
+  type CompanyLike,
   serializePrimaryCompanyContact,
   serializePrimaryCompanyDetails,
   serializeCompanySummary,
@@ -376,7 +376,7 @@ router.get("/api/v1/admin/clients", requireAuth, requireOwner, async (_req, res)
   return res.json({
     ok: true,
     items: tenants.map((tenant) => {
-      const primaryCompany = pickPrimaryCompany((tenant as any).companies)
+      const primaryCompany = pickPrimaryCompany(((tenant as any).companies || []) as CompanyLike[])
       const latestLicense = tenant.licenses[0] || null
       const latestSubscription = tenant.subscriptions[0] || null
 
@@ -544,7 +544,7 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
   }
 
   const latestLicense = tenant.licenses[0] || null
-  const primaryCompany = pickPrimaryCompany((tenant as any).companies)
+  const primaryCompany = pickPrimaryCompany(((tenant as any).companies || []) as CompanyLike[])
   const latestSubscription = tenant.subscriptions[0] || null
   const actorIds = Array.from(new Set(collectDefinedStrings(tenant.auditLogs.map((row) => row.actorId))))
   const actorUsers = actorIds.length
@@ -1508,7 +1508,7 @@ router.post("/api/v1/admin/locations/:id/devices", requireAuth, requireOwner, as
             take: 1,
           },
           terminals: {
-            select: { id: true },
+            select: { id: true, deviceType: true },
           },
         },
       },
@@ -1771,6 +1771,9 @@ router.post(
 
 router.get("/api/v1/license/validate", requireAuth, async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
+  if (!tenantId) {
+    return res.status(400).json({ ok: false, valid: false, error: "Tenant lipsa din sesiune" })
+  }
 
   const license = await prisma.license.findFirst({
     where: { tenantId },
@@ -1783,7 +1786,16 @@ router.get("/api/v1/license/validate", requireAuth, async (req: AuthedRequest, r
 
   const activeModules = await prisma.tenantModule.findMany({
     where: { tenantId, enabled: true },
-    include: { module: true },
+    select: {
+      limitValue: true,
+      module: {
+        select: {
+          code: true,
+          name: true,
+          target: true,
+        },
+      },
+    },
   })
 
   const now = new Date()
@@ -2010,7 +2022,7 @@ router.delete(
   "/api/v1/admin/terminals/:id",
   requireAuth,
   requireOwner,
-  async (req, res) => {
+  async (req: AuthedRequest, res) => {
     const terminal = await prisma.terminal.findUnique({
       where: { id: req.params.id },
     })
