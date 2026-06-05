@@ -4,8 +4,8 @@ import path from "path"
 import type { AuthedRequest } from "../middleware/requireAuth"
 import type { prisma } from "./prisma"
 import { hasEfacturaCertificateFile } from "./efacturaCertificate"
-import { listTenantCompaniesForAuth } from "./companyResolver"
-import { resolveCompanyWithAnafCredential } from "./companyAnafCredentials"
+import { ensureTenantCompany, listTenantCompaniesForAuth, resolveTenantCompanyForAuth, updateOrCreateTenantCompany } from "./companyResolver"
+import { getCompanyAnafCredentialById, getDefaultCompanyAnafCredential, resolveCompanyWithAnafCredential } from "./companyAnafCredentials"
 
 type EfacturaAgentFile = {
   fileName: string
@@ -316,6 +316,150 @@ export function getRequestedCompanyId(req: AuthedRequest) {
   const queryValue = String(req.query?.companyId || "").trim()
   if (queryValue) return queryValue
   return null
+}
+
+export async function getRequestCompany(
+  prismaClient: PrismaClientLike,
+  req: AuthedRequest,
+  extra: Record<string, any> = {},
+) {
+  const tenantId = String(req.auth!.tenantId || "").trim()
+  const activeCompanyId = getActiveCompanyId(req) || null
+  const includeCredentialList = Boolean(extra?.includeCredentialList)
+  const select =
+    extra && typeof extra === "object" && "select" in extra
+      ? extra.select || {}
+      : Object.fromEntries(
+          Object.entries(extra || {}).filter(([key]) => key !== "includeCredentialList"),
+        )
+
+  return resolveCompanyWithAnafCredential(prismaClient as never, tenantId, activeCompanyId, {
+    select,
+    includeCredentialList,
+    auth: req.auth!,
+  })
+}
+
+export async function ensureRequestCompany(
+  prismaClient: PrismaClientLike,
+  req: AuthedRequest,
+  seedData: Record<string, any> = {},
+) {
+  const tenantId = String(req.auth!.tenantId || "").trim()
+  return ensureTenantCompany(prismaClient, tenantId, getActiveCompanyId(req) || null, seedData)
+}
+
+export async function getRequestCompanyCertificateState(
+  prismaClient: PrismaClientLike,
+  req: AuthedRequest,
+) {
+  return getRequestCompany(prismaClient, req, {
+    select: {
+      id: true,
+      tenantId: true,
+      name: true,
+      efacturaCertFilename: true,
+      efacturaCertPasswordEnc: true,
+      efacturaCertSerial: true,
+      anafCredentialId: true,
+      anafCredentialLabel: true,
+    },
+  })
+}
+
+export async function getRequestAnafCredential(
+  prismaClient: PrismaClientLike,
+  req: AuthedRequest,
+  explicitCredentialId?: string | null,
+) {
+  const tenantId = String(req.auth!.tenantId || "").trim()
+  const company = await resolveTenantCompanyForAuth(prismaClient, req.auth!, {
+    select: {
+      id: true,
+      tenantId: true,
+      name: true,
+      efacturaCertSerial: true,
+      efacturaCertPasswordEnc: true,
+      efacturaCertFilename: true,
+      efacturaCertUploadedAt: true,
+      efacturaOauthAccessToken: true,
+      efacturaOauthRefreshToken: true,
+      efacturaOauthAccessTokenExpiresAt: true,
+      efacturaOauthRefreshTokenExpiresAt: true,
+      efacturaOauthConnectedAt: true,
+      efacturaOauthLastError: true,
+      etransportOauthAccessToken: true,
+      etransportOauthRefreshToken: true,
+      etransportOauthAccessTokenExpiresAt: true,
+      etransportOauthRefreshTokenExpiresAt: true,
+      etransportOauthConnectedAt: true,
+      etransportOauthLastError: true,
+    },
+  })
+
+  if (!company?.id) {
+    throw new Error("Firma activa nu este disponibila.")
+  }
+
+  const companyId = company.id
+  const companyTenantId = company.tenantId
+  const companyName = company.name
+
+  const requestedCredentialId = explicitCredentialId || getRequestedCredentialId(req)
+  const credential = requestedCredentialId
+    ? await getCompanyAnafCredentialById(prismaClient as never, tenantId, companyId, requestedCredentialId)
+    : await getDefaultCompanyAnafCredential(prismaClient as never, tenantId, companyId, company)
+
+  if (!credential) {
+    return {
+      company,
+      credential: null,
+    }
+  }
+
+  return {
+    company,
+    credential: {
+      ...credential,
+      tenantId: companyTenantId,
+      companyId,
+      name: companyName,
+      anafCredentialId: credential.id,
+      anafCredentialLabel: credential.label,
+      efacturaCertSerial: credential.certSerial,
+      efacturaCertPasswordEnc: credential.certPasswordEnc,
+      efacturaCertFilename: credential.certFilename,
+      efacturaCertUploadedAt: credential.certUploadedAt,
+      efacturaOauthAccessToken: credential.efacturaOauthAccessToken,
+      efacturaOauthRefreshToken: credential.efacturaOauthRefreshToken,
+      efacturaOauthAccessTokenExpiresAt: credential.efacturaOauthAccessTokenExpiresAt,
+      efacturaOauthRefreshTokenExpiresAt: credential.efacturaOauthRefreshTokenExpiresAt,
+      efacturaOauthConnectedAt: credential.efacturaOauthConnectedAt,
+      efacturaOauthLastError: credential.efacturaOauthLastError,
+      etransportOauthAccessToken: credential.etransportOauthAccessToken,
+      etransportOauthRefreshToken: credential.etransportOauthRefreshToken,
+      etransportOauthAccessTokenExpiresAt: credential.etransportOauthAccessTokenExpiresAt,
+      etransportOauthRefreshTokenExpiresAt: credential.etransportOauthRefreshTokenExpiresAt,
+      etransportOauthConnectedAt: credential.etransportOauthConnectedAt,
+      etransportOauthLastError: credential.etransportOauthLastError,
+    },
+  }
+}
+
+export async function updateRequestCompany(
+  prismaClient: PrismaClientLike,
+  req: AuthedRequest,
+  updateData: Record<string, any>,
+  createData: Record<string, any> = {},
+) {
+  const tenantId = String(req.auth!.tenantId || "").trim()
+  return updateOrCreateTenantCompany(
+    prismaClient,
+    tenantId,
+    getActiveCompanyId(req) || null,
+    updateData,
+    createData,
+  )
 }
 
 export function decodeTokenExpiry(token: string | null | undefined) {
