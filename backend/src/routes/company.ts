@@ -36,6 +36,8 @@ import { ensureTenantAdminAccess } from "../lib/tenantAdmin"
 import {
   createEfacturaAgentDownloadTicket,
   createEfacturaAgentPairingCode,
+  decodeTokenExpiry,
+  extractAnafCompanyPayload,
   getActiveCompanyId,
   getDefaultEfacturaAppUrl,
   getEfacturaAgentDownloadFileName,
@@ -43,7 +45,9 @@ import {
   getRequestedCompanyId,
   getRequestedCredentialId,
   getLatestEfacturaAgentFile,
+  mapCompanyResponse,
   normalizeOptionalText,
+  normalizeRomanianCounty,
 } from "../lib/companyRouteSupport"
 
 const router = Router()
@@ -87,32 +91,6 @@ const certUpload = multer({
     cb(null, true)
   },
 })
-
-function mapCompanyResponse(company: any, oauthConfig: any) {
-  const hasStoredCertificate = hasEfacturaCertificateFile(
-    company?.tenantId,
-    company?.id,
-    company?.efacturaCertFilename,
-    company?.anafCredentialId || null,
-  )
-
-  return {
-    ...company,
-    warehouseConfig: {
-      multiWarehouseEnabled: Boolean(company?.multiWarehouseEnabled),
-      warehouseFilterEnabled: Boolean(company?.warehouseFilterEnabled),
-      requireWarehouseOnDocuments: Boolean(company?.requireWarehouseOnDocuments),
-      autoSelectSingleWarehouse: company?.autoSelectSingleWarehouse !== false,
-      warehouseLabel: String(company?.warehouseLabel || "Gestiune"),
-    },
-    efacturaEnvironment: oauthConfig.environment || company?.efacturaEnvironment || "test",
-    efacturaPlatformConfigured: oauthConfig.platformConfigured,
-    efacturaUsesPlatformConfig: oauthConfig.usesPlatformConfig,
-    efacturaCertHasFile: hasStoredCertificate,
-    efacturaCertPasswordConfigured: Boolean(company?.efacturaCertPasswordEnc),
-  }
-}
-
 
 async function requireExplicitAnafCompanyContext(
   tenantId: string,
@@ -348,68 +326,6 @@ async function getEffectiveAnafOauthConfig(tenantId: string, activeCompanyId: st
         platform?.efacturaOauthRedirectUri,
     ),
     usesPlatformConfig: Boolean(!usesCompanyConfig && platform?.efacturaOauthClientId && platform?.efacturaOauthClientSecret && platform?.efacturaOauthRedirectUri),
-  }
-}
-
-function decodeTokenExpiry(token: string | null | undefined) {
-  if (!token) return null
-  const decoded = jwt.decode(token) as { exp?: number } | null
-  if (!decoded?.exp) return null
-  return new Date(decoded.exp * 1000)
-}
-
-function normalizeRomanianCounty(value: unknown) {
-  const text = String(value || "").trim()
-  if (!text) return ""
-  return text
-    .toLowerCase()
-    .replace(/\b\w/g, (match) => match.toUpperCase())
-}
-
-function extractAnafCompanyPayload(entry: any) {
-  const general = entry?.date_generale || {}
-  const headquarters = entry?.adresa_sediu_social || {}
-  const registration = entry?.inregistrare_RTVAI || entry?.inregistrare_scop_Tva || {}
-
-  const county =
-    headquarters?.sdenumire_Judet ||
-    general?.judet ||
-    general?.denumire_Judet ||
-    ""
-  const city =
-    headquarters?.sdenumire_Localitate ||
-    general?.localitate ||
-    general?.denumire_Localitate ||
-    ""
-  const postalCode =
-    headquarters?.scod_Postal ||
-    general?.codPostal ||
-    general?.cod_postal ||
-    ""
-  const address =
-    headquarters?.sdenumire_Strada && headquarters?.snumar_Strada
-      ? `${headquarters.sdenumire_Strada} ${headquarters.snumar_Strada}`.trim()
-      : headquarters?.sdenumire_Strada ||
-        general?.adresa_domiciliu_fiscal ||
-        general?.adresa ||
-        general?.adresa_completa ||
-        ""
-
-  return {
-    name: String(general?.denumire || "").trim(),
-    cui: String(general?.cui || "").trim(),
-    regNo: String(general?.nrRegCom || general?.nr_reg_com || "").trim(),
-    address: String(address || "").trim(),
-    city: String(city || "").trim(),
-    county: normalizeRomanianCounty(county),
-    postalCode: String(postalCode || "").trim(),
-    country: "RO",
-    isVatPayer:
-      registration?.scpTVA !== undefined
-        ? Boolean(registration.scpTVA)
-        : general?.scpTVA !== undefined
-          ? Boolean(general.scpTVA)
-          : true,
   }
 }
 

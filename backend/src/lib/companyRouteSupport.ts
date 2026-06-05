@@ -2,6 +2,7 @@ import fs from "fs"
 import jwt from "jsonwebtoken"
 import path from "path"
 import type { AuthedRequest } from "../middleware/requireAuth"
+import { hasEfacturaCertificateFile } from "./efacturaCertificate"
 
 type EfacturaAgentFile = {
   fileName: string
@@ -11,9 +12,99 @@ type EfacturaAgentFile = {
   mtimeMs: number
 }
 
+type CompanyRouteWarehouseConfigSource = {
+  multiWarehouseEnabled?: unknown
+  warehouseFilterEnabled?: unknown
+  requireWarehouseOnDocuments?: unknown
+  autoSelectSingleWarehouse?: unknown
+  warehouseLabel?: unknown
+}
+
+type CompanyRouteOauthConfig = {
+  environment?: string | null
+  platformConfigured?: boolean
+  usesPlatformConfig?: boolean
+}
+
+type CompanyRouteCompanyResponseSource = CompanyRouteWarehouseConfigSource & {
+  id?: string | null
+  tenantId?: string | null
+  efacturaEnvironment?: string | null
+  efacturaCertFilename?: string | null
+  anafCredentialId?: string | null
+  efacturaCertPasswordEnc?: string | null
+}
+
+type AnafRegistrationPayload = {
+  scpTVA?: unknown
+}
+
+type AnafHeadquartersPayload = {
+  sdenumire_Judet?: unknown
+  sdenumire_Localitate?: unknown
+  scod_Postal?: unknown
+  sdenumire_Strada?: unknown
+  snumar_Strada?: unknown
+}
+
+type AnafGeneralPayload = {
+  denumire?: unknown
+  cui?: unknown
+  nrRegCom?: unknown
+  nr_reg_com?: unknown
+  judet?: unknown
+  denumire_Judet?: unknown
+  localitate?: unknown
+  denumire_Localitate?: unknown
+  codPostal?: unknown
+  cod_postal?: unknown
+  adresa_domiciliu_fiscal?: unknown
+  adresa?: unknown
+  adresa_completa?: unknown
+  scpTVA?: unknown
+}
+
+type AnafCompanyLookupEntry = {
+  date_generale?: AnafGeneralPayload | null
+  adresa_sediu_social?: AnafHeadquartersPayload | null
+  inregistrare_RTVAI?: AnafRegistrationPayload | null
+  inregistrare_scop_Tva?: AnafRegistrationPayload | null
+}
+
 export function normalizeOptionalText(value: unknown) {
   const text = String(value || "").trim()
   return text || null
+}
+
+export function mapCompanyResponse(
+  company: CompanyRouteCompanyResponseSource | null | undefined,
+  oauthConfig: CompanyRouteOauthConfig,
+) {
+  const tenantId = String(company?.tenantId || "").trim()
+  const hasStoredCertificate = tenantId
+    ? hasEfacturaCertificateFile(
+        tenantId,
+        company?.id,
+        company?.efacturaCertFilename,
+        company?.anafCredentialId || null,
+      )
+    : false
+
+  return {
+    ...company,
+    warehouseConfig: {
+      multiWarehouseEnabled: Boolean(company?.multiWarehouseEnabled),
+      warehouseFilterEnabled: Boolean(company?.warehouseFilterEnabled),
+      requireWarehouseOnDocuments: Boolean(company?.requireWarehouseOnDocuments),
+      autoSelectSingleWarehouse: company?.autoSelectSingleWarehouse !== false,
+      warehouseLabel: String(company?.warehouseLabel || "Gestiune"),
+    },
+    efacturaEnvironment: oauthConfig.environment || company?.efacturaEnvironment || "test",
+    efacturaPlatformConfigured: oauthConfig.platformConfigured,
+    efacturaUsesPlatformConfig: oauthConfig.usesPlatformConfig,
+    efacturaCertHasFile: hasStoredCertificate,
+    efacturaCertPasswordConfigured: Boolean(company?.efacturaCertPasswordEnc),
+  }
 }
 
 export function getLatestEfacturaAgentFile(efacturaAgentDownloadDirs: string[]) {
@@ -158,4 +249,66 @@ export function getRequestedCompanyId(req: AuthedRequest) {
   const queryValue = String(req.query?.companyId || "").trim()
   if (queryValue) return queryValue
   return null
+}
+
+export function decodeTokenExpiry(token: string | null | undefined) {
+  if (!token) return null
+  const decoded = jwt.decode(token) as { exp?: number } | null
+  if (!decoded?.exp) return null
+  return new Date(decoded.exp * 1000)
+}
+
+export function normalizeRomanianCounty(value: unknown) {
+  const text = String(value || "").trim()
+  if (!text) return ""
+  return text
+    .toLowerCase()
+    .replace(/\b\w/g, (match) => match.toUpperCase())
+}
+
+export function extractAnafCompanyPayload(entry: AnafCompanyLookupEntry | null | undefined) {
+  const general = entry?.date_generale || {}
+  const headquarters = entry?.adresa_sediu_social || {}
+  const registration = entry?.inregistrare_RTVAI || entry?.inregistrare_scop_Tva || {}
+
+  const county =
+    headquarters.sdenumire_Judet ||
+    general.judet ||
+    general.denumire_Judet ||
+    ""
+  const city =
+    headquarters.sdenumire_Localitate ||
+    general.localitate ||
+    general.denumire_Localitate ||
+    ""
+  const postalCode =
+    headquarters.scod_Postal ||
+    general.codPostal ||
+    general.cod_postal ||
+    ""
+  const address =
+    headquarters.sdenumire_Strada && headquarters.snumar_Strada
+      ? `${headquarters.sdenumire_Strada} ${headquarters.snumar_Strada}`.trim()
+      : headquarters.sdenumire_Strada ||
+        general.adresa_domiciliu_fiscal ||
+        general.adresa ||
+        general.adresa_completa ||
+        ""
+
+  return {
+    name: String(general.denumire || "").trim(),
+    cui: String(general.cui || "").trim(),
+    regNo: String(general.nrRegCom || general.nr_reg_com || "").trim(),
+    address: String(address || "").trim(),
+    city: String(city || "").trim(),
+    county: normalizeRomanianCounty(county),
+    postalCode: String(postalCode || "").trim(),
+    country: "RO",
+    isVatPayer:
+      registration.scpTVA !== undefined
+        ? Boolean(registration.scpTVA)
+        : general.scpTVA !== undefined
+          ? Boolean(general.scpTVA)
+          : true,
+  }
 }
