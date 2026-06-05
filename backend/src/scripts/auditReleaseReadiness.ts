@@ -142,6 +142,7 @@ function assertTypedSensitiveModules() {
   const companyResolverLib = readFileSafe("src/lib/companyResolver.ts")
   const companyAnafCredentialsLib = readFileSafe("src/lib/companyAnafCredentials.ts")
   const incomingEfacturaLib = readFileSafe("src/lib/incomingEfactura.ts")
+  const tenantExportLib = readFileSafe("src/lib/tenantExport.ts")
   const professionalPdfLib = readFileSafe("src/lib/professionalPdf.ts")
   const purchaseReceiptsPdfRoutes = readFileSafe("src/routes/purchaseReceiptsPdf.ts")
   const inventoryDocsPdfRoutes = readFileSafe("src/routes/inventoryDocsPdf.ts")
@@ -298,6 +299,15 @@ function assertTypedSensitiveModules() {
       incomingEfacturaLib.includes("export function extractXmlFromAnafDownload") &&
       incomingEfacturaLib.includes("export function parseIncomingEInvoiceXml"),
     "Keep incoming e-Factura download/XML parsing helpers type-checked because they interpret ANAF payloads and invoice XML before import/linking."
+  )
+
+  addResult(
+    "Tenant export helpers no longer bypass TypeScript",
+    !tenantExportLib.startsWith("// @ts-nocheck") &&
+      tenantExportLib.includes("type TenantExportManifest") &&
+      tenantExportLib.includes("export async function buildTenantExportZip") &&
+      tenantExportLib.includes("export function buildTenantBackupStats"),
+    "Keep tenant export/backup packaging helpers type-checked because they assemble production customer data, uploads, and generated XML files into recovery archives."
   )
 
   addResult(

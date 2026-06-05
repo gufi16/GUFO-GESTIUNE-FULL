@@ -1,4 +1,3 @@
-// @ts-nocheck
 import fs from "fs"
 import path from "path"
 import AdmZip from "adm-zip"
@@ -9,6 +8,13 @@ import { getUploadsRoot } from "./uploads"
 const uploadsDir = getUploadsRoot()
 const backupsDir = path.join(uploadsDir, "tenant-backups")
 
+type JsonLike = Record<string, unknown> | unknown[] | string | number | boolean | null
+type TenantBackupPayload = Record<string, unknown>
+type TenantExportManifest = {
+  uploadsIncluded: string[]
+  generatedXmlIncluded: string[]
+}
+
 function sanitizeSegment(value: string) {
   return String(value || "")
     .replace(/[<>:"/\\|?*\x00-\x1F]/g, "-")
@@ -17,7 +23,7 @@ function sanitizeSegment(value: string) {
     .replace(/^-+|-+$/g, "")
 }
 
-function safeJson(value: any) {
+function safeJson(value: JsonLike | Record<string, unknown>) {
   return JSON.stringify(
     value,
     (_key, current) => {
@@ -48,7 +54,7 @@ function normalizeUploadRelativePath(value?: string | null) {
   return null
 }
 
-function addFileIfExists(zip: AdmZip, absolutePath: string, zipPath: string) {
+function addFileIfExists(zip: InstanceType<typeof AdmZip>, absolutePath: string, zipPath: string) {
   if (!fs.existsSync(absolutePath)) return false
   const stat = fs.statSync(absolutePath)
   if (!stat.isFile()) return false
@@ -260,7 +266,7 @@ export async function buildTenantExportZip(tenantId: string) {
   const zip = new AdmZip()
   zip.addFile("data/tenant.json", Buffer.from(safeJson(payload), "utf8"))
 
-  const manifest = {
+  const manifest: TenantExportManifest = {
     uploadsIncluded: [],
     generatedXmlIncluded: [],
   }
@@ -304,7 +310,7 @@ export async function buildTenantExportZip(tenantId: string) {
   for (const invoice of tenant.incomingEInvoices || []) {
     if (!invoice?.xmlText) continue
     const base =
-      sanitizeSegment(invoice.invoiceNumber || invoice.spvDownloadId || invoice.id || "incoming-invoice")
+      sanitizeSegment(invoice.invoiceNo || invoice.spvDownloadId || invoice.id || "incoming-invoice")
     const zipPath = path.posix.join("files", "efactura-incoming", `${base}.xml`)
     zip.addFile(zipPath, Buffer.from(String(invoice.xmlText), "utf8"))
     manifest.generatedXmlIncluded.push(zipPath)
@@ -326,7 +332,7 @@ export function ensureTenantBackupDir(tenantId: string) {
   return dir
 }
 
-export function buildTenantBackupStats(payload: any) {
+export function buildTenantBackupStats(payload: TenantBackupPayload | null | undefined) {
   const stats: Record<string, number> = {}
   if (!payload || typeof payload !== "object") return stats
   for (const [key, value] of Object.entries(payload)) {
