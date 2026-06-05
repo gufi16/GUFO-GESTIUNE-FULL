@@ -1,4 +1,4 @@
-// @ts-nocheck
+import type { Prisma } from "@prisma/client"
 import { prisma } from "./prisma"
 import { getCompanyAnafCredentialById, resolveCompanyWithAnafCredential } from "./companyAnafCredentials"
 import { anafHttpRequest } from "./anafHttp"
@@ -14,6 +14,8 @@ import {
 } from "./incomingEfactura"
 
 const COMPANY_ANAF_SELECT = {
+  id: true,
+  tenantId: true,
   cui: true,
   efacturaEnvironment: true,
   efacturaOauthClientId: true,
@@ -24,6 +26,19 @@ const COMPANY_ANAF_SELECT = {
   efacturaCertSerial: true,
   efacturaCertFilename: true,
   efacturaCertPasswordEnc: true,
+}
+
+type AnafContextCompany = Prisma.CompanyGetPayload<{
+  select: typeof COMPANY_ANAF_SELECT
+}> & {
+  anafCredentialId?: string
+  anafCredentialLabel?: string
+  efacturaUsesPlatformConfig?: boolean
+  efacturaCertUploadedAt?: Date | null
+  efacturaOauthRefreshToken?: string | null
+  efacturaOauthAccessTokenExpiresAt?: Date | null
+  efacturaOauthRefreshTokenExpiresAt?: Date | null
+  efacturaOauthConnectedAt?: Date | null
 }
 
 type AnafCompanyAuthContext = {
@@ -44,18 +59,19 @@ export async function loadAnafCompanyContext(
     return null
   }
 
-  const company = await resolveCompanyWithAnafCredential(prisma as any, tenantId, activeCompanyId ?? auth?.activeCompanyId, {
+  const company = (await resolveCompanyWithAnafCredential(prisma, tenantId, activeCompanyId ?? auth?.activeCompanyId, {
     select: COMPANY_ANAF_SELECT,
     auth,
-  })
+  })) as AnafContextCompany | null
 
   if (!company) return company
 
-  const requestedCredential = credentialId
-    ? await getCompanyAnafCredentialById(prisma as any, tenantId, company.id, credentialId)
+  const normalizedCredentialId = String(credentialId || "").trim()
+  const requestedCredential = normalizedCredentialId
+    ? await getCompanyAnafCredentialById(prisma, tenantId, company.id, normalizedCredentialId)
     : null
 
-  const effectiveCompany = requestedCredential
+  const effectiveCompany: AnafContextCompany = requestedCredential
     ? {
         ...company,
         anafCredentialId: requestedCredential.id,

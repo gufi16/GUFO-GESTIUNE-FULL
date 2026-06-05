@@ -141,6 +141,7 @@ function assertTypedSensitiveModules() {
   const warehouseLib = readFileSafe("src/lib/warehouse.ts")
   const companyResolverLib = readFileSafe("src/lib/companyResolver.ts")
   const companyAnafCredentialsLib = readFileSafe("src/lib/companyAnafCredentials.ts")
+  const anafClientLib = readFileSafe("src/lib/anafClient.ts")
   const incomingEfacturaLib = readFileSafe("src/lib/incomingEfactura.ts")
   const tenantExportLib = readFileSafe("src/lib/tenantExport.ts")
   const tenantRestoreLib = readFileSafe("src/lib/tenantRestore.ts")
@@ -291,6 +292,16 @@ function assertTypedSensitiveModules() {
       companyAnafCredentialsLib.includes("export function mapAnafCredentialSummary") &&
       companyAnafCredentialsLib.includes("export async function resolveCompanyWithAnafCredential"),
     "Keep ANAF credential hydration and legacy-company sync helpers type-checked because they drive OAuth/certificate data used by e-Factura and e-Transport integrations."
+  )
+
+  addResult(
+    "ANAF client helpers no longer bypass TypeScript",
+    !anafClientLib.startsWith("// @ts-nocheck") &&
+      anafClientLib.includes("export async function loadAnafCompanyContext") &&
+      anafClientLib.includes("export function requireAnafReadyCompany") &&
+      anafClientLib.includes("export async function anafUploadXml") &&
+      anafClientLib.includes("export async function anafUploadEtransportXml"),
+    "Keep ANAF client request/diagnostics helpers type-checked because they orchestrate certificate and OAuth traffic for e-Factura and e-Transport."
   )
 
   addResult(
