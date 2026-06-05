@@ -398,13 +398,21 @@ function assertTypedSensitiveModules() {
   )
 
   addResult(
-    "Minutes doc helpers extracted from ts-nocheck route",
+    "Minutes docs route no longer bypasses TypeScript",
+    !minutesDocsRoutes.startsWith("// @ts-nocheck") &&
+      minutesDocsRoutes.includes('router.post("/api/v1/minutes-docs/full"') &&
+      minutesDocsRoutes.includes("type MinutesDocItemInput"),
+    "Keep minutes documents type-checked because deterioration and price-change minutes directly change stock or selling prices."
+  )
+
+  addResult(
+    "Minutes doc helpers extracted from typed route",
     minutesDocsRoutes.includes('from "../lib/minutesDocSupport"') &&
       minutesDocSupport.includes("export function minutesReasonLabel") &&
       minutesDocSupport.includes("export function minutesFindingLabel") &&
       minutesDocSupport.includes("export function minutesDocTypeLabel") &&
       minutesDocSupport.includes("export function formatMinutesMoney"),
-    "Keep minute document parsing, reason/finding labels, and money/qty formatting in a typed helper module before removing // @ts-nocheck from the large route."
+    "Keep minute document parsing, reason/finding labels, and money/qty formatting in a typed helper module instead of regressing into the route file."
   )
 
   addResult(

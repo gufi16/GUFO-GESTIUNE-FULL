@@ -1,4 +1,3 @@
-// @ts-nocheck
 import fs from "fs"
 import { Router } from "express"
 import PDFDocument from "pdfkit"
@@ -25,6 +24,21 @@ import {
 const router = Router()
 
 router.use(requireAuth)
+
+type MinutesDocItemInput = {
+  productId?: unknown
+  qty?: unknown
+  unitValue?: unknown
+  oldPrice?: unknown
+  newPrice?: unknown
+  note?: unknown
+}
+
+type PdfTableColumn = {
+  label: string
+  width: number
+  align?: "left" | "center" | "right"
+}
 
 function registerFonts(doc: PDFKit.PDFDocument) {
   const regularCandidates = [
@@ -217,14 +231,17 @@ async function assertManualDocNoAvailable(tenantId: string, docNo: string, curre
 }
 
 router.get("/api/v1/minutes-docs", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = String(req.auth?.tenantId || "").trim()
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Tenant invalid." })
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ ok: false, error: "Compania activa este obligatorie." })
+  const activeCompanyId = companyId
   const type = String(req.query.type || "").trim().toUpperCase()
 
   const docs = await prisma.minutesDoc.findMany({
     where: {
       tenantId,
-      companyId,
+      companyId: activeCompanyId,
       ...(type === "DETERIORATION" || type === "PRICE_CHANGE" ? { type: type as MinutesDocType } : {}),
     },
     include: {
@@ -248,12 +265,15 @@ router.get("/api/v1/minutes-docs", async (req: AuthedRequest, res) => {
 })
 
 router.get("/api/v1/minutes-docs/:id", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = String(req.auth?.tenantId || "").trim()
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Tenant invalid." })
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ ok: false, error: "Compania activa este obligatorie." })
+  const activeCompanyId = companyId
   const { id } = req.params
 
   const doc = await prisma.minutesDoc.findFirst({
-    where: { id, tenantId, companyId },
+    where: { id, tenantId, companyId: activeCompanyId },
     include: {
       location: true,
       items: {
@@ -276,20 +296,25 @@ router.get("/api/v1/minutes-docs/:id", async (req: AuthedRequest, res) => {
 })
 
 router.post("/api/v1/minutes-docs/full", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = String(req.auth?.tenantId || "").trim()
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Tenant invalid." })
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ ok: false, error: "Compania activa este obligatorie." })
+  const activeCompanyId = companyId
   const { id, header, items, postNow } = req.body || {}
 
   try {
-    const type = String(header?.type || "").trim().toUpperCase()
+    const rawType = String(header?.type || "").trim().toUpperCase()
     const locationId = minutesDocText(header?.locationId)
     const docDate = parseMinutesDocDate(header?.docDate)
     const reasonCode = minutesDocText(header?.reasonCode)
     const findingCode = minutesDocText(header?.findingCode)
     const note = minutesDocText(header?.note)
     const rawDocNo = String(header?.docNo || "").trim()
+    const type: MinutesDocType | null =
+      rawType === "DETERIORATION" || rawType === "PRICE_CHANGE" ? rawType : null
 
-    if (type !== "DETERIORATION" && type !== "PRICE_CHANGE") {
+    if (!type) {
       return res.status(400).json({ ok: false, error: "Tip document invalid." })
     }
     if (!locationId) return res.status(400).json({ ok: false, error: "Selecteaza locatia." })
@@ -299,7 +324,7 @@ router.post("/api/v1/minutes-docs/full", async (req: AuthedRequest, res) => {
     }
 
     let docId = id ? String(id) : null
-    const numberingKey = type === "DETERIORATION" ? "deterioration" : "priceChange"
+    const numberingKey: "deterioration" | "priceChange" = type === "DETERIORATION" ? "deterioration" : "priceChange"
     const preview = !docId ? await getNextNumberPreview(tenantId, numberingKey) : null
     const shouldConsumeAutoNumber = !docId && (!rawDocNo || rawDocNo === preview?.value)
     const autoDocNo = shouldConsumeAutoNumber ? await reserveUniqueMinutesDocNo(tenantId, numberingKey) : ""
@@ -317,7 +342,7 @@ router.post("/api/v1/minutes-docs/full", async (req: AuthedRequest, res) => {
       const created = await prisma.minutesDoc.create({
         data: {
           tenantId,
-          companyId,
+          companyId: activeCompanyId,
           locationId,
           type,
           docNo: finalDocNo,
@@ -331,7 +356,7 @@ router.post("/api/v1/minutes-docs/full", async (req: AuthedRequest, res) => {
       docId = created.id
     } else {
       const existing = await prisma.minutesDoc.findFirst({
-        where: { id: docId, tenantId, companyId },
+        where: { id: docId, tenantId, companyId: activeCompanyId },
       })
 
       if (!existing) return res.status(404).json({ ok: false, error: "Documentul nu a fost gasit." })
@@ -357,7 +382,7 @@ router.post("/api/v1/minutes-docs/full", async (req: AuthedRequest, res) => {
       })
     }
 
-    for (const raw of items) {
+    for (const raw of items as MinutesDocItemInput[]) {
       const productId = String(raw?.productId || "").trim()
       const qty = Math.max(0, minutesDocNumber(raw?.qty))
       const unitValue = Math.max(0, minutesDocNumber(raw?.unitValue))
@@ -382,14 +407,17 @@ router.post("/api/v1/minutes-docs/full", async (req: AuthedRequest, res) => {
       })
     }
 
-    await recalcMinutesDoc(docId)
+    if (!docId) throw new Error("Documentul nu a fost salvat corect.")
+    const persistedDocId = docId
+
+    await recalcMinutesDoc(persistedDocId)
 
     if (postNow === true) {
-      await applyMinutesDoc(tenantId, companyId, docId)
+      await applyMinutesDoc(tenantId, activeCompanyId, persistedDocId)
     }
 
     const doc = await prisma.minutesDoc.findFirst({
-      where: { id: docId, tenantId, companyId },
+      where: { id: persistedDocId, tenantId, companyId: activeCompanyId },
       include: {
         location: true,
         items: {
@@ -405,21 +433,24 @@ router.post("/api/v1/minutes-docs/full", async (req: AuthedRequest, res) => {
     })
 
     return res.json({ ok: true, item: doc })
-  } catch (e: any) {
+  } catch (e: unknown) {
     return res.status(400).json({
       ok: false,
-      error: e?.message || "Eroare la salvarea documentului",
+      error: e instanceof Error ? e.message : "Eroare la salvarea documentului",
     })
   }
 })
 
 router.get("/api/v1/minutes-docs/:id/pdf", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = String(req.auth?.tenantId || "").trim()
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Tenant invalid." })
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ ok: false, error: "Compania activa este obligatorie." })
+  const activeCompanyId = companyId
   const { id } = req.params
 
   const docData = await prisma.minutesDoc.findFirst({
-    where: { id, tenantId, companyId },
+    where: { id, tenantId, companyId: activeCompanyId },
     include: {
       location: true,
       items: {
@@ -579,7 +610,7 @@ router.get("/api/v1/minutes-docs/:id/pdf", async (req: AuthedRequest, res) => {
   doc.font(fonts.bold).fontSize(10).fillColor('#0F172A').text('Pozitii document', margin, y)
   y += 14
 
-  const columns = docData.type === 'DETERIORATION'
+  const columns: PdfTableColumn[] = docData.type === 'DETERIORATION'
     ? [
         { label: '#', width: 28, align: 'center' },
         { label: 'Produs', width: 150, align: 'left' },
