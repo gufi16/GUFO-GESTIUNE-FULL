@@ -1,11 +1,12 @@
 import fs from "fs"
 import jwt from "jsonwebtoken"
 import path from "path"
+import type { Response } from "express"
 import type { AuthedRequest } from "../middleware/requireAuth"
 import type { prisma } from "./prisma"
 import { hasEfacturaCertificateFile } from "./efacturaCertificate"
 import { ensureTenantCompany, listTenantCompaniesForAuth, resolveTenantCompanyForAuth, updateOrCreateTenantCompany } from "./companyResolver"
-import { getCompanyAnafCredentialById, getDefaultCompanyAnafCredential, resolveCompanyWithAnafCredential } from "./companyAnafCredentials"
+import { ANAF_CREDENTIAL_SELECT, getCompanyAnafCredentialById, getDefaultCompanyAnafCredential, resolveCompanyWithAnafCredential, syncDefaultAnafCredentialToCompany } from "./companyAnafCredentials"
 
 type EfacturaAgentFile = {
   fileName: string
@@ -89,9 +90,88 @@ type EffectiveAnafOauthCompanyConfig = {
   efacturaOauthRedirectUri?: string | null
 }
 
+type AnafOauthStatePayload = {
+  tenantId: string
+  returnTo: string
+  activeCompanyId?: string | null
+  credentialId?: string | null
+}
+
 export function normalizeOptionalText(value: unknown) {
   const text = String(value || "").trim()
   return text || null
+}
+
+export function clearAnafOauthContextCookie(res: Response, cookieName: string) {
+  res.clearCookie(cookieName, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/api/v1/company/efactura/oauth/callback",
+  })
+}
+
+export function parseAnafOauthStateOrThrow(
+  effectiveStateRaw: string,
+  jwtSecret: string,
+): AnafOauthStatePayload {
+  return jwt.verify(effectiveStateRaw, jwtSecret) as AnafOauthStatePayload
+}
+
+export function buildAnafOauthReturnUrl(
+  returnTo: string,
+  status: "error" | "denied" | "success",
+  message?: string | null,
+) {
+  const separator = returnTo.includes("?") ? "&" : "?"
+  const base = `${returnTo}${separator}oauth=${status}`
+  if (!message) {
+    return base
+  }
+  return `${base}&message=${encodeURIComponent(message)}`
+}
+
+export async function persistAnafOauthError(
+  prismaClient: PrismaClientLike,
+  tenantId: string,
+  activeCompanyId: string | null | undefined,
+  credentialId: string | null | undefined,
+  errorMessage: string,
+) {
+  const company = await prismaClient.company.findFirst({
+    where: {
+      tenantId,
+      ...(activeCompanyId ? { id: activeCompanyId } : {}),
+    },
+    orderBy: activeCompanyId ? undefined : [{ isDefault: "desc" }, { createdAt: "asc" }],
+    select: {
+      id: true,
+    },
+  })
+
+  if (!company?.id) {
+    return
+  }
+
+  const credential = credentialId
+    ? await getCompanyAnafCredentialById(prismaClient as never, tenantId, company.id, credentialId)
+    : await getDefaultCompanyAnafCredential(prismaClient as never, tenantId, company.id)
+
+  if (credential?.id) {
+    const updated = await prismaClient.companyAnafCredential.update({
+      where: { id: credential.id },
+      data: { efacturaOauthLastError: errorMessage },
+      select: ANAF_CREDENTIAL_SELECT,
+    })
+    if (credential.isDefault) {
+      await syncDefaultAnafCredentialToCompany(prismaClient as never, company.id, updated)
+    }
+    return
+  }
+
+  await updateOrCreateTenantCompany(prismaClient, tenantId, activeCompanyId || null, {
+    efacturaOauthLastError: errorMessage,
+  })
 }
 
 export async function requireExplicitAnafCompanyContext(

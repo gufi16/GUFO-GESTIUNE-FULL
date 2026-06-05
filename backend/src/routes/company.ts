@@ -33,6 +33,8 @@ import { ensureUploadSubdir } from "../lib/uploads"
 import { getJwtSecret } from "../lib/auth"
 import { ensureTenantAdminAccess } from "../lib/tenantAdmin"
 import {
+  buildAnafOauthReturnUrl,
+  clearAnafOauthContextCookie,
   createEfacturaAgentDownloadTicket,
   createEfacturaAgentPairingCode,
   decodeTokenExpiry,
@@ -48,6 +50,8 @@ import {
   getRequestedCredentialId,
   mapCompanyResponse,
   normalizeOptionalText,
+  parseAnafOauthStateOrThrow,
+  persistAnafOauthError,
   requireExplicitAnafCompanyContext,
   requireExplicitAnafCompanyContextForAuth,
   updateRequestCompany,
@@ -103,12 +107,7 @@ export async function handleAnafOauthCallback(req, res) {
   const cookieStateRaw = String(req.cookies?.[ANAF_OAUTH_CTX_COOKIE] || "")
   const effectiveStateRaw = cookieStateRaw || stateRaw
 
-  res.clearCookie(ANAF_OAUTH_CTX_COOKIE, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/api/v1/company/efactura/oauth/callback",
-  })
+  clearAnafOauthContextCookie(res, ANAF_OAUTH_CTX_COOKIE)
 
   if (!effectiveStateRaw) {
     return res.status(400).send("Lipsesc parametrii OAuth ANAF.")
@@ -116,7 +115,7 @@ export async function handleAnafOauthCallback(req, res) {
 
   let state: { tenantId: string; returnTo: string; activeCompanyId?: string | null; credentialId?: string | null } | null = null
   try {
-    state = jwt.verify(effectiveStateRaw, JWT_SECRET) as { tenantId: string; returnTo: string; activeCompanyId?: string | null; credentialId?: string | null }
+    state = parseAnafOauthStateOrThrow(effectiveStateRaw, JWT_SECRET)
   } catch {
     return res.status(400).send("State OAuth invalid sau expirat.")
   }
@@ -124,7 +123,11 @@ export async function handleAnafOauthCallback(req, res) {
   try {
     await requireExplicitAnafCompanyContext(prisma, state.tenantId, state.activeCompanyId || null)
   } catch (error: any) {
-    return res.redirect(`${state.returnTo}${state.returnTo.includes("?") ? "&" : "?"}oauth=error&message=${encodeURIComponent(String(error?.message || "Firma activa nu este disponibila pentru OAuth."))}`)
+    return res.redirect(buildAnafOauthReturnUrl(
+      state.returnTo,
+      "error",
+      String(error?.message || "Firma activa nu este disponibila pentru OAuth."),
+    ))
   }
 
   const oauthConfig = await getEffectiveAnafOauthConfig(prisma, state.tenantId, state.activeCompanyId || null)
@@ -153,33 +156,16 @@ export async function handleAnafOauthCallback(req, res) {
       hasStateCookie: Boolean(cookieStateRaw),
     })
 
-    const company = await resolveTenantCompany(prisma, state.tenantId, state.activeCompanyId || null, {
-      select: { id: true, tenantId: true, name: true },
-    })
-    if (company?.id) {
-      const credential = state.credentialId
-        ? await getCompanyAnafCredentialById(prisma as any, state.tenantId, company.id, state.credentialId)
-        : await getDefaultCompanyAnafCredential(prisma as any, state.tenantId, company.id)
-      if (credential?.id) {
-        const updated = await prisma.companyAnafCredential.update({
-          where: { id: credential.id },
-          data: { efacturaOauthLastError: nextError },
-          select: ANAF_CREDENTIAL_SELECT,
-        })
-        if (credential.isDefault) {
-          await syncDefaultAnafCredentialToCompany(prisma as any, company.id, updated)
-        }
-      } else {
-        await updateOrCreateTenantCompany(prisma, state.tenantId, state.activeCompanyId || null, {
-          efacturaOauthLastError: nextError,
-        })
-      }
-      }
+    await persistAnafOauthError(
+      prisma,
+      state.tenantId,
+      state.activeCompanyId,
+      state.credentialId,
+      nextError,
+    )
 
-      return res.redirect(
-        `${state.returnTo}${state.returnTo.includes("?") ? "&" : "?"}oauth=denied&message=${encodeURIComponent(nextError)}`,
-      )
-    }
+    return res.redirect(buildAnafOauthReturnUrl(state.returnTo, "denied", nextError))
+  }
 
   if (!code) {
     return res.status(400).send("Lipsesc parametrii OAuth ANAF.")
@@ -206,28 +192,15 @@ export async function handleAnafOauthCallback(req, res) {
     const payload = await tokenRes.json().catch(() => ({}))
 
     if (!tokenRes.ok || !payload?.access_token) {
-      const company = await resolveTenantCompany(prisma, state.tenantId, state.activeCompanyId || null, {
-        select: { id: true, tenantId: true, name: true },
-      })
-      if (company?.id) {
-        const credential = state.credentialId
-          ? await getCompanyAnafCredentialById(prisma as any, state.tenantId, company.id, state.credentialId)
-          : await getDefaultCompanyAnafCredential(prisma as any, state.tenantId, company.id)
-        if (credential?.id) {
-          const updated = await prisma.companyAnafCredential.update({
-            where: { id: credential.id },
-            data: {
-              efacturaOauthLastError: String(payload?.error_description || payload?.error || "Nu am putut obtine token-ul ANAF."),
-            },
-            select: ANAF_CREDENTIAL_SELECT,
-          })
-          if (credential.isDefault) {
-            await syncDefaultAnafCredentialToCompany(prisma as any, company.id, updated)
-          }
-        }
-      }
+      await persistAnafOauthError(
+        prisma,
+        state.tenantId,
+        state.activeCompanyId,
+        state.credentialId,
+        String(payload?.error_description || payload?.error || "Nu am putut obtine token-ul ANAF."),
+      )
 
-      return res.redirect(`${state.returnTo}${state.returnTo.includes("?") ? "&" : "?"}oauth=error`)
+      return res.redirect(buildAnafOauthReturnUrl(state.returnTo, "error"))
     }
 
     const company = await resolveTenantCompany(prisma, state.tenantId, state.activeCompanyId || null, {
@@ -265,28 +238,17 @@ export async function handleAnafOauthCallback(req, res) {
 
     await syncDefaultAnafCredentialToCompany(prisma as any, company.id, activeCredential)
 
-    return res.redirect(`${state.returnTo}${state.returnTo.includes("?") ? "&" : "?"}oauth=success`)
+    return res.redirect(buildAnafOauthReturnUrl(state.returnTo, "success"))
   } catch (error: any) {
-    const company = await resolveTenantCompany(prisma, state.tenantId, state.activeCompanyId || null, {
-      select: { id: true, tenantId: true, name: true },
-    })
-    if (company?.id) {
-      const credential = state.credentialId
-        ? await getCompanyAnafCredentialById(prisma as any, state.tenantId, company.id, state.credentialId)
-        : await getDefaultCompanyAnafCredential(prisma as any, state.tenantId, company.id)
-      if (credential?.id) {
-        const updated = await prisma.companyAnafCredential.update({
-          where: { id: credential.id },
-          data: { efacturaOauthLastError: error?.message || "Eroare la schimbul token-ului ANAF." },
-          select: ANAF_CREDENTIAL_SELECT,
-        })
-        if (credential.isDefault) {
-          await syncDefaultAnafCredentialToCompany(prisma as any, company.id, updated)
-        }
-      }
-    }
+    await persistAnafOauthError(
+      prisma,
+      state.tenantId,
+      state.activeCompanyId,
+      state.credentialId,
+      error?.message || "Eroare la schimbul token-ului ANAF.",
+    )
 
-    return res.redirect(`${state.returnTo}${state.returnTo.includes("?") ? "&" : "?"}oauth=error`)
+    return res.redirect(buildAnafOauthReturnUrl(state.returnTo, "error"))
   }
 }
 
