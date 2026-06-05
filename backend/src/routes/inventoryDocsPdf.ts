@@ -1,7 +1,7 @@
-// @ts-nocheck
 import fs from "fs"
 import { Router } from "express"
 import PDFDocument from "pdfkit"
+import type { Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { requireRequestCompanyId, resolveRequestCompany } from "../lib/companyScope"
@@ -10,27 +10,53 @@ const router = Router()
 
 router.use(requireAuth)
 
-function num(v: any) {
+type InventoryDocPdfData = Prisma.InventoryDocGetPayload<{
+  include: {
+    location: true
+    items: {
+      include: {
+        product: {
+          include: {
+            uom: true
+          }
+        }
+      }
+      orderBy: {
+        createdAt: "asc"
+      }
+    }
+  }
+}>
+
+function num(v: unknown) {
   return Number(v || 0)
 }
 
-function fmt(v: any, d = 3) {
+function fmt(v: unknown, d = 3) {
   return num(v).toFixed(d)
 }
 
-function fmtDateTime(v: any) {
-  if (!v) return "-"
-  const d = new Date(v)
+function toDateInput(v: unknown): string | number | Date | null {
+  if (v == null) return null
+  if (v instanceof Date) return v
+  if (typeof v === "string" || typeof v === "number") return v
+  return null
+}
+
+function fmtDateTime(v: unknown) {
+  const dateInput = toDateInput(v)
+  if (!dateInput) return "-"
+  const d = new Date(dateInput)
   if (Number.isNaN(d.getTime())) return "-"
   return d.toLocaleString("ro-RO")
 }
 
-function text(v: any) {
+function text(v: unknown) {
   const t = String(v || "").trim()
   return t || "-"
 }
 
-function safeFilePart(value: string) {
+function safeFilePart(value: unknown) {
   return String(value || "")
     .trim()
     .replace(/\s+/g, "-")
@@ -120,11 +146,19 @@ function mapStatusToRomanian(status: string) {
 
 router.get("/:id/pdf", async (req: AuthedRequest, res) => {
   try {
-    const tenantId = req.auth!.tenantId
-    const companyId = await requireRequestCompanyId(req)
+    const tenantId = String(req.auth?.tenantId || "").trim()
+    if (!tenantId) {
+      return res.status(401).json({ ok: false, error: "Tenant lipsa in sesiune." })
+    }
+
+    const companyId = String((await requireRequestCompanyId(req)) || "").trim()
+    if (!companyId) {
+      return res.status(400).json({ ok: false, error: "Firma activa lipsa." })
+    }
+
     const { id } = req.params
 
-    const docData: any = await prisma.inventoryDoc.findFirst({
+    const docData: InventoryDocPdfData | null = await prisma.inventoryDoc.findFirst({
       where: { id, tenantId, companyId },
       include: {
         location: true,
@@ -150,9 +184,10 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
       })
     }
 
+    const inventoryDoc = docData
     const company = await resolveRequestCompany(req)
 
-    const filename = `Inventar_${safeFilePart(docData.docNo)}_${safeFilePart(docData.location?.name || "locatie")}.pdf`
+    const filename = `Inventar_${safeFilePart(inventoryDoc.docNo)}_${safeFilePart(inventoryDoc.location?.name || "locatie")}.pdf`
 
     res.setHeader("Content-Type", "application/pdf")
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`)
@@ -164,7 +199,7 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
       info: {
         Title: filename,
         Author: company?.name || "Gufo ERP",
-        Subject: `Inventar ${docData.docNo}`
+        Subject: `Inventar ${inventoryDoc.docNo}`
       }
     })
 
@@ -214,7 +249,7 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
       differenceQty: string
     }
 
-    const rows: RowData[] = docData.items.map((item: any, index: number) => ({
+    const rows: RowData[] = inventoryDoc.items.map((item, index: number) => ({
       no: String(index + 1),
       productName: text(item.product?.name),
       sku: text(item.product?.sku),
@@ -301,19 +336,19 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
       const metaRows = [
         [
           "Document",
-          text(docData.docNo),
+          text(inventoryDoc.docNo),
           "Data document",
-          fmtDateTime(docData.docDate),
+          fmtDateTime(inventoryDoc.docDate),
           "Locatie",
-          text(docData.location?.name)
+          text(inventoryDoc.location?.name)
         ],
         [
           "Status",
-          mapStatusToRomanian(text(docData.status)),
+          mapStatusToRomanian(text(inventoryDoc.status)),
           "Finalizat la",
-          docData.finalizedAt ? fmtDateTime(docData.finalizedAt) : "-",
+          inventoryDoc.finalizedAt ? fmtDateTime(inventoryDoc.finalizedAt) : "-",
           "Nr. pozitii",
-          String(docData.items.length)
+          String(inventoryDoc.items.length)
         ]
       ]
 
