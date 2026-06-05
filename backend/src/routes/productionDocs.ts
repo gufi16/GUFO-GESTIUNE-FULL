@@ -5,6 +5,13 @@ import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { requireRequestCompanyId } from "../lib/companyScope"
 import { resolveTenantCompany } from "../lib/companyResolver"
+import {
+  drawProductionTableSection,
+  ensureProductionPdfSpace,
+  formatProductionPdfDate,
+  formatProductionPdfNumber,
+  getProductionPdfPageWidth,
+} from "../lib/productionDocPdfSupport"
 
 const router = Router()
 
@@ -20,52 +27,6 @@ router.use((req: any, _res, next) => {
 })
 
 router.use(requireAuth)
-
-function formatDate(value?: Date | string | null) {
-  if (!value) return "-"
-  const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return "-"
-  return d.toLocaleDateString("ro-RO")
-}
-
-function formatNumber(value?: number | null, digits = 2) {
-  return Number(value || 0).toLocaleString("ro-RO", {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  })
-}
-
-function getPageWidth(doc: any) {
-  return doc.page.width - doc.page.margins.left - doc.page.margins.right
-}
-
-function getBottomLimit(doc: any) {
-  return doc.page.height - doc.page.margins.bottom
-}
-
-function ensureSpace(doc: any, neededHeight: number) {
-  if (doc.y + neededHeight > getBottomLimit(doc)) {
-    doc.addPage()
-  }
-}
-
-function drawCenteredSectionTitle(doc: any, title: string) {
-  ensureSpace(doc, 36)
-
-  const pageWidth = getPageWidth(doc)
-
-  doc.moveDown(0.5)
-  doc
-    .font("Helvetica-Bold")
-    .fontSize(17)
-    .fillColor("#0f172a")
-    .text(title, doc.page.margins.left, doc.y, {
-      width: pageWidth,
-      align: "center",
-    })
-
-  doc.moveDown(0.6)
-}
 
 function drawInfoCard(doc: any, x: number, y: number, width: number, height: number, title: string, lines: string[]) {
   doc.save()
@@ -88,155 +49,6 @@ function drawInfoCard(doc: any, x: number, y: number, width: number, height: num
     })
     lineY += 22
   }
-}
-
-function drawTableHeader(
-  doc: any,
-  startX: number,
-  startY: number,
-  widths: number[],
-  headers: string[],
-  rowHeight = 30
-) {
-  let x = startX
-
-  for (let i = 0; i < headers.length; i++) {
-    const width = widths[i]
-
-    doc.save()
-    doc.rect(x, startY, width, rowHeight).fill("#dbe7f5")
-    doc.restore()
-
-    doc.save()
-    doc.rect(x, startY, width, rowHeight).lineWidth(0.7).strokeColor("#cbd5e1").stroke()
-    doc.restore()
-
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(10.5)
-      .fillColor("#0f172a")
-      .text(headers[i], x + 10, startY + 9, {
-        width: width - 20,
-        align: i === headers.length - 1 ? "right" : "left",
-        ellipsis: true,
-      })
-
-    x += width
-  }
-
-  return startY + rowHeight
-}
-
-function drawTableRow(
-  doc: any,
-  startX: number,
-  startY: number,
-  widths: number[],
-  values: string[],
-  rowHeight = 28
-) {
-  let x = startX
-
-  for (let i = 0; i < values.length; i++) {
-    const width = widths[i]
-
-    doc.save()
-    doc.rect(x, startY, width, rowHeight).fill("#ffffff")
-    doc.restore()
-
-    doc.save()
-    doc.rect(x, startY, width, rowHeight).lineWidth(0.6).strokeColor("#dbe3ee").stroke()
-    doc.restore()
-
-    doc
-      .font("Helvetica")
-      .fontSize(10.5)
-      .fillColor("#0f172a")
-      .text(values[i], x + 10, startY + 8, {
-        width: width - 20,
-        align: i === values.length - 1 ? "right" : "left",
-        ellipsis: true,
-      })
-
-    x += width
-  }
-
-  return startY + rowHeight
-}
-
-function drawTableSection(params: {
-  doc: any
-  title: string
-  headers: string[]
-  rows: string[][]
-  widths: number[]
-  startX: number
-  rowHeight?: number
-  headerHeight?: number
-}) {
-  const {
-    doc,
-    title,
-    headers,
-    rows,
-    widths,
-    startX,
-    rowHeight = 28,
-    headerHeight = 30,
-  } = params
-
-  const pageWidth = getPageWidth(doc)
-  const sectionTitleHeight = 34
-  const minRequired = sectionTitleHeight + headerHeight + rowHeight
-
-  ensureSpace(doc, minRequired)
-
-  const drawSectionHeader = () => {
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(17)
-      .fillColor("#0f172a")
-      .text(title, doc.page.margins.left, doc.y, {
-        width: pageWidth,
-        align: "center",
-      })
-
-    doc.moveDown(0.6)
-    const nextY = drawTableHeader(doc, startX, doc.y, widths, headers, headerHeight)
-    doc.y = nextY
-  }
-
-  drawSectionHeader()
-
-  if (rows.length === 0) {
-    if (doc.y + rowHeight > getBottomLimit(doc)) {
-      doc.addPage()
-      drawSectionHeader()
-    }
-
-    const nextY = drawTableRow(
-      doc,
-      startX,
-      doc.y,
-      widths,
-      ["-", "Nu exista date", "-", "-"],
-      rowHeight
-    )
-    doc.y = nextY + 16
-    return
-  }
-
-  for (const row of rows) {
-    if (doc.y + rowHeight > getBottomLimit(doc)) {
-      doc.addPage()
-      drawSectionHeader()
-    }
-
-    const nextY = drawTableRow(doc, startX, doc.y, widths, row, rowHeight)
-    doc.y = nextY
-  }
-
-  doc.moveDown(1)
 }
 
 router.get("/api/v1/production-docs", async (req: AuthedRequest, res) => {
@@ -463,7 +275,7 @@ router.get("/api/v1/production-docs/:id/pdf", async (req: AuthedRequest, res) =>
 
     pdf.pipe(res)
 
-    const pageWidth = getPageWidth(pdf)
+    const pageWidth = getProductionPdfPageWidth(pdf)
     const fullWidth = pageWidth
     const headerY = pdf.y
     const leftW = 230
@@ -495,7 +307,7 @@ router.get("/api/v1/production-docs/:id/pdf", async (req: AuthedRequest, res) =>
 
     pdf.font("Helvetica").fontSize(9.5).fillColor("#111827")
     pdf.text(`Nr: ${docData.docNo}`, rightX + 12, headerY + 16, { width: rightW - 24, align: "left" })
-    pdf.text(`Data: ${formatDate(docData.docDate)}`, rightX + 12, headerY + 30, { width: rightW - 24, align: "left" })
+    pdf.text(`Data: ${formatProductionPdfDate(docData.docDate)}`, rightX + 12, headerY + 30, { width: rightW - 24, align: "left" })
     pdf.text(`Status: ${docData.status || "-"}`, rightX + 12, headerY + 44, { width: rightW - 24, align: "left" })
 
     pdf.y = headerY + 98
@@ -505,7 +317,7 @@ router.get("/api/v1/production-docs/:id/pdf", async (req: AuthedRequest, res) =>
     const metaCols = [96, 170, 84, 108, 74, metaTableWidth - 96 - 170 - 84 - 108 - 74]
     const metaRows = [
       ["Locatie", docData.location?.name || "-", "Pozitii", String(docData.items.length), "Status", docData.status || "-"],
-      ["Data", formatDate(docData.docDate), "Cantitate", formatNumber(docData.items.reduce((sum, row) => sum + Number(row.qty || 0), 0), 2), "Responsabil", "-"],
+      ["Data", formatProductionPdfDate(docData.docDate), "Cantitate", formatProductionPdfNumber(docData.items.reduce((sum, row) => sum + Number(row.qty || 0), 0), 2), "Responsabil", "-"],
     ]
 
     let metaY = pdf.y
@@ -532,7 +344,7 @@ router.get("/api/v1/production-docs/:id/pdf", async (req: AuthedRequest, res) =>
     pdf.y = metaY + 18
 
     if (docData.note) {
-      ensureSpace(pdf, 60)
+      ensureProductionPdfSpace(pdf, 60)
 
       pdf
         .font("Helvetica")
@@ -555,10 +367,10 @@ router.get("/api/v1/production-docs/:id/pdf", async (req: AuthedRequest, res) =>
       row.product?.sku || "-",
       row.product?.name || "-",
       row.product?.uom?.code || "-",
-      formatNumber(Number(row.qty || 0), 2),
+      formatProductionPdfNumber(Number(row.qty || 0), 2),
     ])
 
-    drawTableSection({
+    drawProductionTableSection({
       doc: pdf,
       title: "Produse finite",
       headers: ["SKU", "Produs", "UM", "Cantitate"],
@@ -605,12 +417,12 @@ router.get("/api/v1/production-docs/:id/pdf", async (req: AuthedRequest, res) =>
       ingredient.sku,
       ingredient.name,
       ingredient.uom,
-      formatNumber(ingredient.qty, 3),
+      formatProductionPdfNumber(ingredient.qty, 3),
     ])
 
     const ingredientsTableWidths = [100, tableTotalWidth - 100 - 90 - 120, 90, 120]
 
-    drawTableSection({
+    drawProductionTableSection({
       doc: pdf,
       title: "Consum ingrediente",
       headers: ["SKU", "Ingredient", "UM", "Cantitate"],
@@ -624,7 +436,7 @@ router.get("/api/v1/production-docs/:id/pdf", async (req: AuthedRequest, res) =>
       headerHeight: 30,
     })
 
-    ensureSpace(pdf, 150)
+    ensureProductionPdfSpace(pdf, 150)
 
     const totalsY = pdf.y
     const totalsHeight = 52
@@ -648,7 +460,7 @@ router.get("/api/v1/production-docs/:id/pdf", async (req: AuthedRequest, res) =>
       )
 
     pdf.text(
-        `Cantitate totala produse: ${formatNumber(
+        `Cantitate totala produse: ${formatProductionPdfNumber(
         docData.items.reduce((sum, row) => sum + Number(row.qty || 0), 0),
         2
       )}`,

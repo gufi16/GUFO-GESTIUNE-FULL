@@ -144,6 +144,8 @@ function assertTypedSensitiveModules() {
   const purchaseReceiptsPdfRoutes = readFileSafe("src/routes/purchaseReceiptsPdf.ts")
   const inventoryDocsPdfRoutes = readFileSafe("src/routes/inventoryDocsPdf.ts")
   const consumptionDocsPdfRoutes = readFileSafe("src/routes/consumptionDocsPdf.ts")
+  const productionDocsRoutes = readFileSafe("src/routes/productionDocs.ts")
+  const productionDocPdfSupport = readFileSafe("src/lib/productionDocPdfSupport.ts")
   const ownerMiddleware = readFileSafe("src/middleware/requireOwner.ts")
   const metaRoutes = readFileSafe("src/routes/meta.ts")
   const productRoutes = readFileSafe("src/routes/products.ts")
@@ -304,6 +306,14 @@ function assertTypedSensitiveModules() {
       consumptionDocsPdfRoutes.includes('router.get("/:id/pdf"') &&
       consumptionDocsPdfRoutes.includes("type ConsumptionDocPdfData"),
     "Keep consumption PDF rendering type-checked because it reflects live stock issue documents and validation state."
+  )
+
+  addResult(
+    "Production PDF helpers extracted from ts-nocheck route",
+    productionDocsRoutes.includes('from "../lib/productionDocPdfSupport"') &&
+      productionDocPdfSupport.includes("export function formatProductionPdfDate") &&
+      productionDocPdfSupport.includes("export function drawProductionTableSection"),
+    "Keep shared production PDF layout helpers in a typed module before removing // @ts-nocheck from the large production docs route."
   )
 
   addResult(
