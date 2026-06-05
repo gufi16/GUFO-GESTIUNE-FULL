@@ -48,12 +48,17 @@ import {
   getRequestCompany,
   getRequestedCompanyId,
   getRequestedCredentialId,
+  isValidEfacturaAgentDownloadTicketPayload,
+  isValidEfacturaAgentPairingPayload,
   mapCompanyResponse,
   normalizeOptionalText,
   parseAnafOauthStateOrThrow,
+  parseEfacturaAgentDownloadTicketOrThrow,
+  parseEfacturaAgentPairingCodeOrThrow,
   persistAnafOauthError,
   requireExplicitAnafCompanyContext,
   requireExplicitAnafCompanyContextForAuth,
+  resolveEfacturaAgentPairingDetails,
   updateRequestCompany,
 } from "../lib/companyRouteSupport"
 
@@ -266,7 +271,7 @@ router.get("/api/v1/public/efactura/agent-download", async (req, res) => {
 
   let payload: { tenantId?: string | null; purpose?: string } | null = null
   try {
-    payload = jwt.verify(ticket, JWT_SECRET) as { tenantId?: string | null; purpose?: string }
+    payload = parseEfacturaAgentDownloadTicketOrThrow(ticket, JWT_SECRET)
   } catch {
     return res.status(401).json({
       ok: false,
@@ -274,7 +279,7 @@ router.get("/api/v1/public/efactura/agent-download", async (req, res) => {
     })
   }
 
-  if (payload?.purpose !== "efactura-agent-download" || !payload?.tenantId) {
+  if (!isValidEfacturaAgentDownloadTicketPayload(payload)) {
     return res.status(401).json({
       ok: false,
       error: "Ticket-ul de descarcare este invalid.",
@@ -329,7 +334,7 @@ router.get("/api/v1/public/efactura/agent-pairing/resolve", async (req, res) => 
 
   let payload: { sub?: string | null; p?: string; exp?: number; companyId?: string | null; credentialId?: string | null; certSerial?: string | null; erpUrl?: string | null } | null = null
   try {
-    payload = jwt.verify(code, JWT_SECRET) as { sub?: string | null; p?: string; exp?: number; companyId?: string | null; credentialId?: string | null; certSerial?: string | null; erpUrl?: string | null }
+    payload = parseEfacturaAgentPairingCodeOrThrow(code, JWT_SECRET)
   } catch {
     return res.status(401).json({
       ok: false,
@@ -339,7 +344,7 @@ router.get("/api/v1/public/efactura/agent-pairing/resolve", async (req, res) => 
 
   const tenantId = String(payload?.sub || "").trim()
 
-  if (payload?.p !== "efactura-agent-pairing" || !tenantId) {
+  if (!isValidEfacturaAgentPairingPayload(payload) || !tenantId) {
     return res.status(401).json({
       ok: false,
       error: "Codul de pairing este invalid.",
@@ -354,17 +359,7 @@ router.get("/api/v1/public/efactura/agent-pairing/resolve", async (req, res) => 
     })
   }
 
-  const company = await resolveCompanyWithAnafCredential(prisma as any, tenantId, payload?.companyId || null, {
-    select: {
-      id: true,
-      name: true,
-      efacturaCertSerial: true,
-    },
-  })
-
-  const credential = payload?.credentialId && company?.id
-    ? await getCompanyAnafCredentialById(prisma as any, tenantId, company.id, payload.credentialId)
-    : null
+  const { company, credential } = await resolveEfacturaAgentPairingDetails(prisma, tenantId, payload)
 
   return res.json({
     ok: true,

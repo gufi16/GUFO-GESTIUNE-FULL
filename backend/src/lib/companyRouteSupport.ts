@@ -97,6 +97,21 @@ type AnafOauthStatePayload = {
   credentialId?: string | null
 }
 
+type EfacturaAgentDownloadTicketPayload = {
+  tenantId?: string | null
+  purpose?: string
+}
+
+type EfacturaAgentPairingPayload = {
+  sub?: string | null
+  p?: string
+  exp?: number
+  companyId?: string | null
+  credentialId?: string | null
+  certSerial?: string | null
+  erpUrl?: string | null
+}
+
 export function normalizeOptionalText(value: unknown) {
   const text = String(value || "").trim()
   return text || null
@@ -116,6 +131,20 @@ export function parseAnafOauthStateOrThrow(
   jwtSecret: string,
 ): AnafOauthStatePayload {
   return jwt.verify(effectiveStateRaw, jwtSecret) as AnafOauthStatePayload
+}
+
+export function parseEfacturaAgentDownloadTicketOrThrow(
+  ticket: string,
+  jwtSecret: string,
+): EfacturaAgentDownloadTicketPayload {
+  return jwt.verify(ticket, jwtSecret) as EfacturaAgentDownloadTicketPayload
+}
+
+export function parseEfacturaAgentPairingCodeOrThrow(
+  code: string,
+  jwtSecret: string,
+): EfacturaAgentPairingPayload {
+  return jwt.verify(code, jwtSecret) as EfacturaAgentPairingPayload
 }
 
 export function buildAnafOauthReturnUrl(
@@ -335,6 +364,41 @@ export function getEfacturaAgentDownloadFileName(source: {
     .replace(/Z$/, "")
 
   return `${baseName}-${compactStamp}${extension}`
+}
+
+export function isValidEfacturaAgentDownloadTicketPayload(
+  payload: EfacturaAgentDownloadTicketPayload | null | undefined,
+): payload is { tenantId: string; purpose: "efactura-agent-download" } {
+  return payload?.purpose === "efactura-agent-download" && Boolean(payload?.tenantId)
+}
+
+export function isValidEfacturaAgentPairingPayload(
+  payload: EfacturaAgentPairingPayload | null | undefined,
+): payload is EfacturaAgentPairingPayload & { sub: string; p: "efactura-agent-pairing" } {
+  return payload?.p === "efactura-agent-pairing" && Boolean(payload?.sub)
+}
+
+export async function resolveEfacturaAgentPairingDetails(
+  prismaClient: PrismaClientLike,
+  tenantId: string,
+  payload: EfacturaAgentPairingPayload,
+) {
+  const company = await resolveCompanyWithAnafCredential(prismaClient as never, tenantId, payload.companyId || null, {
+    select: {
+      id: true,
+      name: true,
+      efacturaCertSerial: true,
+    },
+  })
+
+  const credential = payload.credentialId && company?.id
+    ? await getCompanyAnafCredentialById(prismaClient as never, tenantId, company.id, payload.credentialId)
+    : null
+
+  return {
+    company,
+    credential,
+  }
 }
 
 export function createEfacturaAgentDownloadTicket(tenantId: string, jwtSecret: string) {
