@@ -150,6 +150,7 @@ function assertTypedSensitiveModules() {
   const inventoryDocsPdfRoutes = readFileSafe("src/routes/inventoryDocsPdf.ts")
   const inventoryRoutes = readFileSafe("src/routes/inventory.ts")
   const stockRoutes = readFileSafe("src/routes/stock.ts")
+  const purchaseRoutes = readFileSafe("src/routes/purchase.ts")
   const consumptionDocsPdfRoutes = readFileSafe("src/routes/consumptionDocsPdf.ts")
   const consumptionRoutes = readFileSafe("src/routes/consumption.ts")
   const productionDocsRoutes = readFileSafe("src/routes/productionDocs.ts")
@@ -372,6 +373,15 @@ function assertTypedSensitiveModules() {
       stockRoutes.includes('router.post("/api/v1/stock/transfer"') &&
       stockRoutes.includes("function toPositiveInt"),
     "Keep stock visibility and direct transfer routes type-checked because they expose quantities, movement history, and manual stock transfers."
+  )
+
+  addResult(
+    "Purchase route no longer bypasses TypeScript",
+    !purchaseRoutes.startsWith("// @ts-nocheck") &&
+      purchaseRoutes.includes('router.post("/api/v1/purchase-receipts/full"') &&
+      purchaseRoutes.includes("type PurchaseReceiptItemInput") &&
+      purchaseRoutes.includes("async function createOrReplaceReceiptItems"),
+    "Keep purchase receipt draft/post flows type-checked because they generate inbound stock, supplier reception values, and source invoice linking."
   )
 
   addResult(

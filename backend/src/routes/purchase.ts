@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Router } from "express"
 import { Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma"
@@ -11,19 +10,32 @@ const router = Router()
 
 router.use(requireAuth)
 
-function toNumber(value: any): number {
+type PurchaseReceiptItemInput = {
+  productId?: unknown
+  qty?: unknown
+  conversionFactor?: unknown
+  unitCostNetFc?: unknown
+  vatRateValue?: unknown
+  lotNo?: unknown
+  expiryDate?: unknown
+  uomId?: string | null
+  vatRateId?: string | null
+}
+
+function toNumber(value: unknown): number {
   const n = Number(value)
   return Number.isFinite(n) ? n : 0
 }
 
-function normalizeCurrency(value: any): "RON" | "EUR" | "USD" | "HUF" {
+function normalizeCurrency(value: unknown): "RON" | "EUR" | "USD" | "HUF" {
   const c = String(value || "RON").toUpperCase()
   if (c === "EUR" || c === "USD" || c === "HUF") return c
   return "RON"
 }
 
-function parseDate(value: any) {
+function parseDate(value: unknown) {
   if (!value) return null
+  if (!(typeof value === "string" || typeof value === "number" || value instanceof Date)) return null
   const d = new Date(value)
   return Number.isNaN(d.getTime()) ? null : d
 }
@@ -464,14 +476,22 @@ async function postReceiptToStock(tenantId: string, companyId: string, receiptId
 }
 
 router.get("/api/v1/purchase-receipts", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = String(req.auth?.tenantId || "").trim()
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Tenant invalid." })
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ ok: false, error: "Compania activa este obligatorie." })
+  const activeCompanyId = companyId
 
   const dateFrom = String(req.query.dateFrom || "").trim()
   const dateTo = String(req.query.dateTo || "").trim()
   const month = String(req.query.month || "").trim()
 
-  const where: any = buildCompanyWhere(tenantId, companyId)
+  const where = buildCompanyWhere(tenantId, activeCompanyId) as Record<string, unknown> & {
+    docDate?: {
+      gte?: Date
+      lt?: Date
+    }
+  }
 
   if (month) {
     const [y, m] = month.split("-").map(Number)
@@ -516,14 +536,17 @@ router.get("/api/v1/purchase-receipts", async (req: AuthedRequest, res) => {
 })
 
 router.get("/api/v1/purchase-receipts/:id", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = String(req.auth?.tenantId || "").trim()
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Tenant invalid." })
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ ok: false, error: "Compania activa este obligatorie." })
+  const activeCompanyId = companyId
   const id = req.params.id
 
   const receipt = await prisma.purchaseReceipt.findFirst({
     where: {
       id,
-      ...buildCompanyScopedTenantWhere(tenantId, companyId)
+      ...buildCompanyScopedTenantWhere(tenantId, activeCompanyId)
     },
     include: {
       location: true,
@@ -562,8 +585,11 @@ router.get("/api/v1/purchase-receipts/:id", async (req: AuthedRequest, res) => {
 })
 
 router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = String(req.auth?.tenantId || "").trim()
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Tenant invalid." })
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ ok: false, error: "Compania activa este obligatorie." })
+  const activeCompanyId = companyId
   const { id, header, items, postNow } = req.body || {}
 
   try {
@@ -616,13 +642,13 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
       })
     )
 
-    let supplier: any = null
+    let supplier: Awaited<ReturnType<typeof prisma.supplier.findFirst>> = null
     if (supplierId) {
       supplier = await prisma.supplier.findFirst({
         where: {
           id: supplierId,
           tenantId,
-          companyId,
+          companyId: activeCompanyId,
         }
       })
 
@@ -653,8 +679,8 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
       if (!nextReceiptId) {
         const duplicate = await tx.purchaseReceipt.findFirst({
           where: {
-            tenantId,
-            companyId,
+        tenantId,
+        companyId: activeCompanyId,
             docNo: finalDocNo
           }
         })
@@ -690,7 +716,7 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
         const existing = await tx.purchaseReceipt.findFirst({
           where: {
             id: nextReceiptId,
-            ...buildCompanyWhere(tenantId, companyId)
+            ...buildCompanyWhere(tenantId, activeCompanyId)
           }
         })
 
@@ -705,7 +731,7 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
         const duplicate = await tx.purchaseReceipt.findFirst({
           where: {
             tenantId,
-            companyId,
+            companyId: activeCompanyId,
             docNo: finalDocNo,
             NOT: { id: nextReceiptId }
           }
@@ -718,7 +744,7 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
         await tx.purchaseReceipt.update({
           where: { id: nextReceiptId },
           data: {
-            companyId,
+            companyId: activeCompanyId,
             locationId,
             warehouseId: warehouse.id,
             supplierId: supplier?.id || null,
@@ -737,10 +763,10 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
         })
       }
 
-      await createOrReplaceReceiptItems(tx, tenantId, companyId, nextReceiptId, normalizedFxRate, items)
+      await createOrReplaceReceiptItems(tx, tenantId, activeCompanyId, nextReceiptId, normalizedFxRate, items as PurchaseReceiptItemInput[])
 
       if (postNow === true) {
-        await postReceiptToStockWithClient(tx, tenantId, companyId, nextReceiptId)
+        await postReceiptToStockWithClient(tx, tenantId, activeCompanyId, nextReceiptId)
       }
 
       return nextReceiptId
@@ -749,7 +775,7 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
     const receipt = await prisma.purchaseReceipt.findFirst({
       where: {
         id: receiptId,
-        ...buildCompanyWhere(tenantId, companyId)
+        ...buildCompanyWhere(tenantId, activeCompanyId)
       },
       include: {
         location: true,
@@ -779,7 +805,7 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
         where: {
           tenantId,
           id: sourceIncomingEInvoiceId,
-          companyId,
+          companyId: activeCompanyId,
         },
         data: {
           linkedReceiptId: receiptId,
@@ -793,27 +819,30 @@ router.post("/api/v1/purchase-receipts/full", async (req: AuthedRequest, res) =>
       ok: true,
       receipt: enrichReceipt(receipt)
     })
-  } catch (e: any) {
+  } catch (e: unknown) {
     return res.status(400).json({
       ok: false,
-      error: e?.message || "Eroare la salvarea documentului"
+      error: e instanceof Error ? e.message : "Eroare la salvarea documentului"
     })
   }
 })
 
 router.post("/api/v1/purchase-receipts/:id/post", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = String(req.auth?.tenantId || "").trim()
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Tenant invalid." })
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ ok: false, error: "Compania activa este obligatorie." })
+  const activeCompanyId = companyId
   const id = req.params.id
 
   try {
-    await postReceiptToStock(tenantId, companyId, id)
+    await postReceiptToStock(tenantId, activeCompanyId, id)
 
     const receipt = await prisma.purchaseReceipt.findFirst({
       where: {
         id,
         tenantId,
-        companyId
+        companyId: activeCompanyId
       },
       include: {
         location: true,
@@ -839,23 +868,26 @@ router.post("/api/v1/purchase-receipts/:id/post", async (req: AuthedRequest, res
       ok: true,
       receipt: enrichReceipt(receipt)
     })
-  } catch (e: any) {
+  } catch (e: unknown) {
     return res.status(400).json({
       ok: false,
-      error: e?.message || "Eroare la postare"
+      error: e instanceof Error ? e.message : "Eroare la postare"
     })
   }
 })
 
 router.post("/api/v1/purchase-receipts/:id/cancel", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = String(req.auth?.tenantId || "").trim()
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Tenant invalid." })
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ ok: false, error: "Compania activa este obligatorie." })
+  const activeCompanyId = companyId
   const id = req.params.id
 
   const receipt = await prisma.purchaseReceipt.findFirst({
     where: {
       id,
-      ...buildCompanyWhere(tenantId, companyId)
+      ...buildCompanyWhere(tenantId, activeCompanyId)
     }
   })
 
