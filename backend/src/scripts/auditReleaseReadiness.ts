@@ -135,6 +135,7 @@ function assertTypedSensitiveModules() {
   const backupsTypedRoutes = readFileSafe("src/routes/backups.ts")
   const adminRoutes = readFileSafe("src/routes/admin.ts")
   const spvClassicRoutes = readFileSafe("src/routes/spvClassic.ts")
+  const productionRoutes = readFileSafe("src/routes/production.ts")
   const ownerMiddleware = readFileSafe("src/middleware/requireOwner.ts")
   const metaRoutes = readFileSafe("src/routes/meta.ts")
   const productRoutes = readFileSafe("src/routes/products.ts")
@@ -223,6 +224,14 @@ function assertTypedSensitiveModules() {
       spvClassicRoutes.includes('router.get("/api/v1/spv-classic/status"') &&
       spvClassicRoutes.includes("getRequiredTenantId"),
     "Keep SPV classic status and diagnostics routes type-checked because they touch fiscal integration state."
+  )
+
+  addResult(
+    "Production route no longer bypasses TypeScript",
+    !productionRoutes.startsWith("// @ts-nocheck") &&
+      productionRoutes.includes('router.post("/api/v1/production"') &&
+      productionRoutes.includes("requireRequestCompanyId"),
+    "Keep production document generation and recipe consumption flows type-checked because they move stock and create accounting-relevant documents."
   )
 
   addResult(

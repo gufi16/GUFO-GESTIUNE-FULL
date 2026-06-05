@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Router } from "express"
 import { Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma"
@@ -17,8 +16,21 @@ function toNumber(value: any) {
 
 router.post("/api/v1/production", async (req: AuthedRequest, res) => {
   try {
-    const tenantId = req.auth!.tenantId
+    const tenantId = req.auth?.tenantId
+    if (!tenantId) {
+      return res.status(400).json({
+        ok: false,
+        error: "Tenant lipsa din sesiune."
+      })
+    }
+
     const companyId = await requireRequestCompanyId(req)
+    if (!companyId) {
+      return res.status(400).json({
+        ok: false,
+        error: "Firma activa este obligatorie."
+      })
+    }
 
     const locationId = String(req.body?.locationId || "").trim()
     const note = String(req.body?.note || "").trim() || null
