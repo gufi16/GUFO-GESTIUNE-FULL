@@ -1,7 +1,7 @@
-// @ts-nocheck
 import fs from "fs"
 import { Router } from "express"
 import PDFDocument from "pdfkit"
+import type { Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { resolveTenantCompany } from "../lib/companyResolver"
@@ -11,34 +11,80 @@ const router = Router()
 
 router.use(requireAuth)
 
-function num(v: any) {
+type ConsumptionDocPdfData = Prisma.ConsumptionDocGetPayload<{
+  include: {
+    location: true
+    warehouse: true
+    sale: {
+      include: {
+        items: {
+          include: {
+            product: {
+              include: {
+                uom: true
+              }
+            }
+          }
+        }
+      }
+    }
+    items: {
+      include: {
+        ingredient: {
+          include: {
+            uom: true
+          }
+        }
+        finishedProduct: {
+          include: {
+            uom: true
+          }
+        }
+      }
+      orderBy: {
+        createdAt: "asc"
+      }
+    }
+  }
+}>
+
+function num(v: unknown) {
   return Number(v || 0)
 }
 
-function fmt(v: any, d = 2) {
+function fmt(v: unknown, d = 2) {
   return num(v).toFixed(d)
 }
 
-function fmtDate(v: any) {
-  if (!v) return "-"
-  const d = new Date(v)
+function toDateInput(v: unknown): string | number | Date | null {
+  if (v == null) return null
+  if (v instanceof Date) return v
+  if (typeof v === "string" || typeof v === "number") return v
+  return null
+}
+
+function fmtDate(v: unknown) {
+  const dateInput = toDateInput(v)
+  if (!dateInput) return "-"
+  const d = new Date(dateInput)
   if (Number.isNaN(d.getTime())) return "-"
   return d.toLocaleDateString("ro-RO")
 }
 
-function fmtDateTime(v: any) {
-  if (!v) return "-"
-  const d = new Date(v)
+function fmtDateTime(v: unknown) {
+  const dateInput = toDateInput(v)
+  if (!dateInput) return "-"
+  const d = new Date(dateInput)
   if (Number.isNaN(d.getTime())) return "-"
   return d.toLocaleString("ro-RO")
 }
 
-function text(v: any) {
+function text(v: unknown) {
   const t = String(v || "").trim()
   return t || "-"
 }
 
-function safeFilePart(value: string) {
+function safeFilePart(value: unknown) {
   return String(value || "")
     .trim()
     .replace(/\s+/g, "-")
@@ -122,11 +168,19 @@ function drawCell(
 
 router.get("/:id/pdf", async (req: AuthedRequest, res) => {
   try {
-    const tenantId = req.auth!.tenantId
-    const companyId = await requireRequestCompanyId(req)
+    const tenantId = String(req.auth?.tenantId || "").trim()
+    if (!tenantId) {
+      return res.status(401).json({ ok: false, error: "Tenant lipsa in sesiune." })
+    }
+
+    const companyId = String((await requireRequestCompanyId(req)) || "").trim()
+    if (!companyId) {
+      return res.status(400).json({ ok: false, error: "Firma activa lipsa." })
+    }
+
     const { id } = req.params
 
-    const docData = await prisma.consumptionDoc.findFirst({
+    const docData: ConsumptionDocPdfData | null = await prisma.consumptionDoc.findFirst({
       where: { id, tenantId, companyId },
       include: {
         location: true,
@@ -232,7 +286,7 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
       qty: string
     }
 
-    const rows: RowData[] = docData.items.map((item, index) => ({
+    const rows: RowData[] = consumptionDoc.items.map((item, index) => ({
       no: String(index + 1),
       ingredient: text(item.ingredient?.name),
       uom: text(item.ingredient?.uom?.code),
@@ -448,7 +502,7 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
       }
 
       totalLine("Nr. pozitii consum", String(consumptionDoc.items.length))
-      totalLine("Cantitate totala consum", `${fmt(totalQty, 3)} ${text(docData.items[0]?.ingredient?.uom?.code || "")}`.trim(), true)
+      totalLine("Cantitate totala consum", `${fmt(totalQty, 3)} ${text(consumptionDoc.items[0]?.ingredient?.uom?.code || "")}`.trim(), true)
     }
 
     function drawSignature(startY: number) {
