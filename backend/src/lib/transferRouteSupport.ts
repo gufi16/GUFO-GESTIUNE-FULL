@@ -1,3 +1,5 @@
+import type { Prisma } from "@prisma/client"
+
 type TransferRouteRecord = Record<string, unknown>
 
 type EtransportMessageListResult = {
@@ -214,6 +216,56 @@ export function buildETransportSummary(items: unknown[], vehicleMaxMassKg: numbe
     totalGrossWeightKg,
     totalValueRon,
   }
+}
+
+export function buildTransferDocListWhere(params: {
+  tenantId: string
+  companyId: string
+  month: string
+  dateFrom: string
+  dateTo: string
+}): Prisma.TransferDocWhereInput {
+  const where: Prisma.TransferDocWhereInput = {
+    tenantId: params.tenantId,
+    companyId: params.companyId,
+  }
+
+  if (params.month) {
+    const [year, month] = params.month.split("-").map(Number)
+    if (year && month && month >= 1 && month <= 12) {
+      where.docDate = {
+        gte: new Date(year, month - 1, 1),
+        lt: new Date(year, month, 1),
+      }
+      return where
+    }
+  }
+
+  if (params.dateFrom || params.dateTo) {
+    const docDate: NonNullable<Prisma.TransferDocWhereInput["docDate"]> = {}
+    if (params.dateFrom) {
+      docDate.gte = new Date(params.dateFrom)
+    }
+    if (params.dateTo) {
+      const end = new Date(params.dateTo)
+      end.setDate(end.getDate() + 1)
+      docDate.lt = end
+    }
+    where.docDate = docDate
+  }
+
+  return where
+}
+
+export function getTransferRouteErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message
+  }
+  return fallback
+}
+
+export function getTransferRouteErrorStack(error: unknown) {
+  return error instanceof Error ? error.stack || null : null
 }
 
 export async function resolveEtransportDownloadId(

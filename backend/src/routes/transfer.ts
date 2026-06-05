@@ -14,10 +14,13 @@ import { requireRequestCompanyId, resolveRequestCompany } from "../lib/companySc
 import { generateTransferETransportXml, validateTransferForETransport } from "../lib/etransport"
 import { resolveWarehouseForLocation } from "../lib/warehouse"
 import {
+  buildTransferDocListWhere,
   buildETransportSummary,
   classifyEtransportStatus,
   explainEtransportAnafError,
   extractUit,
+  getTransferRouteErrorMessage,
+  getTransferRouteErrorStack,
   resolveEtransportDownloadId,
   safeTransferFilePart,
   serializeTransferDoc,
@@ -250,27 +253,7 @@ router.get("/api/v1/transfers", async (req: AuthedRequest, res) => {
   const dateFrom = String(req.query.dateFrom || "").trim()
   const dateTo = String(req.query.dateTo || "").trim()
 
-  const where: any = { tenantId, companyId }
-
-  if (month) {
-    const [y, m] = month.split("-").map(Number)
-    if (y && m && m >= 1 && m <= 12) {
-      where.docDate = {
-        gte: new Date(y, m - 1, 1),
-        lt: new Date(y, m, 1)
-      }
-    }
-  } else {
-    if (dateFrom || dateTo) {
-      where.docDate = {}
-      if (dateFrom) where.docDate.gte = new Date(dateFrom)
-      if (dateTo) {
-        const end = new Date(dateTo)
-        end.setDate(end.getDate() + 1)
-        where.docDate.lt = end
-      }
-    }
-  }
+  const where = buildTransferDocListWhere({ tenantId, companyId, month, dateFrom, dateTo })
 
   const docs = await prisma.transferDoc.findMany({
     where,
@@ -630,13 +613,13 @@ router.post("/api/v1/transfers/:id/etransport/send", async (req: AuthedRequest, 
       uploadIndex,
       doc: serializeTransferDoc(updated),
     })
-  } catch (error: any) {
-    const message = error?.message || "Eroare la trimiterea RO e-Transport catre ANAF."
+  } catch (error: unknown) {
+    const message = getTransferRouteErrorMessage(error, "Eroare la trimiterea RO e-Transport catre ANAF.")
     logAnafRouteError("TRANSFER ETRANSPORT SEND ERROR", {
       tenantId,
       transferId: id,
       message,
-      stack: error?.stack || null,
+      stack: getTransferRouteErrorStack(error),
     })
     await prisma.transferDoc.update({
       where: { id: doc.id },
@@ -738,14 +721,14 @@ router.get("/api/v1/transfers/:id/etransport/status", async (req: AuthedRequest,
       message: summary || "Starea RO e-Transport a fost verificata la ANAF.",
       doc: serializeTransferDoc(updated),
     })
-  } catch (error: any) {
-    const message = error?.message || "Eroare la verificarea starii in ANAF."
+  } catch (error: unknown) {
+    const message = getTransferRouteErrorMessage(error, "Eroare la verificarea starii in ANAF.")
     logAnafRouteError("TRANSFER ETRANSPORT STATUS ERROR", {
       tenantId,
       transferId: id,
       uploadIndex: doc.eTransportUploadIndex || null,
       message,
-      stack: error?.stack || null,
+      stack: getTransferRouteErrorStack(error),
     })
     return res.status(500).json({ ok: false, error: message })
   }
@@ -822,14 +805,14 @@ router.get("/api/v1/transfers/:id/etransport/receipt", async (req: AuthedRequest
     res.setHeader("Content-Type", contentType)
     res.setHeader("Content-Disposition", `attachment; filename="${fileNameBase}.${extension}"`)
     return res.send(receiptResult.response.buffer)
-  } catch (error: any) {
-    const message = error?.message || "Eroare la descarcarea raspunsului ANAF."
+  } catch (error: unknown) {
+    const message = getTransferRouteErrorMessage(error, "Eroare la descarcarea raspunsului ANAF.")
     logAnafRouteError("TRANSFER ETRANSPORT RECEIPT ERROR", {
       tenantId,
       transferId: id,
       downloadId: downloadId || null,
       message,
-      stack: error?.stack || null,
+      stack: getTransferRouteErrorStack(error),
     })
     return res.status(500).json({ ok: false, error: message })
   }
@@ -1263,10 +1246,10 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
     })
 
     res.json({ ok: true, doc: serializeTransferDoc(doc) })
-  } catch (e: any) {
+  } catch (e: unknown) {
     return res.status(400).json({
       ok: false,
-      error: e?.message || "Eroare la salvarea transferului."
+      error: getTransferRouteErrorMessage(e, "Eroare la salvarea transferului.")
     })
   }
 })

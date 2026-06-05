@@ -438,6 +438,8 @@ function assertTypedSensitiveModules() {
       transferRouteSupport.includes("export function buildETransportSummary") &&
       transferRouteSupport.includes("export function classifyEtransportStatus") &&
       transferRouteSupport.includes("export function safeTransferFilePart") &&
+      transferRouteSupport.includes("export function buildTransferDocListWhere") &&
+      transferRouteSupport.includes("export function getTransferRouteErrorMessage") &&
       transferRouteSupport.includes("export async function resolveEtransportDownloadId"),
     "Keep transfer serialization, e-Transport summary/status helpers, and file-safe formatting in a typed helper module before removing // @ts-nocheck from the large transfer route."
   )
