@@ -143,6 +143,7 @@ function assertTypedSensitiveModules() {
   const companyAnafCredentialsLib = readFileSafe("src/lib/companyAnafCredentials.ts")
   const incomingEfacturaLib = readFileSafe("src/lib/incomingEfactura.ts")
   const tenantExportLib = readFileSafe("src/lib/tenantExport.ts")
+  const tenantRestoreLib = readFileSafe("src/lib/tenantRestore.ts")
   const professionalPdfLib = readFileSafe("src/lib/professionalPdf.ts")
   const purchaseReceiptsPdfRoutes = readFileSafe("src/routes/purchaseReceiptsPdf.ts")
   const inventoryDocsPdfRoutes = readFileSafe("src/routes/inventoryDocsPdf.ts")
@@ -308,6 +309,15 @@ function assertTypedSensitiveModules() {
       tenantExportLib.includes("export async function buildTenantExportZip") &&
       tenantExportLib.includes("export function buildTenantBackupStats"),
     "Keep tenant export/backup packaging helpers type-checked because they assemble production customer data, uploads, and generated XML files into recovery archives."
+  )
+
+  addResult(
+    "Tenant restore helpers no longer bypass TypeScript",
+    !tenantRestoreLib.startsWith("// @ts-nocheck") &&
+      tenantRestoreLib.includes("export async function restoreTenantBackupFromFile") &&
+      tenantRestoreLib.includes("export async function restoreMissingTenantFilesFromBackupFile") &&
+      tenantRestoreLib.includes("function normalizeRecord"),
+    "Keep tenant restore helpers type-checked because they rebuild production customer data, documents, and uploads from backup archives."
   )
 
   addResult(

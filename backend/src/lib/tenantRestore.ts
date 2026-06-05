@@ -1,20 +1,24 @@
-// @ts-nocheck
 import fs from "fs"
 import path from "path"
 import AdmZip from "adm-zip"
 import { prisma } from "./prisma"
 import { ensureUploadsRoot } from "./uploads"
 
-function toDateIfPossible(value: any) {
+type RestorableRecord = Record<string, unknown>
+type RestorableModel = {
+  createMany(...args: unknown[]): Promise<unknown>
+}
+
+function toDateIfPossible(value: unknown) {
   if (typeof value !== "string") return value
   if (!/^\d{4}-\d{2}-\d{2}T/.test(value) && !/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? value : date
 }
 
-function normalizeRecord(record: any) {
-  if (!record || typeof record !== "object" || Array.isArray(record)) return record
-  const normalized: Record<string, any> = {}
+function normalizeRecord(record: unknown): RestorableRecord {
+  if (!record || typeof record !== "object" || Array.isArray(record)) return {}
+  const normalized: RestorableRecord = {}
   for (const [key, value] of Object.entries(record)) {
     if (Array.isArray(value)) continue
     if (value && typeof value === "object" && !(value instanceof Date)) continue
@@ -23,16 +27,26 @@ function normalizeRecord(record: any) {
   return normalized
 }
 
-function asArray(value: any) {
-  return Array.isArray(value) ? value : []
+function asArray<T = unknown>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : []
 }
 
-function pickFields(record: any, fields: string[]) {
+function asRecord(value: unknown): RestorableRecord | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null
+  return value as RestorableRecord
+}
+
+function getNestedArray<T = unknown>(value: unknown, key: string): T[] {
+  const record = asRecord(value)
+  return record ? asArray<T>(record[key]) : []
+}
+
+function pickFields(record: unknown, fields: string[]) {
   const normalized = normalizeRecord(record)
-  const next: Record<string, any> = {}
+  const next: RestorableRecord = {}
   for (const field of fields) {
-    if (Object.prototype.hasOwnProperty.call(normalized, field)) {
-      next[field] = normalized[field]
+    if (normalized && typeof normalized === "object" && Object.prototype.hasOwnProperty.call(normalized, field)) {
+      next[field] = (normalized as RestorableRecord)[field]
     }
   }
   return next
@@ -58,7 +72,7 @@ function readTenantZip(filePath: string) {
 }
 
 function restoreUploadFilesFromZip(
-  zip: AdmZip,
+  zip: InstanceType<typeof AdmZip>,
   options?: {
     overwriteExisting?: boolean
   },
@@ -95,7 +109,7 @@ function restoreUploadFilesFromZip(
   }
 }
 
-async function createManyIfAny(model: any, data: any[]) {
+async function createManyIfAny(model: RestorableModel, data: unknown[]) {
   if (!Array.isArray(data) || !data.length) return
   await model.createMany({ data })
 }
@@ -108,7 +122,7 @@ export async function restoreTenantBackupFromFile(tenantId: string, filePath: st
     throw new Error("Backup-ul nu apartine acestui client.")
   }
 
-  const companies = asArray(payload.companies).map((item) =>
+  const companies = asArray<RestorableRecord>(payload.companies).map((item) =>
     pickFields(item, [
       "id", "tenantId", "name", "code", "isDefault", "cui", "regNo", "address", "city", "county", "country",
       "postalCode", "bank", "iban", "email", "phone", "contactEmail", "isVatPayer", "posSyncInterval",
@@ -124,67 +138,67 @@ export async function restoreTenantBackupFromFile(tenantId: string, filePath: st
     ]),
   )
 
-  const users = asArray(payload.users).map((item) =>
+  const users = asArray<RestorableRecord>(payload.users).map((item) =>
     pickFields(item, ["id", "tenantId", "email", "name", "passwordHash", "posPinHash", "role", "isActive", "createdAt", "updatedAt"]),
   )
 
-  const userCompanyAccesses = asArray(payload.users).flatMap((item) =>
-    asArray(item?.companyAccesses).map((entry) => ({
+  const userCompanyAccesses = asArray<RestorableRecord>(payload.users).flatMap((item) =>
+    getNestedArray<RestorableRecord>(item, "companyAccesses").map((entry) => ({
       userId: item.id,
       companyId: entry.companyId,
       createdAt: toDateIfPossible(entry.createdAt),
     })),
   )
 
-  const locations = asArray(payload.locations).map((item) =>
+  const locations = asArray<RestorableRecord>(payload.locations).map((item) =>
     pickFields(item, ["id", "tenantId", "companyId", "name", "code", "isActive", "createdAt", "updatedAt"]),
   )
 
-  const terminals = asArray(payload.terminals).map((item) =>
+  const terminals = asArray<RestorableRecord>(payload.terminals).map((item) =>
     pickFields(item, ["id", "tenantId", "companyId", "locationId", "deviceId", "label", "isLockedToLocation", "createdAt", "updatedAt"]),
   )
 
-  const vatRates = asArray(payload.vatRates).map((item) =>
+  const vatRates = asArray<RestorableRecord>(payload.vatRates).map((item) =>
     pickFields(item, ["id", "tenantId", "companyId", "name", "rate", "fiscalCode", "isActive", "createdAt"]),
   )
 
-  const uoms = asArray(payload.uoms).map((item) =>
+  const uoms = asArray<RestorableRecord>(payload.uoms).map((item) =>
     pickFields(item, ["id", "tenantId", "companyId", "code", "name", "isActive", "createdAt"]),
   )
 
-  const departments = asArray(payload.departments).map((item) =>
+  const departments = asArray<RestorableRecord>(payload.departments).map((item) =>
     pickFields(item, ["id", "tenantId", "companyId", "name", "isActive", "createdAt"]),
   )
 
-  const categories = asArray(payload.categories).map((item) =>
+  const categories = asArray<RestorableRecord>(payload.categories).map((item) =>
     pickFields(item, ["id", "tenantId", "companyId", "departmentId", "name", "imageUrl", "isActive", "isVisibleInPos", "createdAt"]),
   )
 
-  const accountingStockTypes = asArray(payload.accountingStockTypes).map((item) =>
+  const accountingStockTypes = asArray<RestorableRecord>(payload.accountingStockTypes).map((item) =>
     pickFields(item, ["id", "tenantId", "companyId", "code", "name", "inventoryAccount", "expenseAccount", "salesAccount", "analyticMode", "isDefault", "createdAt", "updatedAt"]),
   )
 
-  const accountingExportConfigs = asArray(payload.accountingExportConfigs).map((item) =>
+  const accountingExportConfigs = asArray<RestorableRecord>(payload.accountingExportConfigs).map((item) =>
     pickFields(item, ["id", "tenantId", "companyId", "exportTarget", "articleCodeSource", "managementAnalytic", "customerAccount", "supplierAccount", "salesAccount", "expenseAccount", "inventoryAccount", "vatCollectedAccount", "vatDeductibleAccount", "cashAccount", "cardAccount", "defaultStockTypeId", "createdAt", "updatedAt"]),
   )
 
-  const suppliers = asArray(payload.suppliers).map((item) =>
+  const suppliers = asArray<RestorableRecord>(payload.suppliers).map((item) =>
     pickFields(item, ["id", "tenantId", "companyId", "name", "code", "cif", "regCom", "address", "city", "county", "country", "postalCode", "phone", "email", "vatPayer", "isActive", "createdAt", "updatedAt"]),
   )
 
-  const customers = asArray(payload.customers).map((item) =>
+  const customers = asArray<RestorableRecord>(payload.customers).map((item) =>
     pickFields(item, ["id", "tenantId", "companyId", "name", "code", "cif", "regNo", "address", "city", "county", "country", "postalCode", "phone", "email", "vatPayer", "isActive", "createdAt", "updatedAt"]),
   )
 
-  const tenantModules = asArray(payload.tenantModules).map((item) =>
+  const tenantModules = asArray<RestorableRecord>(payload.tenantModules).map((item) =>
     pickFields(item, ["id", "tenantId", "moduleId", "enabled", "limitValue", "source", "createdAt", "updatedAt"]),
   )
 
-  const externalIntegrations = asArray(payload.externalIntegrations).map((item) =>
+  const externalIntegrations = asArray<RestorableRecord>(payload.externalIntegrations).map((item) =>
     pickFields(item, ["id", "tenantId", "locationId", "platform", "status", "authType", "accessToken", "refreshToken", "tokenExpiresAt", "merchantId", "storeId", "webhookSecret", "settingsJson", "createdAt", "updatedAt"]),
   )
 
-  const products = asArray(payload.products).map((item) =>
+  const products = asArray<RestorableRecord>(payload.products).map((item) =>
     pickFields(item, [
       "id", "tenantId", "companyId", "sku", "name", "imageUrl", "class", "vatRateId", "uomId", "purchaseUomId",
       "purchaseFactor", "departmentId", "categoryId", "accountingStockTypeId", "accountingItemCode", "price",
@@ -192,83 +206,85 @@ export async function restoreTenantBackupFromFile(tenantId: string, filePath: st
     ]),
   )
 
-  const productBarcodes = asArray(payload.productBarcodes).map((item) =>
+  const productBarcodes = asArray<RestorableRecord>(payload.productBarcodes).map((item) =>
     pickFields(item, ["id", "tenantId", "productId", "barcode", "createdAt"]),
   )
 
-  const stockBalances = asArray(payload.stockBalances).map((item) => normalizeRecord(item))
-  const stockMoves = asArray(payload.stockMoves).map((item) => normalizeRecord(item))
+  const stockBalances = asArray<RestorableRecord>(payload.stockBalances).map((item) => normalizeRecord(item))
+  const stockMoves = asArray<RestorableRecord>(payload.stockMoves).map((item) => normalizeRecord(item))
 
-  const recipes = asArray(payload.recipes).map((item) => normalizeRecord(item))
-  const recipeItems = asArray(payload.recipes).flatMap((item) => asArray(item?.items).map((entry) => normalizeRecord(entry)))
+  const recipes = asArray<RestorableRecord>(payload.recipes).map((item) => normalizeRecord(item))
+  const recipeItems = asArray<RestorableRecord>(payload.recipes).flatMap((item) =>
+    getNestedArray<RestorableRecord>(item, "items").map((entry) => normalizeRecord(entry)),
+  )
 
-  const incomingEInvoices = asArray(payload.incomingEInvoices).map((item) => {
+  const incomingEInvoices = asArray<RestorableRecord>(payload.incomingEInvoices).map((item) => {
     const next = normalizeRecord(item)
     delete next.linkedReceiptId
     return next
   })
-  const incomingEInvoiceItems = asArray(payload.incomingEInvoices).flatMap((item) =>
-    asArray(item?.items).map((entry) => normalizeRecord(entry)),
+  const incomingEInvoiceItems = asArray<RestorableRecord>(payload.incomingEInvoices).flatMap((item) =>
+    getNestedArray<RestorableRecord>(item, "items").map((entry) => normalizeRecord(entry)),
   )
 
-  const purchaseReceipts = asArray(payload.purchaseReceipts).map((item) => normalizeRecord(item))
-  const purchaseReceiptItems = asArray(payload.purchaseReceipts).flatMap((item) =>
-    asArray(item?.items).map((entry) => normalizeRecord(entry)),
+  const purchaseReceipts = asArray<RestorableRecord>(payload.purchaseReceipts).map((item) => normalizeRecord(item))
+  const purchaseReceiptItems = asArray<RestorableRecord>(payload.purchaseReceipts).flatMap((item) =>
+    getNestedArray<RestorableRecord>(item, "items").map((entry) => normalizeRecord(entry)),
   )
 
-  const transferDocs = asArray(payload.transferDocs).map((item) => normalizeRecord(item))
-  const transferDocItems = asArray(payload.transferDocs).flatMap((item) =>
-    asArray(item?.items).map((entry) => normalizeRecord(entry)),
+  const transferDocs = asArray<RestorableRecord>(payload.transferDocs).map((item) => normalizeRecord(item))
+  const transferDocItems = asArray<RestorableRecord>(payload.transferDocs).flatMap((item) =>
+    getNestedArray<RestorableRecord>(item, "items").map((entry) => normalizeRecord(entry)),
   )
 
-  const inventoryDocs = asArray(payload.inventoryDocs).map((item) => normalizeRecord(item))
-  const inventoryDocItems = asArray(payload.inventoryDocs).flatMap((item) =>
-    asArray(item?.items).map((entry) => normalizeRecord(entry)),
+  const inventoryDocs = asArray<RestorableRecord>(payload.inventoryDocs).map((item) => normalizeRecord(item))
+  const inventoryDocItems = asArray<RestorableRecord>(payload.inventoryDocs).flatMap((item) =>
+    getNestedArray<RestorableRecord>(item, "items").map((entry) => normalizeRecord(entry)),
   )
 
-  const minutesDocs = asArray(payload.minutesDocs).map((item) => normalizeRecord(item))
-  const minutesDocItems = asArray(payload.minutesDocs).flatMap((item) =>
-    asArray(item?.items).map((entry) => normalizeRecord(entry)),
+  const minutesDocs = asArray<RestorableRecord>(payload.minutesDocs).map((item) => normalizeRecord(item))
+  const minutesDocItems = asArray<RestorableRecord>(payload.minutesDocs).flatMap((item) =>
+    getNestedArray<RestorableRecord>(item, "items").map((entry) => normalizeRecord(entry)),
   )
 
-  const productionDocs = asArray(payload.productionDocs).map((item) => normalizeRecord(item))
-  const productionDocItems = asArray(payload.productionDocs).flatMap((item) =>
-    asArray(item?.items).map((entry) => normalizeRecord(entry)),
+  const productionDocs = asArray<RestorableRecord>(payload.productionDocs).map((item) => normalizeRecord(item))
+  const productionDocItems = asArray<RestorableRecord>(payload.productionDocs).flatMap((item) =>
+    getNestedArray<RestorableRecord>(item, "items").map((entry) => normalizeRecord(entry)),
   )
 
-  const sales = asArray(payload.sales).map((item) => normalizeRecord(item))
-  const saleItems = asArray(payload.sales).flatMap((item) =>
-    asArray(item?.items).map((entry) => normalizeRecord(entry)),
+  const sales = asArray<RestorableRecord>(payload.sales).map((item) => normalizeRecord(item))
+  const saleItems = asArray<RestorableRecord>(payload.sales).flatMap((item) =>
+    getNestedArray<RestorableRecord>(item, "items").map((entry) => normalizeRecord(entry)),
   )
 
-  const consumptionDocs = asArray(payload.consumptionDocs).map((item) => normalizeRecord(item))
-  const consumptionDocItems = asArray(payload.consumptionDocs).flatMap((item) =>
-    asArray(item?.items).map((entry) => normalizeRecord(entry)),
+  const consumptionDocs = asArray<RestorableRecord>(payload.consumptionDocs).map((item) => normalizeRecord(item))
+  const consumptionDocItems = asArray<RestorableRecord>(payload.consumptionDocs).flatMap((item) =>
+    getNestedArray<RestorableRecord>(item, "items").map((entry) => normalizeRecord(entry)),
   )
 
-  const externalOrders = asArray(payload.externalOrders).map((item) => normalizeRecord(item))
-  const externalOrderItems = asArray(payload.externalOrders).flatMap((item) =>
-    asArray(item?.items).map((entry) => normalizeRecord(entry)),
+  const externalOrders = asArray<RestorableRecord>(payload.externalOrders).map((item) => normalizeRecord(item))
+  const externalOrderItems = asArray<RestorableRecord>(payload.externalOrders).flatMap((item) =>
+    getNestedArray<RestorableRecord>(item, "items").map((entry) => normalizeRecord(entry)),
   )
-  const externalOrderStatusHistory = asArray(payload.externalOrders).flatMap((item) =>
-    asArray(item?.statusHistory).map((entry) => normalizeRecord(entry)),
-  )
-
-  const saleDrafts = asArray(payload.saleDrafts).map((item) => normalizeRecord(item))
-
-  const kitchenTickets = asArray(payload.kitchenTickets).map((item) => normalizeRecord(item))
-  const kitchenTicketItems = asArray(payload.kitchenTickets).flatMap((item) =>
-    asArray(item?.items).map((entry) => normalizeRecord(entry)),
+  const externalOrderStatusHistory = asArray<RestorableRecord>(payload.externalOrders).flatMap((item) =>
+    getNestedArray<RestorableRecord>(item, "statusHistory").map((entry) => normalizeRecord(entry)),
   )
 
-  const marketplaceMappings = asArray(payload.marketplaceMappings).map((item) => normalizeRecord(item))
+  const saleDrafts = asArray<RestorableRecord>(payload.saleDrafts).map((item) => normalizeRecord(item))
 
-  const salesInvoices = asArray(payload.salesInvoices).map((item) => normalizeRecord(item))
-  const salesInvoiceItems = asArray(payload.salesInvoices).flatMap((item) =>
-    asArray(item?.items).map((entry) => normalizeRecord(entry)),
+  const kitchenTickets = asArray<RestorableRecord>(payload.kitchenTickets).map((item) => normalizeRecord(item))
+  const kitchenTicketItems = asArray<RestorableRecord>(payload.kitchenTickets).flatMap((item) =>
+    getNestedArray<RestorableRecord>(item, "items").map((entry) => normalizeRecord(entry)),
   )
-  const efacturaLogs = asArray(payload.salesInvoices).flatMap((item) =>
-    asArray(item?.efacturaLogs).map((entry) => normalizeRecord(entry)),
+
+  const marketplaceMappings = asArray<RestorableRecord>(payload.marketplaceMappings).map((item) => normalizeRecord(item))
+
+  const salesInvoices = asArray<RestorableRecord>(payload.salesInvoices).map((item) => normalizeRecord(item))
+  const salesInvoiceItems = asArray<RestorableRecord>(payload.salesInvoices).flatMap((item) =>
+    getNestedArray<RestorableRecord>(item, "items").map((entry) => normalizeRecord(entry)),
+  )
+  const efacturaLogs = asArray<RestorableRecord>(payload.salesInvoices).flatMap((item) =>
+    getNestedArray<RestorableRecord>(item, "efacturaLogs").map((entry) => normalizeRecord(entry)),
   )
 
   await prisma.userCompanyAccess.deleteMany({
