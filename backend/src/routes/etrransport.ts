@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Router } from "express"
 import { Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma"
@@ -144,9 +143,23 @@ function recalcNotice(items: any[]) {
   }
 }
 
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback
+}
+
+function getErrorStack(error: unknown) {
+  return error instanceof Error ? error.stack || null : null
+}
+
 router.get("/api/v1/etransport/notices", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = text(req.auth?.tenantId)
+  if (!tenantId) {
+    return res.status(401).json({ ok: false, error: "Unauthorized" })
+  }
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) {
+    return res.status(400).json({ ok: false, error: "Company is required." })
+  }
   const notices = await prisma.eTransportNotice.findMany({
     where: { tenantId, companyId },
     include: {
@@ -158,8 +171,14 @@ router.get("/api/v1/etransport/notices", async (req: AuthedRequest, res) => {
 })
 
 router.get("/api/v1/etransport/notices/:id", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = text(req.auth?.tenantId)
+  if (!tenantId) {
+    return res.status(401).json({ ok: false, error: "Unauthorized" })
+  }
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) {
+    return res.status(400).json({ ok: false, error: "Company is required." })
+  }
   const id = String(req.params.id)
   const notice = await prisma.eTransportNotice.findFirst({
     where: { id, tenantId, companyId },
@@ -184,12 +203,19 @@ router.get("/api/v1/etransport/notices/:id", async (req: AuthedRequest, res) => 
 })
 
 router.post("/api/v1/etransport/notices", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = text(req.auth?.tenantId)
+  if (!tenantId) {
+    return res.status(401).json({ ok: false, error: "Unauthorized" })
+  }
   const company = await requireRequestCompany(req)
+  const companyId = text(company?.id)
+  if (!companyId) {
+    return res.status(400).json({ ok: false, error: "Company is required." })
+  }
   const created = await prisma.eTransportNotice.create({
     data: {
       tenantId,
-      companyId: company.id,
+      companyId,
       noticeNo: makeNoticeNo(),
       sourceType: "MANUAL",
       status: "DRAFT",
@@ -210,11 +236,18 @@ router.post("/api/v1/etransport/notices", async (req: AuthedRequest, res) => {
 })
 
 router.post("/api/v1/etransport/notices/from-transfer/:transferId", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = text(req.auth?.tenantId)
+  if (!tenantId) {
+    return res.status(401).json({ ok: false, error: "Unauthorized" })
+  }
   const company = await requireRequestCompany(req)
+  const companyId = text(company?.id)
+  if (!companyId) {
+    return res.status(400).json({ ok: false, error: "Company is required." })
+  }
   const transferId = String(req.params.transferId)
   const transfer = await prisma.transferDoc.findFirst({
-    where: { id: transferId, tenantId, companyId: company.id },
+    where: { id: transferId, tenantId, companyId },
     include: {
       items: {
         include: {
@@ -256,7 +289,7 @@ router.post("/api/v1/etransport/notices/from-transfer/:transferId", async (req: 
   const created = await prisma.eTransportNotice.create({
     data: {
       tenantId,
-      companyId: company.id,
+      companyId,
       noticeNo: makeNoticeNo(),
       sourceType: "TRANSFER",
       sourceId: transfer.id,
@@ -304,8 +337,14 @@ router.post("/api/v1/etransport/notices/from-transfer/:transferId", async (req: 
 })
 
 router.put("/api/v1/etransport/notices/:id", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = text(req.auth?.tenantId)
+  if (!tenantId) {
+    return res.status(401).json({ ok: false, error: "Unauthorized" })
+  }
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) {
+    return res.status(400).json({ ok: false, error: "Company is required." })
+  }
   const id = String(req.params.id)
   const current = await prisma.eTransportNotice.findFirst({
     where: { id, tenantId, companyId },
@@ -400,8 +439,14 @@ router.put("/api/v1/etransport/notices/:id", async (req: AuthedRequest, res) => 
 })
 
 router.post("/api/v1/etransport/notices/:id/prepare", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = text(req.auth?.tenantId)
+  if (!tenantId) {
+    return res.status(401).json({ ok: false, error: "Unauthorized" })
+  }
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) {
+    return res.status(400).json({ ok: false, error: "Company is required." })
+  }
   const id = String(req.params.id)
   const company = await prisma.company.findFirst({
     where: { id: companyId, tenantId },
@@ -443,8 +488,14 @@ router.post("/api/v1/etransport/notices/:id/prepare", async (req: AuthedRequest,
 })
 
 router.get("/api/v1/etransport/notices/:id/xml", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = text(req.auth?.tenantId)
+  if (!tenantId) {
+    return res.status(401).json({ ok: false, error: "Unauthorized" })
+  }
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) {
+    return res.status(400).json({ ok: false, error: "Company is required." })
+  }
   const id = String(req.params.id)
   const notice = await prisma.eTransportNotice.findFirst({
     where: { id, tenantId, companyId },
@@ -463,8 +514,18 @@ router.get("/api/v1/etransport/notices/:id/xml", async (req: AuthedRequest, res)
 })
 
 router.post("/api/v1/etransport/notices/:id/send", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = text(req.auth?.tenantId)
+  if (!tenantId) {
+    return res.status(401).json({ ok: false, error: "Unauthorized" })
+  }
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) {
+    return res.status(400).json({ ok: false, error: "Company is required." })
+  }
+  const auth = req.auth
+  if (!auth) {
+    return res.status(401).json({ ok: false, error: "Unauthorized" })
+  }
   const id = String(req.params.id)
   const notice = await prisma.eTransportNotice.findFirst({
     where: { id, tenantId, companyId },
@@ -475,7 +536,7 @@ router.post("/api/v1/etransport/notices/:id/send", async (req: AuthedRequest, re
     return res.status(404).json({ ok: false, error: "Notificarea nu a fost gasita." })
   }
 
-  const company = await loadAnafCompanyContext(req.auth)
+  const company = await loadAnafCompanyContext(auth)
   const cif = normalizeCompanyCui(company?.cui)
   if (!cif) {
     return res.status(400).json({ ok: false, error: "Firma nu are CUI valid pentru transmiterea la ANAF." })
@@ -544,13 +605,13 @@ router.post("/api/v1/etransport/notices/:id/send", async (req: AuthedRequest, re
       uploadIndex,
       item: serializeNotice(updated),
     })
-  } catch (error: any) {
-    const message = error?.message || "Eroare la trimiterea RO e-Transport catre ANAF."
+  } catch (error: unknown) {
+    const message = getErrorMessage(error, "Eroare la trimiterea RO e-Transport catre ANAF.")
     logAnafRouteError("NOTICE ETRANSPORT SEND ERROR", {
       tenantId,
       noticeId: id,
       message,
-      stack: error?.stack || null,
+      stack: getErrorStack(error),
     })
     await prisma.eTransportNotice.update({
       where: { id: notice.id },
@@ -565,8 +626,18 @@ router.post("/api/v1/etransport/notices/:id/send", async (req: AuthedRequest, re
 })
 
 router.get("/api/v1/etransport/notices/:id/status", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = text(req.auth?.tenantId)
+  if (!tenantId) {
+    return res.status(401).json({ ok: false, error: "Unauthorized" })
+  }
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) {
+    return res.status(400).json({ ok: false, error: "Company is required." })
+  }
+  const auth = req.auth
+  if (!auth) {
+    return res.status(401).json({ ok: false, error: "Unauthorized" })
+  }
   const id = String(req.params.id)
   const notice = await prisma.eTransportNotice.findFirst({
     where: { id, tenantId, companyId },
@@ -588,7 +659,7 @@ router.get("/api/v1/etransport/notices/:id/status", async (req: AuthedRequest, r
     return res.status(400).json({ ok: false, error: "Notificarea nu a fost trimisa inca la ANAF." })
   }
 
-  const company = await loadAnafCompanyContext(req.auth)
+  const company = await loadAnafCompanyContext(auth)
   if (!company?.efacturaOauthAccessToken) {
     return res.status(400).json({ ok: false, error: "Nu exista token ANAF salvat pentru aceasta firma." })
   }
@@ -610,12 +681,12 @@ router.get("/api/v1/etransport/notices/:id/status", async (req: AuthedRequest, r
         ])
         if (!uit && resolvedUit) uit = resolvedUit
         if (!downloadId && resolvedDownloadId) downloadId = resolvedDownloadId
-      } catch (lookupError: any) {
+      } catch (lookupError: unknown) {
         logAnafRouteError("NOTICE ETRANSPORT STATUS LIST LOOKUP ERROR", {
           tenantId,
           noticeId: id,
           uploadIndex: notice.uploadIndex || null,
-          message: lookupError?.message || String(lookupError),
+          message: getErrorMessage(lookupError, String(lookupError)),
         })
       }
     }
@@ -650,22 +721,32 @@ router.get("/api/v1/etransport/notices/:id/status", async (req: AuthedRequest, r
       message: summary || "Starea RO e-Transport a fost verificata la ANAF.",
       item: serializeNotice(updated),
     })
-  } catch (error: any) {
-    const message = error?.message || "Eroare la verificarea starii in ANAF."
+  } catch (error: unknown) {
+    const message = getErrorMessage(error, "Eroare la verificarea starii in ANAF.")
     logAnafRouteError("NOTICE ETRANSPORT STATUS ERROR", {
       tenantId,
       noticeId: id,
       uploadIndex: notice.uploadIndex || null,
       message,
-      stack: error?.stack || null,
+      stack: getErrorStack(error),
     })
     return res.status(500).json({ ok: false, error: message })
   }
 })
 
 router.get("/api/v1/etransport/notices/:id/receipt", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = text(req.auth?.tenantId)
+  if (!tenantId) {
+    return res.status(401).json({ ok: false, error: "Unauthorized" })
+  }
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) {
+    return res.status(400).json({ ok: false, error: "Company is required." })
+  }
+  const auth = req.auth
+  if (!auth) {
+    return res.status(401).json({ ok: false, error: "Unauthorized" })
+  }
   const id = String(req.params.id)
   const notice = await prisma.eTransportNotice.findFirst({
     where: { id, tenantId, companyId },
@@ -682,7 +763,7 @@ router.get("/api/v1/etransport/notices/:id/receipt", async (req: AuthedRequest, 
     return res.status(404).json({ ok: false, error: "Notificarea nu a fost gasita." })
   }
 
-  const company = await loadAnafCompanyContext(req.auth)
+  const company = await loadAnafCompanyContext(auth)
   if (!company?.efacturaOauthAccessToken) {
     return res.status(400).json({ ok: false, error: "Nu exista token ANAF salvat pentru aceasta firma." })
   }
@@ -738,14 +819,14 @@ router.get("/api/v1/etransport/notices/:id/receipt", async (req: AuthedRequest, 
     res.setHeader("Content-Type", contentType)
     res.setHeader("Content-Disposition", `attachment; filename="${fileNameBase}.${extension}"`)
     return res.send(receiptResult.response.buffer)
-  } catch (error: any) {
-    const message = error?.message || "Eroare la descarcarea raspunsului ANAF."
+  } catch (error: unknown) {
+    const message = getErrorMessage(error, "Eroare la descarcarea raspunsului ANAF.")
     logAnafRouteError("NOTICE ETRANSPORT RECEIPT ERROR", {
       tenantId,
       noticeId: id,
       downloadId: notice.downloadId || null,
       message,
-      stack: error?.stack || null,
+      stack: getErrorStack(error),
     })
     return res.status(500).json({ ok: false, error: message })
   }

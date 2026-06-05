@@ -152,6 +152,7 @@ function assertTypedSensitiveModules() {
   const stockRoutes = readFileSafe("src/routes/stock.ts")
   const purchaseRoutes = readFileSafe("src/routes/purchase.ts")
   const reportsRoutes = readFileSafe("src/routes/reports.ts")
+  const etransportRoutes = readFileSafe("src/routes/etrransport.ts")
   const transferRoutes = readFileSafe("src/routes/transfer.ts")
   const incomingEfacturaRoutes = readFileSafe("src/routes/incomingEfactura.ts")
   const consumptionDocsPdfRoutes = readFileSafe("src/routes/consumptionDocsPdf.ts")
@@ -395,6 +396,14 @@ function assertTypedSensitiveModules() {
       reportsRoutes.includes('router.get("/api/v1/reports/advanced"') &&
       reportsRoutes.includes("function parseDateStart"),
     "Keep advanced reporting type-checked because it aggregates sales, stock, inventory differences, and consumption trends."
+  )
+
+  addResult(
+    "RO e-Transport route no longer bypasses TypeScript",
+    !etransportRoutes.startsWith("// @ts-nocheck") &&
+      etransportRoutes.includes('router.get("/api/v1/etransport/notices"') &&
+      etransportRoutes.includes("function getErrorMessage"),
+    "Keep RO e-Transport notice creation, validation, status, and receipt flows type-checked because they integrate with ANAF and transport compliance data."
   )
 
   addResult(
