@@ -140,6 +140,7 @@ function assertTypedSensitiveModules() {
   const stockLib = readFileSafe("src/lib/stock.ts")
   const warehouseLib = readFileSafe("src/lib/warehouse.ts")
   const companyResolverLib = readFileSafe("src/lib/companyResolver.ts")
+  const companyAnafCredentialsLib = readFileSafe("src/lib/companyAnafCredentials.ts")
   const professionalPdfLib = readFileSafe("src/lib/professionalPdf.ts")
   const purchaseReceiptsPdfRoutes = readFileSafe("src/routes/purchaseReceiptsPdf.ts")
   const inventoryDocsPdfRoutes = readFileSafe("src/routes/inventoryDocsPdf.ts")
@@ -277,6 +278,15 @@ function assertTypedSensitiveModules() {
       companyResolverLib.includes("export async function resolveTenantCompanyForAuth") &&
       companyResolverLib.includes("function collectAllowedCompanyIds"),
     "Keep tenant company resolution and allowed company filtering type-checked because they decide which legal entity a user can operate on."
+  )
+
+  addResult(
+    "Company ANAF credential helpers no longer bypass TypeScript",
+    !companyAnafCredentialsLib.startsWith("// @ts-nocheck") &&
+      companyAnafCredentialsLib.includes("type LegacyCompany") &&
+      companyAnafCredentialsLib.includes("export function mapAnafCredentialSummary") &&
+      companyAnafCredentialsLib.includes("export async function resolveCompanyWithAnafCredential"),
+    "Keep ANAF credential hydration and legacy-company sync helpers type-checked because they drive OAuth/certificate data used by e-Factura and e-Transport integrations."
   )
 
   addResult(

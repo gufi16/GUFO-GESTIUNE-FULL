@@ -1,5 +1,4 @@
-// @ts-nocheck
-import type { PrismaClient } from "@prisma/client"
+import type { Prisma, PrismaClient } from "@prisma/client"
 import { resolveTenantCompany, resolveTenantCompanyForAuth, type CompanyAuthContext } from "./companyResolver"
 
 export const COMPANY_ANAF_LEGACY_FIELDS = {
@@ -16,7 +15,13 @@ export const COMPANY_ANAF_LEGACY_FIELDS = {
   efacturaOauthRefreshTokenExpiresAt: true,
   efacturaOauthConnectedAt: true,
   efacturaOauthLastError: true,
-}
+  etransportOauthAccessToken: true,
+  etransportOauthRefreshToken: true,
+  etransportOauthAccessTokenExpiresAt: true,
+  etransportOauthRefreshTokenExpiresAt: true,
+  etransportOauthConnectedAt: true,
+  etransportOauthLastError: true,
+} satisfies Prisma.CompanySelect
 
 export const ANAF_CREDENTIAL_SELECT = {
   id: true,
@@ -34,8 +39,27 @@ export const ANAF_CREDENTIAL_SELECT = {
   efacturaOauthRefreshTokenExpiresAt: true,
   efacturaOauthConnectedAt: true,
   efacturaOauthLastError: true,
+  etransportOauthAccessToken: true,
+  etransportOauthRefreshToken: true,
+  etransportOauthAccessTokenExpiresAt: true,
+  etransportOauthRefreshTokenExpiresAt: true,
+  etransportOauthConnectedAt: true,
+  etransportOauthLastError: true,
   createdAt: true,
   updatedAt: true,
+} satisfies Prisma.CompanyAnafCredentialSelect
+
+type LegacyCompany = Prisma.CompanyGetPayload<{
+  select: typeof COMPANY_ANAF_LEGACY_FIELDS
+}>
+
+type AnafCredential = Prisma.CompanyAnafCredentialGetPayload<{
+  select: typeof ANAF_CREDENTIAL_SELECT
+}>
+
+type CompanyWithAnafOverlay = LegacyCompany & {
+  anafCredentialId?: string
+  anafCredentialLabel?: string
 }
 
 function hasMeaningfulValue(value: unknown) {
@@ -43,7 +67,7 @@ function hasMeaningfulValue(value: unknown) {
   return String(value || "").trim().length > 0
 }
 
-function companyHasLegacyAnafData(company: any) {
+function companyHasLegacyAnafData(company: LegacyCompany | null | undefined) {
   return [
     company?.efacturaCertSerial,
     company?.efacturaCertPasswordEnc,
@@ -51,18 +75,18 @@ function companyHasLegacyAnafData(company: any) {
     company?.efacturaOauthAccessToken,
     company?.efacturaOauthRefreshToken,
     company?.efacturaOauthLastError,
-    company?.etrtransportOauthAccessToken,
-    company?.etrtransportOauthRefreshToken,
-    company?.etrtransportOauthLastError,
+    company?.etransportOauthAccessToken,
+    company?.etransportOauthRefreshToken,
+    company?.etransportOauthLastError,
   ].some(hasMeaningfulValue)
 }
 
-function buildCredentialLabel(company: any) {
+function buildCredentialLabel(company: Pick<LegacyCompany, "name"> | null | undefined) {
   const companyName = String(company?.name || "Firma").trim() || "Firma"
   return `${companyName} - SPV principal`
 }
 
-function buildCredentialPayloadFromCompany(company: any) {
+function buildCredentialPayloadFromCompany(company: LegacyCompany) {
   return {
     label: buildCredentialLabel(company),
     isDefault: true,
@@ -76,10 +100,19 @@ function buildCredentialPayloadFromCompany(company: any) {
     efacturaOauthRefreshTokenExpiresAt: company?.efacturaOauthRefreshTokenExpiresAt || null,
     efacturaOauthConnectedAt: company?.efacturaOauthConnectedAt || null,
     efacturaOauthLastError: company?.efacturaOauthLastError || null,
+    etransportOauthAccessToken: company?.etransportOauthAccessToken || null,
+    etransportOauthRefreshToken: company?.etransportOauthRefreshToken || null,
+    etransportOauthAccessTokenExpiresAt: company?.etransportOauthAccessTokenExpiresAt || null,
+    etransportOauthRefreshTokenExpiresAt: company?.etransportOauthRefreshTokenExpiresAt || null,
+    etransportOauthConnectedAt: company?.etransportOauthConnectedAt || null,
+    etransportOauthLastError: company?.etransportOauthLastError || null,
   }
 }
 
-function overlayCredentialOnCompany(company: any, credential: any) {
+function overlayCredentialOnCompany(
+  company: LegacyCompany | null,
+  credential: AnafCredential | null,
+): CompanyWithAnafOverlay | null {
   if (!company || !credential) {
     return company
   }
@@ -98,13 +131,20 @@ function overlayCredentialOnCompany(company: any, credential: any) {
     efacturaOauthRefreshTokenExpiresAt: credential.efacturaOauthRefreshTokenExpiresAt,
     efacturaOauthConnectedAt: credential.efacturaOauthConnectedAt,
     efacturaOauthLastError: credential.efacturaOauthLastError,
+    etransportOauthAccessToken: credential.etransportOauthAccessToken,
+    etransportOauthRefreshToken: credential.etransportOauthRefreshToken,
+    etransportOauthAccessTokenExpiresAt: credential.etransportOauthAccessTokenExpiresAt,
+    etransportOauthRefreshTokenExpiresAt: credential.etransportOauthRefreshTokenExpiresAt,
+    etransportOauthConnectedAt: credential.etransportOauthConnectedAt,
+    etransportOauthLastError: credential.etransportOauthLastError,
   }
 }
 
-export function mapAnafCredentialSummary(credential: any) {
+export function mapAnafCredentialSummary(credential: AnafCredential) {
   const hasCertificateFile = Boolean(credential.certFilename)
   const hasCertificatePassword = Boolean(credential.certPasswordEnc)
   const hasEfacturaToken = Boolean(credential.efacturaOauthAccessToken)
+  const hasEtransportToken = Boolean(credential.etransportOauthAccessToken)
   return {
     id: credential.id,
     label: credential.label,
@@ -116,9 +156,13 @@ export function mapAnafCredentialSummary(credential: any) {
     efacturaConnectedAt: credential.efacturaOauthConnectedAt || null,
     efacturaAccessTokenExpiresAt: credential.efacturaOauthAccessTokenExpiresAt || null,
     efacturaLastError: credential.efacturaOauthLastError || "",
+    etransportConnectedAt: credential.etransportOauthConnectedAt || null,
+    etransportAccessTokenExpiresAt: credential.etransportOauthAccessTokenExpiresAt || null,
+    etransportLastError: credential.etransportOauthLastError || "",
     hasCertificateFile,
     hasCertificatePassword,
     hasEfacturaToken,
+    hasEtransportToken,
     connected: hasEfacturaToken,
   }
 }
@@ -149,7 +193,7 @@ export async function getCompanyAnafCredentialById(
 
 export async function ensureLegacyCompanyCredential(
   prismaClient: PrismaClient,
-  company: any,
+  company: LegacyCompany | null | undefined,
 ) {
   if (!company?.id || !company?.tenantId) {
     return null
@@ -187,7 +231,7 @@ export async function getDefaultCompanyAnafCredential(
   prismaClient: PrismaClient,
   tenantId: string,
   companyId: string,
-  legacyCompany?: any,
+  legacyCompany?: LegacyCompany | null,
 ) {
   const existing = await prismaClient.companyAnafCredential.findFirst({
     where: {
@@ -235,7 +279,7 @@ export async function resolveCompanyWithAnafCredential(
 
   const company = options.auth?.userId
     ? await resolveTenantCompanyForAuth(
-        prismaClient as any,
+        prismaClient,
         {
           ...options.auth,
           tenantId,
@@ -244,7 +288,7 @@ export async function resolveCompanyWithAnafCredential(
         companyQuery,
       )
     : await resolveTenantCompany(
-        prismaClient as any,
+        prismaClient,
         tenantId,
         activeCompanyId,
         companyQuery,
@@ -298,7 +342,7 @@ export async function syncCompanyToDefaultAnafCredential(
 export async function syncDefaultAnafCredentialToCompany(
   prismaClient: PrismaClient,
   companyId: string,
-  credential: any,
+  credential: AnafCredential | null | undefined,
 ) {
   if (!companyId || !credential) {
     return null
@@ -317,6 +361,12 @@ export async function syncDefaultAnafCredentialToCompany(
       efacturaOauthRefreshTokenExpiresAt: credential.efacturaOauthRefreshTokenExpiresAt || null,
       efacturaOauthConnectedAt: credential.efacturaOauthConnectedAt || null,
       efacturaOauthLastError: credential.efacturaOauthLastError || null,
+      etransportOauthAccessToken: credential.etransportOauthAccessToken || null,
+      etransportOauthRefreshToken: credential.etransportOauthRefreshToken || null,
+      etransportOauthAccessTokenExpiresAt: credential.etransportOauthAccessTokenExpiresAt || null,
+      etransportOauthRefreshTokenExpiresAt: credential.etransportOauthRefreshTokenExpiresAt || null,
+      etransportOauthConnectedAt: credential.etransportOauthConnectedAt || null,
+      etransportOauthLastError: credential.etransportOauthLastError || null,
     },
   })
 }
