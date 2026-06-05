@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Router } from "express"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
@@ -7,12 +6,12 @@ import { requireRequestCompanyId } from "../lib/companyScope"
 const router = Router()
 router.use(requireAuth)
 
-function toNumber(value: any) {
+function toNumber(value: unknown) {
   const n = Number(value)
   return Number.isFinite(n) ? n : 0
 }
 
-function toPositiveInt(value: any, fallback: number) {
+function toPositiveInt(value: unknown, fallback: number) {
   const n = Number(value)
   if (!Number.isFinite(n)) return fallback
   const intValue = Math.floor(n)
@@ -27,13 +26,16 @@ function pickEarlierDate(current: Date | null, candidate: Date | null | undefine
 
 // stoc global: suma pe toate locatiile
 router.get("/api/v1/stock/global", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = String(req.auth?.tenantId || "").trim()
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Tenant invalid." })
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ ok: false, error: "Compania activa este obligatorie." })
+  const activeCompanyId = companyId
   const q = String(req.query.q || "").trim()
 
   const grouped = await prisma.stockBalance.groupBy({
     by: ["productId"],
-    where: { tenantId, companyId },
+    where: { tenantId, companyId: activeCompanyId },
     _sum: { qty: true }
   })
 
@@ -46,7 +48,7 @@ router.get("/api/v1/stock/global", async (req: AuthedRequest, res) => {
   const products = await prisma.product.findMany({
     where: {
       tenantId,
-      companyId,
+      companyId: activeCompanyId,
       id: { in: productIds },
       ...(q
         ? {
@@ -68,7 +70,7 @@ router.get("/api/v1/stock/global", async (req: AuthedRequest, res) => {
   const lots = await prisma.stockLot.findMany({
     where: {
       tenantId,
-      companyId,
+      companyId: activeCompanyId,
       productId: { in: productIds },
       remainingQty: { gt: 0 },
     },
@@ -89,7 +91,7 @@ router.get("/api/v1/stock/global", async (req: AuthedRequest, res) => {
   const balances = await prisma.stockBalance.findMany({
     where: {
       tenantId,
-      companyId,
+      companyId: activeCompanyId,
       productId: { in: productIds },
     },
     include: {
@@ -141,13 +143,21 @@ router.get("/api/v1/stock/global", async (req: AuthedRequest, res) => {
 
 // stoc pe locatii
 router.get("/api/v1/stock/by-location", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = String(req.auth?.tenantId || "").trim()
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Tenant invalid." })
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ ok: false, error: "Compania activa este obligatorie." })
+  const activeCompanyId = companyId
   const locationId = String(req.query.locationId || "").trim()
   const warehouseId = String(req.query.warehouseId || "").trim()
   const q = String(req.query.q || "").trim()
 
-  const whereBalance: any = { tenantId, companyId }
+  const whereBalance: {
+    tenantId: string
+    companyId: string
+    locationId?: string
+    warehouseId?: string
+  } = { tenantId, companyId: activeCompanyId }
   if (locationId) whereBalance.locationId = locationId
   if (warehouseId) whereBalance.warehouseId = warehouseId
 
@@ -172,7 +182,7 @@ router.get("/api/v1/stock/by-location", async (req: AuthedRequest, res) => {
     ? await prisma.stockLot.findMany({
         where: {
           tenantId,
-          companyId,
+          companyId: activeCompanyId,
           productId: { in: balanceProductIds },
           ...(locationId ? { locationId } : {}),
           ...(warehouseId ? { warehouseId } : {}),
@@ -228,13 +238,21 @@ router.get("/api/v1/stock/by-location", async (req: AuthedRequest, res) => {
 })
 
 router.get("/api/v1/stock/lots", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = String(req.auth?.tenantId || "").trim()
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Tenant invalid." })
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ ok: false, error: "Compania activa este obligatorie." })
+  const activeCompanyId = companyId
   const locationId = String(req.query.locationId || "").trim()
   const warehouseId = String(req.query.warehouseId || "").trim()
   const q = String(req.query.q || "").trim().toLowerCase()
 
-  const where: any = { tenantId, companyId }
+  const where: {
+    tenantId: string
+    companyId: string
+    locationId?: string
+    warehouseId?: string
+  } = { tenantId, companyId: activeCompanyId }
   if (locationId) where.locationId = locationId
   if (warehouseId) where.warehouseId = warehouseId
 
@@ -295,8 +313,11 @@ router.get("/api/v1/stock/lots", async (req: AuthedRequest, res) => {
 
 // miscari de stoc cu filtru data + paginare
 router.get("/api/v1/stock/moves", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = String(req.auth?.tenantId || "").trim()
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Tenant invalid." })
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ ok: false, error: "Compania activa este obligatorie." })
+  const activeCompanyId = companyId
   const productId = String(req.query.productId || "").trim()
   const locationId = String(req.query.locationId || "").trim()
   const warehouseId = String(req.query.warehouseId || "").trim()
@@ -308,7 +329,18 @@ router.get("/api/v1/stock/moves", async (req: AuthedRequest, res) => {
   const limit = Math.min(toPositiveInt(req.query.limit, 20), 200)
   const skip = (page - 1) * limit
 
-  const where: any = { tenantId, companyId }
+  const where: {
+    tenantId: string
+    companyId: string
+    productId?: string
+    locationId?: string
+    warehouseId?: string
+    createdAt?: {
+      gte?: Date
+      lte?: Date
+    }
+    OR?: Array<Record<string, unknown>>
+  } = { tenantId, companyId: activeCompanyId }
 
   if (productId) where.productId = productId
   if (locationId) where.locationId = locationId
@@ -325,12 +357,11 @@ router.get("/api/v1/stock/moves", async (req: AuthedRequest, res) => {
   }
 
   if (q) {
-    where.OR = [
-      { note: { contains: q, mode: "insensitive" } },
-      { refType: { equals: q as any } },
-      { refId: { contains: q, mode: "insensitive" } },
-      { product: { name: { contains: q, mode: "insensitive" } } },
-      { product: { sku: { contains: q, mode: "insensitive" } } },
+      where.OR = [
+        { note: { contains: q, mode: "insensitive" } },
+        { refId: { contains: q, mode: "insensitive" } },
+        { product: { name: { contains: q, mode: "insensitive" } } },
+        { product: { sku: { contains: q, mode: "insensitive" } } },
       { location: { name: { contains: q, mode: "insensitive" } } }
     ]
   }
@@ -393,8 +424,11 @@ router.get("/api/v1/stock/moves", async (req: AuthedRequest, res) => {
 
 // transfer stoc intre locatii
 router.post("/api/v1/stock/transfer", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = String(req.auth?.tenantId || "").trim()
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Tenant invalid." })
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ ok: false, error: "Compania activa este obligatorie." })
+  const activeCompanyId = companyId
 
   const fromLocationId = String(req.body?.fromLocationId || "").trim()
   const toLocationId = String(req.body?.toLocationId || "").trim()
@@ -453,7 +487,7 @@ router.post("/api/v1/stock/transfer", async (req: AuthedRequest, res) => {
         where: {
           tenantId_companyId_locationId_productId_warehouseScope: {
             tenantId,
-            companyId,
+            companyId: activeCompanyId,
             locationId: fromLocationId,
             productId,
             warehouseScope: "__NO_WAREHOUSE__",
@@ -473,7 +507,7 @@ router.post("/api/v1/stock/transfer", async (req: AuthedRequest, res) => {
         where: {
           tenantId_companyId_locationId_productId_warehouseScope: {
             tenantId,
-            companyId,
+            companyId: activeCompanyId,
             locationId: fromLocationId,
             productId,
             warehouseScope: "__NO_WAREHOUSE__",
@@ -504,7 +538,7 @@ router.post("/api/v1/stock/transfer", async (req: AuthedRequest, res) => {
         },
         create: {
           tenantId,
-          companyId,
+          companyId: activeCompanyId,
           locationId: toLocationId,
           warehouseScope: "__NO_WAREHOUSE__",
           productId,
@@ -517,7 +551,7 @@ router.post("/api/v1/stock/transfer", async (req: AuthedRequest, res) => {
       const outMove = await tx.stockMove.create({
         data: {
           tenantId,
-          companyId,
+          companyId: activeCompanyId,
           locationId: fromLocationId,
           productId,
           type: "OUT",
@@ -568,10 +602,10 @@ router.post("/api/v1/stock/transfer", async (req: AuthedRequest, res) => {
         inMoveId: result.inMove.id
       }
     })
-  } catch (e: any) {
+  } catch (e: unknown) {
     return res.status(400).json({
       ok: false,
-      error: e?.message || "Nu am putut face transferul de stoc."
+      error: e instanceof Error ? e.message : "Nu am putut face transferul de stoc."
     })
   }
 })
