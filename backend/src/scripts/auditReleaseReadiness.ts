@@ -138,6 +138,7 @@ function assertTypedSensitiveModules() {
   const productionRoutes = readFileSafe("src/routes/production.ts")
   const stockLotsLib = readFileSafe("src/lib/stockLots.ts")
   const warehouseLib = readFileSafe("src/lib/warehouse.ts")
+  const companyResolverLib = readFileSafe("src/lib/companyResolver.ts")
   const ownerMiddleware = readFileSafe("src/middleware/requireOwner.ts")
   const metaRoutes = readFileSafe("src/routes/meta.ts")
   const productRoutes = readFileSafe("src/routes/products.ts")
@@ -250,6 +251,14 @@ function assertTypedSensitiveModules() {
       warehouseLib.includes("export async function ensureDefaultWarehouseForLocation") &&
       warehouseLib.includes("export async function resolveWarehouseForLocation"),
     "Keep default warehouse bootstrap and warehouse selection logic type-checked because they affect every stock movement scope."
+  )
+
+  addResult(
+    "Company resolver no longer bypasses TypeScript",
+    !companyResolverLib.startsWith("// @ts-nocheck") &&
+      companyResolverLib.includes("export async function resolveTenantCompanyForAuth") &&
+      companyResolverLib.includes("function collectAllowedCompanyIds"),
+    "Keep tenant company resolution and allowed company filtering type-checked because they decide which legal entity a user can operate on."
   )
 
   addResult(
