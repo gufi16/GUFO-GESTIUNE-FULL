@@ -25,6 +25,15 @@ type LicenseModuleFlags = {
   modReports: boolean
 }
 
+type LicenseLike = LicenseModuleFlags & {
+  id: string
+  expiresAt: Date
+  isSuspended: boolean
+  limitLocations: number
+  limitTerminals: number
+  limitKdsDevices: number
+}
+
 type StructuredLocationAddressInput = {
   street?: string | null
   streetNo?: string | null
@@ -88,6 +97,30 @@ export function serializeCompanySummary(company?: CompanyLike | null) {
     phone: company.phone,
     isDefault: company.isDefault,
     createdAt: company.createdAt,
+  }
+}
+
+export function serializePrimaryCompanyContact(company?: CompanyLike | null) {
+  if (!company) return null
+  return {
+    id: company.id,
+    name: company.name,
+    cui: company.cui,
+    email: company.email,
+    phone: company.phone,
+  }
+}
+
+export function serializePrimaryCompanyDetails(company?: CompanyLike | null) {
+  if (!company) return null
+  return {
+    id: company.id,
+    name: company.name,
+    cui: company.cui,
+    email: company.email,
+    phone: company.phone,
+    regNo: company.regNo,
+    address: company.address,
   }
 }
 
@@ -171,6 +204,27 @@ export function moduleMapFromLicense(license: LicenseModuleFlags) {
     pos: Boolean(license.modPos),
     kds: Boolean(license.modKds),
     reports: Boolean(license.modReports),
+  }
+}
+
+export function buildTenantStatus(license?: { isSuspended: boolean; expiresAt: Date } | null) {
+  if (!license) return "inactive"
+  if (license.isSuspended) return "suspended"
+  return license.expiresAt > new Date() ? "active" : "expired"
+}
+
+export function buildLicenseSummary(license?: LicenseLike | null) {
+  if (!license) return null
+  return {
+    id: license.id,
+    expiresAt: license.expiresAt,
+    isSuspended: license.isSuspended,
+    limits: {
+      locations: license.limitLocations,
+      terminals: license.limitTerminals,
+      kdsDevices: license.limitKdsDevices,
+    },
+    modules: moduleMapFromLicense(license),
   }
 }
 

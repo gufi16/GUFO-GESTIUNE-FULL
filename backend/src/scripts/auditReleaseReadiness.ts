@@ -225,6 +225,8 @@ function assertTypedSensitiveModules() {
       adminRouteSupport.includes("export async function generateUniqueTenantSubdomain") &&
       adminRouteSupport.includes("export async function generateUniqueDeviceId") &&
       adminRouteSupport.includes("export async function ensureTenantEfacturaModuleEnabled") &&
+      adminRouteSupport.includes("export function buildTenantStatus") &&
+      adminRouteSupport.includes("export function buildLicenseSummary") &&
       adminRouteSupport.includes("export function moduleMapFromLicense") &&
       adminRouteSupport.includes("export function inferTerminalDeviceType") &&
       adminRouteSupport.includes("export function resolveTerminalDisplayLabel"),

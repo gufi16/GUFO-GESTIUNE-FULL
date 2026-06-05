@@ -10,7 +10,9 @@ import { requireOwner } from "../middleware/requireOwner"
 import { hashSecret } from "../lib/auth"
 import {
   addDays,
+  buildLicenseSummary,
   buildStructuredLocationAddress,
+  buildTenantStatus,
   buildTenantPortalUrl,
   collectDefinedStrings,
   ensureTenantEfacturaModuleEnabled,
@@ -27,6 +29,8 @@ import {
   pickPrimaryCompany,
   resolveOwnedCompany,
   resolveTerminalDisplayLabel,
+  serializePrimaryCompanyContact,
+  serializePrimaryCompanyDetails,
   serializeCompanySummary,
   slugify,
   toNullableText,
@@ -378,39 +382,13 @@ router.get("/api/v1/admin/clients", requireAuth, requireOwner, async (_req, res)
         slug: tenant.subdomain || primaryCompany?.cui || slugify(tenant.name),
         subdomain: tenant.subdomain,
         portalUrl: buildTenantPortalUrl(tenant.subdomain),
-        company: primaryCompany
-          ? {
-              id: primaryCompany.id,
-              name: primaryCompany.name,
-              cui: primaryCompany.cui,
-              email: primaryCompany.email,
-              phone: primaryCompany.phone,
-            }
-          : null,
-        status: !latestLicense
-          ? "inactive"
-          : latestLicense.isSuspended
-            ? "suspended"
-            : latestLicense.expiresAt > new Date()
-              ? "active"
-              : "expired",
+        company: serializePrimaryCompanyContact(primaryCompany),
+        status: buildTenantStatus(latestLicense),
         createdAt: tenant.createdAt,
         usersCount: tenant.users.length,
         locationsCount: tenant.locations.length,
         terminalsCount: tenant.terminals.length,
-        license: latestLicense
-          ? {
-              id: latestLicense.id,
-              expiresAt: latestLicense.expiresAt,
-              isSuspended: latestLicense.isSuspended,
-              limits: {
-                locations: latestLicense.limitLocations,
-                terminals: latestLicense.limitTerminals,
-                kdsDevices: latestLicense.limitKdsDevices,
-              },
-              modules: moduleMapFromLicense(latestLicense),
-            }
-          : null,
+        license: buildLicenseSummary(latestLicense),
         subscription: latestSubscription
           ? {
               id: latestSubscription.id,
@@ -624,27 +602,11 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
       slug: tenant.subdomain || primaryCompany?.cui || slugify(tenant.name),
       subdomain: tenant.subdomain,
       portalUrl: buildTenantPortalUrl(tenant.subdomain),
-      company: primaryCompany
-        ? {
-            id: primaryCompany.id,
-            name: primaryCompany.name,
-            cui: primaryCompany.cui,
-            email: primaryCompany.email,
-            phone: primaryCompany.phone,
-            regNo: primaryCompany.regNo,
-            address: primaryCompany.address,
-          }
-        : null,
+      company: serializePrimaryCompanyDetails(primaryCompany),
       companies: Array.isArray((tenant as any).companies)
         ? (tenant as any).companies.map((company: any) => serializeCompanySummary(company))
         : [],
-      status: !latestLicense
-        ? "inactive"
-        : latestLicense.isSuspended
-          ? "suspended"
-          : latestLicense.expiresAt > new Date()
-            ? "active"
-            : "expired",
+      status: buildTenantStatus(latestLicense),
       createdAt: tenant.createdAt,
       usersCount: tenant.users.length,
       locationsCount: tenant.locations.length,
@@ -705,19 +667,7 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
         company: serializeCompanySummary(terminal.company),
         location: terminal.location,
       })),
-      license: latestLicense
-        ? {
-            id: latestLicense.id,
-            expiresAt: latestLicense.expiresAt,
-            isSuspended: latestLicense.isSuspended,
-            limits: {
-                locations: latestLicense.limitLocations,
-                terminals: latestLicense.limitTerminals,
-                kdsDevices: latestLicense.limitKdsDevices,
-              },
-            modules: moduleMapFromLicense(latestLicense),
-          }
-        : null,
+      license: buildLicenseSummary(latestLicense),
       subscription: latestSubscription
         ? {
             id: latestSubscription.id,
