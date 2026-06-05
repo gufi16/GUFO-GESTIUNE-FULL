@@ -144,6 +144,7 @@ function assertTypedSensitiveModules() {
   const professionalPdfLib = readFileSafe("src/lib/professionalPdf.ts")
   const purchaseReceiptsPdfRoutes = readFileSafe("src/routes/purchaseReceiptsPdf.ts")
   const inventoryDocsPdfRoutes = readFileSafe("src/routes/inventoryDocsPdf.ts")
+  const inventoryRoutes = readFileSafe("src/routes/inventory.ts")
   const consumptionDocsPdfRoutes = readFileSafe("src/routes/consumptionDocsPdf.ts")
   const consumptionRoutes = readFileSafe("src/routes/consumption.ts")
   const productionDocsRoutes = readFileSafe("src/routes/productionDocs.ts")
@@ -311,6 +312,15 @@ function assertTypedSensitiveModules() {
       inventoryDocsPdfRoutes.includes('router.get("/:id/pdf"') &&
       inventoryDocsPdfRoutes.includes("type InventoryDocPdfData"),
     "Keep inventory PDF rendering type-checked because it summarizes counted vs scriptic stock directly from live inventory documents."
+  )
+
+  addResult(
+    "Inventory route no longer bypasses TypeScript",
+    !inventoryRoutes.startsWith("// @ts-nocheck") &&
+      inventoryRoutes.includes('router.post("/api/v1/inventory"') &&
+      inventoryRoutes.includes("type InventoryItemInput") &&
+      inventoryRoutes.includes("validateInventoryPayload"),
+    "Keep inventory draft/update/finalize flows type-checked because they directly recalculate stock balances and adjustment moves."
   )
 
   addResult(

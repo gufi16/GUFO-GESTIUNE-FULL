@@ -1,6 +1,5 @@
-// @ts-nocheck
 import { Router } from "express"
-import { Prisma } from "@prisma/client"
+import { InventoryStatus, Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { reserveNextNumber } from "../lib/numbering"
@@ -10,12 +9,17 @@ const router = Router()
 router.use(requireAuth)
 const NO_WAREHOUSE_SCOPE = "__NO_WAREHOUSE__"
 
-function toNumber(value: any) {
+type InventoryItemInput = {
+  productId?: unknown
+  countedQty?: unknown
+}
+
+function toNumber(value: unknown) {
   const n = Number(value)
   return Number.isFinite(n) ? n : 0
 }
 
-function normalizeText(value: any) {
+function normalizeText(value: unknown) {
   return String(value ?? "").trim()
 }
 
@@ -24,7 +28,7 @@ function warehouseScope(warehouseId?: string | null) {
   return trimmed || NO_WAREHOUSE_SCOPE
 }
 
-function parseDateStart(value: any) {
+function parseDateStart(value: unknown) {
   const text = normalizeText(value)
   if (!text) return null
   const date = new Date(text)
@@ -33,7 +37,7 @@ function parseDateStart(value: any) {
   return date
 }
 
-function parseDateEnd(value: any) {
+function parseDateEnd(value: unknown) {
   const text = normalizeText(value)
   if (!text) return null
   const date = new Date(text)
@@ -42,11 +46,18 @@ function parseDateEnd(value: any) {
   return date
 }
 
-function normalizeItems(items: any[]) {
-  return items.map((row: any) => ({
-    productId: normalizeText(row?.productId),
-    countedQty: toNumber(row?.countedQty)
-  }))
+function normalizeItems(items: unknown[]) {
+  return items.map((item) => {
+    const row = (item ?? {}) as InventoryItemInput
+    return {
+      productId: normalizeText(row.productId),
+      countedQty: toNumber(row.countedQty),
+    }
+  })
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback
 }
 
 type InventoryValidationError = { ok: false; status: number; error: string }
@@ -258,21 +269,23 @@ async function buildInventoryResponse(tenantId: string, companyId: string, id: s
 
 router.get("/api/v1/inventory-docs", async (req: AuthedRequest, res) => {
   try {
-    const tenantId = req.auth!.tenantId
-    const companyId = await requireRequestCompanyId(req)
+    const tenantId = String(req.auth!.tenantId)
+    const companyId = String(await requireRequestCompanyId(req))
 
     const dateFrom = parseDateStart(req.query.dateFrom)
     const dateTo = parseDateEnd(req.query.dateTo)
     const locationId = req.query.locationId ? String(req.query.locationId) : null
     const q = req.query.q ? String(req.query.q).trim() : ""
-    const status = req.query.status ? String(req.query.status).trim() : ""
+    const status = req.query.status ? String(req.query.status).trim().toUpperCase() : ""
 
     const docs = await prisma.inventoryDoc.findMany({
       where: {
         tenantId,
         companyId,
         ...(locationId ? { locationId } : {}),
-        ...(status ? { status: status as any } : {}),
+        ...(status && Object.values(InventoryStatus).includes(status as InventoryStatus)
+          ? { status: status as InventoryStatus }
+          : {}),
         ...(dateFrom || dateTo
           ? {
               docDate: {
@@ -374,8 +387,8 @@ router.get("/api/v1/inventory-docs", async (req: AuthedRequest, res) => {
 
 router.get("/api/v1/inventory-docs/:id", async (req: AuthedRequest, res) => {
   try {
-    const tenantId = req.auth!.tenantId
-    const companyId = await requireRequestCompanyId(req)
+    const tenantId = String(req.auth!.tenantId)
+    const companyId = String(await requireRequestCompanyId(req))
     const id = String(req.params.id)
 
     const item = await buildInventoryResponse(tenantId, companyId, id)
@@ -402,8 +415,8 @@ router.get("/api/v1/inventory-docs/:id", async (req: AuthedRequest, res) => {
 
 router.post("/api/v1/inventory", async (req: AuthedRequest, res) => {
   try {
-    const tenantId = req.auth!.tenantId
-    const companyId = await requireRequestCompanyId(req)
+    const tenantId = String(req.auth!.tenantId)
+    const companyId = String(await requireRequestCompanyId(req))
 
     const locationId = normalizeText(req.body?.locationId)
     const requestedWarehouseId = normalizeText(req.body?.warehouseId) || null
@@ -462,19 +475,19 @@ router.post("/api/v1/inventory", async (req: AuthedRequest, res) => {
       ok: true,
       item
     })
-  } catch (error: any) {
+  } catch (error) {
     console.error("INVENTORY CREATE ERROR:", error)
     return res.status(500).json({
       ok: false,
-      error: error?.message || "Nu am putut genera documentul de inventar."
+      error: getErrorMessage(error, "Nu am putut genera documentul de inventar.")
     })
   }
 })
 
 router.put("/api/v1/inventory-docs/:id", async (req: AuthedRequest, res) => {
   try {
-    const tenantId = req.auth!.tenantId
-    const companyId = await requireRequestCompanyId(req)
+    const tenantId = String(req.auth!.tenantId)
+    const companyId = String(await requireRequestCompanyId(req))
     const id = String(req.params.id)
 
     const existingDoc = await prisma.inventoryDoc.findFirst({
@@ -555,19 +568,19 @@ router.put("/api/v1/inventory-docs/:id", async (req: AuthedRequest, res) => {
       ok: true,
       item
     })
-  } catch (error: any) {
+  } catch (error) {
     console.error("INVENTORY UPDATE ERROR:", error)
     return res.status(500).json({
       ok: false,
-      error: error?.message || "Nu am putut actualiza inventarul."
+      error: getErrorMessage(error, "Nu am putut actualiza inventarul.")
     })
   }
 })
 
 router.post("/api/v1/inventory-docs/:id/finalize", async (req: AuthedRequest, res) => {
   try {
-    const tenantId = req.auth!.tenantId
-    const companyId = await requireRequestCompanyId(req)
+    const tenantId = String(req.auth!.tenantId)
+    const companyId = String(await requireRequestCompanyId(req))
     const id = String(req.params.id)
 
     const doc = await prisma.inventoryDoc.findFirst({
@@ -663,19 +676,19 @@ router.post("/api/v1/inventory-docs/:id/finalize", async (req: AuthedRequest, re
       ok: true,
       item
     })
-  } catch (error: any) {
+  } catch (error) {
     console.error("INVENTORY FINALIZE ERROR:", error)
     return res.status(500).json({
       ok: false,
-      error: error?.message || "Nu am putut finaliza inventarul."
+      error: getErrorMessage(error, "Nu am putut finaliza inventarul.")
     })
   }
 })
 
 router.post("/api/v1/inventory-docs/:id/cancel", async (req: AuthedRequest, res) => {
   try {
-    const tenantId = req.auth!.tenantId
-    const companyId = await requireRequestCompanyId(req)
+    const tenantId = String(req.auth!.tenantId)
+    const companyId = String(await requireRequestCompanyId(req))
     const id = String(req.params.id)
 
     const doc = await prisma.inventoryDoc.findFirst({
@@ -713,11 +726,11 @@ router.post("/api/v1/inventory-docs/:id/cancel", async (req: AuthedRequest, res)
       ok: true,
       item
     })
-  } catch (error: any) {
+  } catch (error) {
     console.error("CANCEL INVENTORY ERROR:", error)
     return res.status(500).json({
       ok: false,
-      error: error?.message || "Nu am putut anula inventarul."
+      error: getErrorMessage(error, "Nu am putut anula inventarul.")
     })
   }
 })
