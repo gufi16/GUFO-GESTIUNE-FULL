@@ -166,6 +166,7 @@ function assertTypedSensitiveModules() {
   const ownerMiddleware = readFileSafe("src/middleware/requireOwner.ts")
   const metaRoutes = readFileSafe("src/routes/meta.ts")
   const productRoutes = readFileSafe("src/routes/products.ts")
+  const salesInvoicesRoutes = readFileSafe("src/routes/salesInvoices.ts")
   const adminRouteSupport = readFileSafe("src/lib/adminRouteSupport.ts")
   const tenantRequest = readFileSafe("src/lib/tenantRequest.ts")
   const passwordReset = readFileSafe("src/lib/passwordReset.ts")
@@ -551,6 +552,15 @@ function assertTypedSensitiveModules() {
       productRoutes.includes('router.post("/api/v1/products/:id/recipe"') &&
       productRoutes.includes("function getScopedAuth"),
     "Keep product CRUD, SKU generation, and recipe management type-checked because they feed stock, pricing, POS visibility, and production flows."
+  )
+
+  addResult(
+    "Sales invoices route no longer bypasses TypeScript",
+    !salesInvoicesRoutes.startsWith("// @ts-nocheck") &&
+      salesInvoicesRoutes.includes('router.post("/api/v1/sales-invoices/full"') &&
+      salesInvoicesRoutes.includes('router.post("/api/v1/sales-invoices/:id/efactura/send"') &&
+      salesInvoicesRoutes.includes("function getErrorMessage"),
+    "Keep sales invoice issuance, storno, PDF, and e-Factura send/status/receipt flows type-checked because they affect fiscal documents and ANAF submissions."
   )
 }
 

@@ -1,6 +1,6 @@
-﻿// @ts-nocheck
+﻿
 import fs from "fs"
-import { Prisma } from "@prisma/client"
+import { EFacturaStatus, Prisma } from "@prisma/client"
 import { Router } from "express"
 import PDFDocument from "pdfkit"
 import { prisma } from "../lib/prisma"
@@ -34,6 +34,14 @@ router.use(requireAuth)
 
 function getTenantId(req: AuthedRequest) {
   return req.auth?.tenantId ?? undefined
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback
+}
+
+function getErrorStack(error: unknown) {
+  return error instanceof Error ? error.stack || null : null
 }
 
 function toNumber(value: any): number {
@@ -854,8 +862,8 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
     `CIF: ${pdfText(invoice.customerCif)}`,
     `Reg. com.: ${pdfText(invoice.customerRegNo)}`,
     `Adresa: ${pdfText(invoice.customerAddress)}`,
-    `Judet: ${pdfText(invoice.customerCounty)}`,
-    `Tara: ${pdfText(invoice.customerCountry || 'RO')}`,
+    `Judet: ${pdfText(invoice.customer?.county)}`,
+    `Tara: ${pdfText(invoice.customer?.country || 'RO')}`,
     `Email: ${pdfText(invoice.customerEmail)}`,
   ]
   const invoiceIdentity = splitInvoiceIdentity(invoice.docNo)
@@ -896,7 +904,6 @@ router.get("/api/v1/sales-invoices/:id/pdf", async (req: AuthedRequest, res) => 
   invoice.items.forEach((item, index) => {
     const productTitle = pdfText(item.productName || item.product?.name)
     const subline = [
-      item.productName === "SGR" ? null : item.product?.serialNo ? `Serie: ${pdfText(item.product.serialNo)}` : null,
       item.productName === "SGR" ? null : item.product?.ncCode ? `Cod NC: ${pdfText(item.product.ncCode)}` : null,
       toNumber(item.discountAmountFc) > 0
         ? `Discount: ${pdfFmt(item.discountPercent)}% (-${pdfFmt(item.discountAmountFc)})`
@@ -1246,7 +1253,11 @@ router.post("/api/v1/sales-invoices/:id/efactura/send", async (req: AuthedReques
     return res.status(400).json({ ok: false, error: "Factura nu are inca XML e-Factura pregatit. Ruleaza mai intai Pregateste e-Factura." })
   }
 
-  const company = await loadAnafCompanyContext(req.auth)
+  const auth = req.auth
+  if (!auth) {
+    return res.status(401).json({ ok: false, error: "Unauthorized" })
+  }
+  const company = await loadAnafCompanyContext(auth)
 
   const cif = normalizeCompanyCui(company?.cui)
   if (!cif) {
@@ -1365,14 +1376,14 @@ router.post("/api/v1/sales-invoices/:id/efactura/send", async (req: AuthedReques
       uploadIndex,
       invoice: enrichInvoice(updated),
     })
-  } catch (error: any) {
-    const message = error?.message || "Eroare la trimiterea facturii catre ANAF."
+  } catch (error: unknown) {
+    const message = getErrorMessage(error, "Eroare la trimiterea facturii catre ANAF.")
     logAnafRouteError("SALES EFACTURA SEND ERROR", {
       tenantId,
       invoiceId: id,
       uploadIndex: null,
       message,
-      stack: error?.stack || null,
+      stack: getErrorStack(error),
     })
     await prisma.eFacturaLog.create({
       data: {
@@ -1438,7 +1449,11 @@ router.get("/api/v1/sales-invoices/:id/efactura/status", async (req: AuthedReque
     return res.status(400).json({ ok: false, error: "Factura nu a fost transmisa inca la ANAF." })
   }
 
-  const company = await loadAnafCompanyContext(req.auth)
+  const auth = req.auth
+  if (!auth) {
+    return res.status(401).json({ ok: false, error: "Unauthorized" })
+  }
+  const company = await loadAnafCompanyContext(auth)
 
   if (!company?.efacturaOauthAccessToken) {
     return res.status(400).json({ ok: false, error: "Nu exista token ANAF salvat pentru aceasta firma." })
@@ -1471,7 +1486,7 @@ router.get("/api/v1/sales-invoices/:id/efactura/status", async (req: AuthedReque
     const updated = await prisma.salesInvoice.update({
       where: { id },
       data: {
-        efacturaStatus: nextStatus as any,
+        efacturaStatus: nextStatus as EFacturaStatus,
         efacturaDownloadId: downloadId,
         efacturaLastCheckAt: new Date(),
         efacturaErrorText: summary || null,
@@ -1511,14 +1526,14 @@ router.get("/api/v1/sales-invoices/:id/efactura/status", async (req: AuthedReque
       message: summary || "Starea facturii a fost verificata la ANAF.",
       invoice: enrichInvoice(updated),
     })
-  } catch (error: any) {
-    const message = error?.message || "Eroare la verificarea starii in ANAF."
+  } catch (error: unknown) {
+    const message = getErrorMessage(error, "Eroare la verificarea starii in ANAF.")
     logAnafRouteError("SALES EFACTURA STATUS ERROR", {
       tenantId,
       invoiceId: id,
       uploadIndex: invoice.efacturaUploadIndex || null,
       message,
-      stack: error?.stack || null,
+      stack: getErrorStack(error),
     })
     await prisma.eFacturaLog.create({
       data: {
@@ -1563,7 +1578,11 @@ router.get("/api/v1/sales-invoices/:id/efactura/receipt", async (req: AuthedRequ
     return res.status(404).json({ ok: false, error: "Factura nu a fost gasita." })
   }
 
-  const company = await loadAnafCompanyContext(req.auth)
+  const auth = req.auth
+  if (!auth) {
+    return res.status(401).json({ ok: false, error: "Unauthorized" })
+  }
+  const company = await loadAnafCompanyContext(auth)
 
   if (!company?.efacturaOauthAccessToken) {
     return res.status(400).json({ ok: false, error: "Nu exista token ANAF salvat pentru aceasta firma." })
@@ -1634,14 +1653,14 @@ router.get("/api/v1/sales-invoices/:id/efactura/receipt", async (req: AuthedRequ
     res.setHeader("Content-Type", contentType)
     res.setHeader("Content-Disposition", `attachment; filename="${fileNameBase}.${extension}"`)
     return res.send(buffer)
-  } catch (error: any) {
-    const message = error?.message || "Eroare la descarcarea recipisei ANAF."
+  } catch (error: unknown) {
+    const message = getErrorMessage(error, "Eroare la descarcarea recipisei ANAF.")
     logAnafRouteError("SALES EFACTURA RECEIPT ERROR", {
       tenantId,
       invoiceId: id,
       downloadId: downloadId || null,
       message,
-      stack: error?.stack || null,
+      stack: getErrorStack(error),
     })
     await prisma.eFacturaLog.create({
       data: {
