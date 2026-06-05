@@ -10,7 +10,7 @@ import { getNextNumberPreview, getNumberingConfig, normalizeNumberingPayload } f
 import { requireTenantModule } from "../lib/tenantModules"
 import { anafHttpRequest } from "../lib/anafHttp"
 import { getAnafCompanyDiagnostics, getAnafTokenDiagnostics } from "../lib/anafClient"
-import { ensureTenantCompany, listTenantCompaniesForAuth, resolveTenantCompany, resolveTenantCompanyForAuth, updateOrCreateTenantCompany } from "../lib/companyResolver"
+import { ensureTenantCompany, resolveTenantCompany, resolveTenantCompanyForAuth, updateOrCreateTenantCompany } from "../lib/companyResolver"
 import { resolveRequestCompany } from "../lib/companyScope"
 import {
   ANAF_CREDENTIAL_SELECT,
@@ -28,7 +28,6 @@ import {
   encryptSecret,
   ensureEfacturaCertDir,
   getEfacturaCertPath,
-  hasEfacturaCertificateFile,
 } from "../lib/efacturaCertificate"
 import { ensureUploadSubdir } from "../lib/uploads"
 import { getJwtSecret } from "../lib/auth"
@@ -38,16 +37,17 @@ import {
   createEfacturaAgentPairingCode,
   decodeTokenExpiry,
   extractAnafCompanyPayload,
+  getEffectiveAnafOauthConfig,
   getActiveCompanyId,
   getDefaultEfacturaAppUrl,
   getEfacturaAgentDownloadFileName,
   getEfacturaAgentDownloadSource,
   getRequestedCompanyId,
   getRequestedCredentialId,
-  getLatestEfacturaAgentFile,
   mapCompanyResponse,
   normalizeOptionalText,
-  normalizeRomanianCounty,
+  requireExplicitAnafCompanyContext,
+  requireExplicitAnafCompanyContextForAuth,
 } from "../lib/companyRouteSupport"
 
 const router = Router()
@@ -91,75 +91,6 @@ const certUpload = multer({
     cb(null, true)
   },
 })
-
-async function requireExplicitAnafCompanyContext(
-  tenantId: string,
-  activeCompanyId?: string | null,
-  requestedCompanyId?: string | null,
-) {
-  const companies = await prisma.company.findMany({
-    where: { tenantId },
-    orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
-    select: {
-      id: true,
-      name: true,
-      isDefault: true,
-    },
-  })
-
-  if (!companies.length) {
-    throw new Error("Nu exista nicio firma configurata pentru acest tenant.")
-  }
-
-  const effectiveCompanyId = requestedCompanyId || activeCompanyId || null
-
-  if (!effectiveCompanyId) {
-    if (companies.length > 1) {
-      throw new Error("Selecteaza mai intai firma activa din ERP, apoi genereaza tokenul ANAF.")
-    }
-    return companies[0]
-  }
-
-  const activeCompany = companies.find((company) => company.id === effectiveCompanyId)
-  if (!activeCompany) {
-    throw new Error("Firma activa selectata nu mai exista. Reincarca pagina si selecteaza firma din nou.")
-  }
-
-  return activeCompany
-}
-
-async function requireExplicitAnafCompanyContextForAuth(
-  req: AuthedRequest,
-  requestedCompanyId?: string | null,
-) {
-  const companies = await listTenantCompaniesForAuth(prisma, req.auth, {
-    select: {
-      id: true,
-      name: true,
-      isDefault: true,
-    },
-  })
-
-  if (!companies.length) {
-    throw new Error("Nu exista nicio firma accesibila pentru acest cont.")
-  }
-
-  const effectiveCompanyId = requestedCompanyId || getActiveCompanyId(req) || null
-
-  if (!effectiveCompanyId) {
-    if (companies.length > 1) {
-      throw new Error("Selecteaza mai intai firma activa din ERP, apoi genereaza tokenul ANAF.")
-    }
-    return companies[0]
-  }
-
-  const company = companies.find((item) => item.id === effectiveCompanyId)
-  if (!company) {
-    throw new Error("Firma selectata nu este accesibila pentru acest cont.")
-  }
-
-  return company
-}
 
 async function getRequestCompany(req: AuthedRequest, extra: Record<string, any> = {}) {
   const includeCredentialList = Boolean(extra?.includeCredentialList)
@@ -280,55 +211,6 @@ async function updateRequestCompany(
   )
 }
 
-async function getEffectiveAnafOauthConfig(tenantId: string, activeCompanyId: string | null = null) {
-  const [company, platform] = await Promise.all([
-    resolveCompanyWithAnafCredential(prisma as any, tenantId, activeCompanyId, {
-      select: {
-        efacturaEnvironment: true,
-        efacturaOauthClientId: true,
-        efacturaOauthClientSecret: true,
-        efacturaOauthRedirectUri: true,
-      },
-    }),
-    prisma.platformConfig.findUnique({
-      where: { key: "global" },
-      select: {
-        efacturaEnvironment: true,
-        efacturaOauthClientId: true,
-        efacturaOauthClientSecret: true,
-        efacturaOauthRedirectUri: true,
-      },
-    }),
-  ])
-
-  const usesCompanyConfig = Boolean(
-    company?.efacturaOauthClientId &&
-      company?.efacturaOauthClientSecret &&
-      company?.efacturaOauthRedirectUri
-  )
-
-  return {
-    clientId: usesCompanyConfig
-        ? company.efacturaOauthClientId
-        : platform?.efacturaOauthClientId || "",
-    clientSecret: usesCompanyConfig
-        ? company.efacturaOauthClientSecret
-        : platform?.efacturaOauthClientSecret || "",
-    redirectUri: usesCompanyConfig
-        ? company.efacturaOauthRedirectUri
-        : platform?.efacturaOauthRedirectUri || "",
-    environment: usesCompanyConfig
-      ? String(company?.efacturaEnvironment || "test").trim() || "test"
-      : String(platform?.efacturaEnvironment || company?.efacturaEnvironment || "test").trim() || "test",
-    platformConfigured: Boolean(
-      platform?.efacturaOauthClientId &&
-        platform?.efacturaOauthClientSecret &&
-        platform?.efacturaOauthRedirectUri,
-    ),
-    usesPlatformConfig: Boolean(!usesCompanyConfig && platform?.efacturaOauthClientId && platform?.efacturaOauthClientSecret && platform?.efacturaOauthRedirectUri),
-  }
-}
-
 export async function handleAnafOauthCallback(req, res) {
   const code = String(req.query.code || "")
   const error = String(req.query.error || "")
@@ -356,12 +238,12 @@ export async function handleAnafOauthCallback(req, res) {
   }
 
   try {
-    await requireExplicitAnafCompanyContext(state.tenantId, state.activeCompanyId || null)
+    await requireExplicitAnafCompanyContext(prisma, state.tenantId, state.activeCompanyId || null)
   } catch (error: any) {
     return res.redirect(`${state.returnTo}${state.returnTo.includes("?") ? "&" : "?"}oauth=error&message=${encodeURIComponent(String(error?.message || "Firma activa nu este disponibila pentru OAuth."))}`)
   }
 
-  const oauthConfig = await getEffectiveAnafOauthConfig(state.tenantId, state.activeCompanyId || null)
+  const oauthConfig = await getEffectiveAnafOauthConfig(prisma, state.tenantId, state.activeCompanyId || null)
   const moduleCheck = await requireTenantModule(state.tenantId, "efactura")
 
   if (!moduleCheck.enabled) {
@@ -661,7 +543,7 @@ router.get("/api/v1/company", async (req: AuthedRequest, res) => {
   try {
     const [company, oauthConfig] = await Promise.all([
       getRequestCompany(req, { includeCredentialList: true }),
-      getEffectiveAnafOauthConfig(tenantId, getActiveCompanyId(req)),
+      getEffectiveAnafOauthConfig(prisma, tenantId, getActiveCompanyId(req)),
     ])
 
     return res.json({
@@ -908,7 +790,7 @@ router.post("/api/v1/company", async (req: AuthedRequest, res) => {
 
     return res.json({
       ok: true,
-      company: mapCompanyResponse(resolvedCompany, await getEffectiveAnafOauthConfig(tenantId, getActiveCompanyId(req)))
+      company: mapCompanyResponse(resolvedCompany, await getEffectiveAnafOauthConfig(prisma, tenantId, getActiveCompanyId(req)))
     })
   } catch (e: any) {
     return res.status(500).json({
@@ -992,7 +874,7 @@ router.post("/api/v1/company/warehouse-config", async (req: AuthedRequest, res) 
         autoSelectSingleWarehouse: company?.autoSelectSingleWarehouse !== false,
         warehouseLabel: String(company?.warehouseLabel || "Gestiune"),
       },
-      company: mapCompanyResponse(resolvedCompany, await getEffectiveAnafOauthConfig(tenantId, getActiveCompanyId(req))),
+      company: mapCompanyResponse(resolvedCompany, await getEffectiveAnafOauthConfig(prisma, tenantId, getActiveCompanyId(req))),
     })
   } catch (e: any) {
     return res.status(500).json({
@@ -1083,7 +965,7 @@ router.post(
 
       return res.json({
         ok: true,
-        company: mapCompanyResponse(company, await getEffectiveAnafOauthConfig(tenantId, getActiveCompanyId(req))),
+        company: mapCompanyResponse(company, await getEffectiveAnafOauthConfig(prisma, tenantId, getActiveCompanyId(req))),
       })
     } catch (error: any) {
       if (req.file?.path && fs.existsSync(req.file.path)) {
@@ -1149,7 +1031,7 @@ router.delete("/api/v1/company/efactura/certificate", requireAuth, async (req: A
 
     return res.json({
       ok: true,
-      company: mapCompanyResponse(updated, await getEffectiveAnafOauthConfig(tenantId, getActiveCompanyId(req))),
+      company: mapCompanyResponse(updated, await getEffectiveAnafOauthConfig(prisma, tenantId, getActiveCompanyId(req))),
     })
   } catch (error: any) {
     return res.status(400).json({
@@ -1177,7 +1059,7 @@ router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, re
 
   let activeCompany: { id: string; name: string } | null = null
   try {
-    activeCompany = await requireExplicitAnafCompanyContextForAuth(req, requestedCompanyId)
+    activeCompany = await requireExplicitAnafCompanyContextForAuth(prisma, req, requestedCompanyId)
   } catch (error: any) {
     return res.status(409).json({
       ok: false,
@@ -1196,7 +1078,7 @@ router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, re
     })
   }
 
-  const oauthConfig = await getEffectiveAnafOauthConfig(tenantId, activeCompany.id)
+  const oauthConfig = await getEffectiveAnafOauthConfig(prisma, tenantId, activeCompany.id)
 
   if (!oauthConfig.clientId || !oauthConfig.redirectUri) {
     return res.status(400).json({

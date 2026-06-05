@@ -2,7 +2,10 @@ import fs from "fs"
 import jwt from "jsonwebtoken"
 import path from "path"
 import type { AuthedRequest } from "../middleware/requireAuth"
+import type { prisma } from "./prisma"
 import { hasEfacturaCertificateFile } from "./efacturaCertificate"
+import { listTenantCompaniesForAuth } from "./companyResolver"
+import { resolveCompanyWithAnafCredential } from "./companyAnafCredentials"
 
 type EfacturaAgentFile = {
   fileName: string
@@ -71,9 +74,73 @@ type AnafCompanyLookupEntry = {
   inregistrare_scop_Tva?: AnafRegistrationPayload | null
 }
 
+type PrismaClientLike = typeof prisma
+
+type MinimalCompanyContext = {
+  id: string
+  name: string
+  isDefault: boolean
+}
+
+type EffectiveAnafOauthCompanyConfig = {
+  efacturaEnvironment?: string | null
+  efacturaOauthClientId?: string | null
+  efacturaOauthClientSecret?: string | null
+  efacturaOauthRedirectUri?: string | null
+}
+
 export function normalizeOptionalText(value: unknown) {
   const text = String(value || "").trim()
   return text || null
+}
+
+export async function requireExplicitAnafCompanyContext(
+  prismaClient: PrismaClientLike,
+  tenantId: string,
+  activeCompanyId?: string | null,
+  requestedCompanyId?: string | null,
+) {
+  const companies = await prismaClient.company.findMany({
+    where: { tenantId },
+    orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+    select: {
+      id: true,
+      name: true,
+      isDefault: true,
+    },
+  })
+
+  if (!companies.length) {
+    throw new Error("Nu exista nicio firma configurata pentru acest tenant.")
+  }
+
+  return selectExplicitAnafCompany(companies, requestedCompanyId || activeCompanyId || null, {
+    missingSelectionMessage: "Selecteaza mai intai firma activa din ERP, apoi genereaza tokenul ANAF.",
+    inaccessibleMessage: "Firma activa selectata nu mai exista. Reincarca pagina si selecteaza firma din nou.",
+  })
+}
+
+export async function requireExplicitAnafCompanyContextForAuth(
+  prismaClient: PrismaClientLike,
+  req: AuthedRequest,
+  requestedCompanyId?: string | null,
+) {
+  const companies = await listTenantCompaniesForAuth(prismaClient, req.auth!, {
+    select: {
+      id: true,
+      name: true,
+      isDefault: true,
+    },
+  })
+
+  if (!companies.length) {
+    throw new Error("Nu exista nicio firma accesibila pentru acest cont.")
+  }
+
+  return selectExplicitAnafCompany(companies, requestedCompanyId || getActiveCompanyId(req) || null, {
+    missingSelectionMessage: "Selecteaza mai intai firma activa din ERP, apoi genereaza tokenul ANAF.",
+    inaccessibleMessage: "Firma selectata nu este accesibila pentru acest cont.",
+  })
 }
 
 export function mapCompanyResponse(
@@ -311,4 +378,87 @@ export function extractAnafCompanyPayload(entry: AnafCompanyLookupEntry | null |
           ? Boolean(general.scpTVA)
           : true,
   }
+}
+
+export async function getEffectiveAnafOauthConfig(
+  prismaClient: PrismaClientLike,
+  tenantId: string,
+  activeCompanyId: string | null = null,
+) {
+  const [companyRaw, platform] = await Promise.all([
+    resolveCompanyWithAnafCredential(prismaClient as never, tenantId, activeCompanyId, {
+      select: {
+        efacturaEnvironment: true,
+        efacturaOauthClientId: true,
+        efacturaOauthClientSecret: true,
+        efacturaOauthRedirectUri: true,
+      },
+    }),
+    prismaClient.platformConfig.findUnique({
+      where: { key: "global" },
+      select: {
+        efacturaEnvironment: true,
+        efacturaOauthClientId: true,
+        efacturaOauthClientSecret: true,
+        efacturaOauthRedirectUri: true,
+      },
+    }),
+  ])
+
+  const company = companyRaw as EffectiveAnafOauthCompanyConfig | null
+
+  const usesCompanyConfig = Boolean(
+    company?.efacturaOauthClientId &&
+      company?.efacturaOauthClientSecret &&
+      company?.efacturaOauthRedirectUri,
+  )
+
+  return {
+    clientId: usesCompanyConfig
+      ? company?.efacturaOauthClientId || ""
+      : platform?.efacturaOauthClientId || "",
+    clientSecret: usesCompanyConfig
+      ? company?.efacturaOauthClientSecret || ""
+      : platform?.efacturaOauthClientSecret || "",
+    redirectUri: usesCompanyConfig
+      ? company?.efacturaOauthRedirectUri || ""
+      : platform?.efacturaOauthRedirectUri || "",
+    environment: usesCompanyConfig
+      ? String(company?.efacturaEnvironment || "test").trim() || "test"
+      : String(platform?.efacturaEnvironment || company?.efacturaEnvironment || "test").trim() || "test",
+    platformConfigured: Boolean(
+      platform?.efacturaOauthClientId &&
+        platform?.efacturaOauthClientSecret &&
+        platform?.efacturaOauthRedirectUri,
+    ),
+    usesPlatformConfig: Boolean(
+      !usesCompanyConfig &&
+        platform?.efacturaOauthClientId &&
+        platform?.efacturaOauthClientSecret &&
+        platform?.efacturaOauthRedirectUri,
+    ),
+  }
+}
+
+function selectExplicitAnafCompany(
+  companies: MinimalCompanyContext[],
+  effectiveCompanyId: string | null,
+  messages: {
+    missingSelectionMessage: string
+    inaccessibleMessage: string
+  },
+) {
+  if (!effectiveCompanyId) {
+    if (companies.length > 1) {
+      throw new Error(messages.missingSelectionMessage)
+    }
+    return companies[0]
+  }
+
+  const company = companies.find((item) => item.id === effectiveCompanyId)
+  if (!company) {
+    throw new Error(messages.inaccessibleMessage)
+  }
+
+  return company
 }

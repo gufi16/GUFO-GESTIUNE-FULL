@@ -304,7 +304,9 @@ function assertTypedSensitiveModules() {
       companyRouteSupportLib.includes("export function createEfacturaAgentPairingCode") &&
       companyRouteSupportLib.includes("export function getRequestedCredentialId") &&
       companyRouteSupportLib.includes("export function mapCompanyResponse") &&
-      companyRouteSupportLib.includes("export function extractAnafCompanyPayload"),
+      companyRouteSupportLib.includes("export function extractAnafCompanyPayload") &&
+      companyRouteSupportLib.includes("export async function requireExplicitAnafCompanyContext") &&
+      companyRouteSupportLib.includes("export async function getEffectiveAnafOauthConfig"),
     "Keep e-Factura agent download, pairing, and request parsing helpers in a typed module while the large company route is being reduced incrementally."
   )
 
