@@ -151,6 +151,7 @@ function assertTypedSensitiveModules() {
   const inventoryRoutes = readFileSafe("src/routes/inventory.ts")
   const stockRoutes = readFileSafe("src/routes/stock.ts")
   const purchaseRoutes = readFileSafe("src/routes/purchase.ts")
+  const reportsRoutes = readFileSafe("src/routes/reports.ts")
   const transferRoutes = readFileSafe("src/routes/transfer.ts")
   const incomingEfacturaRoutes = readFileSafe("src/routes/incomingEfactura.ts")
   const consumptionDocsPdfRoutes = readFileSafe("src/routes/consumptionDocsPdf.ts")
@@ -386,6 +387,14 @@ function assertTypedSensitiveModules() {
       purchaseRoutes.includes("type PurchaseReceiptItemInput") &&
       purchaseRoutes.includes("async function createOrReplaceReceiptItems"),
     "Keep purchase receipt draft/post flows type-checked because they generate inbound stock, supplier reception values, and source invoice linking."
+  )
+
+  addResult(
+    "Reports route no longer bypasses TypeScript",
+    !reportsRoutes.startsWith("// @ts-nocheck") &&
+      reportsRoutes.includes('router.get("/api/v1/reports/advanced"') &&
+      reportsRoutes.includes("function parseDateStart"),
+    "Keep advanced reporting type-checked because it aggregates sales, stock, inventory differences, and consumption trends."
   )
 
   addResult(
