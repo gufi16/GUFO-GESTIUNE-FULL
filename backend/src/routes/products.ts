@@ -1,8 +1,8 @@
-// @ts-nocheck
 import { Router } from "express"
 import path from "path"
 import fs from "fs"
 import multer from "multer"
+import { ProductClass, ProductionMode, RecipeStatus, StockCostMethod } from "@prisma/client"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { buildCompanyScopedTenantWhere, requireRequestCompanyId, resolveRequestCompany } from "../lib/companyScope"
@@ -64,6 +64,15 @@ const upload = multer({
 
 router.use(requireAuth)
 
+function getScopedAuth(req: AuthedRequest) {
+  const tenantId = String(req.auth?.tenantId || "").trim()
+  return { tenantId }
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback
+}
+
 router.post(
   "/api/v1/products/upload-image",
   upload.single("image"),
@@ -80,8 +89,10 @@ router.post(
 )
 
 router.get("/api/v1/products", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const { tenantId } = getScopedAuth(req)
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Unauthorized" })
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ ok: false, error: "Compania activa lipseste." })
   const q = String(req.query.q || "").trim()
 
   const items = await prisma.product.findMany({
@@ -120,14 +131,16 @@ router.get("/api/v1/products", async (req: AuthedRequest, res) => {
 })
 
 router.get("/api/v1/products/next-sku", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const { tenantId } = getScopedAuth(req)
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Unauthorized" })
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ ok: false, error: "Compania activa lipseste." })
 
   try {
     const preview = await getNextAvailableProductSkuValue(prisma, tenantId, companyId)
     res.json({ ok: true, sku: preview.sku })
-  } catch (e: any) {
-    res.status(400).json({ ok: false, error: e?.message || "Nu pot genera urmatorul SKU." })
+  } catch (e: unknown) {
+    res.status(400).json({ ok: false, error: getErrorMessage(e, "Nu pot genera urmatorul SKU.") })
   }
 })
 
@@ -146,8 +159,10 @@ router.get("/api/v1/products/nc-suggest", async (req: AuthedRequest, res) => {
 })
 
 router.post("/api/v1/products", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const { tenantId } = getScopedAuth(req)
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Unauthorized" })
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ ok: false, error: "Compania activa lipseste." })
 
   const company = await resolveRequestCompany(req, {
     select: {
@@ -173,13 +188,13 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
   const categoryId = categoryIdRaw || null
   const ncCode = toNullableText(req.body?.ncCode)?.toUpperCase() || null
   const requestedSku = String(req.body?.sku || "").trim()
-  const classValue = String(req.body?.class || "MARFA").trim()
+  const classValue = String(req.body?.class || "MARFA").trim() as ProductClass
   const normalizedPurchaseUomId = classValue === "PRODUS_FIN" ? uomId : purchaseUomId
   const normalizedPurchaseFactor = classValue === "PRODUS_FIN" ? 1 : purchaseFactor
-  let productionMode = normalizeProductionMode(req.body?.productionMode || "AUTO")
+  let productionMode = normalizeProductionMode(req.body?.productionMode || "AUTO") as ProductionMode | null
   const trackLot = Boolean(req.body?.trackLot)
   const trackExpiry = Boolean(req.body?.trackExpiry)
-  let costMethod = normalizeStockCostMethod(req.body?.costMethod || "AVG")
+  let costMethod = normalizeStockCostMethod(req.body?.costMethod || "AVG") as StockCostMethod | null
   const requestedIsActive = req.body?.isActive === undefined ? true : Boolean(req.body?.isActive)
   const requestedVisibleInPos =
     req.body?.isVisibleInPos === undefined ? true : Boolean(req.body?.isVisibleInPos)
@@ -202,6 +217,9 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
   if (!costMethod) {
     return res.status(400).json({ ok: false, error: "Metoda de cost este invalida." })
   }
+
+  const finalProductionMode = productionMode
+  const finalCostMethod = costMethod
 
   if (trackExpiry && !trackLot) {
     return res.status(400).json({ ok: false, error: "Pentru urmarirea expirarii trebuie activata si urmarirea pe lot." })
@@ -366,7 +384,9 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
           create: { tenantId, key: "product", value: preview.value }
         })
       }
-      const forcedInactiveBecauseMissingRecipe = RECIPE_REQUIRED_CLASSES.includes(classValue)
+      const forcedInactiveBecauseMissingRecipe = RECIPE_REQUIRED_CLASSES.includes(
+        classValue as (typeof RECIPE_REQUIRED_CLASSES)[number]
+      )
 
       const created = await tx.product.create({
         data: {
@@ -375,7 +395,7 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
           sku: finalSku,
           name,
           imageUrl,
-          class: classValue as any,
+          class: classValue,
           vatRateId: vatRate?.id || fallbackVatRate?.id || vatRateIdRaw,
           uomId,
           purchaseUomId: normalizedPurchaseUomId || uomId,
@@ -390,7 +410,7 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
           costPrice,
           trackLot,
           trackExpiry,
-          costMethod: costMethod as any,
+          costMethod: finalCostMethod,
           isActive: forcedInactiveBecauseMissingRecipe ? false : requestedIsActive,
           isMenu: requestedIsMenu,
           posMenuCategory,
@@ -398,7 +418,7 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
           publishToGlovo: requestedPublishToGlovo,
           isSgr,
           sgrValue: isSgr ? 0.5 : 0,
-          productionMode: productionMode as any
+          productionMode: finalProductionMode
         },
         include: {
           vatRate: true,
@@ -435,15 +455,17 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
     })
 
     res.json({ ok: true, item: serializeProduct(item) })
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error("[PRODUCT_CREATE] error", e)
-    res.status(400).json({ ok: false, error: e?.message || "Nu am putut salva produsul." })
+    res.status(400).json({ ok: false, error: getErrorMessage(e, "Nu am putut salva produsul.") })
   }
 })
 
 router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const { tenantId } = getScopedAuth(req)
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Unauthorized" })
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ ok: false, error: "Compania activa lipseste." })
   const id = String(req.params.id)
 
   const company = await resolveRequestCompany(req, {
@@ -469,13 +491,13 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   const categoryIdRaw = String(req.body?.categoryId || "").trim()
   const categoryId = categoryIdRaw || null
   const ncCode = toNullableText(req.body?.ncCode)?.toUpperCase() || null
-  const classValue = String(req.body?.class || "MARFA").trim()
+  const classValue = String(req.body?.class || "MARFA").trim() as ProductClass
   const normalizedPurchaseUomId = classValue === "PRODUS_FIN" ? uomId : purchaseUomId
   const normalizedPurchaseFactor = classValue === "PRODUS_FIN" ? 1 : purchaseFactor
-  let productionMode = normalizeProductionMode(req.body?.productionMode || "AUTO")
+  let productionMode = normalizeProductionMode(req.body?.productionMode || "AUTO") as ProductionMode | null
   const trackLot = Boolean(req.body?.trackLot)
   const trackExpiry = Boolean(req.body?.trackExpiry)
-  let costMethod = normalizeStockCostMethod(req.body?.costMethod ?? "AVG")
+  let costMethod = normalizeStockCostMethod(req.body?.costMethod ?? "AVG") as StockCostMethod | null
   const requestedIsActive = req.body?.isActive === undefined ? true : Boolean(req.body?.isActive)
   const requestedVisibleInPos =
     req.body?.isVisibleInPos === undefined ? true : Boolean(req.body?.isVisibleInPos)
@@ -561,8 +583,21 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
 
   productionMode = normalizeProductionMode(
     req.body?.productionMode ?? current.productionMode ?? "AUTO"
-  )
-  costMethod = normalizeStockCostMethod(req.body?.costMethod ?? current.costMethod ?? "AVG")
+  ) as ProductionMode | null
+  costMethod = normalizeStockCostMethod(
+    req.body?.costMethod ?? current.costMethod ?? "AVG"
+  ) as StockCostMethod | null
+
+  if (!productionMode) {
+    return res.status(400).json({ ok: false, error: "Mod de productie invalid." })
+  }
+
+  if (!costMethod) {
+    return res.status(400).json({ ok: false, error: "Metoda de cost este invalida." })
+  }
+
+  const finalUpdatedProductionMode = productionMode
+  const finalUpdatedCostMethod = costMethod
 
   const [vatRate, fallbackVatRate, uom, purchaseUom, category, existingRecipe] = await Promise.all([
     vatRateId
@@ -634,14 +669,15 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
 
   try {
     const forcedInactiveBecauseMissingRecipe =
-      RECIPE_REQUIRED_CLASSES.includes(classValue) && !existingRecipe
+      RECIPE_REQUIRED_CLASSES.includes(classValue as (typeof RECIPE_REQUIRED_CLASSES)[number]) &&
+      !existingRecipe
 
     const item = await prisma.product.update({
       where: { id },
       data: {
         name,
         imageUrl,
-        class: classValue as any,
+        class: classValue,
         vatRateId: vatRate?.id || fallbackVatRate?.id || current.vatRateId,
         uomId,
         purchaseUomId: normalizedPurchaseUomId || uomId,
@@ -656,7 +692,7 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
         costPrice,
         trackLot,
         trackExpiry,
-        costMethod: costMethod as any,
+        costMethod: finalUpdatedCostMethod,
         isActive: forcedInactiveBecauseMissingRecipe ? false : requestedIsActive,
         isMenu: requestedIsMenu,
         posMenuCategory,
@@ -664,7 +700,7 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
         publishToGlovo: requestedPublishToGlovo,
         isSgr,
         sgrValue: isSgr ? 0.5 : 0,
-        productionMode: productionMode as any
+        productionMode: finalUpdatedProductionMode
       },
       include: {
         vatRate: true,
@@ -700,15 +736,17 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
         forcedInactiveBecauseMissingRecipe
       }
     })
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error("[PRODUCT_UPDATE] error", e)
     res.status(400).json({ ok: false, error: "Nu am putut actualiza produsul." })
   }
 })
 
 router.get("/api/v1/products/:id/recipe", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const { tenantId } = getScopedAuth(req)
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Unauthorized" })
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ ok: false, error: "Compania activa lipseste." })
   const productId = String(req.params.id)
 
   const product = await prisma.product.findFirst({
@@ -756,8 +794,10 @@ router.get("/api/v1/products/:id/recipe", async (req: AuthedRequest, res) => {
 })
 
 router.post("/api/v1/products/:id/recipe", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const { tenantId } = getScopedAuth(req)
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Unauthorized" })
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ ok: false, error: "Compania activa lipseste." })
   const productId = String(req.params.id)
 
   const product = await prisma.product.findFirst({
@@ -782,7 +822,7 @@ router.post("/api/v1/products/:id/recipe", async (req: AuthedRequest, res) => {
   const code = toNullableText(req.body?.code)
   const name = toNullableText(req.body?.name)
   const notes = toNullableText(req.body?.notes)
-  const status = String(req.body?.status || "DRAFT").trim()
+  const status = String(req.body?.status || "DRAFT").trim() as RecipeStatus
   const yieldQty = toNumber(req.body?.yieldQty || 1)
   const isActive = req.body?.isActive === undefined ? true : Boolean(req.body?.isActive)
   const activateProduct = req.body?.activateProduct === undefined ? true : Boolean(req.body?.activateProduct)
@@ -845,7 +885,7 @@ router.post("/api/v1/products/:id/recipe", async (req: AuthedRequest, res) => {
     return res.status(400).json({ ok: false, error: "Unul sau mai multe ingrediente nu exista." })
   }
 
-  const allowedIngredientClasses = product.isMenu === true
+  const allowedIngredientClasses: readonly string[] = product.isMenu === true
     ? MENU_COMPONENT_CLASSES
     : RECIPE_INGREDIENT_CLASSES
 
@@ -880,7 +920,7 @@ router.post("/api/v1/products/:id/recipe", async (req: AuthedRequest, res) => {
               code,
               name,
               notes,
-              status: status as any,
+              status,
               yieldQty,
               isActive
             }
@@ -893,7 +933,7 @@ router.post("/api/v1/products/:id/recipe", async (req: AuthedRequest, res) => {
               code,
               name,
               notes,
-              status: status as any,
+              status,
               yieldQty,
               isActive
             }
@@ -952,17 +992,19 @@ router.post("/api/v1/products/:id/recipe", async (req: AuthedRequest, res) => {
       recipe: serializeRecipe(recipe),
       productActivated: activateProduct
     })
-  } catch (e: any) {
+  } catch (e: unknown) {
     return res.status(400).json({
       ok: false,
-      error: e?.message || "Nu am putut salva retetarul."
+      error: getErrorMessage(e, "Nu am putut salva retetarul.")
     })
   }
 })
 
 router.delete("/api/v1/products/:id", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const { tenantId } = getScopedAuth(req)
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Unauthorized" })
   const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ ok: false, error: "Compania activa lipseste." })
   const id = String(req.params.id)
 
   const current = await prisma.product.findFirst({

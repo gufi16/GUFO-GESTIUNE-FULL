@@ -543,6 +543,15 @@ function assertTypedSensitiveModules() {
       productRouteSupport.includes("export function toNullableText"),
     "Keep SKU generation, class normalization, image normalization, and product/recipe serialization in a typed helper module."
   )
+
+  addResult(
+    "Products route no longer bypasses TypeScript",
+    !productRoutes.startsWith("// @ts-nocheck") &&
+      productRoutes.includes('router.post("/api/v1/products"') &&
+      productRoutes.includes('router.post("/api/v1/products/:id/recipe"') &&
+      productRoutes.includes("function getScopedAuth"),
+    "Keep product CRUD, SKU generation, and recipe management type-checked because they feed stock, pricing, POS visibility, and production flows."
+  )
 }
 
 function assertOpsAssets() {
