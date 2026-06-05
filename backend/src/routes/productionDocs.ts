@@ -1,6 +1,6 @@
-// @ts-nocheck
-import { Router } from "express"
+import { Router, type NextFunction, type Request, type Response } from "express"
 import PDFDocument from "pdfkit"
+import type { Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { requireRequestCompanyId } from "../lib/companyScope"
@@ -15,7 +15,53 @@ import {
 
 const router = Router()
 
-router.use((req: any, _res, next) => {
+type ProductionDocListData = Prisma.ProductionDocGetPayload<{
+  include: {
+    location: true
+    items: {
+      include: {
+        product: {
+          include: {
+            uom: true
+          }
+        }
+      }
+    }
+  }
+}>
+
+type ProductionDocDetailData = Prisma.ProductionDocGetPayload<{
+  include: {
+    location: true
+    items: {
+      include: {
+        product: {
+          include: {
+            uom: true
+            recipe: {
+              include: {
+                items: {
+                  include: {
+                    ingredient: {
+                      include: {
+                        uom: true
+                      }
+                    }
+                  }
+                  orderBy: {
+                    sortOrder: "asc"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}>
+
+router.use((req: Request, _res: Response, next: NextFunction) => {
   const authHeader = String(req.headers.authorization || "").trim()
   const tokenFromQuery = String(req.query?.token || "").trim()
 
@@ -28,37 +74,22 @@ router.use((req: any, _res, next) => {
 
 router.use(requireAuth)
 
-function drawInfoCard(doc: any, x: number, y: number, width: number, height: number, title: string, lines: string[]) {
-  doc.save()
-  doc.roundedRect(x, y, width, height, 12).fill("#f8fafc")
-  doc.restore()
-
-  doc
-    .font("Helvetica-Bold")
-    .fontSize(11)
-    .fillColor("#64748b")
-    .text(title, x + 16, y + 14)
-
-  doc.font("Helvetica").fontSize(12).fillColor("#0f172a")
-
-  let lineY = y + 40
-  for (const line of lines) {
-    doc.text(line, x + 16, lineY, {
-      width: width - 32,
-      align: "left",
-    })
-    lineY += 22
-  }
-}
-
 router.get("/api/v1/production-docs", async (req: AuthedRequest, res) => {
   try {
-    const tenantId = req.auth!.tenantId
-    const companyId = await requireRequestCompanyId(req)
+    const tenantId = String(req.auth?.tenantId || "").trim()
+    if (!tenantId) {
+      return res.status(401).json({ ok: false, error: "Tenant lipsa in sesiune." })
+    }
+
+    const companyId = String((await requireRequestCompanyId(req)) || "").trim()
+    if (!companyId) {
+      return res.status(400).json({ ok: false, error: "Firma activa lipsa." })
+    }
+
     const q = String(req.query.q || "").trim()
     const locationId = String(req.query.locationId || "").trim()
 
-    const docs = await prisma.productionDoc.findMany({
+    const docs: ProductionDocListData[] = await prisma.productionDoc.findMany({
       where: {
         tenantId,
         companyId,
@@ -106,21 +137,29 @@ router.get("/api/v1/production-docs", async (req: AuthedRequest, res) => {
     }))
 
     return res.json({ ok: true, items })
-  } catch (e: any) {
+  } catch (e: unknown) {
     return res.status(500).json({
       ok: false,
-      error: e?.message || "Nu am putut incarca documentele de productie.",
+      error: e instanceof Error ? e.message : "Nu am putut incarca documentele de productie.",
     })
   }
 })
 
 router.get("/api/v1/production-docs/:id", async (req: AuthedRequest, res) => {
   try {
-    const tenantId = req.auth!.tenantId
-    const companyId = await requireRequestCompanyId(req)
+    const tenantId = String(req.auth?.tenantId || "").trim()
+    if (!tenantId) {
+      return res.status(401).json({ ok: false, error: "Tenant lipsa in sesiune." })
+    }
+
+    const companyId = String((await requireRequestCompanyId(req)) || "").trim()
+    if (!companyId) {
+      return res.status(400).json({ ok: false, error: "Firma activa lipsa." })
+    }
+
     const id = String(req.params.id || "").trim()
 
-    const doc = await prisma.productionDoc.findFirst({
+    const doc: ProductionDocDetailData | null = await prisma.productionDoc.findFirst({
       where: {
         id,
         tenantId,
@@ -204,21 +243,29 @@ router.get("/api/v1/production-docs/:id", async (req: AuthedRequest, res) => {
         items,
       },
     })
-  } catch (e: any) {
+  } catch (e: unknown) {
     return res.status(500).json({
       ok: false,
-      error: e?.message || "Nu am putut incarca documentul de productie.",
+      error: e instanceof Error ? e.message : "Nu am putut incarca documentul de productie.",
     })
   }
 })
 
 router.get("/api/v1/production-docs/:id/pdf", async (req: AuthedRequest, res) => {
   try {
-    const tenantId = req.auth!.tenantId
-    const companyId = await requireRequestCompanyId(req)
+    const tenantId = String(req.auth?.tenantId || "").trim()
+    if (!tenantId) {
+      return res.status(401).json({ ok: false, error: "Tenant lipsa in sesiune." })
+    }
+
+    const companyId = String((await requireRequestCompanyId(req)) || "").trim()
+    if (!companyId) {
+      return res.status(400).json({ ok: false, error: "Firma activa lipsa." })
+    }
+
     const id = String(req.params.id || "").trim()
 
-    const docData = await prisma.productionDoc.findFirst({
+    const docData: ProductionDocDetailData | null = await prisma.productionDoc.findFirst({
       where: {
         id,
         tenantId,
@@ -259,6 +306,7 @@ router.get("/api/v1/production-docs/:id/pdf", async (req: AuthedRequest, res) =>
       })
     }
 
+    const productionDoc = docData
     const company = await resolveTenantCompany(prisma, tenantId, companyId)
 
     const pdf = new PDFDocument({
@@ -270,7 +318,7 @@ router.get("/api/v1/production-docs/:id/pdf", async (req: AuthedRequest, res) =>
     res.setHeader("Content-Type", "application/pdf")
     res.setHeader(
       "Content-Disposition",
-      `inline; filename="production-${docData.docNo}.pdf"`
+      `inline; filename="production-${productionDoc.docNo}.pdf"`
     )
 
     pdf.pipe(res)
@@ -306,9 +354,9 @@ router.get("/api/v1/production-docs/:id/pdf", async (req: AuthedRequest, res) =>
     })
 
     pdf.font("Helvetica").fontSize(9.5).fillColor("#111827")
-    pdf.text(`Nr: ${docData.docNo}`, rightX + 12, headerY + 16, { width: rightW - 24, align: "left" })
-    pdf.text(`Data: ${formatProductionPdfDate(docData.docDate)}`, rightX + 12, headerY + 30, { width: rightW - 24, align: "left" })
-    pdf.text(`Status: ${docData.status || "-"}`, rightX + 12, headerY + 44, { width: rightW - 24, align: "left" })
+    pdf.text(`Nr: ${productionDoc.docNo}`, rightX + 12, headerY + 16, { width: rightW - 24, align: "left" })
+    pdf.text(`Data: ${formatProductionPdfDate(productionDoc.docDate)}`, rightX + 12, headerY + 30, { width: rightW - 24, align: "left" })
+    pdf.text("Status: FINALIZAT", rightX + 12, headerY + 44, { width: rightW - 24, align: "left" })
 
     pdf.y = headerY + 98
 
@@ -316,8 +364,8 @@ router.get("/api/v1/production-docs/:id/pdf", async (req: AuthedRequest, res) =>
     const metaTableWidth = pageWidth - 24
     const metaCols = [96, 170, 84, 108, 74, metaTableWidth - 96 - 170 - 84 - 108 - 74]
     const metaRows = [
-      ["Locatie", docData.location?.name || "-", "Pozitii", String(docData.items.length), "Status", docData.status || "-"],
-      ["Data", formatProductionPdfDate(docData.docDate), "Cantitate", formatProductionPdfNumber(docData.items.reduce((sum, row) => sum + Number(row.qty || 0), 0), 2), "Responsabil", "-"],
+      ["Locatie", productionDoc.location?.name || "-", "Pozitii", String(productionDoc.items.length), "Status", "FINALIZAT"],
+      ["Data", formatProductionPdfDate(productionDoc.docDate), "Cantitate", formatProductionPdfNumber(productionDoc.items.reduce((sum, row) => sum + Number(row.qty || 0), 0), 2), "Responsabil", "-"],
     ]
 
     let metaY = pdf.y
@@ -343,14 +391,14 @@ router.get("/api/v1/production-docs/:id/pdf", async (req: AuthedRequest, res) =>
 
     pdf.y = metaY + 18
 
-    if (docData.note) {
+    if (productionDoc.note) {
       ensureProductionPdfSpace(pdf, 60)
 
       pdf
         .font("Helvetica")
         .fontSize(10)
         .fillColor("#0f172a")
-        .text(docData.note, pdf.page.margins.left, pdf.y, {
+        .text(productionDoc.note, pdf.page.margins.left, pdf.y, {
           width: pageWidth,
           align: "left",
         })
@@ -363,7 +411,7 @@ router.get("/api/v1/production-docs/:id/pdf", async (req: AuthedRequest, res) =>
 
     const productsTableWidths = [100, tableTotalWidth - 100 - 90 - 120, 90, 120]
 
-    const productRows = docData.items.map((row) => [
+    const productRows = productionDoc.items.map((row) => [
       row.product?.sku || "-",
       row.product?.name || "-",
       row.product?.uom?.code || "-",
@@ -386,7 +434,7 @@ router.get("/api/v1/production-docs/:id/pdf", async (req: AuthedRequest, res) =>
       { sku: string; name: string; uom: string; qty: number }
     >()
 
-    for (const row of docData.items) {
+    for (const row of productionDoc.items) {
       const yieldQty = Number(row.product?.recipe?.yieldQty || 1) || 1
       const producedQty = Number(row.qty || 0)
       const recipeItems = row.product?.recipe?.items || []
@@ -450,7 +498,7 @@ router.get("/api/v1/production-docs/:id/pdf", async (req: AuthedRequest, res) =>
       .fontSize(10.5)
       .fillColor("#0f172a")
       .text(
-        `Total pozitii: ${docData.items.length}`,
+        `Total pozitii: ${productionDoc.items.length}`,
         tableStartX,
         totalsY + 18,
         {
@@ -461,7 +509,7 @@ router.get("/api/v1/production-docs/:id/pdf", async (req: AuthedRequest, res) =>
 
     pdf.text(
         `Cantitate totala produse: ${formatProductionPdfNumber(
-        docData.items.reduce((sum, row) => sum + Number(row.qty || 0), 0),
+        productionDoc.items.reduce((sum, row) => sum + Number(row.qty || 0), 0),
         2
       )}`,
       tableStartX + tableTotalWidth / 2,
@@ -497,10 +545,10 @@ router.get("/api/v1/production-docs/:id/pdf", async (req: AuthedRequest, res) =>
     })
 
     pdf.end()
-  } catch (e: any) {
+  } catch (e: unknown) {
     return res.status(500).json({
       ok: false,
-      error: e?.message || "Nu am putut genera PDF-ul documentului de productie.",
+      error: e instanceof Error ? e.message : "Nu am putut genera PDF-ul documentului de productie.",
     })
   }
 })

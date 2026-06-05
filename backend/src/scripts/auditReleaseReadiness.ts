@@ -317,6 +317,14 @@ function assertTypedSensitiveModules() {
   )
 
   addResult(
+    "Production docs route no longer bypasses TypeScript",
+    !productionDocsRoutes.startsWith("// @ts-nocheck") &&
+      productionDocsRoutes.includes('router.get("/api/v1/production-docs/:id/pdf"') &&
+      productionDocsRoutes.includes("type ProductionDocDetailData"),
+    "Keep production document list/detail/PDF routes type-checked because they combine production output, recipe ingredients, and document exports."
+  )
+
+  addResult(
     "Admin route no longer bypasses TypeScript",
     !adminRoutes.startsWith("// @ts-nocheck") &&
       adminRoutes.includes('router.get("/api/v1/admin/clients"') &&
