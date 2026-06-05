@@ -144,6 +144,7 @@ function assertTypedSensitiveModules() {
   const purchaseReceiptsPdfRoutes = readFileSafe("src/routes/purchaseReceiptsPdf.ts")
   const inventoryDocsPdfRoutes = readFileSafe("src/routes/inventoryDocsPdf.ts")
   const consumptionDocsPdfRoutes = readFileSafe("src/routes/consumptionDocsPdf.ts")
+  const consumptionRoutes = readFileSafe("src/routes/consumption.ts")
   const productionDocsRoutes = readFileSafe("src/routes/productionDocs.ts")
   const productionDocPdfSupport = readFileSafe("src/lib/productionDocPdfSupport.ts")
   const minutesDocsRoutes = readFileSafe("src/routes/minutesDocs.ts")
@@ -308,6 +309,15 @@ function assertTypedSensitiveModules() {
       consumptionDocsPdfRoutes.includes('router.get("/:id/pdf"') &&
       consumptionDocsPdfRoutes.includes("type ConsumptionDocPdfData"),
     "Keep consumption PDF rendering type-checked because it reflects live stock issue documents and validation state."
+  )
+
+  addResult(
+    "Consumption route no longer bypasses TypeScript",
+    !consumptionRoutes.startsWith("// @ts-nocheck") &&
+      consumptionRoutes.includes('router.post("/api/v1/consumption-docs"') &&
+      consumptionRoutes.includes("normalizeConsumptionItems") &&
+      consumptionRoutes.includes("buildAggregateConsumptionPayload"),
+    "Keep consumption draft/update/aggregate flows type-checked because they generate stock issue documents directly from manual input and recipe-driven sales."
   )
 
   addResult(

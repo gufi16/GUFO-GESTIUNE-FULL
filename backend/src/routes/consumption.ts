@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { Prisma } from "@prisma/client"
+import { ConsumptionDocSource, ConsumptionDocStatus, Prisma } from "@prisma/client"
 import { Router } from "express"
 import { prisma } from "../lib/prisma"
 import { createConsumptionDraft, validateConsumptionDoc, cancelConsumptionDoc } from "../lib/consumptionDocs"
@@ -9,18 +8,27 @@ import { ensureDefaultWarehouseForLocation } from "../lib/warehouse"
 
 const router = Router()
 
-function toNumber(value: any) {
+type ConsumptionDraftItemInput = {
+  ingredientId?: unknown
+  finishedProductId?: unknown
+  qty?: unknown
+  unitCost?: unknown
+  totalCost?: unknown
+  note?: unknown
+}
+
+function toNumber(value: unknown) {
   const n = Number(value ?? 0)
   return Number.isFinite(n) ? n : 0
 }
 
-function consumptionStatusLabel(status?: string) {
+function consumptionStatusLabel(status?: ConsumptionDocStatus | null) {
   if (status === "VALIDATED") return "Validat"
   if (status === "CANCELLED") return "Anulat"
   return "Draft"
 }
 
-function consumptionSourceLabel(source?: string) {
+function consumptionSourceLabel(source?: ConsumptionDocSource | null) {
   if (source === "POS_RECIPE") return "POS / Retetar"
   if (source === "SALES_AGGREGATE") return "Generat din vanzari"
   return "Manual"
@@ -121,7 +129,7 @@ async function buildAggregateConsumptionPayload(
         gte: params.dateFrom,
         lte: params.dateTo,
       },
-      source: params.includeManual ? { in: ["POS_RECIPE", "MANUAL"] as any } : "POS_RECIPE",
+      source: params.includeManual ? { in: [ConsumptionDocSource.POS_RECIPE, ConsumptionDocSource.MANUAL] } : ConsumptionDocSource.POS_RECIPE,
       status: "VALIDATED",
       aggregateParentId: null,
     },
@@ -167,10 +175,29 @@ async function buildAggregateConsumptionPayload(
   }
 }
 
+function normalizeConsumptionItems(itemsRaw: unknown[]) {
+  return itemsRaw
+    .map((item) => {
+      const row = (item ?? {}) as ConsumptionDraftItemInput
+      return {
+        ingredientId: String(row.ingredientId || "").trim(),
+        finishedProductId: String(row.finishedProductId || "").trim() || null,
+        qty: toNumber(row.qty),
+        unitCost: toNumber(row.unitCost),
+        totalCost: toNumber(row.totalCost),
+        note: typeof row.note === "string" ? row.note.trim() : "",
+      }
+    })
+    .filter((item) => item.ingredientId && Number.isFinite(item.qty) && item.qty > 0)
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback
+}
+
 async function buildConsumptionDocDetail(tenantId: string, companyId: string, id: string) {
   const doc = await prisma.consumptionDoc.findFirst({
     where: {
-      id,
       ...buildCompanyWhere(tenantId, companyId, { id }),
     },
     include: {
@@ -383,8 +410,8 @@ async function buildConsumptionDocDetail(tenantId: string, companyId: string, id
 
 router.post("/api/v1/consumption-docs", requireAuth, async (req: AuthedRequest, res) => {
   try {
-    const tenantId = req.auth!.tenantId
-    const companyId = await requireRequestCompanyId(req)
+    const tenantId = String(req.auth!.tenantId)
+    const companyId = String(await requireRequestCompanyId(req))
     const locationId = String(req.body?.locationId || "").trim()
     const requestedWarehouseId = String(req.body?.warehouseId || "").trim()
     const note = typeof req.body?.note === "string" ? req.body.note.trim() : ""
@@ -398,13 +425,11 @@ router.post("/api/v1/consumption-docs", requireAuth, async (req: AuthedRequest, 
       return res.status(400).json({ ok: false, error: "Adauga cel putin un produs in bonul de consum." })
     }
 
-    const normalizedItems = itemsRaw
-      .map((item: any) => ({
-        ingredientId: String(item?.productId || item?.ingredientId || "").trim(),
-        qty: Number(item?.qty || 0),
-        note: typeof item?.note === "string" ? item.note.trim() : "",
-      }))
-      .filter((item: any) => item.ingredientId && Number.isFinite(item.qty) && item.qty > 0)
+    const normalizedItems = normalizeConsumptionItems(itemsRaw).map((item) => ({
+      ingredientId: item.ingredientId,
+      qty: item.qty,
+      note: item.note,
+    }))
 
     if (!normalizedItems.length) {
       return res.status(400).json({ ok: false, error: "Cantitatile din bonul de consum sunt invalide." })
@@ -416,9 +441,9 @@ router.post("/api/v1/consumption-docs", requireAuth, async (req: AuthedRequest, 
     }
     const warehouse = await ensureWarehouse(tenantId, companyId, locationId, requestedWarehouseId)
 
-    const productIds = normalizedItems.map((item: any) => item.ingredientId)
+    const productIds = normalizedItems.map((item) => item.ingredientId)
     const productMap = await loadProducts(tenantId, companyId, productIds)
-    const missingProductId = normalizedItems.find((item: any) => !productMap.has(item.ingredientId))?.ingredientId
+    const missingProductId = normalizedItems.find((item) => !productMap.has(item.ingredientId))?.ingredientId
     if (missingProductId) {
       return res.status(400).json({ ok: false, error: "Unul dintre produsele selectate nu mai exista in nomenclator." })
     }
@@ -450,19 +475,19 @@ router.post("/api/v1/consumption-docs", requireAuth, async (req: AuthedRequest, 
         warehouseName: warehouse?.name || null,
       },
     })
-  } catch (error: any) {
+  } catch (error) {
     console.error("CONSUMPTION DOC CREATE ERROR:", error)
     return res.status(500).json({
       ok: false,
-      error: error?.message || "Nu am putut salva bonul de consum.",
+      error: getErrorMessage(error, "Nu am putut salva bonul de consum."),
     })
   }
 })
 
 router.put("/api/v1/consumption-docs/:id", requireAuth, async (req: AuthedRequest, res) => {
   try {
-    const tenantId = req.auth!.tenantId
-    const companyId = await requireRequestCompanyId(req)
+    const tenantId = String(req.auth!.tenantId)
+    const companyId = String(await requireRequestCompanyId(req))
     const id = String(req.params.id || "").trim()
     const locationId = String(req.body?.locationId || "").trim()
     const requestedWarehouseId = String(req.body?.warehouseId || "").trim()
@@ -472,7 +497,6 @@ router.put("/api/v1/consumption-docs/:id", requireAuth, async (req: AuthedReques
 
     const existingDoc = await prisma.consumptionDoc.findFirst({
       where: {
-        id,
         ...buildCompanyWhere(tenantId, companyId, { id }),
       },
       select: {
@@ -498,13 +522,11 @@ router.put("/api/v1/consumption-docs/:id", requireAuth, async (req: AuthedReques
       return res.status(400).json({ ok: false, error: "Adauga cel putin un produs in bonul de consum." })
     }
 
-    const normalizedItems = itemsRaw
-      .map((item: any) => ({
-        ingredientId: String(item?.productId || item?.ingredientId || "").trim(),
-        qty: Number(item?.qty || 0),
-        note: typeof item?.note === "string" ? item.note.trim() : "",
-      }))
-      .filter((item: any) => item.ingredientId && Number.isFinite(item.qty) && item.qty > 0)
+    const normalizedItems = normalizeConsumptionItems(itemsRaw).map((item) => ({
+      ingredientId: item.ingredientId,
+      qty: item.qty,
+      note: item.note,
+    }))
 
     if (!normalizedItems.length) {
       return res.status(400).json({ ok: false, error: "Cantitatile din bonul de consum sunt invalide." })
@@ -516,9 +538,9 @@ router.put("/api/v1/consumption-docs/:id", requireAuth, async (req: AuthedReques
     }
     const warehouse = await ensureWarehouse(tenantId, companyId, locationId, requestedWarehouseId)
 
-    const productIds = normalizedItems.map((item: any) => item.ingredientId)
+    const productIds = normalizedItems.map((item) => item.ingredientId)
     const productMap = await loadProducts(tenantId, companyId, productIds)
-    const missingProductId = normalizedItems.find((item: any) => !productMap.has(item.ingredientId))?.ingredientId
+    const missingProductId = normalizedItems.find((item) => !productMap.has(item.ingredientId))?.ingredientId
     if (missingProductId) {
       return res.status(400).json({ ok: false, error: "Unul dintre produsele selectate nu mai exista in nomenclator." })
     }
@@ -551,19 +573,19 @@ router.put("/api/v1/consumption-docs/:id", requireAuth, async (req: AuthedReques
 
     const item = await buildConsumptionDocDetail(tenantId, companyId, id)
     return res.json({ ok: true, item })
-  } catch (error: any) {
+  } catch (error) {
     console.error("CONSUMPTION DOC UPDATE ERROR:", error)
     return res.status(500).json({
       ok: false,
-      error: error?.message || "Nu am putut actualiza bonul de consum.",
+      error: getErrorMessage(error, "Nu am putut actualiza bonul de consum."),
     })
   }
 })
 
 router.post("/api/v1/consumption-docs/generate-from-sales", requireAuth, async (req: AuthedRequest, res) => {
   try {
-    const tenantId = req.auth!.tenantId
-    const companyId = await requireRequestCompanyId(req)
+    const tenantId = String(req.auth!.tenantId)
+    const companyId = String(await requireRequestCompanyId(req))
     const locationId = String(req.body?.locationId || "").trim()
     const requestedWarehouseId = String(req.body?.warehouseId || "").trim()
     const note = typeof req.body?.note === "string" ? req.body.note.trim() : ""
@@ -673,19 +695,19 @@ router.post("/api/v1/consumption-docs/generate-from-sales", requireAuth, async (
         sourceDocsCount: generated.sourceDocsCount,
       },
     })
-  } catch (error: any) {
+  } catch (error) {
     console.error("CONSUMPTION DOC GENERATE FROM SALES ERROR:", error)
     return res.status(400).json({
       ok: false,
-      error: error?.message || "Nu am putut genera bonul de consum din vanzari.",
+      error: getErrorMessage(error, "Nu am putut genera bonul de consum din vanzari."),
     })
   }
 })
 
 router.post("/api/v1/consumption-docs/:id/validate", requireAuth, async (req: AuthedRequest, res) => {
   try {
-    const tenantId = req.auth!.tenantId
-    const companyId = await requireRequestCompanyId(req)
+    const tenantId = String(req.auth!.tenantId)
+    const companyId = String(await requireRequestCompanyId(req))
     const id = String(req.params.id || "").trim()
 
     await prisma.$transaction(async (tx) => {
@@ -700,24 +722,23 @@ router.post("/api/v1/consumption-docs/:id/validate", requireAuth, async (req: Au
 
     const item = await buildConsumptionDocDetail(tenantId, companyId, id)
     return res.json({ ok: true, item })
-  } catch (error: any) {
+  } catch (error) {
     console.error("CONSUMPTION DOC VALIDATE ERROR:", error)
     return res.status(400).json({
       ok: false,
-      error: error?.message || "Nu am putut valida bonul de consum.",
+      error: getErrorMessage(error, "Nu am putut valida bonul de consum."),
     })
   }
 })
 
 router.post("/api/v1/consumption-docs/:id/cancel", requireAuth, async (req: AuthedRequest, res) => {
   try {
-    const tenantId = req.auth!.tenantId
-    const companyId = await requireRequestCompanyId(req)
+    const tenantId = String(req.auth!.tenantId)
+    const companyId = String(await requireRequestCompanyId(req))
     const id = String(req.params.id || "").trim()
 
     const existingDoc = await prisma.consumptionDoc.findFirst({
       where: {
-        id,
         ...buildCompanyWhere(tenantId, companyId, { id }),
       },
       select: {
@@ -765,19 +786,19 @@ router.post("/api/v1/consumption-docs/:id/cancel", requireAuth, async (req: Auth
 
     const item = await buildConsumptionDocDetail(tenantId, companyId, id)
     return res.json({ ok: true, item })
-  } catch (error: any) {
+  } catch (error) {
     console.error("CONSUMPTION DOC CANCEL ERROR:", error)
     return res.status(400).json({
       ok: false,
-      error: error?.message || "Nu am putut anula bonul de consum.",
+      error: getErrorMessage(error, "Nu am putut anula bonul de consum."),
     })
   }
 })
 
 router.get("/api/v1/consumption-docs", requireAuth, async (req: AuthedRequest, res) => {
   try {
-    const tenantId = req.auth!.tenantId
-    const companyId = await requireRequestCompanyId(req)
+    const tenantId = String(req.auth!.tenantId)
+    const companyId = String(await requireRequestCompanyId(req))
     const dateFrom = req.query.dateFrom ? new Date(String(req.query.dateFrom)) : null
     const dateTo = req.query.dateTo ? new Date(String(req.query.dateTo)) : null
     const locationId = req.query.locationId ? String(req.query.locationId) : null
@@ -788,7 +809,9 @@ router.get("/api/v1/consumption-docs", requireAuth, async (req: AuthedRequest, r
       where: {
         ...buildCompanyWhere(tenantId, companyId),
         ...(locationId ? { locationId } : {}),
-        ...(status ? { status: status as any } : {}),
+        ...(status && Object.values(ConsumptionDocStatus).includes(status as ConsumptionDocStatus)
+          ? { status: status as ConsumptionDocStatus }
+          : {}),
         ...(dateFrom || dateTo
           ? {
               docDate: {
@@ -911,8 +934,8 @@ router.get("/api/v1/consumption-docs", requireAuth, async (req: AuthedRequest, r
 
 router.get("/api/v1/consumption-docs/:id", requireAuth, async (req: AuthedRequest, res) => {
   try {
-    const tenantId = req.auth!.tenantId
-    const companyId = await requireRequestCompanyId(req)
+    const tenantId = String(req.auth!.tenantId)
+    const companyId = String(await requireRequestCompanyId(req))
     const id = String(req.params.id)
     const item = await buildConsumptionDocDetail(tenantId, companyId, id)
 
