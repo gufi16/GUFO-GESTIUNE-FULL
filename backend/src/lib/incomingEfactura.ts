@@ -1,8 +1,41 @@
-// @ts-nocheck
 import AdmZip from "adm-zip"
 import { XMLParser } from "fast-xml-parser"
 
-type AnyObj = Record<string, any>
+type AnyObj = Record<string, unknown>
+type MessagePayload = Record<string, unknown> | unknown[] | null
+type ParsedInvoiceLine = {
+  lineIndex: number
+  productName: string
+  productCode: string
+  externalCode: string
+  barcode: string
+  uomCode: string
+  uomRawCode: string
+  description: string
+  qty: number
+  unitPrice: number
+  vatRate: number
+  lineNet: number
+  lineVat: number
+  lineGross: number
+}
+type ParsedInvoiceSummary = {
+  invoiceNo?: string
+  supplierName?: string
+  supplierCif?: string
+  totalGross?: number
+  lines?: ParsedInvoiceLine[]
+}
+type ZipXmlEntry = {
+  isDirectory: boolean
+  entryName: string
+  getData(): Buffer
+}
+type ScoredXmlEntry = {
+  item: ZipXmlEntry
+  xmlText: string
+  score: number
+}
 
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
@@ -32,9 +65,10 @@ export function parseAnafPayload(rawText: string) {
   }
 }
 
-export function readStringField(source: any, keys: string[]) {
+export function readStringField(source: unknown, keys: string[]) {
+  const record = source && typeof source === "object" ? (source as Record<string, unknown>) : null
   for (const key of keys) {
-    const value = source?.[key]
+    const value = record?.[key]
     if (value !== undefined && value !== null && String(value).trim()) {
       return String(value).trim()
     }
@@ -42,30 +76,31 @@ export function readStringField(source: any, keys: string[]) {
   return ""
 }
 
-export function collectMessageItems(payload: any) {
+export function collectMessageItems(payload: MessagePayload) {
   if (Array.isArray(payload)) return payload
   const keys = ["mesaje", "messages", "lista", "items", "facturi", "messageList"]
   for (const key of keys) {
-    if (Array.isArray(payload?.[key])) return payload[key]
+    const value = payload && typeof payload === "object" ? (payload as Record<string, unknown>)[key] : null
+    if (Array.isArray(value)) return value
   }
   return []
 }
 
-export function extractUploadIndex(payload: any, rawText: string) {
+export function extractUploadIndex(payload: unknown, rawText: string) {
   const direct = readStringField(payload, ["index_incarcare", "indexIncarcare", "uploadIndex", "id_incarcare"])
   if (direct) return direct
   const match = rawText.match(/(?:index_incarcare|id_incarcare)["'=:\s>]+([0-9]+)/i)
   return match?.[1] || ""
 }
 
-export function extractDownloadId(payload: any, rawText: string) {
+export function extractDownloadId(payload: unknown, rawText: string) {
   const direct = readStringField(payload, ["id_descarcare", "idDescarcare", "downloadId", "id"])
   if (direct) return direct
   const match = rawText.match(/(?:id_descarcare|downloadId|id)["'=:\s>]+([0-9]+)/i)
   return match?.[1] || ""
 }
 
-export function summarizeAnafResponse(payload: any, rawText: string) {
+export function summarizeAnafResponse(payload: unknown, rawText: string) {
   return (
     readStringField(payload, ["message", "mesaj", "details", "detalii", "title"]) ||
     rawText.slice(0, 1000)
@@ -77,7 +112,7 @@ function asArray<T>(value: T | T[] | null | undefined): T[] {
   return value === undefined || value === null ? [] : [value]
 }
 
-function walkObject(value: any, visitor: (node: any) => boolean): any {
+function walkObject(value: unknown, visitor: (node: unknown) => boolean): unknown {
   if (value === undefined || value === null) return null
   if (visitor(value)) return value
   if (Array.isArray(value)) {
@@ -96,55 +131,59 @@ function walkObject(value: any, visitor: (node: any) => boolean): any {
   return null
 }
 
-function textValue(value: any): string {
+function textValue(value: unknown): string {
   if (value === undefined || value === null) return ""
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
     return String(value).trim()
   }
   if (typeof value === "object") {
-    if (typeof value["#text"] === "string" || typeof value["#text"] === "number" || typeof value["#text"] === "boolean") {
-      return String(value["#text"]).trim()
+    const record = value as Record<string, unknown>
+    if (typeof record["#text"] === "string" || typeof record["#text"] === "number" || typeof record["#text"] === "boolean") {
+      return String(record["#text"]).trim()
     }
-    if (typeof value.text === "string" || typeof value.text === "number" || typeof value.text === "boolean") {
-      return String(value.text).trim()
+    if (typeof record.text === "string" || typeof record.text === "number" || typeof record.text === "boolean") {
+      return String(record.text).trim()
     }
   }
   return ""
 }
 
-function numberValue(value: any): number {
+function numberValue(value: unknown): number {
   const normalized = textValue(value).replace(",", ".")
   const parsed = Number(normalized)
   return Number.isFinite(parsed) ? parsed : 0
 }
 
-function attrValue(value: any, key: string): string {
+function attrValue(value: unknown, key: string): string {
   if (!value || typeof value !== "object") return ""
-  return textValue(value[key] ?? value[`@_${key}`])
+  const record = value as Record<string, unknown>
+  return textValue(record[key] ?? record[`@_${key}`])
 }
 
-function parseAddress(address: any) {
+function parseAddress(address: unknown) {
   if (!address || typeof address !== "object") return null
+  const record = address as Record<string, unknown>
   return {
-    street: textValue(address.StreetName),
-    additionalStreet: textValue(address.AdditionalStreetName),
-    city: textValue(address.CityName),
-    postalCode: textValue(address.PostalZone),
-    region: textValue(address.CountrySubentity),
-    country: textValue(address.Country?.IdentificationCode || address.Country?.Name),
+    street: textValue(record.StreetName),
+    additionalStreet: textValue(record.AdditionalStreetName),
+    city: textValue(record.CityName),
+    postalCode: textValue(record.PostalZone),
+    region: textValue(record.CountrySubentity),
+    country: textValue((record.Country as Record<string, unknown> | undefined)?.IdentificationCode || (record.Country as Record<string, unknown> | undefined)?.Name),
   }
 }
 
-function parseContact(contact: any) {
+function parseContact(contact: unknown) {
   if (!contact || typeof contact !== "object") return null
+  const record = contact as Record<string, unknown>
   return {
-    name: textValue(contact.Name),
-    phone: textValue(contact.Telephone),
-    email: textValue(contact.ElectronicMail),
+    name: textValue(record.Name),
+    phone: textValue(record.Telephone),
+    email: textValue(record.ElectronicMail),
   }
 }
 
-function firstDefined(...values: any[]) {
+function firstDefined(...values: unknown[]) {
   for (const value of values) {
     if (value === undefined || value === null) continue
     if (typeof value === "object") {
@@ -156,26 +195,23 @@ function firstDefined(...values: any[]) {
   return null
 }
 
-function findInvoiceNode(root: any) {
+function findInvoiceNode(root: unknown) {
+  const record = root && typeof root === "object" ? (root as Record<string, unknown>) : null
   return (
-    root?.Invoice ||
-    root?.CreditNote ||
-    root?.["ns2:Invoice"] ||
-    root?.["ns2:CreditNote"] ||
-    walkObject(root, (node) => {
+    record?.Invoice ||
+    record?.CreditNote ||
+    record?.["ns2:Invoice"] ||
+    record?.["ns2:CreditNote"] ||
+    walkObject(record, (node) => {
       if (!node || typeof node !== "object" || Array.isArray(node)) return false
-      return Boolean(
-        node.InvoiceLine ||
-        node.CreditNoteLine ||
-        node.AccountingSupplierParty ||
-        node.LegalMonetaryTotal
-      )
+      const nodeRecord = node as Record<string, unknown>
+      return Boolean(nodeRecord.InvoiceLine || nodeRecord.CreditNoteLine || nodeRecord.AccountingSupplierParty || nodeRecord.LegalMonetaryTotal)
     }) ||
     root
   )
 }
 
-function scoreParsedInvoice(parsed: any) {
+function scoreParsedInvoice(parsed: ParsedInvoiceSummary | null) {
   if (!parsed) return -1
   let score = 0
   if (String(parsed.invoiceNo || "").trim()) score += 10
@@ -224,9 +260,9 @@ export function extractXmlFromAnafDownload(buffer: Buffer) {
     const zip = new AdmZip(buffer)
     const xmlEntries = zip
       .getEntries()
-      .filter((item) => !item.isDirectory && item.entryName.toLowerCase().endsWith(".xml"))
+      .filter((item: ZipXmlEntry) => !item.isDirectory && item.entryName.toLowerCase().endsWith(".xml"))
 
-    const scoredEntries = xmlEntries.map((item) => {
+    const scoredEntries = xmlEntries.map((item: ZipXmlEntry): ScoredXmlEntry => {
       try {
         const xmlText = item.getData().toString("utf8")
         const parsed = parseIncomingEInvoiceXml(xmlText)
@@ -250,7 +286,7 @@ export function extractXmlFromAnafDownload(buffer: Buffer) {
       }
     })
 
-    const bestEntry = scoredEntries.sort((a, b) => b.score - a.score)[0]
+    const bestEntry = scoredEntries.sort((a: ScoredXmlEntry, b: ScoredXmlEntry) => b.score - a.score)[0]
 
     if (bestEntry?.xmlText) {
       return { xmlText: bestEntry.xmlText, rawDownloadText: rawText, rawDownloadPayload: payload }
@@ -262,18 +298,20 @@ export function extractXmlFromAnafDownload(buffer: Buffer) {
 
 export function parseIncomingEInvoiceXml(xmlText: string) {
   const parsed = xmlParser.parse(xmlText) as AnyObj
-  const invoice = findInvoiceNode(parsed)
+  const invoice = findInvoiceNode(parsed) as AnyObj | null
   if (!invoice || typeof invoice !== "object") {
     throw new Error("XML-ul facturii nu a putut fi interpretat.")
   }
 
+  const accountingSupplierParty = (invoice.AccountingSupplierParty ?? {}) as AnyObj
+  const accountingCustomerParty = (invoice.AccountingCustomerParty ?? {}) as AnyObj
   const supplierParty = firstDefined(
-    invoice.AccountingSupplierParty?.Party,
-    invoice.AccountingSupplierParty
+    (accountingSupplierParty.Party as AnyObj | undefined),
+    accountingSupplierParty
   ) as AnyObj | null
   const customerParty = firstDefined(
-    invoice.AccountingCustomerParty?.Party,
-    invoice.AccountingCustomerParty
+    (accountingCustomerParty.Party as AnyObj | undefined),
+    accountingCustomerParty
   ) as AnyObj | null
 
   const supplierLegal = supplierParty?.PartyLegalEntity as AnyObj | undefined
@@ -287,42 +325,55 @@ export function parseIncomingEInvoiceXml(xmlText: string) {
   const paymentMeans = firstDefined(invoice.PaymentMeans) as AnyObj | null
   const paymentAccount = paymentMeans?.PayeeFinancialAccount as AnyObj | undefined
   const taxTotalNode = firstDefined(invoice.TaxTotal) as AnyObj | null
-  const taxSubtotals = asArray(taxTotalNode?.TaxSubtotal).map((subtotal: AnyObj) => ({
-    taxableAmount: numberValue(subtotal?.TaxableAmount),
-    taxAmount: numberValue(subtotal?.TaxAmount),
-    categoryId: textValue(subtotal?.TaxCategory?.ID),
-    vatRate: numberValue(subtotal?.TaxCategory?.Percent),
-    taxCode: textValue(subtotal?.TaxCategory?.TaxScheme?.ID),
-    exemptionReason: textValue(
-      firstDefined(
-        subtotal?.TaxCategory?.TaxExemptionReason,
-        subtotal?.TaxCategory?.TaxExemptionReasonCode
-      )
-    ),
-  }))
+  const taxSubtotals = asArray(taxTotalNode?.TaxSubtotal).map((subtotal) => {
+    const subtotalNode = (subtotal ?? {}) as AnyObj
+    const taxCategory = (subtotalNode.TaxCategory ?? {}) as AnyObj
+    const taxScheme = (taxCategory.TaxScheme ?? {}) as AnyObj
+    return {
+      taxableAmount: numberValue(subtotalNode.TaxableAmount),
+      taxAmount: numberValue(subtotalNode.TaxAmount),
+      categoryId: textValue(taxCategory.ID),
+      vatRate: numberValue(taxCategory.Percent),
+      taxCode: textValue(taxScheme.ID),
+      exemptionReason: textValue(
+        firstDefined(
+          taxCategory.TaxExemptionReason,
+          taxCategory.TaxExemptionReasonCode
+        )
+      ),
+    }
+  })
 
   const lineNodes = asArray(firstDefined(invoice.InvoiceLine, invoice.CreditNoteLine))
-  const lines = lineNodes.map((line: AnyObj, index) => {
-    const item = line?.Item || {}
-    const price = line?.Price || {}
-    const classifiedTax = item?.ClassifiedTaxCategory || {}
-    const invoicedQuantity = firstDefined(line?.InvoicedQuantity, line?.CreditedQuantity)
+  const lines = lineNodes.map((line, index): ParsedInvoiceLine => {
+    const lineNode = (line ?? {}) as AnyObj
+    const item = (lineNode.Item ?? {}) as AnyObj
+    const price = (lineNode.Price ?? {}) as AnyObj
+    const classifiedTax = (item.ClassifiedTaxCategory ?? {}) as AnyObj
+    const lineTaxTotal = (lineNode.TaxTotal ?? {}) as AnyObj
+    const lineTaxSubtotal = (lineTaxTotal.TaxSubtotal ?? {}) as AnyObj
+    const lineTaxCategory = (lineTaxSubtotal.TaxCategory ?? {}) as AnyObj
+    const invoicedQuantity = firstDefined(lineNode.InvoicedQuantity, lineNode.CreditedQuantity)
     const qty = numberValue(invoicedQuantity)
-    const unitPrice = numberValue(firstDefined(price?.PriceAmount, line?.ItemPriceExtension?.Amount))
-    const lineNet = numberValue(line?.LineExtensionAmount)
-    const vatRate = numberValue(firstDefined(classifiedTax?.Percent, line?.TaxTotal?.TaxSubtotal?.TaxCategory?.Percent))
+    const unitPrice = numberValue(firstDefined(price.PriceAmount, (lineNode.ItemPriceExtension as AnyObj | undefined)?.Amount))
+    const lineNet = numberValue(lineNode.LineExtensionAmount)
+    const vatRate = numberValue(firstDefined(classifiedTax.Percent, lineTaxCategory.Percent))
     const lineVat = lineNet * vatRate / 100
     const lineGross = lineNet + lineVat
 
     return {
       lineIndex: index + 1,
-      productName: textValue(firstDefined(item?.Name, item?.Description)),
-      productCode: textValue(firstDefined(item?.StandardItemIdentification?.ID, item?.SellersItemIdentification?.ID)),
-      externalCode: textValue(item?.SellersItemIdentification?.ID),
-      barcode: textValue(item?.StandardItemIdentification?.ID),
-      uomCode: textValue(invoicedQuantity?.unitCode || invoicedQuantity?.["@_unitCode"] || invoicedQuantity?.["unitCode"]),
+      productName: textValue(firstDefined(item.Name, item.Description)),
+      productCode: textValue(firstDefined((item.StandardItemIdentification as AnyObj | undefined)?.ID, (item.SellersItemIdentification as AnyObj | undefined)?.ID)),
+      externalCode: textValue((item.SellersItemIdentification as AnyObj | undefined)?.ID),
+      barcode: textValue((item.StandardItemIdentification as AnyObj | undefined)?.ID),
+      uomCode: textValue(
+        invoicedQuantity && typeof invoicedQuantity === "object"
+          ? (invoicedQuantity as AnyObj).unitCode || (invoicedQuantity as AnyObj)["@_unitCode"] || (invoicedQuantity as AnyObj)["unitCode"]
+          : undefined
+      ),
       uomRawCode: attrValue(invoicedQuantity, "unitCode"),
-      description: textValue(firstDefined(item?.Description, item?.Name)),
+      description: textValue(firstDefined(item.Description, item.Name)),
       qty,
       unitPrice,
       vatRate,
@@ -332,7 +383,13 @@ export function parseIncomingEInvoiceXml(xmlText: string) {
     }
   })
 
-  const legalTotals = invoice.LegalMonetaryTotal || {}
+  const legalTotals = (invoice.LegalMonetaryTotal ?? {}) as AnyObj
+  const payableAmountNode = (legalTotals.PayableAmount ?? {}) as AnyObj
+  const supplierPartyName = (supplierParty?.PartyName ?? {}) as AnyObj
+  const customerPartyName = (customerParty?.PartyName ?? {}) as AnyObj
+  const paymentMeansCode = (paymentMeans?.PaymentMeansCode ?? {}) as AnyObj
+  const paymentTerms = (invoice.PaymentTerms ?? {}) as AnyObj
+  const financialInstitutionBranch = (paymentAccount?.FinancialInstitutionBranch ?? {}) as AnyObj
   const totalNet = numberValue(firstDefined(legalTotals.LineExtensionAmount, legalTotals.TaxExclusiveAmount))
   const totalGross = numberValue(firstDefined(legalTotals.PayableAmount, legalTotals.TaxInclusiveAmount))
   const totalVat = numberValue(firstDefined(taxTotalNode?.TaxAmount)) || totalGross - totalNet
@@ -342,7 +399,7 @@ export function parseIncomingEInvoiceXml(xmlText: string) {
     invoiceDate: textValue(firstDefined(invoice.IssueDate, invoice.TaxPointDate)),
     dueDate: textValue(firstDefined(invoice.DueDate)),
     invoiceTypeCode: textValue(invoice.InvoiceTypeCode),
-    currency: textValue(firstDefined(invoice.DocumentCurrencyCode, legalTotals.PayableAmount?.currencyID)) || "RON",
+    currency: textValue(firstDefined(invoice.DocumentCurrencyCode, payableAmountNode.currencyID)) || "RON",
     totalNet,
     totalVat,
     totalGross,
@@ -351,22 +408,22 @@ export function parseIncomingEInvoiceXml(xmlText: string) {
     taxInclusiveAmount: numberValue(legalTotals.TaxInclusiveAmount),
     prepaidAmount: numberValue(legalTotals.PrepaidAmount),
     roundingAmount: numberValue(legalTotals.PayableRoundingAmount),
-    supplierName: textValue(firstDefined(supplierLegal?.RegistrationName, supplierParty?.PartyName?.Name)),
+    supplierName: textValue(firstDefined(supplierLegal?.RegistrationName, supplierPartyName.Name)),
     supplierCif: normalizeCompanyCui(textValue(firstDefined(supplierTax?.CompanyID, supplierLegal?.CompanyID))),
     supplierIdentifier: textValue(firstDefined(supplierParty?.EndpointID, supplierTax?.CompanyID, supplierLegal?.CompanyID)),
     supplierAddress,
     supplierContact,
-    customerName: textValue(firstDefined(customerLegal?.RegistrationName, customerParty?.PartyName?.Name)),
+    customerName: textValue(firstDefined(customerLegal?.RegistrationName, customerPartyName.Name)),
     customerCif: normalizeCompanyCui(textValue(firstDefined(customerTax?.CompanyID, customerLegal?.CompanyID))),
     customerIdentifier: textValue(firstDefined(customerParty?.EndpointID, customerTax?.CompanyID, customerLegal?.CompanyID)),
     customerAddress,
     customerContact,
     paymentMeansCode: textValue(paymentMeans?.PaymentMeansCode),
-    paymentMeansName: attrValue(paymentMeans?.PaymentMeansCode, "name"),
+    paymentMeansName: attrValue(paymentMeansCode, "name"),
     paymentId: textValue(paymentMeans?.PaymentID),
     iban: textValue(paymentAccount?.ID),
-    bankCode: textValue(firstDefined(paymentAccount?.FinancialInstitutionBranch?.ID, paymentAccount?.FinancialInstitutionBranch?.Name)),
-    paymentNote: textValue(firstDefined(invoice.PaymentTerms?.Note, invoice.Note)),
+    bankCode: textValue(firstDefined(financialInstitutionBranch.ID, financialInstitutionBranch.Name)),
+    paymentNote: textValue(firstDefined(paymentTerms.Note, invoice.Note)),
     taxBreakdown: taxSubtotals,
     lines,
   }

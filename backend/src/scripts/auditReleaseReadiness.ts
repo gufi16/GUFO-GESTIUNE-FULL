@@ -141,6 +141,7 @@ function assertTypedSensitiveModules() {
   const warehouseLib = readFileSafe("src/lib/warehouse.ts")
   const companyResolverLib = readFileSafe("src/lib/companyResolver.ts")
   const companyAnafCredentialsLib = readFileSafe("src/lib/companyAnafCredentials.ts")
+  const incomingEfacturaLib = readFileSafe("src/lib/incomingEfactura.ts")
   const professionalPdfLib = readFileSafe("src/lib/professionalPdf.ts")
   const purchaseReceiptsPdfRoutes = readFileSafe("src/routes/purchaseReceiptsPdf.ts")
   const inventoryDocsPdfRoutes = readFileSafe("src/routes/inventoryDocsPdf.ts")
@@ -288,6 +289,15 @@ function assertTypedSensitiveModules() {
       companyAnafCredentialsLib.includes("export function mapAnafCredentialSummary") &&
       companyAnafCredentialsLib.includes("export async function resolveCompanyWithAnafCredential"),
     "Keep ANAF credential hydration and legacy-company sync helpers type-checked because they drive OAuth/certificate data used by e-Factura and e-Transport integrations."
+  )
+
+  addResult(
+    "Incoming e-Factura parsing helpers no longer bypass TypeScript",
+    !incomingEfacturaLib.startsWith("// @ts-nocheck") &&
+      incomingEfacturaLib.includes("type ParsedInvoiceLine") &&
+      incomingEfacturaLib.includes("export function extractXmlFromAnafDownload") &&
+      incomingEfacturaLib.includes("export function parseIncomingEInvoiceXml"),
+    "Keep incoming e-Factura download/XML parsing helpers type-checked because they interpret ANAF payloads and invoice XML before import/linking."
   )
 
   addResult(
