@@ -304,6 +304,7 @@ function assertTypedSensitiveModules() {
       companyRouteSupportLib.includes("export function createEfacturaAgentPairingCode") &&
       companyRouteSupportLib.includes("export function getRequestedCredentialId") &&
       companyRouteSupportLib.includes("export function mapCompanyResponse") &&
+      companyRouteSupportLib.includes("export function normalizeCompanyCuiLookupInput") &&
       companyRouteSupportLib.includes("export function extractAnafCompanyPayload") &&
       companyRouteSupportLib.includes("export async function requireExplicitAnafCompanyContext") &&
       companyRouteSupportLib.includes("export async function getEffectiveAnafOauthConfig") &&
@@ -312,10 +313,10 @@ function assertTypedSensitiveModules() {
       companyRouteSupportLib.includes("export async function updateRequestCompany") &&
       companyRouteSupportLib.includes("export type AnafOauthStatePayload") &&
       companyRouteSupportLib.includes("export function parseAnafOauthStateOrThrow") &&
+      companyRouteSupportLib.includes("export function parseValidatedEfacturaAgentDownloadTicket") &&
+      companyRouteSupportLib.includes("export function parseValidatedEfacturaAgentPairingCode") &&
       companyRouteSupportLib.includes("export function getCompanyRouteErrorMessage") &&
       companyRouteSupportLib.includes("export async function persistAnafOauthError") &&
-      companyRouteSupportLib.includes("export function parseEfacturaAgentDownloadTicketOrThrow") &&
-      companyRouteSupportLib.includes("export function parseEfacturaAgentPairingCodeOrThrow") &&
       companyRouteSupportLib.includes("export async function resolveEfacturaAgentPairingDetails"),
     "Keep e-Factura agent download, pairing, and request parsing helpers in a typed module while the large company route is being reduced incrementally."
   )

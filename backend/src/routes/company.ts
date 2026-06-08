@@ -55,10 +55,11 @@ import {
   isValidEfacturaAgentDownloadTicketPayload,
   isValidEfacturaAgentPairingPayload,
   mapCompanyResponse,
+  normalizeCompanyCuiLookupInput,
   normalizeOptionalText,
   parseAnafOauthStateOrThrow,
-  parseEfacturaAgentDownloadTicketOrThrow,
-  parseEfacturaAgentPairingCodeOrThrow,
+  parseValidatedEfacturaAgentDownloadTicket,
+  parseValidatedEfacturaAgentPairingCode,
   persistAnafOauthError,
   requireExplicitAnafCompanyContext,
   requireExplicitAnafCompanyContextForAuth,
@@ -266,116 +267,83 @@ router.get("/api/v1/company/efactura/oauth/callback", handleAnafOauthCallback)
 router.get("/api/v1/public/efactura/agent-download", async (req, res) => {
   const ticket = String(req.query.ticket || "").trim()
 
-  if (!ticket) {
-    return res.status(401).json({
-      ok: false,
-      error: "Lipseste ticket-ul de descarcare.",
-    })
-  }
-
-  let payload: EfacturaAgentDownloadTicketPayload | null = null
   try {
-    payload = parseEfacturaAgentDownloadTicketOrThrow(ticket, JWT_SECRET)
-  } catch {
-    return res.status(401).json({
-      ok: false,
-      error: "Ticket-ul de descarcare este invalid sau expirat.",
-    })
-  }
+    const payload = parseValidatedEfacturaAgentDownloadTicket(ticket, JWT_SECRET)
+    const moduleCheck = await requireTenantModule(payload.tenantId, "efactura")
+    if (!moduleCheck.enabled) {
+      return res.status(403).json({
+        ok: false,
+        error: "Modulul e-Factura nu este activ pe licenta acestui client.",
+      })
+    }
 
-  if (!isValidEfacturaAgentDownloadTicketPayload(payload)) {
-    return res.status(401).json({
-      ok: false,
-      error: "Ticket-ul de descarcare este invalid.",
-    })
-  }
+    const source = getEfacturaAgentDownloadSource(efacturaAgentDownloadDirs)
 
-  const moduleCheck = await requireTenantModule(payload.tenantId, "efactura")
-  if (!moduleCheck.enabled) {
-    return res.status(403).json({
-      ok: false,
-      error: "Modulul e-Factura nu este activ pe licenta acestui client.",
-    })
-  }
+    if (!source.available) {
+      return res.status(404).json({
+        ok: false,
+        error: source.error,
+      })
+    }
 
-  const source = getEfacturaAgentDownloadSource(efacturaAgentDownloadDirs)
+    if (source.type === "external" && source.url) {
+      return res.redirect(source.url)
+    }
 
-  if (!source.available) {
+    if (source.type === "local" && source.fullPath) {
+      res.setHeader("Content-Type", "application/octet-stream")
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate")
+      res.setHeader("Pragma", "no-cache")
+      res.setHeader("Expires", "0")
+      res.setHeader("Content-Disposition", `attachment; filename="${getEfacturaAgentDownloadFileName(source)}"`)
+      return res.sendFile(source.fullPath)
+    }
+
     return res.status(404).json({
       ok: false,
-      error: source.error,
+      error: "Installerul Gufo e-Factura nu este disponibil.",
+    })
+  } catch (error: unknown) {
+    return res.status(401).json({
+      ok: false,
+      error: getCompanyRouteErrorMessage(error, "Ticket-ul de descarcare este invalid."),
     })
   }
-
-  if (source.type === "external" && source.url) {
-    return res.redirect(source.url)
-  }
-
-  if (source.type === "local" && source.fullPath) {
-    res.setHeader("Content-Type", "application/octet-stream")
-    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate")
-    res.setHeader("Pragma", "no-cache")
-    res.setHeader("Expires", "0")
-    res.setHeader("Content-Disposition", `attachment; filename="${getEfacturaAgentDownloadFileName(source)}"`)
-    return res.sendFile(source.fullPath)
-  }
-
-  return res.status(404).json({
-    ok: false,
-    error: "Installerul Gufo e-Factura nu este disponibil.",
-  })
 })
 
 router.get("/api/v1/public/efactura/agent-pairing/resolve", async (req, res) => {
   const code = String(req.query.code || "").trim()
 
-  if (!code) {
-    return res.status(400).json({
-      ok: false,
-      error: "Lipseste codul de pairing.",
-    })
-  }
-
-  let payload: EfacturaAgentPairingPayload | null = null
   try {
-    payload = parseEfacturaAgentPairingCodeOrThrow(code, JWT_SECRET)
-  } catch {
+    const { tenantId, payload } = parseValidatedEfacturaAgentPairingCode(code, JWT_SECRET)
+
+    const moduleCheck = await requireTenantModule(tenantId, "efactura")
+    if (!moduleCheck.enabled) {
+      return res.status(403).json({
+        ok: false,
+        error: "Modulul e-Factura nu este activ pe licenta acestui client.",
+      })
+    }
+
+    const { company, credential } = await resolveEfacturaAgentPairingDetails(prisma, tenantId, payload)
+
+    return res.json({
+      ok: true,
+      pairing: {
+        tenantId,
+        companyName: company?.name || null,
+        erpUrl: String(payload?.erpUrl || getDefaultEfacturaAppUrl()),
+        certSerial: normalizeOptionalText(credential?.certSerial || payload?.certSerial || company?.efacturaCertSerial) || null,
+        credentialId: payload?.credentialId || null,
+        expiresAt: payload?.exp ? new Date(payload.exp * 1000).toISOString() : null,
+      },
+    })
+  } catch (error: unknown) {
     return res.status(401).json({
       ok: false,
-      error: "Codul de pairing este invalid sau expirat.",
+      error: getCompanyRouteErrorMessage(error, "Codul de pairing este invalid."),
     })
   }
-
-  const tenantId = String(payload?.sub || "").trim()
-
-  if (!isValidEfacturaAgentPairingPayload(payload) || !tenantId) {
-    return res.status(401).json({
-      ok: false,
-      error: "Codul de pairing este invalid.",
-    })
-  }
-
-  const moduleCheck = await requireTenantModule(tenantId, "efactura")
-  if (!moduleCheck.enabled) {
-    return res.status(403).json({
-      ok: false,
-      error: "Modulul e-Factura nu este activ pe licenta acestui client.",
-    })
-  }
-
-  const { company, credential } = await resolveEfacturaAgentPairingDetails(prisma, tenantId, payload)
-
-  return res.json({
-    ok: true,
-    pairing: {
-      tenantId,
-      companyName: company?.name || null,
-      erpUrl: String(payload?.erpUrl || getDefaultEfacturaAppUrl()),
-      certSerial: normalizeOptionalText(credential?.certSerial || payload?.certSerial || company?.efacturaCertSerial) || null,
-      credentialId: payload?.credentialId || null,
-      expiresAt: payload?.exp ? new Date(payload.exp * 1000).toISOString() : null,
-    },
-  })
 })
 
 router.use(requireAuth)
@@ -404,11 +372,7 @@ router.get("/api/v1/company", async (req: AuthedRequest, res) => {
 })
 
 router.get("/api/v1/company/cui-lookup", async (req: AuthedRequest, res) => {
-  const cuiRaw = String(req.query.cui || "")
-    .trim()
-    .toUpperCase()
-    .replace(/^RO/, "")
-    .replace(/\D/g, "")
+  const cuiRaw = normalizeCompanyCuiLookupInput(req.query.cui)
 
   if (!cuiRaw) {
     return res.status(400).json({
@@ -448,10 +412,10 @@ router.get("/api/v1/company/cui-lookup", async (req: AuthedRequest, res) => {
       company: extractAnafCompanyPayload(item),
       raw: item,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     return res.status(502).json({
       ok: false,
-      error: error?.message || "Nu am putut interoga serviciul ANAF pentru CUI.",
+      error: getCompanyRouteErrorMessage(error, "Nu am putut interoga serviciul ANAF pentru CUI."),
     })
   }
 })

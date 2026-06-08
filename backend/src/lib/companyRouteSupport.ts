@@ -147,6 +147,45 @@ export function parseEfacturaAgentPairingCodeOrThrow(
   return jwt.verify(code, jwtSecret) as EfacturaAgentPairingPayload
 }
 
+export function parseValidatedEfacturaAgentDownloadTicket(ticket: string, jwtSecret: string) {
+  if (!ticket) {
+    throw new Error("Lipseste ticket-ul de descarcare.")
+  }
+
+  let payload: EfacturaAgentDownloadTicketPayload | null = null
+  try {
+    payload = parseEfacturaAgentDownloadTicketOrThrow(ticket, jwtSecret)
+  } catch {
+    throw new Error("Ticket-ul de descarcare este invalid sau expirat.")
+  }
+
+  if (!isValidEfacturaAgentDownloadTicketPayload(payload)) {
+    throw new Error("Ticket-ul de descarcare este invalid.")
+  }
+
+  return payload
+}
+
+export function parseValidatedEfacturaAgentPairingCode(code: string, jwtSecret: string) {
+  if (!code) {
+    throw new Error("Lipseste codul de pairing.")
+  }
+
+  let payload: EfacturaAgentPairingPayload | null = null
+  try {
+    payload = parseEfacturaAgentPairingCodeOrThrow(code, jwtSecret)
+  } catch {
+    throw new Error("Codul de pairing este invalid sau expirat.")
+  }
+
+  const tenantId = String(payload?.sub || "").trim()
+  if (!isValidEfacturaAgentPairingPayload(payload) || !tenantId) {
+    throw new Error("Codul de pairing este invalid.")
+  }
+
+  return { tenantId, payload }
+}
+
 export function buildAnafOauthReturnUrl(
   returnTo: string,
   status: "error" | "denied" | "success",
@@ -165,6 +204,14 @@ export function getCompanyRouteErrorMessage(error: unknown, fallback: string) {
     return error.message
   }
   return fallback
+}
+
+export function normalizeCompanyCuiLookupInput(value: unknown) {
+  return String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/^RO/, "")
+    .replace(/\D/g, "")
 }
 
 export async function persistAnafOauthError(
