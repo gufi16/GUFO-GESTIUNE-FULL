@@ -34,6 +34,43 @@ export { MENU_COMPONENT_CLASSES, PRODUCTION_MODE_VALUES, RECIPE_INGREDIENT_CLASS
 
 type ProductClient = PrismaClient | Prisma.TransactionClient
 
+type ProductVatRateLike = {
+  rate?: unknown
+}
+
+type ProductUomLike = {
+  code?: unknown
+  name?: unknown
+}
+
+type ProductLike = {
+  price?: unknown
+  costPrice?: unknown
+  purchaseFactor?: unknown
+  netWeightKg?: unknown
+  grossWeightKg?: unknown
+  sgrValue?: unknown
+  trackLot?: boolean | null
+  trackExpiry?: boolean | null
+  costMethod?: string | null
+  vatRate?: ProductVatRateLike | null
+}
+
+type RecipeIngredientLike = ProductLike & {
+  uom?: ProductUomLike | null
+}
+
+type RecipeItemLike = {
+  qty?: unknown
+  lossPercent?: unknown
+  ingredient?: RecipeIngredientLike | null
+}
+
+type RecipeLike = {
+  yieldQty?: unknown
+  items?: RecipeItemLike[] | null
+}
+
 function getClassRules(classValue: string) {
   return PRODUCT_CLASS_RULES[classValue] || null
 }
@@ -72,7 +109,7 @@ export function toNumber(value: unknown) {
   return Number.isFinite(n) ? n : 0
 }
 
-export function serializeProduct(item: any) {
+export function serializeProduct(item: ProductLike | null | undefined) {
   if (!item) return item
 
   return {
@@ -95,14 +132,14 @@ export function serializeProduct(item: any) {
   }
 }
 
-export function serializeRecipe(recipe: any) {
+export function serializeRecipe(recipe: RecipeLike | null | undefined) {
   if (!recipe) return recipe
 
   return {
     ...recipe,
     yieldQty: toNumber(recipe.yieldQty || 1),
     items: Array.isArray(recipe.items)
-      ? recipe.items.map((item: any) => ({
+      ? recipe.items.map((item: RecipeItemLike) => ({
           ...item,
           qty: toNumber(item.qty || 0),
           lossPercent: toNumber(item.lossPercent || 0),
