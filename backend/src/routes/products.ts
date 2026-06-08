@@ -28,6 +28,14 @@ import {
 
 const router = Router()
 
+type RecipeInputItemLike = {
+  ingredientId?: unknown
+  qty?: unknown
+  lossPercent?: unknown
+  sortOrder?: unknown
+  notes?: unknown
+}
+
 const uploadsDir = ensureUploadSubdir("products")
 
 const storage = multer.diskStorage({
@@ -842,7 +850,7 @@ router.post("/api/v1/products/:id/recipe", async (req: AuthedRequest, res) => {
     lossPercent: number
     sortOrder: number
     notes: string | null
-  }> = itemsRaw.map((line: any, index: number) => ({
+  }> = itemsRaw.map((line: RecipeInputItemLike, index: number) => ({
     ingredientId: String(line?.ingredientId || "").trim(),
     qty: toNumber(line?.qty || 0),
     lossPercent: toNumber(line?.lossPercent || 0),
