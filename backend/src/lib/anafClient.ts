@@ -48,6 +48,42 @@ type AnafCompanyAuthContext = {
   activeCompanyId?: string | null
 }
 
+type AnafScopeEntry = {
+  id?: unknown
+  value?: unknown
+}
+
+type AnafHttpResponse = Awaited<ReturnType<typeof anafHttpRequest>>
+
+type AnafRequestResult = {
+  response: AnafHttpResponse
+  url: string
+  fallbackIndex: number
+}
+
+type AnafCompanyLike = Partial<AnafContextCompany> & {
+  tenantId?: string | null
+  cui?: string | null
+  efacturaEnvironment?: string | null
+  efacturaOauthAccessToken?: string | null
+  efacturaOauthLastError?: string | null
+  efacturaCertSerial?: string | null
+  efacturaCertFilename?: string | null
+  anafCredentialId?: string
+  anafCredentialLabel?: string
+}
+
+type AnafReadyCompany = {
+  cif: string
+  certOptions: ReturnType<typeof getAnafCertificateOptions>
+  baseUrl: string
+  accessToken: string
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error && error.message ? error.message : String(error)
+}
+
 export async function loadAnafCompanyContext(
   tenantOrAuth: string | AnafCompanyAuthContext,
   activeCompanyId?: string | null,
@@ -145,8 +181,8 @@ export function getAnafTokenDiagnostics(accessToken: string) {
   const scopeData = Array.isArray(payload.scope_data) ? payload.scope_data : []
   const scopeMap = Object.fromEntries(
     scopeData
-      .filter((entry: any) => entry && typeof entry.id === "string")
-      .map((entry: any) => [entry.id, entry.value])
+      .filter((entry: AnafScopeEntry) => entry && typeof entry.id === "string")
+      .map((entry: AnafScopeEntry) => [String(entry.id), entry.value])
   )
 
   return {
@@ -163,9 +199,9 @@ export function getAnafTokenDiagnostics(accessToken: string) {
   }
 }
 
-export function getAnafCompanyDiagnostics(company: any) {
+export function getAnafCompanyDiagnostics(company: AnafCompanyLike | null) {
   const tokenDiagnostics = getAnafTokenDiagnostics(String(company?.efacturaOauthAccessToken || ""))
-  const certOptions = getAnafCertificateOptions(company)
+  const certOptions = getAnafCertificateOptions(company || {})
   const certSerialConfigured = company?.efacturaCertSerial || null
   const tokenSerial = tokenDiagnostics.tokenSerial || null
   const certSerialNormalized = normalizeCertificateSerial(certSerialConfigured)
@@ -193,7 +229,7 @@ export function getAnafCompanyDiagnostics(company: any) {
   }
 }
 
-export function requireAnafReadyCompany(company: any, actionLabel = "operatiunea ANAF") {
+export function requireAnafReadyCompany(company: AnafCompanyLike | null, actionLabel = "operatiunea ANAF"): AnafReadyCompany {
   const cif = normalizeCompanyCui(company?.cui)
   if (!cif) {
     throw new Error(`Firma nu are CUI valid pentru ${actionLabel}.`)
@@ -234,9 +270,7 @@ function getEtransportBaseUrls(environment: string | null | undefined) {
 }
 
 function isTlsHandshakeError(error: unknown) {
-  return /SSL\/TLS|EPROTO|ECONNRESET|handshake|tls alert|SSL routines|wrong version number/i.test(
-    String((error as any)?.message || "")
-  )
+  return /SSL\/TLS|EPROTO|ECONNRESET|handshake|tls alert|SSL routines|wrong version number/i.test(getErrorMessage(error))
 }
 
 function isEtransportSchemaDeclarationError(summary: unknown, rawText: unknown) {
@@ -255,15 +289,15 @@ function stripEtransportSchemaHints(xmlText: string) {
 }
 
 async function anafEtransportRequest(
-  company: any,
+  company: AnafCompanyLike | null,
   pathBuilder: (baseUrl: string) => string,
-  requestOptions: (url: string, accessToken: string) => any,
+  requestOptions: (url: string, accessToken: string) => Record<string, unknown>,
   logLabel: string,
   startDetails: Record<string, unknown>,
 ) {
   const ready = requireAnafReadyCompany(company, "operatiunea RO e-Transport")
   const baseUrls = getEtransportBaseUrls(company?.efacturaEnvironment)
-  let lastError: any = null
+  let lastError: unknown = null
 
   for (let index = 0; index < baseUrls.length; index += 1) {
     const baseUrl = baseUrls[index]
@@ -285,7 +319,7 @@ async function anafEtransportRequest(
         label: logLabel,
         url,
         fallbackIndex: index,
-        message: (error as any)?.message || String(error),
+        message: getErrorMessage(error),
       })
       if (!isTlsHandshakeError(error) || index === baseUrls.length - 1) {
         throw error
@@ -297,15 +331,15 @@ async function anafEtransportRequest(
 }
 
 async function anafEfacturaRequest(
-  company: any,
-  pathBuilder: (baseUrl: string, ready: ReturnType<typeof requireAnafReadyCompany>) => string,
-  requestOptions: (url: string, ready: ReturnType<typeof requireAnafReadyCompany>) => any,
+  company: AnafCompanyLike | null,
+  pathBuilder: (baseUrl: string, ready: AnafReadyCompany) => string,
+  requestOptions: (url: string, ready: AnafReadyCompany) => Record<string, unknown>,
   logLabel: string,
   startDetails: Record<string, unknown>,
-) {
+): Promise<AnafRequestResult> {
   const ready = requireAnafReadyCompany(company, "operatiunea e-Factura")
   const baseUrls = getEfacturaBaseUrls(company?.efacturaEnvironment)
-  let lastError: any = null
+  let lastError: unknown = null
 
   for (let index = 0; index < baseUrls.length; index += 1) {
     const baseUrl = baseUrls[index]
@@ -329,7 +363,7 @@ async function anafEfacturaRequest(
         label: logLabel,
         url,
         fallbackIndex: index,
-        message: (error as any)?.message || String(error),
+        message: getErrorMessage(error),
       })
       if (!isTlsHandshakeError(error) || index === baseUrls.length - 1) {
         throw error
@@ -356,12 +390,19 @@ function logAnafRequestFinish(label: string, details: Record<string, unknown>) {
   })
 }
 
-export async function anafListMessages(company: any, options: { days?: number; cif?: string } = {}) {
+export async function anafListMessages(company: AnafCompanyLike | null, options: { days?: number; cif?: string } = {}) {
   const ready = requireAnafReadyCompany(company, "sincronizarea SPV")
   const cif = options.cif || ready.cif
   const days = Math.min(60, Math.max(1, Number(options.days || 30)))
   const tokenDiagnostics = getAnafTokenDiagnostics(ready.accessToken)
-  let lastResult: any = null
+  let lastResult: {
+    url: string
+    response: AnafHttpResponse
+    rawText: string
+    payload: unknown
+    items: unknown[]
+    summary: string
+  } | null = null
 
   for (let index = 0; index < getEfacturaBaseUrls(company?.efacturaEnvironment).length; index += 1) {
     const baseUrl = getEfacturaBaseUrls(company?.efacturaEnvironment)[index]
@@ -418,12 +459,22 @@ export async function anafListMessages(company: any, options: { days?: number; c
     }
   }
 
-  return lastResult
+  if (lastResult) {
+    return lastResult
+  }
+
+  throw new Error("ANAF nu a returnat niciun raspuns pentru lista mesajelor.")
 }
 
-export async function anafDownloadById(company: any, downloadId: string) {
+export async function anafDownloadById(company: AnafCompanyLike | null, downloadId: string) {
   const ready = requireAnafReadyCompany(company, "descarcarea documentului ANAF")
-  let lastResult: any = null
+  let lastResult: {
+    url: string
+    response: AnafHttpResponse
+    rawText: string
+    payload: unknown
+    summary: string
+  } | null = null
 
   for (let index = 0; index < getEfacturaBaseUrls(company?.efacturaEnvironment).length; index += 1) {
     const baseUrl = getEfacturaBaseUrls(company?.efacturaEnvironment)[index]
@@ -471,10 +522,14 @@ export async function anafDownloadById(company: any, downloadId: string) {
     }
   }
 
-  return lastResult
+  if (lastResult) {
+    return lastResult
+  }
+
+  throw new Error("ANAF nu a returnat niciun raspuns pentru descarcarea documentului.")
 }
 
-export async function anafUploadXml(company: any, xmlText: string) {
+export async function anafUploadXml(company: AnafCompanyLike | null, xmlText: string) {
   const { response, url, fallbackIndex } = await anafEfacturaRequest(
     company,
     (baseUrl, ready) => `${baseUrl}/upload?standard=UBL&cif=${encodeURIComponent(ready.cif)}`,
@@ -515,7 +570,7 @@ export async function anafUploadXml(company: any, xmlText: string) {
   }
 }
 
-export async function anafCheckUploadStatus(company: any, uploadIndex: string) {
+export async function anafCheckUploadStatus(company: AnafCompanyLike | null, uploadIndex: string) {
   const { response, url, fallbackIndex } = await anafEfacturaRequest(
     company,
     (baseUrl) => `${baseUrl}/stareMesaj?id_incarcare=${encodeURIComponent(uploadIndex)}`,
@@ -552,7 +607,7 @@ export async function anafCheckUploadStatus(company: any, uploadIndex: string) {
   }
 }
 
-export async function anafUploadEtransportXml(company: any, xmlText: string) {
+export async function anafUploadEtransportXml(company: AnafCompanyLike | null, xmlText: string) {
   const ready = requireAnafReadyCompany(company, "trimiterea RO e-Transport")
   const tokenDiagnostics = getAnafTokenDiagnostics(ready.accessToken)
   const baseUrls = getEtransportBaseUrls(company?.efacturaEnvironment)
@@ -561,8 +616,17 @@ export async function anafUploadEtransportXml(company: any, xmlText: string) {
     { key: "plain", body: xmlText },
     { key: "no-schema-hints", body: stripEtransportSchemaHints(xmlText) },
   ]
-  let lastResult: any = null
-  let lastError: any = null
+  let lastResult: {
+    url: string
+    response: AnafHttpResponse
+    rawText: string
+    payload: unknown
+    uploadIndex: string
+    summary: string
+    fallbackIndex: number
+    xmlVariant: string
+  } | null = null
+  let lastError: unknown = null
 
   for (let baseIndex = 0; baseIndex < baseUrls.length; baseIndex += 1) {
     const baseUrl = baseUrls[baseIndex]
@@ -635,7 +699,7 @@ export async function anafUploadEtransportXml(company: any, xmlText: string) {
             fallbackIndex: baseIndex,
             uploadStandard,
             xmlVariant: xmlVariant.key,
-            message: (error as any)?.message || String(error),
+            message: getErrorMessage(error),
           })
           if (!isTlsHandshakeError(error)) {
             throw error
@@ -649,7 +713,7 @@ export async function anafUploadEtransportXml(company: any, xmlText: string) {
   throw lastError || new Error("Nu am putut comunica cu ANAF pentru upload-ul RO e-Transport.")
 }
 
-export async function anafCheckEtransportStatus(company: any, uploadIndex: string) {
+export async function anafCheckEtransportStatus(company: AnafCompanyLike | null, uploadIndex: string) {
   const { response, url, fallbackIndex } = await anafEtransportRequest(
     company,
     (baseUrl) => `${baseUrl}/stareMesaj/${encodeURIComponent(uploadIndex)}`,
@@ -685,7 +749,7 @@ export async function anafCheckEtransportStatus(company: any, uploadIndex: strin
   }
 }
 
-export async function anafListEtransportMessages(company: any, options: { days?: number; cif?: string } = {}) {
+export async function anafListEtransportMessages(company: AnafCompanyLike | null, options: { days?: number; cif?: string } = {}) {
   const ready = requireAnafReadyCompany(company, "sincronizarea RO e-Transport")
   const cif = options.cif || ready.cif
   const days = Math.min(60, Math.max(1, Number(options.days || 30)))
@@ -723,7 +787,7 @@ export async function anafListEtransportMessages(company: any, options: { days?:
   }
 }
 
-export async function anafDownloadEtransportById(company: any, downloadId: string) {
+export async function anafDownloadEtransportById(company: AnafCompanyLike | null, downloadId: string) {
   const { response, url, fallbackIndex } = await anafEtransportRequest(
     company,
     (baseUrl) => `${baseUrl}/descarcare/${encodeURIComponent(downloadId)}`,
