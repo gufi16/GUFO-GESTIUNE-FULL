@@ -14,6 +14,154 @@ type SpreadsheetFileFormat = "xlsx" | "csv"
 type ExportRow = Record<string, unknown>
 type ExportSheet = { name: string; rows: ExportRow[] }
 type ExportSheetRows = ExportRow[] & { __sheets?: ExportSheet[] }
+type AccountingConfigLike = {
+  articleCodeSource?: string | null
+  managementAnalytic?: string | null
+  defaultStockTypeId?: string | null
+  salesAccount?: string | null
+  expenseAccount?: string | null
+  inventoryAccount?: string | null
+}
+type AccountingStockTypeLike = {
+  id?: string | null
+  code?: string | null
+  name?: string | null
+  inventoryAccount?: string | null
+  expenseAccount?: string | null
+  salesAccount?: string | null
+}
+type AccountingVatRateLike = {
+  rate?: unknown
+  fiscalCode?: unknown
+  name?: unknown
+}
+type AccountingUomLike = {
+  code?: unknown
+  name?: unknown
+}
+type AccountingBarcodeLike = {
+  barcode?: unknown
+}
+type AccountingLocationLike = {
+  code?: string | null
+  name?: string | null
+}
+type AccountingPartnerLike = {
+  id?: string
+  code?: string | null
+  name?: string | null
+  cif?: string | null
+  regNo?: string | null
+  regCom?: string | null
+  country?: string | null
+  county?: string | null
+  city?: string | null
+  address?: string | null
+  phone?: string | null
+  email?: string | null
+}
+type AccountingCompanyLike = AccountingPartnerLike & {
+  cui?: string | null
+  bank?: string | null
+  iban?: string | null
+}
+type AccountingProductLike = {
+  id?: string | null
+  class?: string | null
+  sku?: string | null
+  code?: string | null
+  accountingItemCode?: string | null
+  accountingStockTypeId?: string | null
+  name?: string | null
+  price?: unknown
+  costPrice?: unknown
+  purchaseFactor?: unknown
+  sgrValue?: unknown
+  isSgr?: boolean | null
+  vatRate?: AccountingVatRateLike | null
+  uom?: AccountingUomLike | null
+  barcodes?: AccountingBarcodeLike[] | null
+}
+type AccountingExportLineLike = {
+  id?: string | null
+  qty?: unknown
+  stockQty?: unknown
+  uomCode?: string | null
+  product?: AccountingProductLike | null
+  productName?: string | null
+  productCode?: string | null
+  productId?: string | null
+  vatRateValue?: unknown
+  unitPriceFc?: unknown
+  unitCostNetRon?: unknown
+  lineNetRon?: unknown
+  lineGrossRon?: unknown
+  lineVatRon?: unknown
+  sgrTotalRon?: unknown
+  sgrTotalFc?: unknown
+  sgrUnitFc?: unknown
+}
+type SalesInvoiceLike = {
+  id?: string | null
+  docNo?: string | null
+  docDate?: Date | string | null
+  dueDate?: Date | string | null
+  currency?: string | null
+  customerName?: string | null
+  customerCif?: string | null
+  customerRegNo?: string | null
+  customerCode?: string | null
+  customerAddress?: string | null
+  customer?: AccountingPartnerLike | null
+  location?: AccountingLocationLike | null
+  items: AccountingExportLineLike[]
+}
+type PurchaseReceiptLike = {
+  id?: string | null
+  docNo?: string | null
+  spvInvoiceNo?: string | null
+  docDate?: Date | string | null
+  currency?: string | null
+  supplierName?: string | null
+  supplierCode?: string | null
+  supplier?: AccountingPartnerLike | null
+  location?: AccountingLocationLike | null
+  fxRate?: unknown
+  totalNetRon?: unknown
+  totalVatRon?: unknown
+  totalGrossRon?: unknown
+  items: AccountingExportLineLike[]
+}
+type ProductionDocumentLike = {
+  id?: string | null
+  docNo?: string | null
+  docDate?: Date | string | null
+  note?: string | null
+  location?: AccountingLocationLike | null
+  items: Array<{
+    productId: string
+    qty?: unknown
+    product: AccountingProductLike
+  }>
+}
+type AccountingReceiptAggregateLine = {
+  code: string
+  name: string
+  type: string
+  vatRateValue: number
+  valueRon: number
+  vatRon: number
+  stockAccount: string
+  expenseAccount: string
+}
+type PreviewItem = {
+  id: string
+  code: string
+  label: string
+  partner?: string
+  date: string
+  status: string
+}
 
 const CONFIG_DEFAULTS = {
   exportTarget: "SAGA",
@@ -331,7 +479,11 @@ async function ensureAccountingConfig(tenantId: string, companyId: string) {
   return { config, stockTypes }
 }
 
-function pickStockType(product: any, stockTypes: any[], config: any) {
+function pickStockType(
+  product: AccountingProductLike | null | undefined,
+  stockTypes: AccountingStockTypeLike[],
+  config: AccountingConfigLike | null | undefined
+) {
   if (product?.accountingStockTypeId) {
     const matched = stockTypes.find((item) => item.id === product.accountingStockTypeId)
     if (matched) return matched
@@ -355,15 +507,27 @@ function compactDateToken(value: Date | string | null | undefined) {
   return `${date.getFullYear()}${`${date.getMonth() + 1}`.padStart(2, "0")}${`${date.getDate()}`.padStart(2, "0")}`
 }
 
-function downloadName(kind: string, from: string, to: string, options?: { company?: any; firstDoc?: any }) {
-  if ((kind === "purchase-receipts" || kind === "sales-invoices") && options?.company) {
+function downloadName(
+  kind: string,
+  from: string,
+  to: string,
+  options?: { company?: AccountingCompanyLike | null; firstDoc?: PurchaseReceiptLike | SalesInvoiceLike | null }
+) {
+  if (kind === "purchase-receipts" && options?.company) {
+    const firstDoc = options.firstDoc as PurchaseReceiptLike | null | undefined
     const companyCode = String(
-      kind === "purchase-receipts"
-        ? options.firstDoc?.supplier?.cif || options.firstDoc?.supplierCode || options.firstDoc?.supplier?.code || options.company.cui || options.company.code || "FIRMA"
-        : options.company.cui || options.company.code || "FIRMA"
+      firstDoc?.supplier?.cif || firstDoc?.supplierCode || firstDoc?.supplier?.code || options.company.cui || options.company.code || "FIRMA"
     ).replace(/[^A-Za-z0-9]/g, "")
-    const docNumber = extractSagaNumber(options.firstDoc?.spvInvoiceNo || options.firstDoc?.docNo || "EXPORT")
-    const docDate = compactDateToken(options.firstDoc?.docDate || from || to || new Date())
+    const docNumber = extractSagaNumber(firstDoc?.spvInvoiceNo || firstDoc?.docNo || "EXPORT")
+    const docDate = compactDateToken(firstDoc?.docDate || from || to || new Date())
+    return `F_${companyCode || "FIRMA"}_${docNumber || "EXPORT"}_${docDate}.xml`
+  }
+
+  if (kind === "sales-invoices" && options?.company) {
+    const firstDoc = options.firstDoc as SalesInvoiceLike | null | undefined
+    const companyCode = String(options.company.cui || options.company.code || "FIRMA").replace(/[^A-Za-z0-9]/g, "")
+    const docNumber = extractSagaNumber(firstDoc?.docNo || "EXPORT")
+    const docDate = compactDateToken(firstDoc?.docDate || from || to || new Date())
     return `F_${companyCode || "FIRMA"}_${docNumber || "EXPORT"}_${docDate}.xml`
   }
 
@@ -408,7 +572,10 @@ function spreadsheetSheets(sheets: ExportSheet[]): ExportSheetRows {
   return Object.assign([] as ExportRow[], { __sheets: sheets })
 }
 
-function managementValue(config: any, location: { code?: string | null; name?: string | null } | null | undefined) {
+function managementValue(
+  config: AccountingConfigLike | null | undefined,
+  location: AccountingLocationLike | null | undefined
+) {
   if (!location) return ""
   switch (config?.managementAnalytic) {
     case "LOCATION_NAME":
@@ -421,7 +588,13 @@ function managementValue(config: any, location: { code?: string | null; name?: s
   }
 }
 
-function xmlMeta(company: any, kind: string, dateFrom: string, dateTo: string, valueType: string) {
+function xmlMeta(
+  company: AccountingCompanyLike | null | undefined,
+  kind: string,
+  dateFrom: string,
+  dateTo: string,
+  valueType: string
+) {
   return [
     `  <Meta>`,
     `    <Firma>${xmlEscape(company?.name || "")}</Firma>`,
@@ -479,7 +652,7 @@ function buildVfpXmlSections(sections: Array<{ name: string; rows: Record<string
   ].join("\n")
 }
 
-function sagaInvoiceStockTypeName(stockType: any) {
+function sagaInvoiceStockTypeName(stockType: AccountingStockTypeLike | null | undefined) {
   const code = String(stockType?.code || "").toUpperCase()
   const name = String(stockType?.name || "").trim().toUpperCase()
   if (code === "MARFA") return "Marfuri"
@@ -493,13 +666,13 @@ function sagaInvoiceStockTypeName(stockType: any) {
   return "Marfuri"
 }
 
-function isSagaSgrArticle(product: any) {
+function isSagaSgrArticle(product: AccountingProductLike | null | undefined) {
   const code = String(product?.accountingItemCode || product?.sku || product?.code || product?.id || "").trim().toUpperCase()
   const name = String(product?.name || "").trim().toUpperCase()
   return product?.class === "AMBALAJ_SGR" || code === "SGR" || code.startsWith("SGR_") || name === "SGR"
 }
 
-function serializeAccountingProduct(product: any) {
+function serializeAccountingProduct(product: AccountingProductLike | null | undefined) {
   if (!product) return product
   return {
     ...product,
@@ -550,32 +723,40 @@ function sagaProductTypeFromClass(classValue: unknown) {
   }
 }
 
-function sagaInvoiceLineTypeFromProduct(product: any) {
+function sagaInvoiceLineTypeFromProduct(product: AccountingProductLike | null | undefined) {
   if (isSagaSgrArticle(product)) return "Ambalaje SGR"
   return sagaProductTypeFromClass(product?.class)
 }
 
-function sagaPurchaseReceiptLineType(product: any, _stockTypes: any[], _config: any) {
+function sagaPurchaseReceiptLineType(
+  product: AccountingProductLike | null | undefined,
+  _stockTypes: AccountingStockTypeLike[],
+  _config: AccountingConfigLike | null | undefined
+) {
   if (isSagaSgrArticle(product)) return "Ambalaje SGR"
   return sagaProductTypeFromClass(product?.class)
 }
 
-function sgrUnitValue(product: any) {
+function sgrUnitValue(product: AccountingProductLike | null | undefined) {
   if (!product?.isSgr) return 0
   const value = toFiniteNumber(product?.sgrValue)
   return value > 0 ? value : 0.5
 }
 
-function sgrArticleCode(product: any, fallbackCode?: unknown) {
+function sgrArticleCode(product: AccountingProductLike | null | undefined, fallbackCode?: unknown) {
   const base = product?.accountingItemCode || product?.sku || fallbackCode || product?.name || "SGR"
   return `SGR_${slugCode(String(base), "ART").slice(0, 16)}`
 }
 
-function sgrArticleName(product: any, fallbackName?: unknown) {
+function sgrArticleName(_product: AccountingProductLike | null | undefined, _fallbackName?: unknown) {
   return "SGR"
 }
 
-function sgrProductShape(product: any, fallbackCode?: unknown, fallbackName?: unknown) {
+function sgrProductShape(
+  product: AccountingProductLike | null | undefined,
+  fallbackCode?: unknown,
+  fallbackName?: unknown
+): AccountingProductLike {
   return {
     ...(product || {}),
     id: `${product?.id || fallbackCode || "sgr"}:sgr`,
@@ -592,7 +773,13 @@ function sgrProductShape(product: any, fallbackCode?: unknown, fallbackName?: un
   }
 }
 
-function buildSalesInvoiceSgrLine(invoice: any, line: any, index: number, stockTypes: any[], config: any) {
+function buildSalesInvoiceSgrLine(
+  invoice: SalesInvoiceLike,
+  line: AccountingExportLineLike,
+  index: number,
+  stockTypes: AccountingStockTypeLike[],
+  config: AccountingConfigLike
+) {
   const sgrTotal = toFiniteNumber(line.sgrTotalRon || line.sgrTotalFc)
   const qty = toFiniteNumber(line.qty)
   const unit = toFiniteNumber(line.sgrUnitFc || line.product?.sgrValue || (qty ? sgrTotal / qty : 0))
@@ -640,24 +827,24 @@ function buildSalesInvoiceSgrLine(invoice: any, line: any, index: number, stockT
   }
 }
 
-function receiptSgrValues(line: any, receipt: any) {
+function receiptSgrValues(line: AccountingExportLineLike, receipt: PurchaseReceiptLike) {
   const qty = toFiniteNumber(line.stockQty || line.qty)
   const unit = sgrUnitValue(line.product)
   const valueRon = qty * unit * toFiniteNumber(receipt?.fxRate || 1)
   return { qty, unit, valueRon }
 }
 
-function sagaArticleTypeFromProduct(product: any) {
+function sagaArticleTypeFromProduct(product: AccountingProductLike | null | undefined) {
   if (isSagaSgrArticle(product)) return "Ambalaje SGR"
   return sagaProductTypeFromClass(product?.class)
 }
 
-function sagaArticleCodeForProduct(product: any, config: any) {
+function sagaArticleCodeForProduct(product: AccountingProductLike | null | undefined, config: AccountingConfigLike | null | undefined) {
   const code = config?.articleCodeSource === "SKU" ? product?.sku : product?.accountingItemCode || product?.sku
   return String(code || product?.sku || product?.accountingItemCode || slugCode(product?.name || "ART", "ART")).trim()
 }
 
-function buildSagaArticleXmlLine(product: any, config: any) {
+function buildSagaArticleXmlLine(product: AccountingProductLike, config: AccountingConfigLike | null | undefined) {
   const articleCode = sagaArticleCodeForProduct(product, config)
   return [
     `  <Linie>`,
@@ -679,7 +866,7 @@ function buildSagaArticleXmlLine(product: any, config: any) {
   ].join("\n")
 }
 
-function buildSagaArticlesXml(products: any[], config: any) {
+function buildSagaArticlesXml(products: AccountingProductLike[], config: AccountingConfigLike | null | undefined) {
   return [
     `<?xml version="1.0" encoding="utf-8"?>`,
     `<Articole>`,
@@ -694,6 +881,12 @@ function normalizeFileFormat(value: unknown): ExportFileFormat {
   if (normalized === "xlsx") return "xlsx"
   if (normalized === "csv") return "csv"
   return "xml"
+}
+
+function isReceiptAggregateLine(
+  line: AccountingReceiptAggregateLine | AccountingExportLineLike
+): line is AccountingReceiptAggregateLine {
+  return "type" in line
 }
 
 function requireAccountingTenantId(req: AuthedRequest) {
@@ -1191,14 +1384,22 @@ function buildSagaOperationalLine(line: {
   ].join("\n")
 }
 
-function aggregateByKey<T>(items: T[], buildKey: (item: T) => string, seed: (item: T) => any, merge: (target: any, item: T) => void) {
-  const map = new Map<string, any>()
+function aggregateByKey<T, TAggregate>(
+  items: T[],
+  buildKey: (item: T) => string,
+  seed: (item: T) => TAggregate,
+  merge: (target: TAggregate, item: T) => void
+) {
+  const map = new Map<string, TAggregate>()
   for (const item of items) {
     const key = buildKey(item)
     if (!map.has(key)) {
       map.set(key, seed(item))
     }
-    merge(map.get(key), item)
+    const current = map.get(key)
+    if (current !== undefined) {
+      merge(current, item)
+    }
   }
   return Array.from(map.values())
 }
@@ -1477,7 +1678,7 @@ router.get("/api/v1/reports/accounting/saga/export-preview", requireAuth, async 
   const selectedIdWhere = selectedIds.length ? { id: { in: selectedIds } } : {}
   const from = dateFrom ? new Date(`${dateFrom}T00:00:00`) : new Date("2000-01-01T00:00:00")
   const to = dateTo ? new Date(`${dateTo}T23:59:59.999`) : new Date()
-  const response = (items: any[]) => res.json({ ok: true, items })
+  const response = (items: PreviewItem[]) => res.json({ ok: true, items })
 
   if (kind === "customers") {
     const used = new Set<string>()
@@ -1617,7 +1818,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
   let xml = ""
   let sheetName = "Export contabilitate"
   let spreadsheetRows: Record<string, unknown>[] = []
-  let exportedFileDoc: any = null
+  let exportedFileDoc: SalesInvoiceLike | PurchaseReceiptLike | null = null
   let xmlFiles: Array<{ fileName: string; content: string }> = []
   let splitSpreadsheetFiles: Array<{ fileName: string; sheetName: string; rows: Record<string, unknown>[] }> = []
 
@@ -1651,13 +1852,13 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     })
 
     sheetName = "Articole"
-    const articleProducts: any[] = products.flatMap((product) => {
-      const rows = [product]
+    const articleProducts: AccountingProductLike[] = products.flatMap((product) => {
+      const rows: AccountingProductLike[] = [product]
       if (product.isSgr && sgrUnitValue(product) > 0) rows.push(sgrProductShape(product))
       return rows
     })
 
-    spreadsheetRows = articleProducts.map((product: any) => {
+    spreadsheetRows = articleProducts.map((product) => {
       const articleCode = sagaArticleCodeForProduct(product, config)
 
       return {
@@ -1675,14 +1876,14 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       }
     })
 
-    xmlFiles = articleProducts.map((product: any) => ({
-      fileName: `ART_${slugCode(product.accountingItemCode || product.sku || product.name, "ART")}_${compactDateToken(dateTo || new Date())}.xml`,
+    xmlFiles = articleProducts.map((product) => ({
+      fileName: `ART_${slugCode(String(product.accountingItemCode || product.sku || product.name || ""), "ART")}_${compactDateToken(dateTo || new Date())}.xml`,
       content: buildSagaArticlesXml([product], config),
     }))
-    splitSpreadsheetFiles = articleProducts.map((product: any) => {
+    splitSpreadsheetFiles = articleProducts.map((product) => {
       const articleCode = sagaArticleCodeForProduct(product, config)
       return {
-        fileName: `ART_${slugCode(product.accountingItemCode || product.sku || product.name, "ART")}_${compactDateToken(dateTo || new Date())}`,
+        fileName: `ART_${slugCode(String(product.accountingItemCode || product.sku || product.name || ""), "ART")}_${compactDateToken(dateTo || new Date())}`,
         sheetName: "Articole",
         rows: [
           {
@@ -1731,7 +1932,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     const customerCodeById = new Map<string, string>(
       customers.map((customer, index) => [customer.id, uniqueSagaCode(customer.code, "CLI", index, usedCustomerCodes)])
     )
-    const customerCode = (customer: any) => customerCodeById.get(customer.id) || customer.code || slugCode(customer.name, "CLI")
+    const customerCode = (customer: AccountingPartnerLike) => customerCodeById.get(String(customer.id || "")) || customer.code || slugCode(customer.name || "", "CLI")
 
     sheetName = "Clienti"
     spreadsheetRows = customers.map((customer) => ({
@@ -1752,7 +1953,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       GUID_COD: customer.id,
     }))
 
-    const buildCustomerXml = (customer: any) =>
+    const buildCustomerXml = (customer: AccountingPartnerLike) =>
       [
         `<?xml version="1.0" encoding="utf-8"?>`,
         `<Clienti>`,
@@ -1858,7 +2059,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     const supplierCodeById = new Map<string, string>(
       suppliers.map((supplier, index) => [supplier.id, uniqueSagaCode(supplier.code, "FUR", index, usedSupplierCodes)])
     )
-    const supplierCode = (supplier: any) => supplierCodeById.get(supplier.id) || supplier.code || slugCode(supplier.name, "FUR")
+    const supplierCode = (supplier: AccountingPartnerLike) => supplierCodeById.get(String(supplier.id || "")) || supplier.code || slugCode(supplier.name || "", "FUR")
 
     sheetName = "Furnizori"
     spreadsheetRows = suppliers.map((supplier) => ({
@@ -1877,7 +2078,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       GUID_COD: supplier.id,
     }))
 
-    const buildSupplierXml = (supplier: any) =>
+    const buildSupplierXml = (supplier: AccountingPartnerLike) =>
       [
         `<?xml version="1.0" encoding="utf-8"?>`,
         `<Furnizori>`,
@@ -2047,7 +2248,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
             },
           ])
 
-    const buildInvoiceXml = (invoice: any) =>
+    const buildInvoiceXml = (invoice: SalesInvoiceLike) =>
       [
         `  <Factura>`,
         buildSagaFacturaHeader({
@@ -2095,7 +2296,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         }),
         `      <Detalii>`,
         `        <Continut>`,
-        ...invoice.items.flatMap((line: any, index: number) => {
+        ...invoice.items.flatMap((line, index: number) => {
           const stockType = pickStockType(line.product, stockTypes, config)
           const productLine = buildSagaFacturaLine({
             index: index * 2 + 1,
@@ -2103,7 +2304,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
             management: invoice.location?.code || invoice.location?.name || "",
             activity: "",
             description: line.productName || line.product?.name,
-            clientCode: line.productCode || line.product?.accountingItemCode || line.product?.sku || slugCode(line.productName, "ART"),
+            clientCode: line.productCode || line.product?.accountingItemCode || line.product?.sku || slugCode(line.productName || "", "ART"),
             guid: line.productId || line.productCode || "",
             barcode: line.product?.barcodes?.[0]?.barcode || "",
             uom: line.uomCode || "BUC",
@@ -2231,8 +2432,8 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     exportedFileDoc = receipts[receipts.length - 1] || null
 
     sheetName = "Facturi intrare"
-    const receiptSgrTotalRon = (receipt: any) =>
-      receipt.items.reduce((sum: number, line: any) => sum + receiptSgrValues(line, receipt).valueRon, 0)
+    const receiptSgrTotalRon = (receipt: PurchaseReceiptLike) =>
+      receipt.items.reduce((sum: number, line) => sum + receiptSgrValues(line, receipt).valueRon, 0)
 
     spreadsheetRows = spreadsheetSheets([
       {
@@ -2327,8 +2528,8 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       },
     ])
 
-    const buildReceiptXml = (receipt: any) => {
-      const receiptLinesForExport: any[] = receipt.items.flatMap((line: any) => {
+    const buildReceiptXml = (receipt: PurchaseReceiptLike) => {
+      const receiptLinesForExport: AccountingExportLineLike[] = receipt.items.flatMap((line) => {
         const sgr = receiptSgrValues(line, receipt)
         if (!line.product?.isSgr || sgr.qty <= 0 || sgr.unit <= 0) return [line]
         const product = sgrProductShape(line.product)
@@ -2349,7 +2550,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
           },
         ]
       })
-      const groupedLines: any[] =
+      const groupedLines: Array<AccountingReceiptAggregateLine | AccountingExportLineLike> =
         valueType === "GLOBAL_VALORIC"
           ? aggregateByKey(
               receiptLinesForExport,
@@ -2421,8 +2622,8 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         }),
         `      <Detalii>`,
         `        <Continut>`,
-        ...groupedLines.map((line: any, index: number) => {
-          if (valueType === "GLOBAL_VALORIC") {
+        ...groupedLines.map((line, index: number) => {
+          if (isReceiptAggregateLine(line)) {
             return buildSagaFacturaLine({
               index: index + 1,
               type: line.type || "Marfuri",
@@ -2441,27 +2642,28 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
             })
           }
 
-          const stockType = pickStockType(line.product, stockTypes, config)
+          const receiptLine = line
+          const stockType = pickStockType(receiptLine.product, stockTypes, config)
           return buildSagaFacturaLine({
             index: index + 1,
-            type: sagaPurchaseReceiptLineType(line.product, stockTypes, config),
+            type: sagaPurchaseReceiptLineType(receiptLine.product, stockTypes, config),
             management: receipt.location?.code || receipt.location?.name || "",
             activity: "",
-            description: line.product?.name || "",
-            supplierCode: sagaArticleCodeForProduct(line.product, config),
-            clientCode: sagaArticleCodeForProduct(line.product, config),
-            guid: sagaArticleCodeForProduct(line.product, config),
-            barcode: line.product?.barcodes?.[0]?.barcode || "",
-            uom: line.product?.uom?.code || "BUC",
-            qty: decimal(line.stockQty || line.qty, 3),
-            price: decimal(line.unitCostNetRon),
-            value: decimal(line.lineNetRon),
-            total: decimal(line.lineGrossRon),
-            vatRate: sagaNumber(line.vatRateValue, 2),
-            vatValue: decimal(line.lineVatRon),
+            description: receiptLine.product?.name || "",
+            supplierCode: sagaArticleCodeForProduct(receiptLine.product, config),
+            clientCode: sagaArticleCodeForProduct(receiptLine.product, config),
+            guid: sagaArticleCodeForProduct(receiptLine.product, config),
+            barcode: receiptLine.product?.barcodes?.[0]?.barcode || "",
+            uom: receiptLine.product?.uom?.code || "BUC",
+            qty: decimal(receiptLine.stockQty || receiptLine.qty, 3),
+            price: decimal(receiptLine.unitCostNetRon),
+            value: decimal(receiptLine.lineNetRon),
+            total: decimal(receiptLine.lineGrossRon),
+            vatRate: sagaNumber(receiptLine.vatRateValue, 2),
+            vatValue: decimal(receiptLine.lineVatRon),
             account: stockType?.inventoryAccount || config.inventoryAccount,
             deductionType: "",
-            priceSale: line.product?.price ? decimal(line.product.price) : "",
+            priceSale: receiptLine.product?.price ? decimal(receiptLine.product.price) : "",
             sagaAliases: true,
           })
         }),
@@ -2482,7 +2684,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       }
     })
     splitSpreadsheetFiles = receipts.map((receipt) => {
-      const receiptSgrForFile = receipt.items.reduce((sum: number, line: any) => sum + receiptSgrValues(line, receipt).valueRon, 0)
+      const receiptSgrForFile = receipt.items.reduce((sum: number, line) => sum + receiptSgrValues(line, receipt).valueRon, 0)
       const detailsRows = receipt.items.flatMap((line) => {
         const lineType = sagaPurchaseReceiptLineType(line.product, stockTypes, config)
         const lineManagement = receipt.location?.code || receipt.location?.name || ""
@@ -2785,7 +2987,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       })
     )
 
-    const buildProductionXml = (document: any) =>
+    const buildProductionXml = (document: ProductionDocumentLike) =>
       [
         `    <DocumentProductie>`,
         buildSagaOperationalHeader({
@@ -2797,14 +2999,14 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         }),
         `      <Detalii>`,
         `        <Continut>`,
-        ...document.items.map((line: any, index: number) => {
+        ...document.items.map((line, index: number) => {
           const stockType = pickStockType(line.product, stockTypes, config)
           const unitCost = latestCostMap.get(line.productId) ?? Number(line.product.costPrice || 0)
           return buildSagaOperationalLine({
             index: index + 1,
             management: managementValue(config, document.location),
             description: line.product.name,
-            code: line.product.accountingItemCode || line.product.sku || slugCode(line.product.name, "ART"),
+            code: line.product.accountingItemCode || line.product.sku || slugCode(line.product.name || "", "ART"),
             guid: line.product.id,
             barcode: "",
             info: document.note || "",
