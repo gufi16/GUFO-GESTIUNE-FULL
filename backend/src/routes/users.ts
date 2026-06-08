@@ -1,4 +1,4 @@
-import { UserRole } from "@prisma/client"
+import { Prisma, UserRole } from "@prisma/client"
 import { Router } from "express"
 import path from "path"
 import multer from "multer"
@@ -116,7 +116,7 @@ async function syncUserCompanyAccess(userId: string, companyIds: string[]) {
   })
 }
 
-function normalizeImageUrl(value: any) {
+function normalizeImageUrl(value: unknown) {
   return normalizeStoredUploadUrl(value)
 }
 
@@ -236,7 +236,7 @@ router.patch("/api/v1/users/:id", requireAuth, async (req: AuthedRequest, res) =
     return res.status(409).json({ ok: false, error: "Exista deja un utilizator cu acest email" })
   }
 
-  const updateData: any = {
+  const updateData: Prisma.UserUpdateInput = {
     email: normalizedEmail,
     name: parsed.data.name.trim(),
     imageUrl: normalizeImageUrl(parsed.data.imageUrl),
