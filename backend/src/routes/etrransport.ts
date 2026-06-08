@@ -18,12 +18,87 @@ import { extractDownloadId, normalizeCompanyCui } from "../lib/incomingEfactura"
 const router = Router()
 router.use(requireAuth)
 
-function toNumber(value: any) {
+type EtransportListEntry = {
+  id_descarcare?: unknown
+  downloadId?: unknown
+  id?: unknown
+  uit?: unknown
+}
+
+type EtransportNoticeItemLike = {
+  qty?: unknown
+  unitPrice?: unknown
+  lineValue?: unknown
+  netWeightPerUnitKg?: unknown
+  netWeightTotalKg?: unknown
+  grossWeightPerUnitKg?: unknown
+  grossWeightTotalKg?: unknown
+  fiscalRisk?: unknown
+  product?: {
+    price?: unknown
+    costPrice?: unknown
+    grossWeightKg?: unknown
+  } | null
+}
+
+type EtransportNoticeLike = {
+  vehicleMaxMassKg?: unknown
+  totalGrossWeightKg?: unknown
+  totalValueRon?: unknown
+  uploadIndex?: unknown
+  noticeNo?: unknown
+  items?: EtransportNoticeItemLike[] | null
+}
+
+type EtransportCompanyLike = {
+  cui?: string | null
+  efacturaOauthAccessToken?: string | null
+}
+
+type TransferSourceItemLike = {
+  id?: string | null
+  productId?: string | null
+  qty?: unknown
+  unitPrice?: unknown
+  lineValue?: unknown
+  product?: {
+    sku?: unknown
+    name?: unknown
+    ncCode?: unknown
+    isFiscalRiskProduct?: unknown
+    netWeightKg?: unknown
+    grossWeightKg?: unknown
+    uom?: {
+      standardCode?: unknown
+      code?: unknown
+    } | null
+  } | null
+}
+
+type ManualNoticeItemInput = {
+  productId?: unknown
+  sourceItemId?: unknown
+  sku?: unknown
+  name?: unknown
+  ncCode?: unknown
+  fiscalRisk?: unknown
+  uomCode?: unknown
+  qty?: unknown
+  unitPrice?: unknown
+  lineValue?: unknown
+  netWeightPerUnitKg?: unknown
+  netWeightTotalKg?: unknown
+  grossWeightPerUnitKg?: unknown
+  grossWeightTotalKg?: unknown
+  internalReference?: unknown
+}
+
+function toNumber(value: unknown) {
   const n = Number(value)
   return Number.isFinite(n) ? n : 0
 }
 
-function text(value: any) {
+function text(value: unknown) {
   return String(value || "").trim()
 }
 
@@ -44,7 +119,7 @@ function makeNoticeNo() {
   return `ETR-${datePart}-${timePart}-${rand}`
 }
 
-function classifyEtransportStatus(payload: any, rawText: string) {
+function classifyEtransportStatus(payload: unknown, rawText: string) {
   const textBlob = `${JSON.stringify(payload || {})} ${rawText}`.toLowerCase()
   if (/(nok|respins|rejected|eroare|error|invalid)/i.test(textBlob)) return "REJECTED"
   if (/(ok|acceptat|accepted|validat|uit|disponibil|descarcare)/i.test(textBlob)) return "ACCEPTED"
@@ -68,12 +143,12 @@ function hasExplicitDownloadId(raw: string) {
   return /id_descarcare|downloadId/i.test(String(raw || ""))
 }
 
-async function resolveNoticeDownloadId(company: any, notice: any) {
+async function resolveNoticeDownloadId(company: EtransportCompanyLike | null, notice: EtransportNoticeLike | null) {
   const cif = normalizeCompanyCui(company?.cui)
   if (!cif || !company?.efacturaOauthAccessToken || !notice?.uploadIndex) return ""
 
   const listResult = await anafListEtransportMessages(company, { days: 60, cif })
-  const matched = listResult.items.find((item: any) => {
+  const matched = listResult.items.find((item: EtransportListEntry) => {
     const blob = JSON.stringify(item || {}).toLowerCase()
     return blob.includes(String(notice.uploadIndex).toLowerCase()) || blob.includes(String(notice.noticeNo || "").toLowerCase())
   })
@@ -87,12 +162,12 @@ async function resolveNoticeDownloadId(company: any, notice: any) {
     : ""
 }
 
-async function resolveNoticeUit(company: any, notice: any) {
+async function resolveNoticeUit(company: EtransportCompanyLike | null, notice: EtransportNoticeLike | null) {
   const cif = normalizeCompanyCui(company?.cui)
   if (!cif || !company?.efacturaOauthAccessToken || !notice?.uploadIndex) return ""
 
   const listResult = await anafListEtransportMessages(company, { days: 60, cif })
-  const matched = listResult.items.find((item: any) => {
+  const matched = listResult.items.find((item: EtransportListEntry) => {
     const blob = JSON.stringify(item || {}).toLowerCase()
     return blob.includes(String(notice.uploadIndex).toLowerCase()) || blob.includes(String(notice.noticeNo || "").toLowerCase())
   })
@@ -100,7 +175,7 @@ async function resolveNoticeUit(company: any, notice: any) {
   return text(matched?.uit)
 }
 
-function serializeNotice(notice: any) {
+function serializeNotice(notice: EtransportNoticeLike | null | undefined) {
   if (!notice) return notice
   return {
     ...notice,
@@ -108,7 +183,7 @@ function serializeNotice(notice: any) {
     totalGrossWeightKg: toNumber(notice.totalGrossWeightKg || 0),
     totalValueRon: toNumber(notice.totalValueRon || 0),
     items: Array.isArray(notice.items)
-      ? notice.items.map((item: any) => ({
+      ? notice.items.map((item: EtransportNoticeItemLike) => ({
         ...item,
         qty: toNumber(item.qty),
         unitPrice: toNumber(item.unitPrice),
@@ -130,7 +205,7 @@ function serializeNotice(notice: any) {
   }
 }
 
-function recalcNotice(items: any[]) {
+function recalcNotice(items: EtransportNoticeItemLike[]) {
   const normalized = Array.isArray(items) ? items : []
   const totalGrossWeightKg = normalized.reduce((sum, item) => sum + toNumber(item.grossWeightTotalKg || toNumber(item.qty) * toNumber(item.grossWeightPerUnitKg)), 0)
   const totalValueRon = normalized.reduce((sum, item) => sum + toNumber(item.lineValue), 0)
@@ -266,10 +341,10 @@ router.post("/api/v1/etransport/notices/from-transfer/:transferId", async (req: 
     return res.status(404).json({ ok: false, error: "Transferul nu a fost gasit." })
   }
 
-  const items = transfer.items.map((item: any, index: number) => ({
+  const items = transfer.items.map((item: TransferSourceItemLike, index: number) => ({
     lineNo: index + 1,
-    productId: item.productId,
-    sourceItemId: item.id,
+    productId: text(item.productId) || null,
+    sourceItemId: text(item.id) || null,
     sku: text(item.product?.sku),
     name: text(item.product?.name),
     ncCode: text(item.product?.ncCode),
@@ -356,7 +431,7 @@ router.put("/api/v1/etransport/notices/:id", async (req: AuthedRequest, res) => 
 
   const header = req.body?.header || {}
   const incomingItems = Array.isArray(req.body?.items) ? req.body.items : []
-  const items = incomingItems.map((item: any, index: number) => ({
+  const items = incomingItems.map((item: ManualNoticeItemInput, index: number) => ({
     lineNo: index + 1,
     productId: text(item.productId) || null,
     sourceItemId: text(item.sourceItemId) || null,
