@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import jwt from "jsonwebtoken";
-import { ExternalOrderHistorySource, ExternalOrderStatus, Prisma, UserRole } from "@prisma/client";
+import { ExternalOrderHistorySource, ExternalOrderStatus, KitchenTicketStatus, Prisma, UserRole } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { prisma } from "../lib/prisma";
 import { decrementStockBalanceAllowNegative } from "../lib/stock";
@@ -38,6 +38,160 @@ type PosAuthRequest = Request & {
     deviceId?: string;
   };
 };
+
+type JsonRecord = Record<string, unknown>;
+
+type PosSaleLineLike = {
+  qty?: unknown;
+  unitPrice?: unknown;
+  vatRate?: unknown;
+  lineTotalBeforeDiscount?: unknown;
+  lineDiscountTotal?: unknown;
+  lineTotalAfterDiscount?: unknown;
+  discountPercent?: unknown;
+  productId?: string | null;
+  product?: {
+    id?: string | null;
+    name?: string | null;
+    sku?: string | null;
+    isSgr?: unknown;
+    sgrValue?: unknown;
+    uom?: {
+      code?: string | null;
+      name?: string | null;
+    } | null;
+  } | null;
+} | null;
+
+type PosSaleLike = {
+  id?: unknown;
+  receiptNo?: unknown;
+  soldAt?: unknown;
+  clientSaleId?: unknown;
+} | null;
+
+type CatalogRecipeItemLike = {
+  qty?: unknown;
+  ingredientId?: unknown;
+  ingredient?: {
+    id?: unknown;
+    sku?: unknown;
+    name?: unknown;
+  } | null;
+};
+
+type CatalogProductLike = {
+  id: string;
+  sku?: string | null;
+  name?: string | null;
+  imageUrl?: unknown;
+  class?: string | null;
+  price?: unknown;
+  isActive?: unknown;
+  isVisibleInPos?: unknown;
+  isSgr?: unknown;
+  sgrValue?: unknown;
+  productionMode?: string | null;
+  isMenu?: unknown;
+  categoryId?: string | null;
+  departmentId?: string | null;
+  vatRate?: {
+    id?: string | null;
+    name?: string | null;
+    rate?: unknown;
+    fiscalCode?: string | null;
+  } | null;
+  uom?: {
+    id?: string | null;
+    code?: string | null;
+    name?: string | null;
+  } | null;
+  department?: {
+    id?: string | null;
+    name?: string | null;
+  } | null;
+  category?: {
+    id?: string | null;
+    name?: string | null;
+    imageUrl?: unknown;
+    departmentId?: string | null;
+  } | null;
+  barcodes?: Array<{ barcode?: string | null }> | null;
+  recipe?: {
+    items?: CatalogRecipeItemLike[] | null;
+  } | null;
+};
+
+type MarketplaceIntegrationLike = {
+  settingsJson?: unknown;
+};
+
+type MarketplaceSettings = JsonRecord & {
+  glovoChainId?: unknown;
+  glovoDefaultPrepMinutes?: unknown;
+  glovoClientId?: unknown;
+  glovoClientSecret?: unknown;
+  targetTerminalId?: unknown;
+  targetTerminalDeviceId?: unknown;
+  merchantName?: unknown;
+  partnerName?: unknown;
+};
+
+type MarketplaceOrderItemLike = {
+  qty?: unknown;
+  unitPrice?: unknown;
+  sku?: unknown;
+};
+
+type MarketplaceOrderLike = {
+  id: string;
+  platform?: unknown;
+  total?: unknown;
+  externalOrderId?: unknown;
+  locationId?: unknown;
+  placedAt?: unknown;
+  status?: unknown;
+  readyAt?: unknown;
+  rawPayloadJson?: unknown;
+  integration?: MarketplaceIntegrationLike | null;
+  items?: MarketplaceOrderItemLike[] | null;
+};
+
+type GlovoUpdateItem = {
+  pricing: {
+    pricing_type: "UNIT";
+    quantity: number;
+    unit_price: number;
+    weight: number;
+  };
+  status: "IN_CART";
+  _id?: string;
+  sku?: string;
+};
+
+type GlovoSyncResult = {
+  skipped: boolean;
+  reason?: string;
+  error?: string;
+  glovoStatus?: string;
+  response?: unknown;
+};
+
+function asObject(value: unknown): JsonRecord {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : {};
+}
+
+function parseJsonText(text: string): unknown {
+  try {
+    return text ? JSON.parse(text) : null;
+  } catch {
+    return text || null;
+  }
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
 
 function buildPosSessionKey(req: Request) {
   const userAgent = normalizeText(req.headers["user-agent"]).slice(0, 200);
@@ -420,7 +574,7 @@ async function requirePosAuth(req: PosAuthRequest, res: Response, next: NextFunc
   }
 }
 
-function toNumber(value: any) {
+function toNumber(value: unknown) {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
 }
@@ -436,17 +590,17 @@ function normalizeOptionalText(value: unknown) {
 
 function parseLooseJsonObject(value: unknown) {
   if (!value) return {};
-  if (typeof value === "object") return value as Record<string, any>;
+  if (typeof value === "object" && !Array.isArray(value)) return value as JsonRecord;
   if (typeof value !== "string") return {};
   try {
-    return JSON.parse(value) as Record<string, any>;
+    return asObject(JSON.parse(value));
   } catch {
     return {};
   }
 }
 
 function parseMarketplaceSettings(value: unknown) {
-  return parseLooseJsonObject(value);
+  return parseLooseJsonObject(value) as MarketplaceSettings;
 }
 
 function pickFirstNonBlank(...values: unknown[]) {
@@ -457,10 +611,11 @@ function pickFirstNonBlank(...values: unknown[]) {
   return "";
 }
 
-function extractAnafCompanyPayload(entry: any) {
-  const general = entry?.date_generale || {};
-  const headquarters = entry?.adresa_sediu_social || {};
-  const registration = entry?.inregistrare_RTVAI || entry?.inregistrare_scop_Tva || {};
+function extractAnafCompanyPayload(entry: unknown) {
+  const source = asObject(entry);
+  const general = asObject(source.date_generale);
+  const headquarters = asObject(source.adresa_sediu_social);
+  const registration = asObject(source.inregistrare_RTVAI || source.inregistrare_scop_Tva);
 
   const county =
     headquarters?.sdenumire_Judet ||
@@ -565,7 +720,7 @@ function resolveImageUrl(req: Request, rawUrl: unknown) {
   return `${apiBaseUrl}/${value}`.replace(/^http:\/\//i, "https://");
 }
 
-function buildSgrLine(product: any, qty: number) {
+function buildSgrLine(product: CatalogProductLike | null | undefined, qty: number) {
   const isSgr = Boolean(product?.isSgr);
   const unitPrice = isSgr ? toNumber(product?.sgrValue || 0.5) : 0;
   const total = qty * unitPrice;
@@ -579,34 +734,38 @@ function buildSgrLine(product: any, qty: number) {
     unitPrice,
     vatRate: 0,
     total,
+    lineDiscountTotal: 0,
+    lineTotalBeforeDiscount: total,
+    lineTotalAfterDiscount: total,
+    discountPercent: 0,
     isSgr,
   };
 }
 
-function isSyntheticSgrSaleLine(line: any) {
+function isSyntheticSgrSaleLine(line: PosSaleLineLike) {
   if (!line?.product?.isSgr) return false;
   const unitPrice = toNumber(line?.unitPrice);
   const sgrValue = toNumber(line?.product?.sgrValue || 0.5);
   return toNumber(line?.vatRate) === 0 && Math.abs(unitPrice - sgrValue) < 0.0001;
 }
 
-function buildInvoiceFromSaleNote(sale: any, userNote?: string) {
+function buildInvoiceFromSaleNote(sale: PosSaleLike, userNote?: string) {
   const parts = [
     normalizeText(userNote),
     `Factura emisa dupa bon fiscal ${normalizeText(sale?.receiptNo) || sale?.id || "-"}`,
-    sale?.soldAt ? `Data bon: ${new Date(sale.soldAt).toISOString()}` : "",
+    sale?.soldAt ? `Data bon: ${new Date(String(sale.soldAt)).toISOString()}` : "",
     `[POS-SALE:${sale?.id || ""}]`,
     sale?.clientSaleId ? `[POS-CLIENT-SALE:${sale.clientSaleId}]` : "",
   ].filter(Boolean);
   return parts.join("\n");
 }
 
-function mapCatalogProduct(req: Request, product: any, isVatPayer: boolean) {
+function mapCatalogProduct(req: Request, product: CatalogProductLike, isVatPayer: boolean) {
   const recipeItems = Array.isArray(product.recipe?.items) ? product.recipe.items : [];
   const menuComponents =
     product.isMenu === true
       ? recipeItems
-          .map((item: any) => {
+          .map((item: CatalogRecipeItemLike) => {
             const ingredient = item?.ingredient;
             const componentId = String(ingredient?.id || item?.ingredientId || "").trim();
             if (!componentId) return null;
@@ -675,7 +834,7 @@ function mapCatalogProduct(req: Request, product: any, isVatPayer: boolean) {
     isMenu: Boolean(product.isMenu),
     menuComponents,
     barcodes: Array.isArray(product.barcodes)
-      ? product.barcodes.map((barcode: any) => barcode.barcode)
+      ? product.barcodes.map((barcode: { barcode?: string | null }) => barcode.barcode)
       : [],
   };
 }
@@ -1428,7 +1587,7 @@ export async function handlePosDailyClosure(req: PosAuthRequest, res: Response) 
       let cashTotal = toNumber(data.cashTotal);
       let cardTotal = toNumber(data.cardTotal);
       let otherTotal = toNumber(data.otherTotal);
-      const clientProvidedTotals = Boolean((data.payload as any)?.clientTotals);
+      const clientProvidedTotals = Boolean(asObject(data.payload).clientTotals);
 
       if (!clientProvidedTotals && total === 0 && cashTotal === 0 && cardTotal === 0 && otherTotal === 0) {
         const previousClosure = await prisma.posDailyClosure.findFirst({
@@ -1625,8 +1784,8 @@ const PosMarketplaceKdsStatusSchema = z.object({
   message: z.string().trim().optional(),
 });
 
-function getIntegrationSettingsObject(integration: any) {
-  return integration?.settingsJson && typeof integration.settingsJson === "object" ? integration.settingsJson : {};
+function getIntegrationSettingsObject(integration: MarketplaceIntegrationLike | null | undefined): MarketplaceSettings {
+  return integration?.settingsJson && typeof integration.settingsJson === "object" ? (integration.settingsJson as MarketplaceSettings) : {};
 }
 
 function normalizeGlovoTransportType(value: unknown) {
@@ -1636,19 +1795,20 @@ function normalizeGlovoTransportType(value: unknown) {
   return normalized || null;
 }
 
-function getGlovoChainIdForOrder(order: any) {
-  const raw = order?.rawPayloadJson && typeof order.rawPayloadJson === "object" ? order.rawPayloadJson : {};
+function getGlovoChainIdForOrder(order: MarketplaceOrderLike | null | undefined) {
+  const raw = asObject(order?.rawPayloadJson);
+  const rawClient = asObject(raw.client);
   const settings = getIntegrationSettingsObject(order?.integration);
-  return String(raw?.client?.chain_id || raw?.chain_id || settings?.glovoChainId || "").trim() || null;
+  return String(rawClient.chain_id || raw.chain_id || settings.glovoChainId || "").trim() || null;
 }
 
-function getGlovoOrderUuid(order: any) {
-  const raw = order?.rawPayloadJson && typeof order.rawPayloadJson === "object" ? order.rawPayloadJson : {};
+function getGlovoOrderUuid(order: MarketplaceOrderLike | null | undefined) {
+  const raw = asObject(order?.rawPayloadJson);
   return String(raw?.order_id || raw?.id || order?.externalOrderId || "").trim() || null;
 }
 
-function getGlovoAcceptedFor(order: any) {
-  const raw = order?.rawPayloadJson && typeof order.rawPayloadJson === "object" ? order.rawPayloadJson : {};
+function getGlovoAcceptedFor(order: MarketplaceOrderLike | null | undefined) {
+  const raw = asObject(order?.rawPayloadJson);
   const acceptedRaw = String(raw?.accepted_for || raw?.promised_for || "").trim();
   if (acceptedRaw) {
     const parsed = new Date(acceptedRaw);
@@ -1658,7 +1818,7 @@ function getGlovoAcceptedFor(order: any) {
   const settings = getIntegrationSettingsObject(order?.integration);
   const prepMinutes = Number(settings?.glovoDefaultPrepMinutes || 0);
   if (prepMinutes > 0) {
-    const base = order?.placedAt ? new Date(order.placedAt) : new Date();
+      const base = order?.placedAt ? new Date(String(order.placedAt)) : new Date();
     if (!Number.isNaN(base.getTime())) {
       base.setMinutes(base.getMinutes() + prepMinutes);
       return base.toISOString();
@@ -1668,8 +1828,8 @@ function getGlovoAcceptedFor(order: any) {
   return null;
 }
 
-function buildGlovoUpdateItems(order: any) {
-  const raw = order?.rawPayloadJson && typeof order.rawPayloadJson === "object" ? order.rawPayloadJson : {};
+function buildGlovoUpdateItems(order: MarketplaceOrderLike | null | undefined) {
+  const raw = asObject(order?.rawPayloadJson);
   const rawItems = Array.isArray(raw?.items)
     ? raw.items
     : Array.isArray(raw?.products)
@@ -1679,28 +1839,31 @@ function buildGlovoUpdateItems(order: any) {
 
   const normalized = rawItems.length ? rawItems : fallbackItems;
   return normalized
-    .map((item: any, index: number) => {
+    .map((item: unknown, index: number) => {
+      const rawItem = asObject(item);
       const fallbackOrderItem = fallbackItems[index];
-      const quantity = Number(item?.pricing?.quantity ?? item?.quantity ?? item?.qty ?? fallbackOrderItem?.qty ?? 1) || 1;
+      const itemPricing = asObject(rawItem.pricing);
+      const itemOriginalPricing = asObject(rawItem.original_pricing);
+      const quantity = Number(itemPricing.quantity ?? rawItem.quantity ?? rawItem.qty ?? fallbackOrderItem?.qty ?? 1) || 1;
       const unitPrice = Number(
-        item?.pricing?.unit_price ??
-        item?.original_pricing?.unit_price ??
-        item?.unit_price ??
-        item?.price ??
+        itemPricing.unit_price ??
+        itemOriginalPricing.unit_price ??
+        rawItem.unit_price ??
+        rawItem.price ??
         fallbackOrderItem?.unitPrice ??
         0
       ) || 0;
-      const payloadItem: any = {
+      const payloadItem: GlovoUpdateItem = {
         pricing: {
           pricing_type: "UNIT",
           quantity,
           unit_price: unitPrice,
-          weight: Number(item?.pricing?.weight ?? item?.original_pricing?.weight ?? 0) || 0,
+          weight: Number(itemPricing.weight ?? itemOriginalPricing.weight ?? 0) || 0,
         },
         status: "IN_CART",
       };
-      const rawId = String(item?._id || item?.id || "").trim();
-      const rawSku = String(item?.sku || fallbackOrderItem?.sku || item?.product_id || item?.externalProductId || "").trim();
+      const rawId = String(rawItem._id || rawItem.id || "").trim();
+      const rawSku = String(rawItem.sku || fallbackOrderItem?.sku || rawItem.product_id || rawItem.externalProductId || "").trim();
       if (rawId) payloadItem._id = rawId;
       if (rawSku) payloadItem.sku = rawSku;
       if (!payloadItem._id && !payloadItem.sku) return null;
@@ -1709,7 +1872,7 @@ function buildGlovoUpdateItems(order: any) {
     .filter(Boolean);
 }
 
-async function requestGlovoPartnerAccessToken(integration: any) {
+async function requestGlovoPartnerAccessToken(integration: MarketplaceIntegrationLike | null | undefined) {
   const settings = getIntegrationSettingsObject(integration);
   const clientId = String(settings?.glovoClientId || "").trim();
   const clientSecret = String(settings?.glovoClientSecret || "").trim();
@@ -1731,18 +1894,14 @@ async function requestGlovoPartnerAccessToken(integration: any) {
   });
 
   const text = await response.text();
-  let payload: any = null;
-  try {
-    payload = text ? JSON.parse(text) : null;
-  } catch {
-    payload = null;
-  }
+  const payload = parseJsonText(text);
+  const payloadObject = asObject(payload);
 
   if (!response.ok) {
-    throw new Error(payload?.message || payload?.error_description || `Glovo OAuth failed with ${response.status}`);
+    throw new Error(String(payloadObject.message || payloadObject.error_description || `Glovo OAuth failed with ${response.status}`));
   }
 
-  const token = String(payload?.access_token || "").trim();
+  const token = String(payloadObject.access_token || "").trim();
   if (!token) {
     throw new Error("Glovo OAuth nu a returnat access_token.");
   }
@@ -1750,8 +1909,8 @@ async function requestGlovoPartnerAccessToken(integration: any) {
   return token;
 }
 
-function decideGlovoOutboundStatus(order: any, nextInternalStatus: string) {
-  const transportType = normalizeGlovoTransportType(order?.rawPayloadJson?.transport_type);
+function decideGlovoOutboundStatus(order: MarketplaceOrderLike | null | undefined, nextInternalStatus: string) {
+  const transportType = normalizeGlovoTransportType(asObject(order?.rawPayloadJson).transport_type);
   if (nextInternalStatus === "ACKNOWLEDGED" && transportType === "VENDOR_DELIVERY") {
     return "ACCEPTED";
   }
@@ -1766,7 +1925,7 @@ function decideGlovoOutboundStatus(order: any, nextInternalStatus: string) {
 
 export async function syncGlovoPartnerStatusForOrder(
   auth: NonNullable<PosAuthRequest["auth"]>,
-  order: any,
+  order: MarketplaceOrderLike,
   nextInternalStatus: string,
   source: "POS" | "KDS"
 ) {
@@ -1794,7 +1953,7 @@ export async function syncGlovoPartnerStatusForOrder(
     return { skipped: true, reason: "missing-order-items" };
   }
 
-  const body: any = {
+  const body: JsonRecord = {
     order_id: glovoOrderId,
     status: glovoStatus,
     confirmed_amount: confirmedAmount,
@@ -1821,19 +1980,17 @@ export async function syncGlovoPartnerStatusForOrder(
   });
 
   const text = await response.text();
-  let payload: any = null;
-  try {
-    payload = text ? JSON.parse(text) : null;
-  } catch {
-    payload = text || null;
-  }
+  const payload = parseJsonText(text);
+  const payloadObject = asObject(payload);
 
   if (!response.ok) {
     throw new Error(
-      payload?.message ||
-      payload?.error ||
-      payload?.detail ||
+      String(
+      payloadObject.message ||
+      payloadObject.error ||
+      payloadObject.detail ||
       `Glovo Update Order failed with ${response.status}`
+      )
     );
   }
 
@@ -1856,7 +2013,7 @@ export async function syncGlovoPartnerStatusForOrder(
 
 export async function syncGlovoPartnerCancellationForOrder(
   auth: NonNullable<PosAuthRequest["auth"]>,
-  order: any,
+  order: MarketplaceOrderLike,
   source: "POS" | "KDS",
   reason = "OTHER"
 ) {
@@ -1899,19 +2056,17 @@ export async function syncGlovoPartnerCancellationForOrder(
   });
 
   const text = await response.text();
-  let payload: any = null;
-  try {
-    payload = text ? JSON.parse(text) : null;
-  } catch {
-    payload = text || null;
-  }
+  const payload = parseJsonText(text);
+  const payloadObject = asObject(payload);
 
   if (!response.ok) {
     throw new Error(
-      payload?.message ||
-      payload?.error ||
-      payload?.detail ||
+      String(
+      payloadObject.message ||
+      payloadObject.error ||
+      payloadObject.detail ||
       `Glovo Cancel Order failed with ${response.status}`
+      )
     );
   }
 
@@ -1940,17 +2095,17 @@ async function resolvePosMarketplaceTerminalLocation(auth: NonNullable<PosAuthRe
   });
 }
 
-function getMarketplaceTargetTerminalId(integration: any) {
-  const value = integration?.settingsJson?.targetTerminalId;
+function getMarketplaceTargetTerminalId(integration: MarketplaceIntegrationLike | null | undefined) {
+  const value = getIntegrationSettingsObject(integration).targetTerminalId;
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function getMarketplaceTargetTerminalDeviceId(integration: any) {
-  const value = integration?.settingsJson?.targetTerminalDeviceId;
+function getMarketplaceTargetTerminalDeviceId(integration: MarketplaceIntegrationLike | null | undefined) {
+  const value = getIntegrationSettingsObject(integration).targetTerminalDeviceId;
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-async function resolveMarketplaceTargetTerminal(integration: any) {
+async function resolveMarketplaceTargetTerminal(integration: MarketplaceIntegrationLike | null | undefined) {
   const targetTerminalId = getMarketplaceTargetTerminalId(integration);
   const targetTerminalDeviceId = getMarketplaceTargetTerminalDeviceId(integration);
 
@@ -1983,7 +2138,7 @@ async function resolveMarketplaceTargetTerminal(integration: any) {
   };
 }
 
-async function isMarketplaceOrderVisibleToTerminal(order: any, auth: NonNullable<PosAuthRequest["auth"]>) {
+async function isMarketplaceOrderVisibleToTerminal(order: MarketplaceOrderLike | null | undefined, auth: NonNullable<PosAuthRequest["auth"]>) {
   const targetTerminal = await resolveMarketplaceTargetTerminal(order?.integration);
   if (targetTerminal) {
     if (auth.terminalId && targetTerminal.id === auth.terminalId) {
@@ -2005,7 +2160,7 @@ async function isMarketplaceOrderVisibleToTerminal(order: any, auth: NonNullable
   return terminal.locationId === order?.locationId;
 }
 
-async function getMarketplaceVisibilityDebug(order: any, auth: NonNullable<PosAuthRequest["auth"]>) {
+async function getMarketplaceVisibilityDebug(order: MarketplaceOrderLike | null | undefined, auth: NonNullable<PosAuthRequest["auth"]>) {
   const targetTerminal = await resolveMarketplaceTargetTerminal(order?.integration);
   const authTerminalId = auth.terminalId || null;
   const authDeviceId = auth.deviceId || null;
@@ -2263,7 +2418,7 @@ router.post("/api/v1/pos/marketplace/:externalOrderId/accept", async (req: PosAu
   }
 
   const nextStatus = order.status === "RECEIVED" ? "ACKNOWLEDGED" : order.status;
-  await prisma.$transaction(async (tx: any) => {
+  await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     if (nextStatus !== order.status || order.cancelledAt) {
       await tx.externalOrder.update({
         where: { id: order.id },
@@ -2299,7 +2454,7 @@ router.post("/api/v1/pos/marketplace/:externalOrderId/accept", async (req: PosAu
     { terminalId: auth.terminalId || null }
   );
 
-  let glovoSync: any = { skipped: true, reason: "not-run" };
+  let glovoSync: GlovoSyncResult = { skipped: true, reason: "not-run" };
   try {
     glovoSync = await syncGlovoPartnerStatusForOrder(
       auth,
@@ -2361,7 +2516,7 @@ router.post("/api/v1/pos/marketplace/:externalOrderId/send-to-kds", async (req: 
     return res.status(404).json({ ok: false, error: "Marketplace order not found" });
   }
 
-  await prisma.$transaction(async (tx: any) => {
+  await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     await tx.externalOrder.update({
       where: { id: order.id },
         data: { status: "IN_KITCHEN" },
@@ -2424,7 +2579,7 @@ router.post("/api/v1/pos/marketplace/:externalOrderId/kds-status", async (req: P
 
   const now = new Date();
 
-  await prisma.$transaction(async (tx: any) => {
+  await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     await tx.externalOrder.update({
       where: { id: order.id },
       data: {
@@ -2436,12 +2591,12 @@ router.post("/api/v1/pos/marketplace/:externalOrderId/kds-status", async (req: P
     if (order.kitchenTicket) {
       const kitchenPayload =
         normalizedStatus === "READY_FOR_FISCAL"
-          ? { status: "READY", readyAt: now }
+          ? ({ status: KitchenTicketStatus.READY, readyAt: now } satisfies Prisma.KitchenTicketUpdateInput)
           : normalizedStatus === "IN_KITCHEN"
-            ? { status: "IN_PROGRESS" }
+            ? ({ status: KitchenTicketStatus.IN_PROGRESS } satisfies Prisma.KitchenTicketUpdateInput)
             : normalizedStatus === "ACKNOWLEDGED"
-                ? { status: "NEW" }
-                : { status: "NEW" };
+                ? ({ status: KitchenTicketStatus.NEW } satisfies Prisma.KitchenTicketUpdateInput)
+                : ({ status: KitchenTicketStatus.NEW } satisfies Prisma.KitchenTicketUpdateInput);
       await tx.kitchenTicket.update({
         where: { id: order.kitchenTicket.id },
         data: kitchenPayload,
@@ -2467,7 +2622,7 @@ router.post("/api/v1/pos/marketplace/:externalOrderId/kds-status", async (req: P
     });
   });
 
-  let glovoSync: any = { skipped: true, reason: "not-run" };
+  let glovoSync: GlovoSyncResult = { skipped: true, reason: "not-run" };
   try {
     glovoSync = await syncGlovoPartnerStatusForOrder(
       auth,
@@ -2577,17 +2732,17 @@ router.post("/api/v1/pos/marketplace/:externalOrderId/load-cart", async (req: Po
         customerNote: order.customerNote,
         paymentLabel: order.paymentLabel,
         restaurantName: pickFirstNonBlank(
-          parseMarketplaceSettings(order.integration?.settingsJson)?.merchantName,
-          parseMarketplaceSettings(order.integration?.settingsJson)?.partnerName,
+          parseMarketplaceSettings(order.integration?.settingsJson).merchantName,
+          parseMarketplaceSettings(order.integration?.settingsJson).partnerName,
           order.location?.name
         ) || null,
         deliveryAddress: pickFirstNonBlank(
-          parseLooseJsonObject(order.rawPayloadJson)?.delivery?.address?.label,
-          parseLooseJsonObject(order.rawPayloadJson)?.customer?.address?.label,
-          parseLooseJsonObject(order.rawPayloadJson)?.address?.label,
-          parseLooseJsonObject(order.rawPayloadJson)?.delivery_address?.label,
-          parseLooseJsonObject(order.rawPayloadJson)?.deliveryAddress?.label,
-          parseLooseJsonObject(order.rawPayloadJson)?.deliveryAddress
+          asObject(asObject(parseLooseJsonObject(order.rawPayloadJson).delivery).address).label,
+          asObject(asObject(parseLooseJsonObject(order.rawPayloadJson).customer).address).label,
+          asObject(parseLooseJsonObject(order.rawPayloadJson).address).label,
+          asObject(parseLooseJsonObject(order.rawPayloadJson).delivery_address).label,
+          asObject(parseLooseJsonObject(order.rawPayloadJson).deliveryAddress).label,
+          parseLooseJsonObject(order.rawPayloadJson).deliveryAddress
         ) || null,
         orderType: pickFirstNonBlank(
           parseLooseJsonObject(order.rawPayloadJson)?.order_type,
@@ -2611,12 +2766,12 @@ router.post("/api/v1/pos/marketplace/:externalOrderId/load-cart", async (req: Po
           parseLooseJsonObject(order.rawPayloadJson)?.pickup_eta
         ) || null,
         courierName: pickFirstNonBlank(
-          parseLooseJsonObject(order.rawPayloadJson)?.courier?.name,
+          asObject(parseLooseJsonObject(order.rawPayloadJson).courier).name,
           parseLooseJsonObject(order.rawPayloadJson)?.courier_name,
           parseLooseJsonObject(order.rawPayloadJson)?.courierName
         ) || null,
         courierPhone: pickFirstNonBlank(
-          parseLooseJsonObject(order.rawPayloadJson)?.courier?.phone,
+          asObject(parseLooseJsonObject(order.rawPayloadJson).courier).phone,
           parseLooseJsonObject(order.rawPayloadJson)?.courier_phone,
           parseLooseJsonObject(order.rawPayloadJson)?.courierPhone
         ) || null,
@@ -3106,7 +3261,7 @@ export async function handlePosReceiptInvoice(req: PosAuthRequest, res: Response
   const normalizedCustomerId = normalizeText(payload.customerId);
   const normalizedCustomerCif = normalizeText(payload.customerCif);
 
-  let customer: any = null;
+  let customer: Prisma.CustomerGetPayload<object> | null = null;
   if (normalizedCustomerId) {
     customer = await prisma.customer.findFirst({
       where: {
@@ -3168,12 +3323,12 @@ export async function handlePosReceiptInvoice(req: PosAuthRequest, res: Response
         const qty = toNumber(line.qty);
         const unitPriceGross = toNumber(line.unitPrice);
         const vatRate = toNumber(line.vatRate);
-        const lineGrossBeforeDiscount = toNumber((line as any).lineTotalBeforeDiscount) || qty * unitPriceGross;
-        const discountAmountFc = Math.max(0, toNumber((line as any).lineDiscountTotal));
-        const lineGrossFc = Math.max(0, toNumber((line as any).lineTotalAfterDiscount) || (lineGrossBeforeDiscount - discountAmountFc));
+        const lineGrossBeforeDiscount = toNumber(line.lineTotalBeforeDiscount) || qty * unitPriceGross;
+        const discountAmountFc = Math.max(0, toNumber(line.lineDiscountTotal));
+        const lineGrossFc = Math.max(0, toNumber(line.lineTotalAfterDiscount) || (lineGrossBeforeDiscount - discountAmountFc));
         const discountPercent =
           lineGrossBeforeDiscount > 0
-            ? Math.min(100, Math.max(0, toNumber((line as any).discountPercent) || (discountAmountFc * 100) / lineGrossBeforeDiscount))
+            ? Math.min(100, Math.max(0, toNumber(line.discountPercent) || (discountAmountFc * 100) / lineGrossBeforeDiscount))
             : 0;
         const unitPriceGrossAfterDiscount = qty > 0 ? lineGrossFc / qty : unitPriceGross;
         const lineNetFc = vatRate > 0 ? lineGrossFc / (1 + vatRate / 100) : lineGrossFc;
@@ -3386,13 +3541,13 @@ export async function handlePosReceiptsList(req: PosAuthRequest, res: Response) 
         clientSaleId: sale.clientSaleId,
         soldAt: sale.soldAt,
         total: toNumber(sale.total),
-        subtotal: toNumber((sale as any).subtotal),
-        merchandiseSubtotal: toNumber((sale as any).merchandiseSubtotal),
-        sgrTotal: toNumber((sale as any).sgrTotal),
-        discountTotal: toNumber((sale as any).discountTotal),
-        lineDiscountTotal: toNumber((sale as any).lineDiscountTotal),
-        cartDiscountTotal: toNumber((sale as any).cartDiscountTotal),
-        cartDiscountPercent: toNumber((sale as any).cartDiscountPercent),
+        subtotal: toNumber(sale.subtotal),
+        merchandiseSubtotal: toNumber(sale.merchandiseSubtotal),
+        sgrTotal: toNumber(sale.sgrTotal),
+        discountTotal: toNumber(sale.discountTotal),
+        lineDiscountTotal: toNumber(sale.lineDiscountTotal),
+        cartDiscountTotal: toNumber(sale.cartDiscountTotal),
+        cartDiscountPercent: toNumber(sale.cartDiscountPercent),
         paymentType: sale.paymentType,
         cashAmount: toNumber(sale.cashAmount),
         cardAmount: toNumber(sale.cardAmount),
@@ -3417,10 +3572,10 @@ export async function handlePosReceiptsList(req: PosAuthRequest, res: Response) 
               qty,
               unitPrice,
               vatRate: line.vatRate,
-              total: toNumber((line as any).lineTotalAfterDiscount) || qty * unitPrice,
-              lineTotalBeforeDiscount: toNumber((line as any).lineTotalBeforeDiscount) || qty * unitPrice,
-              discountPercent: toNumber((line as any).discountPercent),
-              lineDiscountTotal: toNumber((line as any).lineDiscountTotal),
+              total: toNumber(line.lineTotalAfterDiscount) || qty * unitPrice,
+              lineTotalBeforeDiscount: toNumber(line.lineTotalBeforeDiscount) || qty * unitPrice,
+              discountPercent: toNumber(line.discountPercent),
+              lineDiscountTotal: toNumber(line.lineDiscountTotal),
               isSgr: false,
             };
           }),
@@ -3464,7 +3619,7 @@ export async function handlePosBackofficeSalesSummary(req: PosAuthRequest, res: 
     const dateFrom = asDate(req.query.dateFrom, startOfDay(now));
     const dateTo = asDate(req.query.dateTo, endOfDay(now));
 
-    const saleWhere: any = {
+    const saleWhere: Prisma.SaleWhereInput = {
       tenantId,
       companyId: company?.id || null,
       soldAt: { gte: dateFrom, lte: dateTo },
@@ -3699,7 +3854,7 @@ export async function handlePosBackofficeReceiptCreate(req: PosAuthRequest, res:
       return res.status(400).json({ ok: false, error: "Terminal fara locatie selectata." });
     }
 
-    let supplier: any = null;
+    let supplier: Prisma.SupplierGetPayload<object> | null = null;
     if (normalizeText(payload.supplierId)) {
       supplier = await prisma.supplier.findFirst({
         where: {
@@ -4100,7 +4255,7 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
     toNumber(payload.lineDiscountTotal) ||
       receiptLines
         .filter((line) => line.type === "PRODUCT")
-        .reduce((sum, line) => sum + toNumber((line as any).lineDiscountTotal), 0)
+        .reduce((sum, line) => sum + toNumber(line.lineDiscountTotal), 0)
   );
   const normalizedCartDiscountTotal = Math.max(0, toNumber(payload.cartDiscountTotal));
   const normalizedDiscountTotal = Math.max(
