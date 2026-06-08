@@ -165,6 +165,7 @@ function assertTypedSensitiveModules() {
   const minutesDocSupport = readFileSafe("src/lib/minutesDocSupport.ts")
   const transferRouteSupport = readFileSafe("src/lib/transferRouteSupport.ts")
   const transferPostingSupport = readFileSafe("src/lib/transferPostingSupport.ts")
+  const transferEtransportSupport = readFileSafe("src/lib/transferEtransportSupport.ts")
   const incomingEfacturaRouteSupport = readFileSafe("src/lib/incomingEfacturaRouteSupport.ts")
   const ownerMiddleware = readFileSafe("src/middleware/requireOwner.ts")
   const metaRoutes = readFileSafe("src/routes/meta.ts")
@@ -452,8 +453,11 @@ function assertTypedSensitiveModules() {
       transferRouteSupport.includes("export function buildTransferPdfSignatureRows") &&
       transferRouteSupport.includes("export async function resolveEtransportDownloadId") &&
       transferRoutes.includes('from "../lib/transferPostingSupport"') &&
+      transferRoutes.includes('from "../lib/transferEtransportSupport"') &&
       transferPostingSupport.includes("export async function recalcTransferDocument") &&
-      transferPostingSupport.includes("export async function postTransferDocumentLines"),
+      transferPostingSupport.includes("export async function postTransferDocumentLines") &&
+      transferEtransportSupport.includes("export async function findTransferDocForEtransport") &&
+      transferEtransportSupport.includes("export async function updateTransferDocForEtransport"),
     "Keep transfer serialization, e-Transport summary/status helpers, and file-safe formatting in a typed helper module before removing // @ts-nocheck from the large transfer route."
   )
 

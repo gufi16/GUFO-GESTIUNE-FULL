@@ -12,6 +12,11 @@ import { drawSimpleTable, ensurePdfPage, pdfDate, pdfFmt, pdfText, registerPdfFo
 import { requireRequestCompanyId, resolveRequestCompany } from "../lib/companyScope"
 import { generateTransferETransportXml, validateTransferForETransport } from "../lib/etransport"
 import { resolveWarehouseForLocation } from "../lib/warehouse"
+import {
+  findTransferDocForEtransport,
+  findTransferReceiptDocForEtransport,
+  updateTransferDocForEtransport,
+} from "../lib/transferEtransportSupport"
 import { postTransferDocumentLines, recalcTransferDocument } from "../lib/transferPostingSupport"
 import {
   buildTransferDocListWhere,
@@ -115,28 +120,7 @@ router.post("/api/v1/transfers/:id/etransport/prepare", async (req: AuthedReques
     select: { id: true, name: true, cui: true },
   })
 
-  const doc = await prisma.transferDoc.findFirst({
-    where: { id, tenantId, companyId },
-    include: {
-      fromLocation: true,
-      fromWarehouse: true,
-      toLocation: true,
-      toWarehouse: true,
-      items: {
-        include: {
-          product: {
-            include: {
-              uom: true,
-              vatRate: true,
-            },
-          },
-          uom: true,
-          vatRate: true,
-        },
-        orderBy: { createdAt: "asc" },
-      },
-    },
-  })
+  const doc = await findTransferDocForEtransport(prisma, { id, tenantId, companyId })
 
   if (!doc) {
     return res.status(404).json({ ok: false, error: "Transferul nu a fost gasit." })
@@ -383,30 +367,13 @@ router.post("/api/v1/transfers/:id/etransport/send", async (req: AuthedRequest, 
       })
     }
 
-    const updated = await prisma.transferDoc.update({
-      where: { id: doc.id },
+    const updated = await updateTransferDocForEtransport(prisma, {
+      id: doc.id,
       data: {
         eTransportPreparedXml: xmlText,
         eTransportStatus: "SENT",
         eTransportUploadIndex: uploadIndex,
         eTransportErrorText: summary || null,
-      },
-      include: {
-        fromLocation: true,
-        toLocation: true,
-        items: {
-          include: {
-            product: {
-              include: {
-                uom: true,
-                vatRate: true,
-              },
-            },
-            uom: true,
-            vatRate: true,
-          },
-          orderBy: { createdAt: "asc" },
-        },
       },
     })
 
@@ -441,26 +408,7 @@ router.get("/api/v1/transfers/:id/etransport/status", async (req: AuthedRequest,
   const companyId = await requireRequestCompanyId(req)
   const id = String(req.params.id)
 
-  const doc = await prisma.transferDoc.findFirst({
-    where: { id, tenantId, companyId },
-    include: {
-      fromLocation: true,
-      toLocation: true,
-      items: {
-        include: {
-          product: {
-            include: {
-              uom: true,
-              vatRate: true,
-            },
-          },
-          uom: true,
-          vatRate: true,
-        },
-        orderBy: { createdAt: "asc" },
-      },
-    },
-  })
+  const doc = await findTransferDocForEtransport(prisma, { id, tenantId, companyId })
 
   if (!doc) {
     return res.status(404).json({ ok: false, error: "Transferul nu a fost gasit." })
@@ -489,30 +437,13 @@ router.get("/api/v1/transfers/:id/etransport/status", async (req: AuthedRequest,
       })
     }
 
-    const updated = await prisma.transferDoc.update({
-      where: { id: doc.id },
+    const updated = await updateTransferDocForEtransport(prisma, {
+      id: doc.id,
       data: {
         eTransportStatus: nextStatus,
         eTransportDownloadId: downloadId,
         eTransportUit: uit,
         eTransportErrorText: summary || null,
-      },
-      include: {
-        fromLocation: true,
-        toLocation: true,
-        items: {
-          include: {
-            product: {
-              include: {
-                uom: true,
-                vatRate: true,
-              },
-            },
-            uom: true,
-            vatRate: true,
-          },
-          orderBy: { createdAt: "asc" },
-        },
       },
     })
 
@@ -542,16 +473,7 @@ router.get("/api/v1/transfers/:id/etransport/receipt", async (req: AuthedRequest
   const companyId = await requireRequestCompanyId(req)
   const id = String(req.params.id)
 
-  const doc = await prisma.transferDoc.findFirst({
-    where: { id, tenantId, companyId },
-    select: {
-      id: true,
-      docNo: true,
-      eTransportUploadIndex: true,
-      eTransportDownloadId: true,
-      eTransportUit: true,
-    },
-  })
+  const doc = await findTransferReceiptDocForEtransport(prisma, { id, tenantId, companyId })
 
   if (!doc) {
     return res.status(404).json({ ok: false, error: "Transferul nu a fost gasit." })
