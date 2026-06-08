@@ -773,13 +773,13 @@ router.post(
         ok: true,
         company: mapCompanyResponse(company, await getEffectiveAnafOauthConfig(prisma, tenantId, getActiveCompanyId(req))),
       })
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (req.file?.path && fs.existsSync(req.file.path)) {
         fs.unlinkSync(req.file.path)
       }
       return res.status(400).json({
         ok: false,
-        error: error?.message || "Nu am putut salva certificatul e-Factura.",
+        error: getCompanyRouteErrorMessage(error, "Nu am putut salva certificatul e-Factura."),
       })
     }
   }
@@ -842,7 +842,7 @@ router.delete("/api/v1/company/efactura/certificate", requireAuth, async (req: A
   } catch (error: unknown) {
     return res.status(400).json({
       ok: false,
-      error: error?.message || "Nu am putut sterge certificatul e-Factura.",
+      error: getCompanyRouteErrorMessage(error, "Nu am putut sterge certificatul e-Factura."),
     })
   }
 })
@@ -869,7 +869,7 @@ router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, re
   } catch (error: unknown) {
     return res.status(409).json({
       ok: false,
-      error: error?.message || "Nu am putut determina firma activa pentru OAuth ANAF.",
+      error: getCompanyRouteErrorMessage(error, "Nu am putut determina firma activa pentru OAuth ANAF."),
     })
   }
 
@@ -1008,11 +1008,12 @@ router.post("/api/v1/company/efactura/oauth/test", async (req: AuthedRequest, re
       expiresAt: credential.efacturaOauthAccessTokenExpiresAt,
     })
   } catch (error: unknown) {
+    const errorMessage = getCompanyRouteErrorMessage(error, "Eroare la testarea conexiunii ANAF.")
     if (credential?.anafCredentialId) {
       const updatedCredential = await prisma.companyAnafCredential.update({
         where: { id: credential.anafCredentialId },
         data: {
-          efacturaOauthLastError: error?.message || "Eroare la testarea conexiunii ANAF.",
+          efacturaOauthLastError: errorMessage,
         },
         select: ANAF_CREDENTIAL_SELECT,
       })
@@ -1021,7 +1022,7 @@ router.post("/api/v1/company/efactura/oauth/test", async (req: AuthedRequest, re
 
     return res.status(500).json({
       ok: false,
-      error: error?.message || "Eroare la testarea conexiunii ANAF.",
+      error: errorMessage,
     })
   }
 })
@@ -1109,7 +1110,7 @@ router.post("/api/v1/company/efactura/credentials", requireAuth, async (req: Aut
       credentials,
       activeCredentialId: created.id,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     return res.status(500).json({
       ok: false,
       error: getCompanyRouteErrorMessage(error, "Nu am putut crea credențiala ANAF."),
@@ -1186,7 +1187,7 @@ router.patch("/api/v1/company/efactura/credentials/:id", requireAuth, async (req
       credentials,
       activeCredentialId: updatedCredential.id,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     return res.status(500).json({
       ok: false,
       error: error?.message || "Nu am putut actualiza credențiala ANAF.",
