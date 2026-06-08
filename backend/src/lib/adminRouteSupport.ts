@@ -1,4 +1,4 @@
-import { TerminalDeviceType } from "@prisma/client"
+import { Prisma, TerminalDeviceType } from "@prisma/client"
 import { prisma } from "./prisma"
 
 export type CompanyLike = {
@@ -319,7 +319,7 @@ export async function generateUniqueDeviceId(
   return deviceId
 }
 
-export async function ensureTenantEfacturaModuleEnabled(tx: any, tenantId: string) {
+export async function ensureTenantEfacturaModuleEnabled(tx: Prisma.TransactionClient, tenantId: string) {
   const moduleRecord = await tx.appModule.upsert({
     where: { code: "efactura" },
     update: {
