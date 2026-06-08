@@ -6,7 +6,7 @@ import type { AuthedRequest } from "../middleware/requireAuth"
 import type { prisma } from "./prisma"
 import { hasEfacturaCertificateFile } from "./efacturaCertificate"
 import { ensureTenantCompany, listTenantCompaniesForAuth, resolveTenantCompanyForAuth, updateOrCreateTenantCompany } from "./companyResolver"
-import { ANAF_CREDENTIAL_SELECT, getCompanyAnafCredentialById, getDefaultCompanyAnafCredential, resolveCompanyWithAnafCredential, syncDefaultAnafCredentialToCompany } from "./companyAnafCredentials"
+import { ANAF_CREDENTIAL_SELECT, getCompanyAnafCredentialById, getDefaultCompanyAnafCredential, listCompanyAnafCredentials, mapAnafCredentialSummary, resolveCompanyWithAnafCredential, syncDefaultAnafCredentialToCompany } from "./companyAnafCredentials"
 
 type EfacturaAgentFile = {
   fileName: string
@@ -228,6 +228,16 @@ export function getCompanyRouteErrorMessage(error: unknown, fallback: string) {
     return error.message
   }
   return fallback
+}
+
+export function requireCompanyRouteEntityId<T extends { id?: string | null }>(
+  entity: T | null | undefined,
+  message: string,
+): T & { id: string } {
+  if (!entity?.id) {
+    throw new Error(message)
+  }
+  return entity as T & { id: string }
 }
 
 export function normalizeCompanyCuiLookupInput(value: unknown) {
@@ -534,6 +544,15 @@ export function buildPublicEfacturaAgentDownloadLink(
   jwtSecret: string,
 ) {
   return `/api/v1/public/efactura/agent-download?ticket=${encodeURIComponent(createEfacturaAgentDownloadTicket(tenantId || "", jwtSecret))}`
+}
+
+export async function listRequestCompanyCredentialSummaries(
+  prismaClient: PrismaClientLike,
+  tenantId: string,
+  companyId: string,
+) {
+  const credentials = await listCompanyAnafCredentials(prismaClient as never, tenantId, companyId)
+  return credentials.map(mapAnafCredentialSummary)
 }
 
 export function getActiveCompanyId(req: AuthedRequest) {

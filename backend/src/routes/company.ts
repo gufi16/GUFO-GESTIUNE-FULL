@@ -63,8 +63,10 @@ import {
   parseValidatedEfacturaAgentDownloadTicket,
   parseValidatedEfacturaAgentPairingCode,
   persistAnafOauthError,
+  requireCompanyRouteEntityId,
   requireExplicitAnafCompanyContext,
   requireExplicitAnafCompanyContextForAuth,
+  listRequestCompanyCredentialSummaries,
   resolveEfacturaAgentPairingDetails,
   updateRequestCompany,
 } from "../lib/companyRouteSupport"
@@ -837,7 +839,7 @@ router.delete("/api/v1/company/efactura/certificate", requireAuth, async (req: A
       ok: true,
       company: mapCompanyResponse(updated, await getEffectiveAnafOauthConfig(prisma, tenantId, getActiveCompanyId(req))),
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     return res.status(400).json({
       ok: false,
       error: error?.message || "Nu am putut sterge certificatul e-Factura.",
@@ -864,7 +866,7 @@ router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, re
   let activeCompany: { id: string; name: string } | null = null
   try {
     activeCompany = await requireExplicitAnafCompanyContextForAuth(prisma, req, requestedCompanyId)
-  } catch (error: any) {
+  } catch (error: unknown) {
     return res.status(409).json({
       ok: false,
       error: error?.message || "Nu am putut determina firma activa pentru OAuth ANAF.",
@@ -1046,23 +1048,17 @@ router.get("/api/v1/company/efactura/agent-download-info", requireAuth, async (r
 router.get("/api/v1/company/efactura/credentials", requireAuth, async (req: AuthedRequest, res) => {
   if (!ensureTenantAdminAccess(req, res)) return
   try {
-    const company = await getRequestCompany(prisma, req, {
+    const company = requireCompanyRouteEntityId(await getRequestCompany(prisma, req, {
       select: {
         id: true,
+        anafCredentialId: true,
       },
-    })
+    }), "Firma activa nu este disponibila.")
 
-    if (!company?.id) {
-      return res.status(404).json({
-        ok: false,
-        error: "Firma activa nu este disponibila.",
-      })
-    }
-
-    const credentials = await listCompanyAnafCredentials(prisma as any, req.auth!.tenantId, company.id)
+    const credentials = await listRequestCompanyCredentialSummaries(prisma, req.auth!.tenantId, company.id)
     return res.json({
       ok: true,
-      credentials: credentials.map(mapAnafCredentialSummary),
+      credentials,
       activeCredentialId: company?.anafCredentialId || null,
     })
   } catch (error: any) {
@@ -1076,19 +1072,12 @@ router.get("/api/v1/company/efactura/credentials", requireAuth, async (req: Auth
 router.post("/api/v1/company/efactura/credentials", requireAuth, async (req: AuthedRequest, res) => {
   if (!ensureTenantAdminAccess(req, res)) return
   try {
-    const company = await getRequestCompany(prisma, req, {
+    const company = requireCompanyRouteEntityId(await getRequestCompany(prisma, req, {
       select: {
         id: true,
         name: true,
       },
-    })
-
-    if (!company?.id) {
-      return res.status(404).json({
-        ok: false,
-        error: "Firma activa nu este disponibila.",
-      })
-    }
+    }), "Firma activa nu este disponibila.")
 
     const label = String(req.body?.label || "").trim()
     if (!label) {
@@ -1113,11 +1102,11 @@ router.post("/api/v1/company/efactura/credentials", requireAuth, async (req: Aut
       await syncDefaultAnafCredentialToCompany(prisma as any, company.id, created)
     }
 
-    const credentials = await listCompanyAnafCredentials(prisma as any, req.auth!.tenantId, company.id)
+    const credentials = await listRequestCompanyCredentialSummaries(prisma, req.auth!.tenantId, company.id)
     return res.json({
       ok: true,
       credential: mapAnafCredentialSummary(created),
-      credentials: credentials.map(mapAnafCredentialSummary),
+      credentials,
       activeCredentialId: created.id,
     })
   } catch (error: any) {
@@ -1131,18 +1120,11 @@ router.post("/api/v1/company/efactura/credentials", requireAuth, async (req: Aut
 router.patch("/api/v1/company/efactura/credentials/:id", requireAuth, async (req: AuthedRequest, res) => {
   if (!ensureTenantAdminAccess(req, res)) return
   try {
-    const company = await getRequestCompany(prisma, req, {
+    const company = requireCompanyRouteEntityId(await getRequestCompany(prisma, req, {
       select: {
         id: true,
       },
-    })
-
-    if (!company?.id) {
-      return res.status(404).json({
-        ok: false,
-        error: "Firma activa nu este disponibila.",
-      })
-    }
+    }), "Firma activa nu este disponibila.")
 
     const credential = await getCompanyAnafCredentialById(
       prisma as any,
@@ -1197,11 +1179,11 @@ router.patch("/api/v1/company/efactura/credentials/:id", requireAuth, async (req
       }
     }
 
-    const credentials = await listCompanyAnafCredentials(prisma as any, req.auth!.tenantId, company.id)
+    const credentials = await listRequestCompanyCredentialSummaries(prisma, req.auth!.tenantId, company.id)
     return res.json({
       ok: true,
       credential: mapAnafCredentialSummary(updatedCredential),
-      credentials: credentials.map(mapAnafCredentialSummary),
+      credentials,
       activeCredentialId: updatedCredential.id,
     })
   } catch (error: any) {
