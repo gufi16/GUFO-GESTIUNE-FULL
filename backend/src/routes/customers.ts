@@ -1,4 +1,5 @@
 import { Router } from "express"
+import { Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { reserveNextNumber } from "../lib/numbering"
@@ -13,12 +14,16 @@ function getTenantId(req: AuthedRequest) {
   return tenantId
 }
 
-function normalizeText(value: any) {
+function normalizeText(value: unknown) {
   const text = String(value ?? "").trim()
   return text || null
 }
 
-async function reserveUniqueCustomerCode(tx: any, tenantId: string, companyId: string) {
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback
+}
+
+async function reserveUniqueCustomerCode(tx: Prisma.TransactionClient, tenantId: string, companyId: string) {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const code = await reserveNextNumber(tx, tenantId, "customer")
     const existing = await tx.customer.findFirst({
@@ -137,10 +142,10 @@ router.post("/api/v1/customers", async (req: AuthedRequest, res) => {
       ok: true,
       customer,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     return res.status(400).json({
       ok: false,
-      error: error?.message || "Nu am putut crea clientul.",
+      error: errorMessage(error, "Nu am putut crea clientul."),
     })
   }
 })
@@ -202,10 +207,10 @@ router.put("/api/v1/customers/:id", async (req: AuthedRequest, res) => {
       ok: true,
       customer,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     return res.status(400).json({
       ok: false,
-      error: error?.message || "Nu am putut actualiza clientul.",
+      error: errorMessage(error, "Nu am putut actualiza clientul."),
     })
   }
 })
