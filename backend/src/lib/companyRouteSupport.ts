@@ -57,10 +57,37 @@ type CompanyRouteOauthConfig = {
 type CompanyRouteCompanyResponseSource = CompanyRouteWarehouseConfigSource & {
   id?: string | null
   tenantId?: string | null
+  name?: string | null
+  code?: string | null
+  country?: string | null
+  city?: string | null
+  county?: string | null
+  postalCode?: string | null
+  contactEmail?: string | null
+  isVatPayer?: unknown
+  invoiceSeries?: string | null
+  purchaseSeries?: string | null
+  transferSeries?: string | null
+  inventorySeries?: string | null
+  consumptionSeries?: string | null
+  productionSeries?: string | null
+  customerCodePrefix?: string | null
+  supplierCodePrefix?: string | null
+  posSyncInterval?: unknown
+  efacturaEnabled?: unknown
   efacturaEnvironment?: string | null
+  efacturaSellerCountryCode?: string | null
+  efacturaSellerCity?: string | null
+  efacturaSellerCounty?: string | null
+  efacturaSellerPostalCode?: string | null
+  efacturaContactEmail?: string | null
+  efacturaCertSerial?: string | null
   efacturaCertFilename?: string | null
   anafCredentialId?: string | null
+  anafCredentialLabel?: string | null
   efacturaCertPasswordEnc?: string | null
+  anafCredentials?: ReturnType<typeof mapAnafCredentialSummary>[]
+  anafCredentialsCount?: number
 }
 
 type AnafRegistrationPayload = {
@@ -135,6 +162,8 @@ export type EfacturaAgentPairingPayload = {
   certSerial?: string | null
   erpUrl?: string | null
 }
+
+export type CompanyRouteRequestCompany = CompanyRouteCompanyResponseSource
 
 export function normalizeOptionalText(value: unknown) {
   const text = String(value || "").trim()
@@ -397,7 +426,7 @@ export function getLatestEfacturaAgentFile(efacturaAgentDownloadDirs: string[]) 
   return files[0] || null
 }
 
-export function getEfacturaAgentDownloadSource(efacturaAgentDownloadDirs: string[]) {
+export function getEfacturaAgentDownloadSource(efacturaAgentDownloadDirs: string[]): EfacturaAgentDownloadSource {
   const externalUrl = String(process.env.GUFO_EFACTURA_AGENT_DOWNLOAD_URL || "").trim()
   if (externalUrl) {
     return {
@@ -579,7 +608,7 @@ export async function getRequestCompany(
   prismaClient: PrismaClientLike,
   req: AuthedRequest,
   extra: Record<string, any> = {},
-) {
+): Promise<CompanyRouteRequestCompany | null> {
   const tenantId = String(req.auth!.tenantId || "").trim()
   const activeCompanyId = getActiveCompanyId(req) || null
   const includeCredentialList = Boolean(extra?.includeCredentialList)
@@ -594,7 +623,7 @@ export async function getRequestCompany(
     select,
     includeCredentialList,
     auth: req.auth!,
-  })
+  }) as Promise<CompanyRouteRequestCompany | null>
 }
 
 export async function ensureRequestCompany(

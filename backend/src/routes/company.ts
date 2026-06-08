@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { Router } from "express"
+import { Router, type Request, type Response } from "express"
 import jwt from "jsonwebtoken"
 import fs from "fs"
 import multer from "multer"
@@ -113,7 +112,15 @@ const certUpload = multer({
   },
 })
 
-export async function handleAnafOauthCallback(req, res) {
+function requireCompanyRouteTenantId(req: AuthedRequest) {
+  const tenantId = String(req.auth?.tenantId || "").trim()
+  if (!tenantId) {
+    throw new Error("Tenantul activ nu este disponibil.")
+  }
+  return tenantId
+}
+
+export async function handleAnafOauthCallback(req: Request, res: Response) {
   const code = String(req.query.code || "")
   const error = String(req.query.error || "")
   const errorDescription = String(req.query.error_description || "")
@@ -348,7 +355,7 @@ router.use(requireAuth)
 const ALLOWED_POS_SYNC_INTERVALS = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30]
 
 router.get("/api/v1/company", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = requireCompanyRouteTenantId(req)
 
   try {
     const [company, oauthConfig] = await Promise.all([
@@ -419,7 +426,7 @@ router.get("/api/v1/company/cui-lookup", async (req: AuthedRequest, res) => {
 
 router.post("/api/v1/company", async (req: AuthedRequest, res) => {
   if (!ensureTenantAdminAccess(req, res)) return
-  const tenantId = req.auth!.tenantId
+  const tenantId = requireCompanyRouteTenantId(req)
 
   const {
     name,
@@ -639,7 +646,7 @@ router.get("/api/v1/company/warehouse-config", async (req: AuthedRequest, res) =
 
 router.post("/api/v1/company/warehouse-config", async (req: AuthedRequest, res) => {
   if (!ensureTenantAdminAccess(req, res)) return
-  const tenantId = req.auth!.tenantId
+  const tenantId = requireCompanyRouteTenantId(req)
 
   try {
     const existing = await getRequestCompany(prisma, req)
@@ -696,7 +703,7 @@ router.post(
   certUpload.single("certificate"),
   async (req: AuthedRequest, res) => {
     if (!ensureTenantAdminAccess(req, res)) return
-    const tenantId = req.auth!.tenantId
+    const tenantId = requireCompanyRouteTenantId(req)
     const requestedCredentialId = getRequestedCredentialId(req)
 
     try {
@@ -787,7 +794,7 @@ router.post(
 
 router.delete("/api/v1/company/efactura/certificate", requireAuth, async (req: AuthedRequest, res) => {
   if (!ensureTenantAdminAccess(req, res)) return
-  const tenantId = req.auth!.tenantId
+  const tenantId = requireCompanyRouteTenantId(req)
   const requestedCredentialId = getRequestedCredentialId(req)
 
   try {
@@ -849,7 +856,7 @@ router.delete("/api/v1/company/efactura/certificate", requireAuth, async (req: A
 
 router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, res) => {
   if (!ensureTenantAdminAccess(req, res)) return
-  const tenantId = req.auth!.tenantId
+  const tenantId = requireCompanyRouteTenantId(req)
   const activeCompanyId = getActiveCompanyId(req)
   const requestedCompanyId = getRequestedCompanyId(req)
   const requestedCredentialId = getRequestedCredentialId(req)
@@ -942,7 +949,7 @@ router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, re
 
 router.post("/api/v1/company/efactura/oauth/test", async (req: AuthedRequest, res) => {
   if (!ensureTenantAdminAccess(req, res)) return
-  const tenantId = req.auth!.tenantId
+  const tenantId = requireCompanyRouteTenantId(req)
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
 
   if (!moduleCheck.enabled) {
@@ -1029,7 +1036,7 @@ router.post("/api/v1/company/efactura/oauth/test", async (req: AuthedRequest, re
 
 router.get("/api/v1/company/efactura/agent-download-info", requireAuth, async (req: AuthedRequest, res) => {
   if (!ensureTenantAdminAccess(req, res)) return
-  const tenantId = req.auth!.tenantId
+  const tenantId = requireCompanyRouteTenantId(req)
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
 
   if (!moduleCheck.enabled) {
@@ -1048,6 +1055,7 @@ router.get("/api/v1/company/efactura/agent-download-info", requireAuth, async (r
 
 router.get("/api/v1/company/efactura/credentials", requireAuth, async (req: AuthedRequest, res) => {
   if (!ensureTenantAdminAccess(req, res)) return
+  const tenantId = requireCompanyRouteTenantId(req)
   try {
     const company = requireCompanyRouteEntityId(await getRequestCompany(prisma, req, {
       select: {
@@ -1056,7 +1064,7 @@ router.get("/api/v1/company/efactura/credentials", requireAuth, async (req: Auth
       },
     }), "Firma activa nu este disponibila.")
 
-    const credentials = await listRequestCompanyCredentialSummaries(prisma, req.auth!.tenantId, company.id)
+    const credentials = await listRequestCompanyCredentialSummaries(prisma, tenantId, company.id)
     return res.json({
       ok: true,
       credentials,
@@ -1072,6 +1080,7 @@ router.get("/api/v1/company/efactura/credentials", requireAuth, async (req: Auth
 
 router.post("/api/v1/company/efactura/credentials", requireAuth, async (req: AuthedRequest, res) => {
   if (!ensureTenantAdminAccess(req, res)) return
+  const tenantId = requireCompanyRouteTenantId(req)
   try {
     const company = requireCompanyRouteEntityId(await getRequestCompany(prisma, req, {
       select: {
@@ -1088,10 +1097,10 @@ router.post("/api/v1/company/efactura/credentials", requireAuth, async (req: Aut
       })
     }
 
-    const existing = await listCompanyAnafCredentials(prisma as any, req.auth!.tenantId, company.id)
+    const existing = await listCompanyAnafCredentials(prisma as any, tenantId, company.id)
     const created = await prisma.companyAnafCredential.create({
       data: {
-        tenantId: req.auth!.tenantId,
+        tenantId,
         companyId: company.id,
         label,
         isDefault: existing.length === 0,
@@ -1103,7 +1112,7 @@ router.post("/api/v1/company/efactura/credentials", requireAuth, async (req: Aut
       await syncDefaultAnafCredentialToCompany(prisma as any, company.id, created)
     }
 
-    const credentials = await listRequestCompanyCredentialSummaries(prisma, req.auth!.tenantId, company.id)
+    const credentials = await listRequestCompanyCredentialSummaries(prisma, tenantId, company.id)
     return res.json({
       ok: true,
       credential: mapAnafCredentialSummary(created),
@@ -1120,6 +1129,7 @@ router.post("/api/v1/company/efactura/credentials", requireAuth, async (req: Aut
 
 router.patch("/api/v1/company/efactura/credentials/:id", requireAuth, async (req: AuthedRequest, res) => {
   if (!ensureTenantAdminAccess(req, res)) return
+  const tenantId = requireCompanyRouteTenantId(req)
   try {
     const company = requireCompanyRouteEntityId(await getRequestCompany(prisma, req, {
       select: {
@@ -1129,7 +1139,7 @@ router.patch("/api/v1/company/efactura/credentials/:id", requireAuth, async (req
 
     const credential = await getCompanyAnafCredentialById(
       prisma as any,
-      req.auth!.tenantId,
+      tenantId,
       company.id,
       String(req.params.id || ""),
     )
@@ -1161,7 +1171,7 @@ router.patch("/api/v1/company/efactura/credentials/:id", requireAuth, async (req
 
     let updatedCredential = credential
     if (req.body?.isDefault === true) {
-      updatedCredential = await setDefaultCompanyAnafCredential(prisma as any, req.auth!.tenantId, company.id, credential.id)
+      updatedCredential = await setDefaultCompanyAnafCredential(prisma as any, tenantId, company.id, credential.id)
       if (Object.keys(updateData).length > 0) {
         updatedCredential = await prisma.companyAnafCredential.update({
           where: { id: credential.id },
@@ -1180,7 +1190,7 @@ router.patch("/api/v1/company/efactura/credentials/:id", requireAuth, async (req
       }
     }
 
-    const credentials = await listRequestCompanyCredentialSummaries(prisma, req.auth!.tenantId, company.id)
+    const credentials = await listRequestCompanyCredentialSummaries(prisma, tenantId, company.id)
     return res.json({
       ok: true,
       credential: mapAnafCredentialSummary(updatedCredential),
@@ -1197,7 +1207,7 @@ router.patch("/api/v1/company/efactura/credentials/:id", requireAuth, async (req
 
 router.get("/api/v1/company/efactura/agent-download", requireAuth, async (req: AuthedRequest, res) => {
   if (!ensureTenantAdminAccess(req, res)) return
-  const tenantId = req.auth!.tenantId
+  const tenantId = requireCompanyRouteTenantId(req)
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
 
   if (!moduleCheck.enabled) {
@@ -1230,7 +1240,7 @@ router.get("/api/v1/company/efactura/agent-download", requireAuth, async (req: A
 
 router.get("/api/v1/company/efactura/agent-download-link", requireAuth, async (req: AuthedRequest, res) => {
   if (!ensureTenantAdminAccess(req, res)) return
-  const tenantId = req.auth!.tenantId
+  const tenantId = requireCompanyRouteTenantId(req)
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
 
   if (!moduleCheck.enabled) {
@@ -1259,7 +1269,7 @@ router.get("/api/v1/company/efactura/agent-download-link", requireAuth, async (r
 
 router.post("/api/v1/company/efactura/agent-pairing-code", requireAuth, async (req: AuthedRequest, res) => {
   if (!ensureTenantAdminAccess(req, res)) return
-  const tenantId = req.auth!.tenantId
+  const tenantId = requireCompanyRouteTenantId(req)
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
 
   if (!moduleCheck.enabled) {
@@ -1297,7 +1307,7 @@ router.post("/api/v1/company/efactura/agent-pairing-code", requireAuth, async (r
 
 router.get("/api/v1/company/efactura/diagnostics", async (req: AuthedRequest, res) => {
   if (!ensureTenantAdminAccess(req, res)) return
-  const tenantId = req.auth!.tenantId
+  const tenantId = requireCompanyRouteTenantId(req)
   const moduleCheck = await requireTenantModule(tenantId, "efactura")
 
   if (!moduleCheck.enabled) {
@@ -1324,7 +1334,7 @@ router.get("/api/v1/company/efactura/diagnostics", async (req: AuthedRequest, re
 
 router.get("/api/v1/company/document-numbering", async (req: AuthedRequest, res) => {
   if (!ensureTenantAdminAccess(req, res)) return
-  const tenantId = req.auth!.tenantId
+  const tenantId = requireCompanyRouteTenantId(req)
 
   try {
     const settings = await getNumberingConfig(tenantId)
@@ -1355,7 +1365,7 @@ router.get("/api/v1/company/document-numbering", async (req: AuthedRequest, res)
 
 router.post("/api/v1/company/document-numbering", async (req: AuthedRequest, res) => {
   if (!ensureTenantAdminAccess(req, res)) return
-  const tenantId = req.auth!.tenantId
+  const tenantId = requireCompanyRouteTenantId(req)
 
   try {
     const settings = normalizeNumberingPayload(req.body)
@@ -1427,7 +1437,7 @@ router.post("/api/v1/company/document-numbering", async (req: AuthedRequest, res
 
 router.get("/api/v1/company/pos-sync-config", async (req: AuthedRequest, res) => {
   if (!ensureTenantAdminAccess(req, res)) return
-  const tenantId = req.auth!.tenantId
+  const tenantId = requireCompanyRouteTenantId(req)
 
   try {
     const company = await getRequestCompany(prisma, req, {
@@ -1451,7 +1461,7 @@ router.get("/api/v1/company/pos-sync-config", async (req: AuthedRequest, res) =>
 
 router.post("/api/v1/company/pos-sync-config", async (req: AuthedRequest, res) => {
   if (!ensureTenantAdminAccess(req, res)) return
-  const tenantId = req.auth!.tenantId
+  const tenantId = requireCompanyRouteTenantId(req)
   const interval = Number(req.body?.posSyncInterval)
 
   if (!ALLOWED_POS_SYNC_INTERVALS.includes(interval)) {

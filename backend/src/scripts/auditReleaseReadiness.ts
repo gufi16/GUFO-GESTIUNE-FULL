@@ -339,6 +339,15 @@ function assertTypedSensitiveModules() {
   )
 
   addResult(
+    "Company route no longer bypasses TypeScript",
+    !companyRoutes.startsWith("// @ts-nocheck") &&
+      companyRoutes.includes("export async function handleAnafOauthCallback") &&
+      companyRoutes.includes('router.post("/api/v1/company/efactura/agent-pairing-code"') &&
+      companyRoutes.includes("function requireCompanyRouteTenantId"),
+    "Keep company profile, warehouse config, ANAF credential management, OAuth callback, and public e-Factura agent flows type-checked because they control legal-entity configuration and SPV connectivity."
+  )
+
+  addResult(
     "Company ANAF credential helpers no longer bypass TypeScript",
     !companyAnafCredentialsLib.startsWith("// @ts-nocheck") &&
       companyAnafCredentialsLib.includes("type LegacyCompany") &&
