@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { requireRequestCompanyId } from "../lib/companyScope"
+
 const router = Router()
 
 type ActivityType =
@@ -19,6 +20,13 @@ type RecentActivityItem = {
   title: string
   meta: string
   at: string
+}
+
+type DashboardSaleLike = {
+  total?: unknown
+  paymentType?: unknown
+  cashAmount?: unknown
+  cardAmount?: unknown
 }
 
 function parseBoundaryDate(value: unknown, fallback: Date, endOfDay = false) {
@@ -44,7 +52,7 @@ function buildTerminalWhere(terminalId: string | null) {
   return terminalId ? { terminalId } : {}
 }
 
-function deriveSalePaymentBuckets(sale: { total?: any; paymentType?: any; cashAmount?: any; cardAmount?: any }) {
+function deriveSalePaymentBuckets(sale: DashboardSaleLike) {
   const total = Number(sale?.total || 0)
   const cash = Number(sale?.cashAmount || 0)
   const card = Number(sale?.cardAmount || 0)
@@ -316,19 +324,19 @@ router.get("/api/v1/dashboard", requireAuth, async (req: AuthedRequest, res: Res
       ...recentSales.map((item) => ({
         type: "sale" as const,
         title: `Bon fiscal ${item.receiptNo ? `#${item.receiptNo}` : "nou"}`,
-        meta: `${item.location?.name || "locatie necunoscuta"} • ${Number(item.total || 0).toFixed(2)} RON`,
+        meta: `${item.location?.name || "locatie necunoscuta"} | ${Number(item.total || 0).toFixed(2)} RON`,
         at: item.soldAt.toISOString(),
       })),
       ...recentPurchases.map((item) => ({
         type: "purchase" as const,
         title: `NIR ${item.docNo}`,
-        meta: `${item.supplierName || "furnizor"} • ${item.location?.name || "locatie"}`,
+        meta: `${item.supplierName || "furnizor"} | ${item.location?.name || "locatie"}`,
         at: item.createdAt.toISOString(),
       })),
       ...recentTransfers.map((item) => ({
         type: "transfer" as const,
         title: `Transfer ${item.docNo}`,
-        meta: `${item.fromLocation?.name || "-"} → ${item.toLocation?.name || "-"}`,
+        meta: `${item.fromLocation?.name || "-"} -> ${item.toLocation?.name || "-"}`,
         at: item.createdAt.toISOString(),
       })),
       ...recentConsumptions.map((item) => ({
