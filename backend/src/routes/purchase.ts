@@ -22,6 +22,74 @@ type PurchaseReceiptItemInput = {
   vatRateId?: string | null
 }
 
+type PurchaseProductLike = {
+  price?: unknown
+  costPrice?: unknown
+  purchaseFactor?: unknown
+  sgrValue?: unknown
+  trackLot?: unknown
+  trackExpiry?: unknown
+  costMethod?: unknown
+  isSgr?: unknown
+  sku?: unknown
+  name?: unknown
+  vatRate?: {
+    rate?: unknown
+  } | null
+}
+
+type PurchaseReceiptItemLike = {
+  id?: unknown
+  productId?: unknown
+  qty?: unknown
+  conversionFactor?: unknown
+  stockQty?: unknown
+  unitCostNetFc?: unknown
+  unitCostNetRon?: unknown
+  lineNetFc?: unknown
+  lineVatFc?: unknown
+  lineGrossFc?: unknown
+  lineNetRon?: unknown
+  lineVatRon?: unknown
+  lineGrossRon?: unknown
+  vatRateValue?: unknown
+  lotNo?: unknown
+  expiryDate?: unknown
+  vatRate?: {
+    rate?: unknown
+  } | null
+  product?: PurchaseProductLike | null
+  receipt?: {
+    fxRate?: unknown
+  } | null
+}
+
+type PurchaseReceiptLike = {
+  fxRate?: unknown
+  totalNetFc?: unknown
+  totalVatFc?: unknown
+  totalGrossFc?: unknown
+  totalNetRon?: unknown
+  totalVatRon?: unknown
+  totalGrossRon?: unknown
+  items?: PurchaseReceiptItemLike[] | null
+}
+
+type ReceiptDocumentLine = {
+  type: "PRODUCT" | "SGR"
+  sourceItemId: unknown
+  productId: unknown
+  label: string
+  qty: number
+  unitPrice: number
+  vatRate: number
+  totalFc: number
+  totalRon: number
+  isSgr: boolean
+  lotNo?: string | null
+  expiryDate?: unknown
+}
+
 function toNumber(value: unknown): number {
   const n = Number(value)
   return Number.isFinite(n) ? n : 0
@@ -40,7 +108,7 @@ function parseDate(value: unknown) {
   return Number.isNaN(d.getTime()) ? null : d
 }
 
-function buildReceiptSgrLine(item: any) {
+function buildReceiptSgrLine(item: PurchaseReceiptItemLike | null | undefined): ReceiptDocumentLine {
   const product = item?.product || null
   const qty = toNumber(item?.qty)
   const isSgr = Boolean(product?.isSgr)
@@ -61,10 +129,10 @@ function buildReceiptSgrLine(item: any) {
   }
 }
 
-function serializeReceipt(receipt: any) {
+function serializeReceipt(receipt: PurchaseReceiptLike | null | undefined) {
   if (!receipt) return receipt
 
-  const serializeProduct = (product: any) => {
+  const serializeProduct = (product: PurchaseProductLike | null | undefined) => {
     if (!product) return product
     return {
       ...product,
@@ -85,7 +153,7 @@ function serializeReceipt(receipt: any) {
   }
 
   const items = Array.isArray(receipt.items)
-    ? receipt.items.map((item: any) => ({
+    ? receipt.items.map((item: PurchaseReceiptItemLike) => ({
         ...item,
         qty: toNumber(item.qty),
         conversionFactor: toNumber(item.conversionFactor || 1),
@@ -124,12 +192,12 @@ function serializeReceipt(receipt: any) {
   }
 }
 
-function enrichReceipt(receipt: any) {
+function enrichReceipt(receipt: PurchaseReceiptLike | null | undefined) {
   receipt = serializeReceipt(receipt)
   if (!receipt) return receipt
 
   const items = Array.isArray(receipt.items)
-    ? receipt.items.map((item: any) => {
+    ? receipt.items.map((item: PurchaseReceiptItemLike) => {
         const sgrUnit = item?.product?.isSgr ? toNumber(item?.product?.sgrValue || 0.5) : 0
         const sgrTotalFc = toNumber(item?.qty) * sgrUnit
 
@@ -143,19 +211,19 @@ function enrichReceipt(receipt: any) {
       })
     : []
 
-  const documentLines = items.flatMap((item: any) => {
-    const productLine = {
+  const documentLines = items.flatMap((item: PurchaseReceiptItemLike) => {
+    const productLine: ReceiptDocumentLine = {
       type: "PRODUCT",
       sourceItemId: item.id,
       productId: item.productId,
-      label: item.product?.name || "",
+      label: String(item.product?.name || ""),
       qty: toNumber(item.qty),
       unitPrice: toNumber(item.unitCostNetFc),
       vatRate: toNumber(item.vatRateValue),
       totalFc: toNumber(item.lineNetFc),
       totalRon: toNumber(item.lineNetRon),
       isSgr: false,
-      lotNo: item.lotNo || null,
+      lotNo: String(item.lotNo || "").trim() || null,
       expiryDate: item.expiryDate || null
     }
 
@@ -164,8 +232,8 @@ function enrichReceipt(receipt: any) {
   })
 
   const totalSgrFc = documentLines
-    .filter((line: any) => line.type === "SGR")
-    .reduce((sum: number, line: any) => sum + toNumber(line.totalFc), 0)
+    .filter((line: ReceiptDocumentLine) => line.type === "SGR")
+    .reduce((sum: number, line: ReceiptDocumentLine) => sum + toNumber(line.totalFc), 0)
 
   const totalSgrRon = totalSgrFc * toNumber(receipt.fxRate || 1)
 
@@ -186,7 +254,7 @@ async function createOrReplaceReceiptItems(
   companyId: string,
   receiptId: string,
   fxRate: number,
-  items: any[]
+  items: PurchaseReceiptItemInput[]
 ) {
   await client.purchaseReceiptItem.deleteMany({
     where: { receiptId }
