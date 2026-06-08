@@ -1007,7 +1007,7 @@ router.post("/api/v1/company/efactura/oauth/test", async (req: AuthedRequest, re
       details: text,
       expiresAt: credential.efacturaOauthAccessTokenExpiresAt,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (credential?.anafCredentialId) {
       const updatedCredential = await prisma.companyAnafCredential.update({
         where: { id: credential.anafCredentialId },
@@ -1061,10 +1061,10 @@ router.get("/api/v1/company/efactura/credentials", requireAuth, async (req: Auth
       credentials,
       activeCredentialId: company?.anafCredentialId || null,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     return res.status(500).json({
       ok: false,
-      error: error?.message || "Nu am putut incarca lista de credențiale ANAF.",
+      error: getCompanyRouteErrorMessage(error, "Nu am putut incarca lista de credențiale ANAF."),
     })
   }
 })
@@ -1112,7 +1112,7 @@ router.post("/api/v1/company/efactura/credentials", requireAuth, async (req: Aut
   } catch (error: any) {
     return res.status(500).json({
       ok: false,
-      error: error?.message || "Nu am putut crea credențiala ANAF.",
+      error: getCompanyRouteErrorMessage(error, "Nu am putut crea credențiala ANAF."),
     })
   }
 })
