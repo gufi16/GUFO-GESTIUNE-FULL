@@ -102,11 +102,11 @@ router.post("/api/v1/spv-classic/test-list-messages", async (req: AuthedRequest,
         error: result.payload?.eroare || null,
       },
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     return res.status(400).json({
       ok: false,
       diagnostics: getSpvClassicCompanyDiagnostics(company || {}),
-      error: error?.message || "Nu am putut testa listaMesaje din SPV clasic.",
+      error: error instanceof Error ? error.message : "Nu am putut testa listaMesaje din SPV clasic.",
     })
   }
 })
