@@ -38,7 +38,37 @@ function getNetUnitPrice(unitPrice: number, vatRate: number) {
   return unitPrice / (1 + vatRate / 100)
 }
 
-function isSyntheticSgrSaleItem(item: any) {
+type ReportsRecipeIngredientLike = {
+  costPrice: unknown
+}
+
+type ReportsRecipeItemLike = {
+  qty: unknown
+  lossPercent: unknown
+  ingredient?: ReportsRecipeIngredientLike | null
+}
+
+type ReportsRecipeLike = {
+  status?: string | null
+  isActive?: boolean | null
+  yieldQty?: unknown
+  items?: ReportsRecipeItemLike[] | null
+}
+
+type ReportsProductLike = {
+  isSgr?: boolean | null
+  sgrValue?: unknown
+  costPrice?: unknown
+  recipe?: ReportsRecipeLike | null
+}
+
+type ReportsSaleItemLike = {
+  unitPrice: unknown
+  vatRate: unknown
+  product?: ReportsProductLike | null
+}
+
+function isSyntheticSgrSaleItem(item: ReportsSaleItemLike) {
   const product = item?.product
   if (!product?.isSgr) return false
 
@@ -49,13 +79,13 @@ function isSyntheticSgrSaleItem(item: any) {
   return vatRate === 0 && Math.abs(unitPrice - sgrValue) < 0.0001
 }
 
-function productUnitCost(product: any) {
+function productUnitCost(product: ReportsProductLike | null | undefined) {
   const recipe = product?.recipe
   const recipeItems = Array.isArray(recipe?.items) ? recipe.items : []
 
   if (recipe?.status === "ACTIVE" && recipe?.isActive !== false && recipeItems.length > 0) {
     const yieldQty = Math.max(toNumber(recipe?.yieldQty || 1), 0.000001)
-    return recipeItems.reduce((sum: number, item: any) => {
+    return recipeItems.reduce((sum: number, item: ReportsRecipeItemLike) => {
       const qty = toNumber(item?.qty)
       const lossPercent = toNumber(item?.lossPercent)
       const ingredientCost = toNumber(item?.ingredient?.costPrice || 0)
