@@ -2289,8 +2289,11 @@ router.post("/api/v1/pos/marketplace/:externalOrderId/accept", async (req: PosAu
         glovoSync
       );
     }
-  } catch (error: any) {
-    glovoSync = { skipped: false, error: error?.message || "Glovo accept sync failed." };
+  } catch (error: unknown) {
+    glovoSync = {
+      skipped: false,
+      error: error instanceof Error ? error.message : "Glovo accept sync failed.",
+    };
     await createPosMarketplaceHistory(
       auth,
       order.id,
@@ -2455,8 +2458,11 @@ router.post("/api/v1/pos/marketplace/:externalOrderId/kds-status", async (req: P
         glovoSync
       );
     }
-  } catch (error: any) {
-    glovoSync = { skipped: false, error: error?.message || "Glovo KDS sync failed." };
+  } catch (error: unknown) {
+    glovoSync = {
+      skipped: false,
+      error: error instanceof Error ? error.message : "Glovo KDS sync failed.",
+    };
     await createPosMarketplaceHistory(
       auth,
       order.id,
@@ -2990,10 +2996,10 @@ export async function handlePosCompanyLookupByCui(req: PosAuthRequest, res: Resp
       company: extractAnafCompanyPayload(item),
       raw: item,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     return res.status(502).json({
       ok: false,
-      error: error?.message || "Nu am putut interoga serviciul ANAF pentru CUI.",
+      error: error instanceof Error ? error.message : "Nu am putut interoga serviciul ANAF pentru CUI.",
     });
   }
 }
