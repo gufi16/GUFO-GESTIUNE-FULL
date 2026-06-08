@@ -16,6 +16,30 @@ type EfacturaAgentFile = {
   mtimeMs: number
 }
 
+type EfacturaAgentDownloadSource =
+  | {
+      available: true
+      type: "external"
+      url: string
+      fileName: string
+      updatedAt: null
+      size: null
+    }
+  | {
+      available: true
+      type: "local"
+      url: null
+      fileName: string
+      fullPath: string
+      updatedAt: string
+      size: number
+    }
+  | {
+      available: false
+      type: "missing"
+      error: string
+    }
+
 type CompanyRouteWarehouseConfigSource = {
   multiWarehouseEnabled?: unknown
   warehouseFilterEnabled?: unknown
@@ -398,6 +422,15 @@ export function getEfacturaAgentDownloadSource(efacturaAgentDownloadDirs: string
   }
 }
 
+export function ensureEfacturaAgentDownloadSource(
+  source: EfacturaAgentDownloadSource,
+): Extract<EfacturaAgentDownloadSource, { available: true }> {
+  if (!source.available) {
+    throw new Error(source.error)
+  }
+  return source
+}
+
 export function getEfacturaAgentDownloadFileName(source: {
   fileName?: string | null
   updatedAt?: string | null
@@ -494,6 +527,13 @@ export function createEfacturaAgentPairingCode(
     jwtSecret,
     { expiresIn: "7d" },
   )
+}
+
+export function buildPublicEfacturaAgentDownloadLink(
+  tenantId: string,
+  jwtSecret: string,
+) {
+  return `/api/v1/public/efactura/agent-download?ticket=${encodeURIComponent(createEfacturaAgentDownloadTicket(tenantId || "", jwtSecret))}`
 }
 
 export function getActiveCompanyId(req: AuthedRequest) {

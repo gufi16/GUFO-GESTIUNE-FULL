@@ -37,10 +37,12 @@ import {
   type EfacturaAgentDownloadTicketPayload,
   type EfacturaAgentPairingPayload,
   buildAnafOauthReturnUrl,
+  buildPublicEfacturaAgentDownloadLink,
   clearAnafOauthContextCookie,
   createEfacturaAgentDownloadTicket,
   createEfacturaAgentPairingCode,
   decodeTokenExpiry,
+  ensureEfacturaAgentDownloadSource,
   extractAnafCompanyPayload,
   getEffectiveAnafOauthConfig,
   getActiveCompanyId,
@@ -277,14 +279,7 @@ router.get("/api/v1/public/efactura/agent-download", async (req, res) => {
       })
     }
 
-    const source = getEfacturaAgentDownloadSource(efacturaAgentDownloadDirs)
-
-    if (!source.available) {
-      return res.status(404).json({
-        ok: false,
-        error: source.error,
-      })
-    }
+  const source = ensureEfacturaAgentDownloadSource(getEfacturaAgentDownloadSource(efacturaAgentDownloadDirs))
 
     if (source.type === "external" && source.url) {
       return res.redirect(source.url)
@@ -1229,14 +1224,7 @@ router.get("/api/v1/company/efactura/agent-download", requireAuth, async (req: A
     })
   }
 
-  const source = getEfacturaAgentDownloadSource(efacturaAgentDownloadDirs)
-
-  if (!source.available) {
-    return res.status(404).json({
-      ok: false,
-      error: source.error,
-    })
-  }
+  const source = ensureEfacturaAgentDownloadSource(getEfacturaAgentDownloadSource(efacturaAgentDownloadDirs))
 
   if (source.type === "external" && source.url) {
     return res.redirect(source.url)
@@ -1269,14 +1257,7 @@ router.get("/api/v1/company/efactura/agent-download-link", requireAuth, async (r
     })
   }
 
-  const source = getEfacturaAgentDownloadSource(efacturaAgentDownloadDirs)
-
-  if (!source.available) {
-    return res.status(404).json({
-      ok: false,
-      error: source.error,
-    })
-  }
+  const source = ensureEfacturaAgentDownloadSource(getEfacturaAgentDownloadSource(efacturaAgentDownloadDirs))
 
   if (source.type === "external" && source.url) {
     return res.json({
@@ -1288,7 +1269,7 @@ router.get("/api/v1/company/efactura/agent-download-link", requireAuth, async (r
 
   return res.json({
     ok: true,
-    url: `/api/v1/public/efactura/agent-download?ticket=${encodeURIComponent(createEfacturaAgentDownloadTicket(tenantId || "", JWT_SECRET))}`,
+    url: buildPublicEfacturaAgentDownloadLink(tenantId || "", JWT_SECRET),
     fileName: getEfacturaAgentDownloadFileName(source),
   })
 })
