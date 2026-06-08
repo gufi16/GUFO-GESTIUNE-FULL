@@ -62,7 +62,7 @@ export function buildPublicUploadUrl(folder: string, filename: string) {
   return `/uploads/${folder}/${filename}`
 }
 
-export function normalizeStoredUploadUrl(value: any) {
+export function normalizeStoredUploadUrl(value: unknown) {
   const text = String(value || "").trim()
   if (!text) return null
 
