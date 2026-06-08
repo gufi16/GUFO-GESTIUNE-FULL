@@ -1,4 +1,4 @@
-import { Router } from "express"
+import { type Response, Router } from "express"
 import bcrypt from "bcryptjs"
 import { TerminalDeviceType, UserRole } from "@prisma/client"
 import { z } from "zod"
@@ -175,6 +175,14 @@ const AddTenantCompanySchema = z.object({
   email: z.string().email().optional(),
   phone: z.string().optional(),
 })
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback
+}
+
+function getTenantCompanies(tenant: { companies?: CompanyLike[] | null }) {
+  return Array.isArray(tenant.companies) ? tenant.companies : []
+}
 
 router.get("/api/v1/admin/platform/efactura", requireAuth, requireOwner, async (_req, res) => {
   const config = await prisma.platformConfig.findUnique({
@@ -376,7 +384,7 @@ router.get("/api/v1/admin/clients", requireAuth, requireOwner, async (_req, res)
   return res.json({
     ok: true,
     items: tenants.map((tenant) => {
-      const primaryCompany = pickPrimaryCompany(((tenant as any).companies || []) as CompanyLike[])
+      const primaryCompany = pickPrimaryCompany(getTenantCompanies(tenant))
       const latestLicense = tenant.licenses[0] || null
       const latestSubscription = tenant.subscriptions[0] || null
 
@@ -544,7 +552,8 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
   }
 
   const latestLicense = tenant.licenses[0] || null
-  const primaryCompany = pickPrimaryCompany(((tenant as any).companies || []) as CompanyLike[])
+  const companies = getTenantCompanies(tenant)
+  const primaryCompany = pickPrimaryCompany(companies)
   const latestSubscription = tenant.subscriptions[0] || null
   const actorIds = Array.from(new Set(collectDefinedStrings(tenant.auditLogs.map((row) => row.actorId))))
   const actorUsers = actorIds.length
@@ -607,9 +616,7 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
       subdomain: tenant.subdomain,
       portalUrl: buildTenantPortalUrl(tenant.subdomain),
       company: serializePrimaryCompanyDetails(primaryCompany),
-      companies: Array.isArray((tenant as any).companies)
-        ? (tenant as any).companies.map((company: any) => serializeCompanySummary(company))
-        : [],
+      companies: companies.map((company) => serializeCompanySummary(company)),
       status: buildTenantStatus(latestLicense),
       createdAt: tenant.createdAt,
       usersCount: tenant.users.length,
@@ -620,7 +627,7 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
         fullName: user.name,
         companies:
           user.role === "OWNER" || user.role === "ADMIN"
-            ? (tenant as any).companies.map((company: any) => serializeCompanySummary(company))
+            ? companies.map((company) => serializeCompanySummary(company))
             : Array.isArray(user.companyAccesses)
               ? user.companyAccesses.map((access) => serializeCompanySummary(access.company)).filter(Boolean)
               : [],
@@ -767,10 +774,10 @@ router.get("/api/v1/admin/clients/:id/export", requireAuth, requireOwner, async 
     res.setHeader("Content-Type", "application/zip")
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`)
     return res.send(zip.toBuffer())
-  } catch (error: any) {
+  } catch (error: unknown) {
     return res.status(500).json({
       ok: false,
-      error: error?.message || "Nu am putut genera exportul clientului.",
+      error: getErrorMessage(error, "Nu am putut genera exportul clientului."),
     })
   }
 })
@@ -894,8 +901,8 @@ router.post("/api/v1/admin/clients", requireAuth, requireOwner, async (req: Auth
         name: result.tenant.name,
         subdomain: result.tenant.subdomain,
         portalUrl: buildTenantPortalUrl(result.tenant.subdomain),
-        company: pickPrimaryCompany((result.tenant as any).companies),
-        companies: (result.tenant as any).companies || [],
+        company: pickPrimaryCompany(getTenantCompanies(result.tenant)),
+        companies: getTenantCompanies(result.tenant),
         license: result.tenant.licenses[0] || null,
         erpUser: {
           id: result.erpUser.id,
@@ -905,10 +912,10 @@ router.post("/api/v1/admin/clients", requireAuth, requireOwner, async (req: Auth
         },
       },
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     return res.status(500).json({
       ok: false,
-      error: error?.message || "Nu am putut crea clientul",
+      error: getErrorMessage(error, "Nu am putut crea clientul"),
     })
   }
 })
@@ -1073,10 +1080,10 @@ router.post("/api/v1/admin/clients/:id/users", requireAuth, requireOwner, async 
       },
       temporaryPassword: rawPassword,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     return res.status(500).json({
       ok: false,
-      error: error?.message || "Nu am putut crea utilizatorul",
+      error: getErrorMessage(error, "Nu am putut crea utilizatorul"),
     })
   }
 })
@@ -1199,10 +1206,10 @@ router.patch("/api/v1/admin/users/:userId", requireAuth, requireOwner, async (re
         fullName: updated.name,
       },
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     return res.status(500).json({
       ok: false,
-      error: error?.message || "Nu am putut actualiza utilizatorul",
+      error: getErrorMessage(error, "Nu am putut actualiza utilizatorul"),
     })
   }
 })
@@ -1337,10 +1344,10 @@ router.post("/api/v1/admin/clients/:id/locations", requireAuth, requireOwner, as
         company: serializeCompanySummary(company),
       },
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     return res.status(500).json({
       ok: false,
-      error: error?.message || "Nu am putut crea locatia",
+      error: getErrorMessage(error, "Nu am putut crea locatia"),
     })
   }
 })
@@ -1470,10 +1477,10 @@ router.patch("/api/v1/admin/locations/:id", requireAuth, requireOwner, async (re
         company: serializeCompanySummary(company),
       },
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     return res.status(500).json({
       ok: false,
-      error: error?.message || "Nu am putut actualiza locatia",
+      error: getErrorMessage(error, "Nu am putut actualiza locatia"),
     })
   }
 })
@@ -1588,10 +1595,10 @@ router.post("/api/v1/admin/locations/:id/devices", requireAuth, requireOwner, as
       ok: true,
       item: serializeCreatedAdminTerminalItem(terminal, location),
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     return res.status(500).json({
       ok: false,
-      error: error?.message || (isKds ? "Nu am putut crea device-ul KDS" : "Nu am putut crea device-ul POS"),
+      error: getErrorMessage(error, isKds ? "Nu am putut crea device-ul KDS" : "Nu am putut crea device-ul POS"),
     })
   }
 })
@@ -1760,10 +1767,10 @@ router.post(
           newPassword: password,
         },
       })
-    } catch (error: any) {
+    } catch (error: unknown) {
       return res.status(500).json({
         ok: false,
-        error: error?.message || "Nu am putut reseta parola",
+        error: getErrorMessage(error, "Nu am putut reseta parola"),
       })
     }
   }
@@ -1904,7 +1911,7 @@ router.post("/api/v1/pos/validate", async (req, res) => {
   return res.json(buildPosLicenseValidationResponse(terminal, license, withinLimit, licenseKey))
 })
 
-async function updateTerminalHandler(req: AuthedRequest, res: any) {
+async function updateTerminalHandler(req: AuthedRequest, res: Response) {
     const parsed = UpdateDeviceSchema.safeParse(req.body)
     if (!parsed.success) {
       return res.status(400).json({ ok: false, error: parsed.error.flatten() })
