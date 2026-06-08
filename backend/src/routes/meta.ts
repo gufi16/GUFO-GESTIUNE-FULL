@@ -225,10 +225,10 @@ router.post("/api/v1/meta/warehouses", async (req: AuthedRequest, res) => {
     })
 
     res.json({ ok: true, warehouse })
-  } catch (error: any) {
+  } catch (error: unknown) {
     res.status(400).json({
       ok: false,
-      error: error?.message || "Nu am putut salva gestiunea.",
+      error: error instanceof Error ? error.message : "Nu am putut salva gestiunea.",
     })
   }
 })
@@ -347,10 +347,10 @@ router.put("/api/v1/meta/warehouses/:id", async (req: AuthedRequest, res) => {
     })
 
     res.json({ ok: true, warehouse })
-  } catch (error: any) {
+  } catch (error: unknown) {
     res.status(400).json({
       ok: false,
-      error: error?.message || "Nu am putut actualiza gestiunea.",
+      error: error instanceof Error ? error.message : "Nu am putut actualiza gestiunea.",
     })
   }
 })
@@ -396,10 +396,10 @@ router.delete("/api/v1/meta/warehouses/:id", async (req: AuthedRequest, res) => 
     })
 
     res.json({ ok: true })
-  } catch (error: any) {
+  } catch (error: unknown) {
     res.status(400).json({
       ok: false,
-      error: error?.message || "Gestiunea este folosita si nu poate fi stearsa.",
+      error: error instanceof Error ? error.message : "Gestiunea este folosita si nu poate fi stearsa.",
     })
   }
 })
