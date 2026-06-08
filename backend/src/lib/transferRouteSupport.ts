@@ -1,6 +1,10 @@
 import type { Prisma } from "@prisma/client"
 
 type TransferRouteRecord = Record<string, unknown>
+type TransferPdfSummaryCell = {
+  label: string
+  value: string
+}
 
 type EtransportMessageListResult = {
   items: unknown[]
@@ -266,6 +270,84 @@ export function getTransferRouteErrorMessage(error: unknown, fallback: string) {
 
 export function getTransferRouteErrorStack(error: unknown) {
   return error instanceof Error ? error.stack || null : null
+}
+
+export function cleanTransferPdfValue(value: unknown) {
+  return String(value || "").trim()
+}
+
+export function buildTransferPdfFileName(docNo: unknown, fromLocationName: unknown, toLocationName: unknown) {
+  return `TRANSFER_${safeTransferFilePart(docNo)}_${safeTransferFilePart(fromLocationName)}_${safeTransferFilePart(toLocationName)}.pdf`
+}
+
+export function buildTransferPdfCompanyLines(company: {
+  cui?: unknown
+  regNo?: unknown
+  address?: unknown
+  email?: unknown
+  contactEmail?: unknown
+  phone?: unknown
+}) {
+  return [
+    `CUI: ${transferRouteText(company?.cui)}`,
+    `Reg. com.: ${transferRouteText(company?.regNo)}`,
+    `Adresa: ${transferRouteText(company?.address)}`,
+    `Email: ${transferRouteText(company?.email || company?.contactEmail)}`,
+    `Telefon: ${transferRouteText(company?.phone)}`,
+  ]
+}
+
+export function buildTransferPdfRightLines(docNo: unknown, docDate: unknown, createdAt: unknown) {
+  const createdAtDate =
+    typeof createdAt === "string" || typeof createdAt === "number" || createdAt instanceof Date
+      ? new Date(createdAt)
+      : null
+
+  return [
+    `Nr. document: ${transferRouteText(docNo)}`,
+    `Data document: ${transferRouteDate(docDate)}`,
+    `Ora: ${createdAtDate && !Number.isNaN(createdAtDate.getTime()) ? createdAtDate.toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" }) : "-"}`,
+  ]
+}
+
+export function buildTransferPdfSummaryRows(params: {
+  actorLabel: string
+  fromStorageLabel: string
+  toStorageLabel: string
+  delegateCi: unknown
+  vehicleNo: unknown
+  note: unknown
+  eTransportUit: unknown
+}): TransferPdfSummaryCell[][] {
+  const observationsLabel = [
+    cleanTransferPdfValue(params.note),
+    cleanTransferPdfValue(params.eTransportUit) ? `UIT e-Transport: ${cleanTransferPdfValue(params.eTransportUit)}` : "",
+  ]
+    .filter(Boolean)
+    .join(" | ") || "-"
+
+  return [
+    [
+      { label: "Din gestiune", value: params.fromStorageLabel },
+      { label: "In gestiune", value: params.toStorageLabel },
+    ],
+    [
+      { label: "Delegat", value: params.actorLabel },
+      { label: "CI / BI", value: cleanTransferPdfValue(params.delegateCi) || "-" },
+    ],
+    [
+      { label: "Nr. auto", value: cleanTransferPdfValue(params.vehicleNo) || "-" },
+      { label: "Observatii", value: observationsLabel },
+    ],
+  ]
+}
+
+export function buildTransferPdfSignatureRows(actorLabel: string, fromStorageLabel: string, toStorageLabel: string) {
+  return [
+    { label: "Intocmit", value: actorLabel },
+    { label: "Am predat", value: fromStorageLabel },
+    { label: "Am primit", value: toStorageLabel },
+  ]
 }
 
 export async function resolveEtransportDownloadId(

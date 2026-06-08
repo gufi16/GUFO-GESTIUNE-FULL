@@ -16,6 +16,12 @@ import { resolveWarehouseForLocation } from "../lib/warehouse"
 import {
   buildTransferDocListWhere,
   buildETransportSummary,
+  buildTransferPdfCompanyLines,
+  buildTransferPdfFileName,
+  buildTransferPdfRightLines,
+  buildTransferPdfSignatureRows,
+  buildTransferPdfSummaryRows,
+  cleanTransferPdfValue,
   classifyEtransportStatus,
   explainEtransportAnafError,
   extractUit,
@@ -1258,7 +1264,6 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
   const tenantId = req.auth!.tenantId
   const companyId = await requireRequestCompanyId(req)
   const id = String(req.params.id)
-  const cleanValue = (value: unknown) => String(value || "").trim()
 
   const docData = await prisma.transferDoc.findFirst({
     where: { id, tenantId, companyId },
@@ -1289,7 +1294,7 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
     : null
 
   const company = await resolveRequestCompany(req)
-  const filename = `TRANSFER_${safeTransferFilePart(docData.docNo)}_${safeTransferFilePart(docData.fromLocation.name)}_${safeTransferFilePart(docData.toLocation.name)}.pdf`
+  const filename = buildTransferPdfFileName(docData.docNo, docData.fromLocation.name, docData.toLocation.name)
   res.setHeader("Content-Type", "application/pdf")
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`)
 
@@ -1302,23 +1307,32 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
   const pageHeight = doc.page.height
   const contentWidth = pageWidth - margin * 2
   const headerBlockHeight = 110
-  const actorLabel = cleanValue(actorUser?.name) || cleanValue(actorUser?.email) || cleanValue(docData.delegateName) || "-"
-  const fromStorageLabel = [cleanValue(docData.fromLocation.name), cleanValue(docData.fromWarehouse?.name)].filter(Boolean).join(" / ") || "-"
-  const toStorageLabel = [cleanValue(docData.toLocation.name), cleanValue(docData.toWarehouse?.name)].filter(Boolean).join(" / ") || "-"
-  const observationsLabel = [cleanValue(docData.note), cleanValue(docData.eTransportUit) ? `UIT e-Transport: ${cleanValue(docData.eTransportUit)}` : ""].filter(Boolean).join(" | ") || "-"
+  const actorLabel =
+    cleanTransferPdfValue(actorUser?.name) ||
+    cleanTransferPdfValue(actorUser?.email) ||
+    cleanTransferPdfValue(docData.delegateName) ||
+    "-"
+  const fromStorageLabel =
+    [cleanTransferPdfValue(docData.fromLocation.name), cleanTransferPdfValue(docData.fromWarehouse?.name)].filter(Boolean).join(" / ") || "-"
+  const toStorageLabel =
+    [cleanTransferPdfValue(docData.toLocation.name), cleanTransferPdfValue(docData.toWarehouse?.name)].filter(Boolean).join(" / ") || "-"
+  const summaryRows = buildTransferPdfSummaryRows({
+    actorLabel,
+    fromStorageLabel,
+    toStorageLabel,
+    delegateCi: docData.delegateCi,
+    vehicleNo: docData.vehicleNo,
+    note: docData.note,
+    eTransportUit: docData.eTransportUit,
+  })
+  const signatures = buildTransferPdfSignatureRows(actorLabel, fromStorageLabel, toStorageLabel)
   const drawHeader = () => {
     const y = margin
     doc.font(fonts.bold).fontSize(12).fillColor('#111827').text(pdfText(company?.name), margin, y + 8, {
       width: 220,
       align: 'left',
     })
-    const companyLines = [
-      `CUI: ${pdfText(company?.cui)}`,
-      `Reg. com.: ${pdfText(company?.regNo)}`,
-      `Adresa: ${pdfText(company?.address)}`,
-      `Email: ${pdfText(company?.email || company?.contactEmail)}`,
-      `Telefon: ${pdfText(company?.phone)}`,
-    ]
+    const companyLines = buildTransferPdfCompanyLines(company || {})
     let companyY = y + 28
     doc.font(fonts.regular).fontSize(8.8).fillColor('#334155')
     companyLines.forEach((lineText) => {
@@ -1336,11 +1350,7 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
     })
 
     const rightX = pageWidth - margin - 210
-    const rightLines = [
-      `Nr. document: ${pdfText(docData.docNo)}`,
-      `Data document: ${pdfDate(docData.docDate)}`,
-      `Ora: ${new Date(docData.createdAt).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' })}`,
-    ]
+    const rightLines = buildTransferPdfRightLines(docData.docNo, docData.docDate, docData.createdAt)
     let rightY = y + 14
     doc.font(fonts.regular).fontSize(9.4).fillColor('#111827')
     rightLines.forEach((lineText) => {
@@ -1379,20 +1389,6 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
   const leftX = margin
   const rightX = margin + contentWidth / 2 + 14
   const pairWidth = contentWidth / 2 - 20
-  const summaryRows = [
-    [
-      { label: 'Din gestiune', value: fromStorageLabel },
-      { label: 'In gestiune', value: toStorageLabel },
-    ],
-    [
-      { label: 'Delegat', value: actorLabel },
-      { label: 'CI / BI', value: cleanValue(docData.delegateCi) || '-' },
-    ],
-    [
-      { label: 'Nr. auto', value: cleanValue(docData.vehicleNo) || '-' },
-      { label: 'Observatii', value: observationsLabel },
-    ],
-  ]
 
   summaryRows.forEach((row) => {
     const leftHeight = drawSummaryPair(leftX, y, row[0].label, row[0].value, pairWidth)
@@ -1444,11 +1440,6 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
   const signatureWidth = 190
   const signatureGap = (contentWidth - signatureWidth * 3) / 2
   const signatureY = y
-  const signatures = [
-    { label: 'Intocmit', value: actorLabel },
-    { label: 'Am predat', value: fromStorageLabel },
-    { label: 'Am primit', value: toStorageLabel },
-  ]
   signatures.forEach((signature, index) => {
     const x = margin + index * (signatureWidth + signatureGap)
     doc.font(fonts.bold).fontSize(10).fillColor('#111827').text(signature.label, x, signatureY, {
