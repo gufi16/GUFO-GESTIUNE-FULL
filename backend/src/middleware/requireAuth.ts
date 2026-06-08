@@ -18,6 +18,29 @@ export interface AuthedRequest extends Request {
   }
 }
 
+type CookieCarrier = {
+  cookies?: Record<string, unknown>
+}
+
+type AccessTokenPayloadLike = {
+  userId?: unknown
+  user_id?: unknown
+  id?: unknown
+  tenantId?: unknown
+  tenant_id?: unknown
+  role?: unknown
+  email?: unknown
+  activeCompanyId?: unknown
+  active_company_id?: unknown
+  controlPanel?: unknown
+  sessionId?: unknown
+}
+
+function toOptionalString(value: unknown) {
+  const text = String(value || "").trim()
+  return text || null
+}
+
 function getHostnameFromUrl(value?: string | null) {
   try {
     return new URL(String(value || "").trim()).hostname.toLowerCase()
@@ -83,7 +106,7 @@ function getTenantSubdomainFromRequest(req: Request) {
   if (validExplicitHeader) return validExplicitHeader
   if (hostDerivedSubdomain) return hostDerivedSubdomain
 
-  const cookieSubdomain = String((req as any).cookies?.[ERP_TENANT_COOKIE] || "").trim().toLowerCase()
+  const cookieSubdomain = String((req as CookieCarrier).cookies?.[ERP_TENANT_COOKIE] || "").trim().toLowerCase()
   if (cookieSubdomain && /^[a-z0-9-]+$/.test(cookieSubdomain)) {
     return cookieSubdomain
   }
@@ -135,10 +158,10 @@ export async function requireAuth(req: AuthedRequest, res: Response, next: NextF
   }
 
   try {
-    const decoded = verifyAccessToken(token) as any
+    const decoded = verifyAccessToken(token) as AccessTokenPayloadLike
 
     if (decoded.sessionId) {
-      const session = await (prisma as any).webSession.findUnique({
+      const session = await prisma.webSession.findUnique({
         where: { id: String(decoded.sessionId) },
         select: {
           id: true,
@@ -171,27 +194,28 @@ export async function requireAuth(req: AuthedRequest, res: Response, next: NextF
     }
 
     req.auth = {
-      userId: decoded.userId || decoded.user_id || decoded.id,
-      tenantId: decoded.tenantId || decoded.tenant_id || null,
-      role: decoded.role,
-      email: decoded.email || null,
-      activeCompanyId: decoded.activeCompanyId || decoded.active_company_id || null,
+      userId: String(decoded.userId || decoded.user_id || decoded.id || "").trim(),
+      tenantId: toOptionalString(decoded.tenantId || decoded.tenant_id),
+      role: String(decoded.role || "").trim(),
+      email: toOptionalString(decoded.email),
+      activeCompanyId: toOptionalString(decoded.activeCompanyId || decoded.active_company_id),
       controlPanel: Boolean(decoded.controlPanel),
-      sessionId: decoded.sessionId || null,
+      sessionId: toOptionalString(decoded.sessionId),
     }
 
-    if (!req.auth.userId || !req.auth.role) {
+    const auth = req.auth
+    if (!auth.userId || !auth.role) {
       return res.status(401).json({ ok: false, error: "Invalid token" })
     }
 
-    if (!req.auth.controlPanel && req.auth.tenantId) {
+    if (!auth.controlPanel && auth.tenantId) {
       const requestedSubdomain = getTenantSubdomainFromRequest(req)
       if (!requestedSubdomain && isHostedGufoBrowserRequest(req)) {
         return res.status(403).json({ ok: false, error: "Autentificarea ERP este permisa doar pe subdomeniul clientului." })
       }
       if (requestedSubdomain) {
         const tenant = await prisma.tenant.findUnique({
-          where: { id: String(req.auth.tenantId) },
+          where: { id: String(auth.tenantId) },
           select: { subdomain: true },
         })
 
