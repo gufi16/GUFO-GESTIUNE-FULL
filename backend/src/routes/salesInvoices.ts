@@ -44,15 +44,118 @@ function getErrorStack(error: unknown) {
   return error instanceof Error ? error.stack || null : null
 }
 
-function toNumber(value: any): number {
+type InvoiceItemInput = {
+  productId?: unknown
+  qty?: unknown
+  unitPriceFc?: unknown
+  vatRateValue?: unknown
+  discountPercent?: unknown
+}
+
+type SalesInvoiceHeaderInput = {
+  locationId?: unknown
+  customerId?: unknown
+  docDate?: unknown
+  dueDate?: unknown
+  customerName?: unknown
+  customerCode?: unknown
+  customerCif?: unknown
+  customerRegNo?: unknown
+  customerAddress?: unknown
+  customerEmail?: unknown
+  customerPhone?: unknown
+  currency?: unknown
+  fxRate?: unknown
+  docNo?: unknown
+  note?: unknown
+}
+
+type InvoiceProductLike = {
+  [key: string]: unknown
+  price?: unknown
+  costPrice?: unknown
+  purchaseFactor?: unknown
+  sgrValue?: unknown
+  vatRate?: ({ [key: string]: unknown; rate?: unknown } | null)
+}
+
+type InvoiceLineLike = {
+  [key: string]: unknown
+  qty?: unknown
+  unitPriceFc?: unknown
+  vatRateValue?: unknown
+  discountPercent?: unknown
+  discountAmountFc?: unknown
+  lineNetFc?: unknown
+  lineVatFc?: unknown
+  lineGrossFc?: unknown
+  sgrUnitFc?: unknown
+  sgrTotalFc?: unknown
+  discountAmountRon?: unknown
+  lineNetRon?: unknown
+  lineVatRon?: unknown
+  lineGrossRon?: unknown
+  sgrTotalRon?: unknown
+  product?: InvoiceProductLike | null
+}
+
+type InvoiceLike = {
+  [key: string]: unknown
+  fxRate?: unknown
+  totalNetFc?: unknown
+  totalDiscountFc?: unknown
+  totalVatFc?: unknown
+  totalGrossFc?: unknown
+  totalSgrFc?: unknown
+  totalWithSgrFc?: unknown
+  totalNetRon?: unknown
+  totalDiscountRon?: unknown
+  totalVatRon?: unknown
+  totalGrossRon?: unknown
+  totalSgrRon?: unknown
+  totalWithSgrRon?: unknown
+  items?: InvoiceLineLike[] | unknown
+}
+
+type EfacturaPayloadCompany = {
+  cui?: string | null
+  efacturaOauthAccessToken?: string | null
+}
+
+type EfacturaPayloadInvoice = {
+  efacturaUploadIndex?: string | null
+}
+
+type SourceInvoice = Prisma.SalesInvoiceGetPayload<{
+  include: {
+    location: true
+    customer: true
+    items: {
+      include: {
+        product: {
+          include: {
+            uom: true
+            vatRate: true
+          }
+        }
+      }
+    }
+  }
+}>
+
+function toNumber(value: unknown): number {
   const n = Number(value)
   return Number.isFinite(n) ? n : 0
 }
 
-function normalizeCurrency(value: any): "RON" | "EUR" | "USD" | "HUF" {
+function normalizeCurrency(value: unknown): "RON" | "EUR" | "USD" | "HUF" {
   const c = String(value || "RON").toUpperCase()
   if (c === "EUR" || c === "USD" || c === "HUF") return c
   return "RON"
+}
+
+function toDateValue(value: unknown) {
+  return new Date(String(value || ""))
 }
 
 function safeFilePart(value: string) {
@@ -64,7 +167,7 @@ function safeFilePart(value: string) {
     .replace(/^[-_.]+|[-_.]+$/g, "")
 }
 
-function sanitizeInvoicePdfNote(value: any) {
+function sanitizeInvoicePdfNote(value: unknown) {
   return String(value || "")
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -143,7 +246,7 @@ async function replaceInvoiceItems(
   companyId: string,
   invoiceId: string,
   fxRate: number,
-  items: any[]
+  items: InvoiceItemInput[]
 ) {
   await client.salesInvoiceItem.deleteMany({
     where: { invoiceId },
@@ -221,7 +324,7 @@ async function recalcInvoice(invoiceId: string) {
   return recalcInvoiceWithClient(prisma, invoiceId)
 }
 
-async function createStornoInvoice(tenantId: string, companyId: string, sourceInvoice: any) {
+async function createStornoInvoice(tenantId: string, companyId: string, sourceInvoice: SourceInvoice) {
   const now = new Date()
   const createdId = await prisma.$transaction(async (tx) => {
     const docNo = await reserveNextNumber(tx, tenantId, "invoice")
@@ -310,7 +413,7 @@ async function createStornoInvoice(tenantId: string, companyId: string, sourceIn
   })
 }
 
-function enrichInvoice(invoice: any) {
+function enrichInvoice(invoice: InvoiceLike | null | undefined) {
   invoice = serializeInvoice(invoice)
   if (!invoice) return invoice
   return {
@@ -319,10 +422,10 @@ function enrichInvoice(invoice: any) {
   }
 }
 
-function serializeInvoice(invoice: any) {
+function serializeInvoice(invoice: InvoiceLike | null | undefined) {
   if (!invoice) return invoice
 
-  const serializeProduct = (product: any) => {
+  const serializeProduct = (product: InvoiceProductLike | null | undefined) => {
     if (!product) return product
     return {
       ...product,
@@ -340,7 +443,7 @@ function serializeInvoice(invoice: any) {
   }
 
   const items = Array.isArray(invoice.items)
-    ? invoice.items.map((item: any) => ({
+    ? invoice.items.map((item: InvoiceLineLike) => ({
         ...item,
         qty: toNumber(item.qty),
         unitPriceFc: toNumber(item.unitPriceFc),
@@ -380,21 +483,21 @@ function serializeInvoice(invoice: any) {
   }
 }
 
-function classifyEfacturaStatus(payload: any, rawText: string) {
+function classifyEfacturaStatus(payload: unknown, rawText: string) {
   const text = `${JSON.stringify(payload || {})} ${rawText}`.toLowerCase()
   if (/(nok|respins|rejected|eroare|error|invalid)/i.test(text)) return "REJECTED"
   if (/(ok|acceptat|accepted|validat|disponibil|descarcare)/i.test(text)) return "ACCEPTED"
   return "SENT"
 }
 
-async function resolveReceiptDownloadId(company: any, invoice: any) {
+async function resolveReceiptDownloadId(company: EfacturaPayloadCompany, invoice: EfacturaPayloadInvoice) {
   const cif = normalizeCompanyCui(company?.cui)
   if (!cif || !company?.efacturaOauthAccessToken || !invoice?.efacturaUploadIndex) {
     return ""
   }
 
   const listResult = await anafListMessages(company, { days: 60, cif })
-  const matched = listResult.items.find((item: any) => {
+  const matched = listResult.items.find((item: unknown) => {
     const blob = JSON.stringify(item || {}).toLowerCase()
     return blob.includes(String(invoice.efacturaUploadIndex).toLowerCase())
   })
@@ -523,8 +626,8 @@ router.post("/api/v1/sales-invoices/:id/storno", async (req: AuthedRequest, res)
       message: `Factura storno ${stornoInvoice?.docNo || ""} a fost creata.`,
       invoice: enrichInvoice(stornoInvoice),
     })
-  } catch (error: any) {
-    return res.status(500).json({ ok: false, error: error?.message || "Nu am putut storna factura." })
+  } catch (error: unknown) {
+    return res.status(500).json({ ok: false, error: getErrorMessage(error, "Nu am putut storna factura.") })
   }
 })
 
@@ -535,7 +638,12 @@ router.post("/api/v1/sales-invoices/full", async (req: AuthedRequest, res) => {
   }
   const companyId = await requireRequestCompanyId(req)
 
-  const { id, header, items, issueNow } = req.body || {}
+  const { id, header, items, issueNow } = (req.body || {}) as {
+    id?: unknown
+    header?: SalesInvoiceHeaderInput
+    items?: InvoiceItemInput[]
+    issueNow?: unknown
+  }
 
   try {
     if (!header?.locationId) {
@@ -563,7 +671,7 @@ router.post("/api/v1/sales-invoices/full", async (req: AuthedRequest, res) => {
     }
 
     const customerId = header?.customerId ? String(header.customerId) : null
-    let customer: any = null
+    let customer: Prisma.CustomerGetPayload<object> | null = null
 
     if (customerId) {
       customer = await prisma.customer.findFirst({
@@ -625,8 +733,8 @@ router.post("/api/v1/sales-invoices/full", async (req: AuthedRequest, res) => {
             locationId: location.id,
             customerId: customer?.id || null,
             docNo,
-            docDate: new Date(header.docDate),
-            dueDate: header?.dueDate ? new Date(header.dueDate) : null,
+            docDate: toDateValue(header.docDate),
+            dueDate: header?.dueDate ? toDateValue(header.dueDate) : null,
             customerName,
             customerCode: customer?.code || (header?.customerCode ? String(header.customerCode).trim() : null),
             customerCif: customer?.cif || (header?.customerCif ? String(header.customerCif).trim() : null),
@@ -685,8 +793,8 @@ router.post("/api/v1/sales-invoices/full", async (req: AuthedRequest, res) => {
             locationId: location.id,
             customerId: customer?.id || null,
             docNo,
-            docDate: new Date(header.docDate),
-            dueDate: header?.dueDate ? new Date(header.dueDate) : null,
+            docDate: toDateValue(header.docDate),
+            dueDate: header?.dueDate ? toDateValue(header.dueDate) : null,
             customerName,
             customerCode: customer?.code || (header?.customerCode ? String(header.customerCode).trim() : null),
             customerCif: customer?.cif || (header?.customerCif ? String(header.customerCif).trim() : null),
@@ -741,10 +849,10 @@ router.post("/api/v1/sales-invoices/full", async (req: AuthedRequest, res) => {
       ok: true,
       invoice: enrichInvoice(invoice),
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     return res.status(400).json({
       ok: false,
-      error: error?.message || "Nu am putut salva factura.",
+      error: getErrorMessage(error, "Nu am putut salva factura."),
     })
   }
 })
