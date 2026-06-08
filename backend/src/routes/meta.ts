@@ -1,5 +1,5 @@
 import { Router } from "express"
-import { TerminalDeviceType } from "@prisma/client"
+import { Prisma, TerminalDeviceType } from "@prisma/client"
 import path from "path"
 import fs from "fs"
 import multer from "multer"
@@ -728,7 +728,7 @@ router.get("/api/v1/meta/suppliers", async (req: AuthedRequest, res) => {
   res.json({ ok: true, suppliers })
 })
 
-async function reserveUniqueSupplierCode(tx: any, tenantId: string) {
+async function reserveUniqueSupplierCode(tx: Prisma.TransactionClient, tenantId: string) {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const code = await reserveNextNumber(tx, tenantId, "supplier")
     const existing = await tx.supplier.findFirst({
