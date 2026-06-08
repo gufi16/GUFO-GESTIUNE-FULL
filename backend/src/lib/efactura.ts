@@ -6,6 +6,86 @@ export type EFacturaValidationIssue = {
   message: string
 }
 
+type EFacturaProductLike = {
+  uom?: {
+    standardCode?: unknown
+  } | null
+}
+
+type EFacturaInvoiceLineLike = {
+  qty?: unknown
+  unitPriceFc?: unknown
+  lineNetFc?: unknown
+  lineVatFc?: unknown
+  lineGrossFc?: unknown
+  lineNetRon?: unknown
+  lineVatRon?: unknown
+  lineGrossRon?: unknown
+  discountAmountFc?: unknown
+  discountAmountRon?: unknown
+  discountPercent?: unknown
+  sgrUnitFc?: unknown
+  sgrTotalFc?: unknown
+  sgrTotalRon?: unknown
+  vatRateValue?: unknown
+  vatCategoryCode?: unknown
+  uomStandardCode?: unknown
+  uomCode?: unknown
+  uom?: unknown
+  productCode?: unknown
+  productName?: unknown
+  product?: EFacturaProductLike | null
+}
+
+type EFacturaInvoiceLike = {
+  docNo?: unknown
+  docDate?: unknown
+  dueDate?: unknown
+  customerName?: unknown
+  customerCif?: unknown
+  customerAddress?: unknown
+  customerCounty?: unknown
+  customerRegion?: unknown
+  customerCity?: unknown
+  customerPostalCode?: unknown
+  customerCountry?: unknown
+  currency?: unknown
+  totalGrossFc?: unknown
+  totalNetFc?: unknown
+  totalSgrFc?: unknown
+  totalVatFc?: unknown
+  note?: unknown
+  invoiceTypeCode?: unknown
+  sourceDocNo?: unknown
+  stornoSourceDocNo?: unknown
+  isEfacturaRequired?: unknown
+  items?: EFacturaInvoiceLineLike[] | null
+  customer?: {
+    county?: unknown
+    region?: unknown
+    city?: unknown
+    postalCode?: unknown
+    country?: unknown
+  } | null
+  sourceInvoice?: {
+    docNo?: unknown
+  } | null
+}
+
+type EFacturaCompanyLike = {
+  name?: unknown
+  cui?: unknown
+  address?: unknown
+  city?: unknown
+  county?: unknown
+  country?: unknown
+  postalCode?: unknown
+  efacturaSellerCity?: unknown
+  efacturaSellerCounty?: unknown
+  efacturaSellerCountryCode?: unknown
+  efacturaSellerPostalCode?: unknown
+}
+
 function xmlEscape(value: unknown) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -44,7 +124,7 @@ function normalizeCountryCode(value: unknown, fallback = "RO") {
   return /^[A-Z]{2}$/.test(text) ? text : fallback
 }
 
-function normalizeVatCategory(line: any) {
+function normalizeVatCategory(line: EFacturaInvoiceLineLike | null | undefined) {
   const explicit = String(line?.vatCategoryCode || "").trim().toUpperCase()
   if (explicit) {
     // The current ERP data model does not carry full exemption metadata.
@@ -55,19 +135,19 @@ function normalizeVatCategory(line: any) {
   return toNumber(line?.vatRateValue) > 0 ? "S" : "Z"
 }
 
-function effectiveUnitPrice(line: any) {
+function effectiveUnitPrice(line: EFacturaInvoiceLineLike | null | undefined) {
   const qty = toNumber(line?.qty)
   if (qty <= 0) return toNumber(line?.unitPriceFc)
   return toNumber(line?.lineNetFc) / qty
 }
 
-function stornoUnitPrice(line: any) {
+function stornoUnitPrice(line: EFacturaInvoiceLineLike | null | undefined) {
   const qty = Math.abs(toNumber(line?.qty))
   if (qty <= 0) return Math.abs(toNumber(line?.unitPriceFc))
   return Math.abs(toNumber(line?.lineNetFc)) / qty
 }
 
-function resolveStornoSourceDocNo(invoice: any) {
+function resolveStornoSourceDocNo(invoice: EFacturaInvoiceLike | null | undefined) {
   const explicit = invoice?.sourceDocNo || invoice?.stornoSourceDocNo || invoice?.sourceInvoice?.docNo
   if (explicit) return String(explicit).trim()
   const match = String(invoice?.note || "").match(/Factura storno pentru\s+([^\r\n]+)/i)
@@ -257,7 +337,7 @@ function normalizeUomCode(value: unknown) {
   return UOM_CODES[text] || "C62"
 }
 
-function resolveInvoiceLineUomCode(line: any) {
+function resolveInvoiceLineUomCode(line: EFacturaInvoiceLineLike | null | undefined) {
   return (
     line?.uomStandardCode ||
     line?.product?.uom?.standardCode ||
@@ -267,8 +347,8 @@ function resolveInvoiceLineUomCode(line: any) {
   )
 }
 
-function expandInvoiceLinesForEfactura(invoice: any) {
-  const expanded: any[] = []
+function expandInvoiceLinesForEfactura(invoice: EFacturaInvoiceLike | null | undefined) {
+  const expanded: EFacturaInvoiceLineLike[] = []
 
   for (const line of Array.isArray(invoice?.items) ? invoice.items : []) {
     expanded.push(line)
@@ -310,7 +390,7 @@ function isLikelyValidRomanianTaxId(value: unknown) {
   return digits.length >= 2 && digits.length <= 10 && !/^0+$/.test(digits)
 }
 
-function resolveCustomerCounty(invoice: any) {
+function resolveCustomerCounty(invoice: EFacturaInvoiceLike | null | undefined) {
   return (
     invoice?.customer?.county ||
     invoice?.customer?.region ||
@@ -320,19 +400,19 @@ function resolveCustomerCounty(invoice: any) {
   )
 }
 
-function resolveCustomerCity(invoice: any) {
+function resolveCustomerCity(invoice: EFacturaInvoiceLike | null | undefined) {
   return invoice?.customer?.city || invoice?.customerCity || ""
 }
 
-function resolveCustomerPostalCode(invoice: any) {
+function resolveCustomerPostalCode(invoice: EFacturaInvoiceLike | null | undefined) {
   return invoice?.customer?.postalCode || invoice?.customerPostalCode || ""
 }
 
-function resolveCustomerCountry(invoice: any) {
+function resolveCustomerCountry(invoice: EFacturaInvoiceLike | null | undefined) {
   return invoice?.customer?.country || invoice?.customerCountry || "RO"
 }
 
-export function validateInvoiceForEFactura(invoice: any, company: any) {
+export function validateInvoiceForEFactura(invoice: EFacturaInvoiceLike | null | undefined, company: EFacturaCompanyLike | null | undefined) {
   const issues: EFacturaValidationIssue[] = []
   const supplierCity = company?.city || company?.efacturaSellerCity
   const supplierCounty = company?.county || company?.efacturaSellerCounty
@@ -399,7 +479,7 @@ export function validateInvoiceForEFactura(invoice: any, company: any) {
   }
 }
 
-export function generateInvoiceEFacturaXml(invoice: any, company: any) {
+export function generateInvoiceEFacturaXml(invoice: EFacturaInvoiceLike | null | undefined, company: EFacturaCompanyLike | null | undefined) {
   const issueDate = formatDate(invoice?.docDate)
   const dueDate = formatDate(invoice?.dueDate)
   const currency = String(invoice?.currency || "RON").toUpperCase()
@@ -454,7 +534,7 @@ export function generateInvoiceEFacturaXml(invoice: any, company: any) {
     .join("")
 
   const lineXml = expandedLines
-    .map((line: any, index: number) => {
+    .map((line: EFacturaInvoiceLineLike, index: number) => {
       const category = normalizeVatCategory(line)
       return [
         "<cac:InvoiceLine>",
