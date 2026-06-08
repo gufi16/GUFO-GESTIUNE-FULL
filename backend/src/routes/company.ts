@@ -360,10 +360,10 @@ router.get("/api/v1/company", async (req: AuthedRequest, res) => {
       ok: true,
       company: company ? mapCompanyResponse(company, oauthConfig) : null
     })
-  } catch (e: any) {
+  } catch (error: unknown) {
     return res.status(500).json({
       ok: false,
-      error: e?.message || "Eroare la incarcarea firmei"
+      error: getCompanyRouteErrorMessage(error, "Eroare la incarcarea firmei"),
     })
   }
 })
@@ -598,10 +598,10 @@ router.post("/api/v1/company", async (req: AuthedRequest, res) => {
       ok: true,
       company: mapCompanyResponse(resolvedCompany, await getEffectiveAnafOauthConfig(prisma, tenantId, getActiveCompanyId(req)))
     })
-  } catch (e: any) {
+  } catch (error: unknown) {
     return res.status(500).json({
       ok: false,
-      error: e?.message || "Eroare la salvarea firmei"
+      error: getCompanyRouteErrorMessage(error, "Eroare la salvarea firmei"),
     })
   }
 })
@@ -629,10 +629,10 @@ router.get("/api/v1/company/warehouse-config", async (req: AuthedRequest, res) =
         warehouseLabel: String(company?.warehouseLabel || "Gestiune"),
       },
     })
-  } catch (e: any) {
+  } catch (error: unknown) {
     return res.status(500).json({
       ok: false,
-      error: e?.message || "Nu am putut incarca setarile de gestiune.",
+      error: getCompanyRouteErrorMessage(error, "Nu am putut incarca setarile de gestiune."),
     })
   }
 })
@@ -682,10 +682,10 @@ router.post("/api/v1/company/warehouse-config", async (req: AuthedRequest, res) 
       },
       company: mapCompanyResponse(resolvedCompany, await getEffectiveAnafOauthConfig(prisma, tenantId, getActiveCompanyId(req))),
     })
-  } catch (e: any) {
+  } catch (error: unknown) {
     return res.status(500).json({
       ok: false,
-      error: e?.message || "Nu am putut salva setarile de gestiune.",
+      error: getCompanyRouteErrorMessage(error, "Nu am putut salva setarile de gestiune."),
     })
   }
 })
@@ -1313,10 +1313,10 @@ router.get("/api/v1/company/efactura/diagnostics", async (req: AuthedRequest, re
       ok: true,
       diagnostics: getAnafCompanyDiagnostics(credential),
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     return res.status(500).json({
       ok: false,
-      error: error?.message || "Nu am putut incarca diagnosticul ANAF.",
+      error: getCompanyRouteErrorMessage(error, "Nu am putut incarca diagnosticul ANAF."),
     })
   }
 })
@@ -1344,10 +1344,10 @@ router.get("/api/v1/company/document-numbering", async (req: AuthedRequest, res)
       settings,
       previews: { invoice, purchaseReceipt, transfer, inventory, production, deterioration, priceChange, customer, supplier },
     })
-  } catch (e: any) {
+  } catch (error: unknown) {
     return res.status(500).json({
       ok: false,
-      error: e?.message || "Eroare la incarcarea numerotarii documentelor",
+      error: getCompanyRouteErrorMessage(error, "Eroare la incarcarea numerotarii documentelor"),
     })
   }
 })
@@ -1416,10 +1416,10 @@ router.post("/api/v1/company/document-numbering", async (req: AuthedRequest, res
       settings: refreshedSettings,
       previews: { invoice, purchaseReceipt, transfer, inventory, production, deterioration, priceChange, customer, supplier },
     })
-  } catch (e: any) {
+  } catch (error: unknown) {
     return res.status(500).json({
       ok: false,
-      error: e?.message || "Eroare la salvarea numerotarii documentelor",
+      error: getCompanyRouteErrorMessage(error, "Eroare la salvarea numerotarii documentelor"),
     })
   }
 })
@@ -1440,10 +1440,10 @@ router.get("/api/v1/company/pos-sync-config", async (req: AuthedRequest, res) =>
       posSyncInterval: company?.posSyncInterval ?? 5,
       allowedIntervals: ALLOWED_POS_SYNC_INTERVALS
     })
-  } catch (e: any) {
+  } catch (error: unknown) {
     return res.status(500).json({
       ok: false,
-      error: e?.message || "Eroare la incarcarea setarilor POS"
+      error: getCompanyRouteErrorMessage(error, "Eroare la incarcarea setarilor POS"),
     })
   }
 })
@@ -1473,10 +1473,10 @@ router.post("/api/v1/company/pos-sync-config", async (req: AuthedRequest, res) =
       posSyncInterval: company.posSyncInterval,
       allowedIntervals: ALLOWED_POS_SYNC_INTERVALS
     })
-  } catch (e: any) {
+  } catch (error: unknown) {
     return res.status(500).json({
       ok: false,
-      error: e?.message || "Eroare la salvarea setarilor POS"
+      error: getCompanyRouteErrorMessage(error, "Eroare la salvarea setarilor POS"),
     })
   }
 })
