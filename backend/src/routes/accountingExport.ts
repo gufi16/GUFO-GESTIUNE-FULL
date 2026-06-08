@@ -1,13 +1,19 @@
-// @ts-nocheck
 import { Router } from "express"
 import ExcelJS from "exceljs"
 import AdmZip from "adm-zip"
 import { z } from "zod"
+import type { Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { buildCompanyScopedTenantWhere, requireRequestCompany, requireRequestCompanyId } from "../lib/companyScope"
 
 const router = Router()
+
+type ExportFileFormat = "xml" | "xlsx" | "csv" | "dbf"
+type SpreadsheetFileFormat = "xlsx" | "csv"
+type ExportRow = Record<string, unknown>
+type ExportSheet = { name: string; rows: ExportRow[] }
+type ExportSheetRows = ExportRow[] & { __sheets?: ExportSheet[] }
 
 const CONFIG_DEFAULTS = {
   exportTarget: "SAGA",
@@ -102,8 +108,11 @@ function xmlEscape(value: unknown) {
     .replace(/'/g, "&apos;")
 }
 
-function formatDate(value: Date | string | null | undefined) {
+function formatDate(value: unknown) {
   if (!value) return ""
+  if (!(value instanceof Date) && typeof value !== "string" && typeof value !== "number") {
+    return ""
+  }
   const date = value instanceof Date ? value : new Date(value)
   if (Number.isNaN(date.getTime())) return ""
   const day = `${date.getDate()}`.padStart(2, "0")
@@ -112,8 +121,11 @@ function formatDate(value: Date | string | null | undefined) {
   return `${day}.${month}.${year}`
 }
 
-function formatIsoDate(value: Date | string | null | undefined) {
+function formatIsoDate(value: unknown) {
   if (!value) return ""
+  if (!(value instanceof Date) && typeof value !== "string" && typeof value !== "number") {
+    return ""
+  }
   const date = value instanceof Date ? value : new Date(value)
   if (Number.isNaN(date.getTime())) return ""
   const day = `${date.getDate()}`.padStart(2, "0")
@@ -373,7 +385,7 @@ function downloadName(kind: string, from: string, to: string, options?: { compan
   return `saga_${safeKind}_${fromChunk}_${toChunk}.xml`
 }
 
-function replaceFileExtension(fileName: string, extension: "xml" | "xlsx" | "csv") {
+function replaceFileExtension(fileName: string, extension: ExportFileFormat) {
   return fileName.replace(/\.[^.]+$/i, `.${extension}`)
 }
 
@@ -392,8 +404,8 @@ function excelSerialDate(value: Date | string | null | undefined) {
   return Math.floor(utc / 86400000) + 25569
 }
 
-function spreadsheetSheets(sheets: Array<{ name: string; rows: Record<string, unknown>[] }>) {
-  return Object.assign([], { __sheets: sheets })
+function spreadsheetSheets(sheets: ExportSheet[]): ExportSheetRows {
+  return Object.assign([] as ExportRow[], { __sheets: sheets })
 }
 
 function managementValue(config: any, location: { code?: string | null; name?: string | null } | null | undefined) {
@@ -503,6 +515,8 @@ function serializeAccountingProduct(product: any) {
       : product.vatRate,
   }
 }
+
+type AccountingProductRow = ReturnType<typeof serializeAccountingProduct>
 
 function sagaProductTypeFromClass(classValue: unknown) {
   switch (String(classValue || "").toUpperCase()) {
@@ -674,12 +688,28 @@ function buildSagaArticlesXml(products: any[], config: any) {
   ].join("\n")
 }
 
-function normalizeFileFormat(value: unknown) {
+function normalizeFileFormat(value: unknown): ExportFileFormat {
   const normalized = String(value || "").trim().toLowerCase()
   if (normalized === "dbf") return "dbf"
   if (normalized === "xlsx") return "xlsx"
   if (normalized === "csv") return "csv"
   return "xml"
+}
+
+function requireAccountingTenantId(req: AuthedRequest) {
+  const tenantId = String(req.auth?.tenantId || "").trim()
+  if (!tenantId) {
+    throw new Error("Tenantul activ nu este disponibil.")
+  }
+  return tenantId
+}
+
+async function requireAccountingCompanyId(req: AuthedRequest) {
+  const companyId = String(await requireRequestCompanyId(req) || "").trim()
+  if (!companyId) {
+    throw new Error("Firma activa nu este disponibila.")
+  }
+  return companyId
 }
 
 function sanitizeDbfFieldName(name: string, fallback: string) {
@@ -734,7 +764,7 @@ function detectDbfFieldType(values: unknown[]) {
       return Number.isFinite(number)
     })
   ) {
-    const decimals = nonEmpty.reduce((max, value) => {
+    const decimals = nonEmpty.reduce<number>((max, value) => {
       const text = String(value)
       const fraction = text.includes(".") ? text.split(".")[1] : ""
       return Math.max(max, fraction.length)
@@ -796,13 +826,14 @@ function encodeDbfValue(value: unknown, field: { type: "C" | "N" | "D" | "L"; le
 }
 
 async function buildDbfBuffer(rows: Record<string, unknown>[]) {
-  const tableRows = Array.isArray((rows as any)?.__sheets)
-    ? Array.isArray((rows as any).__sheets?.[0]?.rows)
-      ? (rows as any).__sheets[0].rows
+  const rowsWithSheets = rows as ExportSheetRows
+  const tableRows: ExportRow[] = Array.isArray(rowsWithSheets?.__sheets)
+    ? Array.isArray(rowsWithSheets.__sheets?.[0]?.rows)
+      ? rowsWithSheets.__sheets[0].rows
       : []
     : rows
 
-  const headers = Array.from(
+  const headers: string[] = Array.from(
     tableRows.reduce((acc: Set<string>, row: Record<string, unknown>) => {
       Object.keys(row || {}).forEach((key) => acc.add(key))
       return acc
@@ -869,17 +900,18 @@ function readablePaymentType(value: unknown) {
   }
 }
 
-async function buildSpreadsheetBuffer(sheetName: string, rows: Record<string, unknown>[], fileFormat: "xlsx" | "csv") {
+async function buildSpreadsheetBuffer(sheetName: string, rows: Record<string, unknown>[], fileFormat: SpreadsheetFileFormat) {
   const workbook = new ExcelJS.Workbook()
-  const sheets = Array.isArray((rows as any)?.__sheets)
-    ? (rows as any).__sheets
+  const rowsWithSheets = rows as ExportSheetRows
+  const sheets: ExportSheet[] = Array.isArray(rowsWithSheets?.__sheets)
+    ? rowsWithSheets.__sheets
     : [{ name: sheetName, rows }]
 
   for (const sheet of sheets) {
     const sheetRows = Array.isArray(sheet?.rows) ? sheet.rows : []
     const worksheet = workbook.addWorksheet(String(sheet?.name || sheetName).slice(0, 31) || "Export")
 
-    const headers = Array.from(
+    const headers: string[] = Array.from(
       sheetRows.reduce((acc: Set<string>, row: Record<string, unknown>) => {
         Object.keys(row || {}).forEach((key) => acc.add(key))
         return acc
@@ -1221,7 +1253,7 @@ async function buildLatestPurchaseCostMap(
 }
 
 router.get("/api/v1/reports/accounting/saga/config", requireAuth, async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = requireAccountingTenantId(req)
   const company = await requireRequestCompany(req)
   const companyId = company.id
   const { config, stockTypes } = await ensureAccountingConfig(tenantId, companyId)
@@ -1270,8 +1302,8 @@ router.patch("/api/v1/reports/accounting/saga/config", requireAuth, async (req: 
     return res.status(400).json({ ok: false, error: parsed.error.flatten() })
   }
 
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const tenantId = requireAccountingTenantId(req)
+  const companyId = await requireAccountingCompanyId(req)
   await ensureAccountingConfig(tenantId, companyId)
 
   const updated = await prisma.accountingExportConfig.update({
@@ -1288,8 +1320,8 @@ router.post("/api/v1/reports/accounting/saga/stock-types", requireAuth, async (r
     return res.status(400).json({ ok: false, error: parsed.error.flatten() })
   }
 
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const tenantId = requireAccountingTenantId(req)
+  const companyId = await requireAccountingCompanyId(req)
   const data = parsed.data
 
   if (data.isDefault) {
@@ -1322,8 +1354,8 @@ router.patch("/api/v1/reports/accounting/saga/stock-types/:id", requireAuth, asy
     return res.status(400).json({ ok: false, error: parsed.error.flatten() })
   }
 
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const tenantId = requireAccountingTenantId(req)
+  const companyId = await requireAccountingCompanyId(req)
   const existing = await prisma.accountingStockType.findFirst({
     where: { id: req.params.id, tenantId, companyId },
   })
@@ -1356,8 +1388,8 @@ router.patch("/api/v1/reports/accounting/saga/stock-types/:id", requireAuth, asy
 })
 
 router.get("/api/v1/reports/accounting/saga/products", requireAuth, async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const tenantId = requireAccountingTenantId(req)
+  const companyId = await requireAccountingCompanyId(req)
   const search = String(req.query.search || "").trim()
 
   const products = await prisma.product.findMany({
@@ -1393,8 +1425,8 @@ router.patch("/api/v1/reports/accounting/saga/products/:id", requireAuth, async 
     return res.status(400).json({ ok: false, error: parsed.error.flatten() })
   }
 
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const tenantId = requireAccountingTenantId(req)
+  const companyId = await requireAccountingCompanyId(req)
 
   const product = await prisma.product.findFirst({
     where: { id: req.params.id, tenantId, companyId },
@@ -1434,8 +1466,8 @@ router.patch("/api/v1/reports/accounting/saga/products/:id", requireAuth, async 
 })
 
 router.get("/api/v1/reports/accounting/saga/export-preview", requireAuth, async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const tenantId = requireAccountingTenantId(req)
+  const companyId = await requireAccountingCompanyId(req)
   const kind = String(req.query.kind || "").trim().toLowerCase()
   const dateFrom = String(req.query.dateFrom || "").trim()
   const dateTo = String(req.query.dateTo || "").trim()
@@ -1565,7 +1597,7 @@ router.get("/api/v1/reports/accounting/saga/export-preview", requireAuth, async 
 })
 
 router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
+  const tenantId = requireAccountingTenantId(req)
   const company = await requireRequestCompany(req)
   const companyId = company.id
   const kind = String(req.query.kind || "").trim().toLowerCase()
@@ -1619,13 +1651,13 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     })
 
     sheetName = "Articole"
-    const articleProducts = products.flatMap((product) => {
+    const articleProducts: any[] = products.flatMap((product) => {
       const rows = [product]
       if (product.isSgr && sgrUnitValue(product) > 0) rows.push(sgrProductShape(product))
       return rows
     })
 
-    spreadsheetRows = articleProducts.map((product) => {
+    spreadsheetRows = articleProducts.map((product: any) => {
       const articleCode = sagaArticleCodeForProduct(product, config)
 
       return {
@@ -1643,11 +1675,11 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       }
     })
 
-    xmlFiles = articleProducts.map((product) => ({
+    xmlFiles = articleProducts.map((product: any) => ({
       fileName: `ART_${slugCode(product.accountingItemCode || product.sku || product.name, "ART")}_${compactDateToken(dateTo || new Date())}.xml`,
       content: buildSagaArticlesXml([product], config),
     }))
-    splitSpreadsheetFiles = articleProducts.map((product) => {
+    splitSpreadsheetFiles = articleProducts.map((product: any) => {
       const articleCode = sagaArticleCodeForProduct(product, config)
       return {
         fileName: `ART_${slugCode(product.accountingItemCode || product.sku || product.name, "ART")}_${compactDateToken(dateTo || new Date())}`,
@@ -1696,7 +1728,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       orderBy: { name: "asc" },
     })
     const usedCustomerCodes = new Set<string>()
-    const customerCodeById = new Map(
+    const customerCodeById = new Map<string, string>(
       customers.map((customer, index) => [customer.id, uniqueSagaCode(customer.code, "CLI", index, usedCustomerCodes)])
     )
     const customerCode = (customer: any) => customerCodeById.get(customer.id) || customer.code || slugCode(customer.name, "CLI")
@@ -1823,7 +1855,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       orderBy: { name: "asc" },
     })
     const usedSupplierCodes = new Set<string>()
-    const supplierCodeById = new Map(
+    const supplierCodeById = new Map<string, string>(
       suppliers.map((supplier, index) => [supplier.id, uniqueSagaCode(supplier.code, "FUR", index, usedSupplierCodes)])
     )
     const supplierCode = (supplier: any) => supplierCodeById.get(supplier.id) || supplier.code || slugCode(supplier.name, "FUR")
@@ -2136,7 +2168,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         return sgrLine ? [productRow, sgrLine.row] : [productRow]
       })
       return {
-        fileName: replaceFileExtension(downloadName("sales-invoices", dateFrom, dateTo, { company, firstDoc: invoice }), ""),
+        fileName: downloadName("sales-invoices", dateFrom, dateTo, { company, firstDoc: invoice }).replace(/\.[^.]+$/i, ""),
         sheetName: "Facturi iesire",
         rows:
           fileFormat === "dbf"
@@ -2296,7 +2328,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     ])
 
     const buildReceiptXml = (receipt: any) => {
-      const receiptLinesForExport = receipt.items.flatMap((line: any) => {
+      const receiptLinesForExport: any[] = receipt.items.flatMap((line: any) => {
         const sgr = receiptSgrValues(line, receipt)
         if (!line.product?.isSgr || sgr.qty <= 0 || sgr.unit <= 0) return [line]
         const product = sgrProductShape(line.product)
@@ -2317,7 +2349,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
           },
         ]
       })
-      const groupedLines =
+      const groupedLines: any[] =
         valueType === "GLOBAL_VALORIC"
           ? aggregateByKey(
               receiptLinesForExport,
@@ -2389,7 +2421,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         }),
         `      <Detalii>`,
         `        <Continut>`,
-        ...groupedLines.map((line, index) => {
+        ...groupedLines.map((line: any, index: number) => {
           if (valueType === "GLOBAL_VALORIC") {
             return buildSagaFacturaLine({
               index: index + 1,

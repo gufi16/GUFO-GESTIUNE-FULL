@@ -154,6 +154,7 @@ function assertTypedSensitiveModules() {
   const stockRoutes = readFileSafe("src/routes/stock.ts")
   const purchaseRoutes = readFileSafe("src/routes/purchase.ts")
   const reportsRoutes = readFileSafe("src/routes/reports.ts")
+  const accountingExportRoutes = readFileSafe("src/routes/accountingExport.ts")
   const etransportRoutes = readFileSafe("src/routes/etrransport.ts")
   const transferRoutes = readFileSafe("src/routes/transfer.ts")
   const incomingEfacturaRoutes = readFileSafe("src/routes/incomingEfactura.ts")
@@ -649,6 +650,15 @@ function assertTypedSensitiveModules() {
       salesInvoicesRoutes.includes('router.post("/api/v1/sales-invoices/:id/efactura/send"') &&
       salesInvoicesRoutes.includes("function getErrorMessage"),
     "Keep sales invoice issuance, storno, PDF, and e-Factura send/status/receipt flows type-checked because they affect fiscal documents and ANAF submissions."
+  )
+
+  addResult(
+    "Accounting export route no longer bypasses TypeScript",
+    !accountingExportRoutes.startsWith("// @ts-nocheck") &&
+      accountingExportRoutes.includes('router.get("/api/v1/reports/accounting/saga/export"') &&
+      accountingExportRoutes.includes("function requireAccountingTenantId") &&
+      accountingExportRoutes.includes("function normalizeFileFormat"),
+    "Keep accounting export configuration, SAGA partner/article mapping, spreadsheet/XML/DBF generation, and export preview flows type-checked because they feed client accounting imports."
   )
 }
 
