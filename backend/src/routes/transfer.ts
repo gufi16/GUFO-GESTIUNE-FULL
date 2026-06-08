@@ -130,29 +130,12 @@ router.post("/api/v1/transfers/:id/etransport/prepare", async (req: AuthedReques
   })
   const nextStatus = doc.eTransportRequired ? "PREPARED" : "READY_TO_REVIEW"
 
-  const updated = await prisma.transferDoc.update({
-    where: { id: doc.id },
+  const updated = await updateTransferDocForEtransport(prisma, {
+    id: doc.id,
     data: {
       eTransportPreparedXml: xmlText,
       eTransportStatus: nextStatus,
       eTransportErrorText: issues.filter((issue) => issue.severity === "warning").map((issue) => issue.message).join("\n") || null,
-    },
-    include: {
-      fromLocation: true,
-      toLocation: true,
-      items: {
-        include: {
-          product: {
-            include: {
-              uom: true,
-              vatRate: true,
-            },
-          },
-          uom: true,
-          vatRate: true,
-        },
-        orderBy: { createdAt: "asc" },
-      },
     },
   })
 
@@ -189,8 +172,8 @@ router.patch("/api/v1/transfers/:id/etransport-fields", async (req: AuthedReques
   const requestedETransportRequired = Boolean(header?.eTransportRequired)
   const eTransport = buildETransportSummary(existing.items || [], eTransportVehicleMaxMassKg)
 
-  const updated = await prisma.transferDoc.update({
-    where: { id: existing.id },
+  const updated = await updateTransferDocForEtransport(prisma, {
+    id: existing.id,
     data: {
       eTransportOperationType: String(header?.eTransportOperationType || "").trim() || null,
       eTransportPartnerCountry: String(header?.eTransportPartnerCountry || "").trim() || null,
@@ -224,18 +207,6 @@ router.patch("/api/v1/transfers/:id/etransport-fields", async (req: AuthedReques
       eTransportUit: null,
       eTransportErrorText: null,
       eTransportStatus: "EDITED",
-    },
-    include: {
-      fromLocation: true,
-      toLocation: true,
-      items: {
-        include: {
-          product: { include: { uom: true, vatRate: true } },
-          uom: true,
-          vatRate: true,
-        },
-        orderBy: { createdAt: "asc" },
-      },
     },
   })
 
