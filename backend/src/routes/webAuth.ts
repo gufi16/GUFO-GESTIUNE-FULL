@@ -244,8 +244,8 @@ router.post("/api/v1/auth/login", async (req, res) => {
   let scopedTenantId: string | undefined
   try {
     scopedTenantId = await resolveRequestedTenantId(req, tenantId, tenantSubdomain)
-  } catch (error: any) {
-    return res.status(403).json({ ok: false, error: error?.message || "Tenant invalid." })
+  } catch (error: unknown) {
+    return res.status(403).json({ ok: false, error: error instanceof Error ? error.message : "Tenant invalid." })
   }
 
   if (!scopedTenantId && isHostedGufoBrowserRequest(req)) {
