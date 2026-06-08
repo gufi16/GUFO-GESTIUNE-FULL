@@ -31,13 +31,21 @@ export function readAnafHeader(
   return entry || ""
 }
 
+function errorMessage(error: unknown) {
+  if (error instanceof Error) return error.message
+  if (typeof error === "object" && error && "message" in error) {
+    return String(error.message || "")
+  }
+  return ""
+}
+
 function shouldRetryWithCurl(error: unknown) {
-  const message = String((error as any)?.message || "")
+  const message = errorMessage(error)
   return /EPROTO|ECONNRESET|handshake failure|tls alert|SSL routines|wrong version number/i.test(message)
 }
 
 function toFriendlyAnafHttpError(error: unknown) {
-  const message = String((error as any)?.message || "")
+  const message = errorMessage(error)
   if (/EPROTO|ECONNRESET|handshake failure|tls alert|SSL routines|wrong version number/i.test(message)) {
     return new Error("Conexiunea securizata cu ANAF a esuat in timpul handshake-ului SSL/TLS.")
   }
