@@ -9,9 +9,18 @@ import { requireRequestCompanyId } from "../lib/companyScope"
 const router = Router()
 router.use(requireAuth)
 
-function toNumber(value: any) {
+type ProductionRequestItemInput = {
+  productId?: unknown
+  qty?: unknown
+}
+
+function toNumber(value: unknown) {
   const n = Number(value)
   return Number.isFinite(n) ? n : 0
+}
+
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback
 }
 
 router.post("/api/v1/production", async (req: AuthedRequest, res) => {
@@ -50,7 +59,7 @@ router.post("/api/v1/production", async (req: AuthedRequest, res) => {
       })
     }
 
-    const normalizedItems: Array<{ productId: string; qty: number }> = items.map((row: any) => ({
+    const normalizedItems: Array<{ productId: string; qty: number }> = items.map((row: ProductionRequestItemInput) => ({
       productId: String(row?.productId || "").trim(),
       qty: toNumber(row?.qty)
     }))
@@ -212,10 +221,10 @@ router.post("/api/v1/production", async (req: AuthedRequest, res) => {
       message: "Productia a fost generata.",
       productionId: result.id
     })
-  } catch (e: any) {
+  } catch (error: unknown) {
     return res.status(400).json({
       ok: false,
-      error: e?.message || "Nu am putut genera productia."
+      error: errorMessage(error, "Nu am putut genera productia.")
     })
   }
 })
