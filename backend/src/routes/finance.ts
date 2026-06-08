@@ -5,6 +5,35 @@ import { requireRequestCompany } from "../lib/companyScope"
 
 const router = Router()
 
+type FinanceSaleLike = {
+  total?: unknown
+  subtotal?: unknown
+  merchandiseSubtotal?: unknown
+  sgrTotal?: unknown
+  discountTotal?: unknown
+  lineDiscountTotal?: unknown
+  cartDiscountTotal?: unknown
+  cartDiscountPercent?: unknown
+  paymentType?: unknown
+  cashAmount?: unknown
+  cardAmount?: unknown
+}
+
+type FinanceProductLike = {
+  isSgr?: boolean | null
+  sgrValue?: unknown
+}
+
+type FinanceSaleLineLike = {
+  unitPrice?: unknown
+  vatRate?: unknown
+  product?: FinanceProductLike | null
+  lineTotalAfterDiscount?: unknown
+  lineTotalBeforeDiscount?: unknown
+  discountPercent?: unknown
+  lineDiscountTotal?: unknown
+}
+
 function asDate(value: unknown, fallback: Date, endOfDay = false) {
   if (typeof value !== "string" || !value.trim()) return fallback
   const text = value.trim()
@@ -28,7 +57,7 @@ function dayEnd(date: Date) {
   return next
 }
 
-function numberValue(value: any) {
+function numberValue(value: unknown) {
   return Number(value || 0)
 }
 
@@ -43,7 +72,7 @@ function normalizeFiscalReceiptNo(value: unknown) {
   return uuidLike.test(text) ? null : text
 }
 
-function deriveSalePaymentBuckets(sale: { total?: any; paymentType?: any; cashAmount?: any; cardAmount?: any }) {
+function deriveSalePaymentBuckets(sale: FinanceSaleLike) {
   const total = numberValue(sale?.total)
   const cash = numberValue(sale?.cashAmount)
   const card = numberValue(sale?.cardAmount)
@@ -61,11 +90,11 @@ function deriveSalePaymentBuckets(sale: { total?: any; paymentType?: any; cashAm
   return { cash, card, other }
 }
 
-function isSyntheticSgrLine(line: any) {
+function isSyntheticSgrLine(line: FinanceSaleLineLike) {
   if (!line?.product?.isSgr) return false
   const unitPrice = numberValue(line?.unitPrice)
   const sgrValue = numberValue(line?.product?.sgrValue || 0.5)
-  return line?.vatRate === 0 && Math.abs(unitPrice - sgrValue) < 0.0001
+  return numberValue(line?.vatRate) === 0 && Math.abs(unitPrice - sgrValue) < 0.0001
 }
 
 function dateToken(date: Date) {
@@ -121,13 +150,13 @@ router.get("/api/v1/finance/pos-receipts", requireAuth, async (req: AuthedReques
       clientSaleId: sale.clientSaleId,
       soldAt: sale.soldAt,
       total: numberValue(sale.total),
-      subtotal: numberValue((sale as any).subtotal),
-      merchandiseSubtotal: numberValue((sale as any).merchandiseSubtotal),
-      sgrTotal: numberValue((sale as any).sgrTotal),
-      discountTotal: numberValue((sale as any).discountTotal),
-      lineDiscountTotal: numberValue((sale as any).lineDiscountTotal),
-      cartDiscountTotal: numberValue((sale as any).cartDiscountTotal),
-      cartDiscountPercent: numberValue((sale as any).cartDiscountPercent),
+      subtotal: numberValue(sale.subtotal),
+      merchandiseSubtotal: numberValue(sale.merchandiseSubtotal),
+      sgrTotal: numberValue(sale.sgrTotal),
+      discountTotal: numberValue(sale.discountTotal),
+      lineDiscountTotal: numberValue(sale.lineDiscountTotal),
+      cartDiscountTotal: numberValue(sale.cartDiscountTotal),
+      cartDiscountPercent: numberValue(sale.cartDiscountPercent),
       paymentType: sale.paymentType,
       cashAmount: numberValue(sale.cashAmount),
       cardAmount: numberValue(sale.cardAmount),
@@ -147,10 +176,10 @@ router.get("/api/v1/finance/pos-receipts", requireAuth, async (req: AuthedReques
           qty,
           unitPrice,
           vatRate: line.vatRate,
-          total: numberValue((line as any).lineTotalAfterDiscount) || qty * unitPrice,
-          lineTotalBeforeDiscount: numberValue((line as any).lineTotalBeforeDiscount) || qty * unitPrice,
-          discountPercent: numberValue((line as any).discountPercent),
-          lineDiscountTotal: numberValue((line as any).lineDiscountTotal),
+          total: numberValue(line.lineTotalAfterDiscount) || qty * unitPrice,
+          lineTotalBeforeDiscount: numberValue(line.lineTotalBeforeDiscount) || qty * unitPrice,
+          discountPercent: numberValue(line.discountPercent),
+          lineDiscountTotal: numberValue(line.lineDiscountTotal),
           isSgr: sgrLine,
         }
       }),
