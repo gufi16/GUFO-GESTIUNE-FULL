@@ -27,6 +27,8 @@ type NumberingConfig = {
   supplierCodePrefix: string
 }
 
+type NumberingPayloadLike = Partial<Record<keyof NumberingConfig, unknown>>
+
 const defaults: NumberingConfig = {
   invoiceSeries: "FAC",
   purchaseSeries: "NIR",
@@ -239,17 +241,18 @@ export async function reserveNextNumber(
   return buildFormattedNumber(prefix, counter.value, key)
 }
 
-export function normalizeNumberingPayload(body: any) {
+export function normalizeNumberingPayload(body: unknown) {
+  const payload: NumberingPayloadLike = typeof body === "object" && body ? body as NumberingPayloadLike : {}
   return {
-    invoiceSeries: normalizePrefix(body?.invoiceSeries, defaults.invoiceSeries),
-    purchaseSeries: normalizePrefix(body?.purchaseSeries, defaults.purchaseSeries),
-    transferSeries: normalizePrefix(body?.transferSeries, defaults.transferSeries),
-    inventorySeries: normalizePrefix(body?.inventorySeries, defaults.inventorySeries),
-    consumptionSeries: normalizePrefix(body?.consumptionSeries, defaults.consumptionSeries),
-    productionSeries: normalizePrefix(body?.productionSeries, defaults.productionSeries),
-    deteriorationSeries: normalizePrefix(body?.deteriorationSeries, defaults.deteriorationSeries),
-    priceChangeSeries: normalizePrefix(body?.priceChangeSeries, defaults.priceChangeSeries),
-    customerCodePrefix: normalizePrefix(body?.customerCodePrefix, defaults.customerCodePrefix),
-    supplierCodePrefix: normalizePrefix(body?.supplierCodePrefix, defaults.supplierCodePrefix),
+    invoiceSeries: normalizePrefix(payload.invoiceSeries, defaults.invoiceSeries),
+    purchaseSeries: normalizePrefix(payload.purchaseSeries, defaults.purchaseSeries),
+    transferSeries: normalizePrefix(payload.transferSeries, defaults.transferSeries),
+    inventorySeries: normalizePrefix(payload.inventorySeries, defaults.inventorySeries),
+    consumptionSeries: normalizePrefix(payload.consumptionSeries, defaults.consumptionSeries),
+    productionSeries: normalizePrefix(payload.productionSeries, defaults.productionSeries),
+    deteriorationSeries: normalizePrefix(payload.deteriorationSeries, defaults.deteriorationSeries),
+    priceChangeSeries: normalizePrefix(payload.priceChangeSeries, defaults.priceChangeSeries),
+    customerCodePrefix: normalizePrefix(payload.customerCodePrefix, defaults.customerCodePrefix),
+    supplierCodePrefix: normalizePrefix(payload.supplierCodePrefix, defaults.supplierCodePrefix),
   }
 }
