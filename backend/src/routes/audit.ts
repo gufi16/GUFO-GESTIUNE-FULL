@@ -1,4 +1,5 @@
 import { Router } from "express"
+import { Prisma } from "@prisma/client"
 import { z } from "zod"
 import { prisma } from "../lib/prisma"
 import { ensureTenantAdminAccess } from "../lib/tenantAdmin"
@@ -44,7 +45,7 @@ router.get("/api/v1/audit-logs", requireAuth, async (req: AuthedRequest, res) =>
   const limit = parsed.data.limit || 120
   const tenantId = req.auth!.tenantId!
 
-  const where: any = {
+  const where: Prisma.AuditLogWhereInput = {
     tenantId,
   }
 
