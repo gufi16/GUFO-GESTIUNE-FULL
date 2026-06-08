@@ -221,6 +221,16 @@ function assertTypedSensitiveModules() {
   )
 
   addResult(
+    "POS route no longer bypasses TypeScript",
+    !posRoutes.startsWith("// @ts-nocheck") &&
+      posRoutes.includes("function parseMarketplaceSettings") &&
+      posRoutes.includes("export async function resolvePosMarketplaceOrder") &&
+      posRoutes.includes('router.post("/api/v1/pos/marketplace/:externalOrderId/load-cart"') &&
+      posRoutes.includes("const PosSaleSchema = z.object("),
+    "Keep POS pairing, marketplace sync, sales finalization, and invoice-from-sale flows type-checked because they drive live restaurant operations and fiscal outputs."
+  )
+
+  addResult(
     "Users management routes no longer bypass TypeScript",
     !usersRoutes.startsWith("// @ts-nocheck") &&
       usersRoutes.includes('router.post("/api/v1/users/:id/reset-password"') &&

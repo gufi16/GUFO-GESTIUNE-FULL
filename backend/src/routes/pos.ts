@@ -1,8 +1,7 @@
-﻿// @ts-nocheck
 import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import jwt from "jsonwebtoken";
-import { Prisma, UserRole } from "@prisma/client";
+import { ExternalOrderHistorySource, ExternalOrderStatus, Prisma, UserRole } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { prisma } from "../lib/prisma";
 import { decrementStockBalanceAllowNegative } from "../lib/stock";
@@ -444,6 +443,10 @@ function parseLooseJsonObject(value: unknown) {
   } catch {
     return {};
   }
+}
+
+function parseMarketplaceSettings(value: unknown) {
+  return parseLooseJsonObject(value);
 }
 
 function pickFirstNonBlank(...values: unknown[]) {
@@ -1129,25 +1132,41 @@ router.post("/api/v1/license/activate", async (req: Request, res: Response) => {
     }
   }
 
-  const terminal = await prisma.terminal.upsert({
+  const terminalCompanyId = locationId
+    ? (
+        await prisma.location.findFirst({
+          where: { id: locationId, tenantId: found.tenantId },
+          select: { companyId: true },
+        })
+      )?.companyId ?? null
+    : null;
+
+  const existingTerminal = await prisma.terminal.findFirst({
     where: {
-      tenantId_deviceId: {
-        tenantId: found.tenantId,
-        deviceId: device_id,
-      },
-    },
-    update: {
-      locationId: locationId ?? undefined,
-      label: `Android POS (${app_version})`,
-    },
-    create: {
       tenantId: found.tenantId,
+      companyId: terminalCompanyId,
       deviceId: device_id,
-      locationId: locationId ?? undefined,
-      label: `Android POS (${app_version})`,
-      isLockedToLocation: true,
     },
   });
+
+  const terminal = existingTerminal
+    ? await prisma.terminal.update({
+        where: { id: existingTerminal.id },
+        data: {
+          locationId: locationId ?? undefined,
+          label: `Android POS (${app_version})`,
+        },
+      })
+    : await prisma.terminal.create({
+        data: {
+          tenantId: found.tenantId,
+          companyId: terminalCompanyId ?? undefined,
+          deviceId: device_id,
+          locationId: locationId ?? undefined,
+          label: `Android POS (${app_version})`,
+          isLockedToLocation: true,
+        },
+      });
 
   const pos_token = signPosToken({
     tenantId: found.tenantId,
@@ -1170,7 +1189,7 @@ router.post("/api/v1/license/activate", async (req: Request, res: Response) => {
 });
 
 router.post("/api/v1/pos/pair", async (req: Request, res: Response) => {
-  console.log("Ã°Å¸â€Â¥ POS PAIR NOU HIT", req.body);
+  console.log("ðŸ”¥ POS PAIR NOU HIT", req.body);
 
   try {
     const parsed = PairSchema.safeParse(req.body);
@@ -1821,7 +1840,7 @@ export async function syncGlovoPartnerStatusForOrder(
   await createPosMarketplaceHistory(
     auth,
     order.id,
-    nextInternalStatus,
+    nextInternalStatus as ExternalOrderStatus,
     "GLOVO",
     `Glovo sync trimis cu status ${glovoStatus} din ${source}.`,
     {
@@ -2022,6 +2041,9 @@ export async function resolvePosMarketplaceOrder(auth: NonNullable<PosAuthReques
       OR: [{ id: inputOrderId }, { externalOrderId: inputOrderId }],
     },
     include: {
+      location: {
+        select: { id: true, name: true, code: true },
+      },
       integration: {
         select: {
           id: true,
@@ -2029,7 +2051,12 @@ export async function resolvePosMarketplaceOrder(auth: NonNullable<PosAuthReques
           locationId: true,
         },
       },
-      ...include,
+      saleDraft: {
+        select: { id: true, status: true, total: true, subtotal: true, updatedAt: true },
+      },
+      kitchenTicket: {
+        select: { id: true, status: true, displayNumber: true, readyAt: true, updatedAt: true },
+      },
     },
   });
   if (!order) return null;
@@ -2039,7 +2066,7 @@ export async function resolvePosMarketplaceOrder(auth: NonNullable<PosAuthReques
 export async function createPosMarketplaceHistory(
   auth: NonNullable<PosAuthRequest["auth"]>,
   externalOrderId: string,
-  status: string,
+  status: ExternalOrderStatus,
   source: string,
   message: string,
   payloadJson?: unknown
@@ -2071,7 +2098,7 @@ export async function createPosMarketplaceHistory(
       tenantId: auth.tenantId,
       externalOrderId,
       status,
-      source: normalizedSource as any,
+      source: normalizedSource as ExternalOrderHistorySource,
       message,
       payloadJson: normalizedPayload ?? undefined,
     },
@@ -2137,6 +2164,8 @@ router.get("/api/v1/pos/marketplace/orders", async (req: PosAuthRequest, res: Re
     orderBy: [{ createdAt: "desc" }],
   });
 
+  const terminal = await resolvePosMarketplaceTerminalLocation(auth);
+
   const visibleItems = (
     await Promise.all(
       items.map(async (item) => ((await isMarketplaceOrderVisibleToTerminal(item, auth)) ? item : null))
@@ -2181,6 +2210,8 @@ router.get("/api/v1/pos/marketplace/debug", async (req: PosAuthRequest, res: Res
     orderBy: [{ createdAt: "desc" }],
     take: 50,
   });
+
+  const terminal = await resolvePosMarketplaceTerminalLocation(auth);
 
   const debugItems = await Promise.all(
     items.map(async (item) => ({
@@ -2500,6 +2531,13 @@ router.post("/api/v1/pos/marketplace/:externalOrderId/load-cart", async (req: Po
       location: {
         select: { id: true, name: true, code: true },
       },
+      integration: {
+        select: {
+          id: true,
+          settingsJson: true,
+          locationId: true,
+        },
+      },
     },
   });
 
@@ -2635,6 +2673,8 @@ const PosSaleSchema = z.object({
   paymentType: z.enum(["CASH", "CARD", "MIXED", "MODERN", "PAID"]).optional(),
   cashAmount: z.number().optional(),
   cardAmount: z.number().optional(),
+  otherAmount: z.number().optional(),
+  otherTotal: z.number().optional(),
   operatorName: z.string().optional(),
 
   lines: z.array(
@@ -3181,6 +3221,10 @@ export async function handlePosReceiptInvoice(req: PosAuthRequest, res: Response
       }, 0);
 
       if (aggregatedSgrQty > 0 && aggregatedSgrTotalFc > 0) {
+        const sgrProductId = sgrLines[0]?.productId;
+        if (!sgrProductId) {
+          throw new Error("Lipsește produsul sursă pentru linia SGR agregată.");
+        }
         const aggregatedSgrUnitFc = aggregatedSgrTotalFc / aggregatedSgrQty;
         totalNetFc += aggregatedSgrTotalFc;
         totalGrossFc += aggregatedSgrTotalFc;
@@ -3189,7 +3233,7 @@ export async function handlePosReceiptInvoice(req: PosAuthRequest, res: Response
         await tx.salesInvoiceItem.create({
           data: {
             invoiceId: invoice.id,
-            productId: sgrLines[0]?.productId || null,
+            productId: sgrProductId,
             productName: "SGR",
             productCode: "SGR",
             uomCode: "BUC",
