@@ -49,6 +49,10 @@ function fileBaseName(value: string) {
     .trim()
 }
 
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback
+}
+
 async function persistTenantBackupSnapshot(
   tenantId: string,
   companyId: string | null,
@@ -139,10 +143,10 @@ router.post("/api/v1/settings/backups", async (req: AuthedRequest, res) => {
     )
 
     return res.json({ ok: true, item })
-  } catch (error: any) {
+  } catch (error: unknown) {
     return res.status(500).json({
       ok: false,
-      error: error?.message || "Nu am putut genera backup-ul clientului.",
+      error: errorMessage(error, "Nu am putut genera backup-ul clientului."),
     })
   }
 })
@@ -201,10 +205,10 @@ router.post("/api/v1/settings/backups/restore-latest", async (req: AuthedRequest
       },
       message: "Ultimul backup a fost restaurat. Starea curenta a fost salvata automat inainte de restore.",
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     return res.status(500).json({
       ok: false,
-      error: error?.message || "Nu am putut restaura ultimul backup.",
+      error: errorMessage(error, "Nu am putut restaura ultimul backup."),
     })
   }
 })
@@ -249,10 +253,10 @@ router.post("/api/v1/settings/backups/recover-files-latest", async (req: AuthedR
       restored,
       message: "Fisierele lipsa au fost recuperate din ultimul backup disponibil, fara suprascriere.",
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     return res.status(500).json({
       ok: false,
-      error: error?.message || "Nu am putut recupera fisierele lipsa.",
+      error: errorMessage(error, "Nu am putut recupera fisierele lipsa."),
     })
   }
 })
@@ -328,7 +332,7 @@ router.post("/api/v1/settings/backups/upload-restore", upload.single("backup"), 
       },
       message: "Backup-ul incarcat a fost restaurat. Starea curenta a fost salvata automat inainte de restore.",
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (fs.existsSync(absolutePath)) {
       try {
         fs.unlinkSync(absolutePath)
@@ -338,7 +342,7 @@ router.post("/api/v1/settings/backups/upload-restore", upload.single("backup"), 
     }
     return res.status(500).json({
       ok: false,
-      error: error?.message || "Nu am putut restaura backup-ul incarcat.",
+      error: errorMessage(error, "Nu am putut restaura backup-ul incarcat."),
     })
   }
 })
@@ -358,10 +362,6 @@ router.get("/api/v1/settings/backups/:id/download", async (req: AuthedRequest, r
 
   if (!item) {
     return res.status(404).json({ ok: false, error: "Backup-ul nu a fost gasit." })
-  }
-
-  if (!fs.existsSync(item.filePath)) {
-    return res.status(404).json({ ok: false, error: "Fisierul backup nu mai exista pe server." })
   }
 
   if (!fs.existsSync(item.filePath)) {
@@ -417,10 +417,10 @@ router.post("/api/v1/settings/backups/:id/recover-files", async (req: AuthedRequ
       restored,
       message: "Fisierele lipsa au fost recuperate din backup, fara suprascriere.",
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     return res.status(500).json({
       ok: false,
-      error: error?.message || "Nu am putut recupera fisierele lipsa din backup.",
+      error: errorMessage(error, "Nu am putut recupera fisierele lipsa din backup."),
     })
   }
 })
@@ -515,10 +515,10 @@ router.post("/api/v1/settings/backups/:id/restore", async (req: AuthedRequest, r
       restored,
       message: "Backup-ul a fost restaurat direct din server.",
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     return res.status(500).json({
       ok: false,
-      error: error?.message || "Nu am putut restaura backup-ul clientului.",
+      error: errorMessage(error, "Nu am putut restaura backup-ul clientului."),
     })
   }
 })
