@@ -467,6 +467,16 @@ function assertTypedSensitiveModules() {
   )
 
   addResult(
+    "Transfer route no longer bypasses TypeScript",
+    !transferRoutes.startsWith("// @ts-nocheck") &&
+      transferRoutes.includes("function requireTransferAuth") &&
+      transferRoutes.includes("async function requireTransferCompanyId") &&
+      transferRoutes.includes('router.post("/api/v1/transfers/full"') &&
+      transferRoutes.includes('router.get("/api/v1/transfers/:id/pdf"'),
+    "Keep transfer draft/save/post/PDF/e-Transport flows type-checked because they move stock across locations and feed transport compliance exports."
+  )
+
+  addResult(
     "Incoming e-Factura route helpers extracted from ts-nocheck route",
     incomingEfacturaRoutes.includes('from "../lib/incomingEfacturaRouteSupport"') &&
       incomingEfacturaRouteSupport.includes("export function incomingEfacturaMoney") &&

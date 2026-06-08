@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Router } from "express"
 import PDFDocument from "pdfkit"
 import { Prisma } from "@prisma/client"
@@ -56,12 +55,36 @@ import {
   summarizeAnafResponse,
 } from "../lib/incomingEfactura"
 
+type TransferRouteAuth = NonNullable<AuthedRequest["auth"]> & {
+  tenantId: string
+}
+
+function requireTransferAuth(req: AuthedRequest): TransferRouteAuth {
+  if (!req.auth?.tenantId) {
+    throw new Error("Sesiunea nu are tenant activ.")
+  }
+
+  return {
+    ...req.auth,
+    tenantId: req.auth.tenantId,
+  }
+}
+
+async function requireTransferCompanyId(req: AuthedRequest) {
+  const companyId = String((await requireRequestCompanyId(req)) || "").trim()
+  if (!companyId) {
+    throw new Error("Nu exista nicio firma activa pentru acest cont.")
+  }
+  return companyId
+}
+
 const router = Router()
 router.use(requireAuth)
 
 router.get("/api/v1/transfers", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireTransferAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireTransferCompanyId(req)
   const month = String(req.query.month || "").trim()
   const dateFrom = String(req.query.dateFrom || "").trim()
   const dateTo = String(req.query.dateTo || "").trim()
@@ -84,8 +107,9 @@ router.get("/api/v1/transfers", async (req: AuthedRequest, res) => {
 })
 
 router.get("/api/v1/transfers/:id", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireTransferAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireTransferCompanyId(req)
   const id = String(req.params.id)
 
   const doc = await findTransferDocDetail(prisma, { id, tenantId, companyId })
@@ -98,8 +122,9 @@ router.get("/api/v1/transfers/:id", async (req: AuthedRequest, res) => {
 })
 
 router.post("/api/v1/transfers/:id/etransport/prepare", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireTransferAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireTransferCompanyId(req)
   const id = String(req.params.id)
   const company = await prisma.company.findFirst({
     where: { id: companyId, tenantId },
@@ -148,8 +173,9 @@ router.post("/api/v1/transfers/:id/etransport/prepare", async (req: AuthedReques
 })
 
 router.patch("/api/v1/transfers/:id/etransport-fields", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireTransferAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireTransferCompanyId(req)
   const id = String(req.params.id)
   const header = req.body?.header || {}
 
@@ -218,8 +244,9 @@ router.patch("/api/v1/transfers/:id/etransport-fields", async (req: AuthedReques
 })
 
 router.get("/api/v1/transfers/:id/etransport/xml", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireTransferAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireTransferCompanyId(req)
   const id = String(req.params.id)
 
   const doc = await prisma.transferDoc.findFirst({
@@ -246,8 +273,9 @@ router.get("/api/v1/transfers/:id/etransport/xml", async (req: AuthedRequest, re
 })
 
 router.post("/api/v1/transfers/:id/etransport/send", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireTransferAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireTransferCompanyId(req)
   const id = String(req.params.id)
 
   const doc = await prisma.transferDoc.findFirst({
@@ -277,7 +305,7 @@ router.post("/api/v1/transfers/:id/etransport/send", async (req: AuthedRequest, 
     return res.status(404).json({ ok: false, error: "Transferul nu a fost gasit." })
   }
 
-  const company = await loadAnafCompanyContext(req.auth)
+  const company = await loadAnafCompanyContext(auth)
   const cif = normalizeCompanyCui(company?.cui)
   if (!cif) {
     return res.status(400).json({ ok: false, error: "Firma nu are CUI valid pentru transmiterea la ANAF." })
@@ -361,8 +389,9 @@ router.post("/api/v1/transfers/:id/etransport/send", async (req: AuthedRequest, 
 })
 
 router.get("/api/v1/transfers/:id/etransport/status", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireTransferAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireTransferCompanyId(req)
   const id = String(req.params.id)
 
   const doc = await findTransferDocForEtransport(prisma, { id, tenantId, companyId })
@@ -375,7 +404,7 @@ router.get("/api/v1/transfers/:id/etransport/status", async (req: AuthedRequest,
     return res.status(400).json({ ok: false, error: "Documentul nu a fost trimis inca la ANAF." })
   }
 
-  const company = await loadAnafCompanyContext(req.auth)
+  const company = await loadAnafCompanyContext(auth)
   if (!company?.efacturaOauthAccessToken) {
     return res.status(400).json({ ok: false, error: "Nu exista token ANAF salvat pentru aceasta firma." })
   }
@@ -426,8 +455,9 @@ router.get("/api/v1/transfers/:id/etransport/status", async (req: AuthedRequest,
 })
 
 router.get("/api/v1/transfers/:id/etransport/receipt", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireTransferAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireTransferCompanyId(req)
   const id = String(req.params.id)
 
   const doc = await findTransferReceiptDocForEtransport(prisma, { id, tenantId, companyId })
@@ -436,7 +466,7 @@ router.get("/api/v1/transfers/:id/etransport/receipt", async (req: AuthedRequest
     return res.status(404).json({ ok: false, error: "Transferul nu a fost gasit." })
   }
 
-  const company = await loadAnafCompanyContext(req.auth)
+  const company = await loadAnafCompanyContext(auth)
   if (!company?.efacturaOauthAccessToken) {
     return res.status(400).json({ ok: false, error: "Nu exista token ANAF salvat pentru aceasta firma." })
   }
@@ -501,8 +531,9 @@ router.get("/api/v1/transfers/:id/etransport/receipt", async (req: AuthedRequest
 })
 
 router.post("/api/v1/transfers/:id/post", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireTransferAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireTransferCompanyId(req)
   const id = String(req.params.id)
 
   const existing = await prisma.transferDoc.findFirst({
@@ -540,8 +571,9 @@ router.post("/api/v1/transfers/:id/post", async (req: AuthedRequest, res) => {
 })
 
 router.delete("/api/v1/transfers/:id", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireTransferAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireTransferCompanyId(req)
   const id = String(req.params.id)
 
   const doc = await prisma.transferDoc.findFirst({
@@ -578,8 +610,9 @@ router.delete("/api/v1/transfers/:id", async (req: AuthedRequest, res) => {
 })
 
 router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireTransferAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireTransferCompanyId(req)
   const { id, header, items, postNow } = req.body || {}
 
   const fromLocationId = String(header?.fromLocationId || "").trim()
@@ -903,8 +936,9 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
 })
 
 router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireTransferAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireTransferCompanyId(req)
   const id = String(req.params.id)
 
   const docData = await findTransferDocForPdf(prisma, { id, tenantId, companyId })
@@ -913,9 +947,9 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
     return res.status(404).json({ ok: false, error: "Documentul nu a fost gasit." })
   }
 
-  const actorUser = req.auth?.userId
+  const actorUser = auth.userId
     ? await prisma.user.findFirst({
-        where: { id: req.auth.userId, tenantId },
+        where: { id: auth.userId, tenantId },
         select: { name: true, email: true },
       })
     : null
