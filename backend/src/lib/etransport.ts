@@ -38,6 +38,106 @@ function normalizeText(value: unknown) {
   return String(value || "").trim()
 }
 
+type ETransportUomLike = {
+  standardCode?: unknown
+  code?: unknown
+}
+
+type ETransportProductLike = {
+  name?: unknown
+  ncCode?: unknown
+  grossWeightKg?: unknown
+  netWeightKg?: unknown
+  isFiscalRiskProduct?: boolean | null
+  uom?: ETransportUomLike | null
+}
+
+type ETransportLocationLike = {
+  address?: unknown
+  city?: unknown
+  county?: unknown
+  country?: unknown
+}
+
+type ETransportLineLike = {
+  qty?: unknown
+  unitPrice?: unknown
+  lineValue?: unknown
+  product?: ETransportProductLike | null
+  productName?: unknown
+  uom?: ETransportUomLike | null
+  uomCode?: unknown
+  uomStandardCode?: unknown
+  ncCode?: unknown
+  name?: unknown
+  fiscalRisk?: boolean | null
+  grossWeightPerUnitKg?: unknown
+  grossWeightTotalKg?: unknown
+  netWeightPerUnitKg?: unknown
+  netWeightTotalKg?: unknown
+}
+
+type ETransportTransferDocLike = {
+  items?: ETransportLineLike[] | null
+  fromLocation?: ETransportLocationLike | null
+  toLocation?: ETransportLocationLike | null
+  eTransportDeclaredStart?: unknown
+  eTransportOperationType?: unknown
+  eTransportPartnerCui?: unknown
+  eTransportPartnerName?: unknown
+  vehicleNo?: unknown
+  trailerNo?: unknown
+  eTransportStartScope?: unknown
+  eTransportStartBorderPoint?: unknown
+  eTransportEndScope?: unknown
+  eTransportEndBorderPoint?: unknown
+  eTransportStartAddress?: unknown
+  eTransportEndAddress?: unknown
+  eTransportVehicleMaxMassKg?: unknown
+  eTransportOrganizer?: unknown
+  eTransportOperator?: unknown
+  docDate?: unknown
+  company?: { cui?: unknown; country?: unknown; name?: unknown } | null
+  declarantCode?: unknown
+  eTransportInternalRef?: unknown
+  docNo?: unknown
+  eTransportTransportDocType?: unknown
+  eTransportPartnerCountry?: unknown
+  eTransportTransportDocDate?: unknown
+  eTransportTransportDocNo?: unknown
+  eTransportTransportDocNotes?: unknown
+}
+
+type ETransportNoticeLike = {
+  items?: ETransportLineLike[] | null
+  declaredStart?: unknown
+  operationType?: unknown
+  partnerCui?: unknown
+  partnerName?: unknown
+  partnerCountry?: unknown
+  vehicleNo?: unknown
+  trailerNo?: unknown
+  startScope?: unknown
+  startBorderPoint?: unknown
+  endScope?: unknown
+  endBorderPoint?: unknown
+  startAddress?: unknown
+  endAddress?: unknown
+  organizerName?: unknown
+  operatorName?: unknown
+  createdAt?: unknown
+  transportDocDate?: unknown
+  sourceType?: unknown
+  transportDocType?: unknown
+  company?: { cui?: unknown } | null
+  organizerCode?: unknown
+  internalRef?: unknown
+  noticeNo?: unknown
+  organizerCountry?: unknown
+  transportDocNo?: unknown
+  transportDocNotes?: unknown
+}
+
 const COUNTY_CODE_MAP: Record<string, string> = {
   ALBA: "1",
   ARAD: "2",
@@ -188,7 +288,7 @@ function resolveOperationTypeCode(value: unknown) {
   return OPERATION_TYPE_CODE_MAP[raw] || raw
 }
 
-function resolveGoodsPurposeCode(operationTypeCode: string, sourceType: string, transportDocType: string) {
+function resolveGoodsPurposeCode(operationTypeCode: string, _sourceType: unknown, _transportDocType: unknown) {
   const op = normalizeText(operationTypeCode)
   if (op === "30") return "101"
   if (op === "10" || op === "20") return "101"
@@ -314,7 +414,7 @@ function buildRoutePlacesXml(startScope: unknown, startAddress: unknown, startBo
   return parts.join("\n")
 }
 
-function resolveTransportUomCode(item: any) {
+function resolveTransportUomCode(item: ETransportLineLike | null | undefined) {
   const standardCode = normalizeText(item?.uom?.standardCode || item?.product?.uom?.standardCode || item?.uomStandardCode)
   if (standardCode) return standardCode
 
@@ -328,7 +428,7 @@ function resolveTransportUomCode(item: any) {
   return internalCode.toUpperCase()
 }
 
-function buildLocationText(location: any) {
+function buildLocationText(location: ETransportLocationLike | null | undefined) {
   if (!location) return ""
   return [location.address, location.city, location.county, location.country || "RO"]
     .map((part) => normalizeText(part))
@@ -342,14 +442,14 @@ function buildNoticeAddressText(scope: unknown, adrValue: unknown, borderPoint: 
     : normalizeText(buildStructuredAddressText(adrValue))
 }
 
-function resolveNoticeTotals(items: any[]) {
+function resolveNoticeTotals(items: ETransportLineLike[] | null | undefined) {
   const normalizedItems = Array.isArray(items) ? items : []
-  const totalGrossWeightKg = normalizedItems.reduce((sum: number, item: any) => {
+  const totalGrossWeightKg = normalizedItems.reduce((sum: number, item: ETransportLineLike) => {
     const qty = toNumber(item?.qty)
     const grossWeightPerUnitKg = toNumber(item?.grossWeightPerUnitKg || item?.product?.grossWeightKg || 0)
     return sum + qty * grossWeightPerUnitKg
   }, 0)
-  const totalValueRon = normalizedItems.reduce((sum: number, item: any) => sum + toNumber(item?.lineValue), 0)
+  const totalValueRon = normalizedItems.reduce((sum: number, item: ETransportLineLike) => sum + toNumber(item?.lineValue), 0)
   return { totalGrossWeightKg, totalValueRon }
 }
 
@@ -359,7 +459,7 @@ export type ETransportValidationIssue = {
   message: string
 }
 
-export function validateTransferForETransport(doc: any) {
+export function validateTransferForETransport(doc: ETransportTransferDocLike | null | undefined) {
   const issues: ETransportValidationIssue[] = []
   const items = Array.isArray(doc?.items) ? doc.items : []
 
@@ -427,7 +527,7 @@ export function validateTransferForETransport(doc: any) {
     issues.push({ severity: "error", field: "items", message: "Transferul trebuie sa aiba cel putin o linie." })
   }
 
-  items.forEach((item: any, index: number) => {
+  items.forEach((item: ETransportLineLike, index: number) => {
     const label = `Linia ${index + 1}`
     if (!normalizeText(item?.product?.name || item?.productName)) {
       issues.push({ severity: "error", field: `items[${index}].product`, message: `${label}: lipseste produsul.` })
@@ -461,7 +561,7 @@ export function validateTransferForETransport(doc: any) {
   return issues
 }
 
-export function generateTransferETransportXml(doc: any) {
+export function generateTransferETransportXml(doc: ETransportTransferDocLike | null | undefined) {
   const items = Array.isArray(doc?.items) ? doc.items : []
   const transportDate = formatDateOnly(doc?.eTransportDeclaredStart || doc?.docDate)
   const transportDocDate = formatDateOnly(doc?.eTransportTransportDocDate || doc?.docDate)
@@ -472,7 +572,7 @@ export function generateTransferETransportXml(doc: any) {
   const documentTypeCode = resolveTransportDocumentTypeCode(doc?.eTransportTransportDocType || "TRANSFER")
 
   const linesXml = items
-    .map((item: any, index: number) => {
+    .map((item: ETransportLineLike) => {
       const qty = toNumber(item?.qty)
       const unitPrice = toNumber(item?.unitPrice)
       const lineValue = toNumber(item?.lineValue)
@@ -515,7 +615,7 @@ ${buildRoutePlacesXml(
 </eTransport>`
 }
 
-export function validateNoticeForETransport(notice: any) {
+export function validateNoticeForETransport(notice: ETransportNoticeLike | null | undefined) {
   const issues: ETransportValidationIssue[] = []
   const items = Array.isArray(notice?.items) ? notice.items : []
 
@@ -567,7 +667,7 @@ export function validateNoticeForETransport(notice: any) {
     issues.push({ severity: "error", field: "items", message: "Notificarea trebuie sa aiba cel putin o linie." })
   }
 
-  items.forEach((item: any, index: number) => {
+  items.forEach((item: ETransportLineLike, index: number) => {
     const label = `Linia ${index + 1}`
     if (!normalizeText(item?.name || item?.product?.name)) {
       issues.push({ severity: "error", field: `items[${index}].name`, message: `${label}: lipseste denumirea bunului.` })
@@ -604,7 +704,7 @@ export function validateNoticeForETransport(notice: any) {
   return issues
 }
 
-export function generateETransportNoticeXml(notice: any) {
+export function generateETransportNoticeXml(notice: ETransportNoticeLike | null | undefined) {
   const items = Array.isArray(notice?.items) ? notice.items : []
   const transportDate = formatDateOnly(notice?.declaredStart || notice?.createdAt)
   const transportDocDate = formatDateOnly(notice?.transportDocDate)
@@ -615,7 +715,7 @@ export function generateETransportNoticeXml(notice: any) {
   const documentTypeCode = resolveTransportDocumentTypeCode(notice?.transportDocType || "ALTELE")
 
   const linesXml = items
-    .map((item: any, index: number) => {
+    .map((item: ETransportLineLike) => {
       const qty = toNumber(item?.qty)
       const lineValue = toNumber(item?.lineValue)
       const netWeightPerUnitKg = toNumber(item?.netWeightPerUnitKg || item?.grossWeightPerUnitKg || item?.product?.grossWeightKg || 0)
