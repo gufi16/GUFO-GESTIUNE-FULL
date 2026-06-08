@@ -310,7 +310,9 @@ function assertTypedSensitiveModules() {
       companyRouteSupportLib.includes("export async function getRequestCompany") &&
       companyRouteSupportLib.includes("export async function getRequestAnafCredential") &&
       companyRouteSupportLib.includes("export async function updateRequestCompany") &&
+      companyRouteSupportLib.includes("export type AnafOauthStatePayload") &&
       companyRouteSupportLib.includes("export function parseAnafOauthStateOrThrow") &&
+      companyRouteSupportLib.includes("export function getCompanyRouteErrorMessage") &&
       companyRouteSupportLib.includes("export async function persistAnafOauthError") &&
       companyRouteSupportLib.includes("export function parseEfacturaAgentDownloadTicketOrThrow") &&
       companyRouteSupportLib.includes("export function parseEfacturaAgentPairingCodeOrThrow") &&

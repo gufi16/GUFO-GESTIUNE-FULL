@@ -33,6 +33,9 @@ import { ensureUploadSubdir } from "../lib/uploads"
 import { getJwtSecret } from "../lib/auth"
 import { ensureTenantAdminAccess } from "../lib/tenantAdmin"
 import {
+  type AnafOauthStatePayload,
+  type EfacturaAgentDownloadTicketPayload,
+  type EfacturaAgentPairingPayload,
   buildAnafOauthReturnUrl,
   clearAnafOauthContextCookie,
   createEfacturaAgentDownloadTicket,
@@ -44,6 +47,7 @@ import {
   getDefaultEfacturaAppUrl,
   getEfacturaAgentDownloadFileName,
   getEfacturaAgentDownloadSource,
+  getCompanyRouteErrorMessage,
   getRequestAnafCredential,
   getRequestCompany,
   getRequestedCompanyId,
@@ -118,7 +122,7 @@ export async function handleAnafOauthCallback(req, res) {
     return res.status(400).send("Lipsesc parametrii OAuth ANAF.")
   }
 
-  let state: { tenantId: string; returnTo: string; activeCompanyId?: string | null; credentialId?: string | null } | null = null
+  let state: AnafOauthStatePayload | null = null
   try {
     state = parseAnafOauthStateOrThrow(effectiveStateRaw, JWT_SECRET)
   } catch {
@@ -127,11 +131,11 @@ export async function handleAnafOauthCallback(req, res) {
 
   try {
     await requireExplicitAnafCompanyContext(prisma, state.tenantId, state.activeCompanyId || null)
-  } catch (error: any) {
+  } catch (error: unknown) {
     return res.redirect(buildAnafOauthReturnUrl(
       state.returnTo,
       "error",
-      String(error?.message || "Firma activa nu este disponibila pentru OAuth."),
+      getCompanyRouteErrorMessage(error, "Firma activa nu este disponibila pentru OAuth."),
     ))
   }
 
@@ -244,13 +248,13 @@ export async function handleAnafOauthCallback(req, res) {
     await syncDefaultAnafCredentialToCompany(prisma as any, company.id, activeCredential)
 
     return res.redirect(buildAnafOauthReturnUrl(state.returnTo, "success"))
-  } catch (error: any) {
+  } catch (error: unknown) {
     await persistAnafOauthError(
       prisma,
       state.tenantId,
       state.activeCompanyId,
       state.credentialId,
-      error?.message || "Eroare la schimbul token-ului ANAF.",
+      getCompanyRouteErrorMessage(error, "Eroare la schimbul token-ului ANAF."),
     )
 
     return res.redirect(buildAnafOauthReturnUrl(state.returnTo, "error"))
@@ -269,7 +273,7 @@ router.get("/api/v1/public/efactura/agent-download", async (req, res) => {
     })
   }
 
-  let payload: { tenantId?: string | null; purpose?: string } | null = null
+  let payload: EfacturaAgentDownloadTicketPayload | null = null
   try {
     payload = parseEfacturaAgentDownloadTicketOrThrow(ticket, JWT_SECRET)
   } catch {
@@ -332,7 +336,7 @@ router.get("/api/v1/public/efactura/agent-pairing/resolve", async (req, res) => 
     })
   }
 
-  let payload: { sub?: string | null; p?: string; exp?: number; companyId?: string | null; credentialId?: string | null; certSerial?: string | null; erpUrl?: string | null } | null = null
+  let payload: EfacturaAgentPairingPayload | null = null
   try {
     payload = parseEfacturaAgentPairingCodeOrThrow(code, JWT_SECRET)
   } catch {

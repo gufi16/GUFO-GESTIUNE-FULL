@@ -90,19 +90,19 @@ type EffectiveAnafOauthCompanyConfig = {
   efacturaOauthRedirectUri?: string | null
 }
 
-type AnafOauthStatePayload = {
+export type AnafOauthStatePayload = {
   tenantId: string
   returnTo: string
   activeCompanyId?: string | null
   credentialId?: string | null
 }
 
-type EfacturaAgentDownloadTicketPayload = {
+export type EfacturaAgentDownloadTicketPayload = {
   tenantId?: string | null
   purpose?: string
 }
 
-type EfacturaAgentPairingPayload = {
+export type EfacturaAgentPairingPayload = {
   sub?: string | null
   p?: string
   exp?: number
@@ -158,6 +158,13 @@ export function buildAnafOauthReturnUrl(
     return base
   }
   return `${base}&message=${encodeURIComponent(message)}`
+}
+
+export function getCompanyRouteErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message
+  }
+  return fallback
 }
 
 export async function persistAnafOauthError(
