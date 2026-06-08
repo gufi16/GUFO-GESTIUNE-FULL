@@ -1,6 +1,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import { prisma } from "./prisma"
+import { getUploadsRoot } from "./uploads"
 
 function toPositiveInt(value: string | undefined, fallback: number) {
   const parsed = Number(value)
@@ -12,12 +13,19 @@ export type WorkerContext = {
   startedAt: Date
 }
 
+export const DEFAULT_WORKER_HEARTBEAT_RELATIVE_PATH = path.join("ops", "worker-heartbeat.json")
+
 function ensureParentDir(filePath: string) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true })
 }
 
 export function getWorkerHeartbeatFile() {
-  return String(process.env.WORKER_HEARTBEAT_FILE || "").trim()
+  const configured = String(process.env.WORKER_HEARTBEAT_FILE || "").trim()
+  if (configured) {
+    return configured
+  }
+
+  return path.join(getUploadsRoot(), DEFAULT_WORKER_HEARTBEAT_RELATIVE_PATH)
 }
 
 function writeWorkerHeartbeat(payload: Record<string, unknown>) {

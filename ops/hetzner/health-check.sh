@@ -7,6 +7,11 @@ WORKER_HEARTBEAT_FILE="${WORKER_HEARTBEAT_FILE:-}"
 WORKER_MAX_AGE_SECONDS="${WORKER_MAX_AGE_SECONDS:-180}"
 API_CONTAINER="${API_CONTAINER:-gufo-gestiune-full-api-1}"
 FRONTEND_CONTAINER="${FRONTEND_CONTAINER:-gufo-gestiune-full-frontend-1}"
+APP_ROOT="${APP_ROOT:-}"
+
+if [[ -z "${WORKER_HEARTBEAT_FILE}" && -n "${APP_ROOT}" ]]; then
+  WORKER_HEARTBEAT_FILE="${APP_ROOT}/uploads/ops/worker-heartbeat.json"
+fi
 
 echo "[health] frontend ${FRONTEND_URL}"
 curl --fail --silent --show-error "${FRONTEND_URL}" >/dev/null

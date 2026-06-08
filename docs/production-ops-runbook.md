@@ -55,6 +55,12 @@ Worker heartbeat file:
 WORKER_HEARTBEAT_FILE=/app/uploads/ops/worker-heartbeat.json
 ```
 
+If `WORKER_HEARTBEAT_FILE` is omitted, the worker falls back automatically to:
+
+```bash
+<UPLOADS_DIR>/ops/worker-heartbeat.json
+```
+
 ## Database Backups
 
 Use:

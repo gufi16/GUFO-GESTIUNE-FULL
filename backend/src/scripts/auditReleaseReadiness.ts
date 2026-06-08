@@ -2,6 +2,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { prisma } from "../lib/prisma"
 import { getUploadsConfig } from "../lib/uploads"
+import { getWorkerHeartbeatFile } from "../lib/workerJobs"
 
 type CheckResult = {
   name: string
@@ -57,11 +58,11 @@ function assertEnvBasics() {
       : "Set UPLOADS_DIR to a persistent mounted path. Fallback uploads inside app/container are unsafe on redeploy."
   )
 
-  const workerHeartbeatFile = String(process.env.WORKER_HEARTBEAT_FILE || "").trim()
+  const workerHeartbeatFile = String(getWorkerHeartbeatFile() || "").trim()
   addResult(
     "Worker heartbeat file configured",
     workerHeartbeatFile.length > 0,
-    "Set WORKER_HEARTBEAT_FILE so worker liveness can be checked outside request traffic."
+    "Set WORKER_HEARTBEAT_FILE explicitly or keep UPLOADS_DIR configured so the worker heartbeat falls back to uploads/ops/worker-heartbeat.json."
   )
 
   const demoSeedEnabled = process.env.ENABLE_DEMO_SEED === "true"
