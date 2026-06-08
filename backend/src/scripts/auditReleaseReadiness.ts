@@ -52,10 +52,12 @@ function assertEnvBasics() {
   const uploadsConfig = getUploadsConfig()
   addResult(
     "Persistent uploads storage configured",
-    !uploadsConfig.usingFallbackRoot || uploadsConfig.allowEphemeralUploads,
+    uploadsConfig.persistentStorageSatisfied,
     uploadsConfig.allowEphemeralUploads
       ? "ALLOW_EPHEMERAL_UPLOADS=true bypass is active. Remove it before selling to clients."
-      : "Set UPLOADS_DIR to a persistent mounted path. Fallback uploads inside app/container are unsafe on redeploy."
+      : uploadsConfig.localFallbackAllowed
+        ? `Local/non-production fallback uploads are in use at ${uploadsConfig.effectiveRoot}. Set UPLOADS_DIR explicitly before production deploy.`
+        : "Set UPLOADS_DIR to a persistent mounted path. Fallback uploads inside app/container are unsafe on redeploy."
   )
 
   const workerHeartbeatFile = String(getWorkerHeartbeatFile() || "").trim()

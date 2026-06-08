@@ -102,6 +102,9 @@ if (!String(process.env.UPLOADS_DIR || "").trim()) {
     `[uploads] UPLOADS_DIR is not set. Files are stored in ${uploadsDir}. ` +
       `In Docker production you should mount this path persistently, otherwise rebuilds can remove uploaded files.`
   )
+  if (uploadsConfig.localFallbackAllowed) {
+    console.info(`[uploads] Non-production fallback storage active at ${uploadsConfig.effectiveRoot}`)
+  }
 } else {
   console.info(`[uploads] Persistent storage root: ${uploadsConfig.effectiveRoot}`)
 }

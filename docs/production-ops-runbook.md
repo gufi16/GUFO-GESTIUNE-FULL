@@ -43,6 +43,8 @@ Required:
 UPLOADS_DIR=/app/uploads
 ```
 
+Local development may use the fallback repo path automatically, but production must never rely on that fallback.
+
 And Docker must mount a persistent host path:
 
 ```bash

@@ -18,6 +18,8 @@ export function getUploadsConfig() {
   const usingFallbackRoot = !configuredRoot
   const allowEphemeralUploads = process.env.ALLOW_EPHEMERAL_UPLOADS === "true"
   const isProduction = process.env.NODE_ENV === "production"
+  const localFallbackAllowed = !isProduction && usingFallbackRoot
+  const persistentStorageSatisfied = !usingFallbackRoot || allowEphemeralUploads || localFallbackAllowed
 
   return {
     configuredRoot,
@@ -25,6 +27,8 @@ export function getUploadsConfig() {
     usingFallbackRoot,
     allowEphemeralUploads,
     isProduction,
+    localFallbackAllowed,
+    persistentStorageSatisfied,
   }
 }
 
