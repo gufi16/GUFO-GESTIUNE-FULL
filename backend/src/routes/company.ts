@@ -1190,7 +1190,7 @@ router.patch("/api/v1/company/efactura/credentials/:id", requireAuth, async (req
   } catch (error: unknown) {
     return res.status(500).json({
       ok: false,
-      error: error?.message || "Nu am putut actualiza credențiala ANAF.",
+      error: getCompanyRouteErrorMessage(error, "Nu am putut actualiza credențiala ANAF."),
     })
   }
 })
