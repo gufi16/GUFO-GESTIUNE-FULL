@@ -166,6 +166,7 @@ function assertTypedSensitiveModules() {
   const transferRouteSupport = readFileSafe("src/lib/transferRouteSupport.ts")
   const transferPostingSupport = readFileSafe("src/lib/transferPostingSupport.ts")
   const transferEtransportSupport = readFileSafe("src/lib/transferEtransportSupport.ts")
+  const transferQuerySupport = readFileSafe("src/lib/transferQuerySupport.ts")
   const incomingEfacturaRouteSupport = readFileSafe("src/lib/incomingEfacturaRouteSupport.ts")
   const ownerMiddleware = readFileSafe("src/middleware/requireOwner.ts")
   const metaRoutes = readFileSafe("src/routes/meta.ts")
@@ -454,10 +455,14 @@ function assertTypedSensitiveModules() {
       transferRouteSupport.includes("export async function resolveEtransportDownloadId") &&
       transferRoutes.includes('from "../lib/transferPostingSupport"') &&
       transferRoutes.includes('from "../lib/transferEtransportSupport"') &&
+      transferRoutes.includes('from "../lib/transferQuerySupport"') &&
       transferPostingSupport.includes("export async function recalcTransferDocument") &&
       transferPostingSupport.includes("export async function postTransferDocumentLines") &&
       transferEtransportSupport.includes("export async function findTransferDocForEtransport") &&
-      transferEtransportSupport.includes("export async function updateTransferDocForEtransport"),
+      transferEtransportSupport.includes("export async function updateTransferDocForEtransport") &&
+      transferQuerySupport.includes("export async function findTransferDocDetail") &&
+      transferQuerySupport.includes("export async function findTransferDocDetailWithLots") &&
+      transferQuerySupport.includes("export async function findTransferDocForPdf"),
     "Keep transfer serialization, e-Transport summary/status helpers, and file-safe formatting in a typed helper module before removing // @ts-nocheck from the large transfer route."
   )
 

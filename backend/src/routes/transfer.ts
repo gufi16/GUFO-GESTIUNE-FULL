@@ -13,6 +13,11 @@ import { requireRequestCompanyId, resolveRequestCompany } from "../lib/companySc
 import { generateTransferETransportXml, validateTransferForETransport } from "../lib/etransport"
 import { resolveWarehouseForLocation } from "../lib/warehouse"
 import {
+  findTransferDocDetail,
+  findTransferDocDetailWithLots,
+  findTransferDocForPdf,
+} from "../lib/transferQuerySupport"
+import {
   findTransferDocForEtransport,
   findTransferReceiptDocForEtransport,
   updateTransferDocForEtransport,
@@ -83,26 +88,7 @@ router.get("/api/v1/transfers/:id", async (req: AuthedRequest, res) => {
   const companyId = await requireRequestCompanyId(req)
   const id = String(req.params.id)
 
-  const doc = await prisma.transferDoc.findFirst({
-    where: { id, tenantId, companyId },
-    include: {
-      fromLocation: true,
-      toLocation: true,
-      items: {
-        include: {
-          product: {
-            include: {
-              uom: true,
-              vatRate: true
-            }
-          },
-          uom: true,
-          vatRate: true
-        },
-        orderBy: { createdAt: "asc" }
-      }
-    }
-  })
+  const doc = await findTransferDocDetail(prisma, { id, tenantId, companyId })
 
   if (!doc) {
     return res.status(404).json({ ok: false, error: "Documentul nu a fost gasit." })
@@ -577,24 +563,7 @@ router.post("/api/v1/transfers/:id/post", async (req: AuthedRequest, res) => {
     })
   })
 
-  const doc = await prisma.transferDoc.findFirst({
-    where: { id, tenantId, companyId },
-    include: {
-      fromLocation: true,
-      fromWarehouse: true,
-      toLocation: true,
-      toWarehouse: true,
-      items: {
-        include: {
-          product: { include: { uom: true, vatRate: true } },
-          uom: true,
-          vatRate: true,
-          lotAllocations: true,
-        },
-        orderBy: { createdAt: "asc" },
-      },
-    },
-  })
+  const doc = await findTransferDocDetailWithLots(prisma, { id, tenantId, companyId })
 
   return res.json({ ok: true, doc: serializeTransferDoc(doc), message: "Transferul a fost finalizat." })
 })
@@ -951,24 +920,7 @@ router.post("/api/v1/transfers/full", async (req: AuthedRequest, res) => {
       })
     }
 
-    const doc = await prisma.transferDoc.findFirst({
-      where: { id: transferId, tenantId, companyId },
-      include: {
-        fromLocation: true,
-        fromWarehouse: true,
-        toLocation: true,
-        toWarehouse: true,
-        items: {
-          include: {
-            product: { include: { uom: true, vatRate: true } },
-            uom: true,
-            vatRate: true,
-            lotAllocations: true,
-          },
-          orderBy: { createdAt: "asc" }
-        }
-      }
-    })
+    const doc = await findTransferDocDetailWithLots(prisma, { id: transferId, tenantId, companyId })
 
     res.json({ ok: true, doc: serializeTransferDoc(doc) })
   } catch (e: unknown) {
@@ -984,22 +936,7 @@ router.get("/api/v1/transfers/:id/pdf", async (req: AuthedRequest, res) => {
   const companyId = await requireRequestCompanyId(req)
   const id = String(req.params.id)
 
-  const docData = await prisma.transferDoc.findFirst({
-    where: { id, tenantId, companyId },
-    include: {
-      fromLocation: true,
-      fromWarehouse: true,
-      toLocation: true,
-      toWarehouse: true,
-      items: {
-        include: {
-          product: { include: { uom: true } },
-          uom: true,
-        },
-        orderBy: { createdAt: "asc" },
-      },
-    },
-  })
+  const docData = await findTransferDocForPdf(prisma, { id, tenantId, companyId })
 
   if (!docData) {
     return res.status(404).json({ ok: false, error: "Documentul nu a fost gasit." })
