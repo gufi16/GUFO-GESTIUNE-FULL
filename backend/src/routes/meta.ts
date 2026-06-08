@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Router } from "express"
 import { TerminalDeviceType } from "@prisma/client"
 import path from "path"
@@ -24,6 +23,29 @@ import {
 import { ensureDefaultWarehouseForLocation, ensureDefaultWarehousesForCompany } from "../lib/warehouse"
 
 const router = Router()
+
+type MetaRouteAuth = NonNullable<AuthedRequest["auth"]> & {
+  tenantId: string
+}
+
+function requireMetaAuth(req: AuthedRequest): MetaRouteAuth {
+  if (!req.auth?.tenantId) {
+    throw new Error("Sesiunea nu are tenant activ.")
+  }
+
+  return {
+    ...req.auth,
+    tenantId: req.auth.tenantId,
+  }
+}
+
+async function requireMetaCompanyId(req: AuthedRequest) {
+  const companyId = String((await requireRequestCompanyId(req)) || "").trim()
+  if (!companyId) {
+    throw new Error("Nu exista nicio firma activa pentru acest cont.")
+  }
+  return companyId
+}
 
 const uploadsDir = ensureUploadSubdir("categories")
 
@@ -81,8 +103,9 @@ router.post(
 ========================= */
 
 router.get("/api/v1/meta/locations", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireMetaAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireMetaCompanyId(req)
 
   await prisma.$transaction(async (tx) => {
     await ensureDefaultWarehousesForCompany(tx, tenantId, companyId)
@@ -100,8 +123,9 @@ router.get("/api/v1/meta/locations", async (req: AuthedRequest, res) => {
 })
 
 router.get("/api/v1/meta/warehouses", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireMetaAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireMetaCompanyId(req)
   const locationId = String(req.query.locationId || "").trim()
 
   await prisma.$transaction(async (tx) => {
@@ -135,8 +159,9 @@ router.get("/api/v1/meta/warehouses", async (req: AuthedRequest, res) => {
 })
 
 router.post("/api/v1/meta/warehouses", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireMetaAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireMetaCompanyId(req)
   const locationId = String(req.body?.locationId || "").trim()
   const code = String(req.body?.code || "").trim().toUpperCase()
   const name = String(req.body?.name || "").trim()
@@ -234,8 +259,9 @@ router.post("/api/v1/meta/warehouses", async (req: AuthedRequest, res) => {
 })
 
 router.put("/api/v1/meta/warehouses/:id", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireMetaAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireMetaCompanyId(req)
   const id = String(req.params.id || "").trim()
   const locationId = String(req.body?.locationId || "").trim()
   const code = String(req.body?.code || "").trim().toUpperCase()
@@ -356,8 +382,9 @@ router.put("/api/v1/meta/warehouses/:id", async (req: AuthedRequest, res) => {
 })
 
 router.delete("/api/v1/meta/warehouses/:id", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireMetaAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireMetaCompanyId(req)
   const id = String(req.params.id || "").trim()
 
   try {
@@ -405,8 +432,9 @@ router.delete("/api/v1/meta/warehouses/:id", async (req: AuthedRequest, res) => 
 })
 
 router.get("/api/v1/meta/terminals", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireMetaAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireMetaCompanyId(req)
   const locationId = String(req.query.locationId || "").trim()
   const requestedDeviceType = String(req.query.deviceType || "").trim().toUpperCase()
   const deviceType =
@@ -488,8 +516,9 @@ router.get("/api/v1/meta/terminals", async (req: AuthedRequest, res) => {
 })
 
 router.post("/api/v1/meta/locations", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireMetaAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireMetaCompanyId(req)
 
   const name = String(req.body?.name || "").trim()
   const code = String(req.body?.code || "").trim()
@@ -564,8 +593,9 @@ router.post("/api/v1/meta/locations", async (req: AuthedRequest, res) => {
 })
 
 router.put("/api/v1/meta/locations/:id", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireMetaAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireMetaCompanyId(req)
   const id = String(req.params.id)
 
   const name = String(req.body?.name || "").trim()
@@ -647,8 +677,9 @@ router.put("/api/v1/meta/locations/:id", async (req: AuthedRequest, res) => {
 })
 
 router.delete("/api/v1/meta/locations/:id", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireMetaAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireMetaCompanyId(req)
   const id = String(req.params.id)
 
   try {
@@ -685,8 +716,9 @@ router.delete("/api/v1/meta/locations/:id", async (req: AuthedRequest, res) => {
 ========================= */
 
 router.get("/api/v1/meta/suppliers", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireMetaAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireMetaCompanyId(req)
 
   const suppliers = await prisma.supplier.findMany({
     where: { tenantId, companyId },
@@ -709,8 +741,9 @@ async function reserveUniqueSupplierCode(tx: any, tenantId: string) {
 }
 
 router.post("/api/v1/meta/suppliers", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireMetaAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireMetaCompanyId(req)
 
   const name = String(req.body?.name || "").trim()
   const code = String(req.body?.code || "").trim() || null
@@ -768,8 +801,9 @@ router.post("/api/v1/meta/suppliers", async (req: AuthedRequest, res) => {
 })
 
 router.put("/api/v1/meta/suppliers/:id", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireMetaAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireMetaCompanyId(req)
   const id = String(req.params.id)
 
   const name = String(req.body?.name || "").trim()
@@ -838,8 +872,9 @@ router.put("/api/v1/meta/suppliers/:id", async (req: AuthedRequest, res) => {
 })
 
 router.delete("/api/v1/meta/suppliers/:id", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireMetaAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireMetaCompanyId(req)
   const id = String(req.params.id)
 
   try {
@@ -872,8 +907,9 @@ router.delete("/api/v1/meta/suppliers/:id", async (req: AuthedRequest, res) => {
 ========================= */
 
 router.get("/api/v1/meta/uom", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireMetaAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireMetaCompanyId(req)
 
   await ensureDefaultUoms(prisma, tenantId, companyId)
 
@@ -889,8 +925,9 @@ router.get("/api/v1/meta/uom", async (req: AuthedRequest, res) => {
 })
 
 router.post("/api/v1/meta/uom", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireMetaAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireMetaCompanyId(req)
 
   const code = String(req.body?.code || "").trim().toUpperCase()
   const standardCode = normalizeStandardUomCode(req.body?.standardCode)
@@ -940,8 +977,9 @@ router.post("/api/v1/meta/uom", async (req: AuthedRequest, res) => {
 })
 
 router.put("/api/v1/meta/uom/:id", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireMetaAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireMetaCompanyId(req)
   const id = String(req.params.id)
 
   const code = String(req.body?.code || "").trim().toUpperCase()
@@ -1008,8 +1046,9 @@ router.put("/api/v1/meta/uom/:id", async (req: AuthedRequest, res) => {
 })
 
 router.delete("/api/v1/meta/uom/:id", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireMetaAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireMetaCompanyId(req)
   const id = String(req.params.id)
 
   try {
@@ -1046,8 +1085,9 @@ router.delete("/api/v1/meta/uom/:id", async (req: AuthedRequest, res) => {
 ========================= */
 
 router.get("/api/v1/meta/vat", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireMetaAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireMetaCompanyId(req)
 
   const items = await prisma.vatRate.findMany({
     where: {
@@ -1061,8 +1101,9 @@ router.get("/api/v1/meta/vat", async (req: AuthedRequest, res) => {
 })
 
 router.post("/api/v1/meta/vat", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireMetaAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireMetaCompanyId(req)
 
   const rawRate = req.body?.rate
   const rate = Number(rawRate)
@@ -1138,8 +1179,9 @@ router.post("/api/v1/meta/vat", async (req: AuthedRequest, res) => {
 })
 
 router.put("/api/v1/meta/vat/:id", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireMetaAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireMetaCompanyId(req)
   const id = String(req.params.id)
 
   const rawRate = req.body?.rate
@@ -1234,8 +1276,9 @@ router.put("/api/v1/meta/vat/:id", async (req: AuthedRequest, res) => {
 })
 
 router.delete("/api/v1/meta/vat/:id", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireMetaAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireMetaCompanyId(req)
   const id = String(req.params.id)
 
   try {
@@ -1272,8 +1315,9 @@ router.delete("/api/v1/meta/vat/:id", async (req: AuthedRequest, res) => {
 ========================= */
 
 router.get("/api/v1/meta/departments", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireMetaAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireMetaCompanyId(req)
 
   const items = await prisma.department.findMany({
     where: {
@@ -1287,8 +1331,9 @@ router.get("/api/v1/meta/departments", async (req: AuthedRequest, res) => {
 })
 
 router.post("/api/v1/meta/departments", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireMetaAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireMetaCompanyId(req)
   const name = String(req.body?.name || "").trim()
 
   if (!name) {
@@ -1329,8 +1374,9 @@ router.post("/api/v1/meta/departments", async (req: AuthedRequest, res) => {
 })
 
 router.put("/api/v1/meta/departments/:id", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireMetaAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireMetaCompanyId(req)
   const id = String(req.params.id)
   const name = String(req.body?.name || "").trim()
   const isActive = Boolean(req.body?.isActive)
@@ -1389,8 +1435,9 @@ router.put("/api/v1/meta/departments/:id", async (req: AuthedRequest, res) => {
 })
 
 router.delete("/api/v1/meta/departments/:id", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireMetaAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireMetaCompanyId(req)
   const id = String(req.params.id)
 
   try {
@@ -1427,8 +1474,9 @@ router.delete("/api/v1/meta/departments/:id", async (req: AuthedRequest, res) =>
 ========================= */
 
 router.get("/api/v1/meta/categories", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireMetaAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireMetaCompanyId(req)
 
   const items = await prisma.category.findMany({
     where: {
@@ -1445,8 +1493,9 @@ router.get("/api/v1/meta/categories", async (req: AuthedRequest, res) => {
 })
 
 router.post("/api/v1/meta/categories", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireMetaAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireMetaCompanyId(req)
 
   const name = String(req.body?.name || "").trim()
   const imageUrl = normalizeImageUrl(req.body?.imageUrl, normalizeStoredUploadUrl)
@@ -1504,8 +1553,9 @@ router.post("/api/v1/meta/categories", async (req: AuthedRequest, res) => {
 })
 
 router.put("/api/v1/meta/categories/:id", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireMetaAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireMetaCompanyId(req)
   const id = String(req.params.id)
 
   const name = String(req.body?.name || "").trim()
@@ -1581,8 +1631,9 @@ router.put("/api/v1/meta/categories/:id", async (req: AuthedRequest, res) => {
 })
 
 router.delete("/api/v1/meta/categories/:id", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth!.tenantId
-  const companyId = await requireRequestCompanyId(req)
+  const auth = requireMetaAuth(req)
+  const tenantId = auth.tenantId
+  const companyId = await requireMetaCompanyId(req)
   const id = String(req.params.id)
 
   try {

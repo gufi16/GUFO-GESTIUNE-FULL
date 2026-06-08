@@ -604,6 +604,16 @@ function assertTypedSensitiveModules() {
   )
 
   addResult(
+    "Meta route no longer bypasses TypeScript",
+    !metaRoutes.startsWith("// @ts-nocheck") &&
+      metaRoutes.includes("function requireMetaAuth") &&
+      metaRoutes.includes("async function requireMetaCompanyId") &&
+      metaRoutes.includes('router.get("/api/v1/meta/warehouses"') &&
+      metaRoutes.includes('router.delete("/api/v1/meta/categories/:id"'),
+    "Keep locations, warehouses, terminals, suppliers, UOM, VAT, departments, and categories routes type-checked because they define operational master data for the whole ERP."
+  )
+
+  addResult(
     "Product route helpers extracted from ts-nocheck route",
     productRoutes.includes('from "../lib/productRouteSupport"') &&
       productRouteSupport.includes("export function normalizeProductFlags") &&

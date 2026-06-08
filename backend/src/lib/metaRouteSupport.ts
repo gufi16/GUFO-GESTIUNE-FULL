@@ -1,4 +1,4 @@
-import { TerminalDeviceType, type PrismaClient, type Prisma } from "@prisma/client"
+import { TerminalDeviceType, WarehouseType, type PrismaClient, type Prisma } from "@prisma/client"
 
 const WAREHOUSE_TYPES = ["GENERAL", "RAW_MATERIALS", "FINISHED_GOODS", "BAR", "KITCHEN", "PACKAGING"] as const
 
@@ -52,9 +52,11 @@ export function normalizeStandardUomCode(value: unknown) {
   return text || null
 }
 
-export function normalizeWarehouseType(value: unknown) {
+export function normalizeWarehouseType(value: unknown): WarehouseType {
   const text = String(value || "").trim().toUpperCase()
-  return WAREHOUSE_TYPES.includes(text as (typeof WAREHOUSE_TYPES)[number]) ? text : "GENERAL"
+  return WAREHOUSE_TYPES.includes(text as (typeof WAREHOUSE_TYPES)[number])
+    ? (text as WarehouseType)
+    : WarehouseType.GENERAL
 }
 
 export function normalizeImageUrl(value: unknown, normalizeStoredUploadUrl: (value: unknown) => string | null) {
