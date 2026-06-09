@@ -2249,7 +2249,7 @@ export async function createPosMarketplaceHistory(
   const normalizedPayload =
     payloadJson && typeof payloadJson === "object" && !Array.isArray(payloadJson)
       ? {
-          ...(payloadJson as Record<string, unknown>),
+          ...asObject(payloadJson),
           historyPlatformSource:
             normalizedSource === "PLATFORM" && !["PLATFORM", "POS", "KDS", "ERP", "BACKEND"].includes(String(source || "").trim().toUpperCase())
               ? String(source || "").trim().toUpperCase()
