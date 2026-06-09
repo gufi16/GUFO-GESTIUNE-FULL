@@ -30,6 +30,46 @@ type SagaPartnerHeader = {
   iban?: unknown
   info?: unknown
 }
+type SagaFacturaLinePayload = {
+  index: number
+  type?: unknown
+  management?: unknown
+  description?: unknown
+  supplierCode?: unknown
+  clientCode?: unknown
+  guid?: unknown
+  barcode?: unknown
+  info?: unknown
+  uom?: unknown
+  qty?: unknown
+  price?: unknown
+  value?: unknown
+  total?: unknown
+  vatRate?: unknown
+  vatValue?: unknown
+  account?: unknown
+  priceSale?: unknown
+  activity?: unknown
+  deductionType?: unknown
+  sagaAliases?: boolean
+}
+type SagaOperationalLinePayload = {
+  index: number
+  management?: unknown
+  description?: unknown
+  code?: unknown
+  guid?: unknown
+  barcode?: unknown
+  info?: unknown
+  uom?: unknown
+  qty?: unknown
+  price?: unknown
+  value?: unknown
+  expenseAccount?: unknown
+  inventoryAccount?: unknown
+  salesAccount?: unknown
+  vatRate?: unknown
+}
 type AccountingConfigLike = {
   articleCodeSource?: string | null
   managementAnalytic?: string | null
@@ -1273,29 +1313,7 @@ function buildSagaFacturaHeader({
   ].join("\n")
 }
 
-function buildSagaFacturaLine(line: {
-  index: number
-  type?: unknown
-  management?: unknown
-  description?: unknown
-  supplierCode?: unknown
-  clientCode?: unknown
-  guid?: unknown
-  barcode?: unknown
-  info?: unknown
-  uom?: unknown
-  qty?: unknown
-  price?: unknown
-  value?: unknown
-  total?: unknown
-  vatRate?: unknown
-  vatValue?: unknown
-  account?: unknown
-  priceSale?: unknown
-  activity?: unknown
-  deductionType?: unknown
-  sagaAliases?: boolean
-}) {
+function buildSagaFacturaLine(line: SagaFacturaLinePayload) {
   return [
     `          <Linie>`,
     xmlLineTag("LinieNrCrt", line.index),
@@ -1366,23 +1384,7 @@ function buildSagaOperationalHeader({
   ].join("\n")
 }
 
-function buildSagaOperationalLine(line: {
-  index: number
-  management?: unknown
-  description?: unknown
-  code?: unknown
-  guid?: unknown
-  barcode?: unknown
-  info?: unknown
-  uom?: unknown
-  qty?: unknown
-  price?: unknown
-  value?: unknown
-  expenseAccount?: unknown
-  inventoryAccount?: unknown
-  salesAccount?: unknown
-  vatRate?: unknown
-}) {
+function buildSagaOperationalLine(line: SagaOperationalLinePayload) {
   return [
     `          <Linie>`,
     xmlLineTag("LinieNrCrt", line.index),
