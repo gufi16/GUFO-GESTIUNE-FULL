@@ -21,6 +21,45 @@ type DraftLineInput = {
   note?: string | null
 }
 
+type ConsumptionIngredientLike = {
+  name?: string | null
+  trackLot?: boolean | null
+  trackExpiry?: boolean | null
+  costMethod?: string | null
+  costPrice?: Prisma.Decimal | number | string | null
+  uom?: {
+    code?: string | null
+    name?: string | null
+  } | null
+}
+
+type ConsumptionLotAllocationLike = {
+  stockLotId: string
+  qty: Prisma.Decimal
+  unitCost: Prisma.Decimal
+  totalCost: Prisma.Decimal
+}
+
+type ConsumptionDocItemLike = {
+  id: string
+  ingredientId: string
+  qty: Prisma.Decimal
+  unitCost?: Prisma.Decimal | null
+  totalCost?: Prisma.Decimal | null
+  ingredient?: ConsumptionIngredientLike | null
+  lotAllocations: ConsumptionLotAllocationLike[]
+}
+
+type ConsumptionDocLike = {
+  id: string
+  docNo: string
+  status: string
+  note?: string | null
+  locationId: string
+  warehouseId?: string | null
+  items: ConsumptionDocItemLike[]
+}
+
 export async function createConsumptionDraft(
   tx: Prisma.TransactionClient,
   params: {
@@ -36,10 +75,10 @@ export async function createConsumptionDraft(
     note?: string | null
     lines: DraftLineInput[]
   }
-) {
+  ) {
   const docNo = await reserveNextNumber(tx, params.tenantId, "consumption")
   const warehouse = params.warehouseId
-    ? await (tx as any).warehouse.findFirst({
+    ? await tx.warehouse.findFirst({
         where: {
           id: params.warehouseId,
           tenantId: params.tenantId,
@@ -65,7 +104,7 @@ export async function createConsumptionDraft(
       sourcePeriodEnd: params.sourcePeriodEnd || null,
       status: "DRAFT",
       note: params.note || null,
-    } as any,
+    },
   })
 
   for (const line of params.lines) {
@@ -93,7 +132,7 @@ export async function validateConsumptionDoc(
     allowNegativeStock?: boolean
   }
 ) {
-  const doc: any = await tx.consumptionDoc.findFirst({
+  const doc: ConsumptionDocLike | null = await tx.consumptionDoc.findFirst({
     where: {
       id: params.docId,
       tenantId: params.tenantId,
@@ -128,7 +167,7 @@ export async function validateConsumptionDoc(
     const costMethod = trackLots ? item.ingredient?.costMethod || "FIFO" : "AVG"
     let unitCost = Math.max(0, toNumber(item.ingredient?.costPrice))
     let totalCost = qtyNumber * unitCost
-    let lotAllocations: any[] = []
+    let lotAllocations: ConsumptionLotAllocationLike[] = []
 
     if (params.allowNegativeStock) {
       await decrementStockBalanceAllowNegative(tx, {
@@ -185,7 +224,7 @@ export async function validateConsumptionDoc(
         unitCost: new Prisma.Decimal(unitCost),
         totalCost: new Prisma.Decimal(totalCost),
         costMethod,
-      } as any,
+      },
     })
 
     if (lotAllocations.length) {
@@ -216,7 +255,7 @@ export async function validateConsumptionDoc(
             refId: doc.id,
             refItemId: item.id,
             note: doc.note || `Consum ${doc.docNo}`,
-          } as any,
+          },
         })
       }
     } else {
@@ -235,7 +274,7 @@ export async function validateConsumptionDoc(
           refId: doc.id,
           refItemId: item.id,
           note: doc.note || `Consum ${doc.docNo}`,
-        } as any,
+        },
       })
     }
 
@@ -249,7 +288,7 @@ export async function validateConsumptionDoc(
       totalValue: new Prisma.Decimal(totalValue),
       validatedAt: new Date(),
       validatedBy: params.actorId || null,
-    } as any,
+    },
   })
 }
 
@@ -262,7 +301,7 @@ export async function cancelConsumptionDoc(
     actorId?: string | null
   }
 ) {
-  const doc: any = await tx.consumptionDoc.findFirst({
+  const doc: ConsumptionDocLike | null = await tx.consumptionDoc.findFirst({
     where: {
       id: params.docId,
       tenantId: params.tenantId,
@@ -300,7 +339,7 @@ export async function cancelConsumptionDoc(
       if (Array.isArray(item.lotAllocations) && item.lotAllocations.length) {
         await restoreLotAllocations(
           tx,
-          item.lotAllocations.map((allocation: any) => ({
+          item.lotAllocations.map((allocation: ConsumptionLotAllocationLike) => ({
             stockLotId: allocation.stockLotId,
             qty: allocation.qty,
             totalCost: allocation.totalCost,
@@ -324,7 +363,7 @@ export async function cancelConsumptionDoc(
               refId: doc.id,
               refItemId: item.id,
               note: `Anulare ${doc.docNo}`,
-            } as any,
+            },
           })
         }
       } else {
@@ -343,7 +382,7 @@ export async function cancelConsumptionDoc(
             refId: doc.id,
             refItemId: item.id,
             note: `Anulare ${doc.docNo}`,
-          } as any,
+          },
         })
       }
     }
@@ -355,6 +394,6 @@ export async function cancelConsumptionDoc(
       status: "CANCELLED",
       cancelledAt: new Date(),
       cancelledBy: params.actorId || null,
-    } as any,
+    },
   })
 }
