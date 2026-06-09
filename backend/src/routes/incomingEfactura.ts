@@ -62,7 +62,7 @@ type IncomingInvoiceItemLike = {
   lineVat?: unknown
   lineGross?: unknown
 }
-type IncomingInvoiceEntryLike = Record<string, unknown> & {
+type IncomingInvoiceEntryLike = {
   id: string
   tenantId: string
   companyId?: string | null
@@ -413,7 +413,7 @@ function isMalformedIncomingInvoice(entry: IncomingInvoiceEntryLike | null | und
 }
 
 function serializeIncomingInvoice(entry: IncomingInvoiceEntryLike | null | undefined) {
-  if (!entry || !isRecord(entry)) return null
+  if (!entry) return null
   return {
     ...entry,
     totalNet: toNumber(entry.totalNet),
