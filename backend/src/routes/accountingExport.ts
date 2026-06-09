@@ -157,6 +157,20 @@ type PurchaseReceiptDetailRow = {
   COD_TAXA: string
   ID_SGR: number
 }
+type ConsumptionSpreadsheetRow = {
+  NR: string | null | undefined
+  DATA: string
+  GESTIUNE: string
+  DEN_GEST: string
+  EXPLICATIE: string
+  COD: string
+  COD_BARE: string
+  DENUMIRE: string
+  UM: string
+  CANTITATE: number
+  PRET?: number
+  VALOARE?: number
+}
 type ReceiptExportLine = AccountingReceiptAggregateLine | AccountingExportLineLike
 type AccountingConfigLike = {
   articleCodeSource?: string | null
@@ -280,6 +294,20 @@ type PurchaseReceiptLike = {
   totalVatRon?: unknown
   totalGrossRon?: unknown
   items: AccountingExportLineLike[]
+}
+type ConsumptionDocumentLike = {
+  id?: string | null
+  docNo?: string | null
+  docDate?: Date | string | null
+  note?: string | null
+  location?: AccountingLocationLike | null
+  items: Array<{
+    ingredientId: string
+    qty?: unknown
+    note?: string | null
+    ingredient: AccountingProductLike & { id?: string | null; costPrice?: unknown }
+    finishedProduct?: AccountingProductLike | null
+  }>
 }
 type ProductionDocumentLike = {
   id?: string | null
@@ -1175,6 +1203,55 @@ function buildPurchaseReceiptSupplierHeader(receipt: PurchaseReceiptLike): SagaP
     bank: "",
     iban: "",
     info: "",
+  }
+}
+
+function buildConsumptionSpreadsheetRow(
+  document: ConsumptionDocumentLike,
+  line: ConsumptionDocumentLike["items"][number],
+  unitCost: number,
+  config: AccountingConfigLike
+): ConsumptionSpreadsheetRow {
+  return {
+    NR: document.docNo,
+    DATA: formatDate(document.docDate),
+    GESTIUNE: managementValue(config, document.location),
+    DEN_GEST: String(document.location?.name || document.location?.code || ""),
+    EXPLICATIE: String(line.note || document.note || ""),
+    COD: String(line.ingredient.accountingItemCode || line.ingredient.sku || slugCode(line.ingredient.name || "", "ART")),
+    COD_BARE: "",
+    DENUMIRE: String(line.ingredient.name || ""),
+    UM: String(line.ingredient.uom?.code || "BUC"),
+    CANTITATE: Number(line.qty || 0),
+    PRET: unitCost,
+    VALOARE: Number(line.qty || 0) * unitCost,
+  }
+}
+
+function buildConsumptionOperationalLine(
+  document: ConsumptionDocumentLike,
+  line: ConsumptionDocumentLike["items"][number],
+  unitCost: number,
+  stockType: AccountingStockTypeLike | null | undefined,
+  config: AccountingConfigLike,
+  index: number
+): SagaOperationalLinePayload {
+  return {
+    index,
+    management: managementValue(config, document.location),
+    description: line.ingredient.name,
+    code: line.ingredient.accountingItemCode || line.ingredient.sku || slugCode(line.ingredient.name || "", "ART"),
+    guid: line.ingredient.id,
+    barcode: "",
+    info: line.finishedProduct?.name ? `Produs final: ${line.finishedProduct.name}` : line.note || "",
+    uom: line.ingredient.uom?.code || "BUC",
+    qty: decimal(line.qty, 3),
+    price: decimal(unitCost),
+    value: decimal(unitCost),
+    vatRate: decimal(line.ingredient.vatRate?.rate ?? 0),
+    expenseAccount: stockType?.expenseAccount || config.expenseAccount,
+    inventoryAccount: stockType?.inventoryAccount || config.inventoryAccount,
+    salesAccount: stockType?.salesAccount || config.salesAccount,
   }
 }
 
@@ -2916,17 +2993,18 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     spreadsheetRows = documents.flatMap((document) =>
       document.items.map((line) => {
         const unitCost = latestCostMap.get(line.ingredientId) ?? Number(line.ingredient?.costPrice || 0)
+        const row = buildConsumptionSpreadsheetRow(document, line, unitCost, config)
         return {
-          NR: document.docNo,
-          DATA: formatDate(document.docDate),
-          GESTIUNE: managementValue(config, document.location),
-          DEN_GEST: document.location?.name || document.location?.code || "",
-          EXPLICATIE: line.note || document.note || "",
-          COD: String(line.ingredient.accountingItemCode || line.ingredient.sku || slugCode(line.ingredient.name, "ART")),
-          COD_BARE: "",
-          DENUMIRE: line.ingredient.name,
-          UM: line.ingredient.uom?.code || "BUC",
-          CANTITATE: Number(line.qty || 0),
+          NR: row.NR,
+          DATA: row.DATA,
+          GESTIUNE: row.GESTIUNE,
+          DEN_GEST: row.DEN_GEST,
+          EXPLICATIE: row.EXPLICATIE,
+          COD: row.COD,
+          COD_BARE: row.COD_BARE,
+          DENUMIRE: row.DENUMIRE,
+          UM: row.UM,
+          CANTITATE: row.CANTITATE,
         }
       })
     )
@@ -2951,23 +3029,9 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
           ...document.items.map((line, index) => {
             const stockType = pickStockType(line.ingredient, stockTypes, config)
             const unitCost = latestCostMap.get(line.ingredientId) ?? Number(line.ingredient?.costPrice || 0)
-            return buildSagaOperationalLine({
-              index: index + 1,
-              management: managementValue(config, document.location),
-              description: line.ingredient.name,
-              code: line.ingredient.accountingItemCode || line.ingredient.sku || slugCode(line.ingredient.name, "ART"),
-              guid: line.ingredient.id,
-              barcode: "",
-              info: line.finishedProduct?.name ? `Produs final: ${line.finishedProduct.name}` : line.note || "",
-              uom: line.ingredient.uom?.code || "BUC",
-              qty: decimal(line.qty, 3),
-              price: decimal(unitCost),
-              value: decimal(unitCost),
-              vatRate: decimal(line.ingredient.vatRate?.rate ?? 0),
-              expenseAccount: stockType?.expenseAccount || config.expenseAccount,
-              inventoryAccount: stockType?.inventoryAccount || config.inventoryAccount,
-              salesAccount: stockType?.salesAccount || config.salesAccount,
-            })
+            return buildSagaOperationalLine(
+              buildConsumptionOperationalLine(document, line, unitCost, stockType, config, index + 1)
+            )
           }),
           `        </Continut>`,
           `      </Detalii>`,
@@ -2983,20 +3047,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       sheetName: "Bonuri consum",
       rows: document.items.map((line) => {
         const unitCost = latestCostMap.get(line.ingredientId) ?? Number(line.ingredient?.costPrice || 0)
-        return {
-          NR: document.docNo,
-          DATA: formatDate(document.docDate),
-          GESTIUNE: managementValue(config, document.location),
-          DEN_GEST: document.location?.name || document.location?.code || "",
-          EXPLICATIE: line.note || document.note || "",
-          COD: String(line.ingredient.accountingItemCode || line.ingredient.sku || slugCode(line.ingredient.name, "ART")),
-          COD_BARE: "",
-          DENUMIRE: line.ingredient.name,
-          UM: line.ingredient.uom?.code || "BUC",
-          CANTITATE: Number(line.qty || 0),
-          PRET: unitCost,
-          VALOARE: Number(line.qty || 0) * unitCost,
-        }
+        return buildConsumptionSpreadsheetRow(document, line, unitCost, config)
       }),
     }))
   } else if (kind === "production-docs") {
