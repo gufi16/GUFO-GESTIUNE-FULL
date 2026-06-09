@@ -216,6 +216,35 @@ const DOCUMENT_CHILD_MODULE_KEYS: TenantBackupModuleKey[] = [
   "documents_stock",
 ]
 
+const MODULE_EXECUTION_PRIORITY: Record<TenantBackupModuleKey, number> = {
+  company: 10,
+  users: 20,
+  customers: 30,
+  suppliers: 40,
+  locations: 50,
+  departments: 60,
+  categories: 70,
+  uoms: 80,
+  vat_rates: 90,
+  catalog: 100,
+  products: 110,
+  recipes: 120,
+  documents: 200,
+  documents_purchase_receipts: 210,
+  documents_transfers: 220,
+  documents_inventory: 230,
+  documents_minutes: 240,
+  documents_production: 250,
+  documents_external_orders: 260,
+  documents_sale_drafts: 270,
+  documents_kitchen_tickets: 280,
+  documents_consumption: 290,
+  documents_sales: 300,
+  documents_sales_invoices: 310,
+  documents_stock: 320,
+  files: 400,
+}
+
 function expandRequestedModuleKey(key: TenantBackupModuleKey): TenantBackupModuleKey[] {
   if (key === "company") return COMPANY_CHILD_MODULE_KEYS
   if (key === "catalog") return CATALOG_CHILD_MODULE_KEYS
@@ -343,6 +372,10 @@ function lowerText(value: unknown) {
 
 function scopeKey(...parts: unknown[]) {
   return parts.map((part) => lowerText(part)).join("::")
+}
+
+function hasAnyRequestedModule(requested: TenantBackupModuleKey[], keys: TenantBackupModuleKey[]) {
+  return keys.some((key) => requested.includes(key))
 }
 
 type IdLookupModel = {
@@ -1082,31 +1115,135 @@ async function restoreCompanyModule(data: SelectiveRestoreData) {
   }
 }
 
+async function syncCompaniesOnly(data: SelectiveRestoreData) {
+  const existing = await prisma.company.findMany({
+    where: { tenantId: asText(data.companies[0]?.tenantId) || undefined },
+    select: { id: true, name: true, code: true, cui: true },
+  })
+  const keys = new Set<string>()
+  existing.forEach((item) => {
+    keys.add(scopeKey("name", item.name))
+    keys.add(scopeKey("code", item.code))
+    keys.add(scopeKey("cui", item.cui))
+  })
+
+  let created = 0
+  for (const item of data.companies) {
+    const nameKey = scopeKey("name", item.name)
+    const codeKey = scopeKey("code", item.code)
+    const cuiKey = scopeKey("cui", item.cui)
+    if (keys.has(nameKey) || (asText(item.code) && keys.has(codeKey)) || (asText(item.cui) && keys.has(cuiKey))) continue
+    await prisma.company.create({ data: item as never })
+    keys.add(nameKey)
+    if (asText(item.code)) keys.add(codeKey)
+    if (asText(item.cui)) keys.add(cuiKey)
+    created += 1
+  }
+
+  return { companies: created, scannedCompanies: data.companies.length }
+}
+
+async function syncAccountingStockTypesOnly(data: SelectiveRestoreData) {
+  const existing = await prisma.accountingStockType.findMany({
+    where: { tenantId: asText(data.accountingStockTypes[0]?.tenantId) || undefined },
+    select: { companyId: true, code: true },
+  })
+  const keys = new Set(existing.map((item) => scopeKey(item.companyId, item.code)))
+  let created = 0
+
+  for (const item of data.accountingStockTypes) {
+    const key = scopeKey(item.companyId, item.code)
+    if (keys.has(key)) continue
+    await prisma.accountingStockType.create({ data: item as never })
+    keys.add(key)
+    created += 1
+  }
+
+  return { accountingStockTypes: created, scannedAccountingStockTypes: data.accountingStockTypes.length }
+}
+
+async function syncAccountingExportConfigsOnly(data: SelectiveRestoreData) {
+  const existing = await prisma.accountingExportConfig.findMany({
+    where: { tenantId: asText(data.accountingExportConfigs[0]?.tenantId) || undefined },
+    select: { companyId: true },
+  })
+  const companyIds = new Set(existing.map((item) => asText(item.companyId)).filter(Boolean))
+  let created = 0
+
+  for (const item of data.accountingExportConfigs) {
+    const companyId = asText(item.companyId)
+    if (!companyId || companyIds.has(companyId)) continue
+    await prisma.accountingExportConfig.create({ data: item as never })
+    companyIds.add(companyId)
+    created += 1
+  }
+
+  return { accountingExportConfigs: created, scannedAccountingExportConfigs: data.accountingExportConfigs.length }
+}
+
+async function syncTenantModulesOnly(data: SelectiveRestoreData) {
+  const existing = await prisma.tenantModule.findMany({
+    where: { tenantId: asText(data.tenantModules[0]?.tenantId) || undefined },
+    select: { moduleId: true },
+  })
+  const keys = new Set(existing.map((item) => asText(item.moduleId)).filter(Boolean))
+  let created = 0
+
+  for (const item of data.tenantModules) {
+    const key = asText(item.moduleId)
+    if (!key || keys.has(key)) continue
+    await prisma.tenantModule.create({ data: item as never })
+    keys.add(key)
+    created += 1
+  }
+
+  return { tenantModules: created, scannedTenantModules: data.tenantModules.length }
+}
+
+async function syncExternalIntegrationsOnly(data: SelectiveRestoreData) {
+  const existing = await prisma.externalIntegration.findMany({
+    where: { tenantId: asText(data.externalIntegrations[0]?.tenantId) || undefined },
+    select: { platform: true, locationId: true, merchantId: true, storeId: true },
+  })
+  const keys = new Set(
+    existing.map((item) => scopeKey(item.platform, item.locationId, item.merchantId, item.storeId)).filter(Boolean),
+  )
+  let created = 0
+
+  for (const item of data.externalIntegrations) {
+    const key = scopeKey(item.platform, item.locationId, item.merchantId, item.storeId)
+    if (keys.has(key)) continue
+    await prisma.externalIntegration.create({ data: item as never })
+    keys.add(key)
+    created += 1
+  }
+
+  return { externalIntegrations: created, scannedExternalIntegrations: data.externalIntegrations.length }
+}
+
 async function syncCompanyModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.company, data.companies)
-  await createManySkipDuplicatesIfAny(prisma.location, data.locations)
-  await createManySkipDuplicatesIfAny(prisma.terminal, data.terminals)
-  await createManySkipDuplicatesIfAny(prisma.vatRate, data.vatRates)
-  await createManySkipDuplicatesIfAny(prisma.uom, data.uoms)
-  await createManySkipDuplicatesIfAny(prisma.department, data.departments)
-  await createManySkipDuplicatesIfAny(prisma.category, data.categories)
-  await createManySkipDuplicatesIfAny(prisma.accountingStockType, data.accountingStockTypes)
-  await createManySkipDuplicatesIfAny(prisma.accountingExportConfig, data.accountingExportConfigs)
-  await createManySkipDuplicatesIfAny(prisma.tenantModule, data.tenantModules)
-  await createManySkipDuplicatesIfAny(prisma.externalIntegration, data.externalIntegrations)
+  const companies = await syncCompaniesOnly(data)
+  const locations = await syncLocationsModule(data)
+  const vatRates = await syncVatRatesModule(data)
+  const uoms = await syncUomsModule(data)
+  const departments = await syncDepartmentsModule(data)
+  const categories = await syncCategoriesModule(data)
+  const accountingStockTypes = await syncAccountingStockTypesOnly(data)
+  const accountingExportConfigs = await syncAccountingExportConfigsOnly(data)
+  const tenantModules = await syncTenantModulesOnly(data)
+  const externalIntegrations = await syncExternalIntegrationsOnly(data)
 
   return {
-    companies: data.companies.length,
-    locations: data.locations.length,
-    terminals: data.terminals.length,
-    vatRates: data.vatRates.length,
-    uoms: data.uoms.length,
-    departments: data.departments.length,
-    categories: data.categories.length,
-    accountingStockTypes: data.accountingStockTypes.length,
-    accountingExportConfigs: data.accountingExportConfigs.length,
-    tenantModules: data.tenantModules.length,
-    externalIntegrations: data.externalIntegrations.length,
+    ...companies,
+    ...locations,
+    ...vatRates,
+    ...uoms,
+    ...departments,
+    ...categories,
+    ...accountingStockTypes,
+    ...accountingExportConfigs,
+    ...tenantModules,
+    ...externalIntegrations,
   }
 }
 
@@ -1126,11 +1263,50 @@ async function restoreUsersModule(data: SelectiveRestoreData, tenantId: string) 
 }
 
 async function syncUsersModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.user, data.users)
-  await createManySkipDuplicatesIfAny(prisma.userCompanyAccess, data.userCompanyAccesses)
+  const existingUsers = await prisma.user.findMany({
+    where: { tenantId: asText(data.users[0]?.tenantId) || undefined },
+    select: { id: true, email: true },
+  })
+  const userIdsByEmail = new Map(existingUsers.map((item) => [lowerText(item.email), item.id]))
+  let createdUsers = 0
+
+  for (const item of data.users) {
+    const emailKey = lowerText(item.email)
+    if (!emailKey || userIdsByEmail.has(emailKey)) continue
+    const created = await prisma.user.create({ data: item as never })
+    userIdsByEmail.set(emailKey, created.id)
+    createdUsers += 1
+  }
+
+  const existingAccesses = await prisma.userCompanyAccess.findMany({
+    where: { userId: { in: Array.from(userIdsByEmail.values()) } },
+    select: { userId: true, companyId: true },
+  })
+  const accessKeys = new Set(existingAccesses.map((item) => scopeKey(item.userId, item.companyId)))
+  let createdAccesses = 0
+
+  for (const item of data.userCompanyAccesses) {
+    const backupUser = data.users.find((entry) => asText(entry.id) === asText(item.userId))
+    const resolvedUserId = backupUser ? userIdsByEmail.get(lowerText(backupUser.email)) : asText(item.userId)
+    const companyId = asText(item.companyId)
+    if (!resolvedUserId || !companyId) continue
+    const key = scopeKey(resolvedUserId, companyId)
+    if (accessKeys.has(key)) continue
+    await prisma.userCompanyAccess.create({
+      data: {
+        ...(item as Record<string, unknown>),
+        userId: resolvedUserId,
+      } as never,
+    })
+    accessKeys.add(key)
+    createdAccesses += 1
+  }
+
   return {
-    users: data.users.length,
-    userCompanyAccesses: data.userCompanyAccesses.length,
+    users: createdUsers,
+    userCompanyAccesses: createdAccesses,
+    scannedUsers: data.users.length,
+    scannedUserCompanyAccesses: data.userCompanyAccesses.length,
   }
 }
 
@@ -1390,17 +1566,11 @@ async function restoreCatalogModule(data: SelectiveRestoreData) {
 }
 
 async function syncCatalogModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.product, data.products)
-  await createManySkipDuplicatesIfAny(prisma.productBarcode, data.productBarcodes)
-  await createManySkipDuplicatesIfAny(prisma.recipe, data.recipes)
-  await createManySkipDuplicatesIfAny(prisma.recipeItem, data.recipeItems)
-  await createManySkipDuplicatesIfAny(prisma.marketplaceProductMapping, data.marketplaceMappings)
+  const products = await syncProductsModule(data)
+  const recipes = await syncRecipesModule(data)
   return {
-    products: data.products.length,
-    productBarcodes: data.productBarcodes.length,
-    recipes: data.recipes.length,
-    recipeItems: data.recipeItems.length,
-    marketplaceMappings: data.marketplaceMappings.length,
+    ...products,
+    ...recipes,
   }
 }
 
@@ -2080,17 +2250,15 @@ export async function restoreTenantBackupSelectionFromFile(
   const payload = readTenantPayloadFromZip(filePath)
   ensureBackupBelongsToTenant(tenantId, payload)
 
-  const requested = TENANT_BACKUP_MODULE_DEFINITIONS.map((definition) => definition.key).filter((key) =>
-    Array.from(
-      new Set(
-        asArray<string>(moduleKeys)
-          .filter((item): item is TenantBackupModuleKey =>
-            TENANT_BACKUP_MODULE_DEFINITIONS.some((definition) => definition.key === item),
-          )
-          .flatMap((item) => expandRequestedModuleKey(item)),
-      ),
-    ).includes(key),
-  )
+  const requested = Array.from(
+    new Set(
+      asArray<string>(moduleKeys)
+        .filter((item): item is TenantBackupModuleKey =>
+          TENANT_BACKUP_MODULE_DEFINITIONS.some((definition) => definition.key === item),
+        )
+        .flatMap((item) => expandRequestedModuleKey(item)),
+    ),
+  ).sort((left, right) => (MODULE_EXECUTION_PRIORITY[left] || 9999) - (MODULE_EXECUTION_PRIORITY[right] || 9999))
 
   if (!requested.length) {
     throw new Error("Nu ai selectat niciun modul pentru restore.")
@@ -2210,6 +2378,26 @@ export async function restoreTenantBackupSelectionFromFile(
         skippedExistingUploadFiles: uploadRestore.skippedExistingFiles,
       }
     }
+  }
+
+  if (
+    hasAnyRequestedModule(requested, [
+      "documents",
+      "documents_purchase_receipts",
+      "documents_transfers",
+      "documents_inventory",
+      "documents_minutes",
+      "documents_production",
+      "documents_external_orders",
+      "documents_sale_drafts",
+      "documents_kitchen_tickets",
+      "documents_consumption",
+      "documents_sales",
+      "documents_sales_invoices",
+      "documents_stock",
+    ])
+  ) {
+    await relinkDocumentReferences(data)
   }
 
   return result
