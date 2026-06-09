@@ -343,6 +343,51 @@ type ProductionSpreadsheetRow = {
   ContCheltuiala: string
   ContVenit: string
 }
+type ArticleSpreadsheetRow = {
+  COD: string
+  DENUMIRE: string | null | undefined
+  UM: unknown
+  TIP: string
+  P_TVA: number
+  PRET: number
+  PRET_CUTVA: number
+  COD_BARE: unknown
+  COD_NC: string
+  COD_CPV: string
+  TEXT_SUPL: string
+}
+type CustomerSpreadsheetRow = {
+  COD: string
+  DENUMIRE: string
+  COD_FISCAL: string
+  REG_COM: string
+  TARA: string
+  JUDET: string
+  LOCALITATE: string
+  ADRESA: string
+  CONT_BANCA: string
+  BANCA: string
+  TEL: string
+  EMAIL: string
+  DISCOUNT: number
+  INFORMATII: string
+  GUID_COD: string | undefined
+}
+type SupplierSpreadsheetRow = {
+  COD: string
+  DENUMIRE: string
+  COD_FISCAL: string
+  TARA: string
+  JUDET: string
+  LOCALITATE: string
+  ADRESA: string
+  CONT_BANCA: string
+  BANCA: string
+  TEL: string
+  EMAIL: string
+  INFORMATII: string
+  GUID_COD: string | undefined
+}
 type AccountingReceiptAggregateLine = {
   code: string
   name: string
@@ -1383,6 +1428,112 @@ function buildSagaArticlesXml(products: AccountingProductLike[], config: Account
   ].join("\n")
 }
 
+function buildArticleSpreadsheetRow(
+  product: AccountingProductLike,
+  config: AccountingConfigLike | null | undefined
+): ArticleSpreadsheetRow {
+  const articleCode = sagaArticleCodeForProduct(product, config)
+  return {
+    COD: String(articleCode || "").trim(),
+    DENUMIRE: product.name,
+    UM: product.uom?.code || "BUC",
+    TIP: sagaArticleTypeFromProduct(product),
+    P_TVA: Number(product.vatRate?.rate ?? 0),
+    PRET: Number(product.price || 0),
+    PRET_CUTVA: Number(product.price || 0) * (1 + Number(product.vatRate?.rate ?? 0) / 100),
+    COD_BARE: product.barcodes?.[0]?.barcode || "",
+    COD_NC: "",
+    COD_CPV: "",
+    TEXT_SUPL: "",
+  }
+}
+
+function buildCustomerSpreadsheetRow(
+  customer: AccountingPartnerLike,
+  code: string
+): CustomerSpreadsheetRow {
+  return {
+    COD: code,
+    DENUMIRE: customer.name || "",
+    COD_FISCAL: customer.cif || "",
+    REG_COM: customer.regNo || "",
+    TARA: sagaCountryCode(customer.country),
+    JUDET: sagaCountyCode(customer.county),
+    LOCALITATE: customer.city || "",
+    ADRESA: customer.address || "",
+    CONT_BANCA: "",
+    BANCA: "",
+    TEL: customer.phone || "",
+    EMAIL: customer.email || "",
+    DISCOUNT: 0,
+    INFORMATII: "",
+    GUID_COD: customer.id,
+  }
+}
+
+function buildCustomerXmlLine(customer: AccountingPartnerLike, code: string) {
+  return [
+    `  <Linie>`,
+    `    <Cod>${xmlEscape(code)}</Cod>`,
+    `    <Denumire>${xmlEscape(customer.name || "")}</Denumire>`,
+    `    <Cod_fiscal>${xmlEscape(customer.cif || "")}</Cod_fiscal>`,
+    `    <Reg_com>${xmlEscape(customer.regNo || "")}</Reg_com>`,
+    `    <Tara>${xmlEscape(sagaCountryCode(customer.country))}</Tara>`,
+    `    <Judet>${xmlEscape(sagaCountyCode(customer.county))}</Judet>`,
+    `    <Localitate>${xmlEscape(customer.city || "")}</Localitate>`,
+    `    <Adresa>${xmlEscape(customer.address || "")}</Adresa>`,
+    `    <Cont_banca/>`,
+    `    <Banca/>`,
+    `    <Tel>${xmlEscape(customer.phone || "")}</Tel>`,
+    `    <Email>${xmlEscape(customer.email || "")}</Email>`,
+    `    <Discount>0</Discount>`,
+    `    <Informatii/>`,
+    `    <Guid_cod>${xmlEscape(customer.id)}</Guid_cod>`,
+    `  </Linie>`,
+  ].join("\n")
+}
+
+function buildSupplierSpreadsheetRow(
+  supplier: AccountingPartnerLike,
+  code: string
+): SupplierSpreadsheetRow {
+  return {
+    COD: code,
+    DENUMIRE: supplier.name || "",
+    COD_FISCAL: supplier.cif || "",
+    TARA: sagaCountryCode(supplier.country),
+    JUDET: sagaCountyCode(supplier.county),
+    LOCALITATE: supplier.city || "",
+    ADRESA: supplier.address || "",
+    CONT_BANCA: "",
+    BANCA: "",
+    TEL: supplier.phone || "",
+    EMAIL: supplier.email || "",
+    INFORMATII: "",
+    GUID_COD: supplier.id,
+  }
+}
+
+function buildSupplierXmlLine(supplier: AccountingPartnerLike, code: string) {
+  return [
+    `  <Linie>`,
+    `    <Cod>${xmlEscape(code)}</Cod>`,
+    `    <Denumire>${xmlEscape(supplier.name || "")}</Denumire>`,
+    `    <Cod_fiscal>${xmlEscape(supplier.cif || "")}</Cod_fiscal>`,
+    `    <Tara>${xmlEscape(sagaCountryCode(supplier.country))}</Tara>`,
+    `    <Judet>${xmlEscape(sagaCountyCode(supplier.county))}</Judet>`,
+    `    <Localitate>${xmlEscape(supplier.city || "")}</Localitate>`,
+    `    <Adresa>${xmlEscape(supplier.address || "")}</Adresa>`,
+    `    <Cont_banca/>`,
+    `    <Banca/>`,
+    `    <Tel>${xmlEscape(supplier.phone || "")}</Tel>`,
+    `    <Email>${xmlEscape(supplier.email || "")}</Email>`,
+    `    <Informatii/>`,
+    `    <Guid_cod>${xmlEscape(supplier.id)}</Guid_cod>`,
+    `  </Linie>`,
+  ].join("\n")
+}
+
 function normalizeFileFormat(value: unknown): ExportFileFormat {
   const normalized = String(value || "").trim().toLowerCase()
   if (normalized === "dbf") return "dbf"
@@ -2320,48 +2471,17 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       return rows
     })
 
-    spreadsheetRows = articleProducts.map((product) => {
-      const articleCode = sagaArticleCodeForProduct(product, config)
-
-      return {
-        COD: String(articleCode || "").trim(),
-        DENUMIRE: product.name,
-        UM: product.uom?.code || "BUC",
-        TIP: sagaArticleTypeFromProduct(product),
-        P_TVA: Number(product.vatRate?.rate ?? 0),
-        PRET: Number(product.price || 0),
-        PRET_CUTVA: Number(product.price || 0) * (1 + Number(product.vatRate?.rate ?? 0) / 100),
-        COD_BARE: product.barcodes?.[0]?.barcode || "",
-        COD_NC: "",
-        COD_CPV: "",
-        TEXT_SUPL: "",
-      }
-    })
+    spreadsheetRows = articleProducts.map((product) => buildArticleSpreadsheetRow(product, config))
 
     xmlFiles = articleProducts.map((product) => ({
       fileName: `ART_${slugCode(String(product.accountingItemCode || product.sku || product.name || ""), "ART")}_${compactDateToken(dateTo || new Date())}.xml`,
       content: buildSagaArticlesXml([product], config),
     }))
     splitSpreadsheetFiles = articleProducts.map((product) => {
-      const articleCode = sagaArticleCodeForProduct(product, config)
       return {
         fileName: `ART_${slugCode(String(product.accountingItemCode || product.sku || product.name || ""), "ART")}_${compactDateToken(dateTo || new Date())}`,
         sheetName: "Articole",
-        rows: [
-          {
-            COD: String(articleCode || "").trim(),
-            DENUMIRE: product.name,
-            UM: product.uom?.code || "BUC",
-            TIP: sagaArticleTypeFromProduct(product),
-            P_TVA: Number(product.vatRate?.rate ?? 0),
-            PRET: Number(product.price || 0),
-            PRET_CUTVA: Number(product.price || 0) * (1 + Number(product.vatRate?.rate ?? 0) / 100),
-            COD_BARE: product.barcodes?.[0]?.barcode || "",
-            COD_NC: "",
-            COD_CPV: "",
-            TEXT_SUPL: "",
-          },
-        ],
+        rows: [buildArticleSpreadsheetRow(product, config)],
       }
     })
 
@@ -2397,45 +2517,13 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     const customerCode = (customer: AccountingPartnerLike) => customerCodeById.get(String(customer.id || "")) || customer.code || slugCode(customer.name || "", "CLI")
 
     sheetName = "Clienti"
-    spreadsheetRows = customers.map((customer) => ({
-      COD: customerCode(customer),
-      DENUMIRE: customer.name || "",
-      COD_FISCAL: customer.cif || "",
-      REG_COM: customer.regNo || "",
-      TARA: sagaCountryCode(customer.country),
-      JUDET: sagaCountyCode(customer.county),
-      LOCALITATE: customer.city || "",
-      ADRESA: customer.address || "",
-      CONT_BANCA: "",
-      BANCA: "",
-      TEL: customer.phone || "",
-      EMAIL: customer.email || "",
-      DISCOUNT: 0,
-      INFORMATII: "",
-      GUID_COD: customer.id,
-    }))
+    spreadsheetRows = customers.map((customer) => buildCustomerSpreadsheetRow(customer, customerCode(customer)))
 
     const buildCustomerXml = (customer: AccountingPartnerLike) =>
       [
         `<?xml version="1.0" encoding="utf-8"?>`,
         `<Clienti>`,
-        `  <Linie>`,
-        `    <Cod>${xmlEscape(customerCode(customer))}</Cod>`,
-        `    <Denumire>${xmlEscape(customer.name || "")}</Denumire>`,
-        `    <Cod_fiscal>${xmlEscape(customer.cif || "")}</Cod_fiscal>`,
-        `    <Reg_com>${xmlEscape(customer.regNo || "")}</Reg_com>`,
-        `    <Tara>${xmlEscape(sagaCountryCode(customer.country))}</Tara>`,
-        `    <Judet>${xmlEscape(sagaCountyCode(customer.county))}</Judet>`,
-        `    <Localitate>${xmlEscape(customer.city || "")}</Localitate>`,
-        `    <Adresa>${xmlEscape(customer.address || "")}</Adresa>`,
-        `    <Cont_banca/>`,
-        `    <Banca/>`,
-        `    <Tel>${xmlEscape(customer.phone || "")}</Tel>`,
-        `    <Email>${xmlEscape(customer.email || "")}</Email>`,
-        `    <Discount>0</Discount>`,
-        `    <Informatii/>`,
-        `    <Guid_cod>${xmlEscape(customer.id)}</Guid_cod>`,
-        `  </Linie>`,
+        buildCustomerXmlLine(customer, customerCode(customer)),
         `</Clienti>`,
       ].join("\n")
 
@@ -2446,51 +2534,13 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     splitSpreadsheetFiles = customers.map((customer) => ({
       fileName: `CLI_${slugCode(customerCode(customer) || customer.name, "CLIENT")}_${compactDateToken(dateTo || new Date())}`,
       sheetName: "Clienti",
-      rows: [
-        {
-          COD: customerCode(customer),
-          DENUMIRE: customer.name || "",
-          COD_FISCAL: customer.cif || "",
-          REG_COM: customer.regNo || "",
-          TARA: sagaCountryCode(customer.country),
-          JUDET: sagaCountyCode(customer.county),
-          LOCALITATE: customer.city || "",
-          ADRESA: customer.address || "",
-          CONT_BANCA: "",
-          BANCA: "",
-          TEL: customer.phone || "",
-          EMAIL: customer.email || "",
-          DISCOUNT: 0,
-          INFORMATII: "",
-          GUID_COD: customer.id,
-        },
-      ],
+      rows: [buildCustomerSpreadsheetRow(customer, customerCode(customer))],
     }))
 
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
       `<Clienti>`,
-      ...customers.map((customer) =>
-        [
-          `  <Linie>`,
-          `    <Cod>${xmlEscape(customerCode(customer))}</Cod>`,
-          `    <Denumire>${xmlEscape(customer.name || "")}</Denumire>`,
-          `    <Cod_fiscal>${xmlEscape(customer.cif || "")}</Cod_fiscal>`,
-          `    <Reg_com>${xmlEscape(customer.regNo || "")}</Reg_com>`,
-          `    <Tara>${xmlEscape(sagaCountryCode(customer.country))}</Tara>`,
-          `    <Judet>${xmlEscape(sagaCountyCode(customer.county))}</Judet>`,
-          `    <Localitate>${xmlEscape(customer.city || "")}</Localitate>`,
-          `    <Adresa>${xmlEscape(customer.address || "")}</Adresa>`,
-          `    <Cont_banca/>`,
-          `    <Banca/>`,
-          `    <Tel>${xmlEscape(customer.phone || "")}</Tel>`,
-          `    <Email>${xmlEscape(customer.email || "")}</Email>`,
-          `    <Discount>0</Discount>`,
-          `    <Informatii/>`,
-          `    <Guid_cod>${xmlEscape(customer.id)}</Guid_cod>`,
-          `  </Linie>`,
-        ].join("\n")
-      ),
+      ...customers.map((customer) => buildCustomerXmlLine(customer, customerCode(customer))),
       `</Clienti>`,
     ].join("\n")
   } else if (kind === "suppliers") {
@@ -2524,41 +2574,13 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     const supplierCode = (supplier: AccountingPartnerLike) => supplierCodeById.get(String(supplier.id || "")) || supplier.code || slugCode(supplier.name || "", "FUR")
 
     sheetName = "Furnizori"
-    spreadsheetRows = suppliers.map((supplier) => ({
-      COD: supplierCode(supplier),
-      DENUMIRE: supplier.name || "",
-      COD_FISCAL: supplier.cif || "",
-      TARA: sagaCountryCode(supplier.country),
-      JUDET: sagaCountyCode(supplier.county),
-      LOCALITATE: supplier.city || "",
-      ADRESA: supplier.address || "",
-      CONT_BANCA: "",
-      BANCA: "",
-      TEL: supplier.phone || "",
-      EMAIL: supplier.email || "",
-      INFORMATII: "",
-      GUID_COD: supplier.id,
-    }))
+    spreadsheetRows = suppliers.map((supplier) => buildSupplierSpreadsheetRow(supplier, supplierCode(supplier)))
 
     const buildSupplierXml = (supplier: AccountingPartnerLike) =>
       [
         `<?xml version="1.0" encoding="utf-8"?>`,
         `<Furnizori>`,
-        `  <Linie>`,
-        `    <Cod>${xmlEscape(supplierCode(supplier))}</Cod>`,
-        `    <Denumire>${xmlEscape(supplier.name || "")}</Denumire>`,
-        `    <Cod_fiscal>${xmlEscape(supplier.cif || "")}</Cod_fiscal>`,
-        `    <Tara>${xmlEscape(sagaCountryCode(supplier.country))}</Tara>`,
-        `    <Judet>${xmlEscape(sagaCountyCode(supplier.county))}</Judet>`,
-        `    <Localitate>${xmlEscape(supplier.city || "")}</Localitate>`,
-        `    <Adresa>${xmlEscape(supplier.address || "")}</Adresa>`,
-        `    <Cont_banca/>`,
-        `    <Banca/>`,
-        `    <Tel>${xmlEscape(supplier.phone || "")}</Tel>`,
-        `    <Email>${xmlEscape(supplier.email || "")}</Email>`,
-        `    <Informatii/>`,
-        `    <Guid_cod>${xmlEscape(supplier.id)}</Guid_cod>`,
-        `  </Linie>`,
+        buildSupplierXmlLine(supplier, supplierCode(supplier)),
         `</Furnizori>`,
       ].join("\n")
 
@@ -2569,47 +2591,13 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     splitSpreadsheetFiles = suppliers.map((supplier) => ({
       fileName: `FUR_${slugCode(supplierCode(supplier) || supplier.name, "FURNIZOR")}_${compactDateToken(dateTo || new Date())}`,
       sheetName: "Furnizori",
-      rows: [
-        {
-          COD: supplierCode(supplier),
-          DENUMIRE: supplier.name || "",
-          COD_FISCAL: supplier.cif || "",
-          TARA: sagaCountryCode(supplier.country),
-          JUDET: sagaCountyCode(supplier.county),
-          LOCALITATE: supplier.city || "",
-          ADRESA: supplier.address || "",
-          CONT_BANCA: "",
-          BANCA: "",
-          TEL: supplier.phone || "",
-          EMAIL: supplier.email || "",
-          INFORMATII: "",
-          GUID_COD: supplier.id,
-        },
-      ],
+      rows: [buildSupplierSpreadsheetRow(supplier, supplierCode(supplier))],
     }))
 
     xml = [
       `<?xml version="1.0" encoding="utf-8"?>`,
       `<Furnizori>`,
-      ...suppliers.map((supplier) =>
-        [
-          `  <Linie>`,
-          `    <Cod>${xmlEscape(supplierCode(supplier))}</Cod>`,
-          `    <Denumire>${xmlEscape(supplier.name || "")}</Denumire>`,
-          `    <Cod_fiscal>${xmlEscape(supplier.cif || "")}</Cod_fiscal>`,
-          `    <Tara>${xmlEscape(sagaCountryCode(supplier.country))}</Tara>`,
-          `    <Judet>${xmlEscape(sagaCountyCode(supplier.county))}</Judet>`,
-          `    <Localitate>${xmlEscape(supplier.city || "")}</Localitate>`,
-          `    <Adresa>${xmlEscape(supplier.address || "")}</Adresa>`,
-          `    <Cont_banca/>`,
-          `    <Banca/>`,
-          `    <Tel>${xmlEscape(supplier.phone || "")}</Tel>`,
-          `    <Email>${xmlEscape(supplier.email || "")}</Email>`,
-          `    <Informatii/>`,
-          `    <Guid_cod>${xmlEscape(supplier.id)}</Guid_cod>`,
-          `  </Linie>`,
-        ].join("\n")
-      ),
+      ...suppliers.map((supplier) => buildSupplierXmlLine(supplier, supplierCode(supplier))),
       `</Furnizori>`,
     ].join("\n")
   } else if (kind === "sales-invoices") {
