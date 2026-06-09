@@ -70,6 +70,37 @@ type SagaOperationalLinePayload = {
   salesAccount?: unknown
   vatRate?: unknown
 }
+type SalesInvoiceHeaderRow = {
+  DENUMIRE_C: string
+  COD_FISCAL: number
+  REGISTRU_C: string
+  JUDET: string
+  ADRESA: string
+  TARA: string
+  MONEDA: string
+  NUMAR_FACT: string
+  DATA: string
+  TVA: number
+  VALOARE_NE: number
+  VALOARE_BR: number
+  DISCOUNT: number
+}
+type SalesInvoiceDetailRow = {
+  TIP: string
+  GESTIUNE: string
+  COD: string
+  COD_BARE: string
+  DENUMIRE: string
+  UM: string
+  P_TVA: number
+  CANTITATE: number
+  PRET: number
+  VALOARE: number
+  TOTAL: number
+  TEXT_SUPL: string
+  CONT: string
+  ACTIVITATE: string
+}
 type AccountingConfigLike = {
   articleCodeSource?: string | null
   managementAnalytic?: string | null
@@ -170,6 +201,11 @@ type SalesInvoiceLike = {
   customerAddress?: string | null
   customer?: AccountingPartnerLike | null
   location?: AccountingLocationLike | null
+  totalNetRon?: unknown
+  totalVatRon?: unknown
+  totalGrossRon?: unknown
+  totalSgrRon?: unknown
+  totalWithSgrRon?: unknown
   items: AccountingExportLineLike[]
 }
 type PurchaseReceiptLike = {
@@ -892,6 +928,48 @@ function buildSalesInvoiceSgrLine(
       deductionType: "",
       sagaAliases: true,
     }),
+  }
+}
+
+function buildSalesInvoiceHeaderRow(invoice: SalesInvoiceLike): SalesInvoiceHeaderRow {
+  return {
+    DENUMIRE_C: invoice.customerName || "",
+    COD_FISCAL: Number(String(invoice.customerCif || "").replace(/\D/g, "") || 0),
+    REGISTRU_C: invoice.customerRegNo || "",
+    JUDET: sagaCountyCode(invoice.customer?.county),
+    ADRESA: invoice.customerAddress || "",
+    TARA: "RO",
+    MONEDA: invoice.currency || "RON",
+    NUMAR_FACT: invoice.docNo || "",
+    DATA: formatDate(invoice.docDate),
+    TVA: Number(invoice.totalVatRon || 0),
+    VALOARE_NE: Number(invoice.totalNetRon || 0) + Number(invoice.totalSgrRon || 0),
+    VALOARE_BR: Number(invoice.totalWithSgrRon || invoice.totalGrossRon || 0),
+    DISCOUNT: 0,
+  }
+}
+
+function buildSalesInvoiceProductRow(
+  invoice: SalesInvoiceLike,
+  line: AccountingExportLineLike,
+  stockType: AccountingStockTypeLike | null | undefined,
+  config: AccountingConfigLike
+): SalesInvoiceDetailRow {
+  return {
+    TIP: sagaInvoiceLineTypeFromProduct(line.product),
+    GESTIUNE: String(invoice.location?.code || invoice.location?.name || ""),
+    COD: String(line.productCode || line.product?.accountingItemCode || line.product?.sku || "").trim(),
+    COD_BARE: String(line.product?.barcodes?.[0]?.barcode || ""),
+    DENUMIRE: String(line.productName || line.product?.name || ""),
+    UM: String(line.uomCode || "BUC"),
+    P_TVA: Number(line.vatRateValue || 0),
+    CANTITATE: Number(line.qty || 0),
+    PRET: Number(line.unitPriceFc || 0),
+    VALOARE: unitAmount(line.lineNetRon, line.qty),
+    TOTAL: unitAmount(line.lineGrossRon, line.qty),
+    TEXT_SUPL: "",
+    CONT: String(stockType?.salesAccount || config.salesAccount || ""),
+    ACTIVITATE: "",
   }
 }
 
@@ -2216,41 +2294,12 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     exportedFileDoc = invoices[invoices.length - 1] || null
 
     sheetName = "Facturi iesire"
-    const invoiceHeaderRows = invoices.map((invoice) => ({
-      DENUMIRE_C: invoice.customerName || "",
-      COD_FISCAL: Number(String(invoice.customerCif || "").replace(/\D/g, "") || 0),
-      REGISTRU_C: invoice.customerRegNo || "",
-      JUDET: sagaCountyCode(invoice.customer?.county),
-      ADRESA: invoice.customerAddress || "",
-      TARA: "RO",
-      MONEDA: invoice.currency || "RON",
-      NUMAR_FACT: invoice.docNo || "",
-      DATA: formatDate(invoice.docDate),
-      TVA: Number(invoice.totalVatRon || 0),
-      VALOARE_NE: Number(invoice.totalNetRon || 0) + Number(invoice.totalSgrRon || 0),
-      VALOARE_BR: Number(invoice.totalWithSgrRon || invoice.totalGrossRon || 0),
-      DISCOUNT: 0,
-    }))
+    const invoiceHeaderRows = invoices.map((invoice) => buildSalesInvoiceHeaderRow(invoice))
 
     const invoiceDetailRows = invoices.flatMap((invoice) =>
       invoice.items.flatMap((line, lineIndex) => {
         const stockType = pickStockType(line.product, stockTypes, config)
-        const productRow = {
-          TIP: sagaInvoiceLineTypeFromProduct(line.product),
-          GESTIUNE: invoice.location?.code || invoice.location?.name || "",
-          COD: String(line.productCode || line.product?.accountingItemCode || line.product?.sku || "").trim(),
-          COD_BARE: line.product?.barcodes?.[0]?.barcode || "",
-          DENUMIRE: line.productName || line.product?.name || "",
-          UM: line.uomCode || "BUC",
-          P_TVA: Number(line.vatRateValue || 0),
-          CANTITATE: Number(line.qty || 0),
-          PRET: Number(line.unitPriceFc || 0),
-          VALOARE: unitAmount(line.lineNetRon, line.qty),
-          TOTAL: unitAmount(line.lineGrossRon, line.qty),
-          TEXT_SUPL: "",
-          CONT: stockType?.salesAccount || config.salesAccount,
-          ACTIVITATE: "",
-        }
+        const productRow = buildSalesInvoiceProductRow(invoice, line, stockType, config)
         const sgrLine = buildSalesInvoiceSgrLine(invoice, line, lineIndex + 1, stockTypes, config)
         return sgrLine ? [productRow, sgrLine.row] : [productRow]
       })
@@ -2354,39 +2403,10 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       content: [`<?xml version="1.0" encoding="utf-8"?>`, `<Facturi>`, buildInvoiceXml(invoice), `</Facturi>`].join("\n"),
     }))
     splitSpreadsheetFiles = invoices.map((invoice) => {
-      const invoiceHeaderRow = {
-        DENUMIRE_C: invoice.customerName || "",
-        COD_FISCAL: Number(String(invoice.customerCif || "").replace(/\D/g, "") || 0),
-        REGISTRU_C: invoice.customerRegNo || "",
-        JUDET: sagaCountyCode(invoice.customer?.county),
-        ADRESA: invoice.customerAddress || "",
-        TARA: "RO",
-        MONEDA: invoice.currency || "RON",
-        NUMAR_FACT: invoice.docNo || "",
-        DATA: formatDate(invoice.docDate),
-        TVA: Number(invoice.totalVatRon || 0),
-        VALOARE_NE: Number(invoice.totalNetRon || 0) + Number(invoice.totalSgrRon || 0),
-        VALOARE_BR: Number(invoice.totalWithSgrRon || invoice.totalGrossRon || 0),
-        DISCOUNT: 0,
-      }
+      const invoiceHeaderRow = buildSalesInvoiceHeaderRow(invoice)
       const invoiceDetailRowsForFile = invoice.items.flatMap((line, lineIndex) => {
         const stockType = pickStockType(line.product, stockTypes, config)
-        const productRow = {
-          TIP: sagaInvoiceLineTypeFromProduct(line.product),
-          GESTIUNE: invoice.location?.code || invoice.location?.name || "",
-          COD: String(line.productCode || line.product?.accountingItemCode || line.product?.sku || "").trim(),
-          COD_BARE: line.product?.barcodes?.[0]?.barcode || "",
-          DENUMIRE: line.productName || line.product?.name || "",
-          UM: line.uomCode || "BUC",
-          P_TVA: Number(line.vatRateValue || 0),
-          CANTITATE: Number(line.qty || 0),
-          PRET: Number(line.unitPriceFc || 0),
-          VALOARE: unitAmount(line.lineNetRon, line.qty),
-          TOTAL: unitAmount(line.lineGrossRon, line.qty),
-          TEXT_SUPL: "",
-          CONT: stockType?.salesAccount || config.salesAccount,
-          ACTIVITATE: "",
-        }
+        const productRow = buildSalesInvoiceProductRow(invoice, line, stockType, config)
         const sgrLine = buildSalesInvoiceSgrLine(invoice, line, lineIndex + 1, stockTypes, config)
         return sgrLine ? [productRow, sgrLine.row] : [productRow]
       })
