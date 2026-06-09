@@ -1,5 +1,17 @@
 import { useEffect, useMemo, useState } from "react"
-import { Archive, Download, FileUp, HardDriveDownload, RefreshCcw, RotateCcw, ShieldCheck, Trash2 } from "lucide-react"
+import {
+  Archive,
+  CheckCircle2,
+  Download,
+  FileUp,
+  HardDriveDownload,
+  Layers3,
+  RefreshCcw,
+  RotateCcw,
+  ShieldCheck,
+  Trash2,
+  UploadCloud,
+} from "lucide-react"
 import PageHeader from "../components/PageHeader"
 import { API_BASE, api, authHeaders } from "../lib/api"
 import {
@@ -35,16 +47,12 @@ type BackupModuleSummary = {
 type BackupActionCardProps = {
   title: string
   description: string
-  hint: string
   tone: "slate" | "emerald" | "sky" | "amber"
   icon: typeof Archive
-  actionLabel: string
-  loadingLabel: string
-  disabled?: boolean
-  loading?: boolean
-  onClick?: () => void
   children?: React.ReactNode
 }
+
+const selectiveRestoreRecommendedOrder = ["company", "users", "customers", "suppliers", "catalog", "documents", "files"]
 
 function fmtBytes(value: number) {
   const size = Number(value || 0)
@@ -79,24 +87,12 @@ function prettifyTableKey(value: string) {
     .trim()
 }
 
-function BackupActionCard({
-  title,
-  description,
-  hint,
-  tone,
-  icon: Icon,
-  actionLabel,
-  loadingLabel,
-  disabled,
-  loading,
-  onClick,
-  children,
-}: BackupActionCardProps) {
+function BackupActionCard({ title, description, tone, icon: Icon, children }: BackupActionCardProps) {
   const toneClasses: Record<BackupActionCardProps["tone"], string> = {
     slate: "border-slate-200 bg-white",
-    emerald: "border-emerald-200 bg-[linear-gradient(180deg,#F8FFFA_0%,#F0FAF3_100%)]",
-    sky: "border-sky-200 bg-[linear-gradient(180deg,#F8FCFF_0%,#EEF8FF_100%)]",
-    amber: "border-amber-200 bg-[linear-gradient(180deg,#FFFDF7_0%,#FBF4E9_100%)]",
+    emerald: "border-emerald-200 bg-[linear-gradient(180deg,#FCFFFD_0%,#F1FBF5_100%)]",
+    sky: "border-sky-200 bg-[linear-gradient(180deg,#FBFEFF_0%,#EEF8FF_100%)]",
+    amber: "border-amber-200 bg-[linear-gradient(180deg,#FFFEFB_0%,#FCF4E8_100%)]",
   }
 
   const iconClasses: Record<BackupActionCardProps["tone"], string> = {
@@ -107,7 +103,7 @@ function BackupActionCard({
   }
 
   return (
-    <div className={`rounded-[22px] border p-4 shadow-sm shadow-slate-900/[0.03] ${toneClasses[tone]}`}>
+    <div className={`rounded-[24px] border p-4 shadow-sm shadow-slate-900/[0.03] ${toneClasses[tone]}`}>
       <div className="flex items-start gap-3">
         <div className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${iconClasses[tone]}`}>
           <Icon size={20} />
@@ -115,19 +111,33 @@ function BackupActionCard({
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold text-[#17324D]">{title}</div>
           <p className="mt-1 text-sm leading-6 text-slate-600">{description}</p>
-          <div className="mt-3 rounded-2xl border border-white/80 bg-white/80 px-3 py-2 text-xs leading-5 text-slate-500">
-            {hint}
-          </div>
         </div>
       </div>
+      <div className="mt-4">{children}</div>
+    </div>
+  )
+}
 
-      {children ? <div className="mt-4">{children}</div> : null}
-
-      {onClick ? (
-        <button type="button" onClick={onClick} disabled={disabled || loading} className={`${documentButtonPrimaryClass} mt-4 w-full`}>
-          {loading ? loadingLabel : actionLabel}
-        </button>
-      ) : null}
+function BackupStep({
+  step,
+  title,
+  description,
+  active,
+}: {
+  step: string
+  title: string
+  description: string
+  active?: boolean
+}) {
+  return (
+    <div
+      className={`rounded-[20px] border px-4 py-3.5 ${
+        active ? "border-[#17324D] bg-[#17324D] text-white" : "border-slate-200 bg-white text-slate-700"
+      }`}
+    >
+      <div className={`text-[11px] font-semibold uppercase tracking-[0.16em] ${active ? "text-slate-200" : "text-slate-400"}`}>{step}</div>
+      <div className="mt-1 text-sm font-semibold">{title}</div>
+      <div className={`mt-1 text-xs leading-5 ${active ? "text-slate-200" : "text-slate-500"}`}>{description}</div>
     </div>
   )
 }
@@ -152,31 +162,30 @@ export default function SetariBackupPage() {
   const [label, setLabel] = useState("")
   const [items, setItems] = useState<BackupItem[]>([])
 
-  const latestAvailableBackup = useMemo(
-    () => items.find((item) => item.fileExists !== false) || null,
-    [items],
-  )
+  const latestAvailableBackup = useMemo(() => items.find((item) => item.fileExists !== false) || null, [items])
   const latestEntries = useMemo(() => getTableCountEntries(latestAvailableBackup), [latestAvailableBackup])
-  const totalStoredSize = useMemo(
-    () => items.reduce((sum, item) => sum + Number(item.fileSizeBytes || 0), 0),
-    [items],
+  const totalStoredSize = useMemo(() => items.reduce((sum, item) => sum + Number(item.fileSizeBytes || 0), 0), [items])
+  const totalLatestRecords = useMemo(() => latestEntries.reduce((sum, [, count]) => sum + count, 0), [latestEntries])
+  const selectedBackup = useMemo(() => items.find((item) => item.id === selectedBackupId) || null, [items, selectedBackupId])
+  const orderedModules = useMemo(() => {
+    return [...availableModules].sort((a, b) => {
+      const indexA = selectiveRestoreRecommendedOrder.indexOf(a.key)
+      const indexB = selectiveRestoreRecommendedOrder.indexOf(b.key)
+      const safeA = indexA === -1 ? selectiveRestoreRecommendedOrder.length : indexA
+      const safeB = indexB === -1 ? selectiveRestoreRecommendedOrder.length : indexB
+      if (safeA !== safeB) return safeA - safeB
+      return b.recordCount - a.recordCount
+    })
+  }, [availableModules])
+  const selectedModuleCount = selectedModules.length
+  const selectedModuleRecords = useMemo(
+    () =>
+      orderedModules
+        .filter((module) => selectedModules.includes(module.key))
+        .reduce((sum, module) => sum + module.recordCount, 0),
+    [orderedModules, selectedModules],
   )
-  const totalLatestRecords = useMemo(
-    () => latestEntries.reduce((sum, [, count]) => sum + count, 0),
-    [latestEntries],
-  )
-  const selectedBackup = useMemo(
-    () => items.find((item) => item.id === selectedBackupId) || null,
-    [items, selectedBackupId],
-  )
-  const selectedCustomerModule = useMemo(
-    () => availableModules.find((module) => module.key === "customers") || null,
-    [availableModules],
-  )
-  const selectedCatalogModule = useMemo(
-    () => availableModules.find((module) => module.key === "catalog") || null,
-    [availableModules],
-  )
+  const existingFilesCount = useMemo(() => items.filter((item) => item.fileExists !== false).length, [items])
 
   async function load() {
     try {
@@ -452,85 +461,96 @@ export default function SetariBackupPage() {
   return (
     <div className="space-y-3">
       <PageHeader
-        badge="configurare"
+        badge="recovery center"
         title="Backup si recuperare date"
-        subtitle="Aici lucrezi cu copiile salvate pe server pentru clientul curent. Pagina este organizata pe scenarii reale: creezi snapshot-uri, restaurezi complet ERP-ul sau recuperezi doar fisierele lipsa."
+        subtitle="Pagina de backup este organizata ca un centru clar de salvare si restaurare: vezi rapid starea, alegi scenariul corect si actionezi fara sa te incurci."
       />
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-4">
-        <DocumentMetric title="Snapshot-uri salvate" value={loading ? "..." : String(items.length)} tone="slate" />
-        <DocumentMetric title="Ultimul backup valid" value={latestAvailableBackup ? fmtDate(latestAvailableBackup.createdAt) : "-"} tone="blue" />
-        <DocumentMetric title="Date in ultimul backup" value={latestAvailableBackup ? totalLatestRecords.toLocaleString("ro-RO") : "-"} tone="emerald" />
+        <DocumentMetric title="Backup-uri in istoric" value={loading ? "..." : String(items.length)} tone="slate" />
+        <DocumentMetric title="Backup-uri valide" value={loading ? "..." : String(existingFilesCount)} tone="blue" />
+        <DocumentMetric title="Ultimul snapshot" value={latestAvailableBackup ? fmtDate(latestAvailableBackup.createdAt) : "-"} tone="emerald" />
         <DocumentMetric title="Spatiu ocupat" value={loading ? "..." : fmtBytes(totalStoredSize)} tone="amber" />
       </div>
 
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
 
-      <section className="rounded-[26px] border border-slate-200 bg-[linear-gradient(135deg,#17324D_0%,#22486D_100%)] p-5 text-white shadow-sm shadow-slate-900/10">
-        <div className="grid gap-4 lg:grid-cols-[1.35fr_1fr]">
-          <div>
-            <div className="inline-flex rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-100">
-              Centru de recuperare
+      <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-[radial-gradient(circle_at_top_left,#EFF7FF_0%,#F7FBFF_32%,#FFFFFF_72%)] shadow-sm shadow-slate-900/[0.04]">
+        <div className="grid gap-0 xl:grid-cols-[1.3fr_0.9fr]">
+          <div className="p-5 md:p-6">
+            <div className="inline-flex rounded-full border border-sky-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-700">
+              Stare protectie date
             </div>
-            <h2 className="mt-3 text-[24px] font-semibold tracking-[-0.02em]">Daca s-a pierdut ceva, de aici incepi</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-200">
-              Pentru date ERP disparute folosesti restore complet dintr-un backup de pe server. Pentru documente sau atasamente lipsa folosesti recuperarea fisierelor.
-              Daca ai un ZIP din alta sursa, il poti incarca si restaura manual.
+            <h2 className="mt-3 text-[26px] font-semibold tracking-[-0.02em] text-[#17324D]">Backup-ul trebuie sa fie simplu de folosit in momentul critic</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+              Ai toate scenariile importante in aceeasi pagina: restore complet din server, recuperare doar pentru fisiere lipsa, restore selectiv pe module si creare rapida de snapshot inainte de schimbari mari.
             </p>
-            <div className="mt-4 grid gap-2 sm:grid-cols-3">
-              <div className="rounded-2xl border border-white/10 bg-white/10 px-3 py-3">
-                <div className="text-xs uppercase tracking-[0.16em] text-slate-300">Caz 1</div>
-                <div className="mt-1 text-sm font-semibold">Au disparut date din ERP</div>
-                <div className="mt-1 text-xs leading-5 text-slate-200">Folosesti restore complet dintr-un backup valid de pe server.</div>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/10 px-3 py-3">
-                <div className="text-xs uppercase tracking-[0.16em] text-slate-300">Caz 2</div>
-                <div className="mt-1 text-sm font-semibold">Lipsesc fisiere sau atasamente</div>
-                <div className="mt-1 text-xs leading-5 text-slate-200">Folosesti recuperarea fisierelor lipsa fara sa suprascrii ERP-ul.</div>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/10 px-3 py-3">
-                <div className="text-xs uppercase tracking-[0.16em] text-slate-300">Caz 3</div>
-                <div className="mt-1 text-sm font-semibold">Ai un ZIP local</div>
-                <div className="mt-1 text-xs leading-5 text-slate-200">Incarci arhiva si rulezi restore-ul controlat din ea.</div>
-              </div>
+
+            <div className="mt-5 grid gap-3 md:grid-cols-3">
+              <BackupStep
+                step="Pas 1"
+                title="Verifici sursa buna"
+                description="Alegi backup-ul potrivit si vezi imediat daca are continutul pe care vrei sa-l readuci."
+                active={!selectedBackup}
+              />
+              <BackupStep
+                step="Pas 2"
+                title="Alegi tipul de recuperare"
+                description="Full restore, restore selectiv sau doar fisiere lipsa, in functie de incident."
+                active={Boolean(selectedBackup)}
+              />
+              <BackupStep
+                step="Pas 3"
+                title="Sistemul isi face plasa de siguranta"
+                description="Inainte de restore se creeaza automat un backup de siguranta pentru revenire."
+                active={false}
+              />
             </div>
           </div>
 
-          <div className="rounded-[22px] border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
+          <div className="border-t border-slate-200 bg-[#17324D] p-5 text-white xl:border-l xl:border-t-0">
             <div className="flex items-start gap-3">
-              <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
-                <ShieldCheck size={20} />
+              <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-white">
+                <ShieldCheck size={22} />
               </div>
               <div>
                 <div className="text-sm font-semibold">Ultimul backup disponibil pe server</div>
                 <div className="mt-1 text-sm text-slate-200">
-                  {latestAvailableBackup ? latestAvailableBackup.fileName : "Nu exista inca un backup valid pentru acest client."}
+                  {latestAvailableBackup ? latestAvailableBackup.label || latestAvailableBackup.fileName : "Nu exista inca un backup valid pentru acest client."}
                 </div>
               </div>
             </div>
 
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <div className="rounded-2xl border border-white/10 bg-white/10 px-3 py-3">
-                <div className="text-xs uppercase tracking-[0.16em] text-slate-300">Creat la</div>
+            <div className="mt-5 grid gap-2 sm:grid-cols-2">
+              <div className="rounded-[18px] border border-white/10 bg-white/10 px-3 py-3">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-slate-300">Creat la</div>
                 <div className="mt-1 text-sm font-semibold">{latestAvailableBackup ? fmtDate(latestAvailableBackup.createdAt) : "-"}</div>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-white/10 px-3 py-3">
-                <div className="text-xs uppercase tracking-[0.16em] text-slate-300">Marime</div>
+              <div className="rounded-[18px] border border-white/10 bg-white/10 px-3 py-3">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-slate-300">Marime</div>
                 <div className="mt-1 text-sm font-semibold">{latestAvailableBackup ? fmtBytes(latestAvailableBackup.fileSizeBytes) : "-"}</div>
+              </div>
+              <div className="rounded-[18px] border border-white/10 bg-white/10 px-3 py-3">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-slate-300">Continut estimat</div>
+                <div className="mt-1 text-sm font-semibold">{latestAvailableBackup ? totalLatestRecords.toLocaleString("ro-RO") : "-"}</div>
+              </div>
+              <div className="rounded-[18px] border border-white/10 bg-white/10 px-3 py-3">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-slate-300">Status</div>
+                <div className="mt-1 text-sm font-semibold">{latestAvailableBackup ? "Pregatit pentru recovery" : "Nu exista sursa valida"}</div>
               </div>
             </div>
 
-            <div className="mt-4 text-xs leading-5 text-slate-200">
-              Restore-ul complet creeaza automat un backup de siguranta inainte sa suprascrie datele curente.
+            <div className="mt-4 rounded-[18px] border border-emerald-300/30 bg-emerald-400/10 px-3.5 py-3 text-sm leading-6 text-emerald-50">
+              Restore-ul complet si restore-ul selectiv creeaza automat un backup de siguranta inainte sa modifice datele curente.
             </div>
           </div>
         </div>
       </section>
 
       <DocumentSection
-        title="Actiuni rapide de recuperare"
-        description="Foloseste actiunea potrivita pentru problema concreta, ca sa nu suprascrii inutil date bune."
+        title="Recuperare rapida"
+        description="Alege direct scenariul potrivit fara sa intri in istoricul complet."
         actions={
           <button type="button" onClick={() => void load()} disabled={loading} className={documentButtonSecondaryClass}>
             <RefreshCcw size={16} className="mr-2" />
@@ -538,45 +558,55 @@ export default function SetariBackupPage() {
           </button>
         }
       >
-        <div className="grid gap-3 lg:grid-cols-3">
+        <div className="grid gap-3 xl:grid-cols-3">
           <BackupActionCard
-            title="Restore complet din ultimul backup de pe server"
-            description="Refaci datele ERP ale clientului din cel mai recent snapshot valid pastrat pe server."
-            hint="Foloseste aceasta optiune daca au disparut clienti, produse, utilizatori, configurari sau documente din ERP."
+            title="Restore complet din server"
+            description="Refaci tot ERP-ul clientului din ultimul backup valid salvat pe server."
             tone="emerald"
             icon={HardDriveDownload}
-            actionLabel="Restore complet din server"
-            loadingLabel="Se restaureaza..."
-            disabled={!latestAvailableBackup}
-            loading={restoringLatest}
-            onClick={() => void handleRestoreLatest()}
-          />
+          >
+            <div className="rounded-[18px] border border-white/80 bg-white/80 px-3 py-2.5 text-xs leading-5 text-slate-500">
+              Recomandat cand lipsesc clienti, produse, utilizatori, configurari sau documente din ERP.
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleRestoreLatest()}
+              disabled={!latestAvailableBackup || restoringLatest}
+              className={`${documentButtonPrimaryClass} mt-4 w-full`}
+            >
+              {restoringLatest ? "Se restaureaza..." : "Restore complet din ultimul backup"}
+            </button>
+          </BackupActionCard>
 
           <BackupActionCard
-            title="Recupereaza doar fisierele lipsa"
-            description="Aduce inapoi doar fisierele de upload lipsa, fara sa suprascrie datele existente din ERP."
-            hint="Foloseste aceasta optiune cand lipsesc atasamente, imagini sau fisiere, dar datele din ERP sunt in regula."
+            title="Recuperare doar fisiere"
+            description="Aduce inapoi doar upload-urile lipsa fara sa atinga datele existente din ERP."
             tone="sky"
             icon={RefreshCcw}
-            actionLabel="Recupereaza fisierele lipsa"
-            loadingLabel="Se recupereaza..."
-            disabled={!latestAvailableBackup}
-            loading={recoveringLatestFiles}
-            onClick={() => void handleRecoverLatestFiles()}
-          />
+          >
+            <div className="rounded-[18px] border border-white/80 bg-white/80 px-3 py-2.5 text-xs leading-5 text-slate-500">
+              Recomandat pentru atasamente, imagini, PDF-uri sau fisiere care lipsesc din sistem, dar datele din ERP sunt bune.
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleRecoverLatestFiles()}
+              disabled={!latestAvailableBackup || recoveringLatestFiles}
+              className={`${documentButtonPrimaryClass} mt-4 w-full`}
+            >
+              {recoveringLatestFiles ? "Se recupereaza..." : "Recupereaza fisierele lipsa"}
+            </button>
+          </BackupActionCard>
 
           <BackupActionCard
-            title="Restore dintr-un ZIP incarcat manual"
-            description="Incarci un backup local si il restaurezi daca nu vrei sa folosesti direct ultimul snapshot de pe server."
-            hint="Util daca ai exportat backup-ul in afara sistemului sau ai primit arhiva de la suport."
+            title="Restore din ZIP incarcat"
+            description="Incarci manual o arhiva de backup si rulezi restaurarea din ea."
             tone="amber"
-            icon={FileUp}
-            actionLabel="Alege ZIP pentru restore"
-            loadingLabel="Se incarca..."
-            disabled={creating || uploadRestoring}
-            loading={uploadRestoring}
+            icon={UploadCloud}
           >
-            <label className="block">
+            <div className="rounded-[18px] border border-white/80 bg-white/80 px-3 py-2.5 text-xs leading-5 text-slate-500">
+              Util cand backup-ul nu vine din istoricul acestui tenant, ci dintr-o arhiva locala sau din suport.
+            </div>
+            <label className="mt-4 block">
               <input
                 type="file"
                 accept=".zip,application/zip"
@@ -584,13 +614,11 @@ export default function SetariBackupPage() {
                 disabled={uploadRestoring || creating}
                 onChange={(e) => {
                   const file = e.target.files?.[0]
-                  if (file) {
-                    void handleUploadRestore(file)
-                  }
+                  if (file) void handleUploadRestore(file)
                   e.currentTarget.value = ""
                 }}
               />
-              <span className={`${documentButtonPrimaryClass} mt-4 flex w-full cursor-pointer ${uploadRestoring || creating ? "pointer-events-none" : ""}`}>
+              <span className={`${documentButtonPrimaryClass} flex w-full cursor-pointer ${uploadRestoring || creating ? "pointer-events-none" : ""}`}>
                 {uploadRestoring ? "Se incarca..." : "Alege ZIP pentru restore"}
               </span>
             </label>
@@ -599,173 +627,223 @@ export default function SetariBackupPage() {
       </DocumentSection>
 
       <DocumentSection
-        title="Restore selectiv din backup"
-        description="Alegi un backup de pe server si bifezi exact modulele pe care vrei sa le aduci inapoi, fara full restore al intregului ERP."
+        title="Restore selectiv ghidat"
+        description="Flow in 3 pasi pentru cazurile in care vrei sa readuci doar anumite module dintr-un backup."
       >
-        <div className="grid gap-3 xl:grid-cols-[280px_1fr]">
+        <div className="grid gap-3 xl:grid-cols-[320px_1fr]">
           <div className="space-y-3">
-            <div>
-              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Backup sursa</div>
+            <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Pas 1</div>
+              <div className="mt-1 text-sm font-semibold text-[#17324D]">Alege backup-ul sursa</div>
               <select
                 value={selectedBackupId}
                 onChange={(e) => setSelectedBackupId(e.target.value)}
-                className={`${documentInputClass} mt-2`}
+                className={`${documentInputClass} mt-3`}
               >
                 <option value="">Selecteaza backup-ul</option>
                 {items
                   .filter((item) => item.fileExists !== false)
                   .map((item) => (
                     <option key={item.id} value={item.id}>
-                      {fmtDate(item.createdAt)} · {item.label || item.fileName}
+                      {fmtDate(item.createdAt)} | {item.label || item.fileName}
                     </option>
                   ))}
               </select>
             </div>
 
-            <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-600">
-              Restore-ul selectiv ruleaza in mod sigur pentru cazurile in care ai pierdut doar anumite zone din ERP, de exemplu clienti, furnizori sau produse dupa un deploy problematic.
+            <div className="rounded-[22px] border border-slate-200 bg-white p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Pas 2</div>
+              <div className="mt-1 text-sm font-semibold text-[#17324D]">Verifici daca backup-ul chiar te ajuta</div>
+              {selectedBackup ? (
+                <div className="mt-3 space-y-2">
+                  <div className="rounded-[16px] border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800">
+                    Backup selectat: <span className="font-semibold">{selectedBackup.label || selectedBackup.fileName}</span>
+                  </div>
+                  <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-600">
+                    Daca vezi valori `0` pe modulele care te intereseaza, backup-ul ales este deja de dupa incident si nu are ce sa readuca.
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-3 rounded-[16px] border border-dashed border-slate-300 px-3 py-3 text-sm text-slate-500">
+                  Selecteaza un backup ca sa vezi modulele disponibile.
+                </div>
+              )}
             </div>
 
-            {selectedBackup ? (
-              <div className="rounded-[18px] border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-sm text-emerald-800">
-                <div className="font-semibold">Preview backup selectat</div>
-                <div className="mt-1">Clienti in backup: {selectedCustomerModule?.recordCount?.toLocaleString("ro-RO") || 0}</div>
-                <div className="mt-1">Produse si retete in backup: {selectedCatalogModule?.recordCount?.toLocaleString("ro-RO") || 0}</div>
-                <div className="mt-2 text-xs leading-5 text-emerald-700">
-                  Daca aici vezi `0` la clienti, backup-ul ales este deja de dupa incident si nu are ce sa readuca inapoi.
-                </div>
+            <div className="rounded-[22px] border border-slate-200 bg-[#17324D] p-4 text-white">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-300">Pas 3</div>
+              <div className="mt-1 text-sm font-semibold">Ruleaza restore-ul selectiv</div>
+              <div className="mt-2 text-sm text-slate-200">
+                {selectedModuleCount
+                  ? `${selectedModuleCount} module selectate, aproximativ ${selectedModuleRecords.toLocaleString("ro-RO")} inregistrari.`
+                  : "Nu ai selectat inca niciun modul."}
               </div>
-            ) : null}
-
-            <button
-              type="button"
-              onClick={() => void handleRestoreSelectedModules()}
-              disabled={!selectedBackup || !selectedModules.length || moduleLoading || moduleRestoreLoading}
-              className={`${documentButtonPrimaryClass} w-full`}
-            >
-              {moduleRestoreLoading ? "Se restaureaza modulele..." : "Restore modulele selectate"}
-            </button>
+              <button
+                type="button"
+                onClick={() => void handleRestoreSelectedModules()}
+                disabled={!selectedBackup || !selectedModules.length || moduleLoading || moduleRestoreLoading}
+                className={`${documentButtonPrimaryClass} mt-4 w-full bg-white text-[#17324D] hover:bg-slate-100`}
+              >
+                {moduleRestoreLoading ? "Se restaureaza modulele..." : "Restore modulele selectate"}
+              </button>
+            </div>
           </div>
 
           <div className="space-y-3">
             {moduleLoading ? (
-              <div className="rounded-[18px] border border-dashed border-slate-300 px-4 py-8 text-sm text-slate-500">
+              <div className="rounded-[22px] border border-dashed border-slate-300 px-4 py-10 text-sm text-slate-500">
                 Se incarca modulele disponibile din backup...
               </div>
             ) : !selectedBackup ? (
-              <div className="rounded-[18px] border border-dashed border-slate-300 px-4 py-8 text-sm text-slate-500">
-                Alege mai intai un backup din lista.
+              <div className="rounded-[22px] border border-dashed border-slate-300 px-4 py-10 text-sm text-slate-500">
+                Alege mai intai un backup din lista din stanga.
               </div>
-            ) : !availableModules.length ? (
-              <div className="rounded-[18px] border border-dashed border-slate-300 px-4 py-8 text-sm text-slate-500">
+            ) : !orderedModules.length ? (
+              <div className="rounded-[22px] border border-dashed border-slate-300 px-4 py-10 text-sm text-slate-500">
                 Backup-ul ales nu are module disponibile pentru restore selectiv.
               </div>
             ) : (
-              <div className="grid gap-3 md:grid-cols-2">
-                {availableModules.map((module) => {
-                  const isSelected = selectedModules.includes(module.key)
-                  return (
-                    <label
-                      key={module.key}
-                      className={`cursor-pointer rounded-[20px] border p-4 shadow-sm shadow-slate-900/[0.03] ${
-                        isSelected ? "border-emerald-200 bg-emerald-50/60" : "border-slate-200 bg-white"
-                      }`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <input
-                          type="checkbox"
-                          className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                          checked={isSelected}
-                          onChange={(e) => {
-                            setSelectedModules((current) =>
-                              e.target.checked ? [...current, module.key] : current.filter((item) => item !== module.key),
-                            )
-                          }}
-                        />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="text-sm font-semibold text-[#17324D]">{module.label}</div>
-                            <div className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                              {module.recordCount.toLocaleString("ro-RO")}
+              <>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {orderedModules.map((module) => {
+                    const isSelected = selectedModules.includes(module.key)
+                    return (
+                      <label
+                        key={module.key}
+                        className={`cursor-pointer rounded-[22px] border p-4 shadow-sm shadow-slate-900/[0.03] ${
+                          isSelected ? "border-emerald-200 bg-emerald-50/70" : "border-slate-200 bg-white"
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                            checked={isSelected}
+                            onChange={(e) => {
+                              setSelectedModules((current) =>
+                                e.target.checked ? [...current, module.key] : current.filter((item) => item !== module.key),
+                              )
+                            }}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="text-sm font-semibold text-[#17324D]">{module.label}</div>
+                                <div className="mt-1 text-xs leading-5 text-slate-500">{module.description}</div>
+                              </div>
+                              <div
+                                className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] ${
+                                  isSelected
+                                    ? "border-emerald-200 bg-white text-emerald-700"
+                                    : "border-slate-200 bg-slate-50 text-slate-500"
+                                }`}
+                              >
+                                {module.recordCount.toLocaleString("ro-RO")}
+                              </div>
                             </div>
+
+                            {module.breakdown?.length ? (
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {module.breakdown
+                                  .filter((entry) => entry.count > 0)
+                                  .slice(0, 5)
+                                  .map((entry) => (
+                                    <span
+                                      key={entry.key}
+                                      className="inline-flex rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600"
+                                    >
+                                      {prettifyTableKey(entry.key)}: {entry.count.toLocaleString("ro-RO")}
+                                    </span>
+                                  ))}
+                              </div>
+                            ) : null}
                           </div>
-                          <p className="mt-1 text-sm leading-6 text-slate-600">{module.description}</p>
-                          {module.breakdown?.length ? (
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              {module.breakdown
-                                .filter((entry) => entry.count > 0)
-                                .slice(0, 4)
-                                .map((entry) => (
-                                  <span key={entry.key} className="inline-flex rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600">
-                                    {prettifyTableKey(entry.key)}: {entry.count.toLocaleString("ro-RO")}
-                                  </span>
-                                ))}
-                            </div>
-                          ) : null}
                         </div>
+                      </label>
+                    )
+                  })}
+                </div>
+
+                <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-200 text-slate-700">
+                      <Layers3 size={18} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-semibold text-[#17324D]">Rezumat selectie</div>
+                      <div className="mt-1 text-sm text-slate-600">
+                        {selectedModuleCount
+                          ? `Ai selectat ${selectedModuleCount} module. Totalul estimat este de ${selectedModuleRecords.toLocaleString("ro-RO")} inregistrari.`
+                          : "Bifeaza modulele pe care vrei sa le readuci din backup."}
                       </div>
-                    </label>
-                  )
-                })}
-              </div>
+                    </div>
+                  </div>
+                </div>
+              </>
             )}
           </div>
         </div>
       </DocumentSection>
 
-      <div className="grid gap-3 xl:grid-cols-[1.05fr_1.2fr]">
+      <div className="grid gap-3 xl:grid-cols-[0.95fr_1.25fr]">
         <DocumentSection
           title="Creeaza backup nou"
-          description="Salvezi manual un snapshot complet al clientului curent pe server, ca punct sigur de revenire inainte de update-uri sau modificari mari."
+          description="Snapshot manual rapid inainte de update-uri, importuri, schimbari de stoc sau alte operatiuni sensibile."
         >
-          <div className="grid gap-3 lg:grid-cols-[1.2fr_auto]">
-            <div>
-              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Eticheta optionala</div>
-              <input
-                value={label}
-                onChange={(e) => setLabel(e.target.value)}
-                placeholder="Ex: inainte-update, final-luna, inainte-import-clienti"
-                className={`${documentInputClass} mt-2`}
-              />
-              <div className="mt-2 text-xs leading-5 text-slate-500">
-                Backup-ul este salvat in istoricul clientului si poate fi restaurat sau descarcat ulterior.
-              </div>
+          <div className="rounded-[24px] border border-slate-200 bg-[linear-gradient(180deg,#FFFFFF_0%,#F8FAFC_100%)] p-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Eticheta optionala</div>
+            <input
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="Ex: inainte-update, final-luna, import-clienti"
+              className={`${documentInputClass} mt-3`}
+            />
+            <div className="mt-2 text-xs leading-5 text-slate-500">
+              Eticheta te ajuta sa gasesti rapid snapshot-ul potrivit in istoric cand trebuie sa revii la un moment clar.
             </div>
-            <button type="button" onClick={() => void handleCreate()} disabled={creating} className={`${documentButtonPrimaryClass} h-11 px-5`}>
+            <button type="button" onClick={() => void handleCreate()} disabled={creating} className={`${documentButtonPrimaryClass} mt-4 w-full`}>
               <Archive size={16} className="mr-2" />
-              {creating ? "Se creeaza..." : "Creeaza backup"}
+              {creating ? "Se creeaza..." : "Creeaza backup manual"}
             </button>
           </div>
         </DocumentSection>
 
         <DocumentSection
           title="Ce contine ultimul backup"
-          description="Vedere rapida a principalelor colectii salvate in snapshot-ul cel mai recent disponibil."
+          description="Previzualizare rapida a celor mai importante colectii salvate in ultimul snapshot valid."
         >
           {latestAvailableBackup ? (
             <div className="space-y-3">
-              <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-3.5 py-3">
-                <div className="text-sm font-semibold text-[#17324D]">{latestAvailableBackup.label || latestAvailableBackup.fileName}</div>
-                <div className="mt-1 text-xs text-slate-500">
-                  Creat la {fmtDate(latestAvailableBackup.createdAt)} · {fmtBytes(latestAvailableBackup.fileSizeBytes)}
+              <div className="rounded-[22px] border border-emerald-200 bg-emerald-50/70 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-[#17324D]">{latestAvailableBackup.label || latestAvailableBackup.fileName}</div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      Creat la {fmtDate(latestAvailableBackup.createdAt)} | {fmtBytes(latestAvailableBackup.fileSizeBytes)}
+                    </div>
+                  </div>
+                  <div className="inline-flex rounded-full border border-emerald-200 bg-white px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
+                    Ultimul valid
+                  </div>
                 </div>
               </div>
-              <div className="grid gap-2 sm:grid-cols-2">
+
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                 {latestEntries.slice(0, 8).map(([key, value]) => (
-                  <div key={key} className="rounded-[16px] border border-slate-200 bg-white px-3 py-3">
-                    <div className="text-xs uppercase tracking-[0.14em] text-slate-400">{prettifyTableKey(key)}</div>
+                  <div key={key} className="rounded-[18px] border border-slate-200 bg-white px-3 py-3">
+                    <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">{prettifyTableKey(key)}</div>
                     <div className="mt-1 text-base font-semibold text-[#17324D]">{value.toLocaleString("ro-RO")}</div>
                   </div>
                 ))}
                 {!latestEntries.length ? (
-                  <div className="rounded-[16px] border border-dashed border-slate-300 px-3 py-4 text-sm text-slate-500 sm:col-span-2">
+                  <div className="rounded-[18px] border border-dashed border-slate-300 px-3 py-4 text-sm text-slate-500 sm:col-span-2 xl:col-span-4">
                     Snapshot-ul nu are statistici de continut disponibile.
                   </div>
                 ) : null}
               </div>
             </div>
           ) : (
-            <div className="rounded-[18px] border border-dashed border-slate-300 px-3.5 py-5 text-sm text-slate-500">
+            <div className="rounded-[22px] border border-dashed border-slate-300 px-4 py-8 text-sm text-slate-500">
               Nu exista inca un backup valid din care sa putem afisa continutul.
             </div>
           )}
@@ -773,8 +851,8 @@ export default function SetariBackupPage() {
       </div>
 
       <DocumentSection
-        title="Istoric backup-uri pe server"
-        description="Fiecare snapshot poate fi descarcat, restaurat complet sau folosit doar pentru recuperarea fisierelor lipsa."
+        title="Istoric backup-uri"
+        description="Toate snapshot-urile disponibile pentru acest client, cu status clar si actiuni rapide pe fiecare."
       >
         <div className="space-y-3">
           {items.map((item, index) => {
@@ -784,7 +862,7 @@ export default function SetariBackupPage() {
             return (
               <div
                 key={item.id}
-                className={`rounded-[22px] border p-4 shadow-sm shadow-slate-900/[0.03] ${
+                className={`rounded-[24px] border p-4 shadow-sm shadow-slate-900/[0.03] ${
                   isLatest ? "border-emerald-200 bg-[linear-gradient(180deg,#FFFFFF_0%,#F5FBF6_100%)]" : "border-slate-200 bg-white"
                 }`}
               >
@@ -801,23 +879,29 @@ export default function SetariBackupPage() {
                         <span className="inline-flex rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-rose-700">
                           Fisier lipsa
                         </span>
-                      ) : null}
+                      ) : (
+                        <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600">
+                          Disponibil pe server
+                        </span>
+                      )}
                     </div>
 
-                    <div className="mt-1 text-sm text-slate-500">{item.fileName}</div>
+                    <div className="mt-1 break-all text-sm text-slate-500">{item.fileName}</div>
 
-                    <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                    <div className="mt-3 grid gap-2 md:grid-cols-3">
+                      <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-2.5">
                         <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">Creat la</div>
                         <div className="mt-1 text-sm font-semibold text-[#17324D]">{fmtDate(item.createdAt)}</div>
                       </div>
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                      <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-2.5">
                         <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">Marime</div>
                         <div className="mt-1 text-sm font-semibold text-[#17324D]">{fmtBytes(item.fileSizeBytes)}</div>
                       </div>
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-                        <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">Status</div>
-                        <div className="mt-1 text-sm font-semibold text-[#17324D]">{item.fileExists === false ? "Fisier indisponibil" : "Disponibil pe server"}</div>
+                      <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-2.5">
+                        <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">Preview continut</div>
+                        <div className="mt-1 text-sm font-semibold text-[#17324D]">
+                          {contentPreview.length ? `${contentPreview.length} categorii` : "Fara preview"}
+                        </div>
                       </div>
                     </div>
 
@@ -834,7 +918,7 @@ export default function SetariBackupPage() {
                     </div>
                   </div>
 
-                  <div className="grid gap-2 sm:grid-cols-2 xl:w-[320px]">
+                  <div className="grid gap-2 sm:grid-cols-2 xl:w-[340px]">
                     <button
                       type="button"
                       onClick={() => void handleDownload(item)}
@@ -844,6 +928,7 @@ export default function SetariBackupPage() {
                       <Download size={15} className="mr-2" />
                       {downloadingId === item.id ? "Se descarca..." : "Descarca"}
                     </button>
+
                     <button
                       type="button"
                       onClick={() => void handleRecoverFiles(item)}
@@ -853,6 +938,7 @@ export default function SetariBackupPage() {
                       <RefreshCcw size={15} className="mr-2" />
                       {recoveringFilesId === item.id ? "Se recupereaza..." : "Fisiere lipsa"}
                     </button>
+
                     <button
                       type="button"
                       onClick={() => void handleRestore(item)}
@@ -862,6 +948,7 @@ export default function SetariBackupPage() {
                       <RotateCcw size={15} className="mr-2" />
                       {restoringId === item.id ? "Se restaureaza..." : "Restore complet"}
                     </button>
+
                     <button
                       type="button"
                       onClick={() => void handleDelete(item)}
@@ -878,10 +965,53 @@ export default function SetariBackupPage() {
           })}
 
           {!items.length ? (
-            <div className="rounded-[20px] border border-dashed border-slate-300 px-4 py-10 text-center text-sm text-slate-500">
+            <div className="rounded-[22px] border border-dashed border-slate-300 px-4 py-10 text-center text-sm text-slate-500">
               {loading ? "Se incarca backup-urile..." : "Nu exista inca backup-uri pentru acest client."}
             </div>
           ) : null}
+        </div>
+      </DocumentSection>
+
+      <DocumentSection
+        title="Verificare rapida"
+        description="Rezumat operational pentru utilizatorii care vor sa stie imediat daca pot recupera datele."
+      >
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-[22px] border border-slate-200 bg-white p-4">
+            <div className="flex items-start gap-3">
+              <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+                <CheckCircle2 size={18} />
+              </div>
+              <div>
+                <div className="text-sm font-semibold text-[#17324D]">Restore complet</div>
+                <div className="mt-1 text-sm text-slate-600">Pentru date ERP disparute dupa deploy, import sau eroare operationala.</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-[22px] border border-slate-200 bg-white p-4">
+            <div className="flex items-start gap-3">
+              <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-sky-100 text-sky-700">
+                <FileUp size={18} />
+              </div>
+              <div>
+                <div className="text-sm font-semibold text-[#17324D]">Restore selectiv</div>
+                <div className="mt-1 text-sm text-slate-600">Pentru clienti, furnizori, produse sau alte module pierdute punctual.</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-[22px] border border-slate-200 bg-white p-4">
+            <div className="flex items-start gap-3">
+              <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
+                <UploadCloud size={18} />
+              </div>
+              <div>
+                <div className="text-sm font-semibold text-[#17324D]">Recuperare fisiere</div>
+                <div className="mt-1 text-sm text-slate-600">Pentru upload-uri si atasamente lipsa fara sa rescrii restul datelor.</div>
+              </div>
+            </div>
+          </div>
         </div>
       </DocumentSection>
     </div>
