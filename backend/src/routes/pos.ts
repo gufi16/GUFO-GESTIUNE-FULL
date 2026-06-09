@@ -2189,33 +2189,42 @@ async function getMarketplaceVisibilityDebug(order: MarketplaceOrderLike | null 
   };
 }
 
-export async function resolvePosMarketplaceOrder(auth: NonNullable<PosAuthRequest["auth"]>, inputOrderId: string, include: Record<string, unknown> = {}) {
+export async function resolvePosMarketplaceOrder<TInclude extends Prisma.ExternalOrderInclude>(
+  auth: NonNullable<PosAuthRequest["auth"]>,
+  inputOrderId: string,
+  include?: TInclude
+): Promise<Prisma.ExternalOrderGetPayload<{ include: TInclude & Prisma.ExternalOrderInclude }> | null> {
+  const mergedInclude = {
+    location: {
+      select: { id: true, name: true, code: true },
+    },
+    integration: {
+      select: {
+        id: true,
+        settingsJson: true,
+        locationId: true,
+      },
+    },
+    saleDraft: {
+      select: { id: true, status: true, total: true, subtotal: true, updatedAt: true },
+    },
+    kitchenTicket: {
+      select: { id: true, status: true, displayNumber: true, readyAt: true, updatedAt: true },
+    },
+    ...(include || {}),
+  } as TInclude & Prisma.ExternalOrderInclude;
+
   const order = await prisma.externalOrder.findFirst({
     where: {
       tenantId: auth.tenantId,
       OR: [{ id: inputOrderId }, { externalOrderId: inputOrderId }],
     },
-    include: {
-      location: {
-        select: { id: true, name: true, code: true },
-      },
-      integration: {
-        select: {
-          id: true,
-          settingsJson: true,
-          locationId: true,
-        },
-      },
-      saleDraft: {
-        select: { id: true, status: true, total: true, subtotal: true, updatedAt: true },
-      },
-      kitchenTicket: {
-        select: { id: true, status: true, displayNumber: true, readyAt: true, updatedAt: true },
-      },
-    },
+    include: mergedInclude,
   });
   if (!order) return null;
-  return (await isMarketplaceOrderVisibleToTerminal(order, auth)) ? order : null;
+  return (await isMarketplaceOrderVisibleToTerminal(order, auth))
+    ? (order as Prisma.ExternalOrderGetPayload<{ include: TInclude & Prisma.ExternalOrderInclude }>)
+    : null;
 }
 
 export async function createPosMarketplaceHistory(
