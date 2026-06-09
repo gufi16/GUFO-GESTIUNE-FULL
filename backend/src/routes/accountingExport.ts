@@ -101,6 +101,62 @@ type SalesInvoiceDetailRow = {
   CONT: string
   ACTIVITATE: string
 }
+type PurchaseReceiptHeaderRow = {
+  tip: string
+  nr_nir: string
+  nr_intrare: string
+  cod: string
+  denumire: string
+  tvai: number
+  data: number | string
+  scadent: number | string
+  baza_tva: number
+  transp_lei: number
+  tva: number
+  total: number
+  neachitat: number
+  data_doc: string
+  inf_suplm: string
+  den_agent: string
+  id_solicit: string
+}
+type PurchaseReceiptDetailRow = {
+  den_tip: string
+  gestiune: string
+  den_gest: string
+  GESTIUNE: string
+  denumire: string
+  cod: string
+  um: string
+  tva_art: number
+  cantitate: number
+  pret_unitar: number
+  valoare: number
+  transp_lei: number
+  total: number
+  tva_ded: number
+  tip_ded: string
+  cont: string
+  pret_vanz: number
+  adaos: number
+  adaos_proc: number
+  text_supl: string
+  categorie: string
+  ID_U: string
+  ID_INTRARE: string
+  PTVA_VANZ: number
+  IS_FACTURAT: number
+  DISCOUNT: number
+  ID_BC: number
+  plan: string
+  SECTOR: string
+  SURSA: string
+  CAPITOL: string
+  ARTICOL: string
+  LOT: string
+  COD_TAXA: string
+  ID_SGR: number
+}
 type AccountingConfigLike = {
   articleCodeSource?: string | null
   managementAnalytic?: string | null
@@ -970,6 +1026,78 @@ function buildSalesInvoiceProductRow(
     TEXT_SUPL: "",
     CONT: String(stockType?.salesAccount || config.salesAccount || ""),
     ACTIVITATE: "",
+  }
+}
+
+function buildPurchaseReceiptDetailRow(
+  receipt: PurchaseReceiptLike,
+  line: AccountingExportLineLike,
+  stockTypes: AccountingStockTypeLike[],
+  stockType: AccountingStockTypeLike | null | undefined,
+  config: AccountingConfigLike
+): PurchaseReceiptDetailRow {
+  const lineManagement = String(receipt.location?.code || receipt.location?.name || "")
+  return {
+    den_tip: sagaPurchaseReceiptLineType(line.product, stockTypes, config),
+    gestiune: lineManagement,
+    den_gest: lineManagement,
+    GESTIUNE: lineManagement,
+    denumire: String(line.product?.name || ""),
+    cod: String(sagaArticleCodeForProduct(line.product, config)),
+    um: String(line.product?.uom?.code || "BUC"),
+    tva_art: Number(line.vatRateValue || 0),
+    cantitate: Number(line.stockQty || line.qty || 0),
+    pret_unitar: Number(line.unitCostNetRon || 0),
+    valoare: unitAmount(line.lineNetRon, line.stockQty || line.qty),
+    transp_lei: 0,
+    total: unitAmount(line.lineGrossRon, line.stockQty || line.qty),
+    tva_ded: unitAmount(line.lineVatRon, line.stockQty || line.qty),
+    tip_ded: "N50",
+    cont: String(stockType?.inventoryAccount || config.inventoryAccount || ""),
+    pret_vanz: Number(line.product?.price || 0),
+    adaos: 0,
+    adaos_proc: 0,
+    text_supl: "",
+    categorie: "",
+    ID_U: "",
+    ID_INTRARE: "",
+    PTVA_VANZ: 0,
+    IS_FACTURAT: 0,
+    DISCOUNT: 0,
+    ID_BC: 0,
+    plan: "",
+    SECTOR: "",
+    SURSA: "",
+    CAPITOL: "",
+    ARTICOL: "",
+    LOT: "",
+    COD_TAXA: "",
+    ID_SGR: 0,
+  }
+}
+
+function buildPurchaseReceiptHeaderRow(
+  receipt: PurchaseReceiptLike,
+  sgrTotalRon: number
+): PurchaseReceiptHeaderRow {
+  return {
+    tip: "R",
+    nr_nir: extractSagaNumber(receipt.docNo || ""),
+    nr_intrare: extractSagaNumber(receipt.spvInvoiceNo || receipt.docNo || ""),
+    cod: String(receipt.supplierCode || receipt.supplier?.code || ""),
+    denumire: String(receipt.supplierName || receipt.supplier?.name || ""),
+    tvai: 0,
+    data: excelSerialDate(receipt.docDate),
+    scadent: receipt.docDate ? excelSerialDate(receipt.docDate) : "",
+    baza_tva: Number(receipt.totalNetRon || 0) + sgrTotalRon,
+    transp_lei: 0,
+    tva: Number(receipt.totalVatRon || 0),
+    total: Number(receipt.totalGrossRon || 0) + sgrTotalRon,
+    neachitat: Number(receipt.totalGrossRon || 0) + sgrTotalRon,
+    data_doc: "",
+    inf_suplm: "",
+    den_agent: "",
+    id_solicit: "",
   }
 }
 
@@ -2482,45 +2610,8 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         name: "IntrariDetalii",
         rows: receipts.flatMap((receipt) =>
           receipt.items.flatMap((line) => {
-            const lineType = sagaPurchaseReceiptLineType(line.product, stockTypes, config)
-            const lineManagement = receipt.location?.code || receipt.location?.name || ""
-            const productRow = {
-              den_tip: lineType,
-              gestiune: lineManagement,
-              den_gest: lineManagement,
-              GESTIUNE: lineManagement,
-              denumire: line.product?.name || "",
-              cod: sagaArticleCodeForProduct(line.product, config),
-              um: line.product?.uom?.code || "BUC",
-              tva_art: Number(line.vatRateValue || 0),
-              cantitate: Number(line.stockQty || line.qty || 0),
-              pret_unitar: Number(line.unitCostNetRon || 0),
-              valoare: unitAmount(line.lineNetRon, line.stockQty || line.qty),
-              transp_lei: 0,
-              total: unitAmount(line.lineGrossRon, line.stockQty || line.qty),
-              tva_ded: unitAmount(line.lineVatRon, line.stockQty || line.qty),
-              tip_ded: "N50",
-              cont: pickStockType(line.product, stockTypes, config)?.inventoryAccount || config.inventoryAccount,
-              pret_vanz: Number(line.product?.price || 0),
-              adaos: 0,
-              adaos_proc: 0,
-              text_supl: "",
-              categorie: "",
-              ID_U: "",
-              ID_INTRARE: "",
-              PTVA_VANZ: 0,
-              IS_FACTURAT: 0,
-              DISCOUNT: 0,
-              ID_BC: 0,
-              plan: "",
-              SECTOR: "",
-              SURSA: "",
-              CAPITOL: "",
-              ARTICOL: "",
-              LOT: "",
-              COD_TAXA: "",
-              ID_SGR: 0,
-            }
+            const stockType = pickStockType(line.product, stockTypes, config)
+            const productRow = buildPurchaseReceiptDetailRow(receipt, line, stockTypes, stockType, config)
             const sgr = receiptSgrValues(line, receipt)
             if (!line.product?.isSgr || sgr.qty <= 0 || sgr.unit <= 0) return [productRow]
             const sgrProduct = sgrProductShape(line.product)
@@ -2548,25 +2639,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       },
       {
         name: "Intrari",
-        rows: receipts.map((receipt) => ({
-          tip: "R",
-          nr_nir: extractSagaNumber(receipt.docNo || ""),
-          nr_intrare: extractSagaNumber(receipt.spvInvoiceNo || receipt.docNo || ""),
-          cod: receipt.supplierCode || receipt.supplier?.code || "",
-          denumire: receipt.supplierName || receipt.supplier?.name || "",
-          tvai: 0,
-          data: excelSerialDate(receipt.docDate),
-          scadent: receipt.docDate ? excelSerialDate(receipt.docDate) : "",
-          baza_tva: Number(receipt.totalNetRon || 0) + receiptSgrTotalRon(receipt),
-          transp_lei: 0,
-          tva: Number(receipt.totalVatRon || 0),
-          total: Number(receipt.totalGrossRon || 0) + receiptSgrTotalRon(receipt),
-          neachitat: Number(receipt.totalGrossRon || 0) + receiptSgrTotalRon(receipt),
-          data_doc: "",
-          inf_suplm: "",
-          den_agent: "",
-          id_solicit: "",
-        })),
+        rows: receipts.map((receipt) => buildPurchaseReceiptHeaderRow(receipt, receiptSgrTotalRon(receipt))),
       },
     ])
 
@@ -2728,45 +2801,8 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     splitSpreadsheetFiles = receipts.map((receipt) => {
       const receiptSgrForFile = receipt.items.reduce((sum: number, line) => sum + receiptSgrValues(line, receipt).valueRon, 0)
       const detailsRows = receipt.items.flatMap((line) => {
-        const lineType = sagaPurchaseReceiptLineType(line.product, stockTypes, config)
-        const lineManagement = receipt.location?.code || receipt.location?.name || ""
-        const productRow = {
-          den_tip: lineType,
-          gestiune: lineManagement,
-          den_gest: lineManagement,
-          GESTIUNE: lineManagement,
-          denumire: line.product?.name || "",
-          cod: sagaArticleCodeForProduct(line.product, config),
-          um: line.product?.uom?.code || "BUC",
-          tva_art: Number(line.vatRateValue || 0),
-          cantitate: Number(line.stockQty || line.qty || 0),
-          pret_unitar: Number(line.unitCostNetRon || 0),
-          valoare: unitAmount(line.lineNetRon, line.stockQty || line.qty),
-          transp_lei: 0,
-          total: unitAmount(line.lineGrossRon, line.stockQty || line.qty),
-          tva_ded: unitAmount(line.lineVatRon, line.stockQty || line.qty),
-          tip_ded: "N50",
-          cont: pickStockType(line.product, stockTypes, config)?.inventoryAccount || config.inventoryAccount,
-          pret_vanz: Number(line.product?.price || 0),
-          adaos: 0,
-          adaos_proc: 0,
-          text_supl: "",
-          categorie: "",
-          ID_U: "",
-          ID_INTRARE: "",
-          PTVA_VANZ: 0,
-          IS_FACTURAT: 0,
-          DISCOUNT: 0,
-          ID_BC: 0,
-          plan: "",
-          SECTOR: "",
-          SURSA: "",
-          CAPITOL: "",
-          ARTICOL: "",
-          LOT: "",
-          COD_TAXA: "",
-          ID_SGR: 0,
-        }
+        const stockType = pickStockType(line.product, stockTypes, config)
+        const productRow = buildPurchaseReceiptDetailRow(receipt, line, stockTypes, stockType, config)
         const sgr = receiptSgrValues(line, receipt)
         if (!line.product?.isSgr || sgr.qty <= 0 || sgr.unit <= 0) return [productRow]
         const sgrProduct = sgrProductShape(line.product)
@@ -2790,27 +2826,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
           },
         ]
       })
-      const headerRows = [
-        {
-          tip: "R",
-          nr_nir: extractSagaNumber(receipt.docNo || ""),
-          nr_intrare: extractSagaNumber(receipt.spvInvoiceNo || receipt.docNo || ""),
-          cod: receipt.supplierCode || receipt.supplier?.code || "",
-          denumire: receipt.supplierName || receipt.supplier?.name || "",
-          tvai: 0,
-          data: excelSerialDate(receipt.docDate),
-          scadent: receipt.docDate ? excelSerialDate(receipt.docDate) : "",
-          baza_tva: Number(receipt.totalNetRon || 0) + receiptSgrForFile,
-          transp_lei: 0,
-          tva: Number(receipt.totalVatRon || 0),
-          total: Number(receipt.totalGrossRon || 0) + receiptSgrForFile,
-          neachitat: Number(receipt.totalGrossRon || 0) + receiptSgrForFile,
-          data_doc: "",
-          inf_suplm: "",
-          den_agent: "",
-          id_solicit: "",
-        },
-      ]
+      const headerRows = [buildPurchaseReceiptHeaderRow(receipt, receiptSgrForFile)]
       const supplierCode = String(receipt.supplier?.cif || receipt.supplierCode || receipt.supplier?.code || "FURNIZOR").replace(/[^A-Za-z0-9]/g, "")
       const docNumber = extractSagaNumber(receipt.spvInvoiceNo || receipt.docNo || "NIR")
       const docDate = compactDateToken(receipt.docDate || dateTo || new Date())
