@@ -90,6 +90,15 @@ type ReceiptDocumentLine = {
   expiryDate?: unknown
 }
 
+type PurchaseReceiptListWhere = ReturnType<
+  typeof buildCompanyWhere<{
+    docDate?: {
+      gte?: Date
+      lt?: Date
+    }
+  }>
+>
+
 function toNumber(value: unknown): number {
   const n = Number(value)
   return Number.isFinite(n) ? n : 0
@@ -554,12 +563,7 @@ router.get("/api/v1/purchase-receipts", async (req: AuthedRequest, res) => {
   const dateTo = String(req.query.dateTo || "").trim()
   const month = String(req.query.month || "").trim()
 
-  const where = buildCompanyWhere(tenantId, activeCompanyId) as Record<string, unknown> & {
-    docDate?: {
-      gte?: Date
-      lt?: Date
-    }
-  }
+  const where: PurchaseReceiptListWhere = buildCompanyWhere(tenantId, activeCompanyId)
 
   if (month) {
     const [y, m] = month.split("-").map(Number)
