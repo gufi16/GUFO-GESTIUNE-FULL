@@ -188,7 +188,7 @@ app.use(morgan("dev"))
 app.use("/uploads", express.static(uploadsDir))
 app.use((req, res, next) => {
   const originalJson = res.json.bind(res)
-  res.json = ((body: any) => originalJson(repairDeepStrings(body))) as typeof res.json
+  res.json = ((body: unknown) => originalJson(repairDeepStrings(body))) as typeof res.json
   next()
 })
 app.use((req, res, next) => {
