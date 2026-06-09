@@ -340,6 +340,18 @@ async function createManySkipDuplicatesIfAny(model: RestorableModel, data: unkno
   await model.createMany({ data, skipDuplicates: true })
 }
 
+function asText(value: unknown) {
+  return String(value ?? "").trim()
+}
+
+function lowerText(value: unknown) {
+  return asText(value).toLowerCase()
+}
+
+function scopeKey(...parts: unknown[]) {
+  return parts.map((part) => lowerText(part)).join("::")
+}
+
 function ensureBackupBelongsToTenant(tenantId: string, payload: unknown) {
   if (String((payload as RestorableRecord | null)?.tenantId || "") !== String(tenantId)) {
     throw new Error("Backup-ul nu apartine acestui client.")
@@ -1047,8 +1059,31 @@ async function restoreCustomersModule(data: SelectiveRestoreData) {
 }
 
 async function syncCustomersModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.customer, data.customers)
-  return { customers: data.customers.length }
+  const existing = await prisma.customer.findMany({
+    where: { tenantId: asText(data.customers[0]?.tenantId) || undefined },
+    select: { id: true, companyId: true, code: true, cif: true, name: true },
+  })
+  const keys = new Set<string>()
+  existing.forEach((item) => {
+    keys.add(scopeKey(item.companyId, "code", item.code))
+    keys.add(scopeKey(item.companyId, "cif", item.cif))
+    keys.add(scopeKey(item.companyId, "name", item.name))
+  })
+
+  let created = 0
+  for (const item of data.customers) {
+    const companyId = asText(item.companyId) || null
+    const codeKey = scopeKey(companyId, "code", item.code)
+    const cifKey = scopeKey(companyId, "cif", item.cif)
+    const nameKey = scopeKey(companyId, "name", item.name)
+    if (keys.has(codeKey) || keys.has(cifKey) || keys.has(nameKey)) continue
+    await prisma.customer.create({ data: item as never })
+    keys.add(codeKey)
+    keys.add(cifKey)
+    keys.add(nameKey)
+    created += 1
+  }
+  return { customers: created, scanned: data.customers.length }
 }
 
 async function restoreSuppliersModule(data: SelectiveRestoreData) {
@@ -1059,8 +1094,31 @@ async function restoreSuppliersModule(data: SelectiveRestoreData) {
 }
 
 async function syncSuppliersModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.supplier, data.suppliers)
-  return { suppliers: data.suppliers.length }
+  const existing = await prisma.supplier.findMany({
+    where: { tenantId: asText(data.suppliers[0]?.tenantId) || undefined },
+    select: { id: true, companyId: true, code: true, cif: true, name: true },
+  })
+  const keys = new Set<string>()
+  existing.forEach((item) => {
+    keys.add(scopeKey(item.companyId, "code", item.code))
+    keys.add(scopeKey(item.companyId, "cif", item.cif))
+    keys.add(scopeKey(item.companyId, "name", item.name))
+  })
+
+  let created = 0
+  for (const item of data.suppliers) {
+    const companyId = asText(item.companyId) || null
+    const codeKey = scopeKey(companyId, "code", item.code)
+    const cifKey = scopeKey(companyId, "cif", item.cif)
+    const nameKey = scopeKey(companyId, "name", item.name)
+    if (keys.has(codeKey) || keys.has(cifKey) || keys.has(nameKey)) continue
+    await prisma.supplier.create({ data: item as never })
+    keys.add(codeKey)
+    keys.add(cifKey)
+    keys.add(nameKey)
+    created += 1
+  }
+  return { suppliers: created, scanned: data.suppliers.length }
 }
 
 async function restoreLocationsModule(data: SelectiveRestoreData) {
@@ -1074,9 +1132,43 @@ async function restoreLocationsModule(data: SelectiveRestoreData) {
 }
 
 async function syncLocationsModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.location, data.locations)
-  await createManySkipDuplicatesIfAny(prisma.terminal, data.terminals)
-  return { locations: data.locations.length, terminals: data.terminals.length }
+  const existingLocations = await prisma.location.findMany({
+    where: { tenantId: asText(data.locations[0]?.tenantId) || undefined },
+    select: { id: true, companyId: true, code: true },
+  })
+  const locationKeyToId = new Map(existingLocations.map((item) => [scopeKey(item.companyId, item.code), item.id]))
+  const locationIdMap = new Map<string, string>()
+  let createdLocations = 0
+
+  for (const item of data.locations) {
+    const key = scopeKey(item.companyId, item.code)
+    const existingId = locationKeyToId.get(key)
+    if (existingId) {
+      locationIdMap.set(asText(item.id), existingId)
+      continue
+    }
+    const created = await prisma.location.create({ data: item as never })
+    locationKeyToId.set(key, created.id)
+    locationIdMap.set(asText(item.id), created.id)
+    createdLocations += 1
+  }
+
+  const existingTerminals = await prisma.terminal.findMany({
+    where: { tenantId: asText(data.terminals[0]?.tenantId) || undefined },
+    select: { id: true, companyId: true, deviceId: true },
+  })
+  const terminalKeys = new Set(existingTerminals.map((item) => scopeKey(item.companyId, item.deviceId)))
+  let createdTerminals = 0
+  for (const item of data.terminals) {
+    const key = scopeKey(item.companyId, item.deviceId)
+    if (terminalKeys.has(key)) continue
+    const next = { ...item, locationId: locationIdMap.get(asText(item.locationId)) || item.locationId }
+    await prisma.terminal.create({ data: next as never })
+    terminalKeys.add(key)
+    createdTerminals += 1
+  }
+
+  return { locations: createdLocations, terminals: createdTerminals, scannedLocations: data.locations.length, scannedTerminals: data.terminals.length }
 }
 
 async function restoreDepartmentsModule(data: SelectiveRestoreData) {
@@ -1087,8 +1179,20 @@ async function restoreDepartmentsModule(data: SelectiveRestoreData) {
 }
 
 async function syncDepartmentsModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.department, data.departments)
-  return { departments: data.departments.length }
+  const existing = await prisma.department.findMany({
+    where: { tenantId: asText(data.departments[0]?.tenantId) || undefined },
+    select: { companyId: true, name: true },
+  })
+  const keys = new Set(existing.map((item) => scopeKey(item.companyId, item.name)))
+  let created = 0
+  for (const item of data.departments) {
+    const key = scopeKey(item.companyId, item.name)
+    if (keys.has(key)) continue
+    await prisma.department.create({ data: item as never })
+    keys.add(key)
+    created += 1
+  }
+  return { departments: created, scanned: data.departments.length }
 }
 
 async function restoreCategoriesModule(data: SelectiveRestoreData) {
@@ -1099,8 +1203,29 @@ async function restoreCategoriesModule(data: SelectiveRestoreData) {
 }
 
 async function syncCategoriesModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.category, data.categories)
-  return { categories: data.categories.length }
+  const existingDepartments = await prisma.department.findMany({
+    where: { tenantId: asText(data.categories[0]?.tenantId) || undefined },
+    select: { id: true, companyId: true, name: true },
+  })
+  const departmentByKey = new Map(existingDepartments.map((item) => [scopeKey(item.companyId, item.name), item.id]))
+  const backupDepartmentById = new Map(data.departments.map((item) => [asText(item.id), item]))
+
+  const existing = await prisma.category.findMany({
+    where: { tenantId: asText(data.categories[0]?.tenantId) || undefined },
+    select: { companyId: true, name: true },
+  })
+  const keys = new Set(existing.map((item) => scopeKey(item.companyId, item.name)))
+  let created = 0
+  for (const item of data.categories) {
+    const key = scopeKey(item.companyId, item.name)
+    if (keys.has(key)) continue
+    const backupDepartment = backupDepartmentById.get(asText(item.departmentId))
+    const resolvedDepartmentId = backupDepartment ? departmentByKey.get(scopeKey(backupDepartment.companyId, backupDepartment.name)) || null : null
+    await prisma.category.create({ data: { ...item, departmentId: resolvedDepartmentId } as never })
+    keys.add(key)
+    created += 1
+  }
+  return { categories: created, scanned: data.categories.length }
 }
 
 async function restoreUomsModule(data: SelectiveRestoreData) {
@@ -1111,8 +1236,20 @@ async function restoreUomsModule(data: SelectiveRestoreData) {
 }
 
 async function syncUomsModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.uom, data.uoms)
-  return { uoms: data.uoms.length }
+  const existing = await prisma.uom.findMany({
+    where: { tenantId: asText(data.uoms[0]?.tenantId) || undefined },
+    select: { companyId: true, code: true },
+  })
+  const keys = new Set(existing.map((item) => scopeKey(item.companyId, item.code)))
+  let created = 0
+  for (const item of data.uoms) {
+    const key = scopeKey(item.companyId, item.code)
+    if (keys.has(key)) continue
+    await prisma.uom.create({ data: item as never })
+    keys.add(key)
+    created += 1
+  }
+  return { uoms: created, scanned: data.uoms.length }
 }
 
 async function restoreVatRatesModule(data: SelectiveRestoreData) {
@@ -1123,8 +1260,20 @@ async function restoreVatRatesModule(data: SelectiveRestoreData) {
 }
 
 async function syncVatRatesModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.vatRate, data.vatRates)
-  return { vatRates: data.vatRates.length }
+  const existing = await prisma.vatRate.findMany({
+    where: { tenantId: asText(data.vatRates[0]?.tenantId) || undefined },
+    select: { companyId: true, rate: true },
+  })
+  const keys = new Set(existing.map((item) => scopeKey(item.companyId, item.rate)))
+  let created = 0
+  for (const item of data.vatRates) {
+    const key = scopeKey(item.companyId, item.rate)
+    if (keys.has(key)) continue
+    await prisma.vatRate.create({ data: item as never })
+    keys.add(key)
+    created += 1
+  }
+  return { vatRates: created, scanned: data.vatRates.length }
 }
 
 async function restoreCatalogModule(data: SelectiveRestoreData) {
@@ -1190,13 +1339,128 @@ async function restoreProductsModule(data: SelectiveRestoreData) {
 }
 
 async function syncProductsModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.product, data.products)
-  await createManySkipDuplicatesIfAny(prisma.productBarcode, data.productBarcodes)
-  await createManySkipDuplicatesIfAny(prisma.marketplaceProductMapping, data.marketplaceMappings)
+  const tenantId = asText(data.products[0]?.tenantId || data.productBarcodes[0]?.tenantId)
+  const [existingProducts, existingBarcodes, existingDepartments, existingCategories, existingUoms, existingVatRates, existingStockTypes, existingMappings] =
+    await Promise.all([
+      prisma.product.findMany({
+        where: { tenantId },
+        select: { id: true, companyId: true, sku: true },
+      }),
+      prisma.productBarcode.findMany({
+        where: { tenantId },
+        select: { barcode: true },
+      }),
+      prisma.department.findMany({
+        where: { tenantId },
+        select: { id: true, companyId: true, name: true },
+      }),
+      prisma.category.findMany({
+        where: { tenantId },
+        select: { id: true, companyId: true, name: true },
+      }),
+      prisma.uom.findMany({
+        where: { tenantId },
+        select: { id: true, companyId: true, code: true },
+      }),
+      prisma.vatRate.findMany({
+        where: { tenantId },
+        select: { id: true, companyId: true, rate: true },
+      }),
+      prisma.accountingStockType.findMany({
+        where: { tenantId },
+        select: { id: true, companyId: true, code: true },
+      }),
+      prisma.marketplaceProductMapping.findMany({
+        where: { tenantId },
+        select: { integrationId: true, externalProductId: true },
+      }),
+    ])
+
+  const productByKey = new Map(existingProducts.map((item) => [scopeKey(item.companyId, item.sku), item.id]))
+  const barcodeKeys = new Set(existingBarcodes.map((item) => lowerText(item.barcode)))
+  const mappingKeys = new Set(existingMappings.map((item) => scopeKey(item.integrationId, item.externalProductId)))
+  const departmentByKey = new Map(existingDepartments.map((item) => [scopeKey(item.companyId, item.name), item.id]))
+  const categoryByKey = new Map(existingCategories.map((item) => [scopeKey(item.companyId, item.name), item.id]))
+  const uomByKey = new Map(existingUoms.map((item) => [scopeKey(item.companyId, item.code), item.id]))
+  const vatRateByKey = new Map(existingVatRates.map((item) => [scopeKey(item.companyId, item.rate), item.id]))
+  const stockTypeByKey = new Map(existingStockTypes.map((item) => [scopeKey(item.companyId, item.code), item.id]))
+
+  const backupDepartmentById = new Map(data.departments.map((item) => [asText(item.id), item]))
+  const backupCategoryById = new Map(data.categories.map((item) => [asText(item.id), item]))
+  const backupUomById = new Map(data.uoms.map((item) => [asText(item.id), item]))
+  const backupVatById = new Map(data.vatRates.map((item) => [asText(item.id), item]))
+  const backupStockTypeById = new Map(data.accountingStockTypes.map((item) => [asText(item.id), item]))
+
+  const resolvedProductIdByBackupId = new Map<string, string>()
+  let createdProducts = 0
+  for (const item of data.products) {
+    const key = scopeKey(item.companyId, item.sku)
+    const existingId = productByKey.get(key)
+    if (existingId) {
+      resolvedProductIdByBackupId.set(asText(item.id), existingId)
+      continue
+    }
+
+    const backupDepartment = backupDepartmentById.get(asText(item.departmentId))
+    const backupCategory = backupCategoryById.get(asText(item.categoryId))
+    const backupUom = backupUomById.get(asText(item.uomId))
+    const backupPurchaseUom = backupUomById.get(asText(item.purchaseUomId))
+    const backupVat = backupVatById.get(asText(item.vatRateId))
+    const backupStockType = backupStockTypeById.get(asText(item.accountingStockTypeId))
+
+    const created = await prisma.product.create({
+      data: {
+        ...(item as Record<string, unknown>),
+        departmentId: backupDepartment ? departmentByKey.get(scopeKey(backupDepartment.companyId, backupDepartment.name)) || undefined : undefined,
+        categoryId: backupCategory ? categoryByKey.get(scopeKey(backupCategory.companyId, backupCategory.name)) || undefined : undefined,
+        uomId: backupUom ? uomByKey.get(scopeKey(backupUom.companyId, backupUom.code)) || asText(item.uomId) : asText(item.uomId),
+        purchaseUomId: backupPurchaseUom ? uomByKey.get(scopeKey(backupPurchaseUom.companyId, backupPurchaseUom.code)) || undefined : undefined,
+        vatRateId: backupVat ? vatRateByKey.get(scopeKey(backupVat.companyId, backupVat.rate)) || asText(item.vatRateId) : asText(item.vatRateId),
+        accountingStockTypeId: backupStockType ? stockTypeByKey.get(scopeKey(backupStockType.companyId, backupStockType.code)) || undefined : undefined,
+      } as never,
+    })
+
+    productByKey.set(key, created.id)
+    resolvedProductIdByBackupId.set(asText(item.id), created.id)
+    createdProducts += 1
+  }
+
+  let createdBarcodes = 0
+  for (const item of data.productBarcodes) {
+    const barcodeKey = lowerText(item.barcode)
+    if (!barcodeKey || barcodeKeys.has(barcodeKey)) continue
+    const resolvedProductId = resolvedProductIdByBackupId.get(asText(item.productId))
+    if (!resolvedProductId) continue
+    await prisma.productBarcode.create({
+      data: {
+        ...(item as Record<string, unknown>),
+        productId: resolvedProductId,
+      } as never,
+    })
+    barcodeKeys.add(barcodeKey)
+    createdBarcodes += 1
+  }
+
+  let createdMappings = 0
+  for (const item of data.marketplaceMappings) {
+    const mappingKey = scopeKey(item.integrationId, item.externalProductId)
+    if (mappingKeys.has(mappingKey)) continue
+    const resolvedProductId = resolvedProductIdByBackupId.get(asText(item.erpProductId))
+    await prisma.marketplaceProductMapping.create({
+      data: {
+        ...(item as Record<string, unknown>),
+        erpProductId: resolvedProductId || null,
+      } as never,
+    })
+    mappingKeys.add(mappingKey)
+    createdMappings += 1
+  }
+
   return {
-    products: data.products.length,
-    productBarcodes: data.productBarcodes.length,
-    marketplaceMappings: data.marketplaceMappings.length,
+    products: createdProducts,
+    productBarcodes: createdBarcodes,
+    marketplaceMappings: createdMappings,
+    scannedProducts: data.products.length,
   }
 }
 
@@ -1219,11 +1483,57 @@ async function restoreRecipesModule(data: SelectiveRestoreData) {
 }
 
 async function syncRecipesModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.recipe, data.recipes)
-  await createManySkipDuplicatesIfAny(prisma.recipeItem, data.recipeItems)
+  const tenantId = asText(data.recipes[0]?.tenantId)
+  const existingProducts = await prisma.product.findMany({
+    where: { tenantId },
+    select: { id: true, companyId: true, sku: true },
+  })
+  const existingRecipes = await prisma.recipe.findMany({
+    where: { tenantId },
+    select: { id: true, productId: true },
+  })
+
+  const productByKey = new Map(existingProducts.map((item) => [scopeKey(item.companyId, item.sku), item.id]))
+  const backupProductById = new Map(data.products.map((item) => [asText(item.id), item]))
+  const existingRecipeProductIds = new Set(existingRecipes.map((item) => item.productId))
+  const createdRecipeIdByBackupId = new Map<string, string>()
+
+  let createdRecipes = 0
+  for (const item of data.recipes) {
+    const backupProduct = backupProductById.get(asText(item.productId))
+    const resolvedProductId = backupProduct ? productByKey.get(scopeKey(backupProduct.companyId, backupProduct.sku)) : null
+    if (!resolvedProductId || existingRecipeProductIds.has(resolvedProductId)) continue
+    const created = await prisma.recipe.create({
+      data: {
+        ...(item as Record<string, unknown>),
+        productId: resolvedProductId,
+      } as never,
+    })
+    existingRecipeProductIds.add(resolvedProductId)
+    createdRecipeIdByBackupId.set(asText(item.id), created.id)
+    createdRecipes += 1
+  }
+
+  let createdRecipeItems = 0
+  for (const item of data.recipeItems) {
+    const resolvedRecipeId = createdRecipeIdByBackupId.get(asText(item.recipeId))
+    const backupIngredient = backupProductById.get(asText(item.ingredientId))
+    const resolvedIngredientId = backupIngredient ? productByKey.get(scopeKey(backupIngredient.companyId, backupIngredient.sku)) : null
+    if (!resolvedRecipeId || !resolvedIngredientId) continue
+    await prisma.recipeItem.create({
+      data: {
+        ...(item as Record<string, unknown>),
+        recipeId: resolvedRecipeId,
+        ingredientId: resolvedIngredientId,
+      } as never,
+    })
+    createdRecipeItems += 1
+  }
+
   return {
-    recipes: data.recipes.length,
-    recipeItems: data.recipeItems.length,
+    recipes: createdRecipes,
+    recipeItems: createdRecipeItems,
+    scannedRecipes: data.recipes.length,
   }
 }
 
