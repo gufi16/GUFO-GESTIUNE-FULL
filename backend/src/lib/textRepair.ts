@@ -57,6 +57,10 @@ function toAsciiRomanian(text: string) {
   return ASCII_REPLACEMENTS.reduce((current, [pattern, replacement]) => current.replace(pattern, replacement), text)
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value) && !(value instanceof Date) && !(value instanceof Buffer)
+}
+
 export function repairText(value: unknown) {
   const raw = String(value ?? "")
   if (!raw) return ""
@@ -83,8 +87,8 @@ export function repairDeepStrings<T>(value: T): T {
     return value.map((item) => repairDeepStrings(item)) as T
   }
 
-  if (value && typeof value === "object" && !(value instanceof Date) && !(value instanceof Buffer)) {
-    const entries = Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, repairDeepStrings(item)])
+  if (isPlainObject(value)) {
+    const entries = Object.entries(value).map(([key, item]) => [key, repairDeepStrings(item)])
     return Object.fromEntries(entries) as T
   }
 
