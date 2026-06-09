@@ -378,6 +378,14 @@ function hasAnyRequestedModule(requested: TenantBackupModuleKey[], keys: TenantB
   return keys.some((key) => requested.includes(key))
 }
 
+function normalizeSaleDraftRecord(item: RestorableRecord) {
+  const next = normalizeRecord(item)
+  if (!("cartJson" in next) || next.cartJson == null) {
+    next.cartJson = item.cartJson ?? item.cart ?? { items: [] }
+  }
+  return next
+}
+
 type IdLookupModel = {
   findMany(args: { where: { id: { in: string[] } }; select: { id: true } }): Promise<Array<{ id: string }>>
 }
@@ -667,7 +675,7 @@ function buildSelectiveRestoreData(payload: unknown): SelectiveRestoreData {
   const externalOrderStatusHistory = asArray<RestorableRecord>((payload as RestorableRecord).externalOrders).flatMap((item) =>
     getNestedArray<RestorableRecord>(item, "statusHistory").map((entry) => normalizeRecord(entry)),
   )
-  const saleDrafts = asArray<RestorableRecord>((payload as RestorableRecord).saleDrafts).map((item) => normalizeRecord(item))
+  const saleDrafts = asArray<RestorableRecord>((payload as RestorableRecord).saleDrafts).map((item) => normalizeSaleDraftRecord(item))
   const kitchenTickets = asArray<RestorableRecord>((payload as RestorableRecord).kitchenTickets).map((item) => normalizeRecord(item))
   const kitchenTicketItems = asArray<RestorableRecord>((payload as RestorableRecord).kitchenTickets).flatMap((item) =>
     getNestedArray<RestorableRecord>(item, "items").map((entry) => normalizeRecord(entry)),
@@ -889,7 +897,7 @@ export async function restoreTenantBackupFromFile(tenantId: string, filePath: st
     getNestedArray<RestorableRecord>(item, "statusHistory").map((entry) => normalizeRecord(entry)),
   )
 
-  const saleDrafts = asArray<RestorableRecord>(payload.saleDrafts).map((item) => normalizeRecord(item))
+  const saleDrafts = asArray<RestorableRecord>(payload.saleDrafts).map((item) => normalizeSaleDraftRecord(item))
 
   const kitchenTickets = asArray<RestorableRecord>(payload.kitchenTickets).map((item) => normalizeRecord(item))
   const kitchenTicketItems = asArray<RestorableRecord>(payload.kitchenTickets).flatMap((item) =>
