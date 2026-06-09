@@ -21,6 +21,7 @@ type CompanyResolverClient = {
 type CompanyQueryExtra = Record<string, unknown>
 type CompanyAccessRow = { companyId: string | null }
 type CompanyCreateSeedData = Partial<Prisma.CompanyUncheckedCreateInput>
+type ResolvedCompany = Prisma.CompanyGetPayload<Prisma.CompanyDefaultArgs>
 
 export type CompanyAuthContext = {
   userId?: string | null
@@ -84,7 +85,7 @@ async function findCompanyByTenant(
   tenantId: string,
   activeCompanyId?: string | null,
   extra: CompanyQueryExtra = {},
-): Promise<any> {
+): Promise<ResolvedCompany | null> {
   if (!client.company.findFirst) {
     throw new Error("Company resolver client does not support findFirst.")
   }
@@ -95,11 +96,11 @@ async function findCompanyByTenant(
     const activeCompany = await client.company.findFirst(toCompanyFindFirstArgs(tenantId, extra, activeCompanyId))
 
     if (activeCompany) {
-      return activeCompany
+      return activeCompany as ResolvedCompany
     }
   }
 
-  return client.company.findFirst(baseArgs)
+  return (await client.company.findFirst(baseArgs)) as ResolvedCompany | null
 }
 
 export async function resolveTenantCompany(
@@ -107,7 +108,7 @@ export async function resolveTenantCompany(
   tenantId: string,
   activeCompanyId?: string | null,
   extra: CompanyQueryExtra = {},
-): Promise<any> {
+): Promise<ResolvedCompany | null> {
   return findCompanyByTenant(client, tenantId, activeCompanyId, extra)
 }
 
@@ -115,14 +116,14 @@ export async function listTenantCompaniesForAuth(
   client: CompanyResolverClient,
   auth: CompanyAuthContext,
   extra: CompanyQueryExtra = {},
-): Promise<any[]> {
+): Promise<ResolvedCompany[]> {
   const tenantId = String(auth?.tenantId || "").trim()
   if (!tenantId) {
     return []
   }
 
   if (auth?.role === "OWNER" || auth?.role === "ADMIN") {
-    return client.company.findMany(toCompanyFindManyArgs(tenantId, extra))
+    return (await client.company.findMany(toCompanyFindManyArgs(tenantId, extra))) as ResolvedCompany[]
   }
 
   const userId = String(auth?.userId || "").trim()
@@ -147,20 +148,20 @@ export async function listTenantCompaniesForAuth(
   const baseArgs = toCompanyFindManyArgs(tenantId, extra)
   const where = (baseArgs.where ?? {}) as Prisma.CompanyWhereInput
 
-  return client.company.findMany({
+  return (await client.company.findMany({
     ...baseArgs,
     where: {
       ...where,
       id: { in: allowedCompanyIds },
     },
-  })
+  })) as ResolvedCompany[]
 }
 
 export async function resolveTenantCompanyForAuth(
   client: CompanyResolverClient,
   auth: CompanyAuthContext,
   extra: CompanyQueryExtra = {},
-): Promise<any> {
+): Promise<ResolvedCompany | null> {
   const companies = await listTenantCompaniesForAuth(client, auth, extra)
   if (!companies.length) {
     return null
@@ -194,7 +195,7 @@ export async function ensureTenantCompany(
   tenantId: string,
   activeCompanyId?: string | null,
   seedData: CompanyCreateSeedData = {},
-): Promise<any> {
+): Promise<ResolvedCompany> {
   if (!client.company.create) {
     throw new Error("Company resolver client does not support create.")
   }
@@ -213,7 +214,7 @@ export async function ensureTenantCompany(
 
   const sanitizedSeedData = sanitizeCompanyCreateData(seedData)
 
-  return client.company.create({
+  return (await client.company.create({
     data: {
       tenantId,
       name: tenant?.name || "Companie",
@@ -221,7 +222,7 @@ export async function ensureTenantCompany(
       isDefault: true,
       ...sanitizedSeedData,
     },
-  })
+  })) as ResolvedCompany
 }
 
 export async function updateOrCreateTenantCompany(
@@ -230,17 +231,17 @@ export async function updateOrCreateTenantCompany(
   activeCompanyId: string | null | undefined,
   updateData: CompanyCreateSeedData,
   createData: CompanyCreateSeedData = {},
-): Promise<any> {
+): Promise<ResolvedCompany> {
   if (!client.company.create || !client.company.update) {
     throw new Error("Company resolver client does not support update/create.")
   }
 
   const existing = await findCompanyByTenant(client, tenantId, activeCompanyId)
   if (existing) {
-    return client.company.update({
+    return (await client.company.update({
       where: { id: existing.id },
       data: updateData,
-    })
+    })) as ResolvedCompany
   }
 
   const tenant = client.tenant
@@ -253,7 +254,7 @@ export async function updateOrCreateTenantCompany(
   const sanitizedCreateData = sanitizeCompanyCreateData(createData)
   const sanitizedUpdateData = sanitizeCompanyCreateData(updateData)
 
-  return client.company.create({
+  return (await client.company.create({
     data: {
       tenantId,
       name: tenant?.name || "Companie",
@@ -262,7 +263,7 @@ export async function updateOrCreateTenantCompany(
       ...sanitizedCreateData,
       ...sanitizedUpdateData,
     },
-  })
+  })) as ResolvedCompany
 }
 
 export async function getPrimaryTenantCompany(tenantId: string, extra: CompanyQueryExtra = {}) {

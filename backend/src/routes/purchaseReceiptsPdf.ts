@@ -189,7 +189,6 @@ router.get("/:id/pdf", async (req: AuthedRequest, res) => {
     `Nr. ord. reg. com: ${pdfText(company?.regNo)}`,
     `Sediu: ${pdfText(company?.address)}`,
     `Judetul ${pdfText(company?.county)}`,
-    `Capital social: ${pdfText(company?.shareCapital)}`,
     `IBAN: ${pdfText(company?.iban)}`,
     `Banca: ${pdfText(company?.bank)}`,
   ]

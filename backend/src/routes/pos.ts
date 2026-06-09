@@ -3843,6 +3843,9 @@ export async function handlePosBackofficeReceiptCreate(req: PosAuthRequest, res:
   const company = await getPrimaryTenantCompany(tenantId, {
     select: { id: true },
   });
+  if (!company?.id) {
+    return res.status(400).json({ ok: false, error: "Nu exista firma activa pentru acest terminal." });
+  }
 
   try {
     const terminal = await prisma.terminal.findUnique({
@@ -3957,7 +3960,7 @@ export async function handlePosBackofficeReceiptCreate(req: PosAuthRequest, res:
             where: {
               tenantId_companyId_locationId_productId_warehouseScope: {
                 tenantId,
-                companyId: company?.id || null,
+                companyId: company.id,
                 locationId: terminal.locationId!,
                 productId: product.id,
                 warehouseScope: "__NO_WAREHOUSE__",
@@ -4109,6 +4112,9 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
         isVatPayer: true,
       },
     });
+  if (!company?.id) {
+    return res.status(400).json({ ok: false, error: "Nu exista firma activa pentru acest terminal." });
+  }
 
   const isVatPayer = company?.isVatPayer ?? true;
 
@@ -4399,7 +4405,7 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
       } else {
         await decrementStockBalanceAllowNegative(tx, {
             tenantId,
-            companyId: company?.id || null,
+            companyId: company.id,
             locationId,
           productId: line.productId,
           qty: qtyDecimal,
@@ -4408,7 +4414,7 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
         await tx.stockMove.create({
             data: {
               tenantId,
-              companyId: company?.id || null,
+              companyId: company.id,
               locationId,
             productId: line.productId,
             type: "OUT",
