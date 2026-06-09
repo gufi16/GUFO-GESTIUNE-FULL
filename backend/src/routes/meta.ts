@@ -28,6 +28,12 @@ type MetaRouteAuth = NonNullable<AuthedRequest["auth"]> & {
   tenantId: string
 }
 
+function asRecord(value: Prisma.JsonValue | null): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
+}
+
 function requireMetaAuth(req: AuthedRequest): MetaRouteAuth {
   if (!req.auth?.tenantId) {
     throw new Error("Sesiunea nu are tenant activ.")
@@ -489,7 +495,7 @@ router.get("/api/v1/meta/terminals", async (req: AuthedRequest, res) => {
   for (const log of creationLogs) {
     const terminalId = String(log.entityId || "").trim()
     if (!terminalId || createdLabelByTerminalId.has(terminalId)) continue
-    const payload = log.payload as Record<string, unknown> | null
+    const payload = asRecord(log.payload)
     const label = typeof payload?.label === "string" ? payload.label.trim() : ""
     if (label) {
       createdLabelByTerminalId.set(terminalId, label)
