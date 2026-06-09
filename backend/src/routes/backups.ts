@@ -70,23 +70,41 @@ function isZipBackupFile(file: Express.Multer.File | undefined) {
   return name.endsWith(".zip") || mime.includes("zip")
 }
 
-router.get("/api/v1/settings/backups", async (req: AuthedRequest, res) => {
-  const tenantId = req.auth?.tenantId
-  if (!tenantId) {
-    return res.status(400).json({ ok: false, error: "Tenant lipsa pentru backup." })
-  }
-
+async function cleanupMissingTenantBackupEntries(tenantId: string) {
   const items = await prisma.tenantBackup.findMany({
     where: { tenantId },
     orderBy: { createdAt: "desc" },
     take: 100,
   })
 
+  const existingItems = items.filter((item) => fs.existsSync(item.filePath))
+  const missingIds = items.filter((item) => !fs.existsSync(item.filePath)).map((item) => item.id)
+
+  if (missingIds.length) {
+    await prisma.tenantBackup.deleteMany({
+      where: {
+        tenantId,
+        id: { in: missingIds },
+      },
+    })
+  }
+
+  return existingItems
+}
+
+router.get("/api/v1/settings/backups", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth?.tenantId
+  if (!tenantId) {
+    return res.status(400).json({ ok: false, error: "Tenant lipsa pentru backup." })
+  }
+
+  const items = await cleanupMissingTenantBackupEntries(tenantId)
+
   return res.json({
     ok: true,
     items: items.map((item) => ({
       ...item,
-      fileExists: fs.existsSync(item.filePath),
+      fileExists: true,
     })),
   })
 })
