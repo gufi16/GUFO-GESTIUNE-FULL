@@ -40,6 +40,16 @@ type PosAuthRequest = Request & {
 };
 
 type JsonRecord = Record<string, unknown>;
+type PosResolvedAuth = {
+  tenantId: string;
+  terminalId: string;
+  deviceId: string;
+};
+type PosFallbackSource = "header" | "scopedSession" | "latestSession";
+type PosFallbackResolution = {
+  auth: PosResolvedAuth;
+  source: PosFallbackSource;
+};
 
 type PosSaleLineLike = {
   qty?: unknown;
@@ -234,6 +244,85 @@ function resolveLatestPairedPosSession() {
   return lastPairedPosSession;
 }
 
+function getPosToken(req: Request) {
+  const authHeader = normalizeText(req.headers.authorization);
+  const headerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : authHeader;
+  const token =
+    headerToken ||
+    normalizeText(req.headers["x-pos-token"]) ||
+    normalizeText(req.headers["x-access-token"]) ||
+    normalizeText(req.headers["pos-token"]) ||
+    normalizeText(req.headers["token"]) ||
+    normalizeText(req.headers["pos_token"]) ||
+    normalizeText(req.query.token) ||
+    normalizeText(req.query.pos_token) ||
+    normalizeText(req.query.access_token);
+
+  return {
+    authHeader,
+    token,
+  };
+}
+
+function buildPosTokenPresence(req: Request, authHeader?: string) {
+  const resolvedAuthHeader = authHeader ?? normalizeText(req.headers.authorization);
+  return {
+    authorization: Boolean(resolvedAuthHeader),
+    xPosToken: Boolean(normalizeText(req.headers["x-pos-token"])),
+    xAccessToken: Boolean(normalizeText(req.headers["x-access-token"])),
+    posTokenHeader: Boolean(normalizeText(req.headers["pos-token"])),
+    tokenHeader: Boolean(normalizeText(req.headers["token"])),
+    posTokenUnderscoreHeader: Boolean(normalizeText(req.headers["pos_token"])),
+    queryToken: Boolean(normalizeText(req.query.token)),
+    queryPosToken: Boolean(normalizeText(req.query.pos_token)),
+    queryAccessToken: Boolean(normalizeText(req.query.access_token)),
+  };
+}
+
+function decodePosToken(token: string): PosResolvedAuth {
+  return jwt.verify(token, JWT_SECRET) as PosResolvedAuth;
+}
+
+function applyPosAuth(req: PosAuthRequest, auth: PosResolvedAuth) {
+  req.auth = auth;
+  return auth;
+}
+
+function sessionToPosAuth(session: { tenantId: string; terminalId: string; deviceId: string }): PosResolvedAuth {
+  return {
+    tenantId: session.tenantId,
+    terminalId: session.terminalId,
+    deviceId: session.deviceId,
+  };
+}
+
+function resolveScopedOrLatestSessionAuth(
+  req: Request,
+  options: { allowLatest: boolean }
+): PosFallbackResolution | null {
+  const scopedSession = resolvePairedPosSession(req);
+  if (scopedSession) {
+    return {
+      auth: sessionToPosAuth(scopedSession),
+      source: "scopedSession",
+    };
+  }
+
+  if (!options.allowLatest) {
+    return null;
+  }
+
+  const latestSession = resolveLatestPairedPosSession();
+  if (!latestSession) {
+    return null;
+  }
+
+  return {
+    auth: sessionToPosAuth(latestSession),
+    source: "latestSession",
+  };
+}
+
 async function resolvePosHeaderTerminalContext(req: Request) {
   const headerTerminalId =
     normalizeText(req.headers["x-pos-terminal-id"]) ||
@@ -340,33 +429,11 @@ export async function resolvePosAuthContext(req: PosAuthRequest) {
     return req.auth;
   }
 
-  const authHeader = normalizeText(req.headers.authorization);
-  const headerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : authHeader;
-  const token =
-    headerToken ||
-    normalizeText(req.headers["x-pos-token"]) ||
-    normalizeText(req.headers["x-access-token"]) ||
-    normalizeText(req.headers["pos-token"]) ||
-    normalizeText(req.headers["token"]) ||
-    normalizeText(req.headers["pos_token"]) ||
-    normalizeText(req.query.token) ||
-    normalizeText(req.query.pos_token) ||
-    normalizeText(req.query.access_token);
+  const { token } = getPosToken(req);
 
   if (token) {
     try {
-      const decoded = jwt.verify(token, JWT_SECRET) as {
-        tenantId: string;
-        terminalId: string;
-        deviceId: string;
-      };
-
-      req.auth = {
-        tenantId: decoded.tenantId,
-        terminalId: decoded.terminalId,
-        deviceId: decoded.deviceId,
-      };
-      return req.auth;
+      return applyPosAuth(req, decodePosToken(token));
     } catch (error) {
       console.warn("POS AUTH INVALID TOKEN IN CONTEXT", {
         path: req.path,
@@ -378,22 +445,9 @@ export async function resolvePosAuthContext(req: PosAuthRequest) {
     }
   }
 
-  const scopedSession = resolvePairedPosSession(req);
-  if (scopedSession) {
-    return {
-      tenantId: scopedSession.tenantId,
-      terminalId: scopedSession.terminalId,
-      deviceId: scopedSession.deviceId,
-    };
-  }
-
-  const latestSession = resolveLatestPairedPosSession();
-  if (latestSession) {
-    return {
-      tenantId: latestSession.tenantId,
-      terminalId: latestSession.terminalId,
-      deviceId: latestSession.deviceId,
-    };
+  const sessionResolution = resolveScopedOrLatestSessionAuth(req, { allowLatest: true });
+  if (sessionResolution) {
+    return sessionResolution.auth;
   }
 
   const headerResolved = await resolvePosHeaderTerminalContext(req);
@@ -433,124 +487,64 @@ export async function resolvePosAuthContext(req: PosAuthRequest) {
   return null;
 }
 async function requirePosAuth(req: PosAuthRequest, res: Response, next: NextFunction) {
-  const authHeader = normalizeText(req.headers.authorization);
-  const headerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : authHeader;
-  const token =
-    headerToken ||
-    normalizeText(req.headers["x-pos-token"]) ||
-    normalizeText(req.headers["x-access-token"]) ||
-    normalizeText(req.headers["pos-token"]) ||
-    normalizeText(req.headers["token"]) ||
-    normalizeText(req.headers["pos_token"]) ||
-    normalizeText(req.query.token) ||
-    normalizeText(req.query.pos_token) ||
-    normalizeText(req.query.access_token);
+  const { authHeader, token } = getPosToken(req);
 
   if (!token) {
     const headerResolved = await resolvePosHeaderTerminalContext(req);
     if (headerResolved) {
-      req.auth = headerResolved;
+      applyPosAuth(req, headerResolved);
       return next();
     }
 
-    const fallbackSession = resolvePairedPosSession(req);
-    if (fallbackSession) {
-      req.auth = {
-        tenantId: fallbackSession.tenantId,
-        terminalId: fallbackSession.terminalId,
-        deviceId: fallbackSession.deviceId,
-      };
-      console.warn("POS AUTH FALLBACK SESSION", {
+    const sessionResolution = resolveScopedOrLatestSessionAuth(req, { allowLatest: true });
+    if (sessionResolution) {
+      applyPosAuth(req, sessionResolution.auth);
+      console.warn(
+        sessionResolution.source === "scopedSession"
+          ? "POS AUTH FALLBACK SESSION"
+          : "POS AUTH GLOBAL FALLBACK SESSION",
+        {
         path: req.path,
         method: req.method,
-        terminalId: fallbackSession.terminalId,
-        deviceId: fallbackSession.deviceId,
-      });
-      return next();
-    }
-
-    const latestSession = resolveLatestPairedPosSession();
-    if (latestSession) {
-      req.auth = {
-        tenantId: latestSession.tenantId,
-        terminalId: latestSession.terminalId,
-        deviceId: latestSession.deviceId,
-      };
-      console.warn("POS AUTH GLOBAL FALLBACK SESSION", {
-        path: req.path,
-        method: req.method,
-        terminalId: latestSession.terminalId,
-        deviceId: latestSession.deviceId,
-      });
+          terminalId: sessionResolution.auth.terminalId,
+          deviceId: sessionResolution.auth.deviceId,
+        }
+      );
       return next();
     }
 
     console.warn("POS AUTH MISSING TOKEN", {
       path: req.path,
       method: req.method,
-      authorization: Boolean(authHeader),
-      xPosToken: Boolean(normalizeText(req.headers["x-pos-token"])),
-      xAccessToken: Boolean(normalizeText(req.headers["x-access-token"])),
-      posTokenHeader: Boolean(normalizeText(req.headers["pos-token"])),
-      tokenHeader: Boolean(normalizeText(req.headers["token"])),
-      posTokenUnderscoreHeader: Boolean(normalizeText(req.headers["pos_token"])),
-      queryToken: Boolean(normalizeText(req.query.token)),
-      queryPosToken: Boolean(normalizeText(req.query.pos_token)),
-      queryAccessToken: Boolean(normalizeText(req.query.access_token)),
+      ...buildPosTokenPresence(req, authHeader),
     });
     return res.status(401).json({ ok: false, error: "Missing token" });
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as {
-      tenantId: string;
-      terminalId: string;
-      deviceId: string;
-    };
-
-    req.auth = {
-      tenantId: decoded.tenantId,
-      terminalId: decoded.terminalId,
-      deviceId: decoded.deviceId,
-    };
-
+    applyPosAuth(req, decodePosToken(token));
     next();
   } catch (error) {
     const headerResolved = await resolvePosHeaderTerminalContext(req);
     if (headerResolved) {
-      req.auth = headerResolved;
+      applyPosAuth(req, headerResolved);
       return next();
     }
 
-    const fallbackSession = resolvePairedPosSession(req);
-    if (fallbackSession) {
-      req.auth = {
-        tenantId: fallbackSession.tenantId,
-        terminalId: fallbackSession.terminalId,
-        deviceId: fallbackSession.deviceId,
-      };
-      console.warn("POS AUTH FALLBACK SESSION AFTER INVALID TOKEN", {
+    const sessionResolution = resolveScopedOrLatestSessionAuth(req, { allowLatest: true });
+    if (sessionResolution) {
+      applyPosAuth(req, sessionResolution.auth);
+      console.warn(
+        sessionResolution.source === "scopedSession"
+          ? "POS AUTH FALLBACK SESSION AFTER INVALID TOKEN"
+          : "POS AUTH GLOBAL FALLBACK SESSION AFTER INVALID TOKEN",
+        {
         path: req.path,
         method: req.method,
-        terminalId: fallbackSession.terminalId,
-        deviceId: fallbackSession.deviceId,
-      });
-      return next();
-    }
-
-    const latestSession = resolveLatestPairedPosSession();
-    if (latestSession) {
-      req.auth = {
-        tenantId: latestSession.tenantId,
-        terminalId: latestSession.terminalId,
-        deviceId: latestSession.deviceId,
-      };
-      console.warn("POS AUTH GLOBAL FALLBACK SESSION AFTER INVALID TOKEN", {
-        path: req.path,
-        method: req.method,
-        terminalId: latestSession.terminalId,
-        deviceId: latestSession.deviceId,
-      });
+          terminalId: sessionResolution.auth.terminalId,
+          deviceId: sessionResolution.auth.deviceId,
+        }
+      );
       return next();
     }
 
@@ -559,15 +553,7 @@ async function requirePosAuth(req: PosAuthRequest, res: Response, next: NextFunc
       method: req.method,
       tokenPreview: token.slice(0, 24),
       tokenLength: token.length,
-      authorization: Boolean(authHeader),
-      xPosToken: Boolean(normalizeText(req.headers["x-pos-token"])),
-      xAccessToken: Boolean(normalizeText(req.headers["x-access-token"])),
-      posTokenHeader: Boolean(normalizeText(req.headers["pos-token"])),
-      tokenHeader: Boolean(normalizeText(req.headers["token"])),
-      posTokenUnderscoreHeader: Boolean(normalizeText(req.headers["pos_token"])),
-      queryToken: Boolean(normalizeText(req.query.token)),
-      queryPosToken: Boolean(normalizeText(req.query.pos_token)),
-      queryAccessToken: Boolean(normalizeText(req.query.access_token)),
+      ...buildPosTokenPresence(req, authHeader),
       error: error instanceof Error ? error.message : String(error),
     });
     return res.status(401).json({ ok: false, error: "Invalid POS token" });
@@ -2991,26 +2977,23 @@ async function resolveSaleAuthContext(
     };
   }
 
-  const scopedSession = resolvePairedPosSession(req);
-  if (scopedSession) {
+  const sessionResolution = resolveScopedOrLatestSessionAuth(req, { allowLatest: false });
+  if (sessionResolution) {
     if (
       explicitAuth &&
-      (explicitAuth.terminalId !== scopedSession.terminalId || explicitAuth.deviceId !== scopedSession.deviceId)
+      (explicitAuth.terminalId !== sessionResolution.auth.terminalId ||
+        explicitAuth.deviceId !== sessionResolution.auth.deviceId)
     ) {
       console.warn("POS SALE SCOPED SESSION OVERRIDE FROM PAYLOAD", {
-        scopedTerminalId: scopedSession.terminalId,
-        scopedDeviceId: scopedSession.deviceId,
+        scopedTerminalId: sessionResolution.auth.terminalId,
+        scopedDeviceId: sessionResolution.auth.deviceId,
         payloadTerminalId: explicitAuth.terminalId,
         payloadDeviceId: explicitAuth.deviceId,
       });
       return explicitAuth;
     }
 
-    return {
-      tenantId: scopedSession.tenantId,
-      terminalId: scopedSession.terminalId,
-      deviceId: scopedSession.deviceId,
-    };
+    return sessionResolution.auth;
   }
 
   if (explicitAuth) {
