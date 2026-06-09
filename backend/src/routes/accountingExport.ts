@@ -572,6 +572,18 @@ function spreadsheetSheets(sheets: ExportSheet[]): ExportSheetRows {
   return Object.assign([] as ExportRow[], { __sheets: sheets })
 }
 
+function getExportSheets(rows: ExportSheetRows, sheetName: string): ExportSheet[] {
+  return Array.isArray(rows.__sheets)
+    ? rows.__sheets
+    : [{ name: sheetName, rows }]
+}
+
+function getPrimaryExportRows(rows: ExportSheetRows): ExportRow[] {
+  return Array.isArray(rows.__sheets?.[0]?.rows)
+    ? rows.__sheets[0].rows
+    : rows
+}
+
 function managementValue(
   config: AccountingConfigLike | null | undefined,
   location: AccountingLocationLike | null | undefined
@@ -616,7 +628,7 @@ function xmlLineTag(name: string, value: unknown) {
   return `            <${name}>${xmlEscape(value ?? "")}</${name}>`
 }
 
-function buildVfpXml(rows: Record<string, unknown>[]) {
+function buildVfpXml(rows: ExportRow[]) {
   return [
     `<VFPData>`,
     ...rows.map((row) =>
@@ -633,7 +645,7 @@ function buildVfpXml(rows: Record<string, unknown>[]) {
   ].join("\n")
 }
 
-function buildVfpXmlSections(sections: Array<{ name: string; rows: Record<string, unknown>[] }>) {
+function buildVfpXmlSections(sections: Array<{ name: string; rows: ExportRow[] }>) {
   return [
     `<VFPData>`,
     ...sections.flatMap((section) =>
@@ -1018,16 +1030,11 @@ function encodeDbfValue(value: unknown, field: { type: "C" | "N" | "D" | "L"; le
   return Buffer.from(text.padEnd(field.length, " "), "ascii")
 }
 
-async function buildDbfBuffer(rows: Record<string, unknown>[]) {
-  const rowsWithSheets = rows as ExportSheetRows
-  const tableRows: ExportRow[] = Array.isArray(rowsWithSheets?.__sheets)
-    ? Array.isArray(rowsWithSheets.__sheets?.[0]?.rows)
-      ? rowsWithSheets.__sheets[0].rows
-      : []
-    : rows
+async function buildDbfBuffer(rows: ExportSheetRows) {
+  const tableRows = getPrimaryExportRows(rows)
 
   const headers: string[] = Array.from(
-    tableRows.reduce((acc: Set<string>, row: Record<string, unknown>) => {
+    tableRows.reduce((acc: Set<string>, row) => {
       Object.keys(row || {}).forEach((key) => acc.add(key))
       return acc
     }, new Set<string>())
@@ -1093,19 +1100,16 @@ function readablePaymentType(value: unknown) {
   }
 }
 
-async function buildSpreadsheetBuffer(sheetName: string, rows: Record<string, unknown>[], fileFormat: SpreadsheetFileFormat) {
+async function buildSpreadsheetBuffer(sheetName: string, rows: ExportSheetRows, fileFormat: SpreadsheetFileFormat) {
   const workbook = new ExcelJS.Workbook()
-  const rowsWithSheets = rows as ExportSheetRows
-  const sheets: ExportSheet[] = Array.isArray(rowsWithSheets?.__sheets)
-    ? rowsWithSheets.__sheets
-    : [{ name: sheetName, rows }]
+  const sheets = getExportSheets(rows, sheetName)
 
   for (const sheet of sheets) {
     const sheetRows = Array.isArray(sheet?.rows) ? sheet.rows : []
     const worksheet = workbook.addWorksheet(String(sheet?.name || sheetName).slice(0, 31) || "Export")
 
     const headers: string[] = Array.from(
-      sheetRows.reduce((acc: Set<string>, row: Record<string, unknown>) => {
+      sheetRows.reduce((acc: Set<string>, row) => {
         Object.keys(row || {}).forEach((key) => acc.add(key))
         return acc
       }, new Set<string>())
@@ -1117,8 +1121,8 @@ async function buildSpreadsheetBuffer(sheetName: string, rows: Record<string, un
       width: Math.min(Math.max(header.length + 4, 14), 28),
     }))
 
-    sheetRows.forEach((row: Record<string, unknown>) => {
-      const normalizedRow: Record<string, unknown> = {}
+    sheetRows.forEach((row) => {
+      const normalizedRow: ExportRow = {}
       headers.forEach((header) => {
         normalizedRow[header] = row?.[header] ?? ""
       })
