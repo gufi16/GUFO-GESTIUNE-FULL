@@ -116,12 +116,6 @@ export const TENANT_BACKUP_MODULE_DEFINITIONS = [
     ],
   },
   {
-    key: "documents_incoming_einvoices",
-    label: "Documente: e-Factura primita",
-    description: "Facturi intrate din SPV si liniile lor.",
-    payloadKeys: ["incomingEInvoices"],
-  },
-  {
     key: "documents_purchase_receipts",
     label: "Documente: NIR",
     description: "Receptii/NIR si liniile lor.",
@@ -208,7 +202,6 @@ type RestoreMode = "merge" | "sync_missing"
 const COMPANY_CHILD_MODULE_KEYS: TenantBackupModuleKey[] = ["locations", "departments", "categories", "uoms", "vat_rates"]
 const CATALOG_CHILD_MODULE_KEYS: TenantBackupModuleKey[] = ["products", "recipes"]
 const DOCUMENT_CHILD_MODULE_KEYS: TenantBackupModuleKey[] = [
-  "documents_incoming_einvoices",
   "documents_purchase_receipts",
   "documents_transfers",
   "documents_inventory",
@@ -350,6 +343,96 @@ function lowerText(value: unknown) {
 
 function scopeKey(...parts: unknown[]) {
   return parts.map((part) => lowerText(part)).join("::")
+}
+
+type IdLookupModel = {
+  findMany(args: { where: { id: { in: string[] } }; select: { id: true } }): Promise<Array<{ id: string }>>
+}
+
+type IdConstraint = {
+  field: string
+  allowed: Set<string>
+}
+
+async function fetchExistingIds(model: IdLookupModel, values: Iterable<unknown>) {
+  const ids = Array.from(new Set(Array.from(values).map(asText).filter(Boolean)))
+  if (!ids.length) return new Set<string>()
+  const rows = await model.findMany({ where: { id: { in: ids } }, select: { id: true } })
+  return new Set(rows.map((row) => asText(row.id)).filter(Boolean))
+}
+
+function prepareRecords(
+  records: RestorableRecord[],
+  options?: {
+    required?: IdConstraint[]
+    optional?: IdConstraint[]
+  },
+) {
+  const required = options?.required ?? []
+  const optional = options?.optional ?? []
+  const prepared: RestorableRecord[] = []
+
+  for (const record of records) {
+    const next: RestorableRecord = { ...record }
+
+    for (const constraint of optional) {
+      const value = asText(next[constraint.field])
+      if (value && !constraint.allowed.has(value)) {
+        next[constraint.field] = null
+      }
+    }
+
+    const valid = required.every((constraint) => {
+      const value = asText(next[constraint.field])
+      return Boolean(value) && constraint.allowed.has(value)
+    })
+
+    if (valid) {
+      prepared.push(next)
+    }
+  }
+
+  return prepared
+}
+
+async function relinkDocumentReferences(data: SelectiveRestoreData) {
+  const consumptionDocIds = await fetchExistingIds(prisma.consumptionDoc as unknown as IdLookupModel, [
+    ...data.sales.map((item) => item.consumptionBatchDocId),
+    ...data.consumptionDocs.map((item) => item.id),
+    ...data.consumptionDocs.map((item) => item.aggregateParentId),
+  ])
+  const saleIds = await fetchExistingIds(prisma.sale as unknown as IdLookupModel, [
+    ...data.sales.map((item) => item.id),
+    ...data.consumptionDocs.map((item) => item.saleId),
+  ])
+
+  for (const sale of data.sales) {
+    const saleId = asText(sale.id)
+    const consumptionBatchDocId = asText(sale.consumptionBatchDocId)
+    if (!saleId || !consumptionBatchDocId) continue
+    if (!saleIds.has(saleId) || !consumptionDocIds.has(consumptionBatchDocId)) continue
+    await prisma.sale.updateMany({
+      where: { id: saleId },
+      data: { consumptionBatchDocId },
+    })
+  }
+
+  for (const doc of data.consumptionDocs) {
+    const docId = asText(doc.id)
+    if (!docId || !consumptionDocIds.has(docId)) continue
+
+    const nextSaleId = asText(doc.saleId)
+    const nextAggregateParentId = asText(doc.aggregateParentId)
+
+    await prisma.consumptionDoc.updateMany({
+      where: { id: docId },
+      data: {
+        saleId: nextSaleId && saleIds.has(nextSaleId) ? nextSaleId : null,
+        aggregateParentId:
+          nextAggregateParentId && consumptionDocIds.has(nextAggregateParentId) ? nextAggregateParentId : null,
+      },
+    })
+  }
 }
 
 function ensureBackupBelongsToTenant(tenantId: string, payload: unknown) {
@@ -1538,36 +1621,21 @@ async function syncRecipesModule(data: SelectiveRestoreData) {
 }
 
 async function restoreDocumentsModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.incomingEInvoice, data.incomingEInvoices)
-  await createManySkipDuplicatesIfAny(prisma.incomingEInvoiceItem, data.incomingEInvoiceItems)
-  await createManySkipDuplicatesIfAny(prisma.purchaseReceipt, data.purchaseReceipts)
-  await createManySkipDuplicatesIfAny(prisma.purchaseReceiptItem, data.purchaseReceiptItems)
-  await createManySkipDuplicatesIfAny(prisma.transferDoc, data.transferDocs)
-  await createManySkipDuplicatesIfAny(prisma.transferDocItem, data.transferDocItems)
-  await createManySkipDuplicatesIfAny(prisma.inventoryDoc, data.inventoryDocs)
-  await createManySkipDuplicatesIfAny(prisma.inventoryDocItem, data.inventoryDocItems)
-  await createManySkipDuplicatesIfAny(prisma.minutesDoc, data.minutesDocs)
-  await createManySkipDuplicatesIfAny(prisma.minutesDocItem, data.minutesDocItems)
-  await createManySkipDuplicatesIfAny(prisma.productionDoc, data.productionDocs)
-  await createManySkipDuplicatesIfAny(prisma.productionDocItem, data.productionDocItems)
-  await createManySkipDuplicatesIfAny(prisma.sale, data.sales)
-  await createManySkipDuplicatesIfAny(prisma.saleItem, data.saleItems)
-  await createManySkipDuplicatesIfAny(prisma.consumptionDoc, data.consumptionDocs)
-  await createManySkipDuplicatesIfAny(prisma.consumptionDocItem, data.consumptionDocItems)
-  await createManySkipDuplicatesIfAny(prisma.externalOrder, data.externalOrders)
-  await createManySkipDuplicatesIfAny(prisma.externalOrderItem, data.externalOrderItems)
-  await createManySkipDuplicatesIfAny(prisma.externalOrderStatusHistory, data.externalOrderStatusHistory)
-  await createManySkipDuplicatesIfAny(prisma.saleDraft, data.saleDrafts)
-  await createManySkipDuplicatesIfAny(prisma.kitchenTicket, data.kitchenTickets)
-  await createManySkipDuplicatesIfAny(prisma.kitchenTicketItem, data.kitchenTicketItems)
-  await createManySkipDuplicatesIfAny(prisma.salesInvoice, data.salesInvoices)
-  await createManySkipDuplicatesIfAny(prisma.salesInvoiceItem, data.salesInvoiceItems)
-  await createManySkipDuplicatesIfAny(prisma.eFacturaLog, data.efacturaLogs)
-  await createManySkipDuplicatesIfAny(prisma.stockBalance, data.stockBalances)
-  await createManySkipDuplicatesIfAny(prisma.stockMove, data.stockMoves)
+  await restorePurchaseReceiptsModule(data)
+  await restoreTransferDocsModule(data)
+  await restoreInventoryDocsModule(data)
+  await restoreMinutesDocsModule(data)
+  await restoreProductionDocsModule(data)
+  await restoreExternalOrdersModule(data)
+  await restoreSaleDraftsModule(data)
+  await restoreKitchenTicketsModule(data)
+  await restoreSalesModule(data)
+  await restoreConsumptionDocsModule(data)
+  await restoreSalesInvoicesModule(data)
+  await restoreStockModule(data)
+  await relinkDocumentReferences(data)
 
   return {
-    incomingEInvoices: data.incomingEInvoices.length,
     purchaseReceipts: data.purchaseReceipts.length,
     transferDocs: data.transferDocs.length,
     inventoryDocs: data.inventoryDocs.length,
@@ -1585,36 +1653,21 @@ async function restoreDocumentsModule(data: SelectiveRestoreData) {
 }
 
 async function syncDocumentsModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.incomingEInvoice, data.incomingEInvoices)
-  await createManySkipDuplicatesIfAny(prisma.incomingEInvoiceItem, data.incomingEInvoiceItems)
-  await createManySkipDuplicatesIfAny(prisma.purchaseReceipt, data.purchaseReceipts)
-  await createManySkipDuplicatesIfAny(prisma.purchaseReceiptItem, data.purchaseReceiptItems)
-  await createManySkipDuplicatesIfAny(prisma.transferDoc, data.transferDocs)
-  await createManySkipDuplicatesIfAny(prisma.transferDocItem, data.transferDocItems)
-  await createManySkipDuplicatesIfAny(prisma.inventoryDoc, data.inventoryDocs)
-  await createManySkipDuplicatesIfAny(prisma.inventoryDocItem, data.inventoryDocItems)
-  await createManySkipDuplicatesIfAny(prisma.minutesDoc, data.minutesDocs)
-  await createManySkipDuplicatesIfAny(prisma.minutesDocItem, data.minutesDocItems)
-  await createManySkipDuplicatesIfAny(prisma.productionDoc, data.productionDocs)
-  await createManySkipDuplicatesIfAny(prisma.productionDocItem, data.productionDocItems)
-  await createManySkipDuplicatesIfAny(prisma.sale, data.sales)
-  await createManySkipDuplicatesIfAny(prisma.saleItem, data.saleItems)
-  await createManySkipDuplicatesIfAny(prisma.consumptionDoc, data.consumptionDocs)
-  await createManySkipDuplicatesIfAny(prisma.consumptionDocItem, data.consumptionDocItems)
-  await createManySkipDuplicatesIfAny(prisma.externalOrder, data.externalOrders)
-  await createManySkipDuplicatesIfAny(prisma.externalOrderItem, data.externalOrderItems)
-  await createManySkipDuplicatesIfAny(prisma.externalOrderStatusHistory, data.externalOrderStatusHistory)
-  await createManySkipDuplicatesIfAny(prisma.saleDraft, data.saleDrafts)
-  await createManySkipDuplicatesIfAny(prisma.kitchenTicket, data.kitchenTickets)
-  await createManySkipDuplicatesIfAny(prisma.kitchenTicketItem, data.kitchenTicketItems)
-  await createManySkipDuplicatesIfAny(prisma.salesInvoice, data.salesInvoices)
-  await createManySkipDuplicatesIfAny(prisma.salesInvoiceItem, data.salesInvoiceItems)
-  await createManySkipDuplicatesIfAny(prisma.eFacturaLog, data.efacturaLogs)
-  await createManySkipDuplicatesIfAny(prisma.stockBalance, data.stockBalances)
-  await createManySkipDuplicatesIfAny(prisma.stockMove, data.stockMoves)
+  await syncPurchaseReceiptsModule(data)
+  await syncTransferDocsModule(data)
+  await syncInventoryDocsModule(data)
+  await syncMinutesDocsModule(data)
+  await syncProductionDocsModule(data)
+  await syncExternalOrdersModule(data)
+  await syncSaleDraftsModule(data)
+  await syncKitchenTicketsModule(data)
+  await syncSalesModule(data)
+  await syncConsumptionDocsModule(data)
+  await syncSalesInvoicesModule(data)
+  await syncStockModule(data)
+  await relinkDocumentReferences(data)
 
   return {
-    incomingEInvoices: data.incomingEInvoices.length,
     purchaseReceipts: data.purchaseReceipts.length,
     transferDocs: data.transferDocs.length,
     inventoryDocs: data.inventoryDocs.length,
@@ -1644,148 +1697,376 @@ async function syncIncomingEInvoicesModule(data: SelectiveRestoreData) {
 }
 
 async function restorePurchaseReceiptsModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.purchaseReceipt, data.purchaseReceipts)
-  await createManySkipDuplicatesIfAny(prisma.purchaseReceiptItem, data.purchaseReceiptItems)
+  const locationIds = await fetchExistingIds(prisma.location as unknown as IdLookupModel, data.purchaseReceipts.map((item) => item.locationId))
+  const warehouseIds = await fetchExistingIds(prisma.warehouse as unknown as IdLookupModel, data.purchaseReceipts.map((item) => item.warehouseId))
+  const supplierIds = await fetchExistingIds(prisma.supplier as unknown as IdLookupModel, data.purchaseReceipts.map((item) => item.supplierId))
+  const receipts = prepareRecords(data.purchaseReceipts, {
+    required: [{ field: "locationId", allowed: locationIds }],
+    optional: [
+      { field: "warehouseId", allowed: warehouseIds },
+      { field: "supplierId", allowed: supplierIds },
+    ],
+  })
+  await createManySkipDuplicatesIfAny(prisma.purchaseReceipt, receipts)
+
+  const receiptIds = await fetchExistingIds(prisma.purchaseReceipt as unknown as IdLookupModel, data.purchaseReceiptItems.map((item) => item.receiptId))
+  const productIds = await fetchExistingIds(prisma.product as unknown as IdLookupModel, data.purchaseReceiptItems.map((item) => item.productId))
+  const uomIds = await fetchExistingIds(prisma.uom as unknown as IdLookupModel, data.purchaseReceiptItems.map((item) => item.uomId))
+  const vatRateIds = await fetchExistingIds(prisma.vatRate as unknown as IdLookupModel, data.purchaseReceiptItems.map((item) => item.vatRateId))
+  const items = prepareRecords(data.purchaseReceiptItems, {
+    required: [
+      { field: "receiptId", allowed: receiptIds },
+      { field: "productId", allowed: productIds },
+      { field: "uomId", allowed: uomIds },
+    ],
+    optional: [{ field: "vatRateId", allowed: vatRateIds }],
+  })
+  await createManySkipDuplicatesIfAny(prisma.purchaseReceiptItem, items)
   return { purchaseReceipts: data.purchaseReceipts.length }
 }
 
 async function syncPurchaseReceiptsModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.purchaseReceipt, data.purchaseReceipts)
-  await createManySkipDuplicatesIfAny(prisma.purchaseReceiptItem, data.purchaseReceiptItems)
+  await restorePurchaseReceiptsModule(data)
   return { purchaseReceipts: data.purchaseReceipts.length }
 }
 
 async function restoreTransferDocsModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.transferDoc, data.transferDocs)
-  await createManySkipDuplicatesIfAny(prisma.transferDocItem, data.transferDocItems)
+  const locationIds = await fetchExistingIds(prisma.location as unknown as IdLookupModel, [
+    ...data.transferDocs.map((item) => item.fromLocationId),
+    ...data.transferDocs.map((item) => item.toLocationId),
+  ])
+  const warehouseIds = await fetchExistingIds(prisma.warehouse as unknown as IdLookupModel, [
+    ...data.transferDocs.map((item) => item.fromWarehouseId),
+    ...data.transferDocs.map((item) => item.toWarehouseId),
+  ])
+  const docs = prepareRecords(data.transferDocs, {
+    required: [
+      { field: "fromLocationId", allowed: locationIds },
+      { field: "toLocationId", allowed: locationIds },
+    ],
+    optional: [
+      { field: "fromWarehouseId", allowed: warehouseIds },
+      { field: "toWarehouseId", allowed: warehouseIds },
+    ],
+  })
+  await createManySkipDuplicatesIfAny(prisma.transferDoc, docs)
+
+  const transferIds = await fetchExistingIds(prisma.transferDoc as unknown as IdLookupModel, data.transferDocItems.map((item) => item.transferId))
+  const productIds = await fetchExistingIds(prisma.product as unknown as IdLookupModel, data.transferDocItems.map((item) => item.productId))
+  const uomIds = await fetchExistingIds(prisma.uom as unknown as IdLookupModel, data.transferDocItems.map((item) => item.uomId))
+  const vatRateIds = await fetchExistingIds(prisma.vatRate as unknown as IdLookupModel, data.transferDocItems.map((item) => item.vatRateId))
+  const items = prepareRecords(data.transferDocItems, {
+    required: [
+      { field: "transferId", allowed: transferIds },
+      { field: "productId", allowed: productIds },
+      { field: "uomId", allowed: uomIds },
+    ],
+    optional: [{ field: "vatRateId", allowed: vatRateIds }],
+  })
+  await createManySkipDuplicatesIfAny(prisma.transferDocItem, items)
   return { transferDocs: data.transferDocs.length }
 }
 
 async function syncTransferDocsModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.transferDoc, data.transferDocs)
-  await createManySkipDuplicatesIfAny(prisma.transferDocItem, data.transferDocItems)
+  await restoreTransferDocsModule(data)
   return { transferDocs: data.transferDocs.length }
 }
 
 async function restoreInventoryDocsModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.inventoryDoc, data.inventoryDocs)
-  await createManySkipDuplicatesIfAny(prisma.inventoryDocItem, data.inventoryDocItems)
+  const locationIds = await fetchExistingIds(prisma.location as unknown as IdLookupModel, data.inventoryDocs.map((item) => item.locationId))
+  const warehouseIds = await fetchExistingIds(prisma.warehouse as unknown as IdLookupModel, data.inventoryDocs.map((item) => item.warehouseId))
+  const docs = prepareRecords(data.inventoryDocs, {
+    required: [{ field: "locationId", allowed: locationIds }],
+    optional: [{ field: "warehouseId", allowed: warehouseIds }],
+  })
+  await createManySkipDuplicatesIfAny(prisma.inventoryDoc, docs)
+
+  const inventoryDocIds = await fetchExistingIds(prisma.inventoryDoc as unknown as IdLookupModel, data.inventoryDocItems.map((item) => item.inventoryDocId))
+  const productIds = await fetchExistingIds(prisma.product as unknown as IdLookupModel, data.inventoryDocItems.map((item) => item.productId))
+  const items = prepareRecords(data.inventoryDocItems, {
+    required: [
+      { field: "inventoryDocId", allowed: inventoryDocIds },
+      { field: "productId", allowed: productIds },
+    ],
+  })
+  await createManySkipDuplicatesIfAny(prisma.inventoryDocItem, items)
   return { inventoryDocs: data.inventoryDocs.length }
 }
 
 async function syncInventoryDocsModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.inventoryDoc, data.inventoryDocs)
-  await createManySkipDuplicatesIfAny(prisma.inventoryDocItem, data.inventoryDocItems)
+  await restoreInventoryDocsModule(data)
   return { inventoryDocs: data.inventoryDocs.length }
 }
 
 async function restoreMinutesDocsModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.minutesDoc, data.minutesDocs)
-  await createManySkipDuplicatesIfAny(prisma.minutesDocItem, data.minutesDocItems)
+  const locationIds = await fetchExistingIds(prisma.location as unknown as IdLookupModel, data.minutesDocs.map((item) => item.locationId))
+  const warehouseIds = await fetchExistingIds(prisma.warehouse as unknown as IdLookupModel, data.minutesDocs.map((item) => item.warehouseId))
+  const docs = prepareRecords(data.minutesDocs, {
+    required: [{ field: "locationId", allowed: locationIds }],
+    optional: [{ field: "warehouseId", allowed: warehouseIds }],
+  })
+  await createManySkipDuplicatesIfAny(prisma.minutesDoc, docs)
+
+  const minutesDocIds = await fetchExistingIds(prisma.minutesDoc as unknown as IdLookupModel, data.minutesDocItems.map((item) => item.minutesDocId))
+  const productIds = await fetchExistingIds(prisma.product as unknown as IdLookupModel, data.minutesDocItems.map((item) => item.productId))
+  const items = prepareRecords(data.minutesDocItems, {
+    required: [
+      { field: "minutesDocId", allowed: minutesDocIds },
+      { field: "productId", allowed: productIds },
+    ],
+  })
+  await createManySkipDuplicatesIfAny(prisma.minutesDocItem, items)
   return { minutesDocs: data.minutesDocs.length }
 }
 
 async function syncMinutesDocsModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.minutesDoc, data.minutesDocs)
-  await createManySkipDuplicatesIfAny(prisma.minutesDocItem, data.minutesDocItems)
+  await restoreMinutesDocsModule(data)
   return { minutesDocs: data.minutesDocs.length }
 }
 
 async function restoreProductionDocsModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.productionDoc, data.productionDocs)
-  await createManySkipDuplicatesIfAny(prisma.productionDocItem, data.productionDocItems)
+  const locationIds = await fetchExistingIds(prisma.location as unknown as IdLookupModel, data.productionDocs.map((item) => item.locationId))
+  const warehouseIds = await fetchExistingIds(prisma.warehouse as unknown as IdLookupModel, data.productionDocs.map((item) => item.warehouseId))
+  const docs = prepareRecords(data.productionDocs, {
+    required: [{ field: "locationId", allowed: locationIds }],
+    optional: [{ field: "warehouseId", allowed: warehouseIds }],
+  })
+  await createManySkipDuplicatesIfAny(prisma.productionDoc, docs)
+
+  const productionDocIds = await fetchExistingIds(prisma.productionDoc as unknown as IdLookupModel, data.productionDocItems.map((item) => item.productionDocId))
+  const productIds = await fetchExistingIds(prisma.product as unknown as IdLookupModel, data.productionDocItems.map((item) => item.productId))
+  const items = prepareRecords(data.productionDocItems, {
+    required: [
+      { field: "productionDocId", allowed: productionDocIds },
+      { field: "productId", allowed: productIds },
+    ],
+  })
+  await createManySkipDuplicatesIfAny(prisma.productionDocItem, items)
   return { productionDocs: data.productionDocs.length }
 }
 
 async function syncProductionDocsModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.productionDoc, data.productionDocs)
-  await createManySkipDuplicatesIfAny(prisma.productionDocItem, data.productionDocItems)
+  await restoreProductionDocsModule(data)
   return { productionDocs: data.productionDocs.length }
 }
 
 async function restoreSalesModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.sale, data.sales)
-  await createManySkipDuplicatesIfAny(prisma.saleItem, data.saleItems)
+  const locationIds = await fetchExistingIds(prisma.location as unknown as IdLookupModel, data.sales.map((item) => item.locationId))
+  const terminalIds = await fetchExistingIds(prisma.terminal as unknown as IdLookupModel, data.sales.map((item) => item.terminalId))
+  const externalOrderIds = await fetchExistingIds(prisma.externalOrder as unknown as IdLookupModel, data.sales.map((item) => item.externalOrderId))
+  const consumptionDocIds = await fetchExistingIds(prisma.consumptionDoc as unknown as IdLookupModel, data.sales.map((item) => item.consumptionBatchDocId))
+  const sales = prepareRecords(data.sales, {
+    required: [{ field: "locationId", allowed: locationIds }],
+    optional: [
+      { field: "terminalId", allowed: terminalIds },
+      { field: "externalOrderId", allowed: externalOrderIds },
+      { field: "consumptionBatchDocId", allowed: consumptionDocIds },
+    ],
+  })
+  await createManySkipDuplicatesIfAny(prisma.sale, sales)
+
+  const saleIds = await fetchExistingIds(prisma.sale as unknown as IdLookupModel, data.saleItems.map((item) => item.saleId))
+  const productIds = await fetchExistingIds(prisma.product as unknown as IdLookupModel, data.saleItems.map((item) => item.productId))
+  const items = prepareRecords(data.saleItems, {
+    required: [
+      { field: "saleId", allowed: saleIds },
+      { field: "productId", allowed: productIds },
+    ],
+  })
+  await createManySkipDuplicatesIfAny(prisma.saleItem, items)
   return { sales: data.sales.length }
 }
 
 async function syncSalesModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.sale, data.sales)
-  await createManySkipDuplicatesIfAny(prisma.saleItem, data.saleItems)
+  await restoreSalesModule(data)
   return { sales: data.sales.length }
 }
 
 async function restoreConsumptionDocsModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.consumptionDoc, data.consumptionDocs)
-  await createManySkipDuplicatesIfAny(prisma.consumptionDocItem, data.consumptionDocItems)
+  const locationIds = await fetchExistingIds(prisma.location as unknown as IdLookupModel, data.consumptionDocs.map((item) => item.locationId))
+  const warehouseIds = await fetchExistingIds(prisma.warehouse as unknown as IdLookupModel, data.consumptionDocs.map((item) => item.warehouseId))
+  const saleIds = await fetchExistingIds(prisma.sale as unknown as IdLookupModel, data.consumptionDocs.map((item) => item.saleId))
+  const parentConsumptionIds = await fetchExistingIds(prisma.consumptionDoc as unknown as IdLookupModel, data.consumptionDocs.map((item) => item.aggregateParentId))
+  const docs = prepareRecords(data.consumptionDocs, {
+    required: [{ field: "locationId", allowed: locationIds }],
+    optional: [
+      { field: "warehouseId", allowed: warehouseIds },
+      { field: "saleId", allowed: saleIds },
+      { field: "aggregateParentId", allowed: parentConsumptionIds },
+    ],
+  })
+  await createManySkipDuplicatesIfAny(prisma.consumptionDoc, docs)
+
+  const consumptionDocIds = await fetchExistingIds(prisma.consumptionDoc as unknown as IdLookupModel, data.consumptionDocItems.map((item) => item.consumptionDocId))
+  const productIds = await fetchExistingIds(prisma.product as unknown as IdLookupModel, [
+    ...data.consumptionDocItems.map((item) => item.finishedProductId),
+    ...data.consumptionDocItems.map((item) => item.ingredientId),
+  ])
+  const items = prepareRecords(data.consumptionDocItems, {
+    required: [
+      { field: "consumptionDocId", allowed: consumptionDocIds },
+      { field: "ingredientId", allowed: productIds },
+    ],
+    optional: [{ field: "finishedProductId", allowed: productIds }],
+  })
+  await createManySkipDuplicatesIfAny(prisma.consumptionDocItem, items)
   return { consumptionDocs: data.consumptionDocs.length }
 }
 
 async function syncConsumptionDocsModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.consumptionDoc, data.consumptionDocs)
-  await createManySkipDuplicatesIfAny(prisma.consumptionDocItem, data.consumptionDocItems)
+  await restoreConsumptionDocsModule(data)
   return { consumptionDocs: data.consumptionDocs.length }
 }
 
 async function restoreSalesInvoicesModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.salesInvoice, data.salesInvoices)
-  await createManySkipDuplicatesIfAny(prisma.salesInvoiceItem, data.salesInvoiceItems)
-  await createManySkipDuplicatesIfAny(prisma.eFacturaLog, data.efacturaLogs)
+  const locationIds = await fetchExistingIds(prisma.location as unknown as IdLookupModel, data.salesInvoices.map((item) => item.locationId))
+  const customerIds = await fetchExistingIds(prisma.customer as unknown as IdLookupModel, data.salesInvoices.map((item) => item.customerId))
+  const invoices = prepareRecords(data.salesInvoices, {
+    required: [{ field: "locationId", allowed: locationIds }],
+    optional: [{ field: "customerId", allowed: customerIds }],
+  })
+  await createManySkipDuplicatesIfAny(prisma.salesInvoice, invoices)
+
+  const invoiceIds = await fetchExistingIds(prisma.salesInvoice as unknown as IdLookupModel, [
+    ...data.salesInvoiceItems.map((item) => item.invoiceId),
+    ...data.efacturaLogs.map((item) => item.invoiceId),
+  ])
+  const productIds = await fetchExistingIds(prisma.product as unknown as IdLookupModel, data.salesInvoiceItems.map((item) => item.productId))
+  const items = prepareRecords(data.salesInvoiceItems, {
+    required: [
+      { field: "invoiceId", allowed: invoiceIds },
+      { field: "productId", allowed: productIds },
+    ],
+  })
+  await createManySkipDuplicatesIfAny(prisma.salesInvoiceItem, items)
+
+  const logs = prepareRecords(data.efacturaLogs, {
+    required: [{ field: "invoiceId", allowed: invoiceIds }],
+  })
+  await createManySkipDuplicatesIfAny(prisma.eFacturaLog, logs)
   return { salesInvoices: data.salesInvoices.length }
 }
 
 async function syncSalesInvoicesModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.salesInvoice, data.salesInvoices)
-  await createManySkipDuplicatesIfAny(prisma.salesInvoiceItem, data.salesInvoiceItems)
-  await createManySkipDuplicatesIfAny(prisma.eFacturaLog, data.efacturaLogs)
+  await restoreSalesInvoicesModule(data)
   return { salesInvoices: data.salesInvoices.length }
 }
 
 async function restoreExternalOrdersModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.externalOrder, data.externalOrders)
-  await createManySkipDuplicatesIfAny(prisma.externalOrderItem, data.externalOrderItems)
-  await createManySkipDuplicatesIfAny(prisma.externalOrderStatusHistory, data.externalOrderStatusHistory)
+  const locationIds = await fetchExistingIds(prisma.location as unknown as IdLookupModel, data.externalOrders.map((item) => item.locationId))
+  const integrationIds = await fetchExistingIds(prisma.externalIntegration as unknown as IdLookupModel, data.externalOrders.map((item) => item.integrationId))
+  const orders = prepareRecords(data.externalOrders, {
+    required: [{ field: "locationId", allowed: locationIds }],
+    optional: [{ field: "integrationId", allowed: integrationIds }],
+  })
+  await createManySkipDuplicatesIfAny(prisma.externalOrder, orders)
+
+  const externalOrderIds = await fetchExistingIds(prisma.externalOrder as unknown as IdLookupModel, [
+    ...data.externalOrderItems.map((item) => item.externalOrderId),
+    ...data.externalOrderStatusHistory.map((item) => item.externalOrderId),
+  ])
+  const productIds = await fetchExistingIds(prisma.product as unknown as IdLookupModel, data.externalOrderItems.map((item) => item.erpProductId))
+  const items = prepareRecords(data.externalOrderItems, {
+    required: [{ field: "externalOrderId", allowed: externalOrderIds }],
+    optional: [{ field: "erpProductId", allowed: productIds }],
+  })
+  await createManySkipDuplicatesIfAny(prisma.externalOrderItem, items)
+
+  const history = prepareRecords(data.externalOrderStatusHistory, {
+    required: [{ field: "externalOrderId", allowed: externalOrderIds }],
+  })
+  await createManySkipDuplicatesIfAny(prisma.externalOrderStatusHistory, history)
   return { externalOrders: data.externalOrders.length }
 }
 
 async function syncExternalOrdersModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.externalOrder, data.externalOrders)
-  await createManySkipDuplicatesIfAny(prisma.externalOrderItem, data.externalOrderItems)
-  await createManySkipDuplicatesIfAny(prisma.externalOrderStatusHistory, data.externalOrderStatusHistory)
+  await restoreExternalOrdersModule(data)
   return { externalOrders: data.externalOrders.length }
 }
 
 async function restoreSaleDraftsModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.saleDraft, data.saleDrafts)
+  const locationIds = await fetchExistingIds(prisma.location as unknown as IdLookupModel, data.saleDrafts.map((item) => item.locationId))
+  const externalOrderIds = await fetchExistingIds(prisma.externalOrder as unknown as IdLookupModel, data.saleDrafts.map((item) => item.externalOrderId))
+  const drafts = prepareRecords(data.saleDrafts, {
+    required: [{ field: "locationId", allowed: locationIds }],
+    optional: [{ field: "externalOrderId", allowed: externalOrderIds }],
+  })
+  await createManySkipDuplicatesIfAny(prisma.saleDraft, drafts)
   return { saleDrafts: data.saleDrafts.length }
 }
 
 async function syncSaleDraftsModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.saleDraft, data.saleDrafts)
+  await restoreSaleDraftsModule(data)
   return { saleDrafts: data.saleDrafts.length }
 }
 
 async function restoreKitchenTicketsModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.kitchenTicket, data.kitchenTickets)
-  await createManySkipDuplicatesIfAny(prisma.kitchenTicketItem, data.kitchenTicketItems)
+  const locationIds = await fetchExistingIds(prisma.location as unknown as IdLookupModel, data.kitchenTickets.map((item) => item.locationId))
+  const externalOrderIds = await fetchExistingIds(prisma.externalOrder as unknown as IdLookupModel, data.kitchenTickets.map((item) => item.externalOrderId))
+  const tickets = prepareRecords(data.kitchenTickets, {
+    required: [{ field: "locationId", allowed: locationIds }],
+    optional: [{ field: "externalOrderId", allowed: externalOrderIds }],
+  })
+  await createManySkipDuplicatesIfAny(prisma.kitchenTicket, tickets)
+
+  const kitchenTicketIds = await fetchExistingIds(prisma.kitchenTicket as unknown as IdLookupModel, data.kitchenTicketItems.map((item) => item.kitchenTicketId))
+  const productIds = await fetchExistingIds(prisma.product as unknown as IdLookupModel, data.kitchenTicketItems.map((item) => item.productId))
+  const departmentIds = await fetchExistingIds(prisma.department as unknown as IdLookupModel, data.kitchenTicketItems.map((item) => item.departmentId))
+  const items = prepareRecords(data.kitchenTicketItems, {
+    required: [{ field: "kitchenTicketId", allowed: kitchenTicketIds }],
+    optional: [
+      { field: "productId", allowed: productIds },
+      { field: "departmentId", allowed: departmentIds },
+    ],
+  })
+  await createManySkipDuplicatesIfAny(prisma.kitchenTicketItem, items)
   return { kitchenTickets: data.kitchenTickets.length }
 }
 
 async function syncKitchenTicketsModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.kitchenTicket, data.kitchenTickets)
-  await createManySkipDuplicatesIfAny(prisma.kitchenTicketItem, data.kitchenTicketItems)
+  await restoreKitchenTicketsModule(data)
   return { kitchenTickets: data.kitchenTickets.length }
 }
 
 async function restoreStockModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.stockBalance, data.stockBalances)
-  await createManySkipDuplicatesIfAny(prisma.stockMove, data.stockMoves)
+  const locationIds = await fetchExistingIds(prisma.location as unknown as IdLookupModel, [
+    ...data.stockBalances.map((item) => item.locationId),
+    ...data.stockMoves.map((item) => item.locationId),
+  ])
+  const warehouseIds = await fetchExistingIds(prisma.warehouse as unknown as IdLookupModel, [
+    ...data.stockBalances.map((item) => item.warehouseId),
+    ...data.stockMoves.map((item) => item.warehouseId),
+  ])
+  const productIds = await fetchExistingIds(prisma.product as unknown as IdLookupModel, [
+    ...data.stockBalances.map((item) => item.productId),
+    ...data.stockMoves.map((item) => item.productId),
+  ])
+  const lotIds = await fetchExistingIds(prisma.stockLot as unknown as IdLookupModel, data.stockMoves.map((item) => item.lotId))
+  const balances = prepareRecords(data.stockBalances, {
+    required: [
+      { field: "locationId", allowed: locationIds },
+      { field: "productId", allowed: productIds },
+    ],
+    optional: [{ field: "warehouseId", allowed: warehouseIds }],
+  })
+  await createManySkipDuplicatesIfAny(prisma.stockBalance, balances)
+
+  const moves = prepareRecords(data.stockMoves, {
+    required: [
+      { field: "locationId", allowed: locationIds },
+      { field: "productId", allowed: productIds },
+    ],
+    optional: [
+      { field: "warehouseId", allowed: warehouseIds },
+      { field: "lotId", allowed: lotIds },
+    ],
+  })
+  await createManySkipDuplicatesIfAny(prisma.stockMove, moves)
   return { stockBalances: data.stockBalances.length, stockMoves: data.stockMoves.length }
 }
 
 async function syncStockModule(data: SelectiveRestoreData) {
-  await createManySkipDuplicatesIfAny(prisma.stockBalance, data.stockBalances)
-  await createManySkipDuplicatesIfAny(prisma.stockMove, data.stockMoves)
+  await restoreStockModule(data)
   return { stockBalances: data.stockBalances.length, stockMoves: data.stockMoves.length }
 }
 
@@ -1872,10 +2153,6 @@ export async function restoreTenantBackupSelectionFromFile(
     }
     if (key === "documents") {
       result.documents = mode === "sync_missing" ? await syncDocumentsModule(data) : await restoreDocumentsModule(data)
-      continue
-    }
-    if (key === "documents_incoming_einvoices") {
-      result.documentsIncomingEInvoices = mode === "sync_missing" ? await syncIncomingEInvoicesModule(data) : await restoreIncomingEInvoicesModule(data)
       continue
     }
     if (key === "documents_purchase_receipts") {

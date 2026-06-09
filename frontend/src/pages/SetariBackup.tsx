@@ -49,7 +49,6 @@ const syncGroups: SyncGroup[] = [
     label: "Documente",
     modal: true,
     children: [
-      "documents_incoming_einvoices",
       "documents_purchase_receipts",
       "documents_transfers",
       "documents_inventory",
