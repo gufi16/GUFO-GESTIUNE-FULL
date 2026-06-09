@@ -1448,12 +1448,12 @@ async function restoreDepartmentsModule(data: SelectiveRestoreData) {
 async function syncDepartmentsModule(data: SelectiveRestoreData) {
   const existing = await prisma.department.findMany({
     where: { tenantId: asText(data.departments[0]?.tenantId) || undefined },
-    select: { companyId: true, name: true },
+    select: { name: true },
   })
-  const keys = new Set(existing.map((item) => scopeKey(item.companyId, item.name)))
+  const keys = new Set(existing.map((item) => lowerText(item.name)).filter(Boolean))
   let created = 0
   for (const item of data.departments) {
-    const key = scopeKey(item.companyId, item.name)
+    const key = lowerText(item.name)
     if (keys.has(key)) continue
     await prisma.department.create({ data: item as never })
     keys.add(key)

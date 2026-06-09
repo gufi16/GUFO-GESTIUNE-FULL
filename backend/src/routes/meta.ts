@@ -1350,13 +1350,28 @@ router.get("/api/v1/meta/departments", async (req: AuthedRequest, res) => {
   const tenantId = auth.tenantId
   const companyId = await requireMetaCompanyId(req)
 
-  const items = await prisma.department.findMany({
+  const rawItems = await prisma.department.findMany({
     where: {
       tenantId,
       OR: buildCompanyScope(companyId),
     },
-    orderBy: { name: "asc" }
+    orderBy: [{ name: "asc" }, { createdAt: "asc" }],
   })
+
+  const deduped = new Map<string, (typeof rawItems)[number]>()
+  for (const item of rawItems) {
+    const key = item.name.trim().toLowerCase()
+    const current = deduped.get(key)
+    if (!current) {
+      deduped.set(key, item)
+      continue
+    }
+    if (current.companyId == null && item.companyId != null) {
+      deduped.set(key, item)
+    }
+  }
+
+  const items = Array.from(deduped.values()).sort((left, right) => left.name.localeCompare(right.name, "ro"))
 
   res.json({ ok: true, items })
 })
@@ -1376,7 +1391,11 @@ router.post("/api/v1/meta/departments", async (req: AuthedRequest, res) => {
 
   try {
     const existing = await prisma.department.findFirst({
-      where: { tenantId, companyId, name }
+      where: {
+        tenantId,
+        name,
+        OR: buildCompanyScope(companyId),
+      },
     })
 
     if (existing) {
@@ -1438,10 +1457,10 @@ router.put("/api/v1/meta/departments/:id", async (req: AuthedRequest, res) => {
     const duplicate = await prisma.department.findFirst({
       where: {
         tenantId,
-        companyId: current.companyId ?? companyId,
         name,
-        NOT: { id }
-      }
+        OR: buildCompanyScope(companyId),
+        NOT: { id },
+      },
     })
 
     if (duplicate) {
