@@ -555,6 +555,7 @@ export async function restoreTenantBackupFromFile(tenantId: string, filePath: st
   )
 
   const stockBalances = asArray<RestorableRecord>(payload.stockBalances).map((item) => normalizeRecord(item))
+  const stockLots = asArray<RestorableRecord>(payload.stockLots).map((item) => normalizeRecord(item))
   const stockMoves = asArray<RestorableRecord>(payload.stockMoves).map((item) => normalizeRecord(item))
 
   const recipes = asArray<RestorableRecord>(payload.recipes).map((item) => normalizeRecord(item))
@@ -648,11 +649,14 @@ export async function restoreTenantBackupFromFile(tenantId: string, filePath: st
   await prisma.saleItem.deleteMany({ where: { sale: { tenantId } } })
   await prisma.recipeItem.deleteMany({ where: { recipe: { tenantId } } })
   await prisma.kitchenTicketItem.deleteMany({ where: { kitchenTicket: { tenantId } } })
+  await prisma.transferDocItemLot.deleteMany({ where: { transferDocItem: { transfer: { tenantId } } } })
+  await prisma.consumptionDocItemLot.deleteMany({ where: { consumptionDocItem: { consumptionDoc: { tenantId } } } })
   await prisma.externalOrderStatusHistory.deleteMany({ where: { tenantId } })
   await prisma.externalOrderItem.deleteMany({ where: { externalOrder: { tenantId } } })
   await prisma.productBarcode.deleteMany({ where: { tenantId } })
   await prisma.marketplaceProductMapping.deleteMany({ where: { tenantId } })
   await prisma.stockMove.deleteMany({ where: { tenantId } })
+  await prisma.stockLot.deleteMany({ where: { tenantId } })
   await prisma.stockBalance.deleteMany({ where: { tenantId } })
   await prisma.saleDraft.deleteMany({ where: { tenantId } })
   await prisma.kitchenTicket.deleteMany({ where: { tenantId } })
@@ -728,6 +732,7 @@ export async function restoreTenantBackupFromFile(tenantId: string, filePath: st
   await createManyIfAny(prisma.salesInvoiceItem, salesInvoiceItems)
   await createManyIfAny(prisma.eFacturaLog, efacturaLogs)
   await createManyIfAny(prisma.stockBalance, stockBalances)
+  await createManyIfAny(prisma.stockLot, stockLots)
   await createManyIfAny(prisma.stockMove, stockMoves)
   await createManyIfAny(prisma.userCompanyAccess, userCompanyAccesses)
 
@@ -751,6 +756,7 @@ export async function restoreTenantBackupFromFile(tenantId: string, filePath: st
     products: products.length,
     productBarcodes: productBarcodes.length,
     stockBalances: stockBalances.length,
+    stockLots: stockLots.length,
     stockMoves: stockMoves.length,
     recipes: recipes.length,
     incomingEInvoices: incomingEInvoices.length,

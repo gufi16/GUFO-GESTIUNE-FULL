@@ -125,6 +125,7 @@ export async function buildTenantExportZip(tenantId: string) {
       suppliers: true,
       customers: true,
       stockBalances: true,
+      stockLots: true,
       stockMoves: true,
       purchaseReceipts: {
         include: {
@@ -256,6 +257,7 @@ export async function buildTenantExportZip(tenantId: string) {
     suppliers: tenant.suppliers,
     customers: tenant.customers,
     stockBalances: tenant.stockBalances,
+    stockLots: tenant.stockLots,
     stockMoves: tenant.stockMoves,
     purchaseReceipts: tenant.purchaseReceipts,
     transferDocs: tenant.transferDocs,
