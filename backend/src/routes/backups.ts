@@ -6,7 +6,12 @@ import { Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { buildTenantBackupStats, buildTenantExportZip, ensureTenantBackupDir } from "../lib/tenantExport"
-import { restoreMissingTenantFilesFromBackupFile, restoreTenantBackupFromFile } from "../lib/tenantRestore"
+import {
+  describeTenantBackupModulesFromFile,
+  restoreMissingTenantFilesFromBackupFile,
+  restoreTenantBackupFromFile,
+  restoreTenantBackupSelectionFromFile,
+} from "../lib/tenantRestore"
 import { ensureTenantAdminAccess } from "../lib/tenantAdmin"
 
 const router = Router()
@@ -51,6 +56,11 @@ function fileBaseName(value: string) {
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
+}
+
+function parseSelectedModules(value: unknown) {
+  if (!Array.isArray(value)) return []
+  return value.map((item) => String(item || "").trim()).filter(Boolean)
 }
 
 async function persistTenantBackupSnapshot(
@@ -373,6 +383,46 @@ router.get("/api/v1/settings/backups/:id/download", async (req: AuthedRequest, r
   return res.send(fs.readFileSync(item.filePath))
 })
 
+router.get("/api/v1/settings/backups/:id/modules", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth?.tenantId
+  if (!tenantId) {
+    return res.status(400).json({ ok: false, error: "Tenant lipsa pentru backup." })
+  }
+
+  const item = await prisma.tenantBackup.findFirst({
+    where: {
+      id: req.params.id,
+      tenantId,
+    },
+  })
+
+  if (!item) {
+    return res.status(404).json({ ok: false, error: "Backup-ul nu a fost gasit." })
+  }
+
+  if (!fs.existsSync(item.filePath)) {
+    return res.status(404).json({ ok: false, error: "Fisierul backup nu mai exista pe server." })
+  }
+
+  try {
+    const modules = describeTenantBackupModulesFromFile(tenantId, item.filePath)
+    return res.json({
+      ok: true,
+      backup: {
+        id: item.id,
+        fileName: item.fileName,
+        createdAt: item.createdAt,
+      },
+      modules,
+    })
+  } catch (error: unknown) {
+    return res.status(500).json({
+      ok: false,
+      error: errorMessage(error, "Nu am putut citi modulele disponibile din backup."),
+    })
+  }
+})
+
 router.post("/api/v1/settings/backups/:id/recover-files", async (req: AuthedRequest, res) => {
   const tenantId = req.auth?.tenantId
   if (!tenantId) {
@@ -519,6 +569,77 @@ router.post("/api/v1/settings/backups/:id/restore", async (req: AuthedRequest, r
     return res.status(500).json({
       ok: false,
       error: errorMessage(error, "Nu am putut restaura backup-ul clientului."),
+    })
+  }
+})
+
+router.post("/api/v1/settings/backups/:id/restore-selected", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth?.tenantId
+  if (!tenantId) {
+    return res.status(400).json({ ok: false, error: "Tenant lipsa pentru backup." })
+  }
+
+  const item = await prisma.tenantBackup.findFirst({
+    where: {
+      id: req.params.id,
+      tenantId,
+    },
+  })
+
+  if (!item) {
+    return res.status(404).json({ ok: false, error: "Backup-ul nu a fost gasit." })
+  }
+
+  if (!fs.existsSync(item.filePath)) {
+    return res.status(404).json({ ok: false, error: "Fisierul backup nu mai exista pe server." })
+  }
+
+  const modules = parseSelectedModules(req.body?.modules)
+  if (!modules.length) {
+    return res.status(400).json({ ok: false, error: "Selecteaza cel putin un modul pentru restore." })
+  }
+
+  try {
+    const safetyBackup = await persistTenantBackupSnapshot(
+      tenantId,
+      req.auth?.activeCompanyId || null,
+      req.auth?.userId,
+      "siguranta-inainte-restore-selectiv",
+    )
+
+    const restored = await restoreTenantBackupSelectionFromFile(tenantId, item.filePath, modules)
+
+    await prisma.auditLog.create({
+      data: {
+        tenantId,
+        actorType: "USER",
+        actorId: req.auth?.userId,
+        action: "TENANT_BACKUP_RESTORED_SELECTED",
+        entityType: "TenantBackup",
+        entityId: item.id,
+        payload: {
+          fileName: item.fileName,
+          modules,
+          restored: restored as Prisma.InputJsonValue,
+          safetyBackupId: safetyBackup.id,
+          safetyBackupFileName: safetyBackup.fileName,
+        },
+      },
+    })
+
+    return res.json({
+      ok: true,
+      restored,
+      safetyBackup: {
+        id: safetyBackup.id,
+        fileName: safetyBackup.fileName,
+      },
+      message: "Modulele selectate au fost aduse inapoi din backupul de pe server.",
+    })
+  } catch (error: unknown) {
+    return res.status(500).json({
+      ok: false,
+      error: errorMessage(error, "Nu am putut restaura modulele selectate din backup."),
     })
   }
 })

@@ -21,6 +21,17 @@ type BackupItem = {
   fileExists?: boolean
 }
 
+type BackupModuleSummary = {
+  key: string
+  label: string
+  description: string
+  recordCount: number
+  breakdown?: Array<{
+    key: string
+    count: number
+  }>
+}
+
 type BackupActionCardProps = {
   title: string
   description: string
@@ -131,6 +142,11 @@ export default function SetariBackupPage() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
   const [restoringId, setRestoringId] = useState<string | null>(null)
   const [recoveringFilesId, setRecoveringFilesId] = useState<string | null>(null)
+  const [selectedBackupId, setSelectedBackupId] = useState("")
+  const [moduleLoading, setModuleLoading] = useState(false)
+  const [moduleRestoreLoading, setModuleRestoreLoading] = useState(false)
+  const [availableModules, setAvailableModules] = useState<BackupModuleSummary[]>([])
+  const [selectedModules, setSelectedModules] = useState<string[]>([])
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
   const [label, setLabel] = useState("")
@@ -149,13 +165,23 @@ export default function SetariBackupPage() {
     () => latestEntries.reduce((sum, [, count]) => sum + count, 0),
     [latestEntries],
   )
+  const selectedBackup = useMemo(
+    () => items.find((item) => item.id === selectedBackupId) || null,
+    [items, selectedBackupId],
+  )
 
   async function load() {
     try {
       setLoading(true)
       setError("")
       const data = await api<{ items?: BackupItem[] }>("/api/v1/settings/backups")
-      setItems(Array.isArray(data?.items) ? data.items : [])
+      const nextItems = Array.isArray(data?.items) ? data.items : []
+      setItems(nextItems)
+      setSelectedBackupId((current) => {
+        if (current && nextItems.some((item) => item.id === current)) return current
+        const fallback = nextItems.find((item) => item.fileExists !== false) || nextItems[0] || null
+        return fallback?.id || ""
+      })
     } catch (error: unknown) {
       setError(getErrorMessage(error, "Nu am putut incarca backup-urile clientului."))
     } finally {
@@ -166,6 +192,32 @@ export default function SetariBackupPage() {
   useEffect(() => {
     void load()
   }, [])
+
+  useEffect(() => {
+    async function loadModules() {
+      if (!selectedBackupId) {
+        setAvailableModules([])
+        setSelectedModules([])
+        return
+      }
+
+      try {
+        setModuleLoading(true)
+        const data = await api<{ modules?: BackupModuleSummary[] }>(`/api/v1/settings/backups/${selectedBackupId}/modules`)
+        const modules = Array.isArray(data?.modules) ? data.modules : []
+        setAvailableModules(modules)
+        setSelectedModules((current) => current.filter((key) => modules.some((module) => module.key === key)))
+      } catch (error: unknown) {
+        setAvailableModules([])
+        setSelectedModules([])
+        setError(getErrorMessage(error, "Nu am putut citi modulele disponibile din backup."))
+      } finally {
+        setModuleLoading(false)
+      }
+    }
+
+    void loadModules()
+  }, [selectedBackupId])
 
   async function handleCreate() {
     try {
@@ -357,6 +409,42 @@ export default function SetariBackupPage() {
     }
   }
 
+  async function handleRestoreSelectedModules() {
+    if (!selectedBackup) {
+      setError("Alege un backup din care vrei sa restaurezi modulele.")
+      return
+    }
+
+    if (!selectedModules.length) {
+      setError("Selecteaza cel putin un modul pentru restore.")
+      return
+    }
+
+    if (
+      !window.confirm(
+        `Restaurezi selectiv din ${selectedBackup.fileName} modulele: ${selectedModules.join(", ")}? Sistemul creeaza mai intai un backup de siguranta.`,
+      )
+    ) {
+      return
+    }
+
+    try {
+      setModuleRestoreLoading(true)
+      setError("")
+      setMessage("")
+      const data = await api<{ message?: string }>(`/api/v1/settings/backups/${selectedBackup.id}/restore-selected`, {
+        method: "POST",
+        body: JSON.stringify({ modules: selectedModules }),
+      })
+      setMessage(data?.message || "Modulele selectate au fost restaurate din backup.")
+      await load()
+    } catch (error: unknown) {
+      setError(getErrorMessage(error, "Nu am putut restaura modulele selectate din backup."))
+    } finally {
+      setModuleRestoreLoading(false)
+    }
+  }
+
   return (
     <div className="space-y-3">
       <PageHeader
@@ -503,6 +591,110 @@ export default function SetariBackupPage() {
               </span>
             </label>
           </BackupActionCard>
+        </div>
+      </DocumentSection>
+
+      <DocumentSection
+        title="Restore selectiv din backup"
+        description="Alegi un backup de pe server si bifezi exact modulele pe care vrei sa le aduci inapoi, fara full restore al intregului ERP."
+      >
+        <div className="grid gap-3 xl:grid-cols-[280px_1fr]">
+          <div className="space-y-3">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Backup sursa</div>
+              <select
+                value={selectedBackupId}
+                onChange={(e) => setSelectedBackupId(e.target.value)}
+                className={`${documentInputClass} mt-2`}
+              >
+                <option value="">Selecteaza backup-ul</option>
+                {items
+                  .filter((item) => item.fileExists !== false)
+                  .map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {fmtDate(item.createdAt)} · {item.label || item.fileName}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-600">
+              Restore-ul selectiv ruleaza in mod sigur pentru cazurile in care ai pierdut doar anumite zone din ERP, de exemplu clienti, furnizori sau produse dupa un deploy problematic.
+            </div>
+
+            <button
+              type="button"
+              onClick={() => void handleRestoreSelectedModules()}
+              disabled={!selectedBackup || !selectedModules.length || moduleLoading || moduleRestoreLoading}
+              className={`${documentButtonPrimaryClass} w-full`}
+            >
+              {moduleRestoreLoading ? "Se restaureaza modulele..." : "Restore modulele selectate"}
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            {moduleLoading ? (
+              <div className="rounded-[18px] border border-dashed border-slate-300 px-4 py-8 text-sm text-slate-500">
+                Se incarca modulele disponibile din backup...
+              </div>
+            ) : !selectedBackup ? (
+              <div className="rounded-[18px] border border-dashed border-slate-300 px-4 py-8 text-sm text-slate-500">
+                Alege mai intai un backup din lista.
+              </div>
+            ) : !availableModules.length ? (
+              <div className="rounded-[18px] border border-dashed border-slate-300 px-4 py-8 text-sm text-slate-500">
+                Backup-ul ales nu are module disponibile pentru restore selectiv.
+              </div>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2">
+                {availableModules.map((module) => {
+                  const isSelected = selectedModules.includes(module.key)
+                  return (
+                    <label
+                      key={module.key}
+                      className={`cursor-pointer rounded-[20px] border p-4 shadow-sm shadow-slate-900/[0.03] ${
+                        isSelected ? "border-emerald-200 bg-emerald-50/60" : "border-slate-200 bg-white"
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                          checked={isSelected}
+                          onChange={(e) => {
+                            setSelectedModules((current) =>
+                              e.target.checked ? [...current, module.key] : current.filter((item) => item !== module.key),
+                            )
+                          }}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="text-sm font-semibold text-[#17324D]">{module.label}</div>
+                            <div className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                              {module.recordCount.toLocaleString("ro-RO")}
+                            </div>
+                          </div>
+                          <p className="mt-1 text-sm leading-6 text-slate-600">{module.description}</p>
+                          {module.breakdown?.length ? (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {module.breakdown
+                                .filter((entry) => entry.count > 0)
+                                .slice(0, 4)
+                                .map((entry) => (
+                                  <span key={entry.key} className="inline-flex rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600">
+                                    {prettifyTableKey(entry.key)}: {entry.count.toLocaleString("ro-RO")}
+                                  </span>
+                                ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </label>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </DocumentSection>
 
