@@ -209,7 +209,7 @@ function assertTypedSensitiveModules() {
   addResult(
     "Backend entrypoint no longer bypasses TypeScript",
     !indexRoutes.startsWith("// @ts-nocheck"),
-    "Remove // @ts-nocheck from src/index.ts once extracted helpers and route ordering are stable."
+    "Keep src/index.ts type-checked now that helper extraction and route ordering are stable."
   )
 
   addResult(
@@ -508,7 +508,7 @@ function assertTypedSensitiveModules() {
       transferQuerySupport.includes("export async function findTransferDocDetail") &&
       transferQuerySupport.includes("export async function findTransferDocDetailWithLots") &&
       transferQuerySupport.includes("export async function findTransferDocForPdf"),
-    "Keep transfer serialization, e-Transport summary/status helpers, and file-safe formatting in a typed helper module before removing // @ts-nocheck from the large transfer route."
+    "Keep transfer serialization, e-Transport summary/status helpers, and file-safe formatting in a typed helper module so the large transfer route stays type-checked."
   )
 
   addResult(
@@ -528,7 +528,7 @@ function assertTypedSensitiveModules() {
       incomingEfacturaRouteSupport.includes("export function incomingEfacturaDateRo") &&
       incomingEfacturaRouteSupport.includes("export function joinIncomingEfacturaAddressParts") &&
       incomingEfacturaRouteSupport.includes("export function normalizeIncomingEfacturaCurrency"),
-    "Keep incoming e-Factura formatting, address joining, currency normalization, and safe filename/date helpers in a typed helper module before removing // @ts-nocheck from the large route."
+    "Keep incoming e-Factura formatting, address joining, currency normalization, and safe filename/date helpers in a typed helper module so the large route stays type-checked."
   )
 
   addResult(
@@ -561,7 +561,7 @@ function assertTypedSensitiveModules() {
     productionDocsRoutes.includes('from "../lib/productionDocPdfSupport"') &&
       productionDocPdfSupport.includes("export function formatProductionPdfDate") &&
       productionDocPdfSupport.includes("export function drawProductionTableSection"),
-    "Keep shared production PDF layout helpers in a typed module before removing // @ts-nocheck from the large production docs route."
+    "Keep shared production PDF layout helpers in a typed module so the large production docs route stays type-checked."
   )
 
   addResult(
