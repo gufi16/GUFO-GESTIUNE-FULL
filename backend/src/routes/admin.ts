@@ -40,6 +40,7 @@ import {
   toNullableText,
 } from "../lib/adminRouteSupport"
 import { buildTenantExportZip } from "../lib/tenantExport"
+import { getTenantBackupHealth, persistTenantBackupSnapshot } from "../lib/tenantBackupSupport"
 
 const router = Router()
 
@@ -385,12 +386,18 @@ router.get("/api/v1/admin/clients", requireAuth, requireOwner, async (_req, res)
     },
   })
 
+  const backupHealthEntries = await Promise.all(
+    tenants.map(async (tenant) => [tenant.id, await getTenantBackupHealth(tenant.id)] as const),
+  )
+  const backupHealthMap = new Map(backupHealthEntries)
+
   return res.json({
     ok: true,
     items: tenants.map((tenant) => {
       const primaryCompany = pickPrimaryCompany(getTenantCompanies(tenant))
       const latestLicense = tenant.licenses[0] || null
       const latestSubscription = tenant.subscriptions[0] || null
+      const backupHealth = backupHealthMap.get(tenant.id) || null
 
       return {
         id: tenant.id,
@@ -428,6 +435,7 @@ router.get("/api/v1/admin/clients", requireAuth, requireOwner, async (_req, res)
           name: row.module.name,
           limitValue: row.limitValue,
         })),
+        backupHealth,
       }
     }),
   })
@@ -559,6 +567,7 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
   const companies = getTenantCompanies(tenant)
   const primaryCompany = pickPrimaryCompany(companies)
   const latestSubscription = tenant.subscriptions[0] || null
+  const backupHealth = await getTenantBackupHealth(tenant.id)
   const actorIds = Array.from(new Set(collectDefinedStrings(tenant.auditLogs.map((row) => row.actorId))))
   const actorUsers = actorIds.length
     ? await prisma.user.findMany({
@@ -665,6 +674,7 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
         name: row.module.name,
         limitValue: row.limitValue,
       })),
+      backupHealth,
       auditLogs: tenant.auditLogs.map((entry) => {
         const actor = entry.actorId ? actorMap.get(entry.actorId) : null
         return {
@@ -898,6 +908,25 @@ router.post("/api/v1/admin/clients", requireAuth, requireOwner, async (req: Auth
       }
     })
 
+    let initialBackup
+    try {
+      initialBackup = await persistTenantBackupSnapshot({
+        tenantId: result.tenant.id,
+        companyId: result.tenant.companies[0]?.id || null,
+        actorId: req.auth?.userId,
+        actorType: "OWNER",
+        label: "initial-control-panel-provisioning",
+      })
+    } catch (backupError) {
+      await prisma.tenant.delete({ where: { id: result.tenant.id } })
+      throw new Error(
+        `Clientul a fost anulat deoarece backup-ul initial nu a putut fi creat: ${getErrorMessage(
+          backupError,
+          "eroare necunoscuta",
+        )}`,
+      )
+    }
+
     return res.status(201).json({
       ok: true,
       item: {
@@ -914,6 +943,14 @@ router.post("/api/v1/admin/clients", requireAuth, requireOwner, async (req: Auth
           fullName: result.erpUser.name,
           password: result.defaultPassword,
         },
+        backupHealth: await getTenantBackupHealth(result.tenant.id),
+        initialBackup: initialBackup
+          ? {
+              id: initialBackup.id,
+              fileName: initialBackup.fileName,
+              createdAt: initialBackup.createdAt,
+            }
+          : null,
       },
     })
   } catch (error: unknown) {

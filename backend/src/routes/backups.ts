@@ -5,7 +5,8 @@ import multer from "multer"
 import { Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
-import { buildTenantBackupStats, buildTenantExportZip, ensureTenantBackupDir } from "../lib/tenantExport"
+import { ensureTenantBackupDir } from "../lib/tenantExport"
+import { persistTenantBackupSnapshot } from "../lib/tenantBackupSupport"
 import {
   describeTenantBackupModulesFromFile,
   restoreMissingTenantFilesFromBackupFile,
@@ -63,57 +64,6 @@ function parseSelectedModules(value: unknown) {
   return value.map((item) => String(item || "").trim()).filter(Boolean)
 }
 
-async function persistTenantBackupSnapshot(
-  tenantId: string,
-  companyId: string | null,
-  userId: string | null | undefined,
-  label: string,
-) {
-  const { zip, filename } = await buildTenantExportZip(tenantId)
-  const tenantEntry = zip.getEntry("data/tenant.json")
-  const payload = tenantEntry ? JSON.parse(zip.readAsText(tenantEntry)) : null
-  const tableCounts = buildTenantBackupStats(payload)
-  const backupDir = ensureTenantBackupDir(tenantId)
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
-  const baseName = sanitizeLabel(label) || fileBaseName(filename)
-  const finalFileName = `${timestamp}-${baseName}.zip`
-  const absolutePath = path.join(backupDir, finalFileName)
-  const buffer = zip.toBuffer()
-  fs.writeFileSync(absolutePath, buffer)
-
-  const item = await prisma.tenantBackup.create({
-    data: {
-      tenantId,
-      companyId,
-      createdByUserId: userId || null,
-      label: label || null,
-      fileName: finalFileName,
-      filePath: absolutePath,
-      fileSizeBytes: buffer.length,
-      tableCounts,
-    },
-  })
-
-  await prisma.auditLog.create({
-    data: {
-      tenantId,
-      actorType: "USER",
-      actorId: userId || null,
-      action: "TENANT_BACKUP_CREATED",
-      entityType: "TenantBackup",
-      entityId: item.id,
-      payload: {
-        fileName: finalFileName,
-        fileSizeBytes: buffer.length,
-        tableCounts,
-        label,
-      },
-    },
-  })
-
-  return item
-}
-
 router.get("/api/v1/settings/backups", async (req: AuthedRequest, res) => {
   const tenantId = req.auth?.tenantId
   if (!tenantId) {
@@ -145,12 +95,13 @@ router.post("/api/v1/settings/backups", async (req: AuthedRequest, res) => {
   const companyId = req.auth?.activeCompanyId || null
 
   try {
-    const item = await persistTenantBackupSnapshot(
+    const item = await persistTenantBackupSnapshot({
       tenantId,
       companyId,
-      req.auth?.userId,
-      label || "backup-manual",
-    )
+      actorId: req.auth?.userId,
+      actorType: "USER",
+      label: label || "backup-manual",
+    })
 
     return res.json({ ok: true, item })
   } catch (error: unknown) {
@@ -180,12 +131,13 @@ router.post("/api/v1/settings/backups/restore-latest", async (req: AuthedRequest
   }
 
   try {
-    const safetyBackup = await persistTenantBackupSnapshot(
+    const safetyBackup = await persistTenantBackupSnapshot({
       tenantId,
-      req.auth?.activeCompanyId || null,
-      req.auth?.userId,
-      "siguranta-inainte-restore",
-    )
+      companyId: req.auth?.activeCompanyId || null,
+      actorId: req.auth?.userId,
+      actorType: "USER",
+      label: "siguranta-inainte-restore",
+    })
 
     const restored = await restoreTenantBackupFromFile(tenantId, latestBackup.filePath)
 
@@ -288,12 +240,13 @@ router.post("/api/v1/settings/backups/upload-restore", upload.single("backup"), 
   const absolutePath = path.join(backupDir, finalFileName)
 
   try {
-    const safetyBackup = await persistTenantBackupSnapshot(
+    const safetyBackup = await persistTenantBackupSnapshot({
       tenantId,
-      req.auth?.activeCompanyId || null,
-      req.auth?.userId,
-      "siguranta-inainte-restore-upload",
-    )
+      companyId: req.auth?.activeCompanyId || null,
+      actorId: req.auth?.userId,
+      actorType: "USER",
+      label: "siguranta-inainte-restore-upload",
+    })
 
     fs.writeFileSync(absolutePath, req.file.buffer)
 
@@ -600,12 +553,13 @@ router.post("/api/v1/settings/backups/:id/restore-selected", async (req: AuthedR
   }
 
   try {
-    const safetyBackup = await persistTenantBackupSnapshot(
+    const safetyBackup = await persistTenantBackupSnapshot({
       tenantId,
-      req.auth?.activeCompanyId || null,
-      req.auth?.userId,
-      "siguranta-inainte-restore-selectiv",
-    )
+      companyId: req.auth?.activeCompanyId || null,
+      actorId: req.auth?.userId,
+      actorType: "USER",
+      label: "siguranta-inainte-restore-selectiv",
+    })
 
     const restored = await restoreTenantBackupSelectionFromFile(tenantId, item.filePath, modules)
 

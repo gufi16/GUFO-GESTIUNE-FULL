@@ -11,6 +11,7 @@
     "audit:tenant": "tsx src/scripts/auditTenantIsolation.ts",
     "audit:release": "tsx src/scripts/auditReleaseReadiness.ts",
     "audit:release:soft": "tsx src/scripts/auditReleaseReadiness.ts --soft",
+    "backup:tenants": "tsx src/scripts/runTenantBackupSnapshots.ts",
     "start": "tsx src/index.ts",
     "start:worker": "tsx src/worker.ts",
     "db:deploy": "prisma db push",

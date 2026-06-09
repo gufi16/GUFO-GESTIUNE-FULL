@@ -1095,6 +1095,15 @@ export default function ControlPanelClientDetails() {
       {copyMessage ? <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">{copyMessage}</div> : null}
       {userError ? <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{userError}</div> : null}
       {companyError ? <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{companyError}</div> : null}
+      {client?.backupHealth?.status !== "protected" ? (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          Acest client nu are backup valid de tenant pe server. Recovery-ul este nesigur pana nu exista un snapshot disponibil.
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          Ultimul backup valid: {formatDate(client?.backupHealth?.latestBackupAt)} · snapshot-uri totale {client?.backupHealth?.backupsCount ?? 0}
+        </div>
+      )}
 
       <section className="rounded-[24px] border border-slate-200 bg-white px-4 py-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -1219,6 +1228,7 @@ export default function ControlPanelClientDetails() {
             {metricCard("Locatii", client?.locationsCount ?? locations.length)}
             {metricCard("POS", posDevicesCount)}
             {metricCard("KDS", kdsDevicesCount)}
+            {metricCard("Backup-uri", client?.backupHealth?.backupsCount ?? 0)}
           </div>
 
           <div className="mt-4 grid gap-x-4 gap-y-2 text-sm">

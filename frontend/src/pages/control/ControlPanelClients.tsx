@@ -46,6 +46,12 @@ type AdminClientItem = {
     code: string
     name: string
   }>
+  backupHealth?: {
+    backupsCount?: number
+    latestBackupAt?: string | null
+    latestBackupFileExists?: boolean
+    status?: "protected" | "missing_file" | "missing_backup" | string
+  } | null
 }
 
 type AdminClientsResponse = {
@@ -82,6 +88,9 @@ type CreateClientResponse = {
     name?: string
     subdomain?: string | null
     portalUrl?: string | null
+    initialBackup?: {
+      fileName?: string | null
+    } | null
     erpUser?: {
       email?: string
       password?: string
@@ -200,6 +209,14 @@ function normalizeClient(raw: any): AdminClientItem {
         }
       : null,
     activeModules: Array.isArray(raw?.activeModules) ? raw.activeModules : [],
+    backupHealth: raw?.backupHealth
+      ? {
+          backupsCount: Number(raw.backupHealth.backupsCount ?? 0),
+          latestBackupAt: typeof raw.backupHealth.latestBackupAt === "string" ? raw.backupHealth.latestBackupAt : null,
+          latestBackupFileExists: Boolean(raw.backupHealth.latestBackupFileExists),
+          status: raw.backupHealth.status || "missing_backup",
+        }
+      : null,
   }
 }
 
@@ -349,6 +366,12 @@ export default function ControlPanelClients() {
           portalUrl: response?.item?.portalUrl || null,
         })
       }
+      setMessage(
+        response?.item?.initialBackup?.fileName
+          ? `Client creat cu snapshot initial: ${response.item.initialBackup.fileName}`
+          : "Client creat.",
+      )
+      window.setTimeout(() => setMessage(null), 3000)
       setIsModalOpen(false)
       setForm({
         companyName: "",
@@ -568,7 +591,13 @@ export default function ControlPanelClients() {
                   <div className="mt-1.5 flex flex-wrap gap-3 text-xs text-slate-500">
                     <span>Creat {formatDate(item.createdAt)}</span>
                     <span>Licenta {formatDate(item.license?.expiresAt)}</span>
+                    <span>Backup {formatDate(item.backupHealth?.latestBackupAt)}</span>
                   </div>
+                  {item.backupHealth?.status !== "protected" ? (
+                    <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
+                      Client fara backup valid. Recovery-ul este in risc pana nu exista snapshot de tenant pe server.
+                    </div>
+                  ) : null}
                   <div className="mt-2 flex flex-wrap gap-2">
                     <button
                       type="button"
@@ -608,6 +637,12 @@ export default function ControlPanelClients() {
                     <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">POS</span>
                     <span className="font-semibold text-slate-950">
                       {item.terminalsCount}/{item.license?.limits?.terminals ?? 0}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+                    <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Backup</span>
+                    <span className={`font-semibold ${item.backupHealth?.status === "protected" ? "text-emerald-700" : "text-rose-700"}`}>
+                      {item.backupHealth?.status === "protected" ? "Protejat" : "Lipsa"}
                     </span>
                   </div>
                 </div>

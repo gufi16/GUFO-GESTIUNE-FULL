@@ -169,6 +169,14 @@ export default function SetariBackupPage() {
     () => items.find((item) => item.id === selectedBackupId) || null,
     [items, selectedBackupId],
   )
+  const selectedCustomerModule = useMemo(
+    () => availableModules.find((module) => module.key === "customers") || null,
+    [availableModules],
+  )
+  const selectedCatalogModule = useMemo(
+    () => availableModules.find((module) => module.key === "catalog") || null,
+    [availableModules],
+  )
 
   async function load() {
     try {
@@ -177,11 +185,7 @@ export default function SetariBackupPage() {
       const data = await api<{ items?: BackupItem[] }>("/api/v1/settings/backups")
       const nextItems = Array.isArray(data?.items) ? data.items : []
       setItems(nextItems)
-      setSelectedBackupId((current) => {
-        if (current && nextItems.some((item) => item.id === current)) return current
-        const fallback = nextItems.find((item) => item.fileExists !== false) || nextItems[0] || null
-        return fallback?.id || ""
-      })
+      setSelectedBackupId((current) => (current && nextItems.some((item) => item.id === current) ? current : ""))
     } catch (error: unknown) {
       setError(getErrorMessage(error, "Nu am putut incarca backup-urile clientului."))
     } finally {
@@ -621,6 +625,17 @@ export default function SetariBackupPage() {
             <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-600">
               Restore-ul selectiv ruleaza in mod sigur pentru cazurile in care ai pierdut doar anumite zone din ERP, de exemplu clienti, furnizori sau produse dupa un deploy problematic.
             </div>
+
+            {selectedBackup ? (
+              <div className="rounded-[18px] border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-sm text-emerald-800">
+                <div className="font-semibold">Preview backup selectat</div>
+                <div className="mt-1">Clienti in backup: {selectedCustomerModule?.recordCount?.toLocaleString("ro-RO") || 0}</div>
+                <div className="mt-1">Produse si retete in backup: {selectedCatalogModule?.recordCount?.toLocaleString("ro-RO") || 0}</div>
+                <div className="mt-2 text-xs leading-5 text-emerald-700">
+                  Daca aici vezi `0` la clienti, backup-ul ales este deja de dupa incident si nu are ce sa readuca inapoi.
+                </div>
+              </div>
+            ) : null}
 
             <button
               type="button"
