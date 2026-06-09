@@ -1,6 +1,7 @@
 import fs from "fs"
 import jwt from "jsonwebtoken"
 import path from "path"
+import type { Prisma } from "@prisma/client"
 import type { Response } from "express"
 import type { AuthedRequest } from "../middleware/requireAuth"
 import type { prisma } from "./prisma"
@@ -140,6 +141,13 @@ type EffectiveAnafOauthCompanyConfig = {
   efacturaOauthClientSecret?: string | null
   efacturaOauthRedirectUri?: string | null
 }
+
+type CompanyRouteRequestCompanyExtra = {
+  includeCredentialList?: boolean
+  select?: Record<string, boolean>
+} & Record<string, unknown>
+
+type CompanyRouteSeedData = Record<string, unknown>
 
 export type AnafOauthStatePayload = {
   tenantId: string
@@ -607,17 +615,17 @@ export function getRequestedCompanyId(req: AuthedRequest) {
 export async function getRequestCompany(
   prismaClient: PrismaClientLike,
   req: AuthedRequest,
-  extra: Record<string, any> = {},
+  extra: CompanyRouteRequestCompanyExtra = {},
 ): Promise<CompanyRouteRequestCompany | null> {
   const tenantId = String(req.auth!.tenantId || "").trim()
   const activeCompanyId = getActiveCompanyId(req) || null
   const includeCredentialList = Boolean(extra?.includeCredentialList)
-  const select =
+  const select: Record<string, boolean> =
     extra && typeof extra === "object" && "select" in extra
-      ? extra.select || {}
+      ? (extra.select || {})
       : Object.fromEntries(
           Object.entries(extra || {}).filter(([key]) => key !== "includeCredentialList"),
-        )
+        ) as Record<string, boolean>
 
   return resolveCompanyWithAnafCredential(prismaClient as never, tenantId, activeCompanyId, {
     select,
@@ -629,7 +637,7 @@ export async function getRequestCompany(
 export async function ensureRequestCompany(
   prismaClient: PrismaClientLike,
   req: AuthedRequest,
-  seedData: Record<string, any> = {},
+  seedData: CompanyRouteSeedData = {},
 ) {
   const tenantId = String(req.auth!.tenantId || "").trim()
   return ensureTenantCompany(prismaClient, tenantId, getActiveCompanyId(req) || null, seedData)
@@ -735,8 +743,8 @@ export async function getRequestAnafCredential(
 export async function updateRequestCompany(
   prismaClient: PrismaClientLike,
   req: AuthedRequest,
-  updateData: Record<string, any>,
-  createData: Record<string, any> = {},
+  updateData: CompanyRouteSeedData,
+  createData: CompanyRouteSeedData = {},
 ) {
   const tenantId = String(req.auth!.tenantId || "").trim()
   return updateOrCreateTenantCompany(
