@@ -47,10 +47,52 @@ export const TENANT_BACKUP_MODULE_DEFINITIONS = [
     payloadKeys: ["suppliers"],
   },
   {
+    key: "locations",
+    label: "Locatii si terminale",
+    description: "Locatii, puncte de lucru si terminale POS/KDS.",
+    payloadKeys: ["locations", "terminals"],
+  },
+  {
+    key: "departments",
+    label: "Departamente",
+    description: "Departamente folosite in ERP si productie.",
+    payloadKeys: ["departments"],
+  },
+  {
+    key: "categories",
+    label: "Categorii",
+    description: "Categorii vizibile in ERP si POS.",
+    payloadKeys: ["categories"],
+  },
+  {
+    key: "uoms",
+    label: "Unitati de masura",
+    description: "Unitati de masura pentru produse si documente.",
+    payloadKeys: ["uoms"],
+  },
+  {
+    key: "vat_rates",
+    label: "TVA",
+    description: "Cote TVA si codurile lor fiscale.",
+    payloadKeys: ["vatRates"],
+  },
+  {
     key: "catalog",
     label: "Produse si retete",
     description: "Produse, coduri de bare, retete si mapari marketplace.",
     payloadKeys: ["products", "productBarcodes", "recipes", "marketplaceMappings"],
+  },
+  {
+    key: "products",
+    label: "Produse",
+    description: "Produse, coduri de bare si mapari marketplace.",
+    payloadKeys: ["products", "productBarcodes", "marketplaceMappings"],
+  },
+  {
+    key: "recipes",
+    label: "Retete",
+    description: "Retete si componentele lor.",
+    payloadKeys: ["recipes"],
   },
   {
     key: "documents",
@@ -74,6 +116,84 @@ export const TENANT_BACKUP_MODULE_DEFINITIONS = [
     ],
   },
   {
+    key: "documents_incoming_einvoices",
+    label: "Documente: e-Factura primita",
+    description: "Facturi intrate din SPV si liniile lor.",
+    payloadKeys: ["incomingEInvoices"],
+  },
+  {
+    key: "documents_purchase_receipts",
+    label: "Documente: NIR",
+    description: "Receptii/NIR si liniile lor.",
+    payloadKeys: ["purchaseReceipts"],
+  },
+  {
+    key: "documents_transfers",
+    label: "Documente: transfer",
+    description: "Transferuri intre gestiuni.",
+    payloadKeys: ["transferDocs"],
+  },
+  {
+    key: "documents_inventory",
+    label: "Documente: inventar",
+    description: "Documente de inventar si pozitii.",
+    payloadKeys: ["inventoryDocs"],
+  },
+  {
+    key: "documents_minutes",
+    label: "Documente: procese verbale",
+    description: "Procese verbale si minute docs.",
+    payloadKeys: ["minutesDocs"],
+  },
+  {
+    key: "documents_production",
+    label: "Documente: productie",
+    description: "Documente de productie si pozitii.",
+    payloadKeys: ["productionDocs"],
+  },
+  {
+    key: "documents_sales",
+    label: "Documente: vanzari POS",
+    description: "Bonuri, vanzari si liniile lor.",
+    payloadKeys: ["sales"],
+  },
+  {
+    key: "documents_consumption",
+    label: "Documente: consum",
+    description: "Bonuri de consum si pozitii.",
+    payloadKeys: ["consumptionDocs"],
+  },
+  {
+    key: "documents_sales_invoices",
+    label: "Documente: facturi",
+    description: "Facturi de vanzare si liniile lor.",
+    payloadKeys: ["salesInvoices"],
+  },
+  {
+    key: "documents_external_orders",
+    label: "Documente: comenzi externe",
+    description: "Comenzi marketplace si istoricul lor.",
+    payloadKeys: ["externalOrders"],
+  },
+  {
+    key: "documents_sale_drafts",
+    label: "Documente: drafturi vanzare",
+    description: "Drafturi de vanzare si sesiuni in curs.",
+    payloadKeys: ["saleDrafts"],
+  },
+  {
+    key: "documents_kitchen_tickets",
+    label: "Documente: bonuri bucatarie",
+    description: "Kitchen tickets si liniile lor.",
+    payloadKeys: ["kitchenTickets"],
+  },
+  {
+    key: "documents_stock",
+    label: "Documente: miscari stoc",
+    description: "Balante si miscari de stoc.",
+    payloadKeys: ["stockBalances", "stockMoves"],
+  },
+  {
     key: "files",
     label: "Fisiere si atasamente",
     description: "Fisiere din uploads si alte atasamente salvate in arhiva.",
@@ -84,6 +204,31 @@ export const TENANT_BACKUP_MODULE_DEFINITIONS = [
 export type TenantBackupModuleKey = (typeof TENANT_BACKUP_MODULE_DEFINITIONS)[number]["key"]
 type TenantBackupModuleDefinition = (typeof TENANT_BACKUP_MODULE_DEFINITIONS)[number]
 type RestoreMode = "merge" | "sync_missing"
+
+const COMPANY_CHILD_MODULE_KEYS: TenantBackupModuleKey[] = ["locations", "departments", "categories", "uoms", "vat_rates"]
+const CATALOG_CHILD_MODULE_KEYS: TenantBackupModuleKey[] = ["products", "recipes"]
+const DOCUMENT_CHILD_MODULE_KEYS: TenantBackupModuleKey[] = [
+  "documents_incoming_einvoices",
+  "documents_purchase_receipts",
+  "documents_transfers",
+  "documents_inventory",
+  "documents_minutes",
+  "documents_production",
+  "documents_sales",
+  "documents_consumption",
+  "documents_sales_invoices",
+  "documents_external_orders",
+  "documents_sale_drafts",
+  "documents_kitchen_tickets",
+  "documents_stock",
+]
+
+function expandRequestedModuleKey(key: TenantBackupModuleKey): TenantBackupModuleKey[] {
+  if (key === "company") return COMPANY_CHILD_MODULE_KEYS
+  if (key === "catalog") return CATALOG_CHILD_MODULE_KEYS
+  if (key === "documents") return DOCUMENT_CHILD_MODULE_KEYS
+  return [key]
+}
 
 function toDateIfPossible(value: unknown) {
   if (typeof value !== "string") return value
@@ -918,6 +1063,70 @@ async function syncSuppliersModule(data: SelectiveRestoreData) {
   return { suppliers: data.suppliers.length }
 }
 
+async function restoreLocationsModule(data: SelectiveRestoreData) {
+  for (const item of data.locations) {
+    await prisma.location.upsert({ where: { id: String(item.id) }, update: item as never, create: item as never })
+  }
+  for (const item of data.terminals) {
+    await prisma.terminal.upsert({ where: { id: String(item.id) }, update: item as never, create: item as never })
+  }
+  return { locations: data.locations.length, terminals: data.terminals.length }
+}
+
+async function syncLocationsModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.location, data.locations)
+  await createManySkipDuplicatesIfAny(prisma.terminal, data.terminals)
+  return { locations: data.locations.length, terminals: data.terminals.length }
+}
+
+async function restoreDepartmentsModule(data: SelectiveRestoreData) {
+  for (const item of data.departments) {
+    await prisma.department.upsert({ where: { id: String(item.id) }, update: item as never, create: item as never })
+  }
+  return { departments: data.departments.length }
+}
+
+async function syncDepartmentsModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.department, data.departments)
+  return { departments: data.departments.length }
+}
+
+async function restoreCategoriesModule(data: SelectiveRestoreData) {
+  for (const item of data.categories) {
+    await prisma.category.upsert({ where: { id: String(item.id) }, update: item as never, create: item as never })
+  }
+  return { categories: data.categories.length }
+}
+
+async function syncCategoriesModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.category, data.categories)
+  return { categories: data.categories.length }
+}
+
+async function restoreUomsModule(data: SelectiveRestoreData) {
+  for (const item of data.uoms) {
+    await prisma.uom.upsert({ where: { id: String(item.id) }, update: item as never, create: item as never })
+  }
+  return { uoms: data.uoms.length }
+}
+
+async function syncUomsModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.uom, data.uoms)
+  return { uoms: data.uoms.length }
+}
+
+async function restoreVatRatesModule(data: SelectiveRestoreData) {
+  for (const item of data.vatRates) {
+    await prisma.vatRate.upsert({ where: { id: String(item.id) }, update: item as never, create: item as never })
+  }
+  return { vatRates: data.vatRates.length }
+}
+
+async function syncVatRatesModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.vatRate, data.vatRates)
+  return { vatRates: data.vatRates.length }
+}
+
 async function restoreCatalogModule(data: SelectiveRestoreData) {
   for (const item of data.products) {
     await prisma.product.upsert({ where: { id: String(item.id) }, update: item as never, create: item as never })
@@ -960,6 +1169,61 @@ async function syncCatalogModule(data: SelectiveRestoreData) {
     recipes: data.recipes.length,
     recipeItems: data.recipeItems.length,
     marketplaceMappings: data.marketplaceMappings.length,
+  }
+}
+
+async function restoreProductsModule(data: SelectiveRestoreData) {
+  for (const item of data.products) {
+    await prisma.product.upsert({ where: { id: String(item.id) }, update: item as never, create: item as never })
+  }
+  for (const item of data.productBarcodes) {
+    await prisma.productBarcode.upsert({ where: { id: String(item.id) }, update: item as never, create: item as never })
+  }
+  for (const item of data.marketplaceMappings) {
+    await prisma.marketplaceProductMapping.upsert({ where: { id: String(item.id) }, update: item as never, create: item as never })
+  }
+  return {
+    products: data.products.length,
+    productBarcodes: data.productBarcodes.length,
+    marketplaceMappings: data.marketplaceMappings.length,
+  }
+}
+
+async function syncProductsModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.product, data.products)
+  await createManySkipDuplicatesIfAny(prisma.productBarcode, data.productBarcodes)
+  await createManySkipDuplicatesIfAny(prisma.marketplaceProductMapping, data.marketplaceMappings)
+  return {
+    products: data.products.length,
+    productBarcodes: data.productBarcodes.length,
+    marketplaceMappings: data.marketplaceMappings.length,
+  }
+}
+
+async function restoreRecipesModule(data: SelectiveRestoreData) {
+  for (const item of data.recipes) {
+    await prisma.recipe.upsert({ where: { id: String(item.id) }, update: item as never, create: item as never })
+  }
+  if (data.recipes.length) {
+    await prisma.recipeItem.deleteMany({
+      where: {
+        recipeId: { in: data.recipes.map((item) => String(item.id)) },
+      },
+    })
+  }
+  await createManySkipDuplicatesIfAny(prisma.recipeItem, data.recipeItems)
+  return {
+    recipes: data.recipes.length,
+    recipeItems: data.recipeItems.length,
+  }
+}
+
+async function syncRecipesModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.recipe, data.recipes)
+  await createManySkipDuplicatesIfAny(prisma.recipeItem, data.recipeItems)
+  return {
+    recipes: data.recipes.length,
+    recipeItems: data.recipeItems.length,
   }
 }
 
@@ -1057,6 +1321,164 @@ async function syncDocumentsModule(data: SelectiveRestoreData) {
   }
 }
 
+async function restoreIncomingEInvoicesModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.incomingEInvoice, data.incomingEInvoices)
+  await createManySkipDuplicatesIfAny(prisma.incomingEInvoiceItem, data.incomingEInvoiceItems)
+  return { incomingEInvoices: data.incomingEInvoices.length }
+}
+
+async function syncIncomingEInvoicesModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.incomingEInvoice, data.incomingEInvoices)
+  await createManySkipDuplicatesIfAny(prisma.incomingEInvoiceItem, data.incomingEInvoiceItems)
+  return { incomingEInvoices: data.incomingEInvoices.length }
+}
+
+async function restorePurchaseReceiptsModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.purchaseReceipt, data.purchaseReceipts)
+  await createManySkipDuplicatesIfAny(prisma.purchaseReceiptItem, data.purchaseReceiptItems)
+  return { purchaseReceipts: data.purchaseReceipts.length }
+}
+
+async function syncPurchaseReceiptsModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.purchaseReceipt, data.purchaseReceipts)
+  await createManySkipDuplicatesIfAny(prisma.purchaseReceiptItem, data.purchaseReceiptItems)
+  return { purchaseReceipts: data.purchaseReceipts.length }
+}
+
+async function restoreTransferDocsModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.transferDoc, data.transferDocs)
+  await createManySkipDuplicatesIfAny(prisma.transferDocItem, data.transferDocItems)
+  return { transferDocs: data.transferDocs.length }
+}
+
+async function syncTransferDocsModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.transferDoc, data.transferDocs)
+  await createManySkipDuplicatesIfAny(prisma.transferDocItem, data.transferDocItems)
+  return { transferDocs: data.transferDocs.length }
+}
+
+async function restoreInventoryDocsModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.inventoryDoc, data.inventoryDocs)
+  await createManySkipDuplicatesIfAny(prisma.inventoryDocItem, data.inventoryDocItems)
+  return { inventoryDocs: data.inventoryDocs.length }
+}
+
+async function syncInventoryDocsModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.inventoryDoc, data.inventoryDocs)
+  await createManySkipDuplicatesIfAny(prisma.inventoryDocItem, data.inventoryDocItems)
+  return { inventoryDocs: data.inventoryDocs.length }
+}
+
+async function restoreMinutesDocsModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.minutesDoc, data.minutesDocs)
+  await createManySkipDuplicatesIfAny(prisma.minutesDocItem, data.minutesDocItems)
+  return { minutesDocs: data.minutesDocs.length }
+}
+
+async function syncMinutesDocsModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.minutesDoc, data.minutesDocs)
+  await createManySkipDuplicatesIfAny(prisma.minutesDocItem, data.minutesDocItems)
+  return { minutesDocs: data.minutesDocs.length }
+}
+
+async function restoreProductionDocsModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.productionDoc, data.productionDocs)
+  await createManySkipDuplicatesIfAny(prisma.productionDocItem, data.productionDocItems)
+  return { productionDocs: data.productionDocs.length }
+}
+
+async function syncProductionDocsModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.productionDoc, data.productionDocs)
+  await createManySkipDuplicatesIfAny(prisma.productionDocItem, data.productionDocItems)
+  return { productionDocs: data.productionDocs.length }
+}
+
+async function restoreSalesModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.sale, data.sales)
+  await createManySkipDuplicatesIfAny(prisma.saleItem, data.saleItems)
+  return { sales: data.sales.length }
+}
+
+async function syncSalesModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.sale, data.sales)
+  await createManySkipDuplicatesIfAny(prisma.saleItem, data.saleItems)
+  return { sales: data.sales.length }
+}
+
+async function restoreConsumptionDocsModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.consumptionDoc, data.consumptionDocs)
+  await createManySkipDuplicatesIfAny(prisma.consumptionDocItem, data.consumptionDocItems)
+  return { consumptionDocs: data.consumptionDocs.length }
+}
+
+async function syncConsumptionDocsModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.consumptionDoc, data.consumptionDocs)
+  await createManySkipDuplicatesIfAny(prisma.consumptionDocItem, data.consumptionDocItems)
+  return { consumptionDocs: data.consumptionDocs.length }
+}
+
+async function restoreSalesInvoicesModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.salesInvoice, data.salesInvoices)
+  await createManySkipDuplicatesIfAny(prisma.salesInvoiceItem, data.salesInvoiceItems)
+  await createManySkipDuplicatesIfAny(prisma.eFacturaLog, data.efacturaLogs)
+  return { salesInvoices: data.salesInvoices.length }
+}
+
+async function syncSalesInvoicesModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.salesInvoice, data.salesInvoices)
+  await createManySkipDuplicatesIfAny(prisma.salesInvoiceItem, data.salesInvoiceItems)
+  await createManySkipDuplicatesIfAny(prisma.eFacturaLog, data.efacturaLogs)
+  return { salesInvoices: data.salesInvoices.length }
+}
+
+async function restoreExternalOrdersModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.externalOrder, data.externalOrders)
+  await createManySkipDuplicatesIfAny(prisma.externalOrderItem, data.externalOrderItems)
+  await createManySkipDuplicatesIfAny(prisma.externalOrderStatusHistory, data.externalOrderStatusHistory)
+  return { externalOrders: data.externalOrders.length }
+}
+
+async function syncExternalOrdersModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.externalOrder, data.externalOrders)
+  await createManySkipDuplicatesIfAny(prisma.externalOrderItem, data.externalOrderItems)
+  await createManySkipDuplicatesIfAny(prisma.externalOrderStatusHistory, data.externalOrderStatusHistory)
+  return { externalOrders: data.externalOrders.length }
+}
+
+async function restoreSaleDraftsModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.saleDraft, data.saleDrafts)
+  return { saleDrafts: data.saleDrafts.length }
+}
+
+async function syncSaleDraftsModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.saleDraft, data.saleDrafts)
+  return { saleDrafts: data.saleDrafts.length }
+}
+
+async function restoreKitchenTicketsModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.kitchenTicket, data.kitchenTickets)
+  await createManySkipDuplicatesIfAny(prisma.kitchenTicketItem, data.kitchenTicketItems)
+  return { kitchenTickets: data.kitchenTickets.length }
+}
+
+async function syncKitchenTicketsModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.kitchenTicket, data.kitchenTickets)
+  await createManySkipDuplicatesIfAny(prisma.kitchenTicketItem, data.kitchenTicketItems)
+  return { kitchenTickets: data.kitchenTickets.length }
+}
+
+async function restoreStockModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.stockBalance, data.stockBalances)
+  await createManySkipDuplicatesIfAny(prisma.stockMove, data.stockMoves)
+  return { stockBalances: data.stockBalances.length, stockMoves: data.stockMoves.length }
+}
+
+async function syncStockModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.stockBalance, data.stockBalances)
+  await createManySkipDuplicatesIfAny(prisma.stockMove, data.stockMoves)
+  return { stockBalances: data.stockBalances.length, stockMoves: data.stockMoves.length }
+}
+
 export async function restoreTenantBackupSelectionFromFile(
   tenantId: string,
   filePath: string,
@@ -1067,12 +1489,16 @@ export async function restoreTenantBackupSelectionFromFile(
   const payload = readTenantPayloadFromZip(filePath)
   ensureBackupBelongsToTenant(tenantId, payload)
 
-  const requested = Array.from(
-    new Set(
-      asArray<string>(moduleKeys).filter((item): item is TenantBackupModuleKey =>
-        TENANT_BACKUP_MODULE_DEFINITIONS.some((definition) => definition.key === item),
+  const requested = TENANT_BACKUP_MODULE_DEFINITIONS.map((definition) => definition.key).filter((key) =>
+    Array.from(
+      new Set(
+        asArray<string>(moduleKeys)
+          .filter((item): item is TenantBackupModuleKey =>
+            TENANT_BACKUP_MODULE_DEFINITIONS.some((definition) => definition.key === item),
+          )
+          .flatMap((item) => expandRequestedModuleKey(item)),
       ),
-    ),
+    ).includes(key),
   )
 
   if (!requested.length) {
@@ -1102,12 +1528,92 @@ export async function restoreTenantBackupSelectionFromFile(
       result.suppliers = mode === "sync_missing" ? await syncSuppliersModule(data) : await restoreSuppliersModule(data)
       continue
     }
+    if (key === "locations") {
+      result.locations = mode === "sync_missing" ? await syncLocationsModule(data) : await restoreLocationsModule(data)
+      continue
+    }
+    if (key === "departments") {
+      result.departments = mode === "sync_missing" ? await syncDepartmentsModule(data) : await restoreDepartmentsModule(data)
+      continue
+    }
+    if (key === "categories") {
+      result.categories = mode === "sync_missing" ? await syncCategoriesModule(data) : await restoreCategoriesModule(data)
+      continue
+    }
+    if (key === "uoms") {
+      result.uoms = mode === "sync_missing" ? await syncUomsModule(data) : await restoreUomsModule(data)
+      continue
+    }
+    if (key === "vat_rates") {
+      result.vatRates = mode === "sync_missing" ? await syncVatRatesModule(data) : await restoreVatRatesModule(data)
+      continue
+    }
     if (key === "catalog") {
       result.catalog = mode === "sync_missing" ? await syncCatalogModule(data) : await restoreCatalogModule(data)
       continue
     }
+    if (key === "products") {
+      result.products = mode === "sync_missing" ? await syncProductsModule(data) : await restoreProductsModule(data)
+      continue
+    }
+    if (key === "recipes") {
+      result.recipes = mode === "sync_missing" ? await syncRecipesModule(data) : await restoreRecipesModule(data)
+      continue
+    }
     if (key === "documents") {
       result.documents = mode === "sync_missing" ? await syncDocumentsModule(data) : await restoreDocumentsModule(data)
+      continue
+    }
+    if (key === "documents_incoming_einvoices") {
+      result.documentsIncomingEInvoices = mode === "sync_missing" ? await syncIncomingEInvoicesModule(data) : await restoreIncomingEInvoicesModule(data)
+      continue
+    }
+    if (key === "documents_purchase_receipts") {
+      result.documentsPurchaseReceipts = mode === "sync_missing" ? await syncPurchaseReceiptsModule(data) : await restorePurchaseReceiptsModule(data)
+      continue
+    }
+    if (key === "documents_transfers") {
+      result.documentsTransfers = mode === "sync_missing" ? await syncTransferDocsModule(data) : await restoreTransferDocsModule(data)
+      continue
+    }
+    if (key === "documents_inventory") {
+      result.documentsInventory = mode === "sync_missing" ? await syncInventoryDocsModule(data) : await restoreInventoryDocsModule(data)
+      continue
+    }
+    if (key === "documents_minutes") {
+      result.documentsMinutes = mode === "sync_missing" ? await syncMinutesDocsModule(data) : await restoreMinutesDocsModule(data)
+      continue
+    }
+    if (key === "documents_production") {
+      result.documentsProduction = mode === "sync_missing" ? await syncProductionDocsModule(data) : await restoreProductionDocsModule(data)
+      continue
+    }
+    if (key === "documents_sales") {
+      result.documentsSales = mode === "sync_missing" ? await syncSalesModule(data) : await restoreSalesModule(data)
+      continue
+    }
+    if (key === "documents_consumption") {
+      result.documentsConsumption = mode === "sync_missing" ? await syncConsumptionDocsModule(data) : await restoreConsumptionDocsModule(data)
+      continue
+    }
+    if (key === "documents_sales_invoices") {
+      result.documentsSalesInvoices = mode === "sync_missing" ? await syncSalesInvoicesModule(data) : await restoreSalesInvoicesModule(data)
+      continue
+    }
+    if (key === "documents_external_orders") {
+      result.documentsExternalOrders = mode === "sync_missing" ? await syncExternalOrdersModule(data) : await restoreExternalOrdersModule(data)
+      continue
+    }
+    if (key === "documents_sale_drafts") {
+      result.documentsSaleDrafts = mode === "sync_missing" ? await syncSaleDraftsModule(data) : await restoreSaleDraftsModule(data)
+      continue
+    }
+    if (key === "documents_kitchen_tickets") {
+      result.documentsKitchenTickets = mode === "sync_missing" ? await syncKitchenTicketsModule(data) : await restoreKitchenTicketsModule(data)
+      continue
+    }
+    if (key === "documents_stock") {
+      result.documentsStock = mode === "sync_missing" ? await syncStockModule(data) : await restoreStockModule(data)
       continue
     }
     if (key === "files") {

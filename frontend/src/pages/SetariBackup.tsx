@@ -27,7 +27,45 @@ type BackupModuleSummary = {
   recordCount: number
 }
 
-const moduleOrder = ["company", "users", "customers", "suppliers", "catalog", "documents", "files"]
+type SyncGroup = {
+  id: string
+  label: string
+  children: string[]
+  modal?: boolean
+}
+
+const syncGroups: SyncGroup[] = [
+  { id: "customers", label: "Clienti", children: ["customers"] },
+  { id: "suppliers", label: "Furnizori", children: ["suppliers"] },
+  { id: "products", label: "Produse", children: ["products"] },
+  { id: "recipes", label: "Retete", children: ["recipes"] },
+  { id: "categories", label: "Categorii", children: ["categories"] },
+  { id: "departments", label: "Departamente", children: ["departments"] },
+  { id: "locations", label: "Locatii", children: ["locations"] },
+  { id: "uoms", label: "UM", children: ["uoms"] },
+  { id: "vat_rates", label: "TVA", children: ["vat_rates"] },
+  {
+    id: "documents",
+    label: "Documente",
+    modal: true,
+    children: [
+      "documents_incoming_einvoices",
+      "documents_purchase_receipts",
+      "documents_transfers",
+      "documents_inventory",
+      "documents_minutes",
+      "documents_production",
+      "documents_sales",
+      "documents_consumption",
+      "documents_sales_invoices",
+      "documents_external_orders",
+      "documents_sale_drafts",
+      "documents_kitchen_tickets",
+      "documents_stock",
+    ],
+  },
+  { id: "files", label: "Fisiere", children: ["files"] },
+]
 
 function fmtBytes(value: number) {
   const size = Number(value || 0)
@@ -96,6 +134,7 @@ export default function SetariBackupPage() {
   const [importing, setImporting] = useState(false)
   const [uploadRestoring, setUploadRestoring] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [documentPickerOpen, setDocumentPickerOpen] = useState(false)
   const [label, setLabel] = useState("")
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
@@ -108,13 +147,11 @@ export default function SetariBackupPage() {
   const selectedBackup = useMemo(() => items.find((item) => item.id === selectedBackupId) || null, [items, selectedBackupId])
   const totalStoredSize = useMemo(() => items.reduce((sum, item) => sum + Number(item.fileSizeBytes || 0), 0), [items])
   const topStats = useMemo(() => getTopStats(latestAvailableBackup), [latestAvailableBackup])
-  const orderedModules = useMemo(() => {
-    return [...availableModules].sort((a, b) => {
-      const aIndex = moduleOrder.indexOf(a.key)
-      const bIndex = moduleOrder.indexOf(b.key)
-      return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex)
-    })
-  }, [availableModules])
+  const moduleMap = useMemo(() => new Map(availableModules.map((module) => [module.key, module])), [availableModules])
+  const visibleGroups = useMemo(
+    () => syncGroups.filter((group) => group.children.some((child) => moduleMap.has(child))),
+    [moduleMap],
+  )
 
   async function load() {
     try {
@@ -151,10 +188,7 @@ export default function SetariBackupPage() {
         const data = await api<{ modules?: BackupModuleSummary[] }>(`/api/v1/settings/backups/${selectedBackupId}/modules`)
         const modules = Array.isArray(data?.modules) ? data.modules : []
         setAvailableModules(modules)
-        setSelectedModules((current) => {
-          const filtered = current.filter((key) => modules.some((module) => module.key === key))
-          return filtered.length ? filtered : modules.map((module) => module.key)
-        })
+        setSelectedModules((current) => current.filter((key) => modules.some((module) => module.key === key)))
       } catch (loadError: unknown) {
         setAvailableModules([])
         setSelectedModules([])
@@ -184,6 +218,32 @@ export default function SetariBackupPage() {
     } finally {
       setCreating(false)
     }
+  }
+
+  function getGroupChildren(group: SyncGroup) {
+    return group.children.filter((child) => moduleMap.has(child))
+  }
+
+  function isGroupSelected(group: SyncGroup) {
+    const children = getGroupChildren(group)
+    return children.length > 0 && children.every((child) => selectedModules.includes(child))
+  }
+
+  function getGroupSelectedCount(group: SyncGroup) {
+    return getGroupChildren(group).filter((child) => selectedModules.includes(child)).length
+  }
+
+  function toggleGroup(group: SyncGroup) {
+    const children = getGroupChildren(group)
+    if (!children.length) return
+
+    setSelectedModules((current) => {
+      const allSelected = children.every((child) => current.includes(child))
+      if (allSelected) {
+        return current.filter((item) => !children.includes(item))
+      }
+      return Array.from(new Set([...current, ...children]))
+    })
   }
 
   async function handleSyncCloud() {
@@ -409,8 +469,8 @@ export default function SetariBackupPage() {
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => setSelectedModules(orderedModules.map((module) => module.key))}
-                disabled={!orderedModules.length}
+                onClick={() => setSelectedModules(Array.from(new Set(visibleGroups.flatMap((group) => getGroupChildren(group)))))}
+                disabled={!visibleGroups.length}
                 className={documentButtonSecondaryClass}
               >
                 Selecteaza tot
@@ -427,38 +487,51 @@ export default function SetariBackupPage() {
 
             {moduleLoading ? (
               <div className="rounded-[20px] border border-dashed border-slate-300 px-4 py-10 text-sm text-slate-500">Se incarca modulele...</div>
-            ) : !orderedModules.length ? (
+            ) : !visibleGroups.length ? (
               <div className="rounded-[20px] border border-dashed border-slate-300 px-4 py-10 text-sm text-slate-500">Nu exista module disponibile.</div>
             ) : (
-              <div className="grid gap-2 md:grid-cols-2">
-                {orderedModules.map((module) => {
-                  const checked = selectedModules.includes(module.key)
+              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                {visibleGroups.map((group) => {
+                  const checked = isGroupSelected(group)
+                  const selectedCount = getGroupSelectedCount(group)
+                  const totalCount = getGroupChildren(group).length
+                  const primaryModule = moduleMap.get(getGroupChildren(group)[0] || "")
                   return (
-                    <label
-                      key={module.key}
-                      className={`cursor-pointer rounded-[18px] border px-3 py-3 transition ${
+                    <button
+                      key={group.id}
+                      type="button"
+                      onClick={() => {
+                        if (group.modal) {
+                          setDocumentPickerOpen(true)
+                          return
+                        }
+                        toggleGroup(group)
+                      }}
+                      className={`rounded-[18px] border px-3 py-3 text-left transition ${
                         checked ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"
                       }`}
                     >
-                      <div className="flex items-start gap-3">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(event) => {
-                            setSelectedModules((current) =>
-                              event.target.checked ? [...current, module.key] : current.filter((item) => item !== module.key),
-                            )
-                          }}
-                          className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                        />
+                      <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="text-sm font-semibold text-[#17324D]">{module.label}</div>
-                            <div className="text-xs font-semibold text-slate-500">{module.recordCount.toLocaleString("ro-RO")}</div>
+                          <div className="text-sm font-semibold text-[#17324D]">{group.label}</div>
+                          <div className="mt-1 text-xs text-slate-500">
+                            {group.modal
+                              ? `${selectedCount}/${totalCount} tipuri selectate`
+                              : primaryModule
+                                ? `${primaryModule.recordCount.toLocaleString("ro-RO")} in backup`
+                                : "Disponibil"}
                           </div>
+                          {group.modal ? <div className="mt-2 text-[11px] uppercase tracking-[0.14em] text-slate-400">Alege din popup</div> : null}
+                        </div>
+                        <div
+                          className={`inline-flex min-w-[56px] items-center justify-center rounded-full px-2.5 py-1 text-xs font-semibold ${
+                            checked ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"
+                          }`}
+                        >
+                          {group.modal ? `${selectedCount}/${totalCount}` : checked ? "Activ" : "Off"}
                         </div>
                       </div>
-                    </label>
+                    </button>
                   )
                 })}
               </div>
@@ -583,6 +656,86 @@ export default function SetariBackupPage() {
           </Card>
         </div>
       </div>
+
+      {documentPickerOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-[28px] border border-slate-200 bg-white p-6 shadow-2xl shadow-slate-950/15">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Sync Cloud</div>
+                <div className="mt-1 text-lg font-semibold text-[#17324D]">Alege documentele</div>
+              </div>
+              <button type="button" onClick={() => setDocumentPickerOpen(false)} className={documentButtonSecondaryClass}>
+                Inchide
+              </button>
+            </div>
+
+            <div className="mt-5 grid gap-2 sm:grid-cols-2">
+              {syncGroups
+                .find((group) => group.id === "documents")
+                ?.children.filter((child) => moduleMap.has(child))
+                .map((child) => {
+                  const module = moduleMap.get(child)
+                  const checked = selectedModules.includes(child)
+                  if (!module) return null
+                  return (
+                    <label
+                      key={child}
+                      className={`cursor-pointer rounded-[18px] border px-3 py-3 transition ${
+                        checked ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(event) => {
+                            setSelectedModules((current) =>
+                              event.target.checked ? Array.from(new Set([...current, child])) : current.filter((item) => item !== child),
+                            )
+                          }}
+                          className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-semibold text-[#17324D]">{module.label.replace("Documente: ", "")}</div>
+                          <div className="mt-1 text-xs text-slate-500">{module.recordCount.toLocaleString("ro-RO")} in backup</div>
+                        </div>
+                      </div>
+                    </label>
+                  )
+                })}
+            </div>
+
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const allDocumentChildren =
+                    syncGroups.find((group) => group.id === "documents")?.children.filter((child) => moduleMap.has(child)) || []
+                  setSelectedModules((current) => Array.from(new Set([...current, ...allDocumentChildren])))
+                }}
+                className={documentButtonSecondaryClass}
+              >
+                Selecteaza tot
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const allDocumentChildren =
+                    syncGroups.find((group) => group.id === "documents")?.children.filter((child) => moduleMap.has(child)) || []
+                  setSelectedModules((current) => current.filter((item) => !allDocumentChildren.includes(item)))
+                }}
+                className={documentButtonSecondaryClass}
+              >
+                Reseteaza
+              </button>
+              <button type="button" onClick={() => setDocumentPickerOpen(false)} className={documentButtonPrimaryClass}>
+                Salveaza selectia
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {historyOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
