@@ -2,11 +2,13 @@ import fs from "fs"
 import path from "path"
 import { Router } from "express"
 import multer from "multer"
+import AdmZip from "adm-zip"
 import { Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { ensureTenantBackupDir } from "../lib/tenantExport"
 import { persistTenantBackupSnapshot } from "../lib/tenantBackupSupport"
+import { exportTenantDataWorkbookZip, importTenantDataWorkbookZip } from "../lib/backupDataExchange"
 import {
   describeTenantBackupModulesFromFile,
   restoreMissingTenantFilesFromBackupFile,
@@ -20,16 +22,6 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
     fileSize: 250 * 1024 * 1024,
-  },
-  fileFilter: (_req, file, cb) => {
-    const isZip =
-      String(file.mimetype || "").includes("zip") ||
-      String(file.originalname || "").toLowerCase().endsWith(".zip")
-    if (!isZip) {
-      cb(new Error("Se accepta doar fisiere backup .zip."))
-      return
-    }
-    cb(null, true)
   },
 })
 
@@ -62,6 +54,20 @@ function errorMessage(error: unknown, fallback: string) {
 function parseSelectedModules(value: unknown) {
   if (!Array.isArray(value)) return []
   return value.map((item) => String(item || "").trim()).filter(Boolean)
+}
+
+function isAllowedImportFile(file: Express.Multer.File | undefined) {
+  if (!file?.buffer?.length) return false
+  const name = String(file.originalname || "").toLowerCase()
+  const mime = String(file.mimetype || "").toLowerCase()
+  return name.endsWith(".zip") || name.endsWith(".xlsx") || mime.includes("zip") || mime.includes("spreadsheet")
+}
+
+function isZipBackupFile(file: Express.Multer.File | undefined) {
+  if (!file?.buffer?.length) return false
+  const name = String(file.originalname || "").toLowerCase()
+  const mime = String(file.mimetype || "").toLowerCase()
+  return name.endsWith(".zip") || mime.includes("zip")
 }
 
 router.get("/api/v1/settings/backups", async (req: AuthedRequest, res) => {
@@ -223,17 +229,85 @@ router.post("/api/v1/settings/backups/recover-files-latest", async (req: AuthedR
   }
 })
 
+router.post("/api/v1/settings/backups/sync-cloud", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth?.tenantId
+  if (!tenantId) {
+    return res.status(400).json({ ok: false, error: "Tenant lipsa pentru backup." })
+  }
+
+  const requestedBackupId = String(req.body?.backupId || "").trim()
+  const modules = parseSelectedModules(req.body?.modules)
+  if (!modules.length) {
+    return res.status(400).json({ ok: false, error: "Selecteaza cel putin un modul pentru sync." })
+  }
+
+  const backups = await prisma.tenantBackup.findMany({
+    where: { tenantId },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  })
+
+  const sourceBackup = requestedBackupId
+    ? backups.find((item) => item.id === requestedBackupId)
+    : backups.find((item) => fs.existsSync(item.filePath))
+
+  if (!sourceBackup) {
+    return res.status(404).json({ ok: false, error: "Nu exista backup sursa pentru sync cloud." })
+  }
+
+  if (!fs.existsSync(sourceBackup.filePath)) {
+    return res.status(404).json({ ok: false, error: "Fisierul sursa nu mai exista pe server." })
+  }
+
+  try {
+    const restored = await restoreTenantBackupSelectionFromFile(tenantId, sourceBackup.filePath, modules, "sync_missing")
+
+    await prisma.auditLog.create({
+      data: {
+        tenantId,
+        actorType: "USER",
+        actorId: req.auth?.userId,
+        action: "TENANT_BACKUP_SYNC_CLOUD",
+        entityType: "TenantBackup",
+        entityId: sourceBackup.id,
+        payload: {
+          fileName: sourceBackup.fileName,
+          modules,
+          restored: restored as Prisma.InputJsonValue,
+        },
+      },
+    })
+
+    return res.json({
+      ok: true,
+      restored,
+      sourceBackup: {
+        id: sourceBackup.id,
+        fileName: sourceBackup.fileName,
+        createdAt: sourceBackup.createdAt,
+      },
+      message: "Sync cloud finalizat. Au fost aduse doar datele lipsa, fara dubluri.",
+    })
+  } catch (error: unknown) {
+    return res.status(500).json({
+      ok: false,
+      error: errorMessage(error, "Nu am putut executa sync cloud."),
+    })
+  }
+})
+
 router.post("/api/v1/settings/backups/upload-restore", upload.single("backup"), async (req: AuthedRequest, res) => {
   const tenantId = req.auth?.tenantId
   if (!tenantId) {
     return res.status(400).json({ ok: false, error: "Tenant lipsa pentru backup." })
   }
 
-  if (!req.file?.buffer?.length) {
-    return res.status(400).json({ ok: false, error: "Nu ai incarcat niciun backup .zip." })
+  if (!isZipBackupFile(req.file)) {
+    return res.status(400).json({ ok: false, error: "Nu ai incarcat niciun backup .zip valid." })
   }
+  const file = req.file!
 
-  const originalName = String(req.file.originalname || "backup-manual.zip").trim() || "backup-manual.zip"
+  const originalName = String(file.originalname || "backup-manual.zip").trim() || "backup-manual.zip"
   const backupDir = ensureTenantBackupDir(tenantId)
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
   const finalFileName = `${timestamp}-${sanitizeLabel(fileBaseName(originalName)) || "backup-manual"}.zip`
@@ -248,7 +322,7 @@ router.post("/api/v1/settings/backups/upload-restore", upload.single("backup"), 
       label: "siguranta-inainte-restore-upload",
     })
 
-    fs.writeFileSync(absolutePath, req.file.buffer)
+    fs.writeFileSync(absolutePath, file.buffer)
 
     const item = await prisma.tenantBackup.create({
       data: {
@@ -258,7 +332,7 @@ router.post("/api/v1/settings/backups/upload-restore", upload.single("backup"), 
         label: "restore-upload-manual",
         fileName: finalFileName,
         filePath: absolutePath,
-        fileSizeBytes: req.file.buffer.length,
+        fileSizeBytes: file.buffer.length,
         tableCounts: Prisma.JsonNull,
       },
     })
@@ -334,6 +408,90 @@ router.get("/api/v1/settings/backups/:id/download", async (req: AuthedRequest, r
   res.setHeader("Content-Type", "application/zip")
   res.setHeader("Content-Disposition", `attachment; filename="${item.fileName}"`)
   return res.send(fs.readFileSync(item.filePath))
+})
+
+router.get("/api/v1/settings/backups/data-export", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth?.tenantId
+  if (!tenantId) {
+    return res.status(400).json({ ok: false, error: "Tenant lipsa pentru export." })
+  }
+
+  try {
+    const exported = await exportTenantDataWorkbookZip(tenantId)
+
+    await prisma.auditLog.create({
+      data: {
+        tenantId,
+        actorType: "USER",
+        actorId: req.auth?.userId,
+        action: "TENANT_DATA_EXPORT_XLSX",
+        entityType: "Tenant",
+        entityId: tenantId,
+        payload: {
+          fileName: exported.fileName,
+          files: exported.files,
+        },
+      },
+    })
+
+    res.setHeader("Content-Type", "application/zip")
+    res.setHeader("Content-Disposition", `attachment; filename="${exported.fileName}"`)
+    return res.send(exported.buffer)
+  } catch (error: unknown) {
+    return res.status(500).json({
+      ok: false,
+      error: errorMessage(error, "Nu am putut genera exportul Excel."),
+    })
+  }
+})
+
+router.post("/api/v1/settings/backups/data-import", upload.single("file"), async (req: AuthedRequest, res) => {
+  const tenantId = req.auth?.tenantId
+  if (!tenantId) {
+    return res.status(400).json({ ok: false, error: "Tenant lipsa pentru import." })
+  }
+
+  if (!isAllowedImportFile(req.file)) {
+    return res.status(400).json({ ok: false, error: "Incarca un fisier .zip sau .xlsx valid." })
+  }
+
+  try {
+    const importBuffer = req.file!.originalname.toLowerCase().endsWith(".xlsx")
+      ? (() => {
+          const zip = new AdmZip()
+          zip.addFile(path.posix.basename(req.file!.originalname), req.file!.buffer)
+          return zip.toBuffer()
+        })()
+      : req.file!.buffer
+
+    const imported = await importTenantDataWorkbookZip(tenantId, importBuffer)
+
+    await prisma.auditLog.create({
+      data: {
+        tenantId,
+        actorType: "USER",
+        actorId: req.auth?.userId,
+        action: "TENANT_DATA_IMPORT_XLSX",
+        entityType: "Tenant",
+        entityId: tenantId,
+        payload: {
+          fileName: req.file?.originalname || "import",
+          imported: imported as Prisma.InputJsonValue,
+        },
+      },
+    })
+
+    return res.json({
+      ok: true,
+      imported,
+      message: "Importul Excel a fost finalizat.",
+    })
+  } catch (error: unknown) {
+    return res.status(500).json({
+      ok: false,
+      error: errorMessage(error, "Nu am putut importa fisierele Excel."),
+    })
+  }
 })
 
 router.get("/api/v1/settings/backups/:id/modules", async (req: AuthedRequest, res) => {

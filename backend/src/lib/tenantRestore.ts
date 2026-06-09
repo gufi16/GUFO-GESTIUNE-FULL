@@ -83,6 +83,7 @@ export const TENANT_BACKUP_MODULE_DEFINITIONS = [
 
 export type TenantBackupModuleKey = (typeof TENANT_BACKUP_MODULE_DEFINITIONS)[number]["key"]
 type TenantBackupModuleDefinition = (typeof TENANT_BACKUP_MODULE_DEFINITIONS)[number]
+type RestoreMode = "merge" | "sync_missing"
 
 function toDateIfPossible(value: unknown) {
   if (typeof value !== "string") return value
@@ -841,6 +842,34 @@ async function restoreCompanyModule(data: SelectiveRestoreData) {
   }
 }
 
+async function syncCompanyModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.company, data.companies)
+  await createManySkipDuplicatesIfAny(prisma.location, data.locations)
+  await createManySkipDuplicatesIfAny(prisma.terminal, data.terminals)
+  await createManySkipDuplicatesIfAny(prisma.vatRate, data.vatRates)
+  await createManySkipDuplicatesIfAny(prisma.uom, data.uoms)
+  await createManySkipDuplicatesIfAny(prisma.department, data.departments)
+  await createManySkipDuplicatesIfAny(prisma.category, data.categories)
+  await createManySkipDuplicatesIfAny(prisma.accountingStockType, data.accountingStockTypes)
+  await createManySkipDuplicatesIfAny(prisma.accountingExportConfig, data.accountingExportConfigs)
+  await createManySkipDuplicatesIfAny(prisma.tenantModule, data.tenantModules)
+  await createManySkipDuplicatesIfAny(prisma.externalIntegration, data.externalIntegrations)
+
+  return {
+    companies: data.companies.length,
+    locations: data.locations.length,
+    terminals: data.terminals.length,
+    vatRates: data.vatRates.length,
+    uoms: data.uoms.length,
+    departments: data.departments.length,
+    categories: data.categories.length,
+    accountingStockTypes: data.accountingStockTypes.length,
+    accountingExportConfigs: data.accountingExportConfigs.length,
+    tenantModules: data.tenantModules.length,
+    externalIntegrations: data.externalIntegrations.length,
+  }
+}
+
 async function restoreUsersModule(data: SelectiveRestoreData, tenantId: string) {
   await prisma.passwordResetToken.deleteMany({ where: { tenantId } })
   for (const item of data.users) {
@@ -856,6 +885,15 @@ async function restoreUsersModule(data: SelectiveRestoreData, tenantId: string) 
   }
 }
 
+async function syncUsersModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.user, data.users)
+  await createManySkipDuplicatesIfAny(prisma.userCompanyAccess, data.userCompanyAccesses)
+  return {
+    users: data.users.length,
+    userCompanyAccesses: data.userCompanyAccesses.length,
+  }
+}
+
 async function restoreCustomersModule(data: SelectiveRestoreData) {
   for (const item of data.customers) {
     await prisma.customer.upsert({ where: { id: String(item.id) }, update: item as never, create: item as never })
@@ -863,10 +901,20 @@ async function restoreCustomersModule(data: SelectiveRestoreData) {
   return { customers: data.customers.length }
 }
 
+async function syncCustomersModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.customer, data.customers)
+  return { customers: data.customers.length }
+}
+
 async function restoreSuppliersModule(data: SelectiveRestoreData) {
   for (const item of data.suppliers) {
     await prisma.supplier.upsert({ where: { id: String(item.id) }, update: item as never, create: item as never })
   }
+  return { suppliers: data.suppliers.length }
+}
+
+async function syncSuppliersModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.supplier, data.suppliers)
   return { suppliers: data.suppliers.length }
 }
 
@@ -891,6 +939,21 @@ async function restoreCatalogModule(data: SelectiveRestoreData) {
   for (const item of data.marketplaceMappings) {
     await prisma.marketplaceProductMapping.upsert({ where: { id: String(item.id) }, update: item as never, create: item as never })
   }
+  return {
+    products: data.products.length,
+    productBarcodes: data.productBarcodes.length,
+    recipes: data.recipes.length,
+    recipeItems: data.recipeItems.length,
+    marketplaceMappings: data.marketplaceMappings.length,
+  }
+}
+
+async function syncCatalogModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.product, data.products)
+  await createManySkipDuplicatesIfAny(prisma.productBarcode, data.productBarcodes)
+  await createManySkipDuplicatesIfAny(prisma.recipe, data.recipes)
+  await createManySkipDuplicatesIfAny(prisma.recipeItem, data.recipeItems)
+  await createManySkipDuplicatesIfAny(prisma.marketplaceProductMapping, data.marketplaceMappings)
   return {
     products: data.products.length,
     productBarcodes: data.productBarcodes.length,
@@ -947,10 +1010,58 @@ async function restoreDocumentsModule(data: SelectiveRestoreData) {
   }
 }
 
+async function syncDocumentsModule(data: SelectiveRestoreData) {
+  await createManySkipDuplicatesIfAny(prisma.incomingEInvoice, data.incomingEInvoices)
+  await createManySkipDuplicatesIfAny(prisma.incomingEInvoiceItem, data.incomingEInvoiceItems)
+  await createManySkipDuplicatesIfAny(prisma.purchaseReceipt, data.purchaseReceipts)
+  await createManySkipDuplicatesIfAny(prisma.purchaseReceiptItem, data.purchaseReceiptItems)
+  await createManySkipDuplicatesIfAny(prisma.transferDoc, data.transferDocs)
+  await createManySkipDuplicatesIfAny(prisma.transferDocItem, data.transferDocItems)
+  await createManySkipDuplicatesIfAny(prisma.inventoryDoc, data.inventoryDocs)
+  await createManySkipDuplicatesIfAny(prisma.inventoryDocItem, data.inventoryDocItems)
+  await createManySkipDuplicatesIfAny(prisma.minutesDoc, data.minutesDocs)
+  await createManySkipDuplicatesIfAny(prisma.minutesDocItem, data.minutesDocItems)
+  await createManySkipDuplicatesIfAny(prisma.productionDoc, data.productionDocs)
+  await createManySkipDuplicatesIfAny(prisma.productionDocItem, data.productionDocItems)
+  await createManySkipDuplicatesIfAny(prisma.sale, data.sales)
+  await createManySkipDuplicatesIfAny(prisma.saleItem, data.saleItems)
+  await createManySkipDuplicatesIfAny(prisma.consumptionDoc, data.consumptionDocs)
+  await createManySkipDuplicatesIfAny(prisma.consumptionDocItem, data.consumptionDocItems)
+  await createManySkipDuplicatesIfAny(prisma.externalOrder, data.externalOrders)
+  await createManySkipDuplicatesIfAny(prisma.externalOrderItem, data.externalOrderItems)
+  await createManySkipDuplicatesIfAny(prisma.externalOrderStatusHistory, data.externalOrderStatusHistory)
+  await createManySkipDuplicatesIfAny(prisma.saleDraft, data.saleDrafts)
+  await createManySkipDuplicatesIfAny(prisma.kitchenTicket, data.kitchenTickets)
+  await createManySkipDuplicatesIfAny(prisma.kitchenTicketItem, data.kitchenTicketItems)
+  await createManySkipDuplicatesIfAny(prisma.salesInvoice, data.salesInvoices)
+  await createManySkipDuplicatesIfAny(prisma.salesInvoiceItem, data.salesInvoiceItems)
+  await createManySkipDuplicatesIfAny(prisma.eFacturaLog, data.efacturaLogs)
+  await createManySkipDuplicatesIfAny(prisma.stockBalance, data.stockBalances)
+  await createManySkipDuplicatesIfAny(prisma.stockMove, data.stockMoves)
+
+  return {
+    incomingEInvoices: data.incomingEInvoices.length,
+    purchaseReceipts: data.purchaseReceipts.length,
+    transferDocs: data.transferDocs.length,
+    inventoryDocs: data.inventoryDocs.length,
+    minutesDocs: data.minutesDocs.length,
+    productionDocs: data.productionDocs.length,
+    sales: data.sales.length,
+    consumptionDocs: data.consumptionDocs.length,
+    externalOrders: data.externalOrders.length,
+    saleDrafts: data.saleDrafts.length,
+    kitchenTickets: data.kitchenTickets.length,
+    salesInvoices: data.salesInvoices.length,
+    stockBalances: data.stockBalances.length,
+    stockMoves: data.stockMoves.length,
+  }
+}
+
 export async function restoreTenantBackupSelectionFromFile(
   tenantId: string,
   filePath: string,
   moduleKeys: string[],
+  mode: RestoreMode = "merge",
 ) {
   const zip = readTenantZip(filePath)
   const payload = readTenantPayloadFromZip(filePath)
@@ -970,37 +1081,37 @@ export async function restoreTenantBackupSelectionFromFile(
 
   const data = buildSelectiveRestoreData(payload)
   const result: Record<string, unknown> = {
-    mode: "selective-merge",
+    mode: mode === "sync_missing" ? "sync-missing" : "selective-merge",
     modules: requested,
   }
 
   for (const key of requested) {
     if (key === "company") {
-      result.company = await restoreCompanyModule(data)
+      result.company = mode === "sync_missing" ? await syncCompanyModule(data) : await restoreCompanyModule(data)
       continue
     }
     if (key === "users") {
-      result.users = await restoreUsersModule(data, tenantId)
+      result.users = mode === "sync_missing" ? await syncUsersModule(data) : await restoreUsersModule(data, tenantId)
       continue
     }
     if (key === "customers") {
-      result.customers = await restoreCustomersModule(data)
+      result.customers = mode === "sync_missing" ? await syncCustomersModule(data) : await restoreCustomersModule(data)
       continue
     }
     if (key === "suppliers") {
-      result.suppliers = await restoreSuppliersModule(data)
+      result.suppliers = mode === "sync_missing" ? await syncSuppliersModule(data) : await restoreSuppliersModule(data)
       continue
     }
     if (key === "catalog") {
-      result.catalog = await restoreCatalogModule(data)
+      result.catalog = mode === "sync_missing" ? await syncCatalogModule(data) : await restoreCatalogModule(data)
       continue
     }
     if (key === "documents") {
-      result.documents = await restoreDocumentsModule(data)
+      result.documents = mode === "sync_missing" ? await syncDocumentsModule(data) : await restoreDocumentsModule(data)
       continue
     }
     if (key === "files") {
-      const uploadRestore = restoreUploadFilesFromZip(zip, { overwriteExisting: true })
+      const uploadRestore = restoreUploadFilesFromZip(zip, { overwriteExisting: mode !== "sync_missing" })
       result.files = {
         restoredUploadFiles: uploadRestore.restoredFiles,
         skippedExistingUploadFiles: uploadRestore.skippedExistingFiles,
