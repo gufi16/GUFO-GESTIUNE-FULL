@@ -308,8 +308,8 @@ export async function persistAnafOauthError(
   }
 
   const credential = credentialId
-    ? await getCompanyAnafCredentialById(prismaClient as never, tenantId, company.id, credentialId)
-    : await getDefaultCompanyAnafCredential(prismaClient as never, tenantId, company.id)
+    ? await getCompanyAnafCredentialById(prismaClient, tenantId, company.id, credentialId)
+    : await getDefaultCompanyAnafCredential(prismaClient, tenantId, company.id)
 
   if (credential?.id) {
     const updated = await prismaClient.companyAnafCredential.update({
@@ -318,7 +318,7 @@ export async function persistAnafOauthError(
       select: ANAF_CREDENTIAL_SELECT,
     })
     if (credential.isDefault) {
-      await syncDefaultAnafCredentialToCompany(prismaClient as never, company.id, updated)
+      await syncDefaultAnafCredentialToCompany(prismaClient, company.id, updated)
     }
     return
   }
@@ -517,7 +517,7 @@ export async function resolveEfacturaAgentPairingDetails(
   tenantId: string,
   payload: EfacturaAgentPairingPayload,
 ) {
-  const company = await resolveCompanyWithAnafCredential(prismaClient as never, tenantId, payload.companyId || null, {
+  const company = await resolveCompanyWithAnafCredential(prismaClient, tenantId, payload.companyId || null, {
     select: {
       id: true,
       name: true,
@@ -526,7 +526,7 @@ export async function resolveEfacturaAgentPairingDetails(
   })
 
   const credential = payload.credentialId && company?.id
-    ? await getCompanyAnafCredentialById(prismaClient as never, tenantId, company.id, payload.credentialId)
+    ? await getCompanyAnafCredentialById(prismaClient, tenantId, company.id, payload.credentialId)
     : null
 
   return {
@@ -588,7 +588,7 @@ export async function listRequestCompanyCredentialSummaries(
   tenantId: string,
   companyId: string,
 ) {
-  const credentials = await listCompanyAnafCredentials(prismaClient as never, tenantId, companyId)
+  const credentials = await listCompanyAnafCredentials(prismaClient, tenantId, companyId)
   return credentials.map(mapAnafCredentialSummary)
 }
 
@@ -627,7 +627,7 @@ export async function getRequestCompany(
           Object.entries(extra || {}).filter(([key]) => key !== "includeCredentialList"),
         ) as Record<string, boolean>
 
-  return resolveCompanyWithAnafCredential(prismaClient as never, tenantId, activeCompanyId, {
+  return resolveCompanyWithAnafCredential(prismaClient, tenantId, activeCompanyId, {
     select,
     includeCredentialList,
     auth: req.auth!,
@@ -701,8 +701,8 @@ export async function getRequestAnafCredential(
 
   const requestedCredentialId = explicitCredentialId || getRequestedCredentialId(req)
   const credential = requestedCredentialId
-    ? await getCompanyAnafCredentialById(prismaClient as never, tenantId, companyId, requestedCredentialId)
-    : await getDefaultCompanyAnafCredential(prismaClient as never, tenantId, companyId, company)
+    ? await getCompanyAnafCredentialById(prismaClient, tenantId, companyId, requestedCredentialId)
+    : await getDefaultCompanyAnafCredential(prismaClient, tenantId, companyId, company)
 
   if (!credential) {
     return {
@@ -824,7 +824,7 @@ export async function getEffectiveAnafOauthConfig(
   activeCompanyId: string | null = null,
 ) {
   const [companyRaw, platform] = await Promise.all([
-    resolveCompanyWithAnafCredential(prismaClient as never, tenantId, activeCompanyId, {
+    resolveCompanyWithAnafCredential(prismaClient, tenantId, activeCompanyId, {
       select: {
         efacturaEnvironment: true,
         efacturaOauthClientId: true,
