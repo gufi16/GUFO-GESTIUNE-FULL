@@ -14,6 +14,8 @@ type PersistTenantBackupSnapshotInput = {
   tenantId: string
 }
 
+const TENANT_BACKUP_RETENTION_DAYS = Math.max(1, Number(process.env.TENANT_BACKUP_RETENTION_DAYS || 7))
+
 function sanitizeLabel(value: string) {
   return String(value || "")
     .trim()
@@ -28,6 +30,44 @@ function fileBaseName(value: string) {
   return String(value || "")
     .replace(/\.zip$/i, "")
     .trim()
+}
+
+async function cleanupExpiredTenantBackups(tenantId: string) {
+  const cutoff = new Date(Date.now() - TENANT_BACKUP_RETENTION_DAYS * 24 * 60 * 60 * 1000)
+  const expired = await prisma.tenantBackup.findMany({
+    where: {
+      tenantId,
+      createdAt: {
+        lt: cutoff,
+      },
+    },
+    select: {
+      id: true,
+      filePath: true,
+    },
+  })
+
+  for (const item of expired) {
+    try {
+      if (fs.existsSync(item.filePath)) {
+        fs.unlinkSync(item.filePath)
+      }
+    } catch {
+      // ignore cleanup errors and still remove stale DB entries
+    }
+  }
+
+  if (expired.length) {
+    await prisma.tenantBackup.deleteMany({
+      where: {
+        id: {
+          in: expired.map((item) => item.id),
+        },
+      },
+    })
+  }
+
+  return expired.length
 }
 
 export async function persistTenantBackupSnapshot(input: PersistTenantBackupSnapshotInput) {
@@ -73,6 +113,25 @@ export async function persistTenantBackupSnapshot(input: PersistTenantBackupSnap
       },
     },
   })
+
+  const removedExpiredBackups = await cleanupExpiredTenantBackups(tenantId)
+
+  if (removedExpiredBackups > 0) {
+    await prisma.auditLog.create({
+      data: {
+        tenantId,
+        actorType: "SYSTEM",
+        actorId: null,
+        action: "TENANT_BACKUP_RETENTION_CLEANUP",
+        entityType: "TenantBackup",
+        entityId: item.id,
+        payload: {
+          retentionDays: TENANT_BACKUP_RETENTION_DAYS,
+          removedExpiredBackups,
+        },
+      },
+    })
+  }
 
   return item
 }
