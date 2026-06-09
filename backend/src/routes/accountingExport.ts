@@ -318,8 +318,30 @@ type ProductionDocumentLike = {
   items: Array<{
     productId: string
     qty?: unknown
-    product: AccountingProductLike
+    product: AccountingProductLike & { id?: string | null; costPrice?: unknown }
   }>
+}
+type ProductionSpreadsheetRow = {
+  Cod: string
+  Denumire: string
+  UM: string
+  Cantitate: number
+  "Pret unitar": number
+  Valoare: number
+  Gestiune: string
+  Data: string
+  "Nr. doc": string | null | undefined
+  Explicatie: string
+  TVA: number
+  "Cont stoc": string
+  "Cont cheltuiala": string
+  "Cont venit": string
+  Document: string | null | undefined
+  Articol: string
+  Pret: number
+  ContStoc: string
+  ContCheltuiala: string
+  ContVenit: string
 }
 type AccountingReceiptAggregateLine = {
   code: string
@@ -1249,6 +1271,64 @@ function buildConsumptionOperationalLine(
     price: decimal(unitCost),
     value: decimal(unitCost),
     vatRate: decimal(line.ingredient.vatRate?.rate ?? 0),
+    expenseAccount: stockType?.expenseAccount || config.expenseAccount,
+    inventoryAccount: stockType?.inventoryAccount || config.inventoryAccount,
+    salesAccount: stockType?.salesAccount || config.salesAccount,
+  }
+}
+
+function buildProductionSpreadsheetRow(
+  document: ProductionDocumentLike,
+  line: ProductionDocumentLike["items"][number],
+  unitCost: number,
+  stockType: AccountingStockTypeLike | null | undefined,
+  config: AccountingConfigLike
+): ProductionSpreadsheetRow {
+  return {
+    Cod: String(line.product.accountingItemCode || line.product.sku || slugCode(line.product.name || "", "ART")),
+    Denumire: String(line.product.name || ""),
+    UM: String(line.product.uom?.code || "BUC"),
+    Cantitate: Number(line.qty || 0),
+    "Pret unitar": unitCost,
+    Valoare: unitCost,
+    Gestiune: managementValue(config, document.location),
+    Data: formatDate(document.docDate),
+    "Nr. doc": document.docNo,
+    Explicatie: String(document.note || "Nota de productie"),
+    TVA: Number(line.product.vatRate?.rate ?? 0),
+    "Cont stoc": String(stockType?.inventoryAccount || config.inventoryAccount || ""),
+    "Cont cheltuiala": String(stockType?.expenseAccount || config.expenseAccount || ""),
+    "Cont venit": String(stockType?.salesAccount || config.salesAccount || ""),
+    Document: document.docNo,
+    Articol: String(line.product.name || ""),
+    Pret: unitCost,
+    ContStoc: String(stockType?.inventoryAccount || config.inventoryAccount || ""),
+    ContCheltuiala: String(stockType?.expenseAccount || config.expenseAccount || ""),
+    ContVenit: String(stockType?.salesAccount || config.salesAccount || ""),
+  }
+}
+
+function buildProductionOperationalLine(
+  document: ProductionDocumentLike,
+  line: ProductionDocumentLike["items"][number],
+  unitCost: number,
+  stockType: AccountingStockTypeLike | null | undefined,
+  config: AccountingConfigLike,
+  index: number
+): SagaOperationalLinePayload {
+  return {
+    index,
+    management: managementValue(config, document.location),
+    description: line.product.name,
+    code: line.product.accountingItemCode || line.product.sku || slugCode(line.product.name || "", "ART"),
+    guid: line.product.id,
+    barcode: "",
+    info: document.note || "",
+    uom: line.product.uom?.code || "BUC",
+    qty: decimal(line.qty, 3),
+    price: decimal(unitCost),
+    value: decimal(Number(line.qty || 0) * unitCost),
+    vatRate: decimal(line.product.vatRate?.rate ?? 0),
     expenseAccount: stockType?.expenseAccount || config.expenseAccount,
     inventoryAccount: stockType?.inventoryAccount || config.inventoryAccount,
     salesAccount: stockType?.salesAccount || config.salesAccount,
@@ -3090,28 +3170,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       document.items.map((line) => {
         const stockType = pickStockType(line.product, stockTypes, config)
         const unitCost = latestCostMap.get(line.productId) ?? Number(line.product.costPrice || 0)
-        return {
-          Cod: line.product.accountingItemCode || line.product.sku || slugCode(line.product.name, "ART"),
-          Denumire: line.product.name,
-          UM: line.product.uom?.code || "BUC",
-          Cantitate: Number(line.qty || 0),
-          "Pret unitar": unitCost,
-          Valoare: unitCost,
-          Gestiune: managementValue(config, document.location),
-          Data: formatDate(document.docDate),
-          "Nr. doc": document.docNo,
-          Explicatie: document.note || "Nota de productie",
-          TVA: Number(line.product.vatRate?.rate ?? 0),
-          "Cont stoc": stockType?.inventoryAccount || config.inventoryAccount,
-          "Cont cheltuiala": stockType?.expenseAccount || config.expenseAccount,
-          "Cont venit": stockType?.salesAccount || config.salesAccount,
-          Document: document.docNo,
-          Articol: line.product.name,
-          Pret: unitCost,
-          ContStoc: stockType?.inventoryAccount || config.inventoryAccount,
-          ContCheltuiala: stockType?.expenseAccount || config.expenseAccount,
-          ContVenit: stockType?.salesAccount || config.salesAccount,
-        }
+        return buildProductionSpreadsheetRow(document, line, unitCost, stockType, config)
       })
     )
 
@@ -3130,23 +3189,9 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
         ...document.items.map((line, index: number) => {
           const stockType = pickStockType(line.product, stockTypes, config)
           const unitCost = latestCostMap.get(line.productId) ?? Number(line.product.costPrice || 0)
-          return buildSagaOperationalLine({
-            index: index + 1,
-            management: managementValue(config, document.location),
-            description: line.product.name,
-            code: line.product.accountingItemCode || line.product.sku || slugCode(line.product.name || "", "ART"),
-            guid: line.product.id,
-            barcode: "",
-            info: document.note || "",
-            uom: line.product.uom?.code || "BUC",
-            qty: decimal(line.qty, 3),
-            price: decimal(unitCost),
-            value: decimal(Number(line.qty || 0) * unitCost),
-            vatRate: decimal(line.product.vatRate?.rate ?? 0),
-            expenseAccount: stockType?.expenseAccount || config.expenseAccount,
-            inventoryAccount: stockType?.inventoryAccount || config.inventoryAccount,
-            salesAccount: stockType?.salesAccount || config.salesAccount,
-          })
+          return buildSagaOperationalLine(
+            buildProductionOperationalLine(document, line, unitCost, stockType, config, index + 1)
+          )
         }),
         `        </Continut>`,
         `      </Detalii>`,
@@ -3182,28 +3227,7 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
       rows: document.items.map((line) => {
         const stockType = pickStockType(line.product, stockTypes, config)
         const unitCost = latestCostMap.get(line.productId) ?? Number(line.product.costPrice || 0)
-        return {
-          Cod: line.product.accountingItemCode || line.product.sku || slugCode(line.product.name, "ART"),
-          Denumire: line.product.name,
-          UM: line.product.uom?.code || "BUC",
-          Cantitate: Number(line.qty || 0),
-          "Pret unitar": unitCost,
-          Valoare: unitCost,
-          Gestiune: managementValue(config, document.location),
-          Data: formatDate(document.docDate),
-          "Nr. doc": document.docNo,
-          Explicatie: document.note || "Nota de productie",
-          TVA: Number(line.product.vatRate?.rate ?? 0),
-          "Cont stoc": stockType?.inventoryAccount || config.inventoryAccount,
-          "Cont cheltuiala": stockType?.expenseAccount || config.expenseAccount,
-          "Cont venit": stockType?.salesAccount || config.salesAccount,
-          Document: document.docNo,
-          Articol: line.product.name,
-          Pret: unitCost,
-          ContStoc: stockType?.inventoryAccount || config.inventoryAccount,
-          ContCheltuiala: stockType?.expenseAccount || config.expenseAccount,
-          ContVenit: stockType?.salesAccount || config.salesAccount,
-        }
+        return buildProductionSpreadsheetRow(document, line, unitCost, stockType, config)
       }),
     }))
   } else {
