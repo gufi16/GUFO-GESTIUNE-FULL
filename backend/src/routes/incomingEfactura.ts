@@ -1,6 +1,7 @@
 import { execFile } from "child_process"
 import fs from "fs"
 import path from "path"
+import { Prisma } from "@prisma/client"
 import { Router } from "express"
 import PDFDocument from "pdfkit"
 import { promisify } from "util"
@@ -40,6 +41,62 @@ router.use(requireAuth)
 
 const incomingEfacturaPdfDir = ensureUploadSubdir("incoming-efactura-pdfs")
 
+type IncomingEfacturaMessage = Record<string, unknown>
+type ParsedIncomingInvoice = ReturnType<typeof parseIncomingEInvoiceXml>
+type ParsedIncomingInvoiceLine = ParsedIncomingInvoice["lines"][number]
+type ParsedIncomingInvoiceTax = ParsedIncomingInvoice["taxBreakdown"][number]
+type CurrencyLike = "RON" | "EUR" | "USD" | "HUF"
+type IncomingInvoiceItemLike = {
+  lineIndex?: unknown
+  productName?: string | null
+  productCode?: string | null
+  externalCode?: string | null
+  barcode?: string | null
+  uomCode?: string | null
+  uomRawCode?: string | null
+  description?: string | null
+  qty?: unknown
+  unitPrice?: unknown
+  vatRate?: unknown
+  lineNet?: unknown
+  lineVat?: unknown
+  lineGross?: unknown
+}
+type IncomingInvoiceEntryLike = Record<string, unknown> & {
+  id: string
+  tenantId: string
+  companyId?: string | null
+  supplierName?: string | null
+  supplierCif?: string | null
+  customerName?: string | null
+  customerCif?: string | null
+  invoiceNo?: string | null
+  invoiceDate?: unknown
+  currency?: string | null
+  totalNet?: unknown
+  totalVat?: unknown
+  totalGross?: unknown
+  spvDownloadId?: string | null
+  spvUploadIndex?: string | null
+  spvMessageId?: string | null
+  spvCommunicationDate?: unknown
+  syncedAt?: unknown
+  xmlText?: string | null
+  rawPayload?: unknown
+  items?: IncomingInvoiceItemLike[] | null
+}
+type PdfTaxBreakdownEntry = {
+  categoryId: string
+  taxableAmount: unknown
+  taxAmount: unknown
+  taxCode: string
+  exemptionReason: string
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+}
+
 function registerFonts(doc: PDFKit.PDFDocument) {
   const regularCandidates = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -67,23 +124,23 @@ function registerFonts(doc: PDFKit.PDFDocument) {
   }
 }
 
-function fmtMoney(value: any) {
+function fmtMoney(value: unknown) {
   return incomingEfacturaMoney(value)
 }
 
-function fmtMoneyRo(value: any) {
+function fmtMoneyRo(value: unknown) {
   return incomingEfacturaMoneyRo(value)
 }
 
-function fmtQtyRo(value: any) {
+function fmtQtyRo(value: unknown) {
   return incomingEfacturaQtyRo(value)
 }
 
-function fmtDateRo(value: any) {
+function fmtDateRo(value: unknown) {
   return incomingEfacturaDateRo(value)
 }
 
-function joinAddressParts(address: any) {
+function joinAddressParts(address: Parameters<typeof joinIncomingEfacturaAddressParts>[0]) {
   return joinIncomingEfacturaAddressParts(address)
 }
 
@@ -97,15 +154,15 @@ function safeFilePart(value: string) {
   return safeIncomingEfacturaFilePart(value)
 }
 
-function toDateOrNull(value: any) {
+function toDateOrNull(value: unknown) {
   return toIncomingEfacturaDateOrNull(value)
 }
 
-function toNumber(value: any) {
+function toNumber(value: unknown) {
   return incomingEfacturaNumber(value)
 }
 
-function normalizeCurrency(value: any): "RON" | "EUR" | "USD" | "HUF" {
+function normalizeCurrency(value: unknown): CurrencyLike {
   return normalizeIncomingEfacturaCurrency(value)
 }
 
@@ -147,9 +204,9 @@ async function matchSupplier(tenantId: string, companyId: string, supplierCif: s
   return null
 }
 
-async function matchProduct(tenantId: string, companyId: string, line: any) {
+async function matchProduct(tenantId: string, companyId: string, line: IncomingInvoiceItemLike | ParsedIncomingInvoiceLine) {
   const skuCandidates = [line.externalCode, line.productCode, line.barcode]
-    .map((value: any) => String(value || "").trim())
+    .map((value) => String(value || "").trim())
     .filter(Boolean)
 
   for (const candidate of skuCandidates) {
@@ -199,9 +256,9 @@ async function matchProduct(tenantId: string, companyId: string, line: any) {
 async function upsertIncomingInvoice(
   tenantId: string,
   companyId: string,
-  rawMessage: any,
+  rawMessage: IncomingEfacturaMessage,
   xmlText: string,
-  parsedInvoice: any
+  parsedInvoice: ParsedIncomingInvoice
 ) {
   const supplier = await matchSupplier(
     tenantId,
@@ -250,7 +307,7 @@ async function upsertIncomingInvoice(
         readStringField(rawMessage, ["data_creare", "date", "createdAt", "communicationDate"])
       ),
       xmlText,
-      rawPayload: rawMessage || null,
+      rawPayload: rawMessage as Prisma.InputJsonValue,
       syncedAt: new Date(),
     },
     create: {
@@ -275,7 +332,7 @@ async function upsertIncomingInvoice(
         readStringField(rawMessage, ["data_creare", "date", "createdAt", "communicationDate"])
       ),
       xmlText,
-      rawPayload: rawMessage || null,
+      rawPayload: rawMessage as Prisma.InputJsonValue,
       status: "SYNCED",
     },
   })
@@ -327,14 +384,14 @@ async function upsertIncomingInvoice(
   })
 }
 
-function isMalformedIncomingInvoice(entry: any) {
+function isMalformedIncomingInvoice(entry: IncomingInvoiceEntryLike | null | undefined) {
   const itemsCount = Array.isArray(entry?.items) ? entry.items.length : 0
   const totalGross = Number(entry?.totalGross)
   const totalNet = Number(entry?.totalNet)
   const totalVat = Number(entry?.totalVat)
   const hasBrokenItemNumbers = Array.isArray(entry?.items)
     ? entry.items.some(
-        (line: any) =>
+        (line) =>
           !Number.isFinite(Number(line?.qty)) ||
           !Number.isFinite(Number(line?.unitPrice)) ||
           !Number.isFinite(Number(line?.vatRate)) ||
@@ -355,15 +412,15 @@ function isMalformedIncomingInvoice(entry: any) {
   )
 }
 
-function serializeIncomingInvoice(entry: any) {
-  if (!entry || typeof entry !== "object") return entry
+function serializeIncomingInvoice(entry: IncomingInvoiceEntryLike | null | undefined) {
+  if (!entry || !isRecord(entry)) return null
   return {
     ...entry,
     totalNet: toNumber(entry.totalNet),
     totalVat: toNumber(entry.totalVat),
     totalGross: toNumber(entry.totalGross),
     items: Array.isArray(entry.items)
-      ? entry.items.map((line: any) => ({
+      ? entry.items.map((line) => ({
           ...line,
           qty: toNumber(line?.qty),
           unitPrice: toNumber(line?.unitPrice),
@@ -376,7 +433,7 @@ function serializeIncomingInvoice(entry: any) {
   }
 }
 
-function isInvoiceEfacturaMessage(entry: any) {
+function isInvoiceEfacturaMessage(entry: IncomingEfacturaMessage) {
   const tip = String(entry?.tip || "").trim().toUpperCase()
   const raw = JSON.stringify(entry || {}).toLowerCase()
   const downloadId = String(
@@ -386,7 +443,7 @@ function isInvoiceEfacturaMessage(entry: any) {
   return Boolean(downloadId) && (tip.includes("FACTURA") || raw.includes("id_descarcare") || raw.includes("download"))
 }
 
-function normalizedCui(value: any) {
+function normalizedCui(value: unknown) {
   return normalizeCompanyCui(String(value || ""))
 }
 
@@ -398,7 +455,10 @@ function getRequestedCredentialId(req: AuthedRequest) {
   return null
 }
 
-function invoiceBelongsToIncomingSide(entry: any, companyCui: string) {
+function invoiceBelongsToIncomingSide(
+  entry: Pick<IncomingInvoiceEntryLike, "supplierCif" | "customerCif">,
+  companyCui: string
+) {
   const supplierCif = normalizedCui(entry?.supplierCif)
   const customerCif = normalizedCui(entry?.customerCif)
   if (!companyCui) return true
@@ -407,7 +467,10 @@ function invoiceBelongsToIncomingSide(entry: any, companyCui: string) {
   return true
 }
 
-function invoiceBelongsToOutgoingSide(entry: any, companyCui: string) {
+function invoiceBelongsToOutgoingSide(
+  entry: Pick<IncomingInvoiceEntryLike, "supplierCif">,
+  companyCui: string
+) {
   const supplierCif = normalizedCui(entry?.supplierCif)
   if (!companyCui) return false
   return Boolean(supplierCif && supplierCif === companyCui)
@@ -421,8 +484,9 @@ async function loadCompanyCui(tenantId: string, companyId: string) {
   return normalizedCui(company?.cui)
 }
 
-function serializeOutgoingInvoice(entry: any) {
+function serializeOutgoingInvoice(entry: IncomingInvoiceEntryLike) {
   const serialized = serializeIncomingInvoice(entry)
+  if (!serialized) return null
   return {
     id: serialized.id,
     invoiceNo: serialized.invoiceNo,
@@ -443,11 +507,11 @@ function serializeOutgoingInvoice(entry: any) {
   }
 }
 
-function mapIncomingSyncError(error: any, company?: {
+function mapIncomingSyncError(error: unknown, _company?: {
   efacturaCertFilename?: string | null
   efacturaCertPasswordEnc?: string | null
 }) {
-  const raw = String(error?.message || "").trim()
+  const raw = isRecord(error) ? String(error.message || "").trim() : ""
 
   if (/handshake failure|sslv3 alert handshake failure|EPROTO|tls/i.test(raw)) {
     return "Conexiunea TLS cu ANAF a fost respinsa. Verifica daca backend-ul foloseste endpointul OAuth nou ANAF si reincearca sincronizarea."
@@ -460,14 +524,15 @@ function mapIncomingSyncError(error: any, company?: {
   return raw || "Nu am putut sincroniza facturile primite direct din ANAF."
 }
 
-async function repairIncomingInvoiceIfNeeded(tenantId: string, companyId: string, entry: any) {
+async function repairIncomingInvoiceIfNeeded(tenantId: string, companyId: string, entry: IncomingInvoiceEntryLike) {
   if (!entry?.xmlText || !isMalformedIncomingInvoice(entry)) return entry
   try {
     const parsedInvoice = parseIncomingEInvoiceXml(String(entry.xmlText))
+    const rawPayload = isRecord(entry.rawPayload) ? entry.rawPayload : null
     const repaired = await upsertIncomingInvoice(
       tenantId,
       companyId,
-      entry.rawPayload || {
+      rawPayload ?? {
         id: entry.spvMessageId || entry.spvDownloadId,
         downloadId: entry.spvDownloadId,
         uploadIndex: entry.spvUploadIndex,
@@ -485,7 +550,7 @@ async function repairIncomingInvoiceIfNeeded(tenantId: string, companyId: string
   }
 }
 
-async function generateIncomingInvoicePdfBuffer(item: any) {
+async function generateIncomingInvoicePdfBuffer(item: IncomingInvoiceEntryLike) {
   const parsed = item?.xmlText ? parseIncomingEInvoiceXml(String(item.xmlText)) : null
   const currency = parsed?.currency || item.currency || "RON"
   const lines = Array.isArray(parsed?.lines) && parsed.lines.length ? parsed.lines : item.items || []
@@ -493,7 +558,7 @@ async function generateIncomingInvoicePdfBuffer(item: any) {
   const supplierCif = parsed?.supplierCif || item.supplierCif || "-"
   const customerName = parsed?.customerName || "-"
   const customerCif = parsed?.customerCif || "-"
-  const taxBreakdown =
+  const taxBreakdown: PdfTaxBreakdownEntry[] =
     Array.isArray(parsed?.taxBreakdown) && parsed.taxBreakdown.length
       ? parsed.taxBreakdown
       : [{ categoryId: "-", taxableAmount: item.totalNet || 0, taxAmount: item.totalVat || 0, taxCode: "VAT", exemptionReason: "" }]
@@ -521,7 +586,7 @@ async function generateIncomingInvoicePdfBuffer(item: any) {
   const footerY = doc.page.height - 30
   const pageBottom = footerY - 14
 
-  function money(value: any, includeCurrency = false) {
+  function money(value: unknown, includeCurrency = false) {
     const amount = fmtMoneyRo(value)
     return includeCurrency ? `${amount} ${currency}` : amount
   }
@@ -666,7 +731,7 @@ async function generateIncomingInvoicePdfBuffer(item: any) {
     doc.font(fonts.bold).fontSize(8).text(col.label, col.x, taxHeadY, { width: col.width })
   })
   let taxY = taxHeadY + 16
-  taxBreakdown.forEach((tax: any) => {
+  taxBreakdown.forEach((tax) => {
     ensureSpace(16)
     doc.font(fonts.regular).fontSize(8)
     doc.text(String(tax.categoryId || "-"), taxCols[0].x, taxY, { width: taxCols[0].width })
@@ -705,7 +770,7 @@ async function generateIncomingInvoicePdfBuffer(item: any) {
   ensureSpace(56)
   drawLineHeader()
 
-  lines.forEach((line: any, index: number) => {
+  lines.forEach((line: ParsedIncomingInvoiceLine | IncomingInvoiceItemLike, index: number) => {
     const description = String(line.description || line.productName || "-")
     const rowHeight = Math.max(18, doc.heightOfString(description, { width: lineColumns[1].width - 4 }) + 4)
     ensureSpace(rowHeight + 10)
@@ -770,7 +835,7 @@ async function generateIncomingInvoicePdfBuffer(item: any) {
   return done
 }
 
-async function generateIncomingInvoiceOfficialPdfBuffer(item: any) {
+async function generateIncomingInvoiceOfficialPdfBuffer(item: Pick<IncomingInvoiceEntryLike, "xmlText">) {
   const xmlText = String(item?.xmlText || "").trim()
   if (!xmlText) {
     throw new Error("Factura nu are XML disponibil pentru conversia ANAF.")
@@ -842,7 +907,7 @@ async function generateIncomingInvoiceOfficialPdfBuffer(item: any) {
   }
 }
 
-async function ensureIncomingInvoicePdfSaved(item: any) {
+async function ensureIncomingInvoicePdfSaved(item: Pick<IncomingInvoiceEntryLike, "tenantId" | "id" | "xmlText" | "currency" | "totalNet" | "totalVat" | "totalGross" | "items" | "invoiceNo" | "spvDownloadId" | "supplierName" | "supplierCif" | "customerName" | "customerCif">) {
   const pdfPath = getIncomingInvoicePdfPath(item.tenantId, item.id)
   let buffer: Buffer
   try {
@@ -971,10 +1036,10 @@ router.post("/api/v1/efactura/incoming/sync", async (req: AuthedRequest, res) =>
   try {
     const listResult = await anafListMessages(company, { days })
     const rawMessages = Array.isArray(listResult.items) ? listResult.items : []
-    const invoiceMessages = rawMessages.filter((entry: any) => isInvoiceEfacturaMessage(entry))
+    const invoiceMessages = rawMessages.filter((entry): entry is IncomingEfacturaMessage => isRecord(entry) && isInvoiceEfacturaMessage(entry))
     const downloadIds = invoiceMessages
-      .map((entry: any) => extractDownloadId(entry, JSON.stringify(entry || {})) || readStringField(entry, ["id", "downloadId"]))
-      .map((entry: any) => String(entry || "").trim())
+      .map((entry) => extractDownloadId(entry, JSON.stringify(entry || {})) || readStringField(entry, ["id", "downloadId"]))
+      .map((entry) => String(entry || "").trim())
       .filter(Boolean)
 
     const existingInvoices = downloadIds.length
@@ -1027,6 +1092,9 @@ router.post("/api/v1/efactura/incoming/sync", async (req: AuthedRequest, res) =>
         const extracted = extractXmlFromAnafDownload(downloadResult.response.buffer)
         const parsedInvoice = parseIncomingEInvoiceXml(extracted.xmlText)
         const item = await upsertIncomingInvoice(tenantId, companyId, message, extracted.xmlText, parsedInvoice)
+        if (!item) {
+          throw new Error(`Factura ${String(downloadId)} nu a putut fi reincarcata dupa import.`)
+        }
         await ensureIncomingInvoicePdfSaved(item)
         imported += 1
         if (invoiceBelongsToOutgoingSide(parsedInvoice, companyCui)) {
@@ -1267,6 +1335,9 @@ router.post("/api/v1/efactura/incoming/import-from-spv-bridge", async (req: Auth
     const extracted = extractXmlFromAnafDownload(buffer)
     const parsedInvoice = parseIncomingEInvoiceXml(extracted.xmlText)
     const item = await upsertIncomingInvoice(tenantId, companyId, rawMessage, extracted.xmlText, parsedInvoice)
+    if (!item) {
+      throw new Error("Factura importata nu a putut fi reincarcata dupa salvare.")
+    }
     await ensureIncomingInvoicePdfSaved(item)
     return res.json({
       ok: true,
