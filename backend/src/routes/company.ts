@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken"
 import fs from "fs"
 import multer from "multer"
 import path from "path"
+import type { Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { getNextNumberPreview, getNumberingConfig, normalizeNumberingPayload } from "../lib/numbering"
@@ -233,8 +234,8 @@ export async function handleAnafOauthCallback(req: Request, res: Response) {
     }
 
     const credential = state.credentialId
-      ? await getCompanyAnafCredentialById(prisma as any, state.tenantId, company.id, state.credentialId)
-      : await getDefaultCompanyAnafCredential(prisma as any, state.tenantId, company.id)
+      ? await getCompanyAnafCredentialById(prisma, state.tenantId, company.id, state.credentialId)
+      : await getDefaultCompanyAnafCredential(prisma, state.tenantId, company.id)
 
     if (!credential?.id) {
       throw new Error("Nu exista o credențiala ANAF disponibila pentru firma activa.")
@@ -255,9 +256,9 @@ export async function handleAnafOauthCallback(req: Request, res: Response) {
 
     const activeCredential = credential.isDefault
       ? updatedCredential
-      : await setDefaultCompanyAnafCredential(prisma as any, state.tenantId, company.id, updatedCredential.id)
+      : await setDefaultCompanyAnafCredential(prisma, state.tenantId, company.id, updatedCredential.id)
 
-    await syncDefaultAnafCredentialToCompany(prisma as any, company.id, activeCredential)
+    await syncDefaultAnafCredentialToCompany(prisma, company.id, activeCredential)
 
     return res.redirect(buildAnafOauthReturnUrl(state.returnTo, "success"))
   } catch (error: unknown) {
@@ -597,7 +598,7 @@ router.post("/api/v1/company", async (req: AuthedRequest, res) => {
         supplierCodePrefix: "FUR",
       })
 
-    await syncCompanyToDefaultAnafCredential(prisma as any, tenantId, company.id)
+    await syncCompanyToDefaultAnafCredential(prisma, tenantId, company.id)
 
     const resolvedCompany = await getRequestCompany(prisma, req, { includeCredentialList: true })
 
@@ -737,8 +738,8 @@ router.post(
       }
 
       let credential = requestedCredentialId
-        ? await getCompanyAnafCredentialById(prisma as any, tenantId, existingCompany.id, requestedCredentialId)
-        : await getDefaultCompanyAnafCredential(prisma as any, tenantId, existingCompany.id)
+        ? await getCompanyAnafCredentialById(prisma, tenantId, existingCompany.id, requestedCredentialId)
+        : await getDefaultCompanyAnafCredential(prisma, tenantId, existingCompany.id)
 
       if (!credential) {
         credential = await prisma.companyAnafCredential.create({
@@ -771,7 +772,7 @@ router.post(
       })
 
       if (updatedCredential.isDefault) {
-        await syncDefaultAnafCredentialToCompany(prisma as any, existingCompany.id, updatedCredential)
+        await syncDefaultAnafCredentialToCompany(prisma, existingCompany.id, updatedCredential)
       }
 
       const company = await getRequestCompany(prisma, req, { includeCredentialList: true })
@@ -805,7 +806,7 @@ router.delete("/api/v1/company/efactura/certificate", requireAuth, async (req: A
     })
 
     if (company?.id && requestedCredentialId) {
-      const credential = await getCompanyAnafCredentialById(prisma as any, tenantId, company.id, requestedCredentialId)
+      const credential = await getCompanyAnafCredentialById(prisma, tenantId, company.id, requestedCredentialId)
       if (!credential?.id) {
         return res.status(404).json({
           ok: false,
@@ -824,7 +825,7 @@ router.delete("/api/v1/company/efactura/certificate", requireAuth, async (req: A
         select: ANAF_CREDENTIAL_SELECT,
       })
       if (updatedCredential.isDefault) {
-        await syncDefaultAnafCredentialToCompany(prisma as any, company.id, updatedCredential)
+        await syncDefaultAnafCredentialToCompany(prisma, company.id, updatedCredential)
       }
     } else {
       const current = await getRequestCompany(prisma, req, {
@@ -881,8 +882,8 @@ router.get("/api/v1/company/efactura/oauth/start", async (req: AuthedRequest, re
   }
 
   const activeCredential = requestedCredentialId
-    ? await getCompanyAnafCredentialById(prisma as any, tenantId, activeCompany.id, requestedCredentialId)
-    : await getDefaultCompanyAnafCredential(prisma as any, tenantId, activeCompany.id)
+    ? await getCompanyAnafCredentialById(prisma, tenantId, activeCompany.id, requestedCredentialId)
+    : await getDefaultCompanyAnafCredential(prisma, tenantId, activeCompany.id)
 
   if (!activeCredential?.id) {
     return res.status(404).json({
@@ -986,7 +987,7 @@ router.post("/api/v1/company/efactura/oauth/test", async (req: AuthedRequest, re
           },
           select: ANAF_CREDENTIAL_SELECT,
         })
-        await syncDefaultAnafCredentialToCompany(prisma as any, company.id, updatedCredential)
+        await syncDefaultAnafCredentialToCompany(prisma, company.id, updatedCredential)
       }
 
       return res.status(400).json({
@@ -1005,7 +1006,7 @@ router.post("/api/v1/company/efactura/oauth/test", async (req: AuthedRequest, re
         },
         select: ANAF_CREDENTIAL_SELECT,
       })
-      await syncDefaultAnafCredentialToCompany(prisma as any, company.id, updatedCredential)
+      await syncDefaultAnafCredentialToCompany(prisma, company.id, updatedCredential)
     }
 
     return res.json({
@@ -1024,7 +1025,7 @@ router.post("/api/v1/company/efactura/oauth/test", async (req: AuthedRequest, re
         },
         select: ANAF_CREDENTIAL_SELECT,
       })
-      await syncDefaultAnafCredentialToCompany(prisma as any, company.id, updatedCredential)
+      await syncDefaultAnafCredentialToCompany(prisma, company.id, updatedCredential)
     }
 
     return res.status(500).json({
@@ -1097,7 +1098,7 @@ router.post("/api/v1/company/efactura/credentials", requireAuth, async (req: Aut
       })
     }
 
-    const existing = await listCompanyAnafCredentials(prisma as any, tenantId, company.id)
+    const existing = await listCompanyAnafCredentials(prisma, tenantId, company.id)
     const created = await prisma.companyAnafCredential.create({
       data: {
         tenantId,
@@ -1109,7 +1110,7 @@ router.post("/api/v1/company/efactura/credentials", requireAuth, async (req: Aut
     })
 
     if (created.isDefault) {
-      await syncDefaultAnafCredentialToCompany(prisma as any, company.id, created)
+      await syncDefaultAnafCredentialToCompany(prisma, company.id, created)
     }
 
     const credentials = await listRequestCompanyCredentialSummaries(prisma, tenantId, company.id)
@@ -1138,7 +1139,7 @@ router.patch("/api/v1/company/efactura/credentials/:id", requireAuth, async (req
     }), "Firma activa nu este disponibila.")
 
     const credential = await getCompanyAnafCredentialById(
-      prisma as any,
+      prisma,
       tenantId,
       company.id,
       String(req.params.id || ""),
@@ -1161,7 +1162,7 @@ router.patch("/api/v1/company/efactura/credentials/:id", requireAuth, async (req
       })
     }
 
-    const updateData: Record<string, any> = {
+    const updateData: Prisma.CompanyAnafCredentialUncheckedUpdateInput = {
       label: nextLabel,
     }
 
@@ -1171,14 +1172,14 @@ router.patch("/api/v1/company/efactura/credentials/:id", requireAuth, async (req
 
     let updatedCredential = credential
     if (req.body?.isDefault === true) {
-      updatedCredential = await setDefaultCompanyAnafCredential(prisma as any, tenantId, company.id, credential.id)
+      updatedCredential = await setDefaultCompanyAnafCredential(prisma, tenantId, company.id, credential.id)
       if (Object.keys(updateData).length > 0) {
         updatedCredential = await prisma.companyAnafCredential.update({
           where: { id: credential.id },
           data: updateData,
           select: ANAF_CREDENTIAL_SELECT,
         })
-        await syncDefaultAnafCredentialToCompany(prisma as any, company.id, updatedCredential)
+        await syncDefaultAnafCredentialToCompany(prisma, company.id, updatedCredential)
       }
     } else {
       updatedCredential = await prisma.companyAnafCredential.update({
@@ -1186,7 +1187,7 @@ router.patch("/api/v1/company/efactura/credentials/:id", requireAuth, async (req
         data: updateData,
       })
       if (updatedCredential.isDefault) {
-        await syncDefaultAnafCredentialToCompany(prisma as any, company.id, updatedCredential)
+        await syncDefaultAnafCredentialToCompany(prisma, company.id, updatedCredential)
       }
     }
 
