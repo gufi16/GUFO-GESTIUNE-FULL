@@ -54,6 +54,8 @@ type AnafScopeEntry = {
 }
 
 type AnafHttpResponse = Awaited<ReturnType<typeof anafHttpRequest>>
+type AnafHttpRequestOptions = Parameters<typeof anafHttpRequest>[1]
+type AnafLogDetails = Readonly<Record<string, unknown>>
 
 type AnafRequestResult = {
   response: AnafHttpResponse
@@ -291,9 +293,9 @@ function stripEtransportSchemaHints(xmlText: string) {
 async function anafEtransportRequest(
   company: AnafCompanyLike | null,
   pathBuilder: (baseUrl: string) => string,
-  requestOptions: (url: string, accessToken: string) => Record<string, unknown>,
+  requestOptions: (url: string, accessToken: string) => AnafHttpRequestOptions,
   logLabel: string,
-  startDetails: Record<string, unknown>,
+  startDetails: AnafLogDetails,
 ) {
   const ready = requireAnafReadyCompany(company, "operatiunea RO e-Transport")
   const baseUrls = getEtransportBaseUrls(company?.efacturaEnvironment)
@@ -333,9 +335,9 @@ async function anafEtransportRequest(
 async function anafEfacturaRequest(
   company: AnafCompanyLike | null,
   pathBuilder: (baseUrl: string, ready: AnafReadyCompany) => string,
-  requestOptions: (url: string, ready: AnafReadyCompany) => Record<string, unknown>,
+  requestOptions: (url: string, ready: AnafReadyCompany) => AnafHttpRequestOptions,
   logLabel: string,
-  startDetails: Record<string, unknown>,
+  startDetails: AnafLogDetails,
 ): Promise<AnafRequestResult> {
   const ready = requireAnafReadyCompany(company, "operatiunea e-Factura")
   const baseUrls = getEfacturaBaseUrls(company?.efacturaEnvironment)
@@ -374,7 +376,7 @@ async function anafEfacturaRequest(
   throw lastError || new Error("Nu am putut comunica cu ANAF pentru e-Factura.")
 }
 
-function logAnafRequestStart(label: string, details: Record<string, unknown>) {
+function logAnafRequestStart(label: string, details: AnafLogDetails) {
   console.log("ANAF REQUEST START", {
     label,
     ...details,
@@ -382,7 +384,7 @@ function logAnafRequestStart(label: string, details: Record<string, unknown>) {
   })
 }
 
-function logAnafRequestFinish(label: string, details: Record<string, unknown>) {
+function logAnafRequestFinish(label: string, details: AnafLogDetails) {
   console.log("ANAF REQUEST FINISH", {
     label,
     ...details,
@@ -394,6 +396,7 @@ export async function anafListMessages(company: AnafCompanyLike | null, options:
   const ready = requireAnafReadyCompany(company, "sincronizarea SPV")
   const cif = options.cif || ready.cif
   const days = Math.min(60, Math.max(1, Number(options.days || 30)))
+  const baseUrls = getEfacturaBaseUrls(company?.efacturaEnvironment)
   const tokenDiagnostics = getAnafTokenDiagnostics(ready.accessToken)
   let lastResult: {
     url: string
@@ -404,8 +407,8 @@ export async function anafListMessages(company: AnafCompanyLike | null, options:
     summary: string
   } | null = null
 
-  for (let index = 0; index < getEfacturaBaseUrls(company?.efacturaEnvironment).length; index += 1) {
-    const baseUrl = getEfacturaBaseUrls(company?.efacturaEnvironment)[index]
+  for (let index = 0; index < baseUrls.length; index += 1) {
+    const baseUrl = baseUrls[index]
     const url = `${baseUrl}/listaMesajeFactura?zile=${days}&cif=${encodeURIComponent(cif)}`
     logAnafRequestStart("listaMesajeFactura", {
       tenantId: company?.tenantId || null,
@@ -453,7 +456,7 @@ export async function anafListMessages(company: AnafCompanyLike | null, options:
         return lastResult
       }
     } catch (error) {
-      if (index === getEfacturaBaseUrls(company?.efacturaEnvironment).length - 1) {
+      if (index === baseUrls.length - 1) {
         throw error
       }
     }
@@ -468,6 +471,7 @@ export async function anafListMessages(company: AnafCompanyLike | null, options:
 
 export async function anafDownloadById(company: AnafCompanyLike | null, downloadId: string) {
   const ready = requireAnafReadyCompany(company, "descarcarea documentului ANAF")
+  const baseUrls = getEfacturaBaseUrls(company?.efacturaEnvironment)
   let lastResult: {
     url: string
     response: AnafHttpResponse
@@ -476,8 +480,8 @@ export async function anafDownloadById(company: AnafCompanyLike | null, download
     summary: string
   } | null = null
 
-  for (let index = 0; index < getEfacturaBaseUrls(company?.efacturaEnvironment).length; index += 1) {
-    const baseUrl = getEfacturaBaseUrls(company?.efacturaEnvironment)[index]
+  for (let index = 0; index < baseUrls.length; index += 1) {
+    const baseUrl = baseUrls[index]
     const url = `${baseUrl}/descarcare?id=${encodeURIComponent(downloadId)}`
     logAnafRequestStart("descarcare", {
       tenantId: company?.tenantId || null,
@@ -516,7 +520,7 @@ export async function anafDownloadById(company: AnafCompanyLike | null, download
         return lastResult
       }
     } catch (error) {
-      if (index === getEfacturaBaseUrls(company?.efacturaEnvironment).length - 1) {
+      if (index === baseUrls.length - 1) {
         throw error
       }
     }
@@ -820,7 +824,7 @@ export async function anafDownloadEtransportById(company: AnafCompanyLike | null
   }
 }
 
-export function logAnafRouteError(label: string, details: Record<string, unknown>) {
+export function logAnafRouteError(label: string, details: AnafLogDetails) {
   console.error(label, {
     ...details,
     at: new Date().toISOString(),
