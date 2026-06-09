@@ -1,14 +1,30 @@
 import test from "node:test"
 import assert from "node:assert/strict"
+import type { Prisma } from "@prisma/client"
 
 import { listTenantCompaniesForAuth, resolveTenantCompanyForAuth } from "./companyResolver"
 
-function makeClient(companies: any[], accessRows: any[] = []) {
+type ResolverTestCompany = {
+  id: string
+  tenantId: string
+  name: string
+  isDefault: boolean
+  createdAt: Date
+}
+
+type ResolverTestAccessRow = {
+  userId: string
+  companyId: string
+}
+
+function makeClient(companies: ResolverTestCompany[], accessRows: ResolverTestAccessRow[] = []) {
   return {
     company: {
-      async findMany(args: any) {
-        const tenantId = args?.where?.tenantId
-        const allowedIds = args?.where?.id?.in || null
+      async findMany(args: Prisma.CompanyFindManyArgs) {
+        const tenantId = String(args.where?.tenantId || "")
+        const idFilter = args.where?.id
+        const allowedIds =
+          typeof idFilter === "object" && idFilter && "in" in idFilter ? idFilter.in : null
         let items = companies.filter((company) => company.tenantId === tenantId)
         if (Array.isArray(allowedIds)) {
           items = items.filter((company) => allowedIds.includes(company.id))
@@ -17,8 +33,8 @@ function makeClient(companies: any[], accessRows: any[] = []) {
       },
     },
     userCompanyAccess: {
-      async findMany(args: any) {
-        const userId = args?.where?.userId
+      async findMany(args: Prisma.UserCompanyAccessFindManyArgs) {
+        const userId = String(args.where?.userId || "")
         return accessRows.filter((row) => row.userId === userId)
       },
     },
