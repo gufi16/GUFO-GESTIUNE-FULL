@@ -1,5 +1,11 @@
 import { prisma } from "../lib/prisma"
-import { getTenantBackupHealth, persistTenantBackupSnapshot } from "../lib/tenantBackupSupport"
+import { persistTenantBackupSnapshot } from "../lib/tenantBackupSupport"
+
+const AUTO_DAILY_BACKUP_LABEL = "auto-daily-tenant-snapshot"
+
+function startOfUtcDay(date = new Date()) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0))
+}
 
 async function main() {
   const force = process.argv.includes("--force")
@@ -15,12 +21,20 @@ async function main() {
 
   let created = 0
   let skipped = 0
+  const todayUtcStart = startOfUtcDay()
 
   for (const tenant of tenants) {
-    const health = await getTenantBackupHealth(tenant.id)
-    const latestAt = health.latestBackupAt ? new Date(health.latestBackupAt) : null
-    const ageMs = latestAt ? Date.now() - latestAt.getTime() : Number.POSITIVE_INFINITY
-    const shouldSnapshot = force || !latestAt || ageMs > 20 * 60 * 60 * 1000
+    const latestAutoBackup = await prisma.tenantBackup.findFirst({
+      where: {
+        tenantId: tenant.id,
+        label: AUTO_DAILY_BACKUP_LABEL,
+      },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true },
+    })
+
+    const latestAutoAt = latestAutoBackup?.createdAt ? new Date(latestAutoBackup.createdAt) : null
+    const shouldSnapshot = force || !latestAutoAt || latestAutoAt < todayUtcStart
 
     if (!shouldSnapshot) {
       skipped += 1
@@ -31,7 +45,7 @@ async function main() {
       tenantId: tenant.id,
       companyId: tenant.companies[0]?.id || null,
       actorType: "SYSTEM",
-      label: "auto-daily-tenant-snapshot",
+      label: AUTO_DAILY_BACKUP_LABEL,
     })
     created += 1
   }
