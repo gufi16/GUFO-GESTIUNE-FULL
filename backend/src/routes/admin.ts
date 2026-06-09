@@ -43,6 +43,10 @@ import { buildTenantExportZip } from "../lib/tenantExport"
 
 const router = Router()
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+}
+
 const CreateClientSchema = z.object({
   companyName: z.string().min(2),
   subdomain: z.string().optional(),
@@ -600,7 +604,7 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
   for (const log of terminalLabelLogs) {
     const terminalId = String(log.entityId || "").trim()
     if (!terminalId || terminalLabelById.has(terminalId)) continue
-    const payload = log.payload as Record<string, unknown> | null
+    const payload = isRecord(log.payload) ? log.payload : null
     const label = typeof payload?.label === "string" ? payload.label.trim() : ""
     if (label) {
       terminalLabelById.set(terminalId, label)
