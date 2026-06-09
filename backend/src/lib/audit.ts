@@ -14,6 +14,10 @@ const SENSITIVE_KEYS = new Set([
   "clientSecret",
 ])
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+}
+
 function normalizeSegment(value: string) {
   return value
     .replace(/[-_]+/g, " ")
@@ -50,8 +54,8 @@ function sanitizeAuditValue(value: unknown, depth = 0): unknown {
     return value.slice(0, 25).map((entry) => sanitizeAuditValue(entry, depth + 1))
   }
 
-  if (typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>).slice(0, 40)
+  if (isPlainObject(value)) {
+    const entries = Object.entries(value).slice(0, 40)
     return Object.fromEntries(
       entries.map(([key, entry]) => [
         key,
