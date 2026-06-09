@@ -1010,7 +1010,7 @@ const PosDailyClosureSchema = z.object({
   terminalDeviceId: z.string().optional().nullable(),
   terminalLabel: z.string().optional().nullable(),
   locationId: z.string().optional().nullable(),
-  payload: z.any().optional(),
+  payload: z.unknown().optional(),
 });
 
 const PosBackofficeReceiptSchema = z.object({
