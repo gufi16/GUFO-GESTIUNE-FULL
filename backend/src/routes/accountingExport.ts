@@ -14,6 +14,22 @@ type SpreadsheetFileFormat = "xlsx" | "csv"
 type ExportRow = Record<string, unknown>
 type ExportSheet = { name: string; rows: ExportRow[] }
 type ExportSheetRows = ExportRow[] & { __sheets?: ExportSheet[] }
+type SplitSpreadsheetFile = { fileName: string; sheetName: string; rows: ExportRow[] }
+type SagaPartnerHeader = {
+  name?: unknown
+  cif?: unknown
+  regCom?: unknown
+  capital?: unknown
+  country?: unknown
+  city?: unknown
+  county?: unknown
+  address?: unknown
+  phone?: unknown
+  email?: unknown
+  bank?: unknown
+  iban?: unknown
+  info?: unknown
+}
 type AccountingConfigLike = {
   articleCodeSource?: string | null
   managementAnalytic?: string | null
@@ -1199,8 +1215,8 @@ function buildSagaFacturaHeader({
   accize,
   clientGuid,
 }: {
-  supplier: Record<string, unknown>
-  client: Record<string, unknown>
+  supplier: SagaPartnerHeader
+  client: SagaPartnerHeader
   number: unknown
   date: unknown
   dueDate?: unknown
@@ -1821,10 +1837,10 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
   const { config, stockTypes } = await ensureAccountingConfig(tenantId, companyId)
   let xml = ""
   let sheetName = "Export contabilitate"
-  let spreadsheetRows: Record<string, unknown>[] = []
+  let spreadsheetRows: ExportRow[] = []
   let exportedFileDoc: SalesInvoiceLike | PurchaseReceiptLike | null = null
   let xmlFiles: Array<{ fileName: string; content: string }> = []
-  let splitSpreadsheetFiles: Array<{ fileName: string; sheetName: string; rows: Record<string, unknown>[] }> = []
+  let splitSpreadsheetFiles: SplitSpreadsheetFile[] = []
 
   if (kind === "products") {
     const products = await prisma.product.findMany({
