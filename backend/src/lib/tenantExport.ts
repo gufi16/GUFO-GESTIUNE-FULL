@@ -62,29 +62,45 @@ function addFileIfExists(zip: InstanceType<typeof AdmZip>, absolutePath: string,
   return true
 }
 
-function collectUploadFilesRecursively(rootDir: string, currentDir = rootDir) {
+function collectFilesRecursively(rootDir: string, currentDir = rootDir) {
   const files: string[] = []
   if (!fs.existsSync(currentDir)) return files
 
   for (const entry of fs.readdirSync(currentDir, { withFileTypes: true })) {
     const absolutePath = path.join(currentDir, entry.name)
-    const relativeToUploads = path.relative(rootDir, absolutePath).replace(/\\/g, "/")
-
-    if (relativeToUploads === "tenant-backups" || relativeToUploads.startsWith("tenant-backups/")) {
-      continue
-    }
+    const relativeToRoot = path.relative(rootDir, absolutePath).replace(/\\/g, "/")
 
     if (entry.isDirectory()) {
-      files.push(...collectUploadFilesRecursively(rootDir, absolutePath))
+      files.push(...collectFilesRecursively(rootDir, absolutePath))
       continue
     }
 
     if (entry.isFile()) {
-      files.push(relativeToUploads)
+      files.push(relativeToRoot)
     }
   }
 
   return files
+}
+
+function addUploadRelativePathIfExists(target: Set<string>, relativePath?: string | null) {
+  const normalized = String(relativePath || "").trim().replace(/^\/+/, "").replace(/\\/g, "/")
+  if (!normalized) return
+  if (normalized === "tenant-backups" || normalized.startsWith("tenant-backups/")) return
+  const absolutePath = path.join(uploadsDir, normalized.replace(/^uploads\//, ""))
+  if (!fs.existsSync(absolutePath)) return
+  if (!fs.statSync(absolutePath).isFile()) return
+  target.add(`uploads/${normalized.replace(/^uploads\//, "")}`)
+}
+
+function addUploadSubdirRecursively(target: Set<string>, uploadSubdir: string) {
+  const normalizedSubdir = String(uploadSubdir || "").trim().replace(/^\/+/, "").replace(/\\/g, "/")
+  if (!normalizedSubdir) return
+  const absoluteDir = path.join(uploadsDir, normalizedSubdir)
+  if (!fs.existsSync(absoluteDir) || !fs.statSync(absoluteDir).isDirectory()) return
+  for (const relative of collectFilesRecursively(absoluteDir)) {
+    target.add(path.posix.join("uploads", normalizedSubdir, relative))
+  }
 }
 
 export async function buildTenantExportZip(tenantId: string) {
@@ -92,6 +108,7 @@ export async function buildTenantExportZip(tenantId: string) {
     where: { id: tenantId },
     include: {
       companies: true,
+      anafCredentials: true,
       users: {
         include: {
           companyAccesses: true,
@@ -261,6 +278,7 @@ export async function buildTenantExportZip(tenantId: string) {
     sales,
     recipes,
     marketplaceMappings,
+    anafCredentials: tenant.anafCredentials,
   }
 
   const zip = new AdmZip()
@@ -272,27 +290,34 @@ export async function buildTenantExportZip(tenantId: string) {
   }
 
   const uploadPaths = new Set<string>()
-  for (const relativeToUploads of collectUploadFilesRecursively(uploadsDir)) {
-    uploadPaths.add(path.posix.join("uploads", relativeToUploads))
-  }
   for (const category of tenant.categories || []) {
     const relative = normalizeUploadRelativePath(category?.imageUrl)
-    if (relative) uploadPaths.add(relative)
+    addUploadRelativePathIfExists(uploadPaths, relative)
   }
   for (const product of tenant.products || []) {
     const relative = normalizeUploadRelativePath(product?.imageUrl)
-    if (relative) uploadPaths.add(relative)
+    addUploadRelativePathIfExists(uploadPaths, relative)
+  }
+  for (const user of tenant.users || []) {
+    const relative = normalizeUploadRelativePath(user?.imageUrl)
+    addUploadRelativePathIfExists(uploadPaths, relative)
   }
   for (const company of tenant.companies || []) {
     if (!company?.efacturaCertFilename) continue
     const certAbsolute = getEfacturaCertPath(tenantId, company.id, company.efacturaCertFilename)
-    if (fs.existsSync(certAbsolute)) {
-      uploadPaths.add(path.relative(process.cwd(), certAbsolute).replace(/\\/g, "/"))
-    }
+    const certRelative = path.relative(uploadsDir, certAbsolute).replace(/\\/g, "/")
+    addUploadRelativePathIfExists(uploadPaths, certRelative)
   }
+  for (const credential of tenant.anafCredentials || []) {
+    if (!credential?.certFilename) continue
+    const certAbsolute = getEfacturaCertPath(tenantId, credential.companyId, credential.certFilename, credential.id)
+    const certRelative = path.relative(uploadsDir, certAbsolute).replace(/\\/g, "/")
+    addUploadRelativePathIfExists(uploadPaths, certRelative)
+  }
+  addUploadSubdirRecursively(uploadPaths, path.posix.join("incoming-efactura-pdfs", tenantId))
 
   for (const relative of uploadPaths) {
-    const absolute = path.join(process.cwd(), relative)
+    const absolute = path.join(uploadsDir, relative.replace(/^uploads\//, ""))
     const zipPath = path.posix.join("files", relative.replace(/^uploads\//, "uploads/"))
     if (addFileIfExists(zip, absolute, zipPath)) {
       manifest.uploadsIncluded.push(zipPath)
