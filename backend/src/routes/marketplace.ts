@@ -1,14 +1,61 @@
-import { Router } from "express"
+import { Router, Request, Response } from "express"
 import crypto from "crypto"
 import { z } from "zod"
+import { Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 
 const router = Router()
-const db = prisma as any
+const db = prisma
 
 const PLATFORMS = ["GLOVO", "WOLT", "BOLT_FOOD"] as const
 const PLATFORM_ENUM = z.enum(PLATFORMS)
+const EXTERNAL_ORDER_STATUSES = [
+  "RECEIVED",
+  "ACKNOWLEDGED",
+  "IN_KITCHEN",
+  "READY",
+  "READY_FOR_FISCAL",
+  "FISCALIZED",
+  "DELIVERED",
+  "CANCELLED",
+  "FAILED",
+] as const
+type MarketplacePlatform = (typeof PLATFORMS)[number]
+type MarketplaceOrderStatus = (typeof EXTERNAL_ORDER_STATUSES)[number]
+type JsonRecord = Record<string, unknown>
+type MarketplaceSettings = Record<string, unknown>
+type TransactionClient = Prisma.TransactionClient
+type MarketplaceOrderPayload = z.infer<typeof ImportMarketplaceOrderSchema>
+type MinimalIntegration = {
+  id: string
+  tenantId: string
+  locationId: string | null
+  storeId: string | null
+  accessToken: string | null
+  webhookSecret: string | null
+  settingsJson: unknown
+}
+type MinimalMappedProduct = {
+  id: string
+  sku: string | null
+  departmentId: string | null
+  vatRate: { rate: number } | null
+}
+type RecentExternalProduct = {
+  integrationId: string | null
+  externalProductId: string | null
+  externalName: string
+  sku: string | null
+  mappingStatus: string
+  orderItemId: string
+  lastSeenAt: Date
+  location: { id: string; name: string; code: string | null } | null
+  platform: string | null
+  mapped: boolean
+}
+type HistoryStatus = Prisma.ExternalOrderStatusHistoryCreateInput["status"]
+type HistorySource = Prisma.ExternalOrderStatusHistoryCreateInput["source"]
 
 const ConnectIntegrationSchema = z.object({
   locationId: z.string().min(1),
@@ -18,7 +65,7 @@ const ConnectIntegrationSchema = z.object({
   accessToken: z.string().trim().optional(),
   refreshToken: z.string().trim().optional(),
   webhookSecret: z.string().trim().optional(),
-  settings: z.record(z.any()).optional(),
+  settings: z.record(z.unknown()).optional(),
 })
 
 const ImportMarketplaceOrderSchema = z.object({
@@ -53,7 +100,7 @@ const ImportMarketplaceOrderSchema = z.object({
       station: z.string().trim().optional(),
     })
   ).min(1),
-  rawPayload: z.any().optional(),
+  rawPayload: z.unknown().optional(),
 })
 
 const ReadyStatusSchema = z.object({
@@ -64,6 +111,26 @@ const ReadyStatusSchema = z.object({
 function normalizeStatusMessage(message?: string) {
   const text = String(message || "").trim()
   return text || null
+}
+
+function isRecord(value: unknown): value is JsonRecord {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback
+}
+
+function isMarketplacePlatform(value: string): value is MarketplacePlatform {
+  return PLATFORMS.includes(value as MarketplacePlatform)
+}
+
+function isMarketplaceOrderStatus(value: string): value is MarketplaceOrderStatus {
+  return EXTERNAL_ORDER_STATUSES.includes(value as MarketplaceOrderStatus)
+}
+
+function integrationSettings(value: unknown): MarketplaceSettings {
+  return isRecord(value) ? value : {}
 }
 
 function buildDraftCart(payload: z.infer<typeof ImportMarketplaceOrderSchema>) {
@@ -109,17 +176,28 @@ async function ensureLocationForTenant(tenantId: string, locationId: string) {
   })
 }
 
-async function resolveMarketplaceOrder(tenantId: string, inputOrderId: string, include: Record<string, unknown> = {}) {
+async function resolveMarketplaceOrder<TInclude extends Prisma.ExternalOrderInclude>(
+  tenantId: string,
+  inputOrderId: string,
+  include?: TInclude
+): Promise<Prisma.ExternalOrderGetPayload<{ include: TInclude }> | null> {
   return db.externalOrder.findFirst({
     where: {
       tenantId,
       OR: [{ id: inputOrderId }, { externalOrderId: inputOrderId }],
     },
     include,
-  })
+  }) as Promise<Prisma.ExternalOrderGetPayload<{ include: TInclude }> | null>
 }
 
-async function createOrderHistory(tenantId: string, externalOrderId: string, status: string, source: string, message?: string, payloadJson?: unknown) {
+async function createOrderHistory(
+  tenantId: string,
+  externalOrderId: string,
+  status: HistoryStatus,
+  source: HistorySource,
+  message?: string,
+  payloadJson?: unknown
+) {
   return db.externalOrderStatusHistory.create({
     data: {
       tenantId,
@@ -127,7 +205,7 @@ async function createOrderHistory(tenantId: string, externalOrderId: string, sta
       status,
       source,
       message: normalizeStatusMessage(message),
-      payloadJson: payloadJson ?? undefined,
+      payloadJson: payloadJson === undefined ? undefined : (payloadJson as Prisma.InputJsonValue),
     },
   })
 }
@@ -151,7 +229,7 @@ function toMoneyNumber(value: unknown): number {
     return Number.isFinite(parsed) ? parsed : 0
   }
   if (value && typeof value === "object") {
-    const obj = value as any
+    const obj = value as JsonRecord
     return (
       toMoneyNumber(obj.total) ||
       toMoneyNumber(obj.amount) ||
@@ -193,23 +271,21 @@ function inferGlovoPartnerName(storeId: string) {
   return partnerName?.trim() || ""
 }
 
-function buildGlovoContractChecklist(integration: any) {
-  const settings = integration?.settingsJson && typeof integration.settingsJson === "object"
-    ? integration.settingsJson
-    : {}
+function buildGlovoContractChecklist(integration: MinimalIntegration) {
+  const settings = integrationSettings(integration.settingsJson)
   const storeId = normalizeGlovoStoreId(integration?.storeId)
-  const partnerName = String(settings?.partnerName || inferGlovoPartnerName(storeId)).trim()
+  const partnerName = String(settings.partnerName || inferGlovoPartnerName(storeId)).trim()
   const tokenConfigured = Boolean(String(integration?.webhookSecret || integration?.accessToken || "").trim())
   const locationSelected = Boolean(String(integration?.locationId || "").trim())
-  const targetTerminalSelected = Boolean(String(settings?.targetTerminalId || settings?.targetTerminalDeviceId || "").trim())
+  const targetTerminalSelected = Boolean(String(settings.targetTerminalId || settings.targetTerminalDeviceId || "").trim())
   const storeIdConfigured = Boolean(storeId)
   const storeIdLooksValid = storeId.includes("__")
-  const chainIdConfigured = Boolean(String(settings?.glovoChainId || "").trim())
-  const clientIdConfigured = Boolean(String(settings?.glovoClientId || "").trim())
-  const clientSecretConfigured = Boolean(String(settings?.glovoClientSecret || "").trim())
-  const orderNotificationsEnabled = Boolean(settings?.portalOrderNotificationsEnabled)
-  const cancelNotificationsEnabled = Boolean(settings?.portalCancelNotificationsEnabled)
-  const menuManagedByIntegration = Boolean(settings?.menuManagedByIntegration)
+  const chainIdConfigured = Boolean(String(settings.glovoChainId || "").trim())
+  const clientIdConfigured = Boolean(String(settings.glovoClientId || "").trim())
+  const clientSecretConfigured = Boolean(String(settings.glovoClientSecret || "").trim())
+  const orderNotificationsEnabled = Boolean(settings.portalOrderNotificationsEnabled)
+  const cancelNotificationsEnabled = Boolean(settings.portalCancelNotificationsEnabled)
+  const menuManagedByIntegration = Boolean(settings.menuManagedByIntegration)
 
   return {
     partnerName,
@@ -240,7 +316,7 @@ function buildGlovoContractChecklist(integration: any) {
   }
 }
 
-async function enrichImportedItems(tenantId: string, integrationId: string | null, items: z.infer<typeof ImportMarketplaceOrderSchema>["items"]) {
+async function enrichImportedItems(tenantId: string, integrationId: string | null, items: MarketplaceOrderPayload["items"]) {
   const externalIds = items.map((item) => item.externalProductId?.trim()).filter(Boolean) as string[]
   const mappings = integrationId && externalIds.length > 0
     ? await db.marketplaceProductMapping.findMany({
@@ -252,8 +328,10 @@ async function enrichImportedItems(tenantId: string, integrationId: string | nul
       })
     : []
 
-  const mappingByExternalId = new Map<string, any>(mappings.map((item: any) => [item.externalProductId, item]))
-  const mappedProductIds = mappings.map((item: any) => item.erpProductId).filter(Boolean)
+  const mappingByExternalId = new Map<string, (typeof mappings)[number]>(
+    mappings.map((item) => [item.externalProductId, item])
+  )
+  const mappedProductIds = mappings.map((item) => item.erpProductId).filter(Boolean) as string[]
   const products = mappedProductIds.length > 0
     ? await db.product.findMany({
         where: {
@@ -272,7 +350,7 @@ async function enrichImportedItems(tenantId: string, integrationId: string | nul
         },
       })
     : []
-  const productById = new Map<string, any>(products.map((item: any) => [item.id, item]))
+  const productById = new Map<string, MinimalMappedProduct>(products.map((item) => [item.id, item]))
 
   return items.map((item) => {
     const mapping = item.externalProductId ? mappingByExternalId.get(item.externalProductId) : null
@@ -288,7 +366,7 @@ async function enrichImportedItems(tenantId: string, integrationId: string | nul
   })
 }
 
-async function importMarketplaceOrderForTenant(tenantId: string, rawPayload: z.infer<typeof ImportMarketplaceOrderSchema>) {
+async function importMarketplaceOrderForTenant(tenantId: string, rawPayload: MarketplaceOrderPayload) {
   const location = await ensureLocationForTenant(tenantId, rawPayload.locationId)
   if (!location) {
     throw new Error("Location not found")
@@ -312,7 +390,7 @@ async function importMarketplaceOrderForTenant(tenantId: string, rawPayload: z.i
     items: await enrichImportedItems(tenantId, integrationId, rawPayload.items),
   }
 
-  return db.$transaction(async (tx: any) => {
+  return db.$transaction(async (tx: TransactionClient) => {
     const order = await tx.externalOrder.upsert({
       where: {
         tenantId_platform_externalOrderId: {
@@ -333,7 +411,7 @@ async function importMarketplaceOrderForTenant(tenantId: string, rawPayload: z.i
         currency: payload.currency,
         subtotal: payload.subtotal,
         total: payload.total,
-        rawPayloadJson: payload.rawPayload ?? payload,
+        rawPayloadJson: (payload.rawPayload ?? payload) as Prisma.InputJsonValue,
         placedAt: payload.placedAt || new Date(),
         status: "RECEIVED",
         acknowledgedAt: null,
@@ -355,7 +433,7 @@ async function importMarketplaceOrderForTenant(tenantId: string, rawPayload: z.i
         currency: payload.currency,
         subtotal: payload.subtotal,
         total: payload.total,
-        rawPayloadJson: payload.rawPayload ?? payload,
+        rawPayloadJson: (payload.rawPayload ?? payload) as Prisma.InputJsonValue,
         placedAt: payload.placedAt || new Date(),
         status: "RECEIVED",
       },
@@ -377,7 +455,7 @@ async function importMarketplaceOrderForTenant(tenantId: string, rawPayload: z.i
           unitPrice: item.unitPrice,
           vatRate: item.vatRate ?? null,
           note: item.note || null,
-          modifiersJson: item.modifiers ? { items: item.modifiers } : undefined,
+          modifiersJson: item.modifiers ? ({ items: item.modifiers } as Prisma.InputJsonValue) : undefined,
           erpProductId: item.erpProductId || null,
           mappingStatus: item.erpProductId ? "MAPPED" : "UNMAPPED",
         })),
@@ -419,7 +497,7 @@ async function importMarketplaceOrderForTenant(tenantId: string, rawPayload: z.i
           departmentId: item.departmentId || null,
           station: item.station || payload.station || null,
           note: item.note || null,
-          modifiersJson: item.modifiers ? { items: item.modifiers } : undefined,
+          modifiersJson: item.modifiers ? ({ items: item.modifiers } as Prisma.InputJsonValue) : undefined,
         })),
       })
     }
@@ -430,7 +508,7 @@ async function importMarketplaceOrderForTenant(tenantId: string, rawPayload: z.i
       where: { externalOrderId: order.id },
       update: {
         status: "OPEN",
-        cartJson: draftCart,
+        cartJson: draftCart as Prisma.InputJsonValue,
         subtotal: payload.subtotal,
         total: payload.total,
       },
@@ -439,7 +517,7 @@ async function importMarketplaceOrderForTenant(tenantId: string, rawPayload: z.i
         locationId: payload.locationId,
         externalOrderId: order.id,
         status: "OPEN",
-        cartJson: draftCart,
+        cartJson: draftCart as Prisma.InputJsonValue,
         subtotal: payload.subtotal,
         total: payload.total,
       },
@@ -455,7 +533,7 @@ async function importMarketplaceOrderForTenant(tenantId: string, rawPayload: z.i
         payloadJson: {
           platform: payload.platform,
           itemsCount: payload.items.length,
-        },
+        } as Prisma.InputJsonValue,
       },
     })
 
@@ -478,7 +556,7 @@ async function setMarketplaceLifecycleStatus(tenantId: string, inputOrderId: str
   if (!order) return null
 
   const now = new Date()
-  await db.$transaction(async (tx: any) => {
+  await db.$transaction(async (tx: TransactionClient) => {
     await tx.externalOrder.update({
       where: { id: order.id },
       data: {
@@ -553,126 +631,138 @@ async function fetchWoltOrderV2(orderId: string, token: string) {
   return response.json()
 }
 
-function normalizeWoltOrderToImportPayload(integration: any, payload: any): z.infer<typeof ImportMarketplaceOrderSchema> {
-  const items = Array.isArray(payload?.items) ? payload.items : []
-  const subtotal = toMoneyNumber(payload?.basket_price)
+function normalizeWoltOrderToImportPayload(integration: MinimalIntegration, payload: unknown): MarketplaceOrderPayload {
+  const source = isRecord(payload) ? payload : {}
+  const items = Array.isArray(source.items) ? source.items : []
+  const payment = isRecord(source.payment) ? source.payment : {}
+  const subtotal = toMoneyNumber(source.basket_price)
   const total =
-    toMoneyNumber(payload?.price) ||
-    toMoneyNumber(payload?.total_price) ||
-    subtotal + toMoneyNumber(payload?.fees)
+    toMoneyNumber(source.price) ||
+    toMoneyNumber(source.total_price) ||
+    subtotal + toMoneyNumber(source.fees)
 
   return {
     platform: "WOLT",
-    locationId: integration.locationId,
+    locationId: String(integration.locationId || "").trim(),
     integrationId: integration.id,
-    externalOrderId: String(payload?.id || "").trim(),
-    externalOrderNumber: String(payload?.order_number || "").trim() || undefined,
-    customerName: String(payload?.consumer_name || "").trim() || undefined,
-    customerPhone: String(payload?.consumer_phone_number || "").trim() || undefined,
-    customerNote: String(payload?.consumer_comment || "").trim() || undefined,
+    externalOrderId: String(source.id || "").trim(),
+    externalOrderNumber: String(source.order_number || "").trim() || undefined,
+    customerName: String(source.consumer_name || "").trim() || undefined,
+    customerPhone: String(source.consumer_phone_number || "").trim() || undefined,
+    customerNote: String(source.consumer_comment || "").trim() || undefined,
     paymentLabel:
       String(
-        payload?.payment?.type ||
-        payload?.payment?.payment_type ||
-        payload?.payment_type ||
-        payload?.payment_method ||
+        payment.type ||
+        payment.payment_type ||
+        source.payment_type ||
+        source.payment_method ||
         ""
       ).trim() || undefined,
     currency: "RON",
     subtotal,
     total,
-    displayNumber: String(payload?.order_number || payload?.id || "").trim() || undefined,
+    displayNumber: String(source.order_number || source.id || "").trim() || undefined,
     station: undefined,
-    items: items.map((item: any, index: number) => {
-      const quantity = Number(item?.quantity || item?.qty || 1) || 1
-      const lineTotal = toMoneyNumber(item?.price) || toMoneyNumber(item?.total_price)
+    items: items.map((item, index: number) => {
+      const row = isRecord(item) ? item : {}
+      const quantity = Number(row.quantity || row.qty || 1) || 1
+      const lineTotal = toMoneyNumber(row.price) || toMoneyNumber(row.total_price)
       return {
-        externalLineId: String(item?.id || `${payload?.id || "wolt"}-${index + 1}`).trim(),
-        externalProductId: String(item?.pos_product_id || item?.merchant_supplied_id || item?.id || "").trim() || undefined,
-        name: String(item?.name || item?.item_name || "Produs Wolt").trim(),
-        sku: String(item?.merchant_supplied_id || item?.sku || "").trim() || undefined,
+        externalLineId: String(row.id || `${String(source.id || "wolt")}-${index + 1}`).trim(),
+        externalProductId: String(row.pos_product_id || row.merchant_supplied_id || row.id || "").trim() || undefined,
+        name: String(row.name || row.item_name || "Produs Wolt").trim(),
+        sku: String(row.merchant_supplied_id || row.sku || "").trim() || undefined,
         qty: quantity,
-        unitPrice: quantity > 0 ? (lineTotal > 0 ? lineTotal / quantity : toMoneyNumber(item?.unit_price)) : 0,
-        vatRate: Number(item?.vat_percentage ?? item?.vat_rate ?? 0) || undefined,
-        note: String(item?.comment || item?.note || "").trim() || undefined,
-        modifiers: Array.isArray(item?.options)
-          ? item.options.map((option: any) => String(option?.name || "").trim()).filter(Boolean)
+        unitPrice: quantity > 0 ? (lineTotal > 0 ? lineTotal / quantity : toMoneyNumber(row.unit_price)) : 0,
+        vatRate: Number(row.vat_percentage ?? row.vat_rate ?? 0) || undefined,
+        note: String(row.comment || row.note || "").trim() || undefined,
+        modifiers: Array.isArray(row.options)
+          ? row.options.map((option) => String((isRecord(option) ? option.name : "") || "").trim()).filter(Boolean)
           : undefined,
         erpProductId: undefined,
         departmentId: undefined,
         station: undefined,
       }
     }),
-    rawPayload: payload,
+    rawPayload: source,
   }
 }
 
-function normalizeGlovoOrderToImportPayload(integration: any, payload: any): z.infer<typeof ImportMarketplaceOrderSchema> {
-  const products = Array.isArray(payload?.products) ? payload.products : Array.isArray(payload?.items) ? payload.items : []
+function normalizeGlovoOrderToImportPayload(integration: MinimalIntegration, payload: unknown): MarketplaceOrderPayload {
+  const source = isRecord(payload) ? payload : {}
+  const products = Array.isArray(source.products) ? source.products : Array.isArray(source.items) ? source.items : []
   const total =
-    toGlovoMoneyNumber(payload?.payment_total) ||
-    toGlovoMoneyNumber(payload?.total_price) ||
-    toGlovoMoneyNumber(payload?.total) ||
-    products.reduce((sum: number, item: any) => sum + toGlovoMoneyNumber(item?.price) * (Number(item?.quantity || 1) || 1), 0)
-  const subtotal = toGlovoMoneyNumber(payload?.subtotal) || total
+    toGlovoMoneyNumber(source.payment_total) ||
+    toGlovoMoneyNumber(source.total_price) ||
+    toGlovoMoneyNumber(source.total) ||
+    products.reduce(
+      (sum: number, item) =>
+        sum + toGlovoMoneyNumber(isRecord(item) ? item.price : 0) * (Number(isRecord(item) ? item.quantity || 1 : 1) || 1),
+      0
+    )
+  const subtotal = toGlovoMoneyNumber(source.subtotal) || total
   const customerNotes = [
-    String(payload?.special_requirements || "").trim(),
-    String(payload?.comments || payload?.notes || payload?.customer_note || "").trim(),
-    String(payload?.allergy_info || "").trim(),
+    String(source.special_requirements || "").trim(),
+    String(source.comments || source.notes || source.customer_note || "").trim(),
+    String(source.allergy_info || "").trim(),
   ].filter(Boolean)
-  const placedAtRaw = String(payload?.order_time || "").trim()
+  const placedAtRaw = String(source.order_time || "").trim()
   const placedAt = placedAtRaw ? new Date(placedAtRaw.replace(" ", "T")) : undefined
+  const customer = isRecord(source.customer) ? source.customer : {}
+  const payment = isRecord(source.payment) ? source.payment : {}
 
   return {
     platform: "GLOVO",
-    locationId: integration.locationId,
+    locationId: String(integration.locationId || "").trim(),
     integrationId: integration.id,
-    externalOrderId: String(payload?.id || payload?.order_id || "").trim(),
-    externalOrderNumber: String(payload?.order_code || payload?.order_number || "").trim() || undefined,
-    customerName: String(payload?.customer?.name || payload?.customer_name || "").trim() || undefined,
-    customerPhone: String(payload?.customer?.phone_number || payload?.customer?.phone || payload?.customer_phone || "").trim() || undefined,
+    externalOrderId: String(source.id || source.order_id || "").trim(),
+    externalOrderNumber: String(source.order_code || source.order_number || "").trim() || undefined,
+    customerName: String(customer.name || source.customer_name || "").trim() || undefined,
+    customerPhone: String(customer.phone_number || customer.phone || source.customer_phone || "").trim() || undefined,
     customerNote: customerNotes.join(" | ") || undefined,
     paymentLabel:
       String(
-        payload?.payment?.type ||
-        payload?.payment?.payment_type ||
-        payload?.payment_method ||
-        payload?.payment_type ||
+        payment.type ||
+        payment.payment_type ||
+        source.payment_method ||
+        source.payment_type ||
         ""
       ).trim() || undefined,
     currency: "RON",
     subtotal,
     total,
     placedAt: placedAt && !Number.isNaN(placedAt.getTime()) ? placedAt : undefined,
-    displayNumber: String(payload?.order_code || payload?.id || payload?.order_id || "").trim() || undefined,
+    displayNumber: String(source.order_code || source.id || source.order_id || "").trim() || undefined,
     station: undefined,
-    items: products.map((item: any, index: number) => {
-      const quantity = Number(item?.quantity || item?.qty || 1) || 1
-      const unitPrice = toGlovoMoneyNumber(item?.price) || toGlovoMoneyNumber(item?.unit_price)
+    items: products.map((item, index: number) => {
+      const row = isRecord(item) ? item : {}
+      const quantity = Number(row.quantity || row.qty || 1) || 1
+      const unitPrice = toGlovoMoneyNumber(row.price) || toGlovoMoneyNumber(row.unit_price)
       return {
-        externalLineId: String(item?.purchased_product_id || item?.id || item?.product_id || `${payload?.id || "glovo"}-${index + 1}`).trim(),
-        externalProductId: String(item?.product_id || item?.id || "").trim() || undefined,
-        name: String(item?.name || item?.product_name || "Produs Glovo").trim(),
-        sku: String(item?.sku || "").trim() || undefined,
+        externalLineId: String(row.purchased_product_id || row.id || row.product_id || `${String(source.id || "glovo")}-${index + 1}`).trim(),
+        externalProductId: String(row.product_id || row.id || "").trim() || undefined,
+        name: String(row.name || row.product_name || "Produs Glovo").trim(),
+        sku: String(row.sku || "").trim() || undefined,
         qty: quantity,
         unitPrice,
-        vatRate: Number(item?.vat_percentage ?? item?.vat_rate ?? 0) || undefined,
-        note: String(item?.comment || item?.note || "").trim() || undefined,
-        modifiers: Array.isArray(item?.attributes)
-          ? item.attributes.map((option: any) => String(option?.name || "").trim()).filter(Boolean)
+        vatRate: Number(row.vat_percentage ?? row.vat_rate ?? 0) || undefined,
+        note: String(row.comment || row.note || "").trim() || undefined,
+        modifiers: Array.isArray(row.attributes)
+          ? row.attributes.map((option) => String((isRecord(option) ? option.name : "") || "").trim()).filter(Boolean)
           : undefined,
         erpProductId: undefined,
         departmentId: undefined,
         station: undefined,
       }
     }),
-    rawPayload: payload,
+    rawPayload: source,
   }
 }
 
-async function findMatchingGlovoIntegration(payload: any, routeStoreId?: string) {
-  const storeId = normalizeGlovoStoreId(routeStoreId || payload?.store_id || payload?.storeId)
-  const token = String(payload?._glovoToken || "").trim()
+async function findMatchingGlovoIntegration(payload: unknown, routeStoreId?: string) {
+  const source = isRecord(payload) ? payload : {}
+  const storeId = normalizeGlovoStoreId(routeStoreId || source.store_id || source.storeId)
+  const token = String(source._glovoToken || "").trim()
 
   const integrations = await db.externalIntegration.findMany({
     where: {
@@ -682,7 +772,7 @@ async function findMatchingGlovoIntegration(payload: any, routeStoreId?: string)
     },
   })
 
-  return integrations.find((integration: any) => {
+  return integrations.find((integration) => {
     const secret = String(integration.webhookSecret || integration.accessToken || "").trim()
     if (secret && token) return secret === token
     if (secret && !token) return false
@@ -690,7 +780,7 @@ async function findMatchingGlovoIntegration(payload: any, routeStoreId?: string)
   }) || null
 }
 
-async function processGlovoWebhook(req: any, res: any, kind: "ORDER" | "CANCEL") {
+async function processGlovoWebhook(req: Request, res: Response, kind: "ORDER" | "CANCEL") {
   const token = String(req.header("Authorization") || req.header("X-Glovo-Webhook-Token") || "")
     .replace(/^Bearer\s+/i, "")
     .trim()
@@ -725,6 +815,9 @@ async function processGlovoWebhook(req: any, res: any, kind: "ORDER" | "CANCEL")
 
     const parsedPayload = normalizeGlovoOrderToImportPayload(matchedIntegration, req.body)
     const externalOrder = await importMarketplaceOrderForTenant(matchedIntegration.tenantId, parsedPayload)
+    if (!externalOrder) {
+      throw new Error("Glovo order import did not return an ERP order.")
+    }
 
     if (["ACCEPTED"].includes(rawStatus)) {
       await setMarketplaceLifecycleStatus(
@@ -749,8 +842,8 @@ async function processGlovoWebhook(req: any, res: any, kind: "ORDER" | "CANCEL")
     }
 
     return res.json({ ok: true, orderId: externalOrder.id })
-  } catch (error: any) {
-    return res.status(500).json({ ok: false, error: error?.message || "Glovo webhook failed" })
+  } catch (error: unknown) {
+    return res.status(500).json({ ok: false, error: getErrorMessage(error, "Glovo webhook failed") })
   }
 }
 
@@ -769,7 +862,7 @@ router.post("/api/v1/marketplace/webhooks/wolt", async (req, res) => {
     },
   })
 
-  const matchedIntegration = integrations.find((integration: any) => {
+  const matchedIntegration = integrations.find((integration) => {
     const storeMatches = externalVenueId && integration.storeId && integration.storeId === externalVenueId
     const merchantMatches = venueId && integration.merchantId && integration.merchantId === venueId
     const secret = String(integration.webhookSecret || "").trim()
@@ -821,6 +914,9 @@ router.post("/api/v1/marketplace/webhooks/wolt", async (req, res) => {
     const orderData = await fetchWoltOrderV2(orderId, token)
     const importPayload = normalizeWoltOrderToImportPayload(matchedIntegration, orderData)
     const externalOrder = await importMarketplaceOrderForTenant(matchedIntegration.tenantId, importPayload)
+    if (!externalOrder) {
+      throw new Error("Wolt order import did not return an ERP order.")
+    }
 
     if (eventStatus === "PRODUCTION") {
       await setMarketplaceLifecycleStatus(
@@ -845,8 +941,8 @@ router.post("/api/v1/marketplace/webhooks/wolt", async (req, res) => {
     }
 
     return res.json({ ok: true, orderId: externalOrder.id })
-  } catch (error: any) {
-    return res.status(500).json({ ok: false, error: error?.message || "Wolt webhook failed" })
+  } catch (error: unknown) {
+    return res.status(500).json({ ok: false, error: getErrorMessage(error, "Wolt webhook failed") })
   }
 })
 
@@ -891,7 +987,7 @@ router.get("/api/v1/marketplace/integrations", async (req: AuthedRequest, res) =
     orderBy: [{ platform: "asc" }, { createdAt: "desc" }],
   })
 
-  const enrichedItems = items.map((item: any) => ({
+  const enrichedItems = items.map((item) => ({
     ...item,
     contract: item.platform === "GLOVO" ? buildGlovoContractChecklist(item) : null,
   }))
@@ -910,9 +1006,9 @@ router.get("/api/v1/marketplace/orders", async (req: AuthedRequest, res) => {
   const locationId = String(req.query.locationId || "").trim()
   const q = String(req.query.q || "").trim()
 
-  const where: any = { tenantId }
-  if (platform && PLATFORMS.includes(platform as any)) where.platform = platform
-  if (status) where.status = status
+  const where: Prisma.ExternalOrderWhereInput = { tenantId }
+  if (platform && isMarketplacePlatform(platform)) where.platform = platform
+  if (status && isMarketplaceOrderStatus(status)) where.status = status
   if (locationId) where.locationId = locationId
   if (q) {
     where.OR = [
@@ -1033,10 +1129,10 @@ router.get("/api/v1/marketplace/mappings", async (req: AuthedRequest, res) => {
   })
 
   const mappedKeySet = new Set(
-    mappings.map((item: any) => `${item.integrationId}::${item.externalProductId}`),
+    mappings.map((item) => `${item.integrationId}::${item.externalProductId}`),
   )
 
-  const seenRecent = new Map<string, any>()
+  const seenRecent = new Map<string, RecentExternalProduct>()
   for (const item of recentItems) {
     const integrationKey = `${item.externalOrder?.integrationId || ""}::${item.externalProductId || item.name}`
     if (seenRecent.has(integrationKey)) continue
@@ -1175,7 +1271,7 @@ router.post("/api/v1/marketplace/integrations/:platform/connect", async (req: Au
     return res.status(404).json({ ok: false, error: "Location not found" })
   }
 
-  const incomingSettings = bodyParsed.data.settings && typeof bodyParsed.data.settings === "object"
+  const incomingSettings: JsonRecord = bodyParsed.data.settings && typeof bodyParsed.data.settings === "object"
     ? { ...bodyParsed.data.settings }
     : {}
 
@@ -1202,7 +1298,10 @@ router.post("/api/v1/marketplace/integrations/:platform/connect", async (req: Au
     orderBy: { createdAt: "desc" },
   })
 
-  const integrationPayload = {
+  const integrationSettingsJson =
+    Object.keys(incomingSettings).length > 0 ? (incomingSettings as Prisma.InputJsonValue) : undefined
+
+  const integrationUpdatePayload: Prisma.ExternalIntegrationUncheckedUpdateInput = {
     status: "ACTIVE",
     authType: bodyParsed.data.authType,
     merchantId: bodyParsed.data.merchantId || null,
@@ -1210,13 +1309,27 @@ router.post("/api/v1/marketplace/integrations/:platform/connect", async (req: Au
     accessToken: bodyParsed.data.accessToken || null,
     refreshToken: bodyParsed.data.refreshToken || null,
     webhookSecret: bodyParsed.data.webhookSecret || null,
-    settingsJson: Object.keys(incomingSettings).length > 0 ? incomingSettings : undefined,
+    settingsJson: integrationSettingsJson,
+  }
+
+  const integrationCreatePayload: Prisma.ExternalIntegrationUncheckedCreateInput = {
+    tenantId,
+    locationId: location.id,
+    platform: platformParsed.data,
+    status: "ACTIVE",
+    authType: bodyParsed.data.authType,
+    merchantId: bodyParsed.data.merchantId || null,
+    storeId: bodyParsed.data.storeId || null,
+    accessToken: bodyParsed.data.accessToken || null,
+    refreshToken: bodyParsed.data.refreshToken || null,
+    webhookSecret: bodyParsed.data.webhookSecret || null,
+    settingsJson: integrationSettingsJson,
   }
 
   const integration = existingIntegration
     ? await db.externalIntegration.update({
         where: { id: existingIntegration.id },
-        data: integrationPayload,
+        data: integrationUpdatePayload,
         include: {
           location: {
             select: { id: true, name: true, code: true },
@@ -1224,12 +1337,7 @@ router.post("/api/v1/marketplace/integrations/:platform/connect", async (req: Au
         },
       })
     : await db.externalIntegration.create({
-        data: {
-          tenantId,
-          locationId: location.id,
-          platform: platformParsed.data,
-          ...integrationPayload,
-        },
+        data: integrationCreatePayload,
         include: {
           location: {
             select: { id: true, name: true, code: true },
@@ -1275,8 +1383,8 @@ router.post("/api/v1/marketplace/integrations/wolt/test-pull", async (req: Authe
     const importPayload = normalizeWoltOrderToImportPayload(integration, orderData)
     const externalOrder = await importMarketplaceOrderForTenant(tenantId, importPayload)
     return res.json({ ok: true, order: externalOrder })
-  } catch (error: any) {
-    return res.status(500).json({ ok: false, error: error?.message || "Wolt pull failed" })
+  } catch (error: unknown) {
+    return res.status(500).json({ ok: false, error: getErrorMessage(error, "Wolt pull failed") })
   }
 })
 
@@ -1320,8 +1428,8 @@ router.post("/api/v1/marketplace/integrations/glovo/test-import", async (req: Au
     const importPayload = normalizeGlovoOrderToImportPayload(integration, normalizedTestOrder)
     const externalOrder = await importMarketplaceOrderForTenant(tenantId, importPayload)
     return res.json({ ok: true, order: externalOrder })
-  } catch (error: any) {
-    return res.status(500).json({ ok: false, error: error?.message || "Glovo import failed" })
+  } catch (error: unknown) {
+    return res.status(500).json({ ok: false, error: getErrorMessage(error, "Glovo import failed") })
   }
 })
 
@@ -1340,8 +1448,8 @@ router.post("/api/v1/marketplace/orders/import", async (req: AuthedRequest, res)
   let externalOrder
   try {
     externalOrder = await importMarketplaceOrderForTenant(tenantId, payload)
-  } catch (error: any) {
-    return res.status(400).json({ ok: false, error: error?.message || "Import failed" })
+  } catch (error: unknown) {
+    return res.status(400).json({ ok: false, error: getErrorMessage(error, "Import failed") })
   }
 
   return res.status(201).json({
@@ -1409,7 +1517,7 @@ router.post("/api/v1/marketplace/orders/:externalOrderId/kds-ready", async (req:
 
   const now = new Date()
 
-  const updated = await db.$transaction(async (tx: any) => {
+  const updated = await db.$transaction(async (tx: TransactionClient) => {
     const updatedOrder = await tx.externalOrder.update({
       where: { id: order.id },
       data: {
@@ -1454,7 +1562,7 @@ router.post("/api/v1/marketplace/orders/:externalOrderId/kds-ready", async (req:
         message: normalizeStatusMessage(bodyParsed.data.message) || "KDS marked marketplace order as ready.",
         payloadJson: {
           kitchenTicketId: bodyParsed.data.kitchenTicketId || order.kitchenTicket?.id || null,
-        },
+        } as Prisma.InputJsonValue,
       },
     })
 
@@ -1579,7 +1687,7 @@ router.post("/api/v1/marketplace/orders/:externalOrderId/fiscalized", async (req
 
   const now = new Date()
 
-  const updatedOrder = await db.$transaction(async (tx: any) => {
+  const updatedOrder = await db.$transaction(async (tx: TransactionClient) => {
     const nextOrder = await tx.externalOrder.update({
       where: { id: order.id },
       data: {
@@ -1618,7 +1726,7 @@ router.post("/api/v1/marketplace/orders/:externalOrderId/fiscalized", async (req
           saleId: sale?.id || order.sale?.id || null,
           receiptNo: parsed.data.receiptNo || sale?.receiptNo || order.sale?.receiptNo || null,
           clientSaleId: parsed.data.clientSaleId || sale?.clientSaleId || order.sale?.clientSaleId || null,
-        },
+        } as Prisma.InputJsonValue,
       },
     })
 
