@@ -157,6 +157,7 @@ type PurchaseReceiptDetailRow = {
   COD_TAXA: string
   ID_SGR: number
 }
+type ReceiptExportLine = AccountingReceiptAggregateLine | AccountingExportLineLike
 type AccountingConfigLike = {
   articleCodeSource?: string | null
   managementAnalytic?: string | null
@@ -1098,6 +1099,82 @@ function buildPurchaseReceiptHeaderRow(
     inf_suplm: "",
     den_agent: "",
     id_solicit: "",
+  }
+}
+
+function buildReceiptExportLines(receipt: PurchaseReceiptLike): AccountingExportLineLike[] {
+  return receipt.items.flatMap((line) => {
+    const sgr = receiptSgrValues(line, receipt)
+    if (!line.product?.isSgr || sgr.qty <= 0 || sgr.unit <= 0) return [line]
+    const product = sgrProductShape(line.product)
+    return [
+      line,
+      {
+        ...line,
+        id: `${line.id}:sgr`,
+        product,
+        productId: product.id,
+        vatRateValue: 0,
+        stockQty: sgr.qty,
+        qty: sgr.qty,
+        unitCostNetRon: sgr.unit,
+        lineNetRon: sgr.valueRon,
+        lineVatRon: 0,
+        lineGrossRon: sgr.valueRon,
+      },
+    ]
+  })
+}
+
+function buildReceiptGroupedLines(
+  receipt: PurchaseReceiptLike,
+  stockTypes: AccountingStockTypeLike[],
+  config: AccountingConfigLike,
+  valueType: string
+): ReceiptExportLine[] {
+  const receiptLinesForExport = buildReceiptExportLines(receipt)
+  if (valueType !== "GLOBAL_VALORIC") {
+    return receiptLinesForExport
+  }
+
+  return aggregateByKey(
+    receiptLinesForExport,
+    (line) => `${line.vatRateValue || 0}|${line.product?.accountingItemCode || line.product?.sku || line.productId}`,
+    (line) => ({
+      code: line.product?.accountingItemCode || line.product?.sku || slugCode(line.product?.name || "ART", "ART"),
+      name: line.product?.name || "",
+      type: sagaPurchaseReceiptLineType(line.product, stockTypes, config),
+      vatRateValue: Number(line.vatRateValue || 0),
+      valueRon: 0,
+      vatRon: 0,
+      stockAccount: "",
+      expenseAccount: "",
+    }),
+    (target, line) => {
+      const stockType = pickStockType(line.product, stockTypes, config)
+      target.valueRon += Number(line.lineNetRon || 0)
+      target.vatRon += Number(line.lineVatRon || 0)
+      target.stockAccount = String(stockType?.inventoryAccount || config.inventoryAccount || "")
+      target.expenseAccount = String(stockType?.expenseAccount || config.expenseAccount || "")
+    }
+  )
+}
+
+function buildPurchaseReceiptSupplierHeader(receipt: PurchaseReceiptLike): SagaPartnerHeader {
+  return {
+    name: receipt.supplierName || receipt.supplier?.name || "",
+    cif: receipt.supplier?.cif || "",
+    regCom: receipt.supplier?.regCom || "",
+    capital: "",
+    country: sagaCountryCode(receipt.supplier?.country),
+    city: receipt.supplier?.city || "",
+    county: receipt.supplier?.county || "",
+    address: receipt.supplier?.address || "",
+    phone: receipt.supplier?.phone || "",
+    email: receipt.supplier?.email || "",
+    bank: "",
+    iban: "",
+    info: "",
   }
 }
 
@@ -2644,70 +2721,12 @@ router.get("/api/v1/reports/accounting/saga/export", requireAuth, async (req: Au
     ])
 
     const buildReceiptXml = (receipt: PurchaseReceiptLike) => {
-      const receiptLinesForExport: AccountingExportLineLike[] = receipt.items.flatMap((line) => {
-        const sgr = receiptSgrValues(line, receipt)
-        if (!line.product?.isSgr || sgr.qty <= 0 || sgr.unit <= 0) return [line]
-        const product = sgrProductShape(line.product)
-        return [
-          line,
-          {
-            ...line,
-            id: `${line.id}:sgr`,
-            product,
-            productId: product.id,
-            vatRateValue: 0,
-            stockQty: sgr.qty,
-            qty: sgr.qty,
-            unitCostNetRon: sgr.unit,
-            lineNetRon: sgr.valueRon,
-            lineVatRon: 0,
-            lineGrossRon: sgr.valueRon,
-          },
-        ]
-      })
-      const groupedLines: Array<AccountingReceiptAggregateLine | AccountingExportLineLike> =
-        valueType === "GLOBAL_VALORIC"
-          ? aggregateByKey(
-              receiptLinesForExport,
-              (line) => `${line.vatRateValue || 0}|${line.product?.accountingItemCode || line.product?.sku || line.productId}`,
-              (line) => ({
-                code: line.product?.accountingItemCode || line.product?.sku || slugCode(line.product?.name || "ART", "ART"),
-                name: line.product?.name || "",
-                type: sagaPurchaseReceiptLineType(line.product, stockTypes, config),
-                vatRateValue: Number(line.vatRateValue || 0),
-                valueRon: 0,
-                vatRon: 0,
-                stockAccount: "",
-                expenseAccount: "",
-              }),
-              (target, line) => {
-                const stockType = pickStockType(line.product, stockTypes, config)
-                target.valueRon += Number(line.lineNetRon || 0)
-                target.vatRon += Number(line.lineVatRon || 0)
-                target.stockAccount = stockType?.inventoryAccount || config.inventoryAccount
-                target.expenseAccount = stockType?.expenseAccount || config.expenseAccount
-              }
-            )
-          : receiptLinesForExport
+      const groupedLines = buildReceiptGroupedLines(receipt, stockTypes, config, valueType)
 
       return [
         `  <Factura>`,
         buildSagaFacturaHeader({
-          supplier: {
-            name: receipt.supplierName || receipt.supplier?.name || "",
-            cif: receipt.supplier?.cif || "",
-            regCom: receipt.supplier?.regCom || "",
-            capital: "",
-            country: sagaCountryCode(receipt.supplier?.country),
-            city: receipt.supplier?.city || "",
-            county: receipt.supplier?.county || "",
-            address: receipt.supplier?.address || "",
-            phone: receipt.supplier?.phone || "",
-            email: receipt.supplier?.email || "",
-            bank: "",
-            iban: "",
-            info: "",
-          },
+          supplier: buildPurchaseReceiptSupplierHeader(receipt),
           client: {
             name: company.name,
             cif: company.cui,
