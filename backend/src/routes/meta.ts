@@ -120,7 +120,7 @@ router.get("/api/v1/meta/locations", async (req: AuthedRequest, res) => {
   const locations = await prisma.location.findMany({
     where: {
       tenantId,
-      companyId,
+      OR: buildCompanyScope(companyId),
     },
     orderBy: { name: "asc" }
   })
@@ -632,7 +632,7 @@ router.put("/api/v1/meta/locations/:id", async (req: AuthedRequest, res) => {
       where: {
         id,
         tenantId,
-        companyId,
+        OR: buildCompanyScope(companyId),
       }
     })
 
@@ -693,7 +693,7 @@ router.delete("/api/v1/meta/locations/:id", async (req: AuthedRequest, res) => {
       where: {
         id,
         tenantId,
-        companyId,
+        OR: buildCompanyScope(companyId),
       }
     })
 
@@ -725,9 +725,26 @@ router.get("/api/v1/meta/suppliers", async (req: AuthedRequest, res) => {
   const auth = requireMetaAuth(req)
   const tenantId = auth.tenantId
   const companyId = await requireMetaCompanyId(req)
+  const query = String(req.query.q || "").trim()
 
   const suppliers = await prisma.supplier.findMany({
-    where: { tenantId, companyId },
+    where: {
+      tenantId,
+      OR: buildCompanyScope(companyId),
+      ...(query
+        ? {
+            AND: [
+              {
+                OR: [
+                  { name: { contains: query, mode: "insensitive" } },
+                  { code: { contains: query, mode: "insensitive" } },
+                  { cif: { contains: query, mode: "insensitive" } },
+                ],
+              },
+            ],
+          }
+        : {}),
+    },
     orderBy: { name: "asc" }
   })
 
@@ -832,7 +849,11 @@ router.put("/api/v1/meta/suppliers/:id", async (req: AuthedRequest, res) => {
 
   try {
     const current = await prisma.supplier.findFirst({
-      where: { id, tenantId, companyId }
+      where: {
+        id,
+        tenantId,
+        OR: buildCompanyScope(companyId),
+      }
     })
 
     if (!current) {
@@ -885,7 +906,11 @@ router.delete("/api/v1/meta/suppliers/:id", async (req: AuthedRequest, res) => {
 
   try {
     const current = await prisma.supplier.findFirst({
-      where: { id, tenantId, companyId }
+      where: {
+        id,
+        tenantId,
+        OR: buildCompanyScope(companyId),
+      }
     })
 
     if (!current) {
@@ -1328,7 +1353,7 @@ router.get("/api/v1/meta/departments", async (req: AuthedRequest, res) => {
   const items = await prisma.department.findMany({
     where: {
       tenantId,
-      companyId,
+      OR: buildCompanyScope(companyId),
     },
     orderBy: { name: "asc" }
   })
@@ -1399,7 +1424,7 @@ router.put("/api/v1/meta/departments/:id", async (req: AuthedRequest, res) => {
       where: {
         id,
         tenantId,
-        companyId,
+        OR: buildCompanyScope(companyId),
       }
     })
 
@@ -1451,7 +1476,7 @@ router.delete("/api/v1/meta/departments/:id", async (req: AuthedRequest, res) =>
       where: {
         id,
         tenantId,
-        companyId,
+        OR: buildCompanyScope(companyId),
       }
     })
 
@@ -1487,7 +1512,7 @@ router.get("/api/v1/meta/categories", async (req: AuthedRequest, res) => {
   const items = await prisma.category.findMany({
     where: {
       tenantId,
-      companyId,
+      OR: buildCompanyScope(companyId),
     },
     include: {
       department: true
@@ -1522,7 +1547,7 @@ router.post("/api/v1/meta/categories", async (req: AuthedRequest, res) => {
         where: {
           id: departmentId,
           tenantId,
-          companyId,
+          OR: buildCompanyScope(companyId),
         }
       })
 
@@ -1583,7 +1608,7 @@ router.put("/api/v1/meta/categories/:id", async (req: AuthedRequest, res) => {
       where: {
         id,
         tenantId,
-        companyId,
+        OR: buildCompanyScope(companyId),
       }
     })
 
@@ -1601,7 +1626,7 @@ router.put("/api/v1/meta/categories/:id", async (req: AuthedRequest, res) => {
         where: {
           id: departmentId,
           tenantId,
-          companyId,
+          OR: buildCompanyScope(companyId),
         }
       })
 
@@ -1647,7 +1672,7 @@ router.delete("/api/v1/meta/categories/:id", async (req: AuthedRequest, res) => 
       where: {
         id,
         tenantId,
-        companyId,
+        OR: buildCompanyScope(companyId),
       }
     })
 
