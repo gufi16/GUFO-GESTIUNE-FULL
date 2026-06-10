@@ -8,7 +8,7 @@ import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { ensureTenantBackupDir } from "../lib/tenantExport"
 import { persistTenantBackupSnapshot } from "../lib/tenantBackupSupport"
-import { exportTenantDataWorkbookZip, importTenantDataWorkbookZip } from "../lib/backupDataExchange"
+import { EXCHANGE_EXPORTABLE_MODULES, exportTenantDataWorkbookZip, importTenantDataWorkbookZip } from "../lib/backupDataExchange"
 import {
   describeTenantBackupModulesFromFile,
   restoreMissingTenantFilesFromBackupFile,
@@ -54,6 +54,21 @@ function errorMessage(error: unknown, fallback: string) {
 function parseSelectedModules(value: unknown) {
   if (!Array.isArray(value)) return []
   return value.map((item) => String(item || "").trim()).filter(Boolean)
+}
+
+function parseExportModules(value: unknown) {
+  const rawValues = Array.isArray(value)
+    ? value
+    : typeof value === "string"
+      ? String(value)
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean)
+      : []
+
+  const allowed = new Set<string>(EXCHANGE_EXPORTABLE_MODULES)
+  const modules = rawValues.map((item) => String(item || "").trim()).filter((item) => allowed.has(item))
+  return modules.length ? Array.from(new Set(modules)) : [...EXCHANGE_EXPORTABLE_MODULES]
 }
 
 function isAllowedImportFile(file: Express.Multer.File | undefined) {
@@ -435,7 +450,7 @@ router.get("/api/v1/settings/backups/data-export", async (req: AuthedRequest, re
   }
 
   try {
-    const exported = await exportTenantDataWorkbookZip(tenantId)
+    const exported = await exportTenantDataWorkbookZip(tenantId, parseExportModules(req.query.modules))
 
     await prisma.auditLog.create({
       data: {
@@ -447,6 +462,7 @@ router.get("/api/v1/settings/backups/data-export", async (req: AuthedRequest, re
         entityId: tenantId,
         payload: {
           fileName: exported.fileName,
+          modules: parseExportModules(req.query.modules),
           files: exported.files,
         },
       },

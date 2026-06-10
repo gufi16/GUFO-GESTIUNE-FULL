@@ -14,6 +14,9 @@ type ExchangeModuleKey =
   | "suppliers"
   | "products"
 
+export const EXCHANGE_EXPORTABLE_MODULES = ["departments", "categories", "customers", "suppliers", "products"] as const
+export type ExchangeExportableModuleKey = (typeof EXCHANGE_EXPORTABLE_MODULES)[number]
+
 type WorkbookRow = Record<string, unknown>
 
 type TemplateColumn = {
@@ -357,7 +360,7 @@ function emptyRowFromDefinition(definition: ExportModuleDefinition) {
   }, {})
 }
 
-export async function exportTenantDataWorkbookZip(tenantId: string) {
+export async function exportTenantDataWorkbookZip(tenantId: string, selectedModules?: string[]) {
   const [companies, locations, departments, categories, uoms, vatRates, customers, suppliers, products] = await Promise.all([
     prisma.company.findMany({ where: { tenantId }, orderBy: { name: "asc" } }),
     prisma.location.findMany({ where: { tenantId }, orderBy: { name: "asc" } }),
@@ -384,6 +387,12 @@ export async function exportTenantDataWorkbookZip(tenantId: string) {
       orderBy: { name: "asc" },
     }),
   ])
+
+  const selectedModuleSet = new Set<ExchangeExportableModuleKey>(
+    (Array.isArray(selectedModules) ? selectedModules : EXCHANGE_EXPORTABLE_MODULES).filter((item): item is ExchangeExportableModuleKey =>
+      EXCHANGE_EXPORTABLE_MODULES.includes(item as ExchangeExportableModuleKey),
+    ),
+  )
 
   const exportItems: ExchangeExportItem[] = [
     {
@@ -524,8 +533,10 @@ export async function exportTenantDataWorkbookZip(tenantId: string) {
     },
   ]
 
+  const filteredItems = exportItems.filter((item) => selectedModuleSet.has(item.key as ExchangeExportableModuleKey))
+
   const zip = new AdmZip()
-  for (const item of exportItems) {
+  for (const item of filteredItems) {
     const rows = item.rows.length ? item.rows : [emptyRowFromDefinition(item)]
     const buffer = await buildWorkbookBuffer(item, rows)
     zip.addFile(item.fileName, buffer)
@@ -534,7 +545,7 @@ export async function exportTenantDataWorkbookZip(tenantId: string) {
   return {
     buffer: zip.toBuffer(),
     fileName: `Export-date-ERP-${tenantId}-${EXPORT_DATE_TOKEN}.zip`,
-    files: exportItems.map((item) => item.fileName),
+    files: filteredItems.map((item) => item.fileName),
   }
 }
 

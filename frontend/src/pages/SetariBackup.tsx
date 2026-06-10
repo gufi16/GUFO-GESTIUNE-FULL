@@ -34,6 +34,11 @@ type SyncGroup = {
   modal?: boolean
 }
 
+type ExportGroup = {
+  id: string
+  label: string
+}
+
 const syncGroups: SyncGroup[] = [
   { id: "customers", label: "Clienti", children: ["customers"] },
   { id: "suppliers", label: "Furnizori", children: ["suppliers"] },
@@ -64,6 +69,14 @@ const syncGroups: SyncGroup[] = [
     ],
   },
   { id: "files", label: "Fisiere", children: ["files"] },
+]
+
+const exportGroups: ExportGroup[] = [
+  { id: "departments", label: "Departamente" },
+  { id: "categories", label: "Categorii" },
+  { id: "customers", label: "Clienti" },
+  { id: "suppliers", label: "Furnizori" },
+  { id: "products", label: "Produse" },
 ]
 
 function fmtBytes(value: number) {
@@ -130,6 +143,8 @@ export default function SetariBackupPage() {
   const [syncing, setSyncing] = useState(false)
   const [creating, setCreating] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [exportPickerOpen, setExportPickerOpen] = useState(false)
+  const [selectedExportModules, setSelectedExportModules] = useState<string[]>(exportGroups.map((item) => item.id))
   const [importing, setImporting] = useState(false)
   const [uploadRestoring, setUploadRestoring] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -293,7 +308,9 @@ export default function SetariBackupPage() {
       setExporting(true)
       setError("")
       setMessage("")
-      const response = await api<Response>("/api/v1/settings/backups/data-export", { raw: true })
+      const params = new URLSearchParams()
+      selectedExportModules.forEach((item) => params.append("modules", item))
+      const response = await api<Response>(`/api/v1/settings/backups/data-export?${params.toString()}`, { raw: true })
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}))
         throw new Error(payload?.error || "Nu am putut genera exportul.")
@@ -559,10 +576,53 @@ export default function SetariBackupPage() {
             }
           >
             <div className="grid gap-3 sm:grid-cols-2">
-              <button type="button" onClick={() => void handleExportData()} disabled={exporting} className={`${documentButtonPrimaryClass} w-full`}>
-                <FileSpreadsheet size={16} className="mr-2" />
-                {exporting ? "Se genereaza..." : "Export Excel"}
-              </button>
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setExportPickerOpen((current) => !current)}
+                  className={`${documentButtonSecondaryClass} w-full justify-between`}
+                >
+                  <span className="flex items-center">
+                    <FileSpreadsheet size={16} className="mr-2" />
+                    Alege exportul
+                  </span>
+                  <span className="text-xs text-slate-500">{selectedExportModules.length}/{exportGroups.length}</span>
+                </button>
+
+                {exportPickerOpen ? (
+                  <div className="rounded-[18px] border border-slate-200 bg-slate-50 p-3">
+                    <div className="grid gap-2">
+                      {exportGroups.map((group) => {
+                        const checked = selectedExportModules.includes(group.id)
+                        return (
+                          <label key={group.id} className="flex cursor-pointer items-center justify-between gap-3 rounded-[14px] border border-slate-200 bg-white px-3 py-2">
+                            <span className="text-sm font-medium text-[#17324D]">{group.label}</span>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() =>
+                                setSelectedExportModules((current) =>
+                                  checked ? current.filter((item) => item !== group.id) : [...current, group.id],
+                                )
+                              }
+                            />
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+
+                <button
+                  type="button"
+                  onClick={() => void handleExportData()}
+                  disabled={exporting || !selectedExportModules.length}
+                  className={`${documentButtonPrimaryClass} w-full`}
+                >
+                  <FileSpreadsheet size={16} className="mr-2" />
+                  {exporting ? "Se genereaza..." : "Export Excel"}
+                </button>
+              </div>
 
               <label className="block">
                 <input
