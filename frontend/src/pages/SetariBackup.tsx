@@ -97,22 +97,6 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
 }
 
-function prettifyTableKey(value: string) {
-  return String(value || "")
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/_/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-}
-
-function getTopStats(item: BackupItem | null) {
-  if (!item?.tableCounts || typeof item.tableCounts !== "object") return []
-  return Object.entries(item.tableCounts)
-    .filter((entry): entry is [string, number] => typeof entry[1] === "number" && Number.isFinite(entry[1]))
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 4)
-}
-
 function Card({
   title,
   action,
@@ -160,7 +144,6 @@ export default function SetariBackupPage() {
   const latestAvailableBackup = useMemo(() => items.find((item) => item.fileExists !== false) || null, [items])
   const selectedBackup = useMemo(() => items.find((item) => item.id === selectedBackupId) || null, [items, selectedBackupId])
   const totalStoredSize = useMemo(() => items.reduce((sum, item) => sum + Number(item.fileSizeBytes || 0), 0), [items])
-  const topStats = useMemo(() => getTopStats(latestAvailableBackup), [latestAvailableBackup])
   const moduleMap = useMemo(() => new Map(availableModules.map((module) => [module.key, module])), [availableModules])
   const visibleGroups = useMemo(
     () => syncGroups.filter((group) => group.children.some((child) => moduleMap.has(child))),
@@ -646,67 +629,45 @@ export default function SetariBackupPage() {
 
           <Card title="Backup server">
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-3">
-                <input
-                  value={label}
-                  onChange={(e) => setLabel(e.target.value)}
-                  placeholder="Eticheta backup"
-                  className={documentInputClass}
-                />
-                <button type="button" onClick={() => void handleCreateBackup()} disabled={creating} className={`${documentButtonPrimaryClass} w-full`}>
-                  <Archive size={16} className="mr-2" />
-                  {creating ? "Se creeaza..." : "Creeaza backup"}
-                </button>
-              </div>
+              <button type="button" onClick={() => void handleCreateBackup()} disabled={creating} className={`${documentButtonPrimaryClass} w-full`}>
+                <Archive size={16} className="mr-2" />
+                {creating ? "Se creeaza..." : "Creeaza backup"}
+              </button>
 
-              <div className="space-y-3">
-                <label className="block">
-                  <input
-                    type="file"
-                    accept=".zip,application/zip"
-                    className="hidden"
-                    disabled={uploadRestoring}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0]
-                      if (file) void handleUploadRestore(file)
-                      e.currentTarget.value = ""
-                    }}
-                  />
-                  <span className={`${documentButtonSecondaryClass} flex w-full cursor-pointer ${uploadRestoring ? "pointer-events-none" : ""}`}>
-                    <FileUp size={16} className="mr-2" />
-                    {uploadRestoring ? "Se incarca..." : "Restore ZIP"}
-                  </span>
-                </label>
-                <button type="button" onClick={() => setHistoryOpen(true)} className={`${documentButtonSecondaryClass} w-full`}>
-                  <RotateCcw size={16} className="mr-2" />
-                  Restore complet
-                </button>
-              </div>
+              <label className="block">
+                <input
+                  type="file"
+                  accept=".zip,application/zip"
+                  className="hidden"
+                  disabled={uploadRestoring}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) void handleUploadRestore(file)
+                    e.currentTarget.value = ""
+                  }}
+                />
+                <span className={`${documentButtonSecondaryClass} flex w-full cursor-pointer ${uploadRestoring ? "pointer-events-none" : ""}`}>
+                  <FileUp size={16} className="mr-2" />
+                  {uploadRestoring ? "Se incarca..." : "Importa ZIP"}
+                </span>
+              </label>
             </div>
           </Card>
 
           <Card title="Ultimul backup">
             {latestAvailableBackup ? (
-              <div className="space-y-3">
-                <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3">
-                  <div className="truncate text-sm font-semibold text-[#17324D]">{latestAvailableBackup.label || latestAvailableBackup.fileName}</div>
-                  <div className="mt-1 text-xs text-slate-500">
-                    {fmtDate(latestAvailableBackup.createdAt)} | {fmtBytes(latestAvailableBackup.fileSizeBytes)}
-                  </div>
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {topStats.length ? (
-                    topStats.map(([key, value]) => (
-                      <div key={key} className="rounded-[16px] border border-slate-200 bg-white px-3 py-3">
-                        <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">{prettifyTableKey(key)}</div>
-                        <div className="mt-1 text-sm font-semibold text-[#17324D]">{value.toLocaleString("ro-RO")}</div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="rounded-[16px] border border-dashed border-slate-300 px-3 py-8 text-sm text-slate-500 sm:col-span-2">
-                      Fara statistici disponibile.
+              <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold text-[#17324D]">{latestAvailableBackup.label || latestAvailableBackup.fileName}</div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      {fmtDate(latestAvailableBackup.createdAt)} | {fmtBytes(latestAvailableBackup.fileSizeBytes)}
                     </div>
-                  )}
+                  </div>
+                  <button type="button" onClick={() => setHistoryOpen(true)} className={documentButtonSecondaryClass}>
+                    <History size={16} className="mr-2" />
+                    Istoric
+                  </button>
                 </div>
               </div>
             ) : (
