@@ -16,9 +16,9 @@ const items = [
   { to: "/control-panel", label: "Panou", icon: LayoutDashboard, exact: true },
   { to: "/control-panel/clienti", label: "Clienti", icon: Building2 },
   { to: "/control-panel/integrari", label: "Integrari", icon: PlugZap },
-  { to: "/control-panel/licente", label: "Licente", icon: ShieldCheck, disabled: true },
-  { to: "/control-panel/facturare", label: "Facturare", icon: CreditCard, disabled: true },
-  { to: "/control-panel/audit", label: "Istoric", icon: Activity, disabled: true },
+  { to: "/control-panel/licente", label: "Licente", icon: ShieldCheck },
+  { to: "/control-panel/facturare", label: "Facturare", icon: CreditCard },
+  { to: "/control-panel/audit", label: "Istoric", icon: Activity },
 ]
 
 function SidebarContent({
@@ -78,24 +78,6 @@ function SidebarContent({
           <div className="space-y-2">
             {items.map((item) => {
               const Icon = item.icon
-
-              if (item.disabled) {
-                return (
-                  <div
-                    key={item.to}
-                    className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-400"
-                  >
-                    <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm">
-                      <Icon size={18} />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="font-medium">{item.label}</div>
-                      <div className="text-xs text-slate-400">in curand</div>
-                    </div>
-                    <ChevronRight size={16} />
-                  </div>
-                )
-              }
 
               return (
                 <div key={item.to} onClick={onCloseMobile}>

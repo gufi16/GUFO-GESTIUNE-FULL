@@ -267,6 +267,213 @@ router.post("/api/v1/admin/platform/efactura", requireAuth, requireOwner, async 
   })
 })
 
+router.get("/api/v1/admin/platform/overview", requireAuth, requireOwner, async (_req, res) => {
+  const now = new Date()
+  const next7Days = addDays(now, 7)
+  const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+
+  const [
+    platformConfig,
+    tenants,
+    totalUsers,
+    totalLocations,
+    totalTerminals,
+    subscriptions,
+    recentAuditLogs,
+    recentTenantBackups,
+  ] = await Promise.all([
+    prisma.platformConfig.findUnique({
+      where: { key: "global" },
+    }),
+    prisma.tenant.findMany({
+      orderBy: { createdAt: "desc" },
+      include: {
+        companies: {
+          orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+        },
+        licenses: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
+      },
+    }),
+    prisma.user.count({
+      where: { isActive: true },
+    }),
+    prisma.location.count({
+      where: { isActive: true },
+    }),
+    prisma.terminal.count(),
+    prisma.subscription.findMany({
+      orderBy: { createdAt: "desc" },
+      include: {
+        tenant: {
+          include: {
+            companies: {
+              orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+            },
+          },
+        },
+        plan: true,
+      },
+    }),
+    prisma.auditLog.findMany({
+      where: {
+        createdAt: {
+          gte: last24Hours,
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 12,
+    }),
+    prisma.tenantBackup.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 12,
+      select: {
+        id: true,
+        tenantId: true,
+        label: true,
+        fileName: true,
+        fileSizeBytes: true,
+        createdAt: true,
+      },
+    }),
+  ])
+
+  const backupHealthEntries = await Promise.all(
+    tenants.map(async (tenant) => [tenant.id, await getTenantBackupHealth(tenant.id)] as const),
+  )
+  const backupHealthMap = new Map(backupHealthEntries)
+
+  const tenantSummaries = tenants.map((tenant) => {
+    const primaryCompany = pickPrimaryCompany(getTenantCompanies(tenant))
+    const latestLicense = tenant.licenses[0] || null
+    const backupHealth = backupHealthMap.get(tenant.id) || null
+
+    return {
+      id: tenant.id,
+      name: tenant.name,
+      subdomain: tenant.subdomain,
+      portalUrl: buildTenantPortalUrl(tenant.subdomain),
+      company: serializePrimaryCompanyContact(primaryCompany),
+      status: buildTenantStatus(latestLicense),
+      license: latestLicense,
+      backupHealth,
+      createdAt: tenant.createdAt,
+    }
+  })
+
+  const activeTenants = tenantSummaries.filter((item) => item.status === "active").length
+  const suspendedTenants = tenantSummaries.filter((item) => item.status === "suspended").length
+  const expiredTenants = tenantSummaries.filter((item) => item.status === "expired").length
+  const protectedTenants = tenantSummaries.filter((item) => item.backupHealth?.status === "protected").length
+  const riskyTenants = tenantSummaries.length - protectedTenants
+
+  const expiringLicenses = tenantSummaries
+    .filter((item) => item.license?.expiresAt && item.license.expiresAt >= now && item.license.expiresAt <= next7Days)
+    .sort((a, b) => +new Date(a.license!.expiresAt) - +new Date(b.license!.expiresAt))
+    .slice(0, 8)
+    .map((item) => ({
+      id: item.id,
+      name: item.company?.name || item.name,
+      status: item.status,
+      expiresAt: item.license?.expiresAt || null,
+      subdomain: item.subdomain,
+      portalUrl: item.portalUrl,
+    }))
+
+  const backupRisks = tenantSummaries
+    .filter((item) => item.backupHealth?.status !== "protected")
+    .slice(0, 8)
+    .map((item) => ({
+      id: item.id,
+      name: item.company?.name || item.name,
+      status: item.status,
+      backupStatus: item.backupHealth?.status || "missing_backup",
+      latestBackupAt: item.backupHealth?.latestBackupAt || null,
+      backupsCount: item.backupHealth?.backupsCount || 0,
+      portalUrl: item.portalUrl,
+    }))
+
+  const subscriptionAlerts = subscriptions
+    .filter((item) =>
+      item.billingStatus !== "OK" ||
+      item.status === "PAST_DUE" ||
+      item.status === "CANCELLED" ||
+      item.status === "EXPIRED" ||
+      (item.nextBillingDate && item.nextBillingDate <= next7Days),
+    )
+    .slice(0, 8)
+    .map((item) => ({
+      id: item.id,
+      tenantId: item.tenantId,
+      clientName: pickPrimaryCompany(getTenantCompanies(item.tenant))?.name || item.tenant.name,
+      status: item.status,
+      billingStatus: item.billingStatus,
+      billingCycle: item.billingCycle,
+      price: Number(item.price),
+      currency: item.currency,
+      nextBillingDate: item.nextBillingDate,
+      plan: item.plan
+        ? {
+            id: item.plan.id,
+            code: item.plan.code,
+            name: item.plan.name,
+          }
+        : null,
+    }))
+
+  return res.json({
+    ok: true,
+    item: {
+      metrics: {
+        tenants: tenantSummaries.length,
+        activeTenants,
+        suspendedTenants,
+        expiredTenants,
+        users: totalUsers,
+        locations: totalLocations,
+        terminals: totalTerminals,
+        protectedTenants,
+        riskyTenants,
+      },
+      platform: {
+        efacturaConfigured: Boolean(
+          platformConfig?.efacturaOauthClientId &&
+            platformConfig?.efacturaOauthClientSecret &&
+            platformConfig?.efacturaOauthRedirectUri,
+        ),
+        efacturaEnvironment: platformConfig?.efacturaEnvironment || "test",
+      },
+      expiringLicenses,
+      backupRisks,
+      subscriptionAlerts,
+      recentAuditLogs: recentAuditLogs.map((entry) => ({
+        id: entry.id,
+        tenantId: entry.tenantId,
+        actorType: entry.actorType,
+        actorId: entry.actorId,
+        action: entry.action,
+        entityType: entry.entityType,
+        entityId: entry.entityId,
+        createdAt: entry.createdAt,
+      })),
+      recentBackups: recentTenantBackups.map((item) => {
+        const tenant = tenantSummaries.find((entry) => entry.id === item.tenantId)
+        return {
+          id: item.id,
+          tenantId: item.tenantId,
+          clientName: tenant?.company?.name || tenant?.name || item.tenantId,
+          label: item.label,
+          fileName: item.fileName,
+          fileSizeBytes: item.fileSizeBytes,
+          createdAt: item.createdAt,
+        }
+      }),
+    },
+  })
+})
+
 router.post("/api/v1/admin/clients/:id/modules/efactura", requireAuth, requireOwner, async (req: AuthedRequest, res) => {
   const parsed = TenantEfacturaModuleSchema.safeParse(req.body || {})
   if (!parsed.success) {
