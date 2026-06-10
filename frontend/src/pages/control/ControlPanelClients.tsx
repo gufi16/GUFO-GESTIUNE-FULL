@@ -1,6 +1,22 @@
 import { FormEvent, useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { Building2, Check, Copy, Crown, LogOut, Plus, RefreshCw, Search, X } from "lucide-react"
+import {
+  Building2,
+  Check,
+  Copy,
+  Crown,
+  ExternalLink,
+  LogOut,
+  Plus,
+  RefreshCw,
+  Save,
+  Search,
+  Server,
+  ShieldAlert,
+  ShieldCheck,
+  Store,
+  X,
+} from "lucide-react"
 import { api } from "../../lib/api"
 import { controlLogout, controlMe } from "../../lib/controlAuth"
 
@@ -55,7 +71,7 @@ type AdminClientItem = {
 }
 
 type AdminClientsResponse = {
-  items?: any[]
+  items?: unknown[]
 }
 
 type CreateClientPayload = {
@@ -123,8 +139,21 @@ function formatDate(value?: string | null) {
   if (Number.isNaN(date.getTime())) return "-"
   return date.toLocaleDateString("ro-RO", {
     day: "2-digit",
-    month: "short",
+    month: "2-digit",
     year: "numeric",
+  })
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return "-"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "-"
+  return date.toLocaleString("ro-RO", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   })
 }
 
@@ -152,6 +181,18 @@ function statusLabel(status: string) {
     default:
       return "Inactiv"
   }
+}
+
+function backupTone(status?: string) {
+  if (status === "protected") return "border-emerald-200 bg-emerald-50 text-emerald-700"
+  if (status === "missing_file") return "border-amber-200 bg-amber-50 text-amber-700"
+  return "border-rose-200 bg-rose-50 text-rose-700"
+}
+
+function backupLabel(status?: string) {
+  if (status === "protected") return "Protejat"
+  if (status === "missing_file") return "Fisier lipsa"
+  return "Fara backup"
 }
 
 function billingCycleLabel(cycle?: string | null) {
@@ -220,13 +261,33 @@ function normalizeClient(raw: any): AdminClientItem {
   }
 }
 
-function summaryCard(label: string, value: number) {
+function summaryCard(label: string, value: number, helper: string) {
   return (
-    <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3">
+    <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-4">
       <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</div>
-      <div className="mt-1 text-2xl font-semibold text-slate-950">{value}</div>
+      <div className="mt-2 text-2xl font-semibold text-slate-950">{value}</div>
+      <div className="mt-1 text-xs text-slate-500">{helper}</div>
     </div>
   )
+}
+
+function moduleLabel(key: string) {
+  if (key === "dashboard") return "Dashboard"
+  if (key === "documents") return "Documente"
+  if (key === "inventory") return "Stoc"
+  if (key === "nomenclature") return "Nomenclator"
+  if (key === "settings") return "Setari"
+  if (key === "pos") return "POS"
+  if (key === "kds") return "KDS"
+  if (key === "reports") return "Rapoarte"
+  return key
+}
+
+function firstEnabledModules(modules: Record<string, boolean> | undefined) {
+  return Object.entries(modules || {})
+    .filter(([, value]) => value)
+    .map(([key]) => moduleLabel(key))
+    .slice(0, 4)
 }
 
 export default function ControlPanelClients() {
@@ -305,6 +366,7 @@ export default function ControlPanelClients() {
         item.company?.name,
         item.company?.cui,
         item.company?.email,
+        item.company?.phone,
         item.name,
         item.slug,
         item.subdomain,
@@ -321,6 +383,7 @@ export default function ControlPanelClients() {
     () => ({
       total: items.length,
       active: items.filter((item) => item.status === "active").length,
+      risky: items.filter((item) => item.backupHealth?.status !== "protected").length,
       locations: items.reduce((sum, item) => sum + item.locationsCount, 0),
       terminals: items.reduce((sum, item) => sum + item.terminalsCount, 0),
     }),
@@ -452,40 +515,54 @@ export default function ControlPanelClients() {
   return (
     <div className="space-y-4">
       <section className="rounded-[28px] border border-slate-200 bg-white px-5 py-5 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#17324D] text-white">
-                <Crown size={16} />
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#17324D] text-white">
+                <Crown size={18} />
               </div>
               <div className="min-w-0">
                 <div className="truncate text-sm font-semibold text-[#17324D]">{ownerEmail}</div>
-                <h1 className="text-2xl font-semibold text-slate-950">Clienti</h1>
+                <h1 className="text-3xl font-semibold tracking-tight text-slate-950">Administrare clienti</h1>
               </div>
             </div>
+            <p className="mt-4 max-w-3xl text-sm leading-6 text-slate-500">
+              Lucrezi pe o listă curată de clienți, vezi rapid licența, backup-ul, subdomeniul și intri direct în detaliu fără să cauți prin zgomot.
+            </p>
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <button onClick={loadClients} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700">
-            <RefreshCw size={15} />
-            Reincarca
+            <button
+              onClick={loadClients}
+              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700"
+            >
+              <RefreshCw size={15} />
+              Reincarca
             </button>
-            <button onClick={() => setIsModalOpen(true)} className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2 text-sm font-semibold text-white">
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2 text-sm font-semibold text-white"
+            >
               <Plus size={15} />
               Client nou
             </button>
-          <button onClick={handleIesire} disabled={loggingOut} className="inline-flex items-center gap-2 rounded-2xl border border-rose-200 bg-white px-3 py-2 text-sm font-medium text-rose-700 disabled:opacity-60">
-            <LogOut size={15} />
-            {loggingOut ? "..." : "Iesire"}
+            <button
+              onClick={handleIesire}
+              disabled={loggingOut}
+              className="inline-flex items-center gap-2 rounded-2xl border border-rose-200 bg-white px-3 py-2 text-sm font-medium text-rose-700 disabled:opacity-60"
+            >
+              <LogOut size={15} />
+              {loggingOut ? "..." : "Iesire"}
             </button>
           </div>
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {summaryCard("Clienti", summary.total)}
-          {summaryCard("Activi", summary.active)}
-          {summaryCard("Locatii", summary.locations)}
-          {summaryCard("POS", summary.terminals)}
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          {summaryCard("Clienti", summary.total, "total conturi")}
+          {summaryCard("Activi", summary.active, "gata de operare")}
+          {summaryCard("In risc", summary.risky, "backup lipsa sau invalid")}
+          {summaryCard("Locatii", summary.locations, "puncte de lucru")}
+          {summaryCard("POS", summary.terminals, "terminale active")}
         </div>
       </section>
 
@@ -526,13 +603,13 @@ export default function ControlPanelClients() {
       ) : null}
 
       <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="relative w-full max-w-xl">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="relative w-full max-w-2xl">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Cauta firma, CUI, email sau subdomeniu"
+              placeholder="Cauta firma, CUI, email, telefon sau subdomeniu"
               className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm text-slate-700 outline-none transition focus:border-[#17324D] focus:bg-white"
             />
           </div>
@@ -554,130 +631,169 @@ export default function ControlPanelClients() {
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
-        <div className="hidden grid-cols-[minmax(0,1.9fr)_170px_180px_260px] gap-4 border-b border-slate-200 bg-slate-50 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 lg:grid">
-          <div>Client</div>
-          <div>Plan</div>
-          <div>Status</div>
-          <div>Subdomeniu</div>
-        </div>
-
+      <section className="grid gap-4">
         {!loading && filteredItems.length === 0 ? (
-          <div className="px-4 py-12 text-center text-sm text-slate-500">Nu exista rezultate.</div>
+          <div className="rounded-[24px] border border-slate-200 bg-white px-4 py-12 text-center text-sm text-slate-500 shadow-sm">
+            Nu exista rezultate.
+          </div>
         ) : null}
 
-        {(loading ? Array.from({ length: 8 }, (_, index) => ({ __skeleton: true as const, index })) : filteredItems).map((item) => {
+        {(loading ? Array.from({ length: 6 }, (_, index) => ({ __skeleton: true as const, index })) : filteredItems).map((item) => {
           if ("__skeleton" in item) {
-            return <div key={`skeleton-${item.index}`} className="h-24 animate-pulse border-b border-slate-100 bg-slate-50/60 last:border-b-0" />
+            return <div key={`skeleton-${item.index}`} className="h-64 animate-pulse rounded-[24px] border border-slate-200 bg-slate-50/70 shadow-sm" />
           }
 
+          const modulePreview = firstEnabledModules(item.license?.modules)
+
           return (
-            <article
-              key={item.id}
-              onClick={() => navigate(`/control-panel/clienti/${item.id}`)}
-              className="cursor-pointer border-b border-slate-100 px-4 py-3 transition hover:bg-slate-50 last:border-b-0"
-            >
-              <div className="grid gap-3 lg:grid-cols-[minmax(0,1.9fr)_170px_180px_260px] lg:items-center">
-                <div className="min-w-0">
+            <article key={item.id} className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="truncate text-[15px] font-semibold text-slate-950">{item.company?.name || item.name}</h2>
+                    <h2 className="truncate text-xl font-semibold text-slate-950">{item.company?.name || item.name}</h2>
                     <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${statusClass(item.status)}`}>
                       {statusLabel(item.status)}
                     </span>
+                    <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${backupTone(item.backupHealth?.status)}`}>
+                      {backupLabel(item.backupHealth?.status)}
+                    </span>
                   </div>
-                  <div className="mt-1 text-sm text-slate-500">
-                    {[item.company?.cui, item.company?.email, item.company?.phone].filter(Boolean).join(" | ") || "-"}
+
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
+                    <span>{item.company?.cui || "Fara CUI"}</span>
+                    <span>{item.company?.email || "Fara email"}</span>
+                    <span>{item.company?.phone || "Fara telefon"}</span>
                   </div>
-                  <div className="mt-1.5 flex flex-wrap gap-3 text-xs text-slate-500">
-                    <span>Creat {formatDate(item.createdAt)}</span>
-                    <span>Licenta {formatDate(item.license?.expiresAt)}</span>
-                    <span>Backup {formatDate(item.backupHealth?.latestBackupAt)}</span>
+
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
+                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">Creat {formatDate(item.createdAt)}</span>
+                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">Licenta {formatDate(item.license?.expiresAt)}</span>
+                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">Backup {formatDateTime(item.backupHealth?.latestBackupAt)}</span>
                   </div>
-                  {item.backupHealth?.status !== "protected" ? (
-                    <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
-                      Client fara backup valid. Recovery-ul este in risc pana nu exista snapshot de tenant pe server.
+
+                  {modulePreview.length ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {modulePreview.map((entry) => (
+                        <span key={entry} className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                          {entry}
+                        </span>
+                      ))}
                     </div>
                   ) : null}
-                  <div className="mt-2 flex flex-wrap gap-2">
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-2 xl:min-w-[360px] xl:max-w-[360px] xl:grid-cols-1">
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/control-panel/clienti/${item.id}`)}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#17324D] px-4 py-3 text-sm font-semibold text-white"
+                  >
+                    Deschide client
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAddCompany(item.id)}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700"
+                  >
+                    <Building2 size={15} />
+                    Adauga firma
+                  </button>
+                  {item.portalUrl ? (
                     <button
                       type="button"
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        handleAddCompany(item.id)
-                      }}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-800"
+                      onClick={() => copyText(item.portalUrl || "", "URL client")}
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700"
                     >
-                      <Building2 size={12} />
-                      Adauga firma
+                      <ExternalLink size={15} />
+                      Copiaza portal
                     </button>
-                  </div>
+                  ) : null}
                 </div>
+              </div>
 
-                <div className="text-sm">
-                  <div className="font-semibold text-slate-900">{item.subscription?.plan?.name || "-"}</div>
-                  <div className="mt-1 text-slate-500">
-                    {item.subscription
-                      ? `${Number(item.subscription.price ?? 0).toLocaleString("ro-RO")} ${item.subscription.currency || "RON"} / ${billingCycleLabel(item.subscription.billingCycle)}`
-                      : "-"}
+              <div className="mt-5 grid gap-4 xl:grid-cols-[1.25fr_0.95fr]">
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                      <Building2 size={13} />
+                      Useri
+                    </div>
+                    <div className="mt-2 text-xl font-semibold text-slate-950">{item.usersCount}</div>
                   </div>
-                </div>
 
-                <div className="grid gap-1.5 text-sm">
-                  <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
-                    <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Useri</span>
-                    <span className="font-semibold text-slate-950">{item.usersCount}</span>
-                  </div>
-                  <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
-                    <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Locatii</span>
-                    <span className="font-semibold text-slate-950">
+                  <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                      <Store size={13} />
+                      Locatii
+                    </div>
+                    <div className="mt-2 text-xl font-semibold text-slate-950">
                       {item.locationsCount}/{item.license?.limits?.locations ?? 0}
-                    </span>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
-                    <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">POS</span>
-                    <span className="font-semibold text-slate-950">
+
+                  <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                      <Server size={13} />
+                      POS
+                    </div>
+                    <div className="mt-2 text-xl font-semibold text-slate-950">
                       {item.terminalsCount}/{item.license?.limits?.terminals ?? 0}
-                    </span>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
-                    <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Backup</span>
-                    <span className={`font-semibold ${item.backupHealth?.status === "protected" ? "text-emerald-700" : "text-rose-700"}`}>
-                      {item.backupHealth?.status === "protected" ? "Protejat" : "Lipsa"}
-                    </span>
+
+                  <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                      {item.backupHealth?.status === "protected" ? <ShieldCheck size={13} /> : <ShieldAlert size={13} />}
+                      Backup
+                    </div>
+                    <div className={`mt-2 text-xl font-semibold ${item.backupHealth?.status === "protected" ? "text-emerald-700" : "text-rose-700"}`}>
+                      {item.backupHealth?.backupsCount ?? 0}
+                    </div>
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <div
-                    className="flex items-center rounded-xl border border-slate-200 bg-slate-50 px-3"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <input
-                      value={subdomainDrafts[item.id] ?? item.subdomain ?? ""}
-                      onChange={(e) =>
-                        setSubdomainDrafts((prev) => ({
-                          ...prev,
-                          [item.id]: e.target.value,
-                        }))
-                      }
-                      placeholder="coffee-cup"
-                      className="h-9 min-w-0 flex-1 bg-transparent text-sm text-slate-700 outline-none"
-                    />
-                    <span className="pl-2 text-xs text-slate-400">.gufo.ink</span>
+                <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Subdomeniu client</div>
+                      <div className="mt-2 text-sm text-slate-500">
+                        {item.subscription?.plan?.name || "Fara plan"}
+                        {item.subscription
+                          ? ` • ${Number(item.subscription.price ?? 0).toLocaleString("ro-RO")} ${item.subscription.currency || "RON"} / ${billingCycleLabel(item.subscription.billingCycle)}`
+                          : ""}
+                      </div>
+                    </div>
+                    {item.backupHealth?.status === "protected" ? statusLabel(item.status) ? <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${statusClass(item.status)}`}>{statusLabel(item.status)}</span> : null : null}
                   </div>
-                  <div className="flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
+
+                  <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                    <div className="flex min-w-0 flex-1 items-center rounded-2xl border border-slate-200 bg-white px-3">
+                      <input
+                        value={subdomainDrafts[item.id] ?? item.subdomain ?? ""}
+                        onChange={(e) =>
+                          setSubdomainDrafts((prev) => ({
+                            ...prev,
+                            [item.id]: e.target.value,
+                          }))
+                        }
+                        placeholder="coffee-cup"
+                        className="h-11 min-w-0 flex-1 bg-transparent text-sm text-slate-700 outline-none"
+                      />
+                      <span className="pl-2 text-xs text-slate-400">.gufo.ink</span>
+                    </div>
                     <button
                       type="button"
                       onClick={() => handleUpdateSubdomain(item)}
                       disabled={savingSubdomainId === item.id}
-                      className="inline-flex h-8 items-center justify-center rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-[#17324D] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#17324D] disabled:opacity-60"
                     >
-                      {savingSubdomainId === item.id ? "..." : "Salveaza"}
+                      <Save size={15} />
+                      {savingSubdomainId === item.id ? "Se salveaza..." : "Salveaza"}
                     </button>
-                    <div className="truncate text-[11px] text-slate-500">{item.portalUrl || "-"}</div>
                   </div>
-                </div>
 
+                  <div className="mt-3 truncate text-sm text-slate-500">{item.portalUrl || "Portalul se genereaza dupa salvarea subdomeniului."}</div>
+                </div>
               </div>
             </article>
           )
@@ -686,107 +802,111 @@ export default function ControlPanelClients() {
 
       {isModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-[28px] border border-slate-200 bg-white p-5 shadow-xl">
+          <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-[28px] border border-slate-200 bg-white p-5 shadow-xl">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="text-lg font-semibold text-[#17324D]">Client nou</div>
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Onboarding</div>
+                <div className="mt-1 text-2xl font-semibold text-[#17324D]">Client nou</div>
+                <div className="mt-1 text-sm text-slate-500">Completezi datele esențiale, limitele și modulele. Restul le administrezi după creare.</div>
               </div>
               <button onClick={() => setIsModalOpen(false)} className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500">
                 <X size={16} />
               </button>
             </div>
 
-            <form className="mt-4 space-y-4" onSubmit={handleCreateClient}>
-              <div className="grid gap-3 md:grid-cols-2">
-                {[
-                  ["companyName", "Firma", "SC Exemplu SRL"],
-                  ["subdomain", "Subdomeniu", "coffee-cup"],
-                  ["cui", "CUI", "RO12345678"],
-                  ["email", "Email", "office@client.ro"],
-                  ["phone", "Telefon", "+40 7xx xxx xxx"],
-                  ["contactName", "Contact", "Administrator"],
-                  ["licenseKey", "Cheie licenta", "GUFO-XXXX-XXXX"],
-                ].map(([field, label, placeholder]) => (
-                  <label key={field} className="block">
-                    <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</div>
+            <form className="mt-5 space-y-5" onSubmit={handleCreateClient}>
+              <section className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
+                <div className="mb-4 text-sm font-semibold text-slate-900">Date client</div>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {[
+                    ["companyName", "Firma", "SC Exemplu SRL"],
+                    ["subdomain", "Subdomeniu", "coffee-cup"],
+                    ["cui", "CUI", "RO12345678"],
+                    ["regNo", "Reg. com.", "J40/1234/2026"],
+                    ["email", "Email", "office@client.ro"],
+                    ["phone", "Telefon", "+40 7xx xxx xxx"],
+                    ["contactName", "Contact", "Administrator"],
+                    ["licenseKey", "Cheie licenta", "GUFO-XXXX-XXXX"],
+                  ].map(([field, label, placeholder]) => (
+                    <label key={field} className="block">
+                      <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</div>
+                      <input
+                        value={(form as any)[field] || ""}
+                        onChange={(e) => setForm((prev) => ({ ...prev, [field]: e.target.value }))}
+                        placeholder={placeholder}
+                        className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+                      />
+                    </label>
+                  ))}
+                </div>
+
+                <label className="mt-3 block">
+                  <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Adresa</div>
+                  <input
+                    value={form.address || ""}
+                    onChange={(e) => setForm((prev) => ({ ...prev, address: e.target.value }))}
+                    className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+                  />
+                </label>
+              </section>
+
+              <section className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
+                <div className="mb-4 text-sm font-semibold text-slate-900">Limite licenta</div>
+                <div className="grid gap-3 md:grid-cols-3">
+                  <label className="block">
+                    <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Locatii</div>
                     <input
-                      value={(form as any)[field] || ""}
-                      onChange={(e) => setForm((prev) => ({ ...prev, [field]: e.target.value }))}
-                      placeholder={placeholder}
-                      className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+                      type="number"
+                      min={1}
+                      value={form.limitLocations}
+                      onChange={(e) => setForm((prev) => ({ ...prev, limitLocations: Number(e.target.value || 1) }))}
+                      className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
                     />
                   </label>
-                ))}
-              </div>
+                  <label className="block">
+                    <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">POS</div>
+                    <input
+                      type="number"
+                      min={1}
+                      value={form.limitTerminals}
+                      onChange={(e) => setForm((prev) => ({ ...prev, limitTerminals: Number(e.target.value || 1) }))}
+                      className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+                    />
+                  </label>
+                  <label className="block">
+                    <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">KDS</div>
+                    <input
+                      type="number"
+                      min={1}
+                      value={form.limitKdsDevices}
+                      onChange={(e) => setForm((prev) => ({ ...prev, limitKdsDevices: Number(e.target.value || 1) }))}
+                      className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+                    />
+                  </label>
+                </div>
+              </section>
 
-              <div className="grid gap-3 md:grid-cols-3">
-                <label className="block md:col-span-1">
-                  <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Reg. com.</div>
-                  <input
-                    value={form.regNo || ""}
-                    onChange={(e) => setForm((prev) => ({ ...prev, regNo: e.target.value }))}
-                    className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
-                  />
-                </label>
-                <label className="block">
-                  <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Locatii</div>
-                  <input
-                    type="number"
-                    min={1}
-                    value={form.limitLocations}
-                    onChange={(e) => setForm((prev) => ({ ...prev, limitLocations: Number(e.target.value || 1) }))}
-                    className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
-                  />
-                </label>
-                <label className="block">
-                  <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">POS</div>
-                  <input
-                    type="number"
-                    min={1}
-                    value={form.limitTerminals}
-                    onChange={(e) => setForm((prev) => ({ ...prev, limitTerminals: Number(e.target.value || 1) }))}
-                    className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
-                  />
-                </label>
-                <label className="block">
-                  <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">KDS</div>
-                  <input
-                    type="number"
-                    min={1}
-                    value={form.limitKdsDevices}
-                    onChange={(e) => setForm((prev) => ({ ...prev, limitKdsDevices: Number(e.target.value || 1) }))}
-                    className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
-                  />
-                </label>
-              </div>
-
-              <label className="block">
-                <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Adresa</div>
-                <input
-                  value={form.address || ""}
-                  onChange={(e) => setForm((prev) => ({ ...prev, address: e.target.value }))}
-                  className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
-                />
-              </label>
-
-              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                {Object.entries(form.modules).map(([key, value]) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setForm((prev) => ({ ...prev, modules: { ...prev.modules, [key]: !value } }))}
-                    className={`rounded-2xl border px-3 py-3 text-left text-sm font-medium transition ${
-                      value ? "border-[#17324D] bg-[#17324D] text-white" : "border-slate-200 bg-slate-50 text-slate-600"
-                    }`}
-                  >
-                    {key === "kds" ? "KDS" : key}
-                  </button>
-                ))}
-              </div>
+              <section className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
+                <div className="mb-4 text-sm font-semibold text-slate-900">Module active</div>
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                  {Object.entries(form.modules).map(([key, value]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setForm((prev) => ({ ...prev, modules: { ...prev.modules, [key]: !value } }))}
+                      className={`rounded-2xl border px-3 py-3 text-left text-sm font-medium transition ${
+                        value ? "border-[#17324D] bg-[#17324D] text-white" : "border-slate-200 bg-white text-slate-600"
+                      }`}
+                    >
+                      {moduleLabel(key)}
+                    </button>
+                  ))}
+                </div>
+              </section>
 
               {formError ? <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{formError}</div> : null}
 
-              <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+              <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700">
                   Inchide
                 </button>
@@ -801,5 +921,3 @@ export default function ControlPanelClients() {
     </div>
   )
 }
-
-
