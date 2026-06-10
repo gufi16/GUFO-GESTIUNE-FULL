@@ -14,14 +14,196 @@ type ExchangeModuleKey =
   | "suppliers"
   | "products"
 
-type ExchangeExportItem = {
+type WorkbookRow = Record<string, unknown>
+
+type TemplateColumn = {
+  key: string
+  label: string
+  width?: number
+  aliases?: string[]
+}
+
+type ExportModuleDefinition = {
   key: ExchangeModuleKey
   fileName: string
   sheetName: string
+  columns: TemplateColumn[]
+}
+
+type ExchangeExportItem = ExportModuleDefinition & {
   rows: Array<Record<string, string | number | boolean | null>>
 }
 
-type WorkbookRow = Record<string, unknown>
+const EXPORT_DATE_TOKEN = new Date().toISOString().slice(0, 10)
+
+const MODULE_DEFINITIONS: Record<ExchangeModuleKey, ExportModuleDefinition> = {
+  companies: {
+    key: "companies",
+    fileName: "01-Firme.xlsx",
+    sheetName: "Firme",
+    columns: [
+      { key: "companyCode", label: "Cod firma", aliases: ["code"] },
+      { key: "companyName", label: "Denumire firma", aliases: ["name"] },
+      { key: "cui", label: "CUI" },
+      { key: "regNo", label: "Nr. Reg. Com." },
+      { key: "address", label: "Adresa" },
+      { key: "city", label: "Oras" },
+      { key: "county", label: "Judet" },
+      { key: "country", label: "Tara" },
+      { key: "postalCode", label: "Cod postal" },
+      { key: "bank", label: "Banca" },
+      { key: "iban", label: "IBAN" },
+      { key: "email", label: "Email" },
+      { key: "phone", label: "Telefon" },
+      { key: "contactEmail", label: "Email contact" },
+      { key: "isDefault", label: "Firma implicita (Da/Nu)", aliases: ["implicit"] },
+      { key: "isVatPayer", label: "Platitor TVA (Da/Nu)" },
+    ],
+  },
+  locations: {
+    key: "locations",
+    fileName: "02-Locatii.xlsx",
+    sheetName: "Locatii",
+    columns: [
+      { key: "companyCode", label: "Cod firma" },
+      { key: "code", label: "Cod locatie" },
+      { key: "name", label: "Denumire locatie" },
+      { key: "address", label: "Adresa" },
+      { key: "city", label: "Oras" },
+      { key: "county", label: "Judet" },
+      { key: "country", label: "Tara" },
+      { key: "postalCode", label: "Cod postal" },
+      { key: "isActive", label: "Activa (Da/Nu)" },
+    ],
+  },
+  departments: {
+    key: "departments",
+    fileName: "03-Departamente.xlsx",
+    sheetName: "Departamente",
+    columns: [
+      { key: "companyCode", label: "Cod firma" },
+      { key: "name", label: "Denumire departament" },
+      { key: "isActive", label: "Activ (Da/Nu)" },
+    ],
+  },
+  categories: {
+    key: "categories",
+    fileName: "04-Categorii.xlsx",
+    sheetName: "Categorii",
+    columns: [
+      { key: "companyCode", label: "Cod firma" },
+      { key: "departmentName", label: "Departament" },
+      { key: "name", label: "Denumire categorie" },
+      { key: "imageUrl", label: "Link imagine" },
+      { key: "isActive", label: "Activa (Da/Nu)" },
+      { key: "isVisibleInPos", label: "Vizibila in POS (Da/Nu)" },
+    ],
+  },
+  uoms: {
+    key: "uoms",
+    fileName: "05-Unitati-de-masura.xlsx",
+    sheetName: "Unitati de masura",
+    columns: [
+      { key: "companyCode", label: "Cod firma" },
+      { key: "code", label: "Cod UM" },
+      { key: "name", label: "Denumire UM" },
+      { key: "standardCode", label: "Cod standard" },
+      { key: "isActive", label: "Activa (Da/Nu)" },
+    ],
+  },
+  vatRates: {
+    key: "vatRates",
+    fileName: "06-Cote-TVA.xlsx",
+    sheetName: "Cote TVA",
+    columns: [
+      { key: "companyCode", label: "Cod firma" },
+      { key: "name", label: "Denumire TVA" },
+      { key: "rate", label: "Cota TVA" },
+      { key: "fiscalCode", label: "Cod fiscal" },
+      { key: "isActive", label: "Activa (Da/Nu)" },
+    ],
+  },
+  customers: {
+    key: "customers",
+    fileName: "07-Clienti.xlsx",
+    sheetName: "Clienti",
+    columns: [
+      { key: "companyCode", label: "Cod firma" },
+      { key: "code", label: "Cod client" },
+      { key: "name", label: "Denumire client" },
+      { key: "cif", label: "CIF/CUI" },
+      { key: "regNo", label: "Nr. Reg. Com." },
+      { key: "address", label: "Adresa" },
+      { key: "city", label: "Oras" },
+      { key: "county", label: "Judet" },
+      { key: "country", label: "Tara" },
+      { key: "postalCode", label: "Cod postal" },
+      { key: "phone", label: "Telefon" },
+      { key: "email", label: "Email" },
+      { key: "vatPayer", label: "Platitor TVA (Da/Nu)" },
+      { key: "isActive", label: "Activ (Da/Nu)" },
+    ],
+  },
+  suppliers: {
+    key: "suppliers",
+    fileName: "08-Furnizori.xlsx",
+    sheetName: "Furnizori",
+    columns: [
+      { key: "companyCode", label: "Cod firma" },
+      { key: "code", label: "Cod furnizor" },
+      { key: "name", label: "Denumire furnizor" },
+      { key: "cif", label: "CIF/CUI" },
+      { key: "regCom", label: "Nr. Reg. Com." },
+      { key: "address", label: "Adresa" },
+      { key: "city", label: "Oras" },
+      { key: "county", label: "Judet" },
+      { key: "country", label: "Tara" },
+      { key: "postalCode", label: "Cod postal" },
+      { key: "phone", label: "Telefon" },
+      { key: "email", label: "Email" },
+      { key: "vatPayer", label: "Platitor TVA (Da/Nu)" },
+      { key: "isActive", label: "Activ (Da/Nu)" },
+    ],
+  },
+  products: {
+    key: "products",
+    fileName: "09-Produse.xlsx",
+    sheetName: "Produse",
+    columns: [
+      { key: "companyCode", label: "Cod firma" },
+      { key: "sku", label: "SKU produs" },
+      { key: "name", label: "Denumire produs" },
+      { key: "class", label: "Clasa produs" },
+      { key: "departmentName", label: "Departament" },
+      { key: "categoryName", label: "Categorie" },
+      { key: "vatRate", label: "Cota TVA" },
+      { key: "stockUom", label: "UM stoc" },
+      { key: "purchaseUom", label: "UM achizitie" },
+      { key: "purchaseFactor", label: "Factor conversie" },
+      { key: "price", label: "Pret vanzare" },
+      { key: "costPrice", label: "Pret achizitie" },
+      { key: "productionMode", label: "Mod productie" },
+      { key: "imageUrl", label: "Link imagine" },
+      { key: "isActive", label: "Activ (Da/Nu)" },
+      { key: "isVisibleInPos", label: "Vizibil in POS (Da/Nu)" },
+      { key: "isSgr", label: "Produs cu SGR (Da/Nu)" },
+      { key: "sgrValue", label: "Valoare SGR" },
+      { key: "accountingItemCode", label: "Cod articol contabil" },
+    ],
+  },
+}
+
+const MODULE_ORDER: ExchangeModuleKey[] = [
+  "companies",
+  "locations",
+  "departments",
+  "categories",
+  "uoms",
+  "vatRates",
+  "customers",
+  "suppliers",
+  "products",
+]
 
 function toCellValue(value: unknown): string | number | boolean | null {
   if (value === null || value === undefined) return null
@@ -55,42 +237,64 @@ function normalizeNumber(value: unknown, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
-function fileNameForModule(key: ExchangeModuleKey) {
-  return `${key}.xlsx`
+function simplifyText(value: string) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase()
 }
 
-async function buildWorkbookBuffer(sheetName: string, rows: WorkbookRow[]) {
-  const workbook = new ExcelJS.Workbook()
-  const worksheet = workbook.addWorksheet(sheetName.slice(0, 31) || "Export")
-  const headers = Array.from(
-    rows.reduce((set, row) => {
-      Object.keys(row || {}).forEach((key) => set.add(key))
-      return set
-    }, new Set<string>()),
-  )
+function getColumnWidth(label: string, width?: number) {
+  if (typeof width === "number" && Number.isFinite(width)) return width
+  return Math.min(Math.max(label.length + 4, 18), 32)
+}
 
-  worksheet.columns = headers.map((header) => ({
-    header,
-    key: header,
-    width: Math.min(Math.max(header.length + 4, 16), 28),
+async function buildWorkbookBuffer(definition: ExportModuleDefinition, rows: WorkbookRow[]) {
+  const workbook = new ExcelJS.Workbook()
+  const worksheet = workbook.addWorksheet(definition.sheetName.slice(0, 31) || "Export")
+
+  worksheet.columns = definition.columns.map((column) => ({
+    header: column.label,
+    key: column.key,
+    width: getColumnWidth(column.label, column.width),
   }))
 
   rows.forEach((row) => {
     const normalized: Record<string, string | number | boolean | null> = {}
-    headers.forEach((header) => {
-      normalized[header] = toCellValue(row?.[header])
+    definition.columns.forEach((column) => {
+      normalized[column.key] = toCellValue(row?.[column.key])
     })
     worksheet.addRow(normalized)
   })
 
-  worksheet.getRow(1).font = { bold: true }
+  worksheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } }
+  worksheet.getRow(1).fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "17324D" },
+  }
+  worksheet.getRow(1).alignment = { vertical: "middle", horizontal: "center" }
   worksheet.views = [{ state: "frozen", ySplit: 1 }]
+  worksheet.autoFilter = {
+    from: { row: 1, column: 1 },
+    to: { row: Math.max(1, rows.length + 1), column: definition.columns.length },
+  }
 
   const buffer = await workbook.xlsx.writeBuffer()
   return Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer)
 }
 
-async function readWorkbookRows(buffer: Buffer | Uint8Array) {
+function findColumnByHeader(definition: ExportModuleDefinition, header: string) {
+  const target = simplifyText(header)
+  return definition.columns.find((column) => {
+    if (simplifyText(column.label) === target) return true
+    if (simplifyText(column.key) === target) return true
+    return (column.aliases || []).some((alias) => simplifyText(alias) === target)
+  })
+}
+
+async function readWorkbookRows(definition: ExportModuleDefinition, buffer: Buffer | Uint8Array) {
   const workbook = new ExcelJS.Workbook()
   await workbook.xlsx.load(buffer as never)
   const worksheet = workbook.worksheets[0]
@@ -98,17 +302,16 @@ async function readWorkbookRows(buffer: Buffer | Uint8Array) {
 
   const headerRow = worksheet.getRow(1)
   const headerValues = Array.isArray(headerRow.values) ? headerRow.values.slice(1) : []
-  const headers = headerValues
-    .map((value: unknown) => normalizeText(value))
-    .filter(Boolean)
+  const columnKeys = headerValues.map((value: unknown) => findColumnByHeader(definition, normalizeText(value))?.key || "")
 
   const rows: WorkbookRow[] = []
   worksheet.eachRow((row, rowNumber) => {
     if (rowNumber === 1) return
     const record: WorkbookRow = {}
-    headers.forEach((header: string, index: number) => {
+    columnKeys.forEach((columnKey, index) => {
+      if (!columnKey) return
       const cellValue = row.getCell(index + 1).value
-      record[header] =
+      record[columnKey] =
         cellValue && typeof cellValue === "object" && "text" in cellValue
           ? String((cellValue as { text?: unknown }).text || "")
           : cellValue
@@ -118,6 +321,40 @@ async function readWorkbookRows(buffer: Buffer | Uint8Array) {
   })
 
   return rows
+}
+
+function normalizedFileNamesForModule(definition: ExportModuleDefinition) {
+  const normalized = new Set<string>()
+  normalized.add(definition.fileName.toLowerCase())
+  normalized.add(`${definition.key}.xlsx`.toLowerCase())
+  if (definition.key === "vatRates") normalized.add("vatrates.xlsx")
+  return normalized
+}
+
+async function readZipWorkbookMap(buffer: Buffer) {
+  const zip = new AdmZip(buffer)
+  const workbookMap = new Map<ExchangeModuleKey, WorkbookRow[]>()
+
+  for (const entry of zip.getEntries()) {
+    if (entry.isDirectory) continue
+    if (!entry.entryName.toLowerCase().endsWith(".xlsx")) continue
+    const basename = path.posix.basename(entry.entryName).toLowerCase()
+    const moduleDefinition = MODULE_ORDER.map((key) => MODULE_DEFINITIONS[key]).find((definition) =>
+      normalizedFileNamesForModule(definition).has(basename),
+    )
+    if (!moduleDefinition) continue
+    const rows = await readWorkbookRows(moduleDefinition, Buffer.from(entry.getData()))
+    workbookMap.set(moduleDefinition.key, rows)
+  }
+
+  return workbookMap
+}
+
+function emptyRowFromDefinition(definition: ExportModuleDefinition) {
+  return definition.columns.reduce<Record<string, string>>((acc, column) => {
+    acc[column.key] = ""
+    return acc
+  }, {})
 }
 
 export async function exportTenantDataWorkbookZip(tenantId: string) {
@@ -150,12 +387,10 @@ export async function exportTenantDataWorkbookZip(tenantId: string) {
 
   const exportItems: ExchangeExportItem[] = [
     {
-      key: "companies",
-      fileName: fileNameForModule("companies"),
-      sheetName: "Companii",
+      ...MODULE_DEFINITIONS.companies,
       rows: companies.map((item) => ({
-        code: item.code || "",
-        name: item.name,
+        companyCode: item.code || "",
+        companyName: item.name,
         cui: item.cui || "",
         regNo: item.regNo || "",
         address: item.address || "",
@@ -173,9 +408,7 @@ export async function exportTenantDataWorkbookZip(tenantId: string) {
       })),
     },
     {
-      key: "locations",
-      fileName: fileNameForModule("locations"),
-      sheetName: "Locatii",
+      ...MODULE_DEFINITIONS.locations,
       rows: locations.map((item) => ({
         companyCode: item.companyId ? companies.find((company) => company.id === item.companyId)?.code || "" : "",
         code: item.code,
@@ -189,9 +422,7 @@ export async function exportTenantDataWorkbookZip(tenantId: string) {
       })),
     },
     {
-      key: "departments",
-      fileName: fileNameForModule("departments"),
-      sheetName: "Departamente",
+      ...MODULE_DEFINITIONS.departments,
       rows: departments.map((item) => ({
         companyCode: item.companyId ? companies.find((company) => company.id === item.companyId)?.code || "" : "",
         name: item.name,
@@ -199,9 +430,7 @@ export async function exportTenantDataWorkbookZip(tenantId: string) {
       })),
     },
     {
-      key: "categories",
-      fileName: fileNameForModule("categories"),
-      sheetName: "Categorii",
+      ...MODULE_DEFINITIONS.categories,
       rows: categories.map((item) => ({
         companyCode: item.company?.code || "",
         departmentName: item.department?.name || "",
@@ -212,9 +441,7 @@ export async function exportTenantDataWorkbookZip(tenantId: string) {
       })),
     },
     {
-      key: "uoms",
-      fileName: fileNameForModule("uoms"),
-      sheetName: "UM",
+      ...MODULE_DEFINITIONS.uoms,
       rows: uoms.map((item) => ({
         companyCode: item.companyId ? companies.find((company) => company.id === item.companyId)?.code || "" : "",
         code: item.code,
@@ -224,9 +451,7 @@ export async function exportTenantDataWorkbookZip(tenantId: string) {
       })),
     },
     {
-      key: "vatRates",
-      fileName: fileNameForModule("vatRates"),
-      sheetName: "TVA",
+      ...MODULE_DEFINITIONS.vatRates,
       rows: vatRates.map((item) => ({
         companyCode: item.companyId ? companies.find((company) => company.id === item.companyId)?.code || "" : "",
         name: item.name,
@@ -236,9 +461,7 @@ export async function exportTenantDataWorkbookZip(tenantId: string) {
       })),
     },
     {
-      key: "customers",
-      fileName: fileNameForModule("customers"),
-      sheetName: "Clienti",
+      ...MODULE_DEFINITIONS.customers,
       rows: customers.map((item) => ({
         companyCode: item.company?.code || "",
         code: item.code || "",
@@ -257,9 +480,7 @@ export async function exportTenantDataWorkbookZip(tenantId: string) {
       })),
     },
     {
-      key: "suppliers",
-      fileName: fileNameForModule("suppliers"),
-      sheetName: "Furnizori",
+      ...MODULE_DEFINITIONS.suppliers,
       rows: suppliers.map((item) => ({
         companyCode: item.company?.code || "",
         code: item.code || "",
@@ -278,9 +499,7 @@ export async function exportTenantDataWorkbookZip(tenantId: string) {
       })),
     },
     {
-      key: "products",
-      fileName: fileNameForModule("products"),
-      sheetName: "Produse",
+      ...MODULE_DEFINITIONS.products,
       rows: products.map((item) => ({
         companyCode: item.company?.code || "",
         sku: item.sku,
@@ -307,29 +526,16 @@ export async function exportTenantDataWorkbookZip(tenantId: string) {
 
   const zip = new AdmZip()
   for (const item of exportItems) {
-    const buffer = await buildWorkbookBuffer(item.sheetName, item.rows)
+    const rows = item.rows.length ? item.rows : [emptyRowFromDefinition(item)]
+    const buffer = await buildWorkbookBuffer(item, rows)
     zip.addFile(item.fileName, buffer)
   }
 
   return {
     buffer: zip.toBuffer(),
-    fileName: `gufo-data-export-${tenantId}-${new Date().toISOString().slice(0, 10)}.zip`,
+    fileName: `Export-date-ERP-${tenantId}-${EXPORT_DATE_TOKEN}.zip`,
     files: exportItems.map((item) => item.fileName),
   }
-}
-
-async function readZipWorkbookMap(buffer: Buffer) {
-  const zip = new AdmZip(buffer)
-  const workbookMap = new Map<string, WorkbookRow[]>()
-
-  for (const entry of zip.getEntries()) {
-    if (entry.isDirectory) continue
-    if (!entry.entryName.toLowerCase().endsWith(".xlsx")) continue
-    const rows = await readWorkbookRows(Buffer.from(entry.getData()))
-    workbookMap.set(path.posix.basename(entry.entryName).toLowerCase(), rows)
-  }
-
-  return workbookMap
 }
 
 export async function importTenantDataWorkbookZip(tenantId: string, buffer: Buffer) {
@@ -339,20 +545,20 @@ export async function importTenantDataWorkbookZip(tenantId: string, buffer: Buff
   const companies = await prisma.company.findMany({ where: { tenantId } })
   const companyByCode = new Map(companies.map((item) => [normalizeText(item.code).toLowerCase(), item]))
 
-  const locationsRows = workbookMap.get("locations.xlsx") || []
-  const departmentsRows = workbookMap.get("departments.xlsx") || []
-  const categoriesRows = workbookMap.get("categories.xlsx") || []
-  const uomRows = workbookMap.get("uoms.xlsx") || []
-  const vatRateRows = workbookMap.get("vatrates.xlsx") || []
-  const customerRows = workbookMap.get("customers.xlsx") || []
-  const supplierRows = workbookMap.get("suppliers.xlsx") || []
-  const productRows = workbookMap.get("products.xlsx") || []
+  const locationsRows = workbookMap.get("locations") || []
+  const departmentsRows = workbookMap.get("departments") || []
+  const categoriesRows = workbookMap.get("categories") || []
+  const uomRows = workbookMap.get("uoms") || []
+  const vatRateRows = workbookMap.get("vatRates") || []
+  const customerRows = workbookMap.get("customers") || []
+  const supplierRows = workbookMap.get("suppliers") || []
+  const productRows = workbookMap.get("products") || []
 
   let importedCompanies = 0
-  for (const row of workbookMap.get("companies.xlsx") || []) {
-    const name = normalizeText(row.name)
+  for (const row of workbookMap.get("companies") || []) {
+    const name = normalizeText(row.companyName)
     if (!name) continue
-    const code = normalizeNullableText(row.code)
+    const code = normalizeNullableText(row.companyCode)
     const existing =
       (code ? companyByCode.get(code.toLowerCase()) : null) ||
       (await prisma.company.findFirst({ where: { tenantId, name } }))
@@ -393,7 +599,10 @@ export async function importTenantDataWorkbookZip(tenantId: string, buffer: Buff
     const code = normalizeText(row.code)
     const name = normalizeText(row.name)
     if (!code || !name) continue
-    const company = refreshedCompanyByCode.get(normalizeText(row.companyCode).toLowerCase()) || refreshedCompanies.find((item) => item.isDefault) || refreshedCompanies[0]
+    const company =
+      refreshedCompanyByCode.get(normalizeText(row.companyCode).toLowerCase()) ||
+      refreshedCompanies.find((item) => item.isDefault) ||
+      refreshedCompanies[0]
     const existing = await prisma.location.findFirst({ where: { tenantId, companyId: company?.id || null, code } })
     if (existing) continue
     await prisma.location.create({
@@ -420,7 +629,7 @@ export async function importTenantDataWorkbookZip(tenantId: string, buffer: Buff
     const name = normalizeText(row.name)
     if (!name) continue
     const company = refreshedCompanyByCode.get(normalizeText(row.companyCode).toLowerCase()) || null
-    const existing = allDepartments.find((item) => item.name.toLowerCase() === name.toLowerCase() && String(item.companyId || "") === String(company?.id || ""))
+    const existing = allDepartments.find((item) => simplifyText(item.name) === simplifyText(name))
     if (existing) continue
     const created = await prisma.department.create({
       data: {
@@ -491,7 +700,7 @@ export async function importTenantDataWorkbookZip(tenantId: string, buffer: Buff
     const company = refreshedCompanyByCode.get(normalizeText(row.companyCode).toLowerCase()) || null
     const departmentName = normalizeText(row.departmentName)
     const department = departmentName
-      ? allDepartments.find((item) => item.name.toLowerCase() === departmentName.toLowerCase() && String(item.companyId || "") === String(company?.id || ""))
+      ? allDepartments.find((item) => simplifyText(item.name) === simplifyText(departmentName))
       : null
     const existing = allCategories.find((item) => item.name.toLowerCase() === name.toLowerCase() && String(item.companyId || "") === String(company?.id || ""))
     if (existing) continue
@@ -599,7 +808,7 @@ export async function importTenantDataWorkbookZip(tenantId: string, buffer: Buff
     const existing = freshProducts.find((item) => item.sku.toLowerCase() === sku.toLowerCase() && String(item.companyId || "") === String(company?.id || ""))
     if (existing) continue
 
-    const department = allDepartments.find((item) => item.name.toLowerCase() === normalizeText(row.departmentName).toLowerCase() && String(item.companyId || "") === String(company?.id || ""))
+    const department = allDepartments.find((item) => simplifyText(item.name) === simplifyText(normalizeText(row.departmentName)))
     const category = allCategories.find((item) => item.name.toLowerCase() === normalizeText(row.categoryName).toLowerCase() && String(item.companyId || "") === String(company?.id || ""))
     const vatRate =
       allVatRates.find((item) => Number(item.rate) === normalizeNumber(row.vatRate, NaN) && String(item.companyId || "") === String(company?.id || "")) ||
