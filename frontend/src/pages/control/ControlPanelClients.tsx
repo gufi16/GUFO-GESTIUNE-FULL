@@ -9,7 +9,6 @@ import {
   LogOut,
   Plus,
   RefreshCw,
-  Save,
   Search,
   Server,
   ShieldAlert,
@@ -111,14 +110,6 @@ type CreateClientResponse = {
       email?: string
       password?: string
     }
-  }
-}
-
-type UpdateSubdomainResponse = {
-  item?: {
-    id?: string
-    subdomain?: string | null
-    portalUrl?: string | null
   }
 }
 
@@ -283,13 +274,6 @@ function moduleLabel(key: string) {
   return key
 }
 
-function firstEnabledModules(modules: Record<string, boolean> | undefined) {
-  return Object.entries(modules || {})
-    .filter(([, value]) => value)
-    .map(([key]) => moduleLabel(key))
-    .slice(0, 4)
-}
-
 export default function ControlPanelClients() {
   const navigate = useNavigate()
   const [items, setItems] = useState<AdminClientItem[]>([])
@@ -304,8 +288,6 @@ export default function ControlPanelClients() {
   const [ownerEmail, setOwnerEmail] = useState("")
   const [loggingOut, setLoggingOut] = useState(false)
   const [createdCredentials, setCreatedCredentials] = useState<{ clientName: string; email: string; password: string; portalUrl?: string | null } | null>(null)
-  const [subdomainDrafts, setSubdomainDrafts] = useState<Record<string, string>>({})
-  const [savingSubdomainId, setSavingSubdomainId] = useState<string | null>(null)
   const [form, setForm] = useState<CreateClientPayload>({
     companyName: "",
     subdomain: "",
@@ -338,12 +320,6 @@ export default function ControlPanelClients() {
       const data = await api<AdminClientsResponse>("/api/v1/admin/clients")
       const normalized = (Array.isArray(data?.items) ? data.items : []).map(normalizeClient)
       setItems(normalized)
-      setSubdomainDrafts(
-        normalized.reduce<Record<string, string>>((acc, item) => {
-          acc[item.id] = item.subdomain || ""
-          return acc
-        }, {}),
-      )
     } catch (err: any) {
       setError(err?.message || "Nu am putut incarca lista de clienti.")
       setItems([])
@@ -456,47 +432,6 @@ export default function ControlPanelClients() {
       setFormError(err?.message || "Nu am putut crea clientul.")
     } finally {
       setSaving(false)
-    }
-  }
-
-  async function handleUpdateSubdomain(item: AdminClientItem) {
-    const nextSubdomain = (subdomainDrafts[item.id] || "").trim()
-    if (!nextSubdomain) {
-      setMessage("Completeaza subdomeniul.")
-      window.setTimeout(() => setMessage(null), 1800)
-      return
-    }
-
-    try {
-      setSavingSubdomainId(item.id)
-      setError(null)
-      const response = await api<UpdateSubdomainResponse>(`/api/v1/admin/clients/${item.id}/subdomain`, {
-        method: "PATCH",
-        body: JSON.stringify({ subdomain: nextSubdomain }),
-      })
-
-      setItems((prev) =>
-        prev.map((entry) =>
-          entry.id === item.id
-            ? {
-                ...entry,
-                subdomain: response?.item?.subdomain || nextSubdomain,
-                portalUrl: response?.item?.portalUrl || null,
-                slug: response?.item?.subdomain || entry.slug,
-              }
-            : entry,
-        ),
-      )
-      setSubdomainDrafts((prev) => ({
-        ...prev,
-        [item.id]: response?.item?.subdomain || nextSubdomain,
-      }))
-      setMessage("Subdomeniu salvat")
-      window.setTimeout(() => setMessage(null), 1800)
-    } catch (err: any) {
-      setError(err?.message || "Nu am putut salva subdomeniul.")
-    } finally {
-      setSavingSubdomainId(null)
     }
   }
 
@@ -643,8 +578,6 @@ export default function ControlPanelClients() {
             return <div key={`skeleton-${item.index}`} className="h-64 animate-pulse rounded-[24px] border border-slate-200 bg-slate-50/70 shadow-sm" />
           }
 
-          const modulePreview = firstEnabledModules(item.license?.modules)
-
           return (
             <article key={item.id} className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -671,15 +604,9 @@ export default function ControlPanelClients() {
                     <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">Backup {formatDateTime(item.backupHealth?.latestBackupAt)}</span>
                   </div>
 
-                  {modulePreview.length ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {modulePreview.map((entry) => (
-                        <span key={entry} className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600">
-                          {entry}
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
+                  <div className="mt-3 text-sm text-slate-500">
+                    {item.subdomain ? `${item.subdomain}.gufo.ink` : "Subdomeniul se seteaza in pagina clientului"}
+                  </div>
                 </div>
 
                 <div className="grid gap-2 sm:grid-cols-2 xl:min-w-[360px] xl:max-w-[360px] xl:grid-cols-1">
@@ -755,7 +682,7 @@ export default function ControlPanelClients() {
                 <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Subdomeniu client</div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Plan si acces</div>
                       <div className="mt-2 text-sm text-slate-500">
                         {item.subscription?.plan?.name || "Fara plan"}
                         {item.subscription
@@ -766,33 +693,12 @@ export default function ControlPanelClients() {
                     {item.backupHealth?.status === "protected" ? statusLabel(item.status) ? <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${statusClass(item.status)}`}>{statusLabel(item.status)}</span> : null : null}
                   </div>
 
-                  <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                    <div className="flex min-w-0 flex-1 items-center rounded-2xl border border-slate-200 bg-white px-3">
-                      <input
-                        value={subdomainDrafts[item.id] ?? item.subdomain ?? ""}
-                        onChange={(e) =>
-                          setSubdomainDrafts((prev) => ({
-                            ...prev,
-                            [item.id]: e.target.value,
-                          }))
-                        }
-                        placeholder="coffee-cup"
-                        className="h-11 min-w-0 flex-1 bg-transparent text-sm text-slate-700 outline-none"
-                      />
-                      <span className="pl-2 text-xs text-slate-400">.gufo.ink</span>
+                  <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                    <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Portal client</div>
+                    <div className="mt-2 text-sm text-slate-700">
+                      {item.portalUrl || "Subdomeniul si portalul se gestioneaza in fereastra clientului."}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleUpdateSubdomain(item)}
-                      disabled={savingSubdomainId === item.id}
-                      className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#17324D] disabled:opacity-60"
-                    >
-                      <Save size={15} />
-                      {savingSubdomainId === item.id ? "Se salveaza..." : "Salveaza"}
-                    </button>
                   </div>
-
-                  <div className="mt-3 truncate text-sm text-slate-500">{item.portalUrl || "Portalul se genereaza dupa salvarea subdomeniului."}</div>
                 </div>
               </div>
             </article>
