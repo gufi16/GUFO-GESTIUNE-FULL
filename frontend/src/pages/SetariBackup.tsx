@@ -39,6 +39,12 @@ type ExportGroup = {
   label: string
 }
 
+type BackupDisplayMeta = {
+  title: string
+  tone: "slate" | "emerald" | "blue" | "amber"
+  tag: string
+}
+
 const syncGroups: SyncGroup[] = [
   { id: "customers", label: "Clienti", children: ["customers"] },
   { id: "suppliers", label: "Furnizori", children: ["suppliers"] },
@@ -78,6 +84,47 @@ const exportGroups: ExportGroup[] = [
   { id: "suppliers", label: "Furnizori" },
   { id: "products", label: "Produse" },
 ]
+
+function getBackupDisplayMeta(item: BackupItem): BackupDisplayMeta {
+  const label = String(item.label || "").trim().toLowerCase()
+
+  if (label === "auto-daily-tenant-snapshot") {
+    return {
+      title: "Backup automat zilnic",
+      tone: "emerald",
+      tag: "Automat",
+    }
+  }
+
+  if (label === "backup-manual") {
+    return {
+      title: "Backup manual",
+      tone: "blue",
+      tag: "Manual",
+    }
+  }
+
+  if (label.startsWith("siguranta-inainte-restore")) {
+    return {
+      title: "Siguranta inainte de restore",
+      tone: "amber",
+      tag: "Siguranta",
+    }
+  }
+
+  return {
+    title: item.label || item.fileName,
+    tone: "slate",
+    tag: "Arhiva",
+  }
+}
+
+function backupTagClass(tone: BackupDisplayMeta["tone"]) {
+  if (tone === "emerald") return "border-emerald-200 bg-emerald-50 text-emerald-700"
+  if (tone === "blue") return "border-blue-200 bg-blue-50 text-blue-700"
+  if (tone === "amber") return "border-amber-200 bg-amber-50 text-amber-700"
+  return "border-slate-200 bg-slate-100 text-slate-600"
+}
 
 function fmtBytes(value: number) {
   const size = Number(value || 0)
@@ -458,11 +505,14 @@ export default function SetariBackupPage() {
               <option value="">Selecteaza backup-ul sursa</option>
               {items
                 .filter((item) => item.fileExists !== false)
-                .map((item) => (
+                .map((item) => {
+                  const meta = getBackupDisplayMeta(item)
+                  return (
                   <option key={item.id} value={item.id}>
-                    {fmtDate(item.createdAt)} | {item.label || item.fileName}
+                    {fmtDate(item.createdAt)} | {meta.title}
                   </option>
-                ))}
+                  )
+                })}
             </select>
 
             <div className="flex flex-wrap gap-2">
@@ -659,7 +709,12 @@ export default function SetariBackupPage() {
               <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-semibold text-[#17324D]">{latestAvailableBackup.label || latestAvailableBackup.fileName}</div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="truncate text-sm font-semibold text-[#17324D]">{getBackupDisplayMeta(latestAvailableBackup).title}</div>
+                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${backupTagClass(getBackupDisplayMeta(latestAvailableBackup).tone)}`}>
+                        {getBackupDisplayMeta(latestAvailableBackup).tag}
+                      </span>
+                    </div>
                     <div className="mt-1 text-xs text-slate-500">
                       {fmtDate(latestAvailableBackup.createdAt)} | {fmtBytes(latestAvailableBackup.fileSizeBytes)}
                     </div>
@@ -778,12 +833,16 @@ export default function SetariBackupPage() {
               {items.length ? (
                 items.map((item, index) => {
                   const isLatest = latestAvailableBackup?.id === item.id
+                  const meta = getBackupDisplayMeta(item)
                   return (
                     <div key={item.id} className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-4">
                       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <div className="text-sm font-semibold text-[#17324D]">{item.label || `Backup ${index + 1}`}</div>
+                            <div className="text-sm font-semibold text-[#17324D]">{meta.title || `Backup ${index + 1}`}</div>
+                            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${backupTagClass(meta.tone)}`}>
+                              {meta.tag}
+                            </span>
                             {isLatest ? (
                               <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
                                 Ultimul
