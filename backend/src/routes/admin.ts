@@ -2,6 +2,8 @@ import { type Response, Router } from "express"
 import bcrypt from "bcryptjs"
 import { TerminalDeviceType, UserRole } from "@prisma/client"
 import { z } from "zod"
+import fs from "node:fs"
+import path from "node:path"
 
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
@@ -187,6 +189,99 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 function getTenantCompanies(tenant: { companies?: CompanyLike[] | null }) {
   return Array.isArray(tenant.companies) ? tenant.companies : []
+}
+
+async function deleteTenantRecords(tx: any, tenantId: string) {
+  await tx.userCompanyAccess.deleteMany({
+    where: { user: { tenantId } },
+  })
+  await tx.webSession.deleteMany({ where: { tenantId } })
+  await tx.passwordResetToken.deleteMany({ where: { tenantId } })
+  await tx.auditLog.deleteMany({ where: { tenantId } })
+  await tx.tenantBackup.deleteMany({ where: { tenantId } })
+  await tx.eFacturaLog.deleteMany({ where: { tenantId } })
+  await tx.salesInvoiceItem.deleteMany({ where: { invoice: { tenantId } } })
+  await tx.salesInvoice.deleteMany({ where: { tenantId } })
+  await tx.incomingEInvoiceItem.deleteMany({ where: { invoice: { tenantId } } })
+  await tx.purchaseReceiptItem.deleteMany({ where: { receipt: { tenantId } } })
+  await tx.transferDocItemLot.deleteMany({ where: { transferDocItem: { transfer: { tenantId } } } })
+  await tx.transferDocItem.deleteMany({ where: { transfer: { tenantId } } })
+  await tx.inventoryDocItem.deleteMany({ where: { inventoryDoc: { tenantId } } })
+  await tx.minutesDocItem.deleteMany({ where: { minutesDoc: { tenantId } } })
+  await tx.productionDocItem.deleteMany({ where: { productionDoc: { tenantId } } })
+  await tx.consumptionDocItemLot.deleteMany({ where: { consumptionDocItem: { consumptionDoc: { tenantId } } } })
+  await tx.consumptionDocItem.deleteMany({ where: { consumptionDoc: { tenantId } } })
+  await tx.saleItem.deleteMany({ where: { sale: { tenantId } } })
+  await tx.recipeItem.deleteMany({ where: { recipe: { tenantId } } })
+  await tx.kitchenTicketItem.deleteMany({ where: { kitchenTicket: { tenantId } } })
+  await tx.eTransportNoticeItem.deleteMany({ where: { notice: { tenantId } } })
+  await tx.externalOrderStatusHistory.deleteMany({ where: { tenantId } })
+  await tx.externalOrderItem.deleteMany({ where: { externalOrder: { tenantId } } })
+  await tx.productBarcode.deleteMany({ where: { tenantId } })
+  await tx.marketplaceProductMapping.deleteMany({ where: { tenantId } })
+  await tx.stockMove.deleteMany({ where: { tenantId } })
+  await tx.stockLot.deleteMany({ where: { tenantId } })
+  await tx.stockBalance.deleteMany({ where: { tenantId } })
+  await tx.saleDraft.deleteMany({ where: { tenantId } })
+  await tx.kitchenTicket.deleteMany({ where: { tenantId } })
+  await tx.eTransportNotice.deleteMany({ where: { tenantId } })
+  await tx.consumptionDoc.deleteMany({ where: { tenantId } })
+  await tx.productionDoc.deleteMany({ where: { tenantId } })
+  await tx.minutesDoc.deleteMany({ where: { tenantId } })
+  await tx.inventoryDoc.deleteMany({ where: { tenantId } })
+  await tx.transferDoc.deleteMany({ where: { tenantId } })
+  await tx.purchaseReceipt.deleteMany({ where: { tenantId } })
+  await tx.incomingEInvoice.deleteMany({ where: { tenantId } })
+  await tx.sale.deleteMany({ where: { tenantId } })
+  await tx.recipe.deleteMany({ where: { tenantId } })
+  await tx.externalOrder.deleteMany({ where: { tenantId } })
+  await tx.externalIntegration.deleteMany({ where: { tenantId } })
+  await tx.tenantModule.deleteMany({ where: { tenantId } })
+  await tx.customer.deleteMany({ where: { tenantId } })
+  await tx.supplier.deleteMany({ where: { tenantId } })
+  await tx.accountingExportConfig.deleteMany({ where: { tenantId } })
+  await tx.accountingStockType.deleteMany({ where: { tenantId } })
+  await tx.product.deleteMany({ where: { tenantId } })
+  await tx.category.deleteMany({ where: { tenantId } })
+  await tx.department.deleteMany({ where: { tenantId } })
+  await tx.uom.deleteMany({ where: { tenantId } })
+  await tx.vatRate.deleteMany({ where: { tenantId } })
+  await tx.warehouse.deleteMany({ where: { tenantId } })
+  await tx.skuCounter.deleteMany({ where: { tenantId } })
+  await tx.terminal.deleteMany({ where: { tenantId } })
+  await tx.location.deleteMany({ where: { tenantId } })
+  await tx.invoice.deleteMany({ where: { tenantId } })
+  await tx.subscription.deleteMany({ where: { tenantId } })
+  await tx.license.deleteMany({ where: { tenantId } })
+  await tx.user.deleteMany({ where: { tenantId } })
+  await tx.companyAnafCredential.deleteMany({ where: { tenantId } })
+  await tx.company.deleteMany({ where: { tenantId } })
+}
+
+function cleanupTenantBackupArtifacts(filePaths: string[]) {
+  const directories = new Set<string>()
+
+  for (const filePath of filePaths) {
+    if (!filePath) continue
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.rmSync(filePath, { force: true })
+      }
+      directories.add(path.dirname(filePath))
+    } catch {
+      // Ignore filesystem cleanup errors after the DB delete already succeeded.
+    }
+  }
+
+  for (const dir of directories) {
+    try {
+      if (fs.existsSync(dir)) {
+        fs.rmSync(dir, { recursive: true, force: true })
+      }
+    } catch {
+      // Ignore filesystem cleanup errors after the DB delete already succeeded.
+    }
+  }
 }
 
 router.get("/api/v1/admin/platform/efactura", requireAuth, requireOwner, async (_req, res) => {
@@ -900,6 +995,86 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
           createdAt: entry.createdAt,
         }
       }),
+    },
+  })
+})
+
+router.delete("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req: AuthedRequest, res) => {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: req.params.id },
+    include: {
+      companies: {
+        orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+        take: 1,
+      },
+      licenses: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
+      backups: {
+        select: {
+          filePath: true,
+        },
+      },
+    },
+  })
+
+  if (!tenant) {
+    return res.status(404).json({
+      ok: false,
+      error: "Client inexistent",
+    })
+  }
+
+  const latestLicense = tenant.licenses[0] || null
+  const status = buildTenantStatus(latestLicense)
+  if (status === "active") {
+    return res.status(400).json({
+      ok: false,
+      error: "Clientul este activ. Suspenda sau inchide licenta inainte de stergere.",
+    })
+  }
+
+  let finalBackupFilePath: string | null = null
+  try {
+    const finalBackup = await persistTenantBackupSnapshot({
+      tenantId: tenant.id,
+      companyId: tenant.companies[0]?.id || null,
+      actorId: req.auth?.userId,
+      actorType: "OWNER",
+      label: "final-before-delete",
+    })
+    finalBackupFilePath = finalBackup.filePath
+  } catch (backupError) {
+    return res.status(400).json({
+      ok: false,
+      error: `Nu am putut crea backup-ul final inainte de stergere: ${getErrorMessage(
+        backupError,
+        "eroare necunoscuta",
+      )}`,
+    })
+  }
+
+  const backupFiles = [...tenant.backups.map((entry) => entry.filePath).filter(Boolean), finalBackupFilePath].filter(
+    Boolean,
+  ) as string[]
+
+  await prisma.$transaction(async (tx) => {
+    await deleteTenantRecords(tx, tenant.id)
+
+    await tx.tenant.delete({
+      where: { id: tenant.id },
+    })
+  })
+
+  cleanupTenantBackupArtifacts(backupFiles)
+
+  return res.json({
+    ok: true,
+    item: {
+      id: tenant.id,
+      name: tenant.name,
+      status,
     },
   })
 })
