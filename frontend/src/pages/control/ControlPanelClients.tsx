@@ -462,7 +462,7 @@ export default function ControlPanelClients() {
               </div>
             </div>
             <p className="mt-4 max-w-3xl text-sm leading-6 text-slate-500">
-              Lucrezi pe o listă curată de clienți, vezi rapid licența, backup-ul, subdomeniul și intri direct în detaliu fără să cauți prin zgomot.
+              Lucrezi pe o lista curata de clienti, vezi rapid statusul, licenta, backup-ul si intri direct in fisa clientului.
             </p>
           </div>
 
@@ -566,144 +566,104 @@ export default function ControlPanelClients() {
         </div>
       </section>
 
-      <section className="grid gap-4">
+      <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div className="text-[16px] font-semibold text-[#17324D]">Lista clienti</div>
+            <div className="mt-1 text-xs text-slate-500">{filteredItems.length} rezultate in contextul curent</div>
+          </div>
+        </div>
+
         {!loading && filteredItems.length === 0 ? (
-          <div className="rounded-[24px] border border-slate-200 bg-white px-4 py-12 text-center text-sm text-slate-500 shadow-sm">
+          <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-12 text-center text-sm text-slate-500">
             Nu exista rezultate.
           </div>
         ) : null}
 
-        {(loading ? Array.from({ length: 6 }, (_, index) => ({ __skeleton: true as const, index })) : filteredItems).map((item) => {
-          if ("__skeleton" in item) {
-            return <div key={`skeleton-${item.index}`} className="h-64 animate-pulse rounded-[24px] border border-slate-200 bg-slate-50/70 shadow-sm" />
-          }
+        <div className="mt-4 hidden rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500 xl:grid xl:grid-cols-[minmax(260px,1.5fr)_110px_180px_130px_130px_160px_250px] xl:gap-3">
+          <div>Client</div>
+          <div>Status</div>
+          <div>Subdomeniu</div>
+          <div>Licenta</div>
+          <div>Backup</div>
+          <div>Utilizare</div>
+          <div>Actiuni</div>
+        </div>
 
-          return (
-            <article key={item.id} className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300">
-              <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="truncate text-xl font-semibold text-slate-950">{item.company?.name || item.name}</h2>
-                    <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${statusClass(item.status)}`}>
-                      {statusLabel(item.status)}
-                    </span>
+        <div className="mt-2 grid grid-cols-1 gap-2">
+          {(loading ? Array.from({ length: 8 }, (_, index) => ({ __skeleton: true as const, index })) : filteredItems).map((item) => {
+            if ("__skeleton" in item) {
+              return <div key={`skeleton-${item.index}`} className="h-24 animate-pulse rounded-xl border border-slate-200 bg-slate-50/70" />
+            }
+
+            return (
+              <div
+                key={item.id}
+                className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 transition hover:border-slate-300 hover:bg-white xl:grid-cols-[minmax(260px,1.5fr)_110px_180px_130px_130px_160px_250px] xl:items-center"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-[#17324D]">{item.company?.name || item.name}</div>
+                  <div className="mt-1 truncate text-xs text-slate-500">
+                    {[item.company?.cui || "fara CUI", item.company?.email || "fara email", item.company?.phone || "fara telefon"].join(" | ")}
+                  </div>
+                </div>
+
+                <div>
+                  <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${statusClass(item.status)}`}>
+                    {statusLabel(item.status)}
+                  </span>
+                </div>
+
+                <div className="text-sm text-slate-700">{item.subdomain ? `${item.subdomain}.gufo.ink` : "-"}</div>
+
+                <div className="text-sm text-slate-700">{formatDate(item.license?.expiresAt)}</div>
+
+                <div className="min-w-0">
+                  <div>
                     <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${backupTone(item.backupHealth?.status)}`}>
                       {backupLabel(item.backupHealth?.status)}
                     </span>
                   </div>
-
-                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
-                    <span>{item.company?.cui || "Fara CUI"}</span>
-                    <span>{item.company?.email || "Fara email"}</span>
-                    <span>{item.company?.phone || "Fara telefon"}</span>
-                  </div>
-
-                  <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
-                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">Creat {formatDate(item.createdAt)}</span>
-                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">Licenta {formatDate(item.license?.expiresAt)}</span>
-                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">Backup {formatDateTime(item.backupHealth?.latestBackupAt)}</span>
-                  </div>
-
-                  <div className="mt-3 text-sm text-slate-500">
-                    {item.subdomain ? `${item.subdomain}.gufo.ink` : "Subdomeniul se seteaza in pagina clientului"}
-                  </div>
+                  <div className="mt-1 text-xs text-slate-500">{formatDateTime(item.backupHealth?.latestBackupAt)}</div>
                 </div>
 
-                <div className="grid gap-2 sm:grid-cols-2 xl:min-w-[360px] xl:max-w-[360px] xl:grid-cols-1">
+                <div className="text-sm text-slate-700">
+                  <div>Useri {item.usersCount}</div>
+                  <div>Locatii {item.locationsCount}/{item.license?.limits?.locations ?? 0}</div>
+                  <div>POS {item.terminalsCount}/{item.license?.limits?.terminals ?? 0}</div>
+                </div>
+
+                <div className="flex flex-wrap gap-2 xl:justify-end">
                   <button
                     type="button"
                     onClick={() => navigate(`/control-panel/clienti/${item.id}`)}
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#17324D] px-4 py-3 text-sm font-semibold text-white"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#17324D] px-3 py-2 text-sm font-semibold text-white"
                   >
-                    Deschide client
+                    Deschide
                   </button>
                   <button
                     type="button"
                     onClick={() => handleAddCompany(item.id)}
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
                   >
-                    <Building2 size={15} />
-                    Adauga firma
+                    <Building2 size={14} />
+                    Firma
                   </button>
                   {item.portalUrl ? (
                     <button
                       type="button"
                       onClick={() => copyText(item.portalUrl || "", "URL client")}
-                      className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700"
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
                     >
-                      <ExternalLink size={15} />
-                      Copiaza portal
+                      <ExternalLink size={14} />
+                      Portal
                     </button>
                   ) : null}
                 </div>
               </div>
-
-              <div className="mt-5 grid gap-4 xl:grid-cols-[1.25fr_0.95fr]">
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3">
-                    <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                      <Building2 size={13} />
-                      Useri
-                    </div>
-                    <div className="mt-2 text-xl font-semibold text-slate-950">{item.usersCount}</div>
-                  </div>
-
-                  <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3">
-                    <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                      <Store size={13} />
-                      Locatii
-                    </div>
-                    <div className="mt-2 text-xl font-semibold text-slate-950">
-                      {item.locationsCount}/{item.license?.limits?.locations ?? 0}
-                    </div>
-                  </div>
-
-                  <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3">
-                    <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                      <Server size={13} />
-                      POS
-                    </div>
-                    <div className="mt-2 text-xl font-semibold text-slate-950">
-                      {item.terminalsCount}/{item.license?.limits?.terminals ?? 0}
-                    </div>
-                  </div>
-
-                  <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3">
-                    <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                      {item.backupHealth?.status === "protected" ? <ShieldCheck size={13} /> : <ShieldAlert size={13} />}
-                      Backup
-                    </div>
-                    <div className={`mt-2 text-xl font-semibold ${item.backupHealth?.status === "protected" ? "text-emerald-700" : "text-rose-700"}`}>
-                      {item.backupHealth?.backupsCount ?? 0}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Plan si acces</div>
-                      <div className="mt-2 text-sm text-slate-500">
-                        {item.subscription?.plan?.name || "Fara plan"}
-                        {item.subscription
-                          ? ` • ${Number(item.subscription.price ?? 0).toLocaleString("ro-RO")} ${item.subscription.currency || "RON"} / ${billingCycleLabel(item.subscription.billingCycle)}`
-                          : ""}
-                      </div>
-                    </div>
-                    {item.backupHealth?.status === "protected" ? statusLabel(item.status) ? <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${statusClass(item.status)}`}>{statusLabel(item.status)}</span> : null : null}
-                  </div>
-
-                  <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                    <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Portal client</div>
-                    <div className="mt-2 text-sm text-slate-700">
-                      {item.portalUrl || "Subdomeniul si portalul se gestioneaza in fereastra clientului."}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </article>
-          )
-        })}
+            )
+          })}
+        </div>
       </section>
 
       {isModalOpen ? (
@@ -713,7 +673,7 @@ export default function ControlPanelClients() {
               <div>
                 <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Onboarding</div>
                 <div className="mt-1 text-2xl font-semibold text-[#17324D]">Client nou</div>
-                <div className="mt-1 text-sm text-slate-500">Completezi datele esențiale, limitele și modulele. Restul le administrezi după creare.</div>
+                <div className="mt-1 text-sm text-slate-500">Completezi datele esentiale, limitele si modulele. Restul le administrezi dupa creare.</div>
               </div>
               <button onClick={() => setIsModalOpen(false)} className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500">
                 <X size={16} />
