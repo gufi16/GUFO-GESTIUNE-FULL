@@ -516,9 +516,12 @@ router.post("/api/v1/admin/auth/login", async (req, res) => {
   if (!matchesFixedControlAccount) {
     const candidates = await prisma.user.findMany({
       where: {
-        email: loginEmail,
+        email: {
+          equals: loginEmail,
+          mode: "insensitive",
+        },
         isActive: true,
-        role: "OWNER",
+        role: { in: ["OWNER", "ADMIN"] },
       },
       orderBy: { createdAt: "desc" },
     })
