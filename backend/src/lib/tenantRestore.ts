@@ -1161,6 +1161,7 @@ async function syncCompaniesOnly(data: SelectiveRestoreData) {
     where: { tenantId: asText(data.companies[0]?.tenantId) || undefined },
     select: { id: true, name: true, code: true, cui: true },
   })
+  const existingIds = new Set(existing.map((item) => asText(item.id)).filter(Boolean))
   const keys = new Set<string>()
   existing.forEach((item) => {
     keys.add(scopeKey("name", item.name))
@@ -1170,11 +1171,14 @@ async function syncCompaniesOnly(data: SelectiveRestoreData) {
 
   let created = 0
   for (const item of data.companies) {
+    const itemId = asText(item.id)
+    if (itemId && existingIds.has(itemId)) continue
     const nameKey = scopeKey("name", item.name)
     const codeKey = scopeKey("code", item.code)
     const cuiKey = scopeKey("cui", item.cui)
     if (keys.has(nameKey) || (asText(item.code) && keys.has(codeKey)) || (asText(item.cui) && keys.has(cuiKey))) continue
     await prisma.company.create({ data: item as never })
+    existingIds.add(itemId)
     keys.add(nameKey)
     if (asText(item.code)) keys.add(codeKey)
     if (asText(item.cui)) keys.add(cuiKey)
@@ -1187,15 +1191,19 @@ async function syncCompaniesOnly(data: SelectiveRestoreData) {
 async function syncAccountingStockTypesOnly(data: SelectiveRestoreData) {
   const existing = await prisma.accountingStockType.findMany({
     where: { tenantId: asText(data.accountingStockTypes[0]?.tenantId) || undefined },
-    select: { companyId: true, code: true },
+    select: { id: true, companyId: true, code: true },
   })
+  const existingIds = new Set(existing.map((item) => asText(item.id)).filter(Boolean))
   const keys = new Set(existing.map((item) => scopeKey(item.companyId, item.code)))
   let created = 0
 
   for (const item of data.accountingStockTypes) {
+    const itemId = asText(item.id)
+    if (itemId && existingIds.has(itemId)) continue
     const key = scopeKey(item.companyId, item.code)
     if (keys.has(key)) continue
     await prisma.accountingStockType.create({ data: item as never })
+    existingIds.add(itemId)
     keys.add(key)
     created += 1
   }
@@ -1206,15 +1214,19 @@ async function syncAccountingStockTypesOnly(data: SelectiveRestoreData) {
 async function syncAccountingExportConfigsOnly(data: SelectiveRestoreData) {
   const existing = await prisma.accountingExportConfig.findMany({
     where: { tenantId: asText(data.accountingExportConfigs[0]?.tenantId) || undefined },
-    select: { companyId: true },
+    select: { id: true, companyId: true },
   })
+  const existingIds = new Set(existing.map((item) => asText(item.id)).filter(Boolean))
   const companyIds = new Set(existing.map((item) => asText(item.companyId)).filter(Boolean))
   let created = 0
 
   for (const item of data.accountingExportConfigs) {
+    const itemId = asText(item.id)
+    if (itemId && existingIds.has(itemId)) continue
     const companyId = asText(item.companyId)
     if (!companyId || companyIds.has(companyId)) continue
     await prisma.accountingExportConfig.create({ data: item as never })
+    existingIds.add(itemId)
     companyIds.add(companyId)
     created += 1
   }
@@ -1225,15 +1237,19 @@ async function syncAccountingExportConfigsOnly(data: SelectiveRestoreData) {
 async function syncTenantModulesOnly(data: SelectiveRestoreData) {
   const existing = await prisma.tenantModule.findMany({
     where: { tenantId: asText(data.tenantModules[0]?.tenantId) || undefined },
-    select: { moduleId: true },
+    select: { id: true, moduleId: true },
   })
+  const existingIds = new Set(existing.map((item) => asText(item.id)).filter(Boolean))
   const keys = new Set(existing.map((item) => asText(item.moduleId)).filter(Boolean))
   let created = 0
 
   for (const item of data.tenantModules) {
+    const itemId = asText(item.id)
+    if (itemId && existingIds.has(itemId)) continue
     const key = asText(item.moduleId)
     if (!key || keys.has(key)) continue
     await prisma.tenantModule.create({ data: item as never })
+    existingIds.add(itemId)
     keys.add(key)
     created += 1
   }
@@ -1244,17 +1260,21 @@ async function syncTenantModulesOnly(data: SelectiveRestoreData) {
 async function syncExternalIntegrationsOnly(data: SelectiveRestoreData) {
   const existing = await prisma.externalIntegration.findMany({
     where: { tenantId: asText(data.externalIntegrations[0]?.tenantId) || undefined },
-    select: { platform: true, locationId: true, merchantId: true, storeId: true },
+    select: { id: true, platform: true, locationId: true, merchantId: true, storeId: true },
   })
+  const existingIds = new Set(existing.map((item) => asText(item.id)).filter(Boolean))
   const keys = new Set(
     existing.map((item) => scopeKey(item.platform, item.locationId, item.merchantId, item.storeId)).filter(Boolean),
   )
   let created = 0
 
   for (const item of data.externalIntegrations) {
+    const itemId = asText(item.id)
+    if (itemId && existingIds.has(itemId)) continue
     const key = scopeKey(item.platform, item.locationId, item.merchantId, item.storeId)
     if (keys.has(key)) continue
     await prisma.externalIntegration.create({ data: item as never })
+    existingIds.add(itemId)
     keys.add(key)
     created += 1
   }
@@ -1308,13 +1328,21 @@ async function syncUsersModule(data: SelectiveRestoreData) {
     where: { tenantId: asText(data.users[0]?.tenantId) || undefined },
     select: { id: true, email: true },
   })
+  const existingUserIds = new Set(existingUsers.map((item) => asText(item.id)).filter(Boolean))
   const userIdsByEmail = new Map(existingUsers.map((item) => [lowerText(item.email), item.id]))
   let createdUsers = 0
 
   for (const item of data.users) {
+    const itemId = asText(item.id)
+    if (itemId && existingUserIds.has(itemId)) {
+      const emailKey = lowerText(item.email)
+      if (emailKey) userIdsByEmail.set(emailKey, itemId)
+      continue
+    }
     const emailKey = lowerText(item.email)
     if (!emailKey || userIdsByEmail.has(emailKey)) continue
     const created = await prisma.user.create({ data: item as never })
+    existingUserIds.add(created.id)
     userIdsByEmail.set(emailKey, created.id)
     createdUsers += 1
   }
@@ -1675,7 +1703,7 @@ async function restoreProductsModule(data: SelectiveRestoreData) {
 
 async function syncProductsModule(data: SelectiveRestoreData) {
   const tenantId = asText(data.products[0]?.tenantId || data.productBarcodes[0]?.tenantId)
-  const [existingProducts, existingBarcodes, existingDepartments, existingCategories, existingUoms, existingVatRates, existingStockTypes, existingMappings] =
+  const [existingProducts, existingBarcodes, existingDepartments, existingCategories, existingUoms, existingVatRates, existingStockTypes, existingMappings, existingBarcodeRows] =
     await Promise.all([
       prisma.product.findMany({
         where: { tenantId },
@@ -1707,13 +1735,19 @@ async function syncProductsModule(data: SelectiveRestoreData) {
       }),
       prisma.marketplaceProductMapping.findMany({
         where: { tenantId },
-        select: { integrationId: true, externalProductId: true },
+        select: { id: true, integrationId: true, externalProductId: true },
+      }),
+      prisma.productBarcode.findMany({
+        where: { tenantId },
+        select: { id: true },
       }),
     ])
 
   const productByKey = new Map(existingProducts.map((item) => [scopeKey(item.companyId, item.sku), item.id]))
   const existingProductIds = new Set(existingProducts.map((item) => asText(item.id)).filter(Boolean))
   const barcodeKeys = new Set(existingBarcodes.map((item) => lowerText(item.barcode)))
+  const existingBarcodeIds = new Set(existingBarcodeRows.map((item) => asText(item.id)).filter(Boolean))
+  const existingMappingIds = new Set(existingMappings.map((item) => asText(item.id)).filter(Boolean))
   const mappingKeys = new Set(existingMappings.map((item) => scopeKey(item.integrationId, item.externalProductId)))
   const departmentByKey = new Map(existingDepartments.map((item) => [scopeKey(item.companyId, item.name), item.id]))
   const categoryByKey = new Map(existingCategories.map((item) => [scopeKey(item.companyId, item.name), item.id]))
@@ -1769,6 +1803,8 @@ async function syncProductsModule(data: SelectiveRestoreData) {
 
   let createdBarcodes = 0
   for (const item of data.productBarcodes) {
+    const itemId = asText(item.id)
+    if (itemId && existingBarcodeIds.has(itemId)) continue
     const barcodeKey = lowerText(item.barcode)
     if (!barcodeKey || barcodeKeys.has(barcodeKey)) continue
     const resolvedProductId = resolvedProductIdByBackupId.get(asText(item.productId))
@@ -1779,12 +1815,15 @@ async function syncProductsModule(data: SelectiveRestoreData) {
         productId: resolvedProductId,
       } as never,
     })
+    existingBarcodeIds.add(itemId)
     barcodeKeys.add(barcodeKey)
     createdBarcodes += 1
   }
 
   let createdMappings = 0
   for (const item of data.marketplaceMappings) {
+    const itemId = asText(item.id)
+    if (itemId && existingMappingIds.has(itemId)) continue
     const mappingKey = scopeKey(item.integrationId, item.externalProductId)
     if (mappingKeys.has(mappingKey)) continue
     const resolvedProductId = resolvedProductIdByBackupId.get(asText(item.erpProductId))
@@ -1794,6 +1833,7 @@ async function syncProductsModule(data: SelectiveRestoreData) {
         erpProductId: resolvedProductId || null,
       } as never,
     })
+    existingMappingIds.add(itemId)
     mappingKeys.add(mappingKey)
     createdMappings += 1
   }
