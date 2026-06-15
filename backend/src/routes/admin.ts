@@ -17,7 +17,6 @@ import {
   buildTenantStatus,
   buildTenantPortalUrl,
   collectDefinedStrings,
-  ensureTenantEfacturaModuleEnabled,
   generateTemporaryPassword,
   generateUniqueDeviceId,
   generateUniqueLocationCode,
@@ -43,18 +42,13 @@ import {
 } from "../lib/adminRouteSupport"
 import { buildTenantExportZip } from "../lib/tenantExport"
 import { getTenantBackupHealth, persistTenantBackupSnapshot } from "../lib/tenantBackupSupport"
+import {
+  buildEffectiveControlPanelModules,
+  getControlPanelModuleDefinition,
+  resolveEffectiveModuleCodes,
+} from "../lib/moduleCatalog"
 
 const router = Router()
-
-const CONTROL_PANEL_DYNAMIC_MODULES = [
-  {
-    code: "efactura",
-    name: "e-Factura",
-    description: "Integrare ANAF e-Factura",
-    target: "GESTIUNE" as const,
-    isCore: false,
-  },
-]
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value)
@@ -204,10 +198,6 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 function getTenantCompanies(tenant: { companies?: CompanyLike[] | null }) {
   return Array.isArray(tenant.companies) ? tenant.companies : []
-}
-
-function getControlPanelDynamicModuleDefinition(code: string) {
-  return CONTROL_PANEL_DYNAMIC_MODULES.find((entry) => entry.code === code) || null
 }
 
 async function deleteTenantRecords(tx: any, tenantId: string) {
@@ -718,6 +708,11 @@ router.get("/api/v1/admin/clients", requireAuth, requireOwner, async (_req, res)
       const latestLicense = tenant.licenses[0] || null
       const latestSubscription = tenant.subscriptions[0] || null
       const backupHealth = backupHealthMap.get(tenant.id) || null
+      const licenseModules = latestLicense ? moduleMapFromLicense(latestLicense) : undefined
+      const effectiveModuleCodes = resolveEffectiveModuleCodes(licenseModules, tenant.tenantModules)
+      const effectiveDynamicModules = buildEffectiveControlPanelModules(licenseModules, tenant.tenantModules).filter(
+        (item) => item.enabled,
+      )
 
       return {
         id: tenant.id,
@@ -750,11 +745,12 @@ router.get("/api/v1/admin/clients", requireAuth, requireOwner, async (_req, res)
                 : null,
             }
           : null,
-        activeModules: tenant.tenantModules.map((row) => ({
-          code: row.module.code,
-          name: row.module.name,
+        activeModules: effectiveDynamicModules.map((row) => ({
+          code: row.code,
+          name: row.name,
           limitValue: row.limitValue,
         })),
+        enabledModuleCodes: Array.from(effectiveModuleCodes),
         backupHealth,
       }
     }),
@@ -873,7 +869,6 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
         },
       },
       tenantModules: {
-        where: { enabled: true },
         include: { module: true },
       },
     },
@@ -946,50 +941,19 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
     },
     orderBy: [{ isCore: "desc" }, { name: "asc" }],
   })
-
-  const availableDynamicModules = new Map<string, {
-    code: string
-    name: string
-    description: string | null
-    target: string
-    isCore: boolean
-  }>()
-
-  for (const moduleRecord of knownDynamicModules) {
-    availableDynamicModules.set(moduleRecord.code, {
+  const licenseModules = latestLicense ? moduleMapFromLicense(latestLicense) : undefined
+  const effectiveDynamicModules = buildEffectiveControlPanelModules(
+    licenseModules,
+    tenant.tenantModules,
+    knownDynamicModules.map((moduleRecord) => ({
       code: moduleRecord.code,
       name: moduleRecord.name,
       description: moduleRecord.description,
       target: moduleRecord.target,
       isCore: moduleRecord.isCore,
-    })
-  }
-
-  for (const definition of CONTROL_PANEL_DYNAMIC_MODULES) {
-    if (!availableDynamicModules.has(definition.code)) {
-      availableDynamicModules.set(definition.code, {
-        code: definition.code,
-        name: definition.name,
-        description: definition.description,
-        target: definition.target,
-        isCore: definition.isCore,
-      })
-    }
-  }
-
-  const tenantModuleByCode = new Map(
-    tenant.tenantModules
-      .filter((row) => row.module?.code)
-      .map((row) => [
-        row.module.code,
-        {
-          id: row.id,
-          enabled: row.enabled,
-          limitValue: row.limitValue,
-          source: row.source,
-        },
-      ]),
+    })),
   )
+  const enabledModuleCodes = resolveEffectiveModuleCodes(licenseModules, tenant.tenantModules)
 
   return res.json({
     ok: true,
@@ -1040,24 +1004,19 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
               : null,
           }
         : null,
-      activeModules: tenant.tenantModules.map((row) => ({
-        code: row.module.code,
-        name: row.module.name,
+      activeModules: effectiveDynamicModules.filter((row) => row.enabled).map((row) => ({
+        code: row.code,
+        name: row.name,
         limitValue: row.limitValue,
         enabled: row.enabled,
-        target: row.module.target,
-        description: row.module.description,
+        target: row.target,
+        description: row.description,
+        area: row.area,
+        inheritedFrom: row.inheritedFrom,
+        defaultEnabled: row.defaultEnabled,
       })),
-      dynamicModules: Array.from(availableDynamicModules.values()).map((moduleRecord) => {
-        const tenantModule = tenantModuleByCode.get(moduleRecord.code)
-        return {
-          ...moduleRecord,
-          enabled: tenantModule?.enabled ?? false,
-          limitValue: tenantModule?.limitValue ?? null,
-          relationId: tenantModule?.id ?? null,
-          source: tenantModule?.source ?? null,
-        }
-      }),
+      dynamicModules: effectiveDynamicModules,
+      enabledModuleCodes: Array.from(enabledModuleCodes),
       backupHealth,
       auditLogs: tenant.auditLogs.map((entry) => {
         const actor = entry.actorId ? actorMap.get(entry.actorId) : null
@@ -1097,7 +1056,7 @@ router.post("/api/v1/admin/clients/:id/modules/:code", requireAuth, requireOwner
   }
 
   const code = String(req.params.code || "").trim().toLowerCase()
-  const fallbackDefinition = getControlPanelDynamicModuleDefinition(code)
+  const fallbackDefinition = getControlPanelModuleDefinition(code)
   const existingModule = await prisma.appModule.findUnique({ where: { code } })
 
   if (!existingModule && !fallbackDefinition) {
@@ -1428,8 +1387,6 @@ router.post("/api/v1/admin/clients", requireAuth, requireOwner, async (req: Auth
           isActive: true,
         },
       })
-
-      await ensureTenantEfacturaModuleEnabled(tx, tenant.id)
 
       await tx.auditLog.create({
         data: {
@@ -2389,10 +2346,12 @@ router.get("/api/v1/license/validate", requireAuth, async (req: AuthedRequest, r
     return res.status(404).json({ ok: false, valid: false, error: "Licenta inexistenta" })
   }
 
-  const activeModules = await prisma.tenantModule.findMany({
-    where: { tenantId, enabled: true },
+  const tenantModuleRows = await prisma.tenantModule.findMany({
+    where: { tenantId },
     select: {
+      enabled: true,
       limitValue: true,
+      source: true,
       module: {
         select: {
           code: true,
@@ -2405,6 +2364,8 @@ router.get("/api/v1/license/validate", requireAuth, async (req: AuthedRequest, r
 
   const now = new Date()
   const valid = !license.isSuspended && license.expiresAt > now
+  const licenseModules = moduleMapFromLicense(license)
+  const dynamicModules = buildEffectiveControlPanelModules(licenseModules, tenantModuleRows)
 
   return res.json({
     ok: true,
@@ -2418,12 +2379,14 @@ router.get("/api/v1/license/validate", requireAuth, async (req: AuthedRequest, r
       kdsDevices: license.limitKdsDevices,
     },
     modules: {
-      ...moduleMapFromLicense(license),
-      dynamic: activeModules.map((row) => ({
-        code: row.module.code,
-        name: row.module.name,
-        target: row.module.target,
+      ...licenseModules,
+      dynamic: dynamicModules.filter((row) => row.enabled).map((row) => ({
+        code: row.code,
+        name: row.name,
+        target: row.target,
         limitValue: row.limitValue,
+        area: row.area,
+        defaultEnabled: row.defaultEnabled,
       })),
     },
   })

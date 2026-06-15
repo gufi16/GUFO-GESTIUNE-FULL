@@ -34,6 +34,7 @@ import { hasGlobalControlPanelOwnerAccess } from "../lib/tenantAdmin"
 import { writeExplicitAuditLog } from "../lib/audit"
 import { AuthedRequest, requireAuth } from "../middleware/requireAuth"
 import { loadEnv } from "../lib/loadEnv"
+import { resolveEffectiveModuleCodes } from "../lib/moduleCatalog"
 
 loadEnv()
 
@@ -812,7 +813,6 @@ router.get("/api/v1/me", requireAuth, async (req: AuthedRequest, res) => {
   const activeTenantModules = await prisma.tenantModule.findMany({
     where: {
       tenantId: auth.tenantId,
-      enabled: true,
     },
     include: {
       module: {
@@ -824,16 +824,21 @@ router.get("/api/v1/me", requireAuth, async (req: AuthedRequest, res) => {
   })
 
   const modules: string[] = license
-    ? [
-        license.modDashboard ? "dashboard" : null,
-        license.modDocuments ? "documents" : null,
-        license.modInventory ? "inventory" : null,
-        license.modNomenclature ? "nomenclature" : null,
-        license.modSettings ? "settings" : null,
-        license.modPos ? "pos" : null,
-        license.modReports ? "reports" : null,
-        ...activeTenantModules.map((row) => row.module.code),
-      ].filter((value): value is string => Boolean(value))
+    ? Array.from(
+        resolveEffectiveModuleCodes(
+          {
+            dashboard: license.modDashboard,
+            documents: license.modDocuments,
+            inventory: license.modInventory,
+            nomenclature: license.modNomenclature,
+            settings: license.modSettings,
+            pos: license.modPos,
+            kds: license.modKds,
+            reports: license.modReports,
+          },
+          activeTenantModules,
+        ),
+      )
     : []
 
   const { companies, activeCompany } = await resolveActiveCompanyForUser(
