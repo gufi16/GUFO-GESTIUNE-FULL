@@ -194,6 +194,17 @@ type LicenseModules = {
   reports: boolean
 }
 
+type DynamicModuleItem = {
+  code: string
+  name: string
+  description?: string | null
+  target?: string | null
+  enabled?: boolean
+  limitValue?: number | null
+  relationId?: string | null
+  source?: string | null
+}
+
 type ClientTab = "overview" | "license" | "locations" | "users"
 
 const defaultModules: LicenseModules = {
@@ -413,7 +424,7 @@ export default function ControlPanelClientDetails() {
   const [copyMessage, setCopyMessage] = useState<string | null>(null)
   const [resettingUserId, setResettingUserId] = useState<string | null>(null)
   const [licenseBusy, setLicenseBusy] = useState(false)
-  const [efacturaBusy, setEfacturaBusy] = useState(false)
+  const [moduleBusyCode, setModuleBusyCode] = useState<string | null>(null)
   const [deletingTerminalId, setDeletingTerminalId] = useState<string | null>(null)
   const [deletingLocationId, setDeletingLocationId] = useState<string | null>(null)
   const [creatingLocation, setCreatingLocation] = useState(false)
@@ -518,7 +529,7 @@ export default function ControlPanelClientDetails() {
   const locations = Array.isArray(client?.locations) ? (client.locations as LocationItem[]) : []
   const auditLogs = Array.isArray(client?.auditLogs) ? (client.auditLogs as AuditLogItem[]) : []
   const companies = Array.isArray(client?.companies) ? client.companies : []
-  const activeModules = Array.isArray(client?.activeModules) ? client.activeModules : []
+  const dynamicModules = Array.isArray(client?.dynamicModules) ? (client.dynamicModules as DynamicModuleItem[]) : []
   const devices = locations.flatMap((location) => (Array.isArray(location.devices) ? location.devices : []))
   const posDevicesCount = devices.filter((device) => (device.deviceType || "POS") === "POS").length
   const kdsDevicesCount = devices.filter((device) => (device.deviceType || "POS") === "KDS").length
@@ -547,8 +558,8 @@ export default function ControlPanelClientDetails() {
       }
     })
   }, [companies, users])
-  const efacturaModuleEnabled = activeModules.some((module: any) => module.code === "efactura")
-  const enabledLicenseModules = moduleLabelsCount(licenseForm.modules) + (efacturaModuleEnabled ? 1 : 0)
+  const enabledDynamicModules = dynamicModules.filter((module) => module.enabled).length
+  const enabledLicenseModules = moduleLabelsCount(licenseForm.modules) + enabledDynamicModules
   const canDeleteClient = client?.status && client.status !== "active"
   const filteredAuditLogs = useMemo(() => {
     return auditLogs.filter((entry) => {
@@ -812,21 +823,21 @@ export default function ControlPanelClientDetails() {
     }
   }
 
-  async function handleToggleEfactura() {
-    if (!id) return
+  async function handleToggleDynamicModule(module: DynamicModuleItem) {
+    if (!id || !module?.code) return
     try {
-      setEfacturaBusy(true)
+      setModuleBusyCode(module.code)
       setError(null)
-      await api(`/api/v1/admin/clients/${id}/modules/efactura`, {
+      await api(`/api/v1/admin/clients/${id}/modules/${module.code}`, {
         method: "POST",
-        body: JSON.stringify({ enabled: !efacturaModuleEnabled }),
+        body: JSON.stringify({ enabled: !module.enabled }),
       })
-      setMessage(efacturaModuleEnabled ? "e-Factura dezactivata." : "e-Factura activata.")
+      setMessage(module.enabled ? `Modulul ${module.name} a fost dezactivat.` : `Modulul ${module.name} a fost activat.`)
       await load()
     } catch (err: any) {
-      setError(err?.message || "Nu am putut actualiza modulul e-Factura.")
+      setError(err?.message || `Nu am putut actualiza modulul ${module.name}.`)
     } finally {
-      setEfacturaBusy(false)
+      setModuleBusyCode(null)
     }
   }
 
@@ -1433,7 +1444,7 @@ export default function ControlPanelClientDetails() {
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-right text-xs text-slate-500">
               <div>{erpEnabled ? "ERP activ" : "ERP inactiv"}</div>
-              <div className="mt-1">{efacturaModuleEnabled ? "e-Factura activa" : "e-Factura inactiva"}</div>
+              <div className="mt-1">{enabledDynamicModules} module extra active</div>
             </div>
           </div>
 
@@ -1443,7 +1454,7 @@ export default function ControlPanelClientDetails() {
             {metricCard("Locatii incluse", licenseForm.limitLocations)}
             {metricCard("POS incluse", licenseForm.limitTerminals)}
             {metricCard("KDS incluse", licenseForm.limitKdsDevices)}
-            {metricCard("e-Factura", efacturaModuleEnabled ? "ON" : "OFF")}
+            {metricCard("Module extra", enabledDynamicModules)}
           </div>
 
           <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -1462,15 +1473,19 @@ export default function ControlPanelClientDetails() {
                 </div>
               )
             })}
-            <div
-              className={`rounded-2xl border px-3 py-3 text-left text-sm font-medium ${
-                efacturaModuleEnabled
-                  ? "border-[#F39C12]/40 bg-[#FFF1D6] text-[#B56800]"
-                  : "border-slate-200 bg-slate-50 text-slate-600"
-              }`}
-            >
-              e-Factura
-            </div>
+            {dynamicModules.map((module) => (
+              <div
+                key={module.code}
+                className={`rounded-2xl border px-3 py-3 text-left text-sm font-medium ${
+                  module.enabled
+                    ? "border-[#F39C12]/40 bg-[#FFF1D6] text-[#B56800]"
+                    : "border-slate-200 bg-slate-50 text-slate-600"
+                }`}
+              >
+                <div>{module.name}</div>
+                <div className="mt-1 text-xs opacity-70">{module.target === "POS" ? "POS" : module.target === "BOTH" ? "ERP + POS" : "ERP"}</div>
+              </div>
+            ))}
           </div>
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
@@ -1555,11 +1570,10 @@ export default function ControlPanelClientDetails() {
                 </button>
                 <button
                   type="button"
-                  onClick={handleToggleEfactura}
-                  disabled={efacturaBusy}
+                  onClick={() => setLicenseModalOpen(true)}
                   className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {efacturaBusy ? "Se actualizeaza..." : efacturaModuleEnabled ? "Dezactiveaza e-Factura" : "Activeaza e-Factura"}
+                  Module extra
                 </button>
               </div>
             </div>
@@ -1567,7 +1581,7 @@ export default function ControlPanelClientDetails() {
 
           <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
             <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Module active</div>
-            <div className="mt-1 text-sm font-semibold text-[#17324D]">Vizibilitate rapida pe ceea ce este vandut si ce este inca oprit</div>
+            <div className="mt-1 text-sm font-semibold text-[#17324D]">Vizibilitate rapida pe ce este vandut si ce este oprit pe client</div>
 
             <div className="mt-4 grid gap-2 sm:grid-cols-2">
               {moduleLabels.map(([key, label]) => {
@@ -1585,15 +1599,18 @@ export default function ControlPanelClientDetails() {
                   </div>
                 )
               })}
-              <div
-                className={`rounded-2xl border px-3 py-3 text-sm font-medium ${
-                  efacturaModuleEnabled
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                    : "border-slate-200 bg-slate-50 text-slate-500"
-                }`}
-              >
-                e-Factura
-              </div>
+              {dynamicModules.map((module) => (
+                <div
+                  key={module.code}
+                  className={`rounded-2xl border px-3 py-3 text-sm font-medium ${
+                    module.enabled
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : "border-slate-200 bg-slate-50 text-slate-500"
+                  }`}
+                >
+                  {module.name}
+                </div>
+              ))}
             </div>
           </div>
         </section>
@@ -2162,18 +2179,22 @@ export default function ControlPanelClientDetails() {
                 )
               })}
 
-              <button
-                type="button"
-                onClick={handleToggleEfactura}
-                disabled={efacturaBusy}
-                className={`rounded-2xl border px-3 py-3 text-left text-sm font-medium transition ${
-                  efacturaModuleEnabled
-                    ? "border-[#F39C12]/40 bg-[#FFF1D6] text-[#B56800]"
-                    : "border-slate-200 bg-slate-50 text-slate-600"
-                } disabled:cursor-not-allowed disabled:opacity-60`}
-              >
-                {efacturaBusy ? "Se actualizeaza..." : "e-Factura"}
-              </button>
+              {dynamicModules.map((module) => (
+                <button
+                  key={module.code}
+                  type="button"
+                  onClick={() => handleToggleDynamicModule(module)}
+                  disabled={moduleBusyCode === module.code}
+                  className={`rounded-2xl border px-3 py-3 text-left text-sm font-medium transition ${
+                    module.enabled
+                      ? "border-[#F39C12]/40 bg-[#FFF1D6] text-[#B56800]"
+                      : "border-slate-200 bg-slate-50 text-slate-600"
+                  } disabled:cursor-not-allowed disabled:opacity-60`}
+                >
+                  <div>{moduleBusyCode === module.code ? "Se actualizeaza..." : module.name}</div>
+                  <div className="mt-1 text-xs opacity-70">{module.target === "POS" ? "POS" : module.target === "BOTH" ? "ERP + POS" : "ERP"}</div>
+                </button>
+              ))}
             </div>
 
             <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">

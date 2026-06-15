@@ -46,6 +46,16 @@ import { getTenantBackupHealth, persistTenantBackupSnapshot } from "../lib/tenan
 
 const router = Router()
 
+const CONTROL_PANEL_DYNAMIC_MODULES = [
+  {
+    code: "efactura",
+    name: "e-Factura",
+    description: "Integrare ANAF e-Factura",
+    target: "GESTIUNE" as const,
+    isCore: false,
+  },
+]
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value)
 }
@@ -169,6 +179,11 @@ const TenantEfacturaModuleSchema = z.object({
   enabled: z.boolean(),
 })
 
+const TenantModuleToggleSchema = z.object({
+  enabled: z.boolean(),
+  limitValue: z.coerce.number().int().positive().nullable().optional(),
+})
+
 const UpdateTenantSubdomainSchema = z.object({
   subdomain: z.string().min(2),
 })
@@ -189,6 +204,10 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 function getTenantCompanies(tenant: { companies?: CompanyLike[] | null }) {
   return Array.isArray(tenant.companies) ? tenant.companies : []
+}
+
+function getControlPanelDynamicModuleDefinition(code: string) {
+  return CONTROL_PANEL_DYNAMIC_MODULES.find((entry) => entry.code === code) || null
 }
 
 async function deleteTenantRecords(tx: any, tenantId: string) {
@@ -682,7 +701,6 @@ router.get("/api/v1/admin/clients", requireAuth, requireOwner, async (_req, res)
         },
       },
       tenantModules: {
-        where: { enabled: true },
         include: { module: true },
       },
     },
@@ -922,6 +940,57 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
     }
   }
 
+  const knownDynamicModules = await prisma.appModule.findMany({
+    where: {
+      OR: [{ isActive: true }, { tenantModules: { some: { tenantId: tenant.id } } }],
+    },
+    orderBy: [{ isCore: "desc" }, { name: "asc" }],
+  })
+
+  const availableDynamicModules = new Map<string, {
+    code: string
+    name: string
+    description: string | null
+    target: string
+    isCore: boolean
+  }>()
+
+  for (const moduleRecord of knownDynamicModules) {
+    availableDynamicModules.set(moduleRecord.code, {
+      code: moduleRecord.code,
+      name: moduleRecord.name,
+      description: moduleRecord.description,
+      target: moduleRecord.target,
+      isCore: moduleRecord.isCore,
+    })
+  }
+
+  for (const definition of CONTROL_PANEL_DYNAMIC_MODULES) {
+    if (!availableDynamicModules.has(definition.code)) {
+      availableDynamicModules.set(definition.code, {
+        code: definition.code,
+        name: definition.name,
+        description: definition.description,
+        target: definition.target,
+        isCore: definition.isCore,
+      })
+    }
+  }
+
+  const tenantModuleByCode = new Map(
+    tenant.tenantModules
+      .filter((row) => row.module?.code)
+      .map((row) => [
+        row.module.code,
+        {
+          id: row.id,
+          enabled: row.enabled,
+          limitValue: row.limitValue,
+          source: row.source,
+        },
+      ]),
+  )
+
   return res.json({
     ok: true,
     item: {
@@ -975,7 +1044,20 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
         code: row.module.code,
         name: row.module.name,
         limitValue: row.limitValue,
+        enabled: row.enabled,
+        target: row.module.target,
+        description: row.module.description,
       })),
+      dynamicModules: Array.from(availableDynamicModules.values()).map((moduleRecord) => {
+        const tenantModule = tenantModuleByCode.get(moduleRecord.code)
+        return {
+          ...moduleRecord,
+          enabled: tenantModule?.enabled ?? false,
+          limitValue: tenantModule?.limitValue ?? null,
+          relationId: tenantModule?.id ?? null,
+          source: tenantModule?.source ?? null,
+        }
+      }),
       backupHealth,
       auditLogs: tenant.auditLogs.map((entry) => {
         const actor = entry.actorId ? actorMap.get(entry.actorId) : null
@@ -995,6 +1077,99 @@ router.get("/api/v1/admin/clients/:id", requireAuth, requireOwner, async (req, r
           createdAt: entry.createdAt,
         }
       }),
+    },
+  })
+})
+
+router.post("/api/v1/admin/clients/:id/modules/:code", requireAuth, requireOwner, async (req: AuthedRequest, res) => {
+  const parsed = TenantModuleToggleSchema.safeParse(req.body || {})
+  if (!parsed.success) {
+    return res.status(400).json({ ok: false, error: parsed.error.flatten() })
+  }
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: req.params.id },
+    select: { id: true, name: true },
+  })
+
+  if (!tenant) {
+    return res.status(404).json({ ok: false, error: "Client inexistent" })
+  }
+
+  const code = String(req.params.code || "").trim().toLowerCase()
+  const fallbackDefinition = getControlPanelDynamicModuleDefinition(code)
+  const existingModule = await prisma.appModule.findUnique({ where: { code } })
+
+  if (!existingModule && !fallbackDefinition) {
+    return res.status(404).json({ ok: false, error: "Modul necunoscut pentru acest client." })
+  }
+
+  const moduleRecord =
+    existingModule ||
+    (await prisma.appModule.create({
+      data: {
+        code: fallbackDefinition!.code,
+        name: fallbackDefinition!.name,
+        description: fallbackDefinition!.description,
+        target: fallbackDefinition!.target,
+        isCore: fallbackDefinition!.isCore,
+        isActive: true,
+      },
+    }))
+
+  const relation = await prisma.tenantModule.upsert({
+    where: {
+      tenantId_moduleId: {
+        tenantId: tenant.id,
+        moduleId: moduleRecord.id,
+      },
+    },
+    update: {
+      enabled: parsed.data.enabled,
+      limitValue: parsed.data.limitValue === undefined ? undefined : parsed.data.limitValue,
+      source: "control_panel",
+    },
+    create: {
+      tenantId: tenant.id,
+      moduleId: moduleRecord.id,
+      enabled: parsed.data.enabled,
+      limitValue: parsed.data.limitValue ?? null,
+      source: "control_panel",
+    },
+    include: {
+      module: true,
+    },
+  })
+
+  await prisma.auditLog.create({
+    data: {
+      tenantId: tenant.id,
+      actorType: "OWNER",
+      actorId: req.auth?.userId,
+      action: "TENANT_DYNAMIC_MODULE_UPDATED",
+      entityType: "TenantModule",
+      entityId: relation.id,
+      payload: {
+        tenantId: tenant.id,
+        tenantName: tenant.name,
+        enabled: relation.enabled,
+        limitValue: relation.limitValue,
+        moduleCode: relation.module.code,
+        moduleName: relation.module.name,
+      },
+    },
+  })
+
+  return res.json({
+    ok: true,
+    item: {
+      id: relation.id,
+      enabled: relation.enabled,
+      limitValue: relation.limitValue,
+      code: relation.module.code,
+      name: relation.module.name,
+      description: relation.module.description,
+      target: relation.module.target,
     },
   })
 })
