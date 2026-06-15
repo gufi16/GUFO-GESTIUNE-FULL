@@ -1826,19 +1826,29 @@ async function restoreRecipesModule(data: SelectiveRestoreData) {
 
 async function syncRecipesModule(data: SelectiveRestoreData) {
   const tenantId = asText(data.recipes[0]?.tenantId)
-  const existingProducts = await prisma.product.findMany({
-    where: { tenantId },
-    select: { id: true, companyId: true, sku: true },
-  })
-  const existingRecipes = await prisma.recipe.findMany({
-    where: { tenantId },
-    select: { id: true, productId: true },
-  })
+  const [existingProducts, existingRecipes, existingRecipeItems] = await Promise.all([
+    prisma.product.findMany({
+      where: { tenantId },
+      select: { id: true, companyId: true, sku: true },
+    }),
+    prisma.recipe.findMany({
+      where: { tenantId },
+      select: { id: true, productId: true },
+    }),
+    prisma.recipeItem.findMany({
+      where: { recipe: { tenantId } },
+      select: { id: true, recipeId: true, ingredientId: true },
+    }),
+  ])
 
   const productByKey = new Map(existingProducts.map((item) => [scopeKey(item.companyId, item.sku), item.id]))
   const backupProductById = new Map(data.products.map((item) => [asText(item.id), item]))
   const existingRecipeProductIds = new Set(existingRecipes.map((item) => item.productId))
   const existingRecipeIds = new Set(existingRecipes.map((item) => asText(item.id)).filter(Boolean))
+  const existingRecipeItemIds = new Set(existingRecipeItems.map((item) => asText(item.id)).filter(Boolean))
+  const existingRecipeItemKeys = new Set(
+    existingRecipeItems.map((item) => scopeKey(item.recipeId, item.ingredientId)).filter(Boolean),
+  )
   const createdRecipeIdByBackupId = new Map<string, string>()
 
   let createdRecipes = 0
@@ -1865,10 +1875,14 @@ async function syncRecipesModule(data: SelectiveRestoreData) {
 
   let createdRecipeItems = 0
   for (const item of data.recipeItems) {
+    const recipeItemId = asText(item.id)
+    if (recipeItemId && existingRecipeItemIds.has(recipeItemId)) continue
     const resolvedRecipeId = createdRecipeIdByBackupId.get(asText(item.recipeId))
     const backupIngredient = backupProductById.get(asText(item.ingredientId))
     const resolvedIngredientId = backupIngredient ? productByKey.get(scopeKey(backupIngredient.companyId, backupIngredient.sku)) : null
     if (!resolvedRecipeId || !resolvedIngredientId) continue
+    const itemKey = scopeKey(resolvedRecipeId, resolvedIngredientId)
+    if (existingRecipeItemKeys.has(itemKey)) continue
     await prisma.recipeItem.create({
       data: {
         ...(item as Record<string, unknown>),
@@ -1876,6 +1890,8 @@ async function syncRecipesModule(data: SelectiveRestoreData) {
         ingredientId: resolvedIngredientId,
       } as never,
     })
+    existingRecipeItemIds.add(recipeItemId)
+    existingRecipeItemKeys.add(itemKey)
     createdRecipeItems += 1
   }
 
