@@ -1491,7 +1491,7 @@ export default function ControlPanelClientDetails() {
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Licenta si module</div>
-                  <div className="mt-1 text-base font-semibold text-[#17324D]">Pachete active si module vandabile</div>
+                  <div className="mt-1 text-base font-semibold text-[#17324D]">Rezumat scurt fara scroll pe pagina</div>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-right text-xs text-slate-500">
                   <div>{erpEnabled ? "ERP activ" : "ERP inactiv"}</div>
@@ -1499,70 +1499,42 @@ export default function ControlPanelClientDetails() {
                 </div>
               </div>
 
-              <div className="mt-3 grid gap-2 sm:grid-cols-3 xl:grid-cols-6">
+              <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                 {metricCard("Pachete baza", enabledCoreModules)}
                 {metricCard("Module fine", enabledDynamicModules)}
-                {metricCard("Locatii", licenseForm.limitLocations)}
-                {metricCard("POS", licenseForm.limitTerminals)}
-                {metricCard("KDS", licenseForm.limitKdsDevices)}
                 {metricCard("Utilizatori", client?.usersCount ?? users.length)}
+                {metricCard("Locatii / POS / KDS", `${licenseForm.limitLocations} / ${licenseForm.limitTerminals} / ${licenseForm.limitKdsDevices}`)}
               </div>
 
-              <div className="mt-3 flex flex-wrap gap-2">
-                {moduleLabels.map(([key, label]) => {
-                  const enabled = Boolean(licenseForm.modules[key])
-                  return (
-                    <span
-                      key={key}
-                      className={`inline-flex rounded-full border px-3 py-1.5 text-xs font-semibold ${enabled ? "border-[#17324D] bg-[#17324D] text-white" : "border-slate-200 bg-slate-50 text-slate-600"}`}
-                    >
-                      {label}
-                    </span>
-                  )
-                })}
-              </div>
-
-              <div className="mt-3 grid gap-2 xl:grid-cols-3">
-                {groupedDynamicModules.map((group) => (
-                  <div key={group.area} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm font-semibold text-[#17324D]">{group.label}</div>
-                      <div className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-500">
-                        {group.items.filter((item) => item.enabled).length}/{group.items.length}
-                      </div>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {group.items.map((module) => (
-                        <div
-                          key={module.code}
-                          className={`rounded-2xl border px-3 py-2 text-xs ${module.enabled ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-slate-200 bg-white text-slate-600"}`}
-                        >
-                          <div className="font-semibold">{module.name}</div>
-                          <div className="mt-1 text-[11px] opacity-80">
-                            {moduleTargetLabel(module.target)} | {moduleStatusLabel(module)}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
+              <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                Modulele vandute si configurarea completa se deschid in popup, ca sa nu mai incarce pagina clientului.
               </div>
 
               <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
                 <div className="text-sm text-slate-500">
                   {explicitlyEnabledDynamicModules} explicit si {inheritedDynamicModules} mostenite din pachet.
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab("license")
-                    setLicenseModalOpen(true)
-                  }}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2.5 text-sm font-semibold text-white"
-                >
-                  <Pencil size={15} />
-                  Configureaza licenta
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setLicenseModalOpen(true)}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"
+                  >
+                    <KeyRound size={15} />
+                    Vezi modulele
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab("license")
+                      setLicenseModalOpen(true)
+                    }}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2.5 text-sm font-semibold text-white"
+                  >
+                    <Pencil size={15} />
+                    Configureaza licenta
+                  </button>
+                </div>
               </div>
             </section>
           </div>
