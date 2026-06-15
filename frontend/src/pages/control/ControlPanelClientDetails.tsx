@@ -1486,11 +1486,9 @@ export default function ControlPanelClientDetails() {
                 )}
               </div>
             </section>
-          </div>
 
-          <div className="space-y-3">
             <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Licenta si module</div>
                   <div className="mt-1 text-base font-semibold text-[#17324D]">Pachete active si module vandabile</div>
@@ -1501,12 +1499,12 @@ export default function ControlPanelClientDetails() {
                 </div>
               </div>
 
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <div className="mt-3 grid gap-2 sm:grid-cols-3 xl:grid-cols-6">
                 {metricCard("Pachete baza", enabledCoreModules)}
                 {metricCard("Module fine", enabledDynamicModules)}
-                {metricCard("Locatii incluse", licenseForm.limitLocations)}
-                {metricCard("POS incluse", licenseForm.limitTerminals)}
-                {metricCard("KDS incluse", licenseForm.limitKdsDevices)}
+                {metricCard("Locatii", licenseForm.limitLocations)}
+                {metricCard("POS", licenseForm.limitTerminals)}
+                {metricCard("KDS", licenseForm.limitKdsDevices)}
                 {metricCard("Utilizatori", client?.usersCount ?? users.length)}
               </div>
 
@@ -1524,7 +1522,7 @@ export default function ControlPanelClientDetails() {
                 })}
               </div>
 
-              <div className="mt-3 grid gap-2 xl:grid-cols-2">
+              <div className="mt-3 grid gap-2 xl:grid-cols-3">
                 {groupedDynamicModules.map((group) => (
                   <div key={group.area} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
                     <div className="flex items-center justify-between gap-3">
@@ -1567,7 +1565,9 @@ export default function ControlPanelClientDetails() {
                 </button>
               </div>
             </section>
+          </div>
 
+          <div className="space-y-3">
             <section className="rounded-[24px] border border-slate-200 bg-white p-3 shadow-sm">
               <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Operare rapida</div>
               <div className="mt-1 text-base font-semibold text-[#17324D]">Actiuni uzuale pentru acest client</div>
