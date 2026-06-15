@@ -209,6 +209,7 @@ type DynamicModuleItem = {
 }
 
 type ClientTab = "overview" | "license" | "locations" | "users"
+type OverviewPanel = "profile" | "companies" | null
 
 const defaultModules: LicenseModules = {
   dashboard: false,
@@ -485,6 +486,7 @@ export default function ControlPanelClientDetails() {
   const [showCompanyForm, setShowCompanyForm] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [licenseModalOpen, setLicenseModalOpen] = useState(false)
+  const [overviewPanelOpen, setOverviewPanelOpen] = useState<OverviewPanel>(null)
   const [activeTab, setActiveTab] = useState<ClientTab>("overview")
   const [subdomainDraft, setSubdomainDraft] = useState("")
   const [savingSubdomain, setSavingSubdomain] = useState(false)
@@ -1279,264 +1281,82 @@ export default function ControlPanelClientDetails() {
       </section>
 
       {activeTab === "overview" ? (
-        <div ref={companySectionRef} className="grid gap-3 xl:grid-cols-[1.2fr_0.8fr]">
-          <div className="space-y-4">
-            <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Profil client</div>
-                  <div className="mt-1 text-base font-semibold text-[#17324D]">Date comerciale, portal si identificare</div>
-                </div>
-                <div className="grid gap-2 sm:grid-cols-4 lg:w-[520px]">
-                  {metricCard("Status", statusLabel(client?.status))}
-                  {metricCard("Expira", formatDate(client?.license?.expiresAt))}
-                  {metricCard("Firme ERP", companies.length)}
-                  {metricCard("Backup-uri", client?.backupHealth?.backupsCount ?? 0)}
-                </div>
+        <div ref={companySectionRef} className="grid gap-3 xl:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => setOverviewPanelOpen("profile")}
+            className="rounded-[24px] border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-slate-300"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Profil client</div>
+                <div className="mt-1 text-base font-semibold text-[#17324D]">{client?.company?.name || client?.name || "Client"}</div>
+                <div className="mt-2 text-sm text-slate-500">{client?.company?.cui || "-"} | {principalUser?.email || "-"}</div>
               </div>
+              <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClass(client?.status)}`}>
+                {statusLabel(client?.status)}
+              </span>
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              {metricCard("Expira", formatDate(client?.license?.expiresAt))}
+              {metricCard("Firme ERP", companies.length)}
+              {metricCard("Backup-uri", client?.backupHealth?.backupsCount ?? 0)}
+            </div>
+            <div className="mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Deschide fereastra profil</div>
+          </button>
 
-              <div className="mt-3 grid gap-2 xl:grid-cols-3">
-                {infoRows.map(([label, value]) => (
-                  <div key={label} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</div>
-                    <div className="mt-1 break-words text-sm font-medium text-slate-800">{value}</div>
-                  </div>
-                ))}
+          <button
+            type="button"
+            onClick={() => setOverviewPanelOpen("companies")}
+            className="rounded-[24px] border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-slate-300"
+          >
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Firme ERP</div>
+            <div className="mt-1 text-base font-semibold text-[#17324D]">Administrare firme si identitate fiscala</div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              {metricCard("Firme", companies.length)}
+              {metricCard("Implicita", companies.find((company: any) => company.isDefault)?.name || "-")}
+              {metricCard("Locatii", locations.length)}
+            </div>
+            <div className="mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Deschide fereastra firme</div>
+          </button>
+
+          <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Licenta si module</div>
+                <div className="mt-1 text-base font-semibold text-[#17324D]">Rezumat scurt, fara lista lunga in pagina</div>
               </div>
-
-              <div className="mt-3 grid gap-3 xl:grid-cols-[0.9fr_1.1fr]">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Subdomeniu</div>
-                      <div className="mt-1 text-sm font-semibold text-[#17324D]">Legatura directa catre portalul clientului</div>
-                    </div>
-                    <div className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600">
-                      {subdomainDraft.trim() || "fara-subdomeniu"}
-                    </div>
-                  </div>
-
-                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                    <input
-                      value={subdomainDraft}
-                      onChange={(e) => setSubdomainDraft(e.target.value)}
-                      placeholder="subdomeniu-client"
-                      className="h-10 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleSaveSubdomain}
-                      disabled={savingSubdomain}
-                      className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl bg-[#17324D] px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <Save size={15} />
-                      {savingSubdomain ? "Se salveaza..." : "Salveaza"}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Portal client</div>
-                  <div className="mt-1 text-sm font-semibold text-[#17324D]">Acces, export si operare rapida</div>
-                  <div className="mt-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700">
-                    {client?.portalUrl || "Portalul clientului apare dupa salvarea subdomeniului."}
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => copy(client?.portalUrl || "", "URL portal")}
-                      disabled={!client?.portalUrl}
-                      className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <Copy size={15} />
-                      Copiaza URL
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleExportClient}
-                      disabled={exportingClient || loading}
-                      className="inline-flex items-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <Download size={15} />
-                      {exportingClient ? "Se pregateste..." : "Export client"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setHistoryOpen(true)}
-                      className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700"
-                    >
-                      <History size={15} />
-                      Istoric
-                    </button>
-                  </div>
-                </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-right text-xs text-slate-500">
+                <div>{erpEnabled ? "ERP activ" : "ERP inactiv"}</div>
+                <div className="mt-1">{enabledDynamicModules} module fine active</div>
               </div>
-            </section>
+            </div>
 
-            <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Firme ERP</div>
-                  <div className="mt-1 text-base font-semibold text-[#17324D]">Lista simpla si control rapid pe firme</div>
-                </div>
-                <button
-                  type="button"
-                  onClick={openCompanyForm}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#0F2740]"
-                >
-                  <Plus size={15} />
-                  Adauga firma
-                </button>
-              </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              {metricCard("Pachete baza", enabledCoreModules)}
+              {metricCard("Module fine", enabledDynamicModules)}
+              {metricCard("Utilizatori", client?.usersCount ?? users.length)}
+              {metricCard("Locatii / POS / KDS", `${licenseForm.limitLocations} / ${licenseForm.limitTerminals} / ${licenseForm.limitKdsDevices}`)}
+            </div>
 
-              {showCompanyForm ? (
-                <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                    <input
-                      value={companyForm.name}
-                      onChange={(e) => setCompanyForm((prev) => ({ ...prev, name: e.target.value }))}
-                      placeholder="Nume firma"
-                      className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
-                    />
-                    <input
-                      value={companyForm.cui}
-                      onChange={(e) => setCompanyForm((prev) => ({ ...prev, cui: e.target.value }))}
-                      placeholder="CUI"
-                      className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
-                    />
-                    <input
-                      value={companyForm.regNo}
-                      onChange={(e) => setCompanyForm((prev) => ({ ...prev, regNo: e.target.value }))}
-                      placeholder="Nr. reg. com."
-                      className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
-                    />
-                    <input
-                      value={companyForm.email}
-                      onChange={(e) => setCompanyForm((prev) => ({ ...prev, email: e.target.value }))}
-                      placeholder="Email"
-                      className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
-                    />
-                    <input
-                      value={companyForm.phone}
-                      onChange={(e) => setCompanyForm((prev) => ({ ...prev, phone: e.target.value }))}
-                      placeholder="Telefon"
-                      className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
-                    />
-                    <input
-                      value={companyForm.address}
-                      onChange={(e) => setCompanyForm((prev) => ({ ...prev, address: e.target.value }))}
-                      placeholder="Adresa"
-                      className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
-                    />
-                  </div>
-
-                  <div className="mt-2 flex flex-wrap justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowCompanyForm(false)}
-                      className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700"
-                    >
-                      Inchide
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleCreateCompany}
-                      disabled={creatingCompany}
-                      className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <Save size={15} />
-                      {creatingCompany ? "Se salveaza..." : "Salveaza firma"}
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-
-              <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200">
-                <div className="grid grid-cols-[minmax(0,1.5fr)_120px_180px_110px] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                  <div>Firma</div>
-                  <div>CUI</div>
-                  <div>Email</div>
-                  <div>Status</div>
-                </div>
-                {companies.length ? (
-                  <div className="max-h-[260px] overflow-auto">
-                    {companies.map((company: any) => (
-                      <div
-                        key={company.id}
-                        className="grid grid-cols-[minmax(0,1.5fr)_120px_180px_110px] gap-3 border-b border-slate-100 px-4 py-2.5 text-sm last:border-b-0"
-                      >
-                        <div className="min-w-0">
-                          <div className="truncate font-semibold text-[#17324D]">{company.name}</div>
-                          <div className="truncate text-xs text-slate-500">{company.code || "Firma ERP"}</div>
-                        </div>
-                        <div className="text-slate-600">{company.cui || "-"}</div>
-                        <div className="truncate text-slate-600">{company.email || "-"}</div>
-                        <div>
-                          <span
-                            className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${company.isDefault ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}
-                          >
-                            {company.isDefault ? "Implicita" : "Activa"}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="px-4 py-6 text-sm text-slate-500">Nu exista firme configurate pentru acest client.</div>
-                )}
-              </div>
-            </section>
-
-            <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Licenta si module</div>
-                  <div className="mt-1 text-base font-semibold text-[#17324D]">Rezumat scurt fara scroll pe pagina</div>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-right text-xs text-slate-500">
-                  <div>{erpEnabled ? "ERP activ" : "ERP inactiv"}</div>
-                  <div className="mt-1">{enabledDynamicModules} module fine active</div>
-                </div>
-              </div>
-
-              <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                {metricCard("Pachete baza", enabledCoreModules)}
-                {metricCard("Module fine", enabledDynamicModules)}
-                {metricCard("Utilizatori", client?.usersCount ?? users.length)}
-                {metricCard("Locatii / POS / KDS", `${licenseForm.limitLocations} / ${licenseForm.limitTerminals} / ${licenseForm.limitKdsDevices}`)}
-              </div>
-
-              <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                Modulele vandute si configurarea completa se deschid in popup, ca sa nu mai incarce pagina clientului.
-              </div>
-
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
-                <div className="text-sm text-slate-500">
-                  {explicitlyEnabledDynamicModules} explicit si {inheritedDynamicModules} mostenite din pachet.
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setLicenseModalOpen(true)}
-                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"
-                  >
-                    <KeyRound size={15} />
-                    Vezi modulele
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveTab("license")
-                      setLicenseModalOpen(true)
-                    }}
-                    className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2.5 text-sm font-semibold text-white"
-                  >
-                    <Pencil size={15} />
-                    Configureaza licenta
-                  </button>
-                </div>
-              </div>
-            </section>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setLicenseModalOpen(true)}
+                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"
+              >
+                <KeyRound size={15} />
+                Vezi / editeaza in popup
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("license")}
+                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-700"
+              >
+                <Pencil size={15} />
+                Tab licenta
+              </button>
+            </div>
           </div>
 
           <div className="space-y-3">
@@ -1618,10 +1438,10 @@ export default function ControlPanelClientDetails() {
         </div>
       ) : null}
       {activeTab === "license" ? (
-        <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+        <section className="grid gap-4">
           <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
             <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Licenta</div>
-            <div className="mt-1 text-sm font-semibold text-[#17324D]">Stare curenta pentru ERP, POS, KDS si module</div>
+            <div className="mt-1 text-sm font-semibold text-[#17324D]">Stare curenta pentru ERP, POS, KDS si module, fara lista lunga in pagina</div>
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {metricCard("Expirare", formatDate(client?.license?.expiresAt))}
@@ -1641,7 +1461,7 @@ export default function ControlPanelClientDetails() {
                   className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2.5 text-sm font-semibold text-white"
                 >
                   <Pencil size={15} />
-                  Editeaza licenta
+                  Editeaza licenta in popup
                 </button>
                 <button
                   type="button"
@@ -1657,74 +1477,12 @@ export default function ControlPanelClientDetails() {
                   onClick={() => setLicenseModalOpen(true)}
                   className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Module fine
+                  Vezi modulele
                 </button>
               </div>
             </div>
-          </div>
-
-          <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Module vandute</div>
-            <div className="mt-1 text-sm font-semibold text-[#17324D]">Vezi rapid ce vine din pachet si ce ai activat special pe client</div>
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Pachete baza</div>
-                <div className="mt-3 grid gap-2">
-                  {moduleLabels.map(([key, label]) => {
-                    const enabled = Boolean(licenseForm.modules[key])
-                    return (
-                      <div
-                        key={key}
-                        className={`rounded-2xl border px-3 py-3 text-sm font-medium ${
-                          enabled
-                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                            : "border-slate-200 bg-white text-slate-500"
-                        }`}
-                      >
-                        {label}
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Module fine</div>
-                  <div className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-500">
-                    {enabledDynamicModules}/{dynamicModules.length}
-                  </div>
-                </div>
-
-                <div className="mt-3 space-y-3">
-                  {groupedDynamicModules.map((group) => (
-                    <div key={group.area}>
-                      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">{group.label}</div>
-                      <div className="grid gap-2">
-                        {group.items.map((module) => (
-                          <div
-                            key={module.code}
-                            className={`rounded-2xl border px-3 py-3 ${
-                              module.enabled
-                                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                : "border-slate-200 bg-white text-slate-500"
-                            }`}
-                          >
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="text-sm font-medium">{module.name}</div>
-                              <div className="text-[11px] font-semibold uppercase tracking-[0.12em] opacity-70">
-                                {moduleTargetLabel(module.target)}
-                              </div>
-                            </div>
-                            <div className="mt-1 text-xs opacity-80">{moduleStatusLabel(module)}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              Toate modulele vandute si configurarile detaliate se vad doar in popup-ul de licenta.
             </div>
           </div>
         </section>
@@ -2204,6 +1962,227 @@ export default function ControlPanelClientDetails() {
                 <Copy size={14} />
                 Copiaza
               </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {overviewPanelOpen === "profile" ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-4xl rounded-[28px] border border-slate-200 bg-white p-5 shadow-xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Profil client</div>
+                <div className="mt-1 text-xl font-semibold text-[#17324D]">Date comerciale si portal</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOverviewPanelOpen(null)}
+                className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600"
+              >
+                Inchide
+              </button>
+            </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-4">
+              {metricCard("Status", statusLabel(client?.status))}
+              {metricCard("Expira", formatDate(client?.license?.expiresAt))}
+              {metricCard("Firme ERP", companies.length)}
+              {metricCard("Backup-uri", client?.backupHealth?.backupsCount ?? 0)}
+            </div>
+
+            <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {infoRows.map(([label, value]) => (
+                <div key={label} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</div>
+                  <div className="mt-1 break-words text-sm font-medium text-slate-800">{value}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-5 grid gap-3 xl:grid-cols-[0.95fr_1.05fr]">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Subdomeniu</div>
+                    <div className="mt-1 text-sm font-semibold text-[#17324D]">Legatura directa catre portalul clientului</div>
+                  </div>
+                  <div className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600">
+                    {subdomainDraft.trim() || "fara-subdomeniu"}
+                  </div>
+                </div>
+
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                  <input
+                    value={subdomainDraft}
+                    onChange={(e) => setSubdomainDraft(e.target.value)}
+                    placeholder="subdomeniu-client"
+                    className="h-10 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSaveSubdomain}
+                    disabled={savingSubdomain}
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl bg-[#17324D] px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Save size={15} />
+                    {savingSubdomain ? "Se salveaza..." : "Salveaza"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Portal client</div>
+                <div className="mt-1 text-sm font-semibold text-[#17324D]">Acces si export</div>
+                <div className="mt-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+                  {client?.portalUrl || "Portalul clientului apare dupa salvarea subdomeniului."}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => copy(client?.portalUrl || "", "URL portal")}
+                    disabled={!client?.portalUrl}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Copy size={15} />
+                    Copiaza URL
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExportClient}
+                    disabled={exportingClient || loading}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Download size={15} />
+                    {exportingClient ? "Se pregateste..." : "Export client"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {overviewPanelOpen === "companies" ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
+          <div className="max-h-[88vh] w-full max-w-5xl overflow-y-auto rounded-[28px] border border-slate-200 bg-white p-5 shadow-xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Firme ERP</div>
+                <div className="mt-1 text-xl font-semibold text-[#17324D]">Administrare firme pentru client</div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={openCompanyForm}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2.5 text-sm font-semibold text-white"
+                >
+                  <Plus size={15} />
+                  Adauga firma
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOverviewPanelOpen(null)}
+                  className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600"
+                >
+                  Inchide
+                </button>
+              </div>
+            </div>
+
+            {showCompanyForm ? (
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                  <input
+                    value={companyForm.name}
+                    onChange={(e) => setCompanyForm((prev) => ({ ...prev, name: e.target.value }))}
+                    placeholder="Nume firma"
+                    className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+                  />
+                  <input
+                    value={companyForm.cui}
+                    onChange={(e) => setCompanyForm((prev) => ({ ...prev, cui: e.target.value }))}
+                    placeholder="CUI"
+                    className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+                  />
+                  <input
+                    value={companyForm.regNo}
+                    onChange={(e) => setCompanyForm((prev) => ({ ...prev, regNo: e.target.value }))}
+                    placeholder="Nr. reg. com."
+                    className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+                  />
+                  <input
+                    value={companyForm.email}
+                    onChange={(e) => setCompanyForm((prev) => ({ ...prev, email: e.target.value }))}
+                    placeholder="Email"
+                    className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+                  />
+                  <input
+                    value={companyForm.phone}
+                    onChange={(e) => setCompanyForm((prev) => ({ ...prev, phone: e.target.value }))}
+                    placeholder="Telefon"
+                    className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+                  />
+                  <input
+                    value={companyForm.address}
+                    onChange={(e) => setCompanyForm((prev) => ({ ...prev, address: e.target.value }))}
+                    placeholder="Adresa"
+                    className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+                  />
+                </div>
+
+                <div className="mt-2 flex flex-wrap justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowCompanyForm(false)}
+                    className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700"
+                  >
+                    Inchide
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCreateCompany}
+                    disabled={creatingCompany}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Save size={15} />
+                    {creatingCompany ? "Se salveaza..." : "Salveaza firma"}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200">
+              <div className="grid grid-cols-[minmax(0,1.5fr)_120px_180px_110px] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                <div>Firma</div>
+                <div>CUI</div>
+                <div>Email</div>
+                <div>Status</div>
+              </div>
+              {companies.length ? (
+                companies.map((company: any) => (
+                  <div
+                    key={company.id}
+                    className="grid grid-cols-[minmax(0,1.5fr)_120px_180px_110px] gap-3 border-b border-slate-100 px-4 py-2.5 text-sm last:border-b-0"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate font-semibold text-[#17324D]">{company.name}</div>
+                      <div className="truncate text-xs text-slate-500">{company.code || "Firma ERP"}</div>
+                    </div>
+                    <div className="text-slate-600">{company.cui || "-"}</div>
+                    <div className="truncate text-slate-600">{company.email || "-"}</div>
+                    <div>
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${company.isDefault ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}
+                      >
+                        {company.isDefault ? "Implicita" : "Activa"}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="px-4 py-6 text-sm text-slate-500">Nu exista firme configurate pentru acest client.</div>
+              )}
             </div>
           </div>
         </div>
