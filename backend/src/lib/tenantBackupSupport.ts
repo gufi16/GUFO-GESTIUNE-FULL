@@ -14,6 +14,8 @@ type PersistTenantBackupSnapshotInput = {
   tenantId: string
 }
 
+const AUTO_DAILY_BACKUP_LABEL = "auto-daily-tenant-snapshot"
+
 const TENANT_BACKUP_RETENTION_DAYS = Math.max(1, Number(process.env.TENANT_BACKUP_RETENTION_DAYS || 7))
 
 function sanitizeLabel(value: string) {
@@ -143,6 +145,14 @@ export async function getTenantBackupHealth(tenantId: string) {
     take: 5,
   })
 
+  const latestAutomatic = await prisma.tenantBackup.findFirst({
+    where: {
+      tenantId,
+      label: AUTO_DAILY_BACKUP_LABEL,
+    },
+    orderBy: { createdAt: "desc" },
+  })
+
   const latest = backups[0] || null
   const latestExisting = backups.find((item) => fs.existsSync(item.filePath)) || null
   const latestCounts =
@@ -163,11 +173,20 @@ export async function getTenantBackupHealth(tenantId: string) {
     (typeof latestCounts?.sales === "number" ? latestCounts.sales : 0)
 
   const status = latestExisting ? "protected" : latest ? "missing_file" : "missing_backup"
+  const latestAutomaticAt = latestAutomatic?.createdAt || null
+  const automaticBackupStatus = latestAutomaticAt
+    ? Date.now() - new Date(latestAutomaticAt).getTime() <= 36 * 60 * 60 * 1000
+      ? "fresh"
+      : "stale"
+    : "missing"
 
   return {
     backupsCount: backups.length,
+    automaticBackupStatus,
     customerCount,
     documentsCount,
+    latestAutomaticBackupAt: latestAutomaticAt,
+    latestAutomaticBackupId: latestAutomatic?.id || null,
     latestBackupAt: latest?.createdAt || null,
     latestBackupFileExists: Boolean(latestExisting),
     latestBackupId: latestExisting?.id || latest?.id || null,

@@ -20,6 +20,11 @@ type BackupItem = {
   fileExists?: boolean
 }
 
+type BackupHealth = {
+  latestAutomaticBackupAt?: string | null
+  automaticBackupStatus?: "fresh" | "stale" | "missing" | string
+}
+
 type BackupModuleSummary = {
   key: string
   label: string
@@ -167,6 +172,7 @@ function Card({
 export default function SetariBackupPage() {
   const [loading, setLoading] = useState(true)
   const [items, setItems] = useState<BackupItem[]>([])
+  const [health, setHealth] = useState<BackupHealth | null>(null)
   const [selectedBackupId, setSelectedBackupId] = useState("")
   const [availableModules, setAvailableModules] = useState<BackupModuleSummary[]>([])
   const [selectedModules, setSelectedModules] = useState<string[]>([])
@@ -201,8 +207,9 @@ export default function SetariBackupPage() {
     try {
       setLoading(true)
       setError("")
-      const data = await api<{ items?: BackupItem[] }>("/api/v1/settings/backups")
+      const data = await api<{ items?: BackupItem[]; health?: BackupHealth | null }>("/api/v1/settings/backups")
       const nextItems = Array.isArray(data?.items) ? data.items : []
+      setHealth(data?.health || null)
       setItems(nextItems)
       setSelectedBackupId((current) => {
         if (current && nextItems.some((item) => item.id === current && item.fileExists !== false)) return current
@@ -484,7 +491,23 @@ export default function SetariBackupPage() {
         <DocumentMetric title="Backup-uri" value={loading ? "..." : String(items.length)} tone="slate" />
         <DocumentMetric title="Ultimul backup" value={latestAvailableBackup ? fmtDate(latestAvailableBackup.createdAt) : "-"} tone="blue" />
         <DocumentMetric title="Spatiu" value={loading ? "..." : fmtBytes(totalStoredSize)} tone="emerald" />
-        <DocumentMetric title="Sursa cloud" value={selectedBackup ? fmtDate(selectedBackup.createdAt) : "-"} tone="amber" />
+        <DocumentMetric title="Ultimul automat" value={health?.latestAutomaticBackupAt ? fmtDate(health.latestAutomaticBackupAt) : "-"} tone="amber" />
+      </div>
+
+      <div
+        className={`rounded-2xl border px-4 py-3 text-sm ${
+          health?.automaticBackupStatus === "fresh"
+            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+            : health?.automaticBackupStatus === "stale"
+              ? "border-amber-200 bg-amber-50 text-amber-700"
+              : "border-rose-200 bg-rose-50 text-rose-700"
+        }`}
+      >
+        {health?.automaticBackupStatus === "fresh"
+          ? `Backupul automat este la zi. Ultimul snapshot automat: ${fmtDate(health.latestAutomaticBackupAt || "")}.`
+          : health?.automaticBackupStatus === "stale"
+            ? `Backupul automat este intarziat. Ultimul snapshot automat: ${fmtDate(health?.latestAutomaticBackupAt || "")}.`
+            : "Nu exista inca backup automat pentru acest tenant."}
       </div>
 
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}

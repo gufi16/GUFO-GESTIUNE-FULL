@@ -7,7 +7,7 @@ import { Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { ensureTenantBackupDir } from "../lib/tenantExport"
-import { persistTenantBackupSnapshot } from "../lib/tenantBackupSupport"
+import { getTenantBackupHealth, persistTenantBackupSnapshot } from "../lib/tenantBackupSupport"
 import { EXCHANGE_EXPORTABLE_MODULES, exportTenantDataWorkbookZip, importTenantDataWorkbookZip } from "../lib/backupDataExchange"
 import {
   describeTenantBackupModulesFromFile,
@@ -114,9 +114,11 @@ router.get("/api/v1/settings/backups", async (req: AuthedRequest, res) => {
   }
 
   const items = await cleanupMissingTenantBackupEntries(tenantId)
+  const health = await getTenantBackupHealth(tenantId)
 
   return res.json({
     ok: true,
+    health,
     items: items.map((item) => ({
       ...item,
       fileExists: true,
