@@ -10,6 +10,7 @@ export function hasGlobalControlPanelAccess(req: AuthedRequest) {
   const role = req.auth?.role
   const email = String(req.auth?.email || "").trim().toLowerCase()
   const controlPanelEmail = normalizedControlPanelEmail()
+  const controlPanelUserId = String(req.auth?.userId || "").trim()
 
   if (!req.auth?.controlPanel || req.auth?.tenantId) {
     return false
@@ -19,7 +20,13 @@ export function hasGlobalControlPanelAccess(req: AuthedRequest) {
     return false
   }
 
-  return !controlPanelEmail || email === controlPanelEmail
+  if (!controlPanelEmail || email === controlPanelEmail) {
+    return true
+  }
+
+  // Allow real DB-backed owner/admin accounts that were explicitly authenticated
+  // for control panel access, even when the legacy fixed env email differs.
+  return controlPanelUserId !== "control-panel-owner"
 }
 
 export function hasGlobalControlPanelOwnerAccess(req: AuthedRequest) {

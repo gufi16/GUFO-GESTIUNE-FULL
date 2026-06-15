@@ -499,25 +499,67 @@ router.post("/api/v1/admin/auth/login", async (req, res) => {
   )
 
   if (!controlEmail || !controlPassword) {
-    return res.status(503).json({ ok: false, error: "Control Panel auth is not configured" })
+    // Keep going: a real OWNER account from the database may still authenticate.
   }
 
-  if (parsed.data.email.trim().toLowerCase() !== controlEmail || parsed.data.password !== controlPassword) {
-    return res.status(401).json({ ok: false, error: "Invalid credentials" })
+  const loginEmail = parsed.data.email.trim().toLowerCase()
+  const loginPassword = parsed.data.password
+  const matchesFixedControlAccount =
+    Boolean(controlEmail && controlPassword) &&
+    loginEmail === controlEmail &&
+    loginPassword === controlPassword
+
+  let controlUserId: string | null = null
+  let controlRole: string = "OWNER"
+  let controlSessionEmail = controlEmail || loginEmail
+
+  if (!matchesFixedControlAccount) {
+    const candidates = await prisma.user.findMany({
+      where: {
+        email: loginEmail,
+        isActive: true,
+        role: "OWNER",
+      },
+      orderBy: { createdAt: "desc" },
+    })
+
+    let matchedOwner: (typeof candidates)[number] | null = null
+    for (const candidate of candidates) {
+      const ok = await verifySecret(loginPassword, candidate.passwordHash)
+      if (ok) {
+        matchedOwner = candidate
+        break
+      }
+    }
+
+    if (!matchedOwner) {
+      return res.status(401).json({ ok: false, error: "Invalid credentials" })
+    }
+
+    if (matchedOwner.mustChangePassword) {
+      return res.status(403).json({
+        ok: false,
+        error: "Contul necesita schimbarea parolei inainte de autentificare.",
+      })
+    }
+
+    controlUserId = matchedOwner.id
+    controlRole = matchedOwner.role
+    controlSessionEmail = matchedOwner.email
   }
 
   const token = signAccessToken({
     tenantId: null,
-    userId: "control-panel-owner",
-    role: "OWNER",
-    email: controlEmail,
+    userId: controlUserId || "control-panel-owner",
+    role: controlRole,
+    email: controlSessionEmail,
     controlPanel: true,
     sessionId: (
       await createWebSession({
         tenantId: null,
-        userId: null,
-        role: "OWNER",
-        email: controlEmail,
+        userId: controlUserId,
+        role: controlRole,
+        email: controlSessionEmail,
         controlPanel: true,
       })
     ).id,
