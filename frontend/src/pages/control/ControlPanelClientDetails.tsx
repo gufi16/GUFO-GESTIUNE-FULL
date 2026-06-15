@@ -4,7 +4,6 @@ import {
   Copy,
   Download,
   Filter,
-  Globe,
   History,
   KeyRound,
   MapPin,
@@ -517,7 +516,7 @@ export default function ControlPanelClientDetails() {
     limitKdsDevices: 1,
     modules: defaultModules,
   })
-  const companySectionRef = useRef<HTMLElement | null>(null)
+  const companySectionRef = useRef<HTMLDivElement | null>(null)
 
   async function load() {
     try {
@@ -1280,117 +1279,7 @@ export default function ControlPanelClientDetails() {
       </section>
 
       {activeTab === "overview" ? (
-        <section ref={companySectionRef} className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
-          <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Acces web</div>
-                <div className="mt-1 text-sm font-semibold text-[#17324D]">Subdomeniu si portal client</div>
-              </div>
-              <Globe size={16} className="text-slate-400" />
-            </div>
-
-            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-              <div className="flex min-w-0 flex-1 items-center rounded-2xl border border-slate-200 bg-slate-50 px-3">
-                <input
-                  value={subdomainDraft}
-                  onChange={(e) => setSubdomainDraft(e.target.value)}
-                  placeholder="coffee-cup"
-                  className="h-11 min-w-0 flex-1 bg-transparent text-sm text-slate-700 outline-none"
-                />
-                <span className="pl-2 text-xs text-slate-400">.gufo.ink</span>
-              </div>
-              <button
-                type="button"
-                onClick={handleSaveSubdomain}
-                disabled={savingSubdomain}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#17324D] px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
-              >
-                <Save size={15} />
-                {savingSubdomain ? "Se salveaza..." : "Salveaza"}
-              </button>
-            </div>
-
-            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Portal</div>
-              <div className="mt-2 break-all text-sm text-slate-700">{client?.portalUrl || "Portalul apare dupa salvarea subdomeniului."}</div>
-              {client?.portalUrl ? (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => copy(String(client.portalUrl), "URL portal")}
-                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700"
-                  >
-                    <Copy size={14} />
-                    Copiaza URL
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div className="min-w-0">
-                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Firme client</div>
-                <div className="mt-1 text-sm font-semibold text-[#17324D]">Administrezi firmele ERP dintr-un loc simplu</div>
-                <div className="mt-1 text-sm text-slate-500">Adminul clientului poate alege firma la login si lucra separat pe fiecare entitate.</div>
-              </div>
-              <div className="flex shrink-0 flex-wrap items-center gap-3">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-                  <span className="font-semibold text-[#17324D]">{companies.length}</span> firme
-                </div>
-                <button
-                  type="button"
-                  onClick={openCompanyForm}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#0F2740] disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <Plus size={15} />
-                  Adauga firma
-                </button>
-              </div>
-            </div>
-
-            {showCompanyForm ? (
-              <div className="mt-4 space-y-3">
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  <input value={companyForm.name} onChange={(e) => setCompanyForm((prev) => ({ ...prev, name: e.target.value }))} placeholder="Nume firma noua" className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]" />
-                  <input value={companyForm.cui} onChange={(e) => setCompanyForm((prev) => ({ ...prev, cui: e.target.value }))} placeholder="CUI" className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]" />
-                  <input value={companyForm.regNo} onChange={(e) => setCompanyForm((prev) => ({ ...prev, regNo: e.target.value }))} placeholder="Reg. com." className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]" />
-                  <input value={companyForm.email} onChange={(e) => setCompanyForm((prev) => ({ ...prev, email: e.target.value }))} placeholder="Email firma" className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]" />
-                  <input value={companyForm.phone} onChange={(e) => setCompanyForm((prev) => ({ ...prev, phone: e.target.value }))} placeholder="Telefon" className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]" />
-                  <input value={companyForm.address} onChange={(e) => setCompanyForm((prev) => ({ ...prev, address: e.target.value }))} placeholder="Adresa" className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]" />
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleCreateCompany}
-                    disabled={creatingCompany}
-                    className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#0F2740] disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <Plus size={15} />
-                    {creatingCompany ? "Se adauga firma..." : "Salveaza firma"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowCompanyForm(false)}
-                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700"
-                  >
-                    Renunta
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-                Apasa pe <span className="font-semibold text-[#17324D]">Adauga firma</span> daca acest client lucreaza cu mai multe entitati.
-              </div>
-            )}
-          </div>
-        </section>
-      ) : null}
-
-      {activeTab === "overview" ? (
-      <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+      <div ref={companySectionRef} className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
         <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <div>
