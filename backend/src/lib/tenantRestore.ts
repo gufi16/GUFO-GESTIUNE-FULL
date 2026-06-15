@@ -511,6 +511,10 @@ function ensureBackupBelongsToTenant(tenantId: string, payload: unknown) {
   }
 }
 
+function toErrorMessage(error: unknown) {
+  return error instanceof Error && error.message ? error.message : String(error)
+}
+
 function countPayloadEntries(payload: unknown, keys: readonly string[]) {
   return keys.reduce((sum, key) => sum + asArray(payload && typeof payload === "object" ? (payload as RestorableRecord)[key] : []).length, 0)
 }
@@ -2392,112 +2396,116 @@ export async function restoreTenantBackupSelectionFromFile(
   }
 
   for (const key of requested) {
-    if (key === "company") {
-      result.company = mode === "sync_missing" ? await syncCompanyModule(data) : await restoreCompanyModule(data)
-      continue
-    }
-    if (key === "users") {
-      result.users = mode === "sync_missing" ? await syncUsersModule(data) : await restoreUsersModule(data, tenantId)
-      continue
-    }
-    if (key === "customers") {
-      result.customers = mode === "sync_missing" ? await syncCustomersModule(data) : await restoreCustomersModule(data)
-      continue
-    }
-    if (key === "suppliers") {
-      result.suppliers = mode === "sync_missing" ? await syncSuppliersModule(data) : await restoreSuppliersModule(data)
-      continue
-    }
-    if (key === "locations") {
-      result.locations = mode === "sync_missing" ? await syncLocationsModule(data) : await restoreLocationsModule(data)
-      continue
-    }
-    if (key === "departments") {
-      result.departments = mode === "sync_missing" ? await syncDepartmentsModule(data) : await restoreDepartmentsModule(data)
-      continue
-    }
-    if (key === "categories") {
-      result.categories = mode === "sync_missing" ? await syncCategoriesModule(data) : await restoreCategoriesModule(data)
-      continue
-    }
-    if (key === "uoms") {
-      result.uoms = mode === "sync_missing" ? await syncUomsModule(data) : await restoreUomsModule(data)
-      continue
-    }
-    if (key === "vat_rates") {
-      result.vatRates = mode === "sync_missing" ? await syncVatRatesModule(data) : await restoreVatRatesModule(data)
-      continue
-    }
-    if (key === "catalog") {
-      result.catalog = mode === "sync_missing" ? await syncCatalogModule(data) : await restoreCatalogModule(data)
-      continue
-    }
-    if (key === "products") {
-      result.products = mode === "sync_missing" ? await syncProductsModule(data) : await restoreProductsModule(data)
-      continue
-    }
-    if (key === "recipes") {
-      result.recipes = mode === "sync_missing" ? await syncRecipesModule(data) : await restoreRecipesModule(data)
-      continue
-    }
-    if (key === "documents") {
-      result.documents = mode === "sync_missing" ? await syncDocumentsModule(data) : await restoreDocumentsModule(data)
-      continue
-    }
-    if (key === "documents_purchase_receipts") {
-      result.documentsPurchaseReceipts = mode === "sync_missing" ? await syncPurchaseReceiptsModule(data) : await restorePurchaseReceiptsModule(data)
-      continue
-    }
-    if (key === "documents_transfers") {
-      result.documentsTransfers = mode === "sync_missing" ? await syncTransferDocsModule(data) : await restoreTransferDocsModule(data)
-      continue
-    }
-    if (key === "documents_inventory") {
-      result.documentsInventory = mode === "sync_missing" ? await syncInventoryDocsModule(data) : await restoreInventoryDocsModule(data)
-      continue
-    }
-    if (key === "documents_minutes") {
-      result.documentsMinutes = mode === "sync_missing" ? await syncMinutesDocsModule(data) : await restoreMinutesDocsModule(data)
-      continue
-    }
-    if (key === "documents_production") {
-      result.documentsProduction = mode === "sync_missing" ? await syncProductionDocsModule(data) : await restoreProductionDocsModule(data)
-      continue
-    }
-    if (key === "documents_sales") {
-      result.documentsSales = mode === "sync_missing" ? await syncSalesModule(data) : await restoreSalesModule(data)
-      continue
-    }
-    if (key === "documents_consumption") {
-      result.documentsConsumption = mode === "sync_missing" ? await syncConsumptionDocsModule(data) : await restoreConsumptionDocsModule(data)
-      continue
-    }
-    if (key === "documents_sales_invoices") {
-      result.documentsSalesInvoices = mode === "sync_missing" ? await syncSalesInvoicesModule(data) : await restoreSalesInvoicesModule(data)
-      continue
-    }
-    if (key === "documents_external_orders") {
-      result.documentsExternalOrders = mode === "sync_missing" ? await syncExternalOrdersModule(data) : await restoreExternalOrdersModule(data)
-      continue
-    }
-    if (key === "documents_sale_drafts") {
-      result.documentsSaleDrafts = mode === "sync_missing" ? await syncSaleDraftsModule(data) : await restoreSaleDraftsModule(data)
-      continue
-    }
-    if (key === "documents_kitchen_tickets") {
-      result.documentsKitchenTickets = mode === "sync_missing" ? await syncKitchenTicketsModule(data) : await restoreKitchenTicketsModule(data)
-      continue
-    }
-    if (key === "documents_stock") {
-      result.documentsStock = mode === "sync_missing" ? await syncStockModule(data) : await restoreStockModule(data)
-      continue
-    }
-    if (key === "files") {
-      const uploadRestore = restoreUploadFilesFromZip(zip, { overwriteExisting: mode !== "sync_missing" })
-      result.files = {
-        restoredUploadFiles: uploadRestore.restoredFiles,
-        skippedExistingUploadFiles: uploadRestore.skippedExistingFiles,
+    try {
+      if (key === "company") {
+        result.company = mode === "sync_missing" ? await syncCompanyModule(data) : await restoreCompanyModule(data)
+        continue
       }
+      if (key === "users") {
+        result.users = mode === "sync_missing" ? await syncUsersModule(data) : await restoreUsersModule(data, tenantId)
+        continue
+      }
+      if (key === "customers") {
+        result.customers = mode === "sync_missing" ? await syncCustomersModule(data) : await restoreCustomersModule(data)
+        continue
+      }
+      if (key === "suppliers") {
+        result.suppliers = mode === "sync_missing" ? await syncSuppliersModule(data) : await restoreSuppliersModule(data)
+        continue
+      }
+      if (key === "locations") {
+        result.locations = mode === "sync_missing" ? await syncLocationsModule(data) : await restoreLocationsModule(data)
+        continue
+      }
+      if (key === "departments") {
+        result.departments = mode === "sync_missing" ? await syncDepartmentsModule(data) : await restoreDepartmentsModule(data)
+        continue
+      }
+      if (key === "categories") {
+        result.categories = mode === "sync_missing" ? await syncCategoriesModule(data) : await restoreCategoriesModule(data)
+        continue
+      }
+      if (key === "uoms") {
+        result.uoms = mode === "sync_missing" ? await syncUomsModule(data) : await restoreUomsModule(data)
+        continue
+      }
+      if (key === "vat_rates") {
+        result.vatRates = mode === "sync_missing" ? await syncVatRatesModule(data) : await restoreVatRatesModule(data)
+        continue
+      }
+      if (key === "catalog") {
+        result.catalog = mode === "sync_missing" ? await syncCatalogModule(data) : await restoreCatalogModule(data)
+        continue
+      }
+      if (key === "products") {
+        result.products = mode === "sync_missing" ? await syncProductsModule(data) : await restoreProductsModule(data)
+        continue
+      }
+      if (key === "recipes") {
+        result.recipes = mode === "sync_missing" ? await syncRecipesModule(data) : await restoreRecipesModule(data)
+        continue
+      }
+      if (key === "documents") {
+        result.documents = mode === "sync_missing" ? await syncDocumentsModule(data) : await restoreDocumentsModule(data)
+        continue
+      }
+      if (key === "documents_purchase_receipts") {
+        result.documentsPurchaseReceipts = mode === "sync_missing" ? await syncPurchaseReceiptsModule(data) : await restorePurchaseReceiptsModule(data)
+        continue
+      }
+      if (key === "documents_transfers") {
+        result.documentsTransfers = mode === "sync_missing" ? await syncTransferDocsModule(data) : await restoreTransferDocsModule(data)
+        continue
+      }
+      if (key === "documents_inventory") {
+        result.documentsInventory = mode === "sync_missing" ? await syncInventoryDocsModule(data) : await restoreInventoryDocsModule(data)
+        continue
+      }
+      if (key === "documents_minutes") {
+        result.documentsMinutes = mode === "sync_missing" ? await syncMinutesDocsModule(data) : await restoreMinutesDocsModule(data)
+        continue
+      }
+      if (key === "documents_production") {
+        result.documentsProduction = mode === "sync_missing" ? await syncProductionDocsModule(data) : await restoreProductionDocsModule(data)
+        continue
+      }
+      if (key === "documents_sales") {
+        result.documentsSales = mode === "sync_missing" ? await syncSalesModule(data) : await restoreSalesModule(data)
+        continue
+      }
+      if (key === "documents_consumption") {
+        result.documentsConsumption = mode === "sync_missing" ? await syncConsumptionDocsModule(data) : await restoreConsumptionDocsModule(data)
+        continue
+      }
+      if (key === "documents_sales_invoices") {
+        result.documentsSalesInvoices = mode === "sync_missing" ? await syncSalesInvoicesModule(data) : await restoreSalesInvoicesModule(data)
+        continue
+      }
+      if (key === "documents_external_orders") {
+        result.documentsExternalOrders = mode === "sync_missing" ? await syncExternalOrdersModule(data) : await restoreExternalOrdersModule(data)
+        continue
+      }
+      if (key === "documents_sale_drafts") {
+        result.documentsSaleDrafts = mode === "sync_missing" ? await syncSaleDraftsModule(data) : await restoreSaleDraftsModule(data)
+        continue
+      }
+      if (key === "documents_kitchen_tickets") {
+        result.documentsKitchenTickets = mode === "sync_missing" ? await syncKitchenTicketsModule(data) : await restoreKitchenTicketsModule(data)
+        continue
+      }
+      if (key === "documents_stock") {
+        result.documentsStock = mode === "sync_missing" ? await syncStockModule(data) : await restoreStockModule(data)
+        continue
+      }
+      if (key === "files") {
+        const uploadRestore = restoreUploadFilesFromZip(zip, { overwriteExisting: mode !== "sync_missing" })
+        result.files = {
+          restoredUploadFiles: uploadRestore.restoredFiles,
+          skippedExistingUploadFiles: uploadRestore.skippedExistingFiles,
+        }
+      }
+    } catch (error: unknown) {
+      throw new Error(`Sync module failed [${key}]: ${toErrorMessage(error)}`)
     }
   }
 
