@@ -199,10 +199,14 @@ type DynamicModuleItem = {
   name: string
   description?: string | null
   target?: string | null
+  area?: string | null
   enabled?: boolean
   limitValue?: number | null
   relationId?: string | null
   source?: string | null
+  defaultEnabled?: boolean
+  overrideEnabled?: boolean | null
+  inheritedFrom?: string[]
 }
 
 type ClientTab = "overview" | "license" | "locations" | "users"
@@ -411,6 +415,40 @@ function moduleLabelsCount(modules: LicenseModules) {
   return Object.values(modules).filter(Boolean).length
 }
 
+function moduleAreaLabel(area?: string | null) {
+  switch (area) {
+    case "catalog":
+      return "Catalog"
+    case "settings":
+      return "Setari"
+    case "stock":
+      return "Stoc"
+    case "documents":
+      return "Documente"
+    case "fiscal":
+      return "Fiscal"
+    case "reports":
+      return "Rapoarte"
+    case "pos":
+      return "POS"
+    default:
+      return "Module"
+  }
+}
+
+function moduleTargetLabel(target?: string | null) {
+  if (target === "POS") return "POS"
+  if (target === "BOTH") return "ERP + POS"
+  return "ERP"
+}
+
+function moduleStatusLabel(module: DynamicModuleItem) {
+  if (module.enabled && module.overrideEnabled) return "Activ explicit"
+  if (module.enabled && module.defaultEnabled) return "Activ din pachet"
+  if (!module.enabled && module.overrideEnabled === false) return "Oprit explicit"
+  return "Inactiv"
+}
+
 export default function ControlPanelClientDetails() {
   const navigate = useNavigate()
   const { id } = useParams()
@@ -559,7 +597,28 @@ export default function ControlPanelClientDetails() {
     })
   }, [companies, users])
   const enabledDynamicModules = dynamicModules.filter((module) => module.enabled).length
-  const enabledLicenseModules = moduleLabelsCount(licenseForm.modules) + enabledDynamicModules
+  const enabledCoreModules = moduleLabelsCount(licenseForm.modules)
+  const explicitlyEnabledDynamicModules = dynamicModules.filter((module) => module.enabled && module.overrideEnabled).length
+  const inheritedDynamicModules = dynamicModules.filter(
+    (module) => module.enabled && module.defaultEnabled && !module.overrideEnabled,
+  ).length
+  const totalEnabledModules = enabledCoreModules + enabledDynamicModules
+  const groupedDynamicModules = useMemo(() => {
+    const groups = new Map<string, DynamicModuleItem[]>()
+    for (const module of dynamicModules) {
+      const key = module.area || "other"
+      const list = groups.get(key) || []
+      list.push(module)
+      groups.set(key, list)
+    }
+    return Array.from(groups.entries())
+      .map(([area, items]) => ({
+        area,
+        label: moduleAreaLabel(area),
+        items: [...items].sort((left, right) => left.name.localeCompare(right.name, "ro")),
+      }))
+      .sort((left, right) => left.label.localeCompare(right.label, "ro"))
+  }, [dynamicModules])
   const canDeleteClient = client?.status && client.status !== "active"
   const filteredAuditLogs = useMemo(() => {
     return auditLogs.filter((entry) => {
@@ -1213,7 +1272,7 @@ export default function ControlPanelClientDetails() {
           </div>
           <div className="flex flex-wrap gap-2">
             {tabButton("General", activeTab === "overview", () => setActiveTab("overview"))}
-            {tabButton("Licenta", activeTab === "license", () => setActiveTab("license"), enabledLicenseModules)}
+            {tabButton("Licenta", activeTab === "license", () => setActiveTab("license"), totalEnabledModules)}
             {tabButton("Locatii", activeTab === "locations", () => setActiveTab("locations"), locations.length)}
             {tabButton("Utilizatori", activeTab === "users", () => setActiveTab("users"), users.length)}
           </div>
@@ -1444,17 +1503,17 @@ export default function ControlPanelClientDetails() {
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-right text-xs text-slate-500">
               <div>{erpEnabled ? "ERP activ" : "ERP inactiv"}</div>
-              <div className="mt-1">{enabledDynamicModules} module extra active</div>
+              <div className="mt-1">{enabledDynamicModules} module fine active</div>
             </div>
           </div>
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             {metricCard("Expira", licenseForm.expiresAt || "-")}
-            {metricCard("Module active", enabledLicenseModules)}
+            {metricCard("Pachete baza", enabledCoreModules)}
             {metricCard("Locatii incluse", licenseForm.limitLocations)}
             {metricCard("POS incluse", licenseForm.limitTerminals)}
             {metricCard("KDS incluse", licenseForm.limitKdsDevices)}
-            {metricCard("Module extra", enabledDynamicModules)}
+            {metricCard("Module fine", enabledDynamicModules)}
           </div>
 
           <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -1473,23 +1532,51 @@ export default function ControlPanelClientDetails() {
                 </div>
               )
             })}
-            {dynamicModules.map((module) => (
-              <div
-                key={module.code}
-                className={`rounded-2xl border px-3 py-3 text-left text-sm font-medium ${
-                  module.enabled
-                    ? "border-[#F39C12]/40 bg-[#FFF1D6] text-[#B56800]"
-                    : "border-slate-200 bg-slate-50 text-slate-600"
-                }`}
-              >
-                <div>{module.name}</div>
-                <div className="mt-1 text-xs opacity-70">{module.target === "POS" ? "POS" : module.target === "BOTH" ? "ERP + POS" : "ERP"}</div>
+          </div>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            {groupedDynamicModules.map((group) => (
+              <div key={group.area} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-sm font-semibold text-[#17324D]">{group.label}</div>
+                  <div className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-500">
+                    {group.items.filter((item) => item.enabled).length}/{group.items.length}
+                  </div>
+                </div>
+
+                <div className="mt-3 space-y-2">
+                  {group.items.map((module) => (
+                    <div
+                      key={module.code}
+                      className={`rounded-2xl border px-3 py-3 ${
+                        module.enabled
+                          ? "border-[#F39C12]/40 bg-[#FFF1D6]"
+                          : "border-slate-200 bg-white"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-semibold text-slate-900">{module.name}</div>
+                          <div className="mt-1 text-xs text-slate-500">{module.description || "Modul configurabil pe client."}</div>
+                        </div>
+                        <div className="rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-500">
+                          {moduleTargetLabel(module.target)}
+                        </div>
+                      </div>
+                      <div className="mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                        {moduleStatusLabel(module)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
-            <div className="text-sm text-slate-500">Editeaza modulele si limitele din popup-ul dedicat, fara sa aglomerezi pagina.</div>
+            <div className="text-sm text-slate-500">
+              {explicitlyEnabledDynamicModules} activat explicit pe client, {inheritedDynamicModules} mostenit din pachet.
+            </div>
             <button
               type="button"
               onClick={() => {
@@ -1545,7 +1632,7 @@ export default function ControlPanelClientDetails() {
               {metricCard("Locatii", licenseForm.limitLocations)}
               {metricCard("POS", licenseForm.limitTerminals)}
               {metricCard("KDS", licenseForm.limitKdsDevices)}
-              {metricCard("Module", enabledLicenseModules)}
+              {metricCard("Module fine", enabledDynamicModules)}
             </div>
 
             <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -1573,44 +1660,74 @@ export default function ControlPanelClientDetails() {
                   onClick={() => setLicenseModalOpen(true)}
                   className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Module extra
+                  Module fine
                 </button>
               </div>
             </div>
           </div>
 
           <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Module active</div>
-            <div className="mt-1 text-sm font-semibold text-[#17324D]">Vizibilitate rapida pe ce este vandut si ce este oprit pe client</div>
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Module vandute</div>
+            <div className="mt-1 text-sm font-semibold text-[#17324D]">Vezi rapid ce vine din pachet si ce ai activat special pe client</div>
 
-            <div className="mt-4 grid gap-2 sm:grid-cols-2">
-              {moduleLabels.map(([key, label]) => {
-                const enabled = Boolean(licenseForm.modules[key])
-                return (
-                  <div
-                    key={key}
-                    className={`rounded-2xl border px-3 py-3 text-sm font-medium ${
-                      enabled
-                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                        : "border-slate-200 bg-slate-50 text-slate-500"
-                    }`}
-                  >
-                    {label}
-                  </div>
-                )
-              })}
-              {dynamicModules.map((module) => (
-                <div
-                  key={module.code}
-                  className={`rounded-2xl border px-3 py-3 text-sm font-medium ${
-                    module.enabled
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                      : "border-slate-200 bg-slate-50 text-slate-500"
-                  }`}
-                >
-                  {module.name}
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Pachete baza</div>
+                <div className="mt-3 grid gap-2">
+                  {moduleLabels.map(([key, label]) => {
+                    const enabled = Boolean(licenseForm.modules[key])
+                    return (
+                      <div
+                        key={key}
+                        className={`rounded-2xl border px-3 py-3 text-sm font-medium ${
+                          enabled
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                            : "border-slate-200 bg-white text-slate-500"
+                        }`}
+                      >
+                        {label}
+                      </div>
+                    )
+                  })}
                 </div>
-              ))}
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Module fine</div>
+                  <div className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-500">
+                    {enabledDynamicModules}/{dynamicModules.length}
+                  </div>
+                </div>
+
+                <div className="mt-3 space-y-3">
+                  {groupedDynamicModules.map((group) => (
+                    <div key={group.area}>
+                      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">{group.label}</div>
+                      <div className="grid gap-2">
+                        {group.items.map((module) => (
+                          <div
+                            key={module.code}
+                            className={`rounded-2xl border px-3 py-3 ${
+                              module.enabled
+                                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                : "border-slate-200 bg-white text-slate-500"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="text-sm font-medium">{module.name}</div>
+                              <div className="text-[11px] font-semibold uppercase tracking-[0.12em] opacity-70">
+                                {moduleTargetLabel(module.target)}
+                              </div>
+                            </div>
+                            <div className="mt-1 text-xs opacity-80">{moduleStatusLabel(module)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -2101,8 +2218,8 @@ export default function ControlPanelClientDetails() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Licenta si module</div>
-                <div className="mt-1 text-xl font-semibold text-[#17324D]">Configurezi ERP, POS, KDS si limitele clientului</div>
-                <div className="mt-1 text-sm text-slate-500">Pastrez logica existenta, doar o mut intr-un popup mai usor de folosit.</div>
+                <div className="mt-1 text-xl font-semibold text-[#17324D]">Configurezi pachetul de baza si modulele fine ale clientului</div>
+                <div className="mt-1 text-sm text-slate-500">Intai stabilesti pachetul mare, apoi activezi sau opresti modulele concrete pe care le vinzi clientului.</div>
               </div>
               <button
                 type="button"
@@ -2178,22 +2295,57 @@ export default function ControlPanelClientDetails() {
                   </button>
                 )
               })}
+            </div>
 
-              {dynamicModules.map((module) => (
-                <button
-                  key={module.code}
-                  type="button"
-                  onClick={() => handleToggleDynamicModule(module)}
-                  disabled={moduleBusyCode === module.code}
-                  className={`rounded-2xl border px-3 py-3 text-left text-sm font-medium transition ${
-                    module.enabled
-                      ? "border-[#F39C12]/40 bg-[#FFF1D6] text-[#B56800]"
-                      : "border-slate-200 bg-slate-50 text-slate-600"
-                  } disabled:cursor-not-allowed disabled:opacity-60`}
-                >
-                  <div>{moduleBusyCode === module.code ? "Se actualizeaza..." : module.name}</div>
-                  <div className="mt-1 text-xs opacity-70">{module.target === "POS" ? "POS" : module.target === "BOTH" ? "ERP + POS" : "ERP"}</div>
-                </button>
+            <div className="mt-5 grid gap-4 lg:grid-cols-2">
+              {groupedDynamicModules.map((group) => (
+                <div key={group.area} className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-[#17324D]">{group.label}</div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        {group.items.filter((item) => item.enabled).length} din {group.items.length} active
+                      </div>
+                    </div>
+                    <div className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-500">
+                      {group.items.filter((item) => item.overrideEnabled).length} explicite
+                    </div>
+                  </div>
+
+                  <div className="mt-3 grid gap-2">
+                    {group.items.map((module) => (
+                      <button
+                        key={module.code}
+                        type="button"
+                        onClick={() => handleToggleDynamicModule(module)}
+                        disabled={moduleBusyCode === module.code}
+                        className={`rounded-2xl border px-3 py-3 text-left transition ${
+                          module.enabled
+                            ? "border-[#F39C12]/40 bg-[#FFF1D6] text-[#17324D]"
+                            : "border-slate-200 bg-white text-slate-700"
+                        } disabled:cursor-not-allowed disabled:opacity-60`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-semibold">
+                              {moduleBusyCode === module.code ? "Se actualizeaza..." : module.name}
+                            </div>
+                            <div className="mt-1 text-xs text-slate-500">{module.description || "Modul configurabil pe client."}</div>
+                          </div>
+                          <div className="rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-500">
+                            {moduleTargetLabel(module.target)}
+                          </div>
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em]">
+                          <span>{moduleStatusLabel(module)}</span>
+                          {Array.isArray(module.inheritedFrom) && module.inheritedFrom.length ? (
+                            <span className="text-slate-400">Din: {module.inheritedFrom.join(", ")}</span>
+                          ) : null}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
 
