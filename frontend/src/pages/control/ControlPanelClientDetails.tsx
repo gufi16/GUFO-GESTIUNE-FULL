@@ -1259,7 +1259,7 @@ export default function ControlPanelClientDetails() {
         </div>
       ) : (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-          Ultimul backup valid: {formatDate(client?.backupHealth?.latestBackupAt)} · snapshot-uri totale {client?.backupHealth?.backupsCount ?? 0}
+          Ultimul backup valid: {formatDate(client?.backupHealth?.latestBackupAt)}  -  snapshot-uri totale {client?.backupHealth?.backupsCount ?? 0}
         </div>
       )}
 
@@ -1279,236 +1279,370 @@ export default function ControlPanelClientDetails() {
       </section>
 
       {activeTab === "overview" ? (
-      <div ref={companySectionRef} className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
-        <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Informatii client</div>
-              <div className="mt-1 text-sm font-semibold text-[#17324D]">Date comerciale si contact</div>
-            </div>
-            <div className="text-xs text-slate-500">Vizual compact</div>
-          </div>
-
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {metricCard("Utilizatori", client?.usersCount ?? users.length)}
-            {metricCard("Locatii", client?.locationsCount ?? locations.length)}
-            {metricCard("POS", posDevicesCount)}
-            {metricCard("KDS", kdsDevicesCount)}
-            {metricCard("Backup-uri", client?.backupHealth?.backupsCount ?? 0)}
-          </div>
-
-          <div className="mt-4 grid gap-x-4 gap-y-2 text-sm">
-            {infoRows.map(([label, value]) => (
-              <div key={label} className="grid grid-cols-[110px_1fr] gap-3 border-b border-slate-100 py-2 last:border-b-0">
-                <div className="font-medium text-slate-400">{label}</div>
-                <div className="break-words text-slate-800">{value}</div>
+        <div ref={companySectionRef} className="grid gap-4 2xl:grid-cols-[1.1fr_0.9fr]">
+          <div className="space-y-4">
+            <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Profil client</div>
+                  <div className="mt-1 text-lg font-semibold text-[#17324D]">Date comerciale, portal si identificare</div>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2 lg:w-[360px]">
+                  {metricCard("Status", statusLabel(client?.status))}
+                  {metricCard("Expira", formatDate(client?.license?.expiresAt))}
+                  {metricCard("Firme ERP", companies.length)}
+                  {metricCard("Backup-uri", client?.backupHealth?.backupsCount ?? 0)}
+                </div>
               </div>
-            ))}
-          </div>
 
-          <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Firme ERP</div>
-                <div className="mt-1 text-sm font-semibold text-[#17324D]">Firmele pe care le poate alege adminul la login</div>
+              <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                {infoRows.map(([label, value]) => (
+                  <div key={label} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</div>
+                    <div className="mt-1 break-words text-sm font-medium text-slate-800">{value}</div>
+                  </div>
+                ))}
               </div>
-              <div className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600">
-                {companies.length} firme
-              </div>
-            </div>
 
-            <div className="mt-3 space-y-2">
-              {companies.map((company: any) => (
-                <div key={company.id} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm">
-                  <div>
-                    <div className="font-semibold text-[#17324D]">{company.name}</div>
-                    <div className="mt-1 text-xs text-slate-500">
-                      {[company.code, company.cui, company.email].filter(Boolean).join(" • ") || "Firma activa ERP"}
+              <div className="mt-4 grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Subdomeniu</div>
+                      <div className="mt-1 text-sm font-semibold text-[#17324D]">Legatura directa catre portalul clientului</div>
+                    </div>
+                    <div className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600">
+                      {subdomainDraft.trim() || "fara-subdomeniu"}
                     </div>
                   </div>
-                  {company.isDefault ? (
-                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-                      Implicita
-                    </span>
-                  ) : null}
+
+                  <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+                    <input
+                      value={subdomainDraft}
+                      onChange={(e) => setSubdomainDraft(e.target.value)}
+                      placeholder="subdomeniu-client"
+                      className="h-11 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSaveSubdomain}
+                      disabled={savingSubdomain}
+                      className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-[#17324D] px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <Save size={15} />
+                      {savingSubdomain ? "Se salveaza..." : "Salveaza"}
+                    </button>
+                  </div>
                 </div>
-              ))}
-            </div>
 
-            <div className="mt-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
-              Foloseste zona albastra de sus pentru a adauga rapid o firma noua pentru acest client.
-            </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Portal client</div>
+                  <div className="mt-1 text-sm font-semibold text-[#17324D]">Acces, export si operare rapida</div>
+                  <div className="mt-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+                    {client?.portalUrl || "Portalul clientului apare dupa salvarea subdomeniului."}
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => copy(client?.portalUrl || "", "URL portal")}
+                      disabled={!client?.portalUrl}
+                      className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Copy size={15} />
+                      Copiaza URL
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExportClient}
+                      disabled={exportingClient || loading}
+                      className="inline-flex items-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <Download size={15} />
+                      {exportingClient ? "Se pregateste..." : "Export client"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setHistoryOpen(true)}
+                      className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700"
+                    >
+                      <History size={15} />
+                      Istoric
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </section>
 
-            <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+            <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Firme ERP</div>
+                  <div className="mt-1 text-lg font-semibold text-[#17324D]">Lista simpla si control rapid pe firme</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={openCompanyForm}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#0F2740]"
+                >
+                  <Plus size={15} />
+                  Adauga firma
+                </button>
+              </div>
+
+              {showCompanyForm ? (
+                <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    <input
+                      value={companyForm.name}
+                      onChange={(e) => setCompanyForm((prev) => ({ ...prev, name: e.target.value }))}
+                      placeholder="Nume firma"
+                      className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+                    />
+                    <input
+                      value={companyForm.cui}
+                      onChange={(e) => setCompanyForm((prev) => ({ ...prev, cui: e.target.value }))}
+                      placeholder="CUI"
+                      className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+                    />
+                    <input
+                      value={companyForm.regNo}
+                      onChange={(e) => setCompanyForm((prev) => ({ ...prev, regNo: e.target.value }))}
+                      placeholder="Nr. reg. com."
+                      className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+                    />
+                    <input
+                      value={companyForm.email}
+                      onChange={(e) => setCompanyForm((prev) => ({ ...prev, email: e.target.value }))}
+                      placeholder="Email"
+                      className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+                    />
+                    <input
+                      value={companyForm.phone}
+                      onChange={(e) => setCompanyForm((prev) => ({ ...prev, phone: e.target.value }))}
+                      placeholder="Telefon"
+                      className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+                    />
+                    <input
+                      value={companyForm.address}
+                      onChange={(e) => setCompanyForm((prev) => ({ ...prev, address: e.target.value }))}
+                      placeholder="Adresa"
+                      className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
+                    />
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowCompanyForm(false)}
+                      className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700"
+                    >
+                      Inchide
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCreateCompany}
+                      disabled={creatingCompany}
+                      className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <Save size={15} />
+                      {creatingCompany ? "Se salveaza..." : "Salveaza firma"}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200">
+                <div className="grid grid-cols-[minmax(0,1.5fr)_120px_180px_110px] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                  <div>Firma</div>
+                  <div>CUI</div>
+                  <div>Email</div>
+                  <div>Status</div>
+                </div>
+                {companies.length ? (
+                  companies.map((company: any) => (
+                    <div
+                      key={company.id}
+                      className="grid grid-cols-[minmax(0,1.5fr)_120px_180px_110px] gap-3 border-b border-slate-100 px-4 py-3 text-sm last:border-b-0"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate font-semibold text-[#17324D]">{company.name}</div>
+                        <div className="mt-1 truncate text-xs text-slate-500">{company.code || "Firma ERP"}</div>
+                      </div>
+                      <div className="text-slate-600">{company.cui || "-"}</div>
+                      <div className="truncate text-slate-600">{company.email || "-"}</div>
+                      <div>
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${company.isDefault ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}
+                        >
+                          {company.isDefault ? "Implicita" : "Activa"}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="px-4 py-6 text-sm text-slate-500">Nu exista firme configurate pentru acest client.</div>
+                )}
+              </div>
+            </section>
+          </div>
+
+          <div className="space-y-4">
+            <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Acces pe firme</div>
-                  <div className="mt-1 text-sm font-semibold text-[#17324D]">Vezi rapid cine poate lucra pe fiecare firma</div>
+                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Licenta si module</div>
+                  <div className="mt-1 text-lg font-semibold text-[#17324D]">Pachete active si module vandabile</div>
                 </div>
-                <div className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">
-                  {users.length} utilizatori activi
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-right text-xs text-slate-500">
+                  <div>{erpEnabled ? "ERP activ" : "ERP inactiv"}</div>
+                  <div className="mt-1">{enabledDynamicModules} module fine active</div>
                 </div>
               </div>
 
-              <div className="mt-3 grid gap-3 xl:grid-cols-2">
-                {usersByCompany.map(({ company, users: companyUsers }: any) => (
-                  <div key={company.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {metricCard("Pachete baza", enabledCoreModules)}
+                {metricCard("Module fine", enabledDynamicModules)}
+                {metricCard("Locatii incluse", licenseForm.limitLocations)}
+                {metricCard("POS incluse", licenseForm.limitTerminals)}
+                {metricCard("KDS incluse", licenseForm.limitKdsDevices)}
+                {metricCard("Utilizatori", client?.usersCount ?? users.length)}
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                {moduleLabels.map(([key, label]) => {
+                  const enabled = Boolean(licenseForm.modules[key])
+                  return (
+                    <span
+                      key={key}
+                      className={`inline-flex rounded-full border px-3 py-1.5 text-xs font-semibold ${enabled ? "border-[#17324D] bg-[#17324D] text-white" : "border-slate-200 bg-slate-50 text-slate-600"}`}
+                    >
+                      {label}
+                    </span>
+                  )
+                })}
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {groupedDynamicModules.map((group) => (
+                  <div key={group.area} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
                     <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className="font-semibold text-[#17324D]">{company.name}</div>
-                        <div className="mt-1 text-xs text-slate-500">
-                          {[company.code, company.cui].filter(Boolean).join(" | ") || "Firma activa ERP"}
-                        </div>
-                      </div>
-                      <div className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600">
-                        {companyUsers.length} utilizatori
+                      <div className="text-sm font-semibold text-[#17324D]">{group.label}</div>
+                      <div className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-500">
+                        {group.items.filter((item) => item.enabled).length}/{group.items.length}
                       </div>
                     </div>
-
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {companyUsers.length ? (
-                        companyUsers.map((user: User) => (
-                          <div key={`${company.id}-${user.id}`} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs">
-                            <div className="font-semibold text-slate-900">{user.fullName}</div>
-                            <div className="mt-0.5 text-slate-500">{user.role}</div>
+                      {group.items.map((module) => (
+                        <div
+                          key={module.code}
+                          className={`rounded-2xl border px-3 py-2 text-xs ${module.enabled ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-slate-200 bg-white text-slate-600"}`}
+                        >
+                          <div className="font-semibold">{module.name}</div>
+                          <div className="mt-1 text-[11px] opacity-80">
+                            {moduleTargetLabel(module.target)} | {moduleStatusLabel(module)}
                           </div>
-                        ))
-                      ) : (
-                        <div className="text-sm text-slate-500">Nu exista utilizatori alocati explicit pe aceasta firma.</div>
-                      )}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))}
               </div>
-            </div>
-          </div>
-        </section>
 
-        <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Licenta si module</div>
-              <div className="mt-1 text-sm font-semibold text-[#17324D]">Rezumat rapid si acces la configurarea detaliata</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-right text-xs text-slate-500">
-              <div>{erpEnabled ? "ERP activ" : "ERP inactiv"}</div>
-              <div className="mt-1">{enabledDynamicModules} module fine active</div>
-            </div>
-          </div>
-
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            {metricCard("Expira", licenseForm.expiresAt || "-")}
-            {metricCard("Pachete baza", enabledCoreModules)}
-            {metricCard("Locatii incluse", licenseForm.limitLocations)}
-            {metricCard("POS incluse", licenseForm.limitTerminals)}
-            {metricCard("KDS incluse", licenseForm.limitKdsDevices)}
-            {metricCard("Module fine", enabledDynamicModules)}
-          </div>
-
-          <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-            {moduleLabels.map(([key, label]) => {
-              const enabled = Boolean(licenseForm.modules[key])
-              return (
-                <div
-                  key={key}
-                  className={`rounded-2xl border px-3 py-3 text-left text-sm font-medium transition ${
-                    enabled
-                      ? "border-[#17324D] bg-[#17324D] text-white"
-                      : "border-slate-200 bg-slate-50 text-slate-600"
-                  }`}
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+                <div className="text-sm text-slate-500">
+                  {explicitlyEnabledDynamicModules} explicit si {inheritedDynamicModules} mostenite din pachet.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab("license")
+                    setLicenseModalOpen(true)
+                  }}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2.5 text-sm font-semibold text-white"
                 >
-                  {label}
-                </div>
-              )
-            })}
-          </div>
+                  <Pencil size={15} />
+                  Configureaza licenta
+                </button>
+              </div>
+            </section>
 
-          <div className="mt-4 grid gap-3 lg:grid-cols-2">
-            {groupedDynamicModules.map((group) => (
-              <div key={group.area} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-sm font-semibold text-[#17324D]">{group.label}</div>
-                  <div className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-500">
-                    {group.items.filter((item) => item.enabled).length}/{group.items.length}
-                  </div>
-                </div>
+            <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Operare rapida</div>
+              <div className="mt-1 text-lg font-semibold text-[#17324D]">Actiuni uzuale pentru acest client</div>
+              <div className="mt-4 grid gap-2">
+                <button
+                  type="button"
+                  onClick={load}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700"
+                >
+                  <RefreshCw size={15} />
+                  Reincarca datele clientului
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHistoryOpen(true)}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700"
+                >
+                  <History size={15} />
+                  Deschide istoricul
+                </button>
+                <button
+                  type="button"
+                  onClick={handleToggleLicenseSuspended}
+                  disabled={!client?.license?.id || licenseBusy}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <PauseCircle size={15} />
+                  {client?.license?.isSuspended ? "Reactiveaza licenta" : "Suspenda licenta"}
+                </button>
+              </div>
+            </section>
 
-                <div className="mt-3 space-y-2">
-                  {group.items.map((module) => (
-                    <div
-                      key={module.code}
-                      className={`rounded-2xl border px-3 py-3 ${
-                        module.enabled
-                          ? "border-[#F39C12]/40 bg-[#FFF1D6]"
-                          : "border-slate-200 bg-white"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="text-sm font-semibold text-slate-900">{module.name}</div>
-                          <div className="mt-1 text-xs text-slate-500">{module.description || "Modul configurabil pe client."}</div>
-                        </div>
-                        <div className="rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-500">
-                          {moduleTargetLabel(module.target)}
-                        </div>
-                      </div>
-                      <div className="mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-                        {moduleStatusLabel(module)}
-                      </div>
+            <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Backup si siguranta</div>
+              <div className="mt-1 text-lg font-semibold text-[#17324D]">Stare backup si actiuni sensibile</div>
+
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {metricCard("Ultimul backup", formatDate(client?.backupHealth?.latestBackupAt))}
+                  {metricCard("Snapshot-uri", client?.backupHealth?.backupsCount ?? 0)}
+                </div>
+                <div className="mt-3 text-sm text-slate-600">
+                  {client?.backupHealth?.status === "protected"
+                    ? "Clientul are backup valid pe server."
+                    : "Clientul nu are backup valid. Recovery-ul nu este sigur pana nu exista un snapshot."}
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-rose-800">Stergerea clientului</div>
+                    <div className="mt-1 text-sm text-rose-700">
+                      Sistemul face backup final, apoi sterge tenantul si datele operationale.
                     </div>
-                  ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteDialogOpen(true)}
+                    disabled={!canDeleteClient || deletingClient}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-rose-200 bg-white px-4 py-2.5 text-sm font-semibold text-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Trash2 size={15} />
+                    Sterge client
+                  </button>
                 </div>
+
+                {!canDeleteClient ? (
+                  <div className="mt-3 rounded-2xl border border-rose-200 bg-white px-4 py-3 text-sm text-rose-700">
+                    Clientul este activ. Suspenda sau lasa licenta sa expire inainte de stergere.
+                  </div>
+                ) : null}
               </div>
-            ))}
+            </section>
           </div>
-
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
-            <div className="text-sm text-slate-500">
-              {explicitlyEnabledDynamicModules} activat explicit pe client, {inheritedDynamicModules} mostenit din pachet.
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab("license")
-                setLicenseModalOpen(true)
-              }}
-              className="inline-flex items-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Pencil size={15} />
-              Configureaza licenta
-            </button>
-          </div>
-        </section>
-
-        <section className="rounded-[24px] border border-rose-200 bg-rose-50 p-4 shadow-sm">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-rose-500">Zona periculoasa</div>
-              <div className="mt-1 text-sm font-semibold text-rose-800">Stergerea clientului</div>
-              <div className="mt-1 text-sm text-rose-700">
-                Stergerea este permisa doar pentru clienti care nu mai sunt activi. Sistemul face automat un backup final inainte de stergere.
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setDeleteDialogOpen(true)}
-              disabled={!canDeleteClient || deletingClient}
-              className="inline-flex items-center gap-2 rounded-2xl border border-rose-200 bg-white px-4 py-2.5 text-sm font-semibold text-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Trash2 size={15} />
-              Sterge client
-            </button>
-          </div>
-
-          {!canDeleteClient ? (
-            <div className="mt-3 rounded-2xl border border-rose-200 bg-white px-4 py-3 text-sm text-rose-700">
-              Clientul este activ. Suspenda sau lasa licenta sa iasa din activ inainte de stergere.
-            </div>
-          ) : null}
-        </section>
-      </div>
+        </div>
       ) : null}
-
       {activeTab === "license" ? (
         <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
           <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
@@ -2546,5 +2680,3 @@ export default function ControlPanelClientDetails() {
     </div>
   )
 }
-
-
