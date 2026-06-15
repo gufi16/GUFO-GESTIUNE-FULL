@@ -374,6 +374,11 @@ function scopeKey(...parts: unknown[]) {
   return parts.map((part) => lowerText(part)).join("::")
 }
 
+function optionalScopeKey(...parts: unknown[]) {
+  const normalized = parts.map((part) => lowerText(part)).filter(Boolean)
+  return normalized.length ? normalized.join("::") : ""
+}
+
 function hasAnyRequestedModule(requested: TenantBackupModuleKey[], keys: TenantBackupModuleKey[]) {
   return keys.some((key) => requested.includes(key))
 }
@@ -1330,24 +1335,31 @@ async function syncCustomersModule(data: SelectiveRestoreData) {
     where: { tenantId: asText(data.customers[0]?.tenantId) || undefined },
     select: { id: true, companyId: true, code: true, cif: true, name: true },
   })
+  const existingIds = new Set(existing.map((item) => asText(item.id)).filter(Boolean))
   const keys = new Set<string>()
   existing.forEach((item) => {
-    keys.add(scopeKey(item.companyId, "code", item.code))
-    keys.add(scopeKey(item.companyId, "cif", item.cif))
-    keys.add(scopeKey(item.companyId, "name", item.name))
+    const codeKey = optionalScopeKey(item.companyId, "code", item.code)
+    const cifKey = optionalScopeKey(item.companyId, "cif", item.cif)
+    const nameKey = optionalScopeKey(item.companyId, "name", item.name)
+    if (codeKey) keys.add(codeKey)
+    if (cifKey) keys.add(cifKey)
+    if (nameKey) keys.add(nameKey)
   })
 
   let created = 0
   for (const item of data.customers) {
+    const itemId = asText(item.id)
+    if (itemId && existingIds.has(itemId)) continue
     const companyId = asText(item.companyId) || null
-    const codeKey = scopeKey(companyId, "code", item.code)
-    const cifKey = scopeKey(companyId, "cif", item.cif)
-    const nameKey = scopeKey(companyId, "name", item.name)
-    if (keys.has(codeKey) || keys.has(cifKey) || keys.has(nameKey)) continue
+    const codeKey = optionalScopeKey(companyId, "code", item.code)
+    const cifKey = optionalScopeKey(companyId, "cif", item.cif)
+    const nameKey = optionalScopeKey(companyId, "name", item.name)
+    if ((codeKey && keys.has(codeKey)) || (cifKey && keys.has(cifKey)) || (nameKey && keys.has(nameKey))) continue
     await prisma.customer.create({ data: item as never })
-    keys.add(codeKey)
-    keys.add(cifKey)
-    keys.add(nameKey)
+    existingIds.add(itemId)
+    if (codeKey) keys.add(codeKey)
+    if (cifKey) keys.add(cifKey)
+    if (nameKey) keys.add(nameKey)
     created += 1
   }
   return { customers: created, scanned: data.customers.length }
@@ -1365,24 +1377,31 @@ async function syncSuppliersModule(data: SelectiveRestoreData) {
     where: { tenantId: asText(data.suppliers[0]?.tenantId) || undefined },
     select: { id: true, companyId: true, code: true, cif: true, name: true },
   })
+  const existingIds = new Set(existing.map((item) => asText(item.id)).filter(Boolean))
   const keys = new Set<string>()
   existing.forEach((item) => {
-    keys.add(scopeKey(item.companyId, "code", item.code))
-    keys.add(scopeKey(item.companyId, "cif", item.cif))
-    keys.add(scopeKey(item.companyId, "name", item.name))
+    const codeKey = optionalScopeKey(item.companyId, "code", item.code)
+    const cifKey = optionalScopeKey(item.companyId, "cif", item.cif)
+    const nameKey = optionalScopeKey(item.companyId, "name", item.name)
+    if (codeKey) keys.add(codeKey)
+    if (cifKey) keys.add(cifKey)
+    if (nameKey) keys.add(nameKey)
   })
 
   let created = 0
   for (const item of data.suppliers) {
+    const itemId = asText(item.id)
+    if (itemId && existingIds.has(itemId)) continue
     const companyId = asText(item.companyId) || null
-    const codeKey = scopeKey(companyId, "code", item.code)
-    const cifKey = scopeKey(companyId, "cif", item.cif)
-    const nameKey = scopeKey(companyId, "name", item.name)
-    if (keys.has(codeKey) || keys.has(cifKey) || keys.has(nameKey)) continue
+    const codeKey = optionalScopeKey(companyId, "code", item.code)
+    const cifKey = optionalScopeKey(companyId, "cif", item.cif)
+    const nameKey = optionalScopeKey(companyId, "name", item.name)
+    if ((codeKey && keys.has(codeKey)) || (cifKey && keys.has(cifKey)) || (nameKey && keys.has(nameKey))) continue
     await prisma.supplier.create({ data: item as never })
-    keys.add(codeKey)
-    keys.add(cifKey)
-    keys.add(nameKey)
+    existingIds.add(itemId)
+    if (codeKey) keys.add(codeKey)
+    if (cifKey) keys.add(cifKey)
+    if (nameKey) keys.add(nameKey)
     created += 1
   }
   return { suppliers: created, scanned: data.suppliers.length }
@@ -1403,20 +1422,27 @@ async function syncLocationsModule(data: SelectiveRestoreData) {
     where: { tenantId: asText(data.locations[0]?.tenantId) || undefined },
     select: { id: true, companyId: true, code: true },
   })
+  const existingLocationIds = new Set(existingLocations.map((item) => asText(item.id)).filter(Boolean))
   const locationKeyToId = new Map(existingLocations.map((item) => [scopeKey(item.companyId, item.code), item.id]))
   const locationIdMap = new Map<string, string>()
   let createdLocations = 0
 
   for (const item of data.locations) {
+    const backupLocationId = asText(item.id)
+    if (backupLocationId && existingLocationIds.has(backupLocationId)) {
+      locationIdMap.set(backupLocationId, backupLocationId)
+      continue
+    }
     const key = scopeKey(item.companyId, item.code)
     const existingId = locationKeyToId.get(key)
     if (existingId) {
-      locationIdMap.set(asText(item.id), existingId)
+      locationIdMap.set(backupLocationId, existingId)
       continue
     }
     const created = await prisma.location.create({ data: item as never })
     locationKeyToId.set(key, created.id)
-    locationIdMap.set(asText(item.id), created.id)
+    existingLocationIds.add(created.id)
+    locationIdMap.set(backupLocationId, created.id)
     createdLocations += 1
   }
 
@@ -1424,13 +1450,17 @@ async function syncLocationsModule(data: SelectiveRestoreData) {
     where: { tenantId: asText(data.terminals[0]?.tenantId) || undefined },
     select: { id: true, companyId: true, deviceId: true },
   })
+  const existingTerminalIds = new Set(existingTerminals.map((item) => asText(item.id)).filter(Boolean))
   const terminalKeys = new Set(existingTerminals.map((item) => scopeKey(item.companyId, item.deviceId)))
   let createdTerminals = 0
   for (const item of data.terminals) {
+    const terminalId = asText(item.id)
+    if (terminalId && existingTerminalIds.has(terminalId)) continue
     const key = scopeKey(item.companyId, item.deviceId)
     if (terminalKeys.has(key)) continue
     const next = { ...item, locationId: locationIdMap.get(asText(item.locationId)) || item.locationId }
     await prisma.terminal.create({ data: next as never })
+    existingTerminalIds.add(terminalId)
     terminalKeys.add(key)
     createdTerminals += 1
   }
@@ -1448,14 +1478,18 @@ async function restoreDepartmentsModule(data: SelectiveRestoreData) {
 async function syncDepartmentsModule(data: SelectiveRestoreData) {
   const existing = await prisma.department.findMany({
     where: { tenantId: asText(data.departments[0]?.tenantId) || undefined },
-    select: { name: true },
+    select: { id: true, companyId: true, name: true },
   })
-  const keys = new Set(existing.map((item) => lowerText(item.name)).filter(Boolean))
+  const existingIds = new Set(existing.map((item) => asText(item.id)).filter(Boolean))
+  const keys = new Set(existing.map((item) => optionalScopeKey(item.companyId, item.name)).filter(Boolean))
   let created = 0
   for (const item of data.departments) {
-    const key = lowerText(item.name)
+    const itemId = asText(item.id)
+    if (itemId && existingIds.has(itemId)) continue
+    const key = optionalScopeKey(item.companyId, item.name)
     if (keys.has(key)) continue
     await prisma.department.create({ data: item as never })
+    existingIds.add(itemId)
     keys.add(key)
     created += 1
   }
@@ -1479,16 +1513,20 @@ async function syncCategoriesModule(data: SelectiveRestoreData) {
 
   const existing = await prisma.category.findMany({
     where: { tenantId: asText(data.categories[0]?.tenantId) || undefined },
-    select: { companyId: true, name: true },
+    select: { id: true, companyId: true, name: true },
   })
+  const existingIds = new Set(existing.map((item) => asText(item.id)).filter(Boolean))
   const keys = new Set(existing.map((item) => scopeKey(item.companyId, item.name)))
   let created = 0
   for (const item of data.categories) {
+    const itemId = asText(item.id)
+    if (itemId && existingIds.has(itemId)) continue
     const key = scopeKey(item.companyId, item.name)
     if (keys.has(key)) continue
     const backupDepartment = backupDepartmentById.get(asText(item.departmentId))
     const resolvedDepartmentId = backupDepartment ? departmentByKey.get(scopeKey(backupDepartment.companyId, backupDepartment.name)) || null : null
     await prisma.category.create({ data: { ...item, departmentId: resolvedDepartmentId } as never })
+    existingIds.add(itemId)
     keys.add(key)
     created += 1
   }
@@ -1505,14 +1543,18 @@ async function restoreUomsModule(data: SelectiveRestoreData) {
 async function syncUomsModule(data: SelectiveRestoreData) {
   const existing = await prisma.uom.findMany({
     where: { tenantId: asText(data.uoms[0]?.tenantId) || undefined },
-    select: { companyId: true, code: true },
+    select: { id: true, companyId: true, code: true },
   })
+  const existingIds = new Set(existing.map((item) => asText(item.id)).filter(Boolean))
   const keys = new Set(existing.map((item) => scopeKey(item.companyId, item.code)))
   let created = 0
   for (const item of data.uoms) {
+    const itemId = asText(item.id)
+    if (itemId && existingIds.has(itemId)) continue
     const key = scopeKey(item.companyId, item.code)
     if (keys.has(key)) continue
     await prisma.uom.create({ data: item as never })
+    existingIds.add(itemId)
     keys.add(key)
     created += 1
   }
@@ -1529,14 +1571,18 @@ async function restoreVatRatesModule(data: SelectiveRestoreData) {
 async function syncVatRatesModule(data: SelectiveRestoreData) {
   const existing = await prisma.vatRate.findMany({
     where: { tenantId: asText(data.vatRates[0]?.tenantId) || undefined },
-    select: { companyId: true, rate: true },
+    select: { id: true, companyId: true, rate: true },
   })
+  const existingIds = new Set(existing.map((item) => asText(item.id)).filter(Boolean))
   const keys = new Set(existing.map((item) => scopeKey(item.companyId, item.rate)))
   let created = 0
   for (const item of data.vatRates) {
+    const itemId = asText(item.id)
+    if (itemId && existingIds.has(itemId)) continue
     const key = scopeKey(item.companyId, item.rate)
     if (keys.has(key)) continue
     await prisma.vatRate.create({ data: item as never })
+    existingIds.add(itemId)
     keys.add(key)
     created += 1
   }
@@ -1638,6 +1684,7 @@ async function syncProductsModule(data: SelectiveRestoreData) {
     ])
 
   const productByKey = new Map(existingProducts.map((item) => [scopeKey(item.companyId, item.sku), item.id]))
+  const existingProductIds = new Set(existingProducts.map((item) => asText(item.id)).filter(Boolean))
   const barcodeKeys = new Set(existingBarcodes.map((item) => lowerText(item.barcode)))
   const mappingKeys = new Set(existingMappings.map((item) => scopeKey(item.integrationId, item.externalProductId)))
   const departmentByKey = new Map(existingDepartments.map((item) => [scopeKey(item.companyId, item.name), item.id]))
@@ -1655,10 +1702,15 @@ async function syncProductsModule(data: SelectiveRestoreData) {
   const resolvedProductIdByBackupId = new Map<string, string>()
   let createdProducts = 0
   for (const item of data.products) {
+    const backupProductId = asText(item.id)
+    if (backupProductId && existingProductIds.has(backupProductId)) {
+      resolvedProductIdByBackupId.set(backupProductId, backupProductId)
+      continue
+    }
     const key = scopeKey(item.companyId, item.sku)
     const existingId = productByKey.get(key)
     if (existingId) {
-      resolvedProductIdByBackupId.set(asText(item.id), existingId)
+      resolvedProductIdByBackupId.set(backupProductId, existingId)
       continue
     }
 
@@ -1682,7 +1734,8 @@ async function syncProductsModule(data: SelectiveRestoreData) {
     })
 
     productByKey.set(key, created.id)
-    resolvedProductIdByBackupId.set(asText(item.id), created.id)
+    existingProductIds.add(created.id)
+    resolvedProductIdByBackupId.set(backupProductId, created.id)
     createdProducts += 1
   }
 
@@ -1757,10 +1810,16 @@ async function syncRecipesModule(data: SelectiveRestoreData) {
   const productByKey = new Map(existingProducts.map((item) => [scopeKey(item.companyId, item.sku), item.id]))
   const backupProductById = new Map(data.products.map((item) => [asText(item.id), item]))
   const existingRecipeProductIds = new Set(existingRecipes.map((item) => item.productId))
+  const existingRecipeIds = new Set(existingRecipes.map((item) => asText(item.id)).filter(Boolean))
   const createdRecipeIdByBackupId = new Map<string, string>()
 
   let createdRecipes = 0
   for (const item of data.recipes) {
+    const recipeId = asText(item.id)
+    if (recipeId && existingRecipeIds.has(recipeId)) {
+      createdRecipeIdByBackupId.set(recipeId, recipeId)
+      continue
+    }
     const backupProduct = backupProductById.get(asText(item.productId))
     const resolvedProductId = backupProduct ? productByKey.get(scopeKey(backupProduct.companyId, backupProduct.sku)) : null
     if (!resolvedProductId || existingRecipeProductIds.has(resolvedProductId)) continue
@@ -1771,7 +1830,8 @@ async function syncRecipesModule(data: SelectiveRestoreData) {
       } as never,
     })
     existingRecipeProductIds.add(resolvedProductId)
-    createdRecipeIdByBackupId.set(asText(item.id), created.id)
+    existingRecipeIds.add(created.id)
+    createdRecipeIdByBackupId.set(recipeId, created.id)
     createdRecipes += 1
   }
 
@@ -1807,8 +1867,8 @@ async function restoreDocumentsModule(data: SelectiveRestoreData) {
   await restoreExternalOrdersModule(data)
   await restoreSaleDraftsModule(data)
   await restoreKitchenTicketsModule(data)
-  await restoreSalesModule(data)
   await restoreConsumptionDocsModule(data)
+  await restoreSalesModule(data)
   await restoreSalesInvoicesModule(data)
   await restoreStockModule(data)
   await relinkDocumentReferences(data)
@@ -1839,8 +1899,8 @@ async function syncDocumentsModule(data: SelectiveRestoreData) {
   await syncExternalOrdersModule(data)
   await syncSaleDraftsModule(data)
   await syncKitchenTicketsModule(data)
-  await syncSalesModule(data)
   await syncConsumptionDocsModule(data)
+  await syncSalesModule(data)
   await syncSalesInvoicesModule(data)
   await syncStockModule(data)
   await relinkDocumentReferences(data)
@@ -2165,7 +2225,7 @@ async function syncExternalOrdersModule(data: SelectiveRestoreData) {
 async function restoreSaleDraftsModule(data: SelectiveRestoreData) {
   const locationIds = await fetchExistingIds(prisma.location as unknown as IdLookupModel, data.saleDrafts.map((item) => item.locationId))
   const externalOrderIds = await fetchExistingIds(prisma.externalOrder as unknown as IdLookupModel, data.saleDrafts.map((item) => item.externalOrderId))
-  const drafts = prepareRecords(data.saleDrafts, {
+  const drafts = prepareRecords(data.saleDrafts.map((item) => normalizeSaleDraftRecord(item)), {
     required: [{ field: "locationId", allowed: locationIds }],
     optional: [{ field: "externalOrderId", allowed: externalOrderIds }],
   })
