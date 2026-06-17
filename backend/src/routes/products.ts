@@ -410,7 +410,7 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
         classValue as (typeof RECIPE_REQUIRED_CLASSES)[number]
       )
 
-      const resolvedDepartmentId = department?.id || category?.departmentId || null
+      const resolvedDepartmentId = category?.departmentId || department?.id || null
 
       const created = await tx.product.create({
         data: {
@@ -710,7 +710,7 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
       RECIPE_REQUIRED_CLASSES.includes(classValue as (typeof RECIPE_REQUIRED_CLASSES)[number]) &&
       !existingRecipe
 
-    const resolvedDepartmentId = department?.id || category?.departmentId || null
+    const resolvedDepartmentId = category?.departmentId || department?.id || null
 
     const item = await prisma.product.update({
       where: { id },
