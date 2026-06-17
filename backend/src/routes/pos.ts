@@ -125,6 +125,10 @@ type CatalogProductLike = {
     name?: string | null;
     imageUrl?: unknown;
     departmentId?: string | null;
+    department?: {
+      id?: string | null;
+      name?: string | null;
+    } | null;
   } | null;
   barcodes?: Array<{ barcode?: string | null }> | null;
   recipe?: {
@@ -748,6 +752,15 @@ function buildInvoiceFromSaleNote(sale: PosSaleLike, userNote?: string) {
 
 function mapCatalogProduct(req: Request, product: CatalogProductLike, isVatPayer: boolean) {
   const recipeItems = Array.isArray(product.recipe?.items) ? product.recipe.items : [];
+  const effectiveDepartment =
+    product.category?.department ||
+    product.department ||
+    null;
+  const effectiveDepartmentId =
+    product.category?.departmentId ||
+    effectiveDepartment?.id ||
+    product.departmentId ||
+    null;
   const menuComponents =
     product.isMenu === true
       ? recipeItems
@@ -800,10 +813,10 @@ function mapCatalogProduct(req: Request, product: CatalogProductLike, isVatPayer
           name: product.uom.name,
         }
       : null,
-    department: product.department
+    department: effectiveDepartment
       ? {
-          id: product.department.id,
-          name: product.department.name,
+          id: effectiveDepartment.id,
+          name: effectiveDepartment.name,
         }
       : null,
     category: product.category
@@ -811,11 +824,11 @@ function mapCatalogProduct(req: Request, product: CatalogProductLike, isVatPayer
           id: product.category.id,
           name: product.category.name,
           image: resolveImageUrl(req, product.category.imageUrl),
-          departmentId: product.category.departmentId || product.department?.id || null,
+          departmentId: effectiveDepartmentId,
         }
       : null,
     categoryId: product.categoryId || null,
-    departmentId: product.departmentId || product.category?.departmentId || null,
+    departmentId: effectiveDepartmentId,
     sgrLabel: product.isSgr ? "SGR" : null,
     isMenu: Boolean(product.isMenu),
     menuComponents,
@@ -979,6 +992,146 @@ const LicenseActivateSchema = z.object({
   app_version: z.string().min(1),
   location_code: z.string().optional(),
 });
+
+async function findActiveLicenseByKey(licenseKey: string) {
+  const normalized = normalizeText(licenseKey);
+  if (!normalized) return null;
+
+  const candidates = await prisma.license.findMany({
+    where: {
+      isSuspended: false,
+      expiresAt: { gt: new Date() },
+    },
+    include: {
+      tenant: true,
+    },
+    take: 100,
+    orderBy: { createdAt: "desc" },
+  });
+
+  for (const candidate of candidates) {
+    const matches = await bcrypt.compare(normalized, candidate.keyHash);
+    if (matches) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+async function resolveTerminalFromPublicLicense(input: {
+  licenseKey: string;
+  deviceId?: string | null;
+  requestedDeviceType?: "POS" | "KDS";
+  terminalLabel?: string | null;
+}) {
+  const normalizedLicenseKey = normalizeText(input.licenseKey);
+  const normalizedDeviceId = normalizeText(input.deviceId);
+  const requestedDeviceType = input.requestedDeviceType || "POS";
+  const terminalLabel = normalizeText(input.terminalLabel);
+
+  let terminal = await prisma.terminal.findFirst({
+    where: {
+      deviceId: normalizedLicenseKey,
+    },
+    include: {
+      location: true,
+      tenant: {
+        include: {
+          licenses: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
+        },
+      },
+    },
+  });
+
+  if (terminal) {
+    return {
+      terminal,
+      license: terminal.tenant.licenses[0] || null,
+      matchedBy: "terminal-license-key" as const,
+    };
+  }
+
+  const matchedLicense = await findActiveLicenseByKey(normalizedLicenseKey);
+  if (!matchedLicense || !normalizedDeviceId) {
+    return {
+      terminal: null,
+      license: matchedLicense,
+      matchedBy: matchedLicense ? ("license-only" as const) : ("none" as const),
+    };
+  }
+
+  terminal = await prisma.terminal.findFirst({
+    where: {
+      tenantId: matchedLicense.tenantId,
+      deviceId: normalizedDeviceId,
+    },
+    include: {
+      location: true,
+      tenant: {
+        include: {
+          licenses: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
+        },
+      },
+    },
+  });
+
+  if (!terminal) {
+    terminal = await prisma.terminal.create({
+      data: {
+        tenantId: matchedLicense.tenantId,
+        companyId: null,
+        locationId: null,
+        deviceId: normalizedDeviceId,
+        deviceType: requestedDeviceType,
+        label: terminalLabel || (requestedDeviceType === "KDS" ? "GuFo KDS" : "Android POS"),
+        isLockedToLocation: true,
+      },
+      include: {
+        location: true,
+        tenant: {
+          include: {
+            licenses: {
+              orderBy: { createdAt: "desc" },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+  } else if (terminal.deviceType !== requestedDeviceType || (terminalLabel && terminal.label !== terminalLabel)) {
+    terminal = await prisma.terminal.update({
+      where: { id: terminal.id },
+      data: {
+        deviceType: requestedDeviceType,
+        ...(terminalLabel ? { label: terminalLabel } : {}),
+      },
+      include: {
+        location: true,
+        tenant: {
+          include: {
+            licenses: {
+              orderBy: { createdAt: "desc" },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+  }
+
+  return {
+    terminal,
+    license: matchedLicense,
+    matchedBy: "license-hash" as const,
+  };
+}
 
 const PosDailyClosureSchema = z.object({
   reportType: z.string().optional().default("Z"),
