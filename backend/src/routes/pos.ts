@@ -753,13 +753,13 @@ function buildInvoiceFromSaleNote(sale: PosSaleLike, userNote?: string) {
 function mapCatalogProduct(req: Request, product: CatalogProductLike, isVatPayer: boolean) {
   const recipeItems = Array.isArray(product.recipe?.items) ? product.recipe.items : [];
   const effectiveDepartment =
-    product.category?.department ||
     product.department ||
+    product.category?.department ||
     null;
   const effectiveDepartmentId =
-    product.category?.departmentId ||
-    effectiveDepartment?.id ||
     product.departmentId ||
+    effectiveDepartment?.id ||
+    product.category?.departmentId ||
     null;
   const menuComponents =
     product.isMenu === true
