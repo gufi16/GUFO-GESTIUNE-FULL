@@ -194,6 +194,8 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
   const grossWeightKg = Math.max(0, toNumber(req.body?.grossWeightKg || 0))
   const categoryIdRaw = String(req.body?.categoryId || "").trim()
   const categoryId = categoryIdRaw || null
+  const departmentIdRaw = String(req.body?.departmentId || "").trim()
+  const requestedDepartmentId = departmentIdRaw || null
   const ncCode = toNullableText(req.body?.ncCode)?.toUpperCase() || null
   const requestedSku = String(req.body?.sku || "").trim()
   const classValue = String(req.body?.class || "MARFA").trim() as ProductClass
@@ -298,7 +300,7 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
     }
   }
 
-  const [vatRate, fallbackVatRate, uom, purchaseUom, category] = await Promise.all([
+  const [vatRate, fallbackVatRate, uom, purchaseUom, category, department] = await Promise.all([
     vatRateId
       ? prisma.vatRate.findFirst({
           where: {
@@ -340,6 +342,14 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
             department: true
           }
         })
+      : Promise.resolve(null),
+    requestedDepartmentId
+      ? prisma.department.findFirst({
+          where: {
+            id: requestedDepartmentId,
+            ...buildCompanyScopedTenantWhere(tenantId, companyId)
+          }
+        })
       : Promise.resolve(null)
   ])
 
@@ -365,6 +375,10 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
 
   if (categoryId && !category) {
     return res.status(404).json({ ok: false, error: "Categoria nu exista." })
+  }
+
+  if (requestedDepartmentId && !department) {
+    return res.status(404).json({ ok: false, error: "Departamentul nu exista." })
   }
 
   try {
@@ -396,6 +410,8 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
         classValue as (typeof RECIPE_REQUIRED_CLASSES)[number]
       )
 
+      const resolvedDepartmentId = department?.id || category?.departmentId || null
+
       const created = await tx.product.create({
         data: {
           tenantId,
@@ -409,7 +425,7 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
           purchaseUomId: normalizedPurchaseUomId || uomId,
           purchaseFactor: normalizedPurchaseFactor,
           categoryId,
-          departmentId: category?.departmentId || null,
+          departmentId: resolvedDepartmentId,
           ncCode: requestedIsFiscalRiskProduct ? ncCode : null,
           isFiscalRiskProduct: requestedIsFiscalRiskProduct,
           netWeightKg: requestedIsFiscalRiskProduct ? netWeightKg : 0,
@@ -498,6 +514,8 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   const grossWeightKg = Math.max(0, toNumber(req.body?.grossWeightKg || 0))
   const categoryIdRaw = String(req.body?.categoryId || "").trim()
   const categoryId = categoryIdRaw || null
+  const departmentIdRaw = String(req.body?.departmentId || "").trim()
+  const requestedDepartmentId = departmentIdRaw || null
   const ncCode = toNullableText(req.body?.ncCode)?.toUpperCase() || null
   const classValue = String(req.body?.class || "MARFA").trim() as ProductClass
   const normalizedPurchaseUomId = classValue === "PRODUS_FIN" ? uomId : purchaseUomId
@@ -607,7 +625,7 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   const finalUpdatedProductionMode = productionMode
   const finalUpdatedCostMethod = costMethod
 
-  const [vatRate, fallbackVatRate, uom, purchaseUom, category, existingRecipe] = await Promise.all([
+  const [vatRate, fallbackVatRate, uom, purchaseUom, category, department, existingRecipe] = await Promise.all([
     vatRateId
       ? prisma.vatRate.findFirst({
           where: {
@@ -650,6 +668,14 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
           }
         })
       : Promise.resolve(null),
+    requestedDepartmentId
+      ? prisma.department.findFirst({
+          where: {
+            id: requestedDepartmentId,
+            ...buildCompanyScopedTenantWhere(tenantId, companyId)
+          }
+        })
+      : Promise.resolve(null),
     prisma.recipe.findFirst({
       where: {
         tenantId,
@@ -675,10 +701,16 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
     return res.status(404).json({ ok: false, error: "Categoria nu exista." })
   }
 
+  if (requestedDepartmentId && !department) {
+    return res.status(404).json({ ok: false, error: "Departamentul nu exista." })
+  }
+
   try {
     const forcedInactiveBecauseMissingRecipe =
       RECIPE_REQUIRED_CLASSES.includes(classValue as (typeof RECIPE_REQUIRED_CLASSES)[number]) &&
       !existingRecipe
+
+    const resolvedDepartmentId = department?.id || category?.departmentId || null
 
     const item = await prisma.product.update({
       where: { id },
@@ -691,7 +723,7 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
         purchaseUomId: normalizedPurchaseUomId || uomId,
           purchaseFactor: normalizedPurchaseFactor,
         categoryId,
-        departmentId: category?.departmentId || null,
+        departmentId: resolvedDepartmentId,
         ncCode: requestedIsFiscalRiskProduct ? ncCode : null,
         isFiscalRiskProduct: requestedIsFiscalRiskProduct,
         netWeightKg: requestedIsFiscalRiskProduct ? netWeightKg : 0,
