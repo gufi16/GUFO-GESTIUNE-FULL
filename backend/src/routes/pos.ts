@@ -4304,13 +4304,16 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
     return res.status(409).json({ ok: false, error: "Comanda marketplace este deja fiscalizata." });
   }
 
-  const productIds = payload.lines.map((line) => line.productId);
+  const productIdentifiers = payload.lines.map((line) => normalizeText(line.productId)).filter(Boolean);
 
   const dbProducts = await prisma.product.findMany({
       where: {
         tenantId,
         companyId: company?.id || null,
-        id: { in: productIds },
+        OR: [
+          { id: { in: productIdentifiers } },
+          { sku: { in: productIdentifiers } },
+        ],
       },
     include: {
       vatRate: true,
@@ -4319,10 +4322,14 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
     },
   });
 
-  const productMap = new Map(dbProducts.map((product) => [product.id, product]));
+  const productMap = new Map<string, (typeof dbProducts)[number]>();
+  dbProducts.forEach((product) => {
+    productMap.set(product.id, product);
+    productMap.set(normalizeText(product.sku), product);
+  });
 
   for (const line of payload.lines) {
-    const product = productMap.get(line.productId);
+    const product = productMap.get(normalizeText(line.productId));
     if (!product) {
       return res.status(404).json({ ok: false, error: "Produs inexistent in vanzare." });
     }
@@ -4332,7 +4339,7 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
       where: {
         tenantId,
         companyId: company?.id || null,
-        productId: { in: productIds },
+        productId: { in: dbProducts.map((product) => product.id) },
         status: "ACTIVE",
       isActive: true,
     },
@@ -4351,7 +4358,7 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
   const recipeMap = new Map(recipes.map((recipe) => [recipe.productId, recipe]));
 
   const receiptLines = payload.lines.flatMap((line) => {
-    const product = productMap.get(line.productId)!;
+    const product = productMap.get(normalizeText(line.productId))!;
     const qty = toNumber(line.qty);
     const effectiveVatRate = isVatPayer ? toNumber(line.vatRate) : 0;
     const lineTotalBeforeDiscount = toNumber(line.lineTotalBeforeDiscount) || qty * toNumber(line.unitPrice);
@@ -4485,8 +4492,8 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
     }> = [];
 
     for (const line of payload.lines) {
-      const product = productMap.get(line.productId)!;
-      const recipe = recipeMap.get(line.productId) || null;
+      const product = productMap.get(normalizeText(line.productId))!;
+      const recipe = recipeMap.get(product.id) || null;
 
       const qtyDecimal = new Prisma.Decimal(line.qty);
       const unitPriceDecimal = new Prisma.Decimal(line.unitPrice);
@@ -4502,7 +4509,7 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
       await tx.saleItem.create({
         data: {
           saleId: sale.id,
-          productId: line.productId,
+          productId: product.id,
           qty: qtyDecimal,
           unitPrice: unitPriceDecimal,
           vatRate: effectiveVatRate,
@@ -4519,7 +4526,7 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
         await tx.saleItem.create({
           data: {
             saleId: sale.id,
-            productId: line.productId,
+            productId: product.id,
             qty: qtyDecimal,
             unitPrice: sgrValue,
             vatRate: 0,
@@ -4556,7 +4563,7 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
             tenantId,
             companyId: company.id,
             locationId,
-          productId: line.productId,
+          productId: product.id,
           qty: qtyDecimal,
         });
 
@@ -4565,7 +4572,7 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
               tenantId,
               companyId: company.id,
               locationId,
-            productId: line.productId,
+            productId: product.id,
             type: "OUT",
             qty: qtyDecimal,
             refType: "SALE",
