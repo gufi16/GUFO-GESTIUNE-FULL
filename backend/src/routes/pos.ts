@@ -893,7 +893,11 @@ export async function buildCatalogPayload(req: Request, tenantId: string) {
       vatRate: true,
       uom: true,
       department: true,
-      category: true,
+      category: {
+        include: {
+          department: true,
+        },
+      },
       barcodes: true,
       recipe: {
         include: {
