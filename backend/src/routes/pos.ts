@@ -1722,8 +1722,33 @@ export async function handlePosDailyClosure(req: PosAuthRequest, res: Response) 
       }
 
       const data = parsed.data;
-      const resolvedCompanyId = terminal.companyId || terminal.location?.companyId || null;
-      const resolvedLocationId = terminal.locationId || normalizeText(data.locationId) || null;
+      const hintedLocationId = normalizeText(data.locationId) || null;
+      const primaryCompany = await getPrimaryTenantCompany(auth.tenantId, {
+        select: { id: true },
+      });
+      const hintedLocation =
+        !terminal.locationId && hintedLocationId
+          ? await prisma.location.findFirst({
+              where: {
+                id: hintedLocationId,
+                tenantId: auth.tenantId,
+                isActive: true,
+              },
+              select: {
+                id: true,
+                name: true,
+                companyId: true,
+              },
+            })
+          : null;
+      const resolvedLocationId = terminal.locationId || hintedLocation?.id || hintedLocationId || null;
+      const resolvedLocationName = terminal.location?.name || hintedLocation?.name || null;
+      const resolvedCompanyId =
+        terminal.companyId ||
+        terminal.location?.companyId ||
+        hintedLocation?.companyId ||
+        primaryCompany?.id ||
+        null;
       const parsedClosedAt = data.closedAt ? new Date(data.closedAt) : new Date();
       const closedAt = Number.isNaN(parsedClosedAt.getTime()) ? new Date() : parsedClosedAt;
       let total = toNumber(data.total);
@@ -1774,7 +1799,7 @@ export async function handlePosDailyClosure(req: PosAuthRequest, res: Response) 
           locationId: resolvedLocationId,
           terminalId: terminal.id,
           deviceId: terminal.deviceId,
-          locationName: terminal.location?.name || null,
+          locationName: resolvedLocationName,
           terminalLabel: terminal.label || null,
           reportType: normalizeText(data.reportType || "Z").toUpperCase() || "Z",
           reportNo: data.reportNo ? normalizeText(data.reportNo) : null,
