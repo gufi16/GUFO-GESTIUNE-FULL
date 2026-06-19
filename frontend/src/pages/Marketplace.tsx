@@ -189,7 +189,28 @@ type GlovoCatalogPushStatus = {
   transactionId: string
   status: string
   details: unknown[]
+  rejectedProductIds: string[]
   promotionStatuses: unknown[]
+}
+
+type GlovoCatalogPushHistoryEntry = {
+  transactionId: string
+  createdAt: string
+  updatedAt: string
+  status: string
+  endpoint: string
+  payload: {
+    products: Array<{
+      id: string
+      name: string
+      price: number
+      available: boolean
+      image_url?: string
+    }>
+  }
+  summary?: Record<string, unknown>
+  details: string[]
+  rejectedProductIds: string[]
 }
 
 type IntegrationForm = {
@@ -348,8 +369,10 @@ export default function MarketplacePage() {
   const [loadingGlovoPreview, setLoadingGlovoPreview] = useState(false)
   const [glovoPushResult, setGlovoPushResult] = useState<GlovoCatalogPushResult | null>(null)
   const [glovoPushStatus, setGlovoPushStatus] = useState<GlovoCatalogPushStatus | null>(null)
+  const [glovoPushHistory, setGlovoPushHistory] = useState<GlovoCatalogPushHistoryEntry[]>([])
   const [loadingGlovoPush, setLoadingGlovoPush] = useState(false)
   const [loadingGlovoPushStatus, setLoadingGlovoPushStatus] = useState(false)
+  const [retryingGlovoPush, setRetryingGlovoPush] = useState(false)
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
   const [forms, setForms] = useState<Record<PlatformCode, IntegrationForm>>({
@@ -379,9 +402,11 @@ export default function MarketplacePage() {
     const integration = integrations.find((item) => item.platform === "GLOVO")
     if (!integration?.id) {
       setGlovoPreview(null)
+      setGlovoPushHistory([])
       return
     }
     void loadGlovoPreview(integration.id)
+    void loadGlovoPushHistory(integration.id)
   }, [integrations])
 
   async function initialLoad() {
@@ -552,6 +577,7 @@ export default function MarketplacePage() {
       setMessage(`Push Glovo pornit. Transaction ID: ${data.transactionId}`)
       await loadGlovoPreview(integrationId)
       await loadGlovoPushStatus(integrationId, data.transactionId)
+      await loadGlovoPushHistory(integrationId)
     } catch (e: any) {
       setError(e?.message || "Nu am putut porni push-ul real de catalog Glovo.")
     } finally {
@@ -570,6 +596,41 @@ export default function MarketplacePage() {
       setError(e?.message || "Nu am putut verifica statusul push-ului Glovo.")
     } finally {
       setLoadingGlovoPushStatus(false)
+    }
+  }
+
+  async function loadGlovoPushHistory(integrationId: string) {
+    try {
+      const data = await api<{ ok: boolean; items: GlovoCatalogPushHistoryEntry[] }>(
+        `/api/v1/marketplace/integrations/glovo/push-history?integrationId=${encodeURIComponent(integrationId)}`
+      )
+      setGlovoPushHistory(Array.isArray(data?.items) ? data.items : [])
+    } catch (e: any) {
+      setError(e?.message || "Nu am putut incarca istoricul Glovo.")
+      setGlovoPushHistory([])
+    }
+  }
+
+  async function retryGlovoCatalogPush(integrationId: string, transactionId?: string) {
+    setRetryingGlovoPush(true)
+    setError("")
+    setMessage("")
+    try {
+      const data = await api<{ ok: boolean; retriedFromTransactionId: string } & GlovoCatalogPushResult>(
+        "/api/v1/marketplace/integrations/glovo/retry-push",
+        {
+          method: "POST",
+          body: JSON.stringify({ integrationId, transactionId }),
+        }
+      )
+      setGlovoPushResult(data)
+      setMessage(`Retry Glovo pornit din ${data.retriedFromTransactionId}. Nou transaction ID: ${data.transactionId}`)
+      await loadGlovoPushStatus(integrationId, data.transactionId)
+      await loadGlovoPushHistory(integrationId)
+    } catch (e: any) {
+      setError(e?.message || "Nu am putut relansa push-ul Glovo.")
+    } finally {
+      setRetryingGlovoPush(false)
     }
   }
 
@@ -763,6 +824,11 @@ export default function MarketplacePage() {
   const platformRecentExternalProducts = recentExternalProducts.filter(
     (item) => !item.platform || item.platform === selectedPlatform || item.integrationId === selectedIntegration?.id,
   )
+  const rejectedPreviewItems = useMemo(() => {
+    const rejectedIds = new Set(glovoPushStatus?.rejectedProductIds || [])
+    if (!rejectedIds.size) return []
+    return (glovoPreview?.items || []).filter((item) => item.externalProductId && rejectedIds.has(item.externalProductId))
+  }, [glovoPreview, glovoPushStatus])
   const platformOrders = orders.filter((order) => order.platform === selectedPlatform)
   const selectedPlatformMeta =
     platforms.find((item) => item.code === selectedPlatform) || defaultPlatforms.find((item) => item.code === selectedPlatform)
@@ -1261,6 +1327,92 @@ export default function MarketplacePage() {
                           ) : (
                             <div>Glovo nu a returnat detalii suplimentare.</div>
                           )}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {rejectedPreviewItems.length ? (
+                      <div className="mt-3 rounded-[14px] border border-rose-200 bg-rose-50 px-3 py-3">
+                        <div className="text-sm font-semibold text-rose-800">Produse respinse de Glovo</div>
+                        <div className="mt-2 space-y-2">
+                          {rejectedPreviewItems.map((item) => (
+                            <div key={`rejected-${item.productId}`} className="rounded-[12px] border border-rose-200 bg-white px-3 py-2">
+                              <div className="text-sm font-semibold text-slate-800">{item.name}</div>
+                              <div className="text-xs text-slate-500">
+                                SKU: {item.sku} | ID extern: {item.externalProductId || "-"} | {formatMoney(item.price)}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {glovoPushHistory.length ? (
+                      <div className="mt-3 rounded-[14px] border border-slate-200 bg-white px-3 py-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="text-sm font-semibold text-slate-900">Istoric push Glovo</div>
+                          {selectedIntegration?.id ? (
+                            <button
+                              type="button"
+                              className={documentButtonSecondaryClass}
+                              onClick={() => loadGlovoPushHistory(selectedIntegration.id)}
+                            >
+                              <RefreshCcw size={14} className="mr-1.5" />
+                              Reincarca istoric
+                            </button>
+                          ) : null}
+                        </div>
+                        <div className="mt-3 space-y-2">
+                          {glovoPushHistory.slice(0, 8).map((item) => (
+                            <div key={item.transactionId} className="rounded-[12px] border border-slate-200 bg-slate-50 px-3 py-3">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                  <div className="text-sm font-semibold text-slate-800">{item.transactionId}</div>
+                                  <div className="text-xs text-slate-500">
+                                    {new Date(item.createdAt).toLocaleString("ro-RO")} | {item.payload.products.length} produse
+                                  </div>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  <span
+                                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                                      item.status === "SUCCESS"
+                                        ? "bg-emerald-100 text-emerald-700"
+                                        : item.status === "PROCESSING"
+                                          ? "bg-amber-100 text-amber-700"
+                                          : "bg-rose-100 text-rose-700"
+                                    }`}
+                                  >
+                                    {item.status}
+                                  </span>
+                                  {selectedIntegration?.id ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        className={documentButtonSecondaryClass}
+                                        onClick={() => loadGlovoPushStatus(selectedIntegration.id, item.transactionId)}
+                                        disabled={loadingGlovoPushStatus}
+                                      >
+                                        Status
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className={documentButtonPrimaryClass}
+                                        onClick={() => retryGlovoCatalogPush(selectedIntegration.id, item.transactionId)}
+                                        disabled={retryingGlovoPush}
+                                      >
+                                        Retry
+                                      </button>
+                                    </>
+                                  ) : null}
+                                </div>
+                              </div>
+                              {item.rejectedProductIds.length ? (
+                                <div className="mt-2 text-xs text-rose-700">
+                                  Respinse: {item.rejectedProductIds.join(", ")}
+                                </div>
+                              ) : null}
+                            </div>
+                          ))}
                         </div>
                       </div>
                     ) : null}

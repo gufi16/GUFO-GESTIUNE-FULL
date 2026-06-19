@@ -72,6 +72,20 @@ type GlovoBulkUpdateProduct = {
   available: boolean
   image_url?: string
 }
+type GlovoCatalogPushHistoryEntry = {
+  transactionId: string
+  createdAt: string
+  updatedAt: string
+  status: string
+  endpoint: string
+  payload: {
+    products: GlovoBulkUpdateProduct[]
+  }
+  summary?: Record<string, unknown>
+  details: string[]
+  rejectedProductIds: string[]
+  response?: unknown
+}
 type HistoryStatus = Prisma.ExternalOrderStatusHistoryCreateInput["status"]
 type HistorySource = Prisma.ExternalOrderStatusHistoryCreateInput["source"]
 
@@ -286,6 +300,130 @@ function normalizeGlovoStoreId(value: unknown) {
 function normalizeHttpsUrl(value: unknown) {
   const text = String(value || "").trim()
   return text.startsWith("https://") ? text : null
+}
+
+function normalizeStringArray(value: unknown) {
+  return Array.isArray(value) ? value.map((item) => String(item || "").trim()).filter(Boolean) : []
+}
+
+function parseGlovoRejectedProductIds(details: unknown) {
+  const lines = normalizeStringArray(details)
+  const ids = new Set<string>()
+
+  for (const line of lines) {
+    if (!/products not updated/i.test(line)) continue
+    const match = line.match(/\[([^\]]*)\]/)
+    if (!match) continue
+    for (const rawId of match[1].split(",")) {
+      const id = rawId.trim()
+      if (id) ids.add(id)
+    }
+  }
+
+  return [...ids]
+}
+
+function readGlovoPushHistory(settingsJson: unknown): GlovoCatalogPushHistoryEntry[] {
+  const settings = integrationSettings(settingsJson)
+  const raw = settings.glovoCatalogPushHistory
+  if (!Array.isArray(raw)) return []
+
+  const items: GlovoCatalogPushHistoryEntry[] = []
+  for (const entry of raw) {
+    if (!isRecord(entry)) continue
+    const payload = isRecord(entry.payload) ? entry.payload : {}
+    const products = Array.isArray(payload.products) ? payload.products : []
+    const normalizedEntry: GlovoCatalogPushHistoryEntry = {
+      transactionId: String(entry.transactionId || "").trim(),
+      createdAt: String(entry.createdAt || "").trim(),
+      updatedAt: String(entry.updatedAt || entry.createdAt || "").trim(),
+      status: String(entry.status || "").trim(),
+      endpoint: String(entry.endpoint || "").trim(),
+      payload: {
+        products: products
+          .filter((item) => isRecord(item))
+          .map((item) => {
+            const record = item as JsonRecord
+            const imageUrl = normalizeHttpsUrl(record.image_url)
+            return {
+              id: String(record.id || "").trim(),
+              name: String(record.name || "").trim(),
+              price: Number(record.price || 0),
+              available: Boolean(record.available),
+              ...(imageUrl ? { image_url: imageUrl } : {}),
+            }
+          })
+          .filter((item) => item.id),
+      },
+      summary: isRecord(entry.summary) ? entry.summary : undefined,
+      details: normalizeStringArray(entry.details),
+      rejectedProductIds: normalizeStringArray(entry.rejectedProductIds),
+      response: entry.response,
+    }
+    if (normalizedEntry.transactionId) {
+      items.push(normalizedEntry)
+    }
+  }
+  return items
+}
+
+async function writeGlovoPushHistory(tenantId: string, integrationId: string, updater: (current: GlovoCatalogPushHistoryEntry[]) => GlovoCatalogPushHistoryEntry[]) {
+  const integration = await db.externalIntegration.findFirst({
+    where: {
+      id: integrationId,
+      tenantId,
+      platform: "GLOVO",
+    },
+    select: {
+      id: true,
+      settingsJson: true,
+    },
+  })
+
+  if (!integration) return
+
+  const settings = integrationSettings(integration.settingsJson)
+  const nextHistory = updater(readGlovoPushHistory(integration.settingsJson)).slice(0, 20)
+
+  await db.externalIntegration.update({
+    where: { id: integration.id },
+    data: {
+      settingsJson: {
+        ...settings,
+        glovoCatalogPushHistory: nextHistory,
+      } as Prisma.InputJsonValue,
+    },
+  })
+}
+
+async function appendGlovoPushHistoryEntry(
+  tenantId: string,
+  integrationId: string,
+  entry: GlovoCatalogPushHistoryEntry
+) {
+  await writeGlovoPushHistory(tenantId, integrationId, (current) => [entry, ...current.filter((item) => item.transactionId !== entry.transactionId)])
+}
+
+async function updateGlovoPushHistoryEntry(
+  tenantId: string,
+  integrationId: string,
+  transactionId: string,
+  patch: Partial<GlovoCatalogPushHistoryEntry>
+) {
+  await writeGlovoPushHistory(tenantId, integrationId, (current) =>
+    current.map((item) =>
+      item.transactionId === transactionId
+        ? {
+            ...item,
+            ...patch,
+            payload: patch.payload || item.payload,
+            details: patch.details || item.details,
+            rejectedProductIds: patch.rejectedProductIds || item.rejectedProductIds,
+            updatedAt: patch.updatedAt || new Date().toISOString(),
+          }
+        : item
+    )
+  )
 }
 
 function inferGlovoPartnerName(storeId: string) {
@@ -619,6 +757,18 @@ async function buildGlovoBulkUpdateProducts(tenantId: string, integrationId: str
 async function pushGlovoCatalogUpdate(tenantId: string, integrationId: string) {
   const { integration, storeId, authToken, apiBaseUrl } = await ensureGlovoPushIntegration(tenantId, integrationId)
   const { preview, payload } = await buildGlovoBulkUpdateProducts(tenantId, integrationId)
+  return pushGlovoCatalogPayload(tenantId, integration.id, storeId, authToken, apiBaseUrl, payload, preview.summary)
+}
+
+async function pushGlovoCatalogPayload(
+  tenantId: string,
+  integrationId: string,
+  storeId: string,
+  authToken: string,
+  apiBaseUrl: string,
+  payload: { products: GlovoBulkUpdateProduct[] },
+  summary?: Record<string, unknown>
+) {
   const endpoint = `${apiBaseUrl}/webhook/stores/${encodeURIComponent(storeId)}/menu/updates`
 
   const response = await fetch(endpoint, {
@@ -650,14 +800,28 @@ async function pushGlovoCatalogUpdate(tenantId: string, integrationId: string) {
     throw new Error("Glovo nu a returnat transaction_id pentru push-ul de catalog.")
   }
 
+  const now = new Date().toISOString()
+  await appendGlovoPushHistoryEntry(tenantId, integrationId, {
+    transactionId,
+    createdAt: now,
+    updatedAt: now,
+    status: "PROCESSING",
+    endpoint,
+    payload,
+    summary,
+    details: [],
+    rejectedProductIds: [],
+    response: parsedResponse,
+  })
+
   return {
-    integrationId: integration.id,
+    integrationId,
     storeId,
     apiBaseUrl,
     endpoint,
     transactionId,
     payload,
-    summary: preview.summary,
+    summary: summary || {},
     response: parsedResponse,
   }
 }
@@ -687,14 +851,27 @@ async function verifyGlovoCatalogUpdateStatus(tenantId: string, integrationId: s
     )
   }
 
+  const details = isRecord(parsedResponse) && Array.isArray(parsedResponse.details) ? normalizeStringArray(parsedResponse.details) : []
+  const rejectedProductIds = parseGlovoRejectedProductIds(details)
+  const status = isRecord(parsedResponse) ? String(parsedResponse.status || "").trim() : ""
+
+  await updateGlovoPushHistoryEntry(tenantId, integrationId, transactionId, {
+    status,
+    details,
+    rejectedProductIds,
+    response: parsedResponse,
+    updatedAt: new Date().toISOString(),
+  })
+
   return {
     integrationId,
     storeId,
     apiBaseUrl,
     endpoint,
     transactionId,
-    status: isRecord(parsedResponse) ? String(parsedResponse.status || "").trim() : "",
-    details: isRecord(parsedResponse) && Array.isArray(parsedResponse.details) ? parsedResponse.details : [],
+    status,
+    details,
+    rejectedProductIds,
     promotionStatuses: isRecord(parsedResponse) && Array.isArray(parsedResponse.promotion_statuses) ? parsedResponse.promotion_statuses : [],
     response: parsedResponse,
   }
@@ -1348,6 +1525,39 @@ router.get("/api/v1/marketplace/integrations/glovo/catalog-preview", async (req:
   }
 })
 
+router.get("/api/v1/marketplace/integrations/glovo/push-history", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth?.tenantId
+  if (!tenantId) {
+    return res.status(400).json({ ok: false, error: "Missing tenant context" })
+  }
+
+  const integrationId = String(req.query.integrationId || "").trim()
+  if (!integrationId) {
+    return res.status(400).json({ ok: false, error: "integrationId is required" })
+  }
+
+  const integration = await db.externalIntegration.findFirst({
+    where: {
+      id: integrationId,
+      tenantId,
+      platform: "GLOVO",
+    },
+    select: {
+      id: true,
+      settingsJson: true,
+    },
+  })
+
+  if (!integration) {
+    return res.status(404).json({ ok: false, error: "Integrarea Glovo nu a fost gasita." })
+  }
+
+  return res.json({
+    ok: true,
+    items: readGlovoPushHistory(integration.settingsJson),
+  })
+})
+
 router.post("/api/v1/marketplace/integrations/glovo/push-catalog", async (req: AuthedRequest, res) => {
   const tenantId = req.auth?.tenantId
   if (!tenantId) {
@@ -1364,6 +1574,49 @@ router.post("/api/v1/marketplace/integrations/glovo/push-catalog", async (req: A
     return res.json({ ok: true, ...result })
   } catch (error: unknown) {
     return res.status(400).json({ ok: false, error: getErrorMessage(error, "Nu am putut trimite catalogul la Glovo.") })
+  }
+})
+
+router.post("/api/v1/marketplace/integrations/glovo/retry-push", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth?.tenantId
+  if (!tenantId) {
+    return res.status(400).json({ ok: false, error: "Missing tenant context" })
+  }
+
+  const integrationId = String(req.body?.integrationId || "").trim()
+  const transactionId = String(req.body?.transactionId || "").trim()
+  if (!integrationId) {
+    return res.status(400).json({ ok: false, error: "integrationId is required" })
+  }
+
+  try {
+    const { storeId, authToken, apiBaseUrl, integration } = await ensureGlovoPushIntegration(tenantId, integrationId)
+    const history = readGlovoPushHistory(integration.settingsJson)
+    const selectedEntry = transactionId
+      ? history.find((item) => item.transactionId === transactionId)
+      : history[0]
+
+    if (!selectedEntry?.payload?.products?.length) {
+      throw new Error("Nu exista payload salvat pentru retry Glovo.")
+    }
+
+    const result = await pushGlovoCatalogPayload(
+      tenantId,
+      integrationId,
+      storeId,
+      authToken,
+      apiBaseUrl,
+      selectedEntry.payload,
+      selectedEntry.summary
+    )
+
+    return res.json({
+      ok: true,
+      retriedFromTransactionId: selectedEntry.transactionId,
+      ...result,
+    })
+  } catch (error: unknown) {
+    return res.status(400).json({ ok: false, error: getErrorMessage(error, "Nu am putut relansa push-ul Glovo.") })
   }
 })
 
