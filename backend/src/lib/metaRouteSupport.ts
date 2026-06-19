@@ -10,14 +10,14 @@ const DEFAULT_UOMS = [
   { code: "g", name: "Gram", standardCode: "GRM" },
   { code: "l", name: "Litru", standardCode: "LTR" },
   { code: "ml", name: "Mililitru", standardCode: "MLT" },
-  { code: "bax", name: "Bax", standardCode: "C62" },
-  { code: "cutie", name: "Cutie", standardCode: "C62" },
-  { code: "sac", name: "Sac", standardCode: "C62" },
-  { code: "lada", name: "Lada", standardCode: "C62" },
-  { code: "pachet", name: "Pachet", standardCode: "C62" },
-  { code: "bidon", name: "Bidon", standardCode: "C62" },
-  { code: "sticla", name: "Sticla", standardCode: "C62" },
-  { code: "doza", name: "Doza", standardCode: "C62" },
+  { code: "bax", name: "Bax", standardCode: "XBX" },
+  { code: "cutie", name: "Cutie", standardCode: "BX" },
+  { code: "sac", name: "Sac", standardCode: "BG" },
+  { code: "lada", name: "Lada", standardCode: "CS" },
+  { code: "pachet", name: "Pachet", standardCode: "PK" },
+  { code: "bidon", name: "Bidon", standardCode: "BO" },
+  { code: "sticla", name: "Sticla", standardCode: "BO" },
+  { code: "doza", name: "Doza", standardCode: "BX" },
 ] as const
 
 type UomClient = PrismaClient | Prisma.TransactionClient
@@ -102,7 +102,7 @@ export async function ensureDefaultUoms(client: UomClient, tenantId: string, com
     const match = byCode.get(def.code)
 
     if (match) {
-      const resolvedStandardCode = String(match.standardCode || "").trim() || def.standardCode
+      const resolvedStandardCode = def.standardCode
 
       if (
         match.code !== def.code ||

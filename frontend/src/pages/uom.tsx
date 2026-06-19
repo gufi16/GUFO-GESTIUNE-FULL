@@ -48,6 +48,7 @@ const STANDARD_UOM_LABELS: Record<string, string> = {
   NAR: "Numar articole",
   BG: "Sac",
   BX: "Cutie",
+  CS: "Lada / naveta",
   BO: "Sticla",
   PK: "Pachet",
   SA: "Saci",
