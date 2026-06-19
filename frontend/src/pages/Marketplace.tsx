@@ -135,6 +135,34 @@ type MarketplaceOrder = {
   }>
 }
 
+type GlovoCatalogPreview = {
+  integration?: {
+    id: string
+    storeId?: string | null
+    location?: LocationItem | null
+  }
+  summary: {
+    totalPublished: number
+    readyForUpdates: number
+    explicitlyMapped: number
+    usingSkuFallback: number
+    missingExternalId: number
+    inactiveOrHidden: number
+    zeroPrice: number
+  }
+  items: Array<{
+    productId: string
+    sku: string
+    name: string
+    price: number
+    stockQty?: number | null
+    available: boolean
+    externalProductId?: string | null
+    mapped: boolean
+    issues: string[]
+  }>
+}
+
 type IntegrationForm = {
   locationId: string
   targetTerminalId: string
@@ -287,6 +315,8 @@ export default function MarketplacePage() {
   const [loading, setLoading] = useState(true)
   const [loadingOrders, setLoadingOrders] = useState(false)
   const [loadingMappings, setLoadingMappings] = useState(false)
+  const [glovoPreview, setGlovoPreview] = useState<GlovoCatalogPreview | null>(null)
+  const [loadingGlovoPreview, setLoadingGlovoPreview] = useState(false)
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
   const [forms, setForms] = useState<Record<PlatformCode, IntegrationForm>>({
@@ -311,6 +341,15 @@ export default function MarketplacePage() {
       void loadMappings(mappingIntegrationId)
     }
   }, [activeTab, mappingIntegrationId])
+
+  useEffect(() => {
+    const integration = integrations.find((item) => item.platform === "GLOVO")
+    if (!integration?.id) {
+      setGlovoPreview(null)
+      return
+    }
+    void loadGlovoPreview(integration.id)
+  }, [integrations])
 
   async function initialLoad() {
     if (!token) {
@@ -449,6 +488,21 @@ export default function MarketplacePage() {
       setError(e?.message || "Nu am putut incarca maparile marketplace.")
     } finally {
       setLoadingMappings(false)
+    }
+  }
+
+  async function loadGlovoPreview(integrationId: string) {
+    setLoadingGlovoPreview(true)
+    try {
+      const data = await api<{ ok: boolean } & GlovoCatalogPreview>(
+        `/api/v1/marketplace/integrations/glovo/catalog-preview?integrationId=${encodeURIComponent(integrationId)}`
+      )
+      setGlovoPreview(data)
+    } catch (e: any) {
+      setGlovoPreview(null)
+      setError(e?.message || "Nu am putut incarca preview-ul de catalog Glovo.")
+    } finally {
+      setLoadingGlovoPreview(false)
     }
   }
 
@@ -1038,6 +1092,68 @@ export default function MarketplacePage() {
                       <a className="text-[#17324D] underline underline-offset-2" href={glovoDocs.overview} target="_blank" rel="noreferrer">Overview Glovo</a>
                       <a className="text-[#17324D] underline underline-offset-2" href={glovoDocs.portalGuide} target="_blank" rel="noreferrer">Portal & setup</a>
                       <a className="text-[#17324D] underline underline-offset-2" href={glovoDocs.partnerApi} target="_blank" rel="noreferrer">Orders & status API</a>
+                    </div>
+                  </div>
+                ) : null}
+
+                {selectedPlatform === "GLOVO" ? (
+                  <div className="rounded-[18px] border border-slate-200 bg-white p-4 shadow-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold text-slate-800">Preview catalog Glovo</div>
+                        <div className="mt-1 text-sm text-slate-500">
+                          Aici vezi ce produse din ERP sunt pregatite pentru fluxul real de pret/stoc si unde mai lipseste maparea.
+                        </div>
+                      </div>
+                      {selectedIntegration?.id ? (
+                        <button
+                          type="button"
+                          className={documentButtonSecondaryClass}
+                          onClick={() => loadGlovoPreview(selectedIntegration.id)}
+                          disabled={loadingGlovoPreview}
+                        >
+                          <RefreshCcw size={14} className="mr-1.5" />
+                          {loadingGlovoPreview ? "Reincarc..." : "Reincarca"}
+                        </button>
+                      ) : null}
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-3">
+                      <DocumentMetric title="Publicate" value={String(glovoPreview?.summary.totalPublished || 0)} tone="slate" />
+                      <DocumentMetric title="Gata update" value={String(glovoPreview?.summary.readyForUpdates || 0)} tone="emerald" />
+                      <DocumentMetric title="Mapate" value={String(glovoPreview?.summary.explicitlyMapped || 0)} tone="blue" />
+                      <DocumentMetric title="Fallback SKU" value={String(glovoPreview?.summary.usingSkuFallback || 0)} tone="amber" />
+                      <DocumentMetric title="Fara ID extern" value={String(glovoPreview?.summary.missingExternalId || 0)} tone="amber" />
+                      <DocumentMetric title="Pret 0 / ascunse" value={String((glovoPreview?.summary.zeroPrice || 0) + (glovoPreview?.summary.inactiveOrHidden || 0))} tone="amber" />
+                    </div>
+
+                    <div className="mt-3 rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                      {glovoPreview?.integration?.storeId
+                        ? `Store activ: ${glovoPreview.integration.storeId}`
+                        : "Store ID lipsa pe integrarea Glovo."}
+                    </div>
+
+                    <div className="mt-3 space-y-2">
+                      {(glovoPreview?.items || []).slice(0, 8).map((item) => (
+                        <div key={item.productId} className="rounded-[14px] border border-slate-200 bg-white px-3 py-2">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                              <div className="text-sm font-semibold text-slate-800">{item.name}</div>
+                              <div className="text-xs text-slate-500">
+                                SKU: {item.sku} | ID extern: {item.externalProductId || "-"} | {formatMoney(item.price)}
+                              </div>
+                            </div>
+                            <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${item.available ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>
+                              {item.available ? "activ" : "inactiv"}
+                            </span>
+                          </div>
+                          {item.issues.length > 0 ? (
+                            <div className="mt-2 text-xs text-amber-700">{item.issues.join(" | ")}</div>
+                          ) : (
+                            <div className="mt-2 text-xs text-emerald-700">Pregatit pentru update Glovo.</div>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ) : null}

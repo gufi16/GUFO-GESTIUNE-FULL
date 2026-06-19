@@ -54,6 +54,17 @@ type RecentExternalProduct = {
   platform: string | null
   mapped: boolean
 }
+type GlovoCatalogPreviewItem = {
+  productId: string
+  sku: string
+  name: string
+  price: number
+  stockQty: number | null
+  available: boolean
+  externalProductId: string | null
+  mapped: boolean
+  issues: string[]
+}
 type HistoryStatus = Prisma.ExternalOrderStatusHistoryCreateInput["status"]
 type HistorySource = Prisma.ExternalOrderStatusHistoryCreateInput["source"]
 
@@ -318,6 +329,9 @@ function buildGlovoContractChecklist(integration: MinimalIntegration) {
 
 async function enrichImportedItems(tenantId: string, integrationId: string | null, items: MarketplaceOrderPayload["items"]) {
   const externalIds = items.map((item) => item.externalProductId?.trim()).filter(Boolean) as string[]
+  const skuCandidates = items
+    .flatMap((item) => [item.sku?.trim(), item.externalProductId?.trim()])
+    .filter(Boolean) as string[]
   const mappings = integrationId && externalIds.length > 0
     ? await db.marketplaceProductMapping.findMany({
         where: {
@@ -332,11 +346,14 @@ async function enrichImportedItems(tenantId: string, integrationId: string | nul
     mappings.map((item) => [item.externalProductId, item])
   )
   const mappedProductIds = mappings.map((item) => item.erpProductId).filter(Boolean) as string[]
-  const products = mappedProductIds.length > 0
+  const products = mappedProductIds.length > 0 || skuCandidates.length > 0
     ? await db.product.findMany({
         where: {
           tenantId,
-          id: { in: mappedProductIds },
+          OR: [
+            ...(mappedProductIds.length > 0 ? [{ id: { in: mappedProductIds } }] : []),
+            ...(skuCandidates.length > 0 ? [{ sku: { in: skuCandidates } }] : []),
+          ],
         },
         select: {
           id: true,
@@ -351,19 +368,141 @@ async function enrichImportedItems(tenantId: string, integrationId: string | nul
       })
     : []
   const productById = new Map<string, MinimalMappedProduct>(products.map((item) => [item.id, item]))
+  const productBySku = new Map<string, MinimalMappedProduct>(products.map((item) => [String(item.sku || "").trim(), item]))
 
   return items.map((item) => {
     const mapping = item.externalProductId ? mappingByExternalId.get(item.externalProductId) : null
     const erpProductId = item.erpProductId || mapping?.erpProductId || undefined
-    const product = erpProductId ? productById.get(erpProductId) : null
+    const fallbackSku = String(item.sku || item.externalProductId || "").trim()
+    const product = erpProductId
+      ? productById.get(erpProductId)
+      : fallbackSku
+        ? productBySku.get(fallbackSku)
+        : null
     return {
       ...item,
-      erpProductId,
+      erpProductId: erpProductId || product?.id || undefined,
       departmentId: item.departmentId || product?.departmentId || undefined,
       sku: item.sku || product?.sku || undefined,
       vatRate: item.vatRate ?? product?.vatRate?.rate ?? undefined,
     }
   })
+}
+
+async function buildGlovoCatalogPreview(tenantId: string, integrationId: string) {
+  const integration = await db.externalIntegration.findFirst({
+    where: {
+      id: integrationId,
+      tenantId,
+      platform: "GLOVO",
+    },
+    include: {
+      location: {
+        select: { id: true, name: true, code: true },
+      },
+    },
+  })
+
+  if (!integration) {
+    throw new Error("Glovo integration not found")
+  }
+
+  const products = await db.product.findMany({
+    where: {
+      tenantId,
+      publishToGlovo: true,
+    },
+    select: {
+      id: true,
+      sku: true,
+      name: true,
+      price: true,
+      isActive: true,
+      isVisibleInPos: true,
+    },
+    orderBy: [{ name: "asc" }],
+  })
+
+  const mappings = await db.marketplaceProductMapping.findMany({
+    where: {
+      tenantId,
+      integrationId,
+      erpProductId: { in: products.map((item) => item.id) },
+    },
+    orderBy: [{ updatedAt: "desc" }],
+  })
+
+  const mappingByProductId = new Map<string, (typeof mappings)[number]>()
+  for (const mapping of mappings) {
+    if (mapping.erpProductId && !mappingByProductId.has(mapping.erpProductId)) {
+      mappingByProductId.set(mapping.erpProductId, mapping)
+    }
+  }
+
+  const stockRows = integration.locationId
+    ? await db.stockBalance.findMany({
+        where: {
+          tenantId,
+          locationId: integration.locationId,
+          productId: { in: products.map((item) => item.id) },
+        },
+        select: {
+          productId: true,
+          qty: true,
+        },
+      })
+    : []
+
+  const stockQtyByProductId = new Map<string, number>()
+  for (const row of stockRows) {
+    const current = stockQtyByProductId.get(row.productId) || 0
+    stockQtyByProductId.set(row.productId, current + Number(row.qty || 0))
+  }
+
+  const items: GlovoCatalogPreviewItem[] = products.map((product) => {
+    const mapping = mappingByProductId.get(product.id) || null
+    const externalProductId = String(mapping?.externalProductId || product.sku || "").trim() || null
+    const stockQty = integration.locationId ? Number(stockQtyByProductId.get(product.id) ?? 0) : null
+    const issues: string[] = []
+
+    if (!product.isActive) issues.push("produs inactiv")
+    if (!product.isVisibleInPos) issues.push("ascuns din POS")
+    if (Number(product.price || 0) <= 0) issues.push("pret 0")
+    if (!externalProductId) issues.push("fara externalProductId sau SKU")
+    if (!mapping?.externalProductId) issues.push("fara mapare explicita, se foloseste SKU")
+
+    return {
+      productId: product.id,
+      sku: product.sku,
+      name: product.name,
+      price: Number(product.price || 0),
+      stockQty,
+      available: Boolean(product.isActive && product.isVisibleInPos),
+      externalProductId,
+      mapped: Boolean(mapping?.externalProductId),
+      issues,
+    }
+  })
+
+  const readyItems = items.filter((item) => item.available && item.price > 0 && item.externalProductId)
+
+  return {
+    integration: {
+      id: integration.id,
+      storeId: integration.storeId,
+      location: integration.location,
+    },
+    summary: {
+      totalPublished: items.length,
+      readyForUpdates: readyItems.length,
+      explicitlyMapped: items.filter((item) => item.mapped).length,
+      usingSkuFallback: items.filter((item) => !item.mapped && Boolean(item.externalProductId)).length,
+      missingExternalId: items.filter((item) => !item.externalProductId).length,
+      inactiveOrHidden: items.filter((item) => !item.available).length,
+      zeroPrice: items.filter((item) => item.price <= 0).length,
+    },
+    items,
+  }
 }
 
 async function importMarketplaceOrderForTenant(tenantId: string, rawPayload: MarketplaceOrderPayload) {
@@ -993,6 +1132,25 @@ router.get("/api/v1/marketplace/integrations", async (req: AuthedRequest, res) =
   }))
 
   return res.json({ ok: true, items: enrichedItems })
+})
+
+router.get("/api/v1/marketplace/integrations/glovo/catalog-preview", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth?.tenantId
+  if (!tenantId) {
+    return res.status(400).json({ ok: false, error: "Missing tenant context" })
+  }
+
+  const integrationId = String(req.query.integrationId || "").trim()
+  if (!integrationId) {
+    return res.status(400).json({ ok: false, error: "integrationId is required" })
+  }
+
+  try {
+    const preview = await buildGlovoCatalogPreview(tenantId, integrationId)
+    return res.json({ ok: true, ...preview })
+  } catch (error: unknown) {
+    return res.status(400).json({ ok: false, error: getErrorMessage(error, "Nu am putut genera preview-ul Glovo.") })
+  }
 })
 
 router.get("/api/v1/marketplace/orders", async (req: AuthedRequest, res) => {
