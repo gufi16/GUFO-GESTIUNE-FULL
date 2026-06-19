@@ -3,21 +3,21 @@ import { TerminalDeviceType, WarehouseType, type PrismaClient, type Prisma } fro
 const WAREHOUSE_TYPES = ["GENERAL", "RAW_MATERIALS", "FINISHED_GOODS", "BAR", "KITCHEN", "PACKAGING"] as const
 
 const DEFAULT_UOMS = [
-  { code: "buc", name: "Bucata", standardCode: "C62" },
+  { code: "buc", name: "Bucata", standardCode: "H87" },
   { code: "set", name: "Set", standardCode: "SET" },
   { code: "portie", name: "Portie", standardCode: "C62" },
   { code: "kg", name: "Kilogram", standardCode: "KGM" },
   { code: "g", name: "Gram", standardCode: "GRM" },
   { code: "l", name: "Litru", standardCode: "LTR" },
   { code: "ml", name: "Mililitru", standardCode: "MLT" },
-  { code: "bax", name: "Bax", standardCode: "XBX" },
-  { code: "cutie", name: "Cutie", standardCode: "BX" },
-  { code: "sac", name: "Sac", standardCode: "BG" },
-  { code: "lada", name: "Lada", standardCode: "CS" },
-  { code: "pachet", name: "Pachet", standardCode: "PK" },
-  { code: "bidon", name: "Bidon", standardCode: "BO" },
-  { code: "sticla", name: "Sticla", standardCode: "BO" },
-  { code: "doza", name: "Doza", standardCode: "BX" },
+  { code: "bax", name: "Bax", standardCode: "C62" },
+  { code: "cutie", name: "Cutie", standardCode: "XBX" },
+  { code: "sac", name: "Sac", standardCode: "XBG" },
+  { code: "lada", name: "Lada", standardCode: "XCR" },
+  { code: "pachet", name: "Pachet", standardCode: "XPA" },
+  { code: "bidon", name: "Bidon", standardCode: "XCI" },
+  { code: "sticla", name: "Sticla", standardCode: "XBO" },
+  { code: "doza", name: "Doza", standardCode: "XCX" },
 ] as const
 
 type UomClient = PrismaClient | Prisma.TransactionClient
