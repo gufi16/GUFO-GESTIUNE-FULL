@@ -302,7 +302,7 @@ export default function UomPage() {
       <div className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-4 flex flex-col gap-2.5 lg:flex-row">
           <input
-            placeholder="Abreviere (ex: BUC)"
+            placeholder="Abreviere interna (ex: buc)"
             value={code}
             onChange={(e) => setCode(e.target.value)}
             className={`${documentInputClass} lg:w-40`}
@@ -311,7 +311,7 @@ export default function UomPage() {
           <div className="lg:w-56">
             <input
               list="uom-standard-codes"
-              placeholder="Cod (ex: H87)"
+              placeholder="Cod standard ANAF (ex: H87)"
               value={standardCode}
               onChange={(e) => setStandardCode(normalizeStandardCode(e.target.value))}
               className={documentInputClass}
@@ -344,7 +344,8 @@ export default function UomPage() {
         </div>
 
         <div className="mb-4 text-xs text-slate-500">
-          <span className="font-semibold text-slate-700">Cod</span> este codul standard folosit in XML-ul e-Factura. Poti cauta direct in lista sau poti scrie manual.
+          <span className="font-semibold text-slate-700">Cod standard ANAF</span> este codul trimis mai departe in XML-ul e-Factura.
+          Abrevierea interna ramane separata si este folosita in ERP exact cum o definesti tu.
         </div>
 
         {loading ? (
@@ -355,12 +356,12 @@ export default function UomPage() {
             subtitle="Cauta, sorteaza si administreaza unitatile de masura din sistem."
             rows={list}
             rowKey={(row) => row.id}
-            searchPlaceholder="Cauta dupa cod sau denumire..."
+              searchPlaceholder="Cauta dupa abreviere, cod standard sau denumire..."
             initialPageSize={10}
             emptyText="Nu exista unitati de masura."
-            columns={[
-              { key: "code", label: "Abreviere" },
-              { key: "standardCode", label: "Cod", render: (u) => u.standardCode || "-" },
+              columns={[
+              { key: "code", label: "Abreviere interna" },
+              { key: "standardCode", label: "Cod standard ANAF", render: (u) => u.standardCode || "-" },
               { key: "name", label: "Denumire" },
               { key: "isActive", label: "Status", type: "status" },
               {
