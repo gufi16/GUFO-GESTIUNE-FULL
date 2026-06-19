@@ -65,6 +65,13 @@ type GlovoCatalogPreviewItem = {
   mapped: boolean
   issues: string[]
 }
+type GlovoBulkUpdateProduct = {
+  id: string
+  name: string
+  price: number
+  available: boolean
+  image_url?: string
+}
 type HistoryStatus = Prisma.ExternalOrderStatusHistoryCreateInput["status"]
 type HistorySource = Prisma.ExternalOrderStatusHistoryCreateInput["source"]
 
@@ -274,6 +281,11 @@ function toGlovoMoneyNumber(value: unknown): number {
 
 function normalizeGlovoStoreId(value: unknown) {
   return String(value || "").trim()
+}
+
+function normalizeHttpsUrl(value: unknown) {
+  const text = String(value || "").trim()
+  return text.startsWith("https://") ? text : null
 }
 
 function inferGlovoPartnerName(storeId: string) {
@@ -502,6 +514,189 @@ async function buildGlovoCatalogPreview(tenantId: string, integrationId: string)
       zeroPrice: items.filter((item) => item.price <= 0).length,
     },
     items,
+  }
+}
+
+function resolveGlovoApiBaseUrl(integration: MinimalIntegration) {
+  const settings = integrationSettings(integration.settingsJson)
+  const configured = String(settings.glovoApiBaseUrl || process.env.GLOVO_API_BASE_URL || "https://api.glovoapp.com").trim()
+  return configured.replace(/\/+$/, "")
+}
+
+function resolveGlovoAuthToken(integration: MinimalIntegration) {
+  return String(integration.webhookSecret || integration.accessToken || "").trim()
+}
+
+async function ensureGlovoPushIntegration(tenantId: string, integrationId: string) {
+  const integration = await db.externalIntegration.findFirst({
+    where: {
+      id: integrationId,
+      tenantId,
+      platform: "GLOVO",
+      status: "ACTIVE",
+    },
+  })
+
+  if (!integration) {
+    throw new Error("Integrarea Glovo activa nu a fost gasita.")
+  }
+
+  const storeId = normalizeGlovoStoreId(integration.storeId)
+  const authToken = resolveGlovoAuthToken(integration)
+  const settings = integrationSettings(integration.settingsJson)
+
+  if (!storeId) {
+    throw new Error("Lipseste storeId pe integrarea Glovo.")
+  }
+
+  if (!authToken) {
+    throw new Error("Lipseste tokenul Glovo pentru push de catalog.")
+  }
+
+  if (!settings.menuManagedByIntegration) {
+    throw new Error("Pe integrarea Glovo nu este activat modulul de catalog gestionat prin integrare.")
+  }
+
+  return {
+    integration,
+    storeId,
+    authToken,
+    apiBaseUrl: resolveGlovoApiBaseUrl(integration),
+  }
+}
+
+async function buildGlovoBulkUpdateProducts(tenantId: string, integrationId: string) {
+  const preview = await buildGlovoCatalogPreview(tenantId, integrationId)
+  const productIds = preview.items.map((item) => item.productId)
+  const products = productIds.length > 0
+    ? await db.product.findMany({
+        where: {
+          tenantId,
+          id: { in: productIds },
+        },
+        select: {
+          id: true,
+          imageUrl: true,
+        },
+      })
+    : []
+
+  const productImageById = new Map<string, string | null>(
+    products.map((item) => [item.id, normalizeHttpsUrl(item.imageUrl)])
+  )
+
+  const readyItems = preview.items.filter((item) => item.available && item.price > 0 && item.externalProductId)
+  const payloadProducts: GlovoBulkUpdateProduct[] = readyItems.map((item) => {
+    const payload: GlovoBulkUpdateProduct = {
+      id: String(item.externalProductId),
+      name: item.name,
+      price: Number(item.price),
+      available: Boolean(item.available),
+    }
+    const imageUrl = productImageById.get(item.productId)
+    if (imageUrl) {
+      payload.image_url = imageUrl
+    }
+    return payload
+  })
+
+  if (payloadProducts.length === 0) {
+    throw new Error("Nu exista produse pregatite pentru push real Glovo.")
+  }
+
+  if (payloadProducts.length > 10000) {
+    throw new Error("Catalogul depaseste limita Glovo de 10000 produse per request.")
+  }
+
+  return {
+    preview,
+    payload: {
+      products: payloadProducts,
+    },
+  }
+}
+
+async function pushGlovoCatalogUpdate(tenantId: string, integrationId: string) {
+  const { integration, storeId, authToken, apiBaseUrl } = await ensureGlovoPushIntegration(tenantId, integrationId)
+  const { preview, payload } = await buildGlovoBulkUpdateProducts(tenantId, integrationId)
+  const endpoint = `${apiBaseUrl}/webhook/stores/${encodeURIComponent(storeId)}/menu/updates`
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: authToken,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(payload),
+  })
+
+  const responseText = await response.text()
+  let parsedResponse: unknown = null
+  try {
+    parsedResponse = responseText ? JSON.parse(responseText) : null
+  } catch {
+    parsedResponse = responseText || null
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      `Glovo push failed (${response.status}): ${typeof parsedResponse === "string" ? parsedResponse : safeJsonStringify(parsedResponse)}`
+    )
+  }
+
+  const transactionId = isRecord(parsedResponse) ? String(parsedResponse.transaction_id || "").trim() : ""
+  if (!transactionId) {
+    throw new Error("Glovo nu a returnat transaction_id pentru push-ul de catalog.")
+  }
+
+  return {
+    integrationId: integration.id,
+    storeId,
+    apiBaseUrl,
+    endpoint,
+    transactionId,
+    payload,
+    summary: preview.summary,
+    response: parsedResponse,
+  }
+}
+
+async function verifyGlovoCatalogUpdateStatus(tenantId: string, integrationId: string, transactionId: string) {
+  const { storeId, authToken, apiBaseUrl } = await ensureGlovoPushIntegration(tenantId, integrationId)
+  const endpoint = `${apiBaseUrl}/webhook/stores/${encodeURIComponent(storeId)}/menu/updates/${encodeURIComponent(transactionId)}`
+
+  const response = await fetch(endpoint, {
+    headers: {
+      Authorization: authToken,
+      Accept: "application/json",
+    },
+  })
+
+  const responseText = await response.text()
+  let parsedResponse: unknown = null
+  try {
+    parsedResponse = responseText ? JSON.parse(responseText) : null
+  } catch {
+    parsedResponse = responseText || null
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      `Glovo verify failed (${response.status}): ${typeof parsedResponse === "string" ? parsedResponse : safeJsonStringify(parsedResponse)}`
+    )
+  }
+
+  return {
+    integrationId,
+    storeId,
+    apiBaseUrl,
+    endpoint,
+    transactionId,
+    status: isRecord(parsedResponse) ? String(parsedResponse.status || "").trim() : "",
+    details: isRecord(parsedResponse) && Array.isArray(parsedResponse.details) ? parsedResponse.details : [],
+    promotionStatuses: isRecord(parsedResponse) && Array.isArray(parsedResponse.promotion_statuses) ? parsedResponse.promotion_statuses : [],
+    response: parsedResponse,
   }
 }
 
@@ -1150,6 +1345,50 @@ router.get("/api/v1/marketplace/integrations/glovo/catalog-preview", async (req:
     return res.json({ ok: true, ...preview })
   } catch (error: unknown) {
     return res.status(400).json({ ok: false, error: getErrorMessage(error, "Nu am putut genera preview-ul Glovo.") })
+  }
+})
+
+router.post("/api/v1/marketplace/integrations/glovo/push-catalog", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth?.tenantId
+  if (!tenantId) {
+    return res.status(400).json({ ok: false, error: "Missing tenant context" })
+  }
+
+  const integrationId = String(req.body?.integrationId || "").trim()
+  if (!integrationId) {
+    return res.status(400).json({ ok: false, error: "integrationId is required" })
+  }
+
+  try {
+    const result = await pushGlovoCatalogUpdate(tenantId, integrationId)
+    return res.json({ ok: true, ...result })
+  } catch (error: unknown) {
+    return res.status(400).json({ ok: false, error: getErrorMessage(error, "Nu am putut trimite catalogul la Glovo.") })
+  }
+})
+
+router.get("/api/v1/marketplace/integrations/glovo/push-status", async (req: AuthedRequest, res) => {
+  const tenantId = req.auth?.tenantId
+  if (!tenantId) {
+    return res.status(400).json({ ok: false, error: "Missing tenant context" })
+  }
+
+  const integrationId = String(req.query.integrationId || "").trim()
+  const transactionId = String(req.query.transactionId || "").trim()
+
+  if (!integrationId) {
+    return res.status(400).json({ ok: false, error: "integrationId is required" })
+  }
+
+  if (!transactionId) {
+    return res.status(400).json({ ok: false, error: "transactionId is required" })
+  }
+
+  try {
+    const result = await verifyGlovoCatalogUpdateStatus(tenantId, integrationId, transactionId)
+    return res.json({ ok: true, ...result })
+  } catch (error: unknown) {
+    return res.status(400).json({ ok: false, error: getErrorMessage(error, "Nu am putut verifica statusul push-ului Glovo.") })
   }
 })
 

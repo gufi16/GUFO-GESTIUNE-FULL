@@ -163,6 +163,35 @@ type GlovoCatalogPreview = {
   }>
 }
 
+type GlovoCatalogPushResult = {
+  integrationId: string
+  storeId: string
+  apiBaseUrl: string
+  endpoint: string
+  transactionId: string
+  payload: {
+    products: Array<{
+      id: string
+      name: string
+      price: number
+      available: boolean
+      image_url?: string
+    }>
+  }
+  summary: GlovoCatalogPreview["summary"]
+}
+
+type GlovoCatalogPushStatus = {
+  integrationId: string
+  storeId: string
+  apiBaseUrl: string
+  endpoint: string
+  transactionId: string
+  status: string
+  details: unknown[]
+  promotionStatuses: unknown[]
+}
+
 type IntegrationForm = {
   locationId: string
   targetTerminalId: string
@@ -317,6 +346,10 @@ export default function MarketplacePage() {
   const [loadingMappings, setLoadingMappings] = useState(false)
   const [glovoPreview, setGlovoPreview] = useState<GlovoCatalogPreview | null>(null)
   const [loadingGlovoPreview, setLoadingGlovoPreview] = useState(false)
+  const [glovoPushResult, setGlovoPushResult] = useState<GlovoCatalogPushResult | null>(null)
+  const [glovoPushStatus, setGlovoPushStatus] = useState<GlovoCatalogPushStatus | null>(null)
+  const [loadingGlovoPush, setLoadingGlovoPush] = useState(false)
+  const [loadingGlovoPushStatus, setLoadingGlovoPushStatus] = useState(false)
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
   const [forms, setForms] = useState<Record<PlatformCode, IntegrationForm>>({
@@ -503,6 +536,40 @@ export default function MarketplacePage() {
       setError(e?.message || "Nu am putut incarca preview-ul de catalog Glovo.")
     } finally {
       setLoadingGlovoPreview(false)
+    }
+  }
+
+  async function pushGlovoCatalog(integrationId: string) {
+    setLoadingGlovoPush(true)
+    setError("")
+    setMessage("")
+    try {
+      const data = await api<{ ok: boolean } & GlovoCatalogPushResult>("/api/v1/marketplace/integrations/glovo/push-catalog", {
+        method: "POST",
+        body: JSON.stringify({ integrationId }),
+      })
+      setGlovoPushResult(data)
+      setMessage(`Push Glovo pornit. Transaction ID: ${data.transactionId}`)
+      await loadGlovoPreview(integrationId)
+      await loadGlovoPushStatus(integrationId, data.transactionId)
+    } catch (e: any) {
+      setError(e?.message || "Nu am putut porni push-ul real de catalog Glovo.")
+    } finally {
+      setLoadingGlovoPush(false)
+    }
+  }
+
+  async function loadGlovoPushStatus(integrationId: string, transactionId: string) {
+    setLoadingGlovoPushStatus(true)
+    try {
+      const data = await api<{ ok: boolean } & GlovoCatalogPushStatus>(
+        `/api/v1/marketplace/integrations/glovo/push-status?integrationId=${encodeURIComponent(integrationId)}&transactionId=${encodeURIComponent(transactionId)}`
+      )
+      setGlovoPushStatus(data)
+    } catch (e: any) {
+      setError(e?.message || "Nu am putut verifica statusul push-ului Glovo.")
+    } finally {
+      setLoadingGlovoPushStatus(false)
     }
   }
 
@@ -1106,15 +1173,25 @@ export default function MarketplacePage() {
                         </div>
                       </div>
                       {selectedIntegration?.id ? (
-                        <button
-                          type="button"
-                          className={documentButtonSecondaryClass}
-                          onClick={() => loadGlovoPreview(selectedIntegration.id)}
-                          disabled={loadingGlovoPreview}
-                        >
-                          <RefreshCcw size={14} className="mr-1.5" />
-                          {loadingGlovoPreview ? "Reincarc..." : "Reincarca"}
-                        </button>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            className={documentButtonSecondaryClass}
+                            onClick={() => loadGlovoPreview(selectedIntegration.id)}
+                            disabled={loadingGlovoPreview}
+                          >
+                            <RefreshCcw size={14} className="mr-1.5" />
+                            {loadingGlovoPreview ? "Reincarc..." : "Reincarca"}
+                          </button>
+                          <button
+                            type="button"
+                            className={documentButtonPrimaryClass}
+                            onClick={() => pushGlovoCatalog(selectedIntegration.id)}
+                            disabled={loadingGlovoPush}
+                          >
+                            {loadingGlovoPush ? "Trimitem..." : "Push catalog real"}
+                          </button>
+                        </div>
                       ) : null}
                     </div>
 
@@ -1132,6 +1209,61 @@ export default function MarketplacePage() {
                         ? `Store activ: ${glovoPreview.integration.storeId}`
                         : "Store ID lipsa pe integrarea Glovo."}
                     </div>
+
+                    {glovoPushResult ? (
+                      <div className="mt-3 rounded-[14px] border border-blue-200 bg-blue-50 px-3 py-3 text-sm text-slate-700">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <div className="font-semibold text-slate-900">Ultimul push real</div>
+                            <div className="text-xs text-slate-500">
+                              Transaction ID: {glovoPushResult.transactionId} | {glovoPushResult.payload.products.length} produse
+                            </div>
+                          </div>
+                          {selectedIntegration?.id ? (
+                            <button
+                              type="button"
+                              className={documentButtonSecondaryClass}
+                              onClick={() => loadGlovoPushStatus(selectedIntegration.id, glovoPushResult.transactionId)}
+                              disabled={loadingGlovoPushStatus}
+                            >
+                              <RefreshCcw size={14} className="mr-1.5" />
+                              {loadingGlovoPushStatus ? "Verificam..." : "Verifica status"}
+                            </button>
+                          ) : null}
+                        </div>
+                        <div className="mt-2 text-xs text-slate-500">
+                          Endpoint: {glovoPushResult.endpoint}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {glovoPushStatus ? (
+                      <div className="mt-3 rounded-[14px] border border-slate-200 bg-white px-3 py-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="text-sm font-semibold text-slate-900">Status Glovo bulk update</div>
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                              glovoPushStatus.status === "SUCCESS"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : glovoPushStatus.status === "PROCESSING"
+                                  ? "bg-amber-100 text-amber-700"
+                                  : "bg-rose-100 text-rose-700"
+                            }`}
+                          >
+                            {glovoPushStatus.status || "necunoscut"}
+                          </span>
+                        </div>
+                        <div className="mt-2 space-y-1 text-xs text-slate-600">
+                          {(glovoPushStatus.details || []).length ? (
+                            glovoPushStatus.details.map((detail, index) => (
+                              <div key={`glovo-status-${index}`}>{String(detail)}</div>
+                            ))
+                          ) : (
+                            <div>Glovo nu a returnat detalii suplimentare.</div>
+                          )}
+                        </div>
+                      </div>
+                    ) : null}
 
                     <div className="mt-3 space-y-2">
                       {(glovoPreview?.items || []).slice(0, 8).map((item) => (
