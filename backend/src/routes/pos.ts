@@ -9,6 +9,7 @@ import { getPrimaryTenantCompany } from "../lib/companyResolver";
 import { reserveNextNumber } from "../lib/numbering";
 import { getJwtSecret, verifySecret } from "../lib/auth";
 import { createConsumptionDraft, validateConsumptionDoc } from "../lib/consumptionDocs";
+import { hasTenantModule } from "../lib/tenantModules";
 
 console.log("POS ROUTES FILE LOADED");
 
@@ -1500,14 +1501,17 @@ router.post("/api/v1/pos/pair", async (req: Request, res: Response) => {
     }
 
     const body = parsed.data;
+    const normalizedSource = normalizeText(body.source)?.toLowerCase() || "";
+    const isWarehouseMobilePair = normalizedSource === "gufo-depozit";
     const requestedDeviceType =
-      normalizeText(body.deviceType ?? body.device_type)?.toUpperCase() === "KDS" || normalizeText(body.source)?.toLowerCase() === "gufo-kds"
+      normalizeText(body.deviceType ?? body.device_type)?.toUpperCase() === "KDS" || normalizedSource === "gufo-kds"
         ? "KDS"
         : "POS";
     const licenseKey = normalizeText(body.licenseKey ?? body.license_key);
     const incomingDeviceId = normalizeText(body.deviceId ?? body.device_id);
     const terminalLabel =
-      normalizeText(body.terminalLabel ?? body.terminal_label) || (requestedDeviceType === "KDS" ? "GuFo KDS" : "Android POS");
+      normalizeText(body.terminalLabel ?? body.terminal_label) ||
+      (requestedDeviceType === "KDS" ? "GuFo KDS" : isWarehouseMobilePair ? "Gufo Depozit" : "Android POS");
 
     if (!licenseKey || licenseKey.length < 3) {
       return res.status(400).json({
@@ -1576,6 +1580,16 @@ router.post("/api/v1/pos/pair", async (req: Request, res: Response) => {
         ok: false,
         error: terminal.deviceType === "KDS" ? "KDS nu este activ" : "POS nu este activ",
       });
+    }
+
+    if (isWarehouseMobilePair) {
+      const warehouseMobileEnabled = await hasTenantModule(terminal.tenantId, "warehouse_mobile");
+      if (!warehouseMobileEnabled) {
+        return res.status(403).json({
+          ok: false,
+          error: "Gufo Depozit nu este activ pe licenta acestui client",
+        });
+      }
     }
 
     if (incomingDeviceId && incomingDeviceId !== terminal.deviceId) {

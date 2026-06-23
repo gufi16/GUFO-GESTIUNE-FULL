@@ -38,6 +38,15 @@ type TenantModuleRowLike = {
 
 const CONTROL_PANEL_MODULE_CATALOG: ControlPanelModuleDefinition[] = [
   {
+    code: "warehouse_mobile",
+    name: "Gufo Depozit",
+    description: "Aplicatia mobila pentru receptie, facturare, stoc live si operatiuni rapide din depozit.",
+    target: ModuleTarget.BOTH,
+    isCore: false,
+    area: "stock",
+    inheritedFrom: [],
+  },
+  {
     code: "products",
     name: "Produse",
     description: "Produse, articole si coduri de baza pentru vanzare.",
