@@ -221,6 +221,26 @@ function formatMoney(value: any) {
   return formatMoneyRo(value)
 }
 
+function buildEan13CheckDigit(base12: string) {
+  const digits = base12
+    .replace(/\D/g, "")
+    .slice(0, 12)
+    .padStart(12, "0")
+    .split("")
+    .map((value) => Number(value))
+
+  const sum = digits.reduce((total, digit, index) => total + digit * (index % 2 === 0 ? 1 : 3), 0)
+  return String((10 - (sum % 10)) % 10)
+}
+
+function generateProductBarcode() {
+  const seed = `${Date.now()}${Math.floor(Math.random() * 1000)
+    .toString()
+    .padStart(3, "0")}`.replace(/\D/g, "")
+  const base12 = `29${seed}`.slice(-12).padStart(12, "0")
+  return `${base12}${buildEan13CheckDigit(base12)}`
+}
+
 function formatUomOption(uom?: { code?: string | null; standardCode?: string | null; name?: string | null } | null) {
   const shortCode = String(uom?.code || "").trim().toUpperCase()
   const standardCode = String(uom?.standardCode || "").trim().toUpperCase()
@@ -659,7 +679,7 @@ function getDefaultVat(list = vatRates) {
         body: JSON.stringify({
           sku: !editingItem ? form.sku.trim() || null : undefined,
           name: form.name.trim(),
-          barcode: warehouseMobileEnabled ? form.barcode.trim() || null : undefined,
+          barcode: form.barcode.trim() || null,
           imageUrl: normalizeHostedImageUrl(form.imageUrl.trim()) || null,
           class: fixedClassValue || form.class,
           uomId: form.uomId,
@@ -1034,6 +1054,7 @@ function getDefaultVat(list = vatRates) {
 
       const name = String(item.name || "").toLowerCase()
       const sku = String(item.sku || "").toLowerCase()
+      const barcode = String(item.barcodes?.[0]?.barcode || "").toLowerCase()
       const cat = String(item.category?.name || "").toLowerCase()
       const dep = String(item.category?.department?.name || item.department?.name || "").toLowerCase()
       const ambalaj = String(item.purchaseUom?.code || item.purchaseUom?.name || "").toLowerCase()
@@ -1041,6 +1062,7 @@ function getDefaultVat(list = vatRates) {
       return (
         name.includes(qq) ||
         sku.includes(qq) ||
+        barcode.includes(qq) ||
         cat.includes(qq) ||
         dep.includes(qq) ||
         ambalaj.includes(qq)
@@ -1198,7 +1220,14 @@ function getDefaultVat(list = vatRates) {
                           <span style={{ color: "#94a3b8" }}>-</span>
                         )}
                       </td>
-                      <td style={td}>{item.sku}</td>
+                      <td style={td}>
+                        <div style={{ display: "grid", gap: 2 }}>
+                          <span>{item.sku}</span>
+                          <span style={{ color: "#64748b", fontSize: 12 }}>
+                            {item.barcodes?.[0]?.barcode ? `Barcode: ${item.barcodes[0].barcode}` : "fara barcode"}
+                          </span>
+                        </div>
+                      </td>
                       <td style={td}>{item.name}</td>
                       <td style={td}>{item.isMenu ? "Meniu" : "Produs"}</td>
                       <td style={td}>{CLASS_LABEL_MAP[item.class] || item.class}</td>
@@ -1336,16 +1365,30 @@ function getDefaultVat(list = vatRates) {
                       />
                     </Field>
 
-                    {warehouseMobileEnabled ? (
-                      <Field label="Cod de bare">
+                    <Field label="Cod de bare">
+                      <div style={inlineFieldRow}>
                         <input
                           value={form.barcode}
                           onChange={(e) => setForm((prev) => ({ ...prev, barcode: e.target.value }))}
                           placeholder="Scaneaza sau scrie codul de bare"
-                          style={input}
+                          style={{ ...input, margin: 0 }}
                         />
-                      </Field>
-                    ) : null}
+
+                        <button
+                          type="button"
+                          onClick={() => setForm((prev) => ({ ...prev, barcode: generateProductBarcode() }))}
+                          style={{ ...btnSecondarySmall, whiteSpace: "nowrap" }}
+                        >
+                          Genereaza cod
+                        </button>
+                      </div>
+
+                      <div style={fieldHint}>
+                        {warehouseMobileEnabled
+                          ? "Codul de bare este folosit direct in Gufo Depozit la scanare."
+                          : "Poti salva codul de bare acum, iar Gufo Depozit il va folosi imediat dupa activare."}
+                      </div>
+                    </Field>
 
                     <Field label="Clasificare">
                       <select
@@ -2324,6 +2367,12 @@ const fieldWrap: CSSProperties = {
   display: "flex",
   flexDirection: "column",
   gap: 4
+}
+
+const inlineFieldRow: CSSProperties = {
+  display: "flex",
+  gap: 8,
+  alignItems: "center"
 }
 
 const labelStyle: CSSProperties = {
