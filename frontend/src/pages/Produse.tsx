@@ -316,6 +316,7 @@ export function ProductsCatalogPage({
   const [ncCodeManual, setNcCodeManual] = useState(false)
   const [page, setPage] = useState(1)
   const [classFilter, setClassFilter] = useState<string>(fixedClassValue || "ALL")
+  const [barcodeFilter, setBarcodeFilter] = useState<"ALL" | "WITH" | "WITHOUT">("ALL")
   const [nextSku, setNextSku] = useState("")
 
   const [form, setForm] = useState<FormState>(emptyForm)
@@ -1043,6 +1044,15 @@ function getDefaultVat(list = vatRates) {
     return counts
   }, [items])
 
+  const barcodeCounts = useMemo(() => {
+    const withBarcode = items.filter((item) => Boolean(String(item.barcodes?.[0]?.barcode || "").trim())).length
+    return {
+      ALL: items.length,
+      WITH: withBarcode,
+      WITHOUT: items.length - withBarcode,
+    }
+  }, [items])
+
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase()
 
@@ -1050,11 +1060,20 @@ function getDefaultVat(list = vatRates) {
       const classOk = effectiveClassFilter === "ALL" ? true : item.class === effectiveClassFilter
       if (!classOk) return false
 
+      const barcodeValue = String(item.barcodes?.[0]?.barcode || "").trim()
+      const barcodeOk =
+        barcodeFilter === "ALL"
+          ? true
+          : barcodeFilter === "WITH"
+            ? Boolean(barcodeValue)
+            : !barcodeValue
+      if (!barcodeOk) return false
+
       if (!qq) return true
 
       const name = String(item.name || "").toLowerCase()
       const sku = String(item.sku || "").toLowerCase()
-      const barcode = String(item.barcodes?.[0]?.barcode || "").toLowerCase()
+      const barcode = barcodeValue.toLowerCase()
       const cat = String(item.category?.name || "").toLowerCase()
       const dep = String(item.category?.department?.name || item.department?.name || "").toLowerCase()
       const ambalaj = String(item.purchaseUom?.code || item.purchaseUom?.name || "").toLowerCase()
@@ -1068,11 +1087,11 @@ function getDefaultVat(list = vatRates) {
         ambalaj.includes(qq)
       )
     })
-  }, [items, q, effectiveClassFilter])
+  }, [items, q, effectiveClassFilter, barcodeFilter])
 
   useEffect(() => {
     setPage(1)
-  }, [q, effectiveClassFilter])
+  }, [q, effectiveClassFilter, barcodeFilter])
 
   useEffect(() => {
     if (fixedClassValue) {
@@ -1123,26 +1142,52 @@ function getDefaultVat(list = vatRates) {
 
       <div style={card}>
         {!fixedClassValue ? (
-          <div style={filterBar}>
-            <button
-              type="button"
-              onClick={() => setClassFilter("ALL")}
-              style={classFilter === "ALL" ? chipActive : chip}
-            >
-              Toate ({items.length})
-            </button>
-
-            {CLASS_OPTIONS.map((option) => (
+          <>
+            <div style={filterBar}>
               <button
-                key={option.value}
                 type="button"
-                onClick={() => setClassFilter(option.value)}
-                style={classFilter === option.value ? chipActive : chip}
+                onClick={() => setClassFilter("ALL")}
+                style={classFilter === "ALL" ? chipActive : chip}
               >
-                {option.label} ({classCounts[option.value] || 0})
+                Toate ({items.length})
               </button>
-            ))}
-          </div>
+
+              {CLASS_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setClassFilter(option.value)}
+                  style={classFilter === option.value ? chipActive : chip}
+                >
+                  {option.label} ({classCounts[option.value] || 0})
+                </button>
+              ))}
+            </div>
+
+            <div style={filterBar}>
+              <button
+                type="button"
+                onClick={() => setBarcodeFilter("ALL")}
+                style={barcodeFilter === "ALL" ? chipActive : chip}
+              >
+                Cod de bare: toate ({barcodeCounts.ALL})
+              </button>
+              <button
+                type="button"
+                onClick={() => setBarcodeFilter("WITH")}
+                style={barcodeFilter === "WITH" ? chipActive : chip}
+              >
+                Cu cod de bare ({barcodeCounts.WITH})
+              </button>
+              <button
+                type="button"
+                onClick={() => setBarcodeFilter("WITHOUT")}
+                style={barcodeFilter === "WITHOUT" ? chipActive : chip}
+              >
+                Fara cod de bare ({barcodeCounts.WITHOUT})
+              </button>
+            </div>
+          </>
         ) : (
           <div style={hintBox}>
             Afisezi doar articolele din clasa <strong>{CLASS_LABEL_MAP[fixedClassValue] || fixedClassValue}</strong>, ca sa lucrezi mai repede pe registrul relevant.
@@ -1224,7 +1269,7 @@ function getDefaultVat(list = vatRates) {
                         <div style={{ display: "grid", gap: 2 }}>
                           <span>{item.sku}</span>
                           <span style={{ color: "#64748b", fontSize: 12 }}>
-                            {item.barcodes?.[0]?.barcode ? `Barcode: ${item.barcodes[0].barcode}` : "fara barcode"}
+                            {item.barcodes?.[0]?.barcode ? `Cod de bare: ${item.barcodes[0].barcode}` : "fara cod de bare"}
                           </span>
                         </div>
                       </td>
