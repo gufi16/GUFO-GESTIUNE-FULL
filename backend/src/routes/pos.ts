@@ -6,7 +6,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "../lib/prisma";
 import { decrementStockBalanceAllowNegative } from "../lib/stock";
 import { getPrimaryTenantCompany } from "../lib/companyResolver";
-import { reserveNextNumber } from "../lib/numbering";
+import { getNextNumberPreview, reserveNextNumber } from "../lib/numbering";
 import { getJwtSecret, verifySecret } from "../lib/auth";
 import { createConsumptionDraft, validateConsumptionDoc } from "../lib/consumptionDocs";
 import { hasTenantModule } from "../lib/tenantModules";
@@ -4146,6 +4146,37 @@ export async function handlePosBackofficeLocationsList(req: PosAuthRequest, res:
   }
 }
 
+export async function handlePosBackofficeNumberPreviews(req: PosAuthRequest, res: Response) {
+  const auth = await resolvePosAuthContext(req);
+  if (!auth?.tenantId) {
+    return res.status(401).json({ ok: false, error: "POS neautentificat." });
+  }
+
+  req.auth = auth;
+
+  try {
+    const [invoice, receipt, transfer, consumption] = await Promise.all([
+      getNextNumberPreview(auth.tenantId, "invoice"),
+      getNextNumberPreview(auth.tenantId, "purchaseReceipt"),
+      getNextNumberPreview(auth.tenantId, "transfer"),
+      getNextNumberPreview(auth.tenantId, "consumption"),
+    ]);
+
+    return res.json({
+      ok: true,
+      previews: {
+        invoice: invoice.value,
+        receipt: receipt.value,
+        transfer: transfer.value,
+        consumption: consumption.value,
+      },
+    });
+  } catch (error) {
+    console.error("POS BACKOFFICE NUMBER PREVIEWS ERROR", error);
+    return res.status(500).json({ ok: false, error: "Nu am putut calcula urmatoarele numere de document." });
+  }
+}
+
 export async function handlePosBackofficeConsumptionCreate(req: PosAuthRequest, res: Response) {
   const auth = await resolvePosAuthContext(req);
   if (!auth?.tenantId || !auth?.terminalId) {
@@ -4855,6 +4886,10 @@ router.get("/api/v1/pos/backoffice/products", requirePosAuth, async (req: PosAut
 
 router.get("/api/v1/pos/backoffice/locations", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
   return handlePosBackofficeLocationsList(req, res);
+});
+
+router.get("/api/v1/pos/backoffice/number-previews", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
+  return handlePosBackofficeNumberPreviews(req, res);
 });
 
 router.post("/api/v1/pos/backoffice/receipts", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
