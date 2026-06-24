@@ -603,6 +603,7 @@ export default function ControlPanelClientDetails() {
   const inheritedDynamicModules = dynamicModules.filter(
     (module) => module.enabled && module.defaultEnabled && !module.overrideEnabled,
   ).length
+  const warehouseMobileModule = dynamicModules.find((module) => module.code === "warehouse_mobile") || null
   const totalEnabledModules = enabledCoreModules + enabledDynamicModules
   const groupedDynamicModules = useMemo(() => {
     const groups = new Map<string, DynamicModuleItem[]>()
@@ -1339,6 +1340,46 @@ export default function ControlPanelClientDetails() {
               {metricCard("Locatii / POS / KDS", `${licenseForm.limitLocations} / ${licenseForm.limitTerminals} / ${licenseForm.limitKdsDevices}`)}
             </div>
 
+            <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Gufo Depozit</div>
+                  <div className="mt-1 text-sm font-semibold text-[#17324D]">Licenta aplicatiei mobile pentru scanare, receptie, facturare si stoc live</div>
+                  <div className="mt-1 text-sm text-slate-500">
+                    {warehouseMobileModule?.enabled
+                      ? "Modulul este activ pe client si poate face pair din aplicatia mobila."
+                      : "Modulul este oprit. Aplicatia mobila nu se poate conecta pana nu il activezi."}
+                  </div>
+                </div>
+                <div className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${
+                  warehouseMobileModule?.enabled
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : "border-slate-200 bg-white text-slate-500"
+                }`}>
+                  {warehouseMobileModule?.enabled ? "Activ" : "Inactiv"}
+                </div>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setLicenseModalOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"
+                >
+                  <Smartphone size={15} />
+                  Configureaza licenta mobila
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("locations")}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"
+                >
+                  <MapPin size={15} />
+                  Vezi locatii si chei device
+                </button>
+              </div>
+            </div>
+
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
@@ -1479,6 +1520,26 @@ export default function ControlPanelClientDetails() {
                 >
                   Vezi modulele
                 </button>
+              </div>
+            </div>
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Gufo Depozit</div>
+                  <div className="mt-1 text-sm font-semibold text-[#17324D]">Status licenta mobila</div>
+                  <div className="mt-1 text-sm text-slate-500">
+                    {warehouseMobileModule?.enabled
+                      ? "Clientul poate face pair din Gufo Depozit si vede produsele, clientii, furnizorii si documentele mobile."
+                      : "Activeaza modulul warehouse_mobile daca vrei scanare si documente mobile pe acest tenant."}
+                  </div>
+                </div>
+                <div className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                  warehouseMobileModule?.enabled
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : "border-slate-200 bg-white text-slate-500"
+                }`}>
+                  {warehouseMobileModule?.enabled ? "Aplicatie activa" : "Aplicatie oprita"}
+                </div>
               </div>
             </div>
             <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">

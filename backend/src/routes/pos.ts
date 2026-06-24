@@ -1192,6 +1192,31 @@ const PosBackofficeInvoiceSchema = z.object({
   ).min(1),
 });
 
+const PosBackofficeConsumptionSchema = z.object({
+  locationId: z.string().optional().nullable(),
+  note: z.string().optional().nullable(),
+  postNow: z.boolean().optional().default(true),
+  items: z.array(
+    z.object({
+      productId: z.string().min(1),
+      qty: z.number().positive(),
+      note: z.string().optional().nullable(),
+    })
+  ).min(1),
+});
+
+const PosBackofficeTransferSchema = z.object({
+  fromLocationId: z.string().optional().nullable(),
+  toLocationId: z.string().min(1),
+  note: z.string().optional().nullable(),
+  items: z.array(
+    z.object({
+      productId: z.string().min(1),
+      qty: z.number().positive(),
+    })
+  ).min(1),
+});
+
 async function resolveDailyClosureAuth(req: PosAuthRequest, body: z.infer<typeof PosDailyClosureSchema>) {
   const hintedTerminalIds = dedupeNonEmpty([body.terminalId]);
   const hintedDeviceIds = dedupeNonEmpty([
@@ -4010,9 +4035,20 @@ export async function handlePosBackofficeProductsSearch(req: PosAuthRequest, res
         vatRate: true,
         uom: true,
         purchaseUom: true,
+        category: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        barcodes: {
+          select: {
+            barcode: true,
+          },
+        },
       },
       orderBy: [{ name: "asc" }],
-      take: 20,
+      take: q ? 40 : 250,
     });
 
     return res.json({
@@ -4025,11 +4061,365 @@ export async function handlePosBackofficeProductsSearch(req: PosAuthRequest, res
         defaultCost: toNumber(product.costPrice),
         salePrice: toNumber(product.price),
         uomCode: product.purchaseUom?.code || product.uom?.code || "",
+        categoryId: product.category?.id || null,
+        categoryName: product.category?.name || null,
+        barcodes: Array.isArray(product.barcodes)
+          ? product.barcodes.map((item) => normalizeText(item?.barcode)).filter(Boolean)
+          : [],
       })),
     });
   } catch (error) {
     console.error("POS BACKOFFICE PRODUCTS ERROR", error);
     return res.status(500).json({ ok: false, error: "Nu am putut cauta produsele." });
+  }
+}
+
+export async function handlePosBackofficeLocationsList(req: PosAuthRequest, res: Response) {
+  const auth = await resolvePosAuthContext(req);
+  if (!auth?.tenantId) {
+    return res.status(401).json({ ok: false, error: "POS neautentificat." });
+  }
+
+  req.auth = auth;
+  const tenantId = auth.tenantId;
+  const company = await getPrimaryTenantCompany(tenantId, {
+    select: { id: true },
+  });
+
+  if (!company?.id) {
+    return res.status(400).json({ ok: false, error: "Nu exista firma activa pentru acest terminal." });
+  }
+
+  try {
+    const locations = await prisma.location.findMany({
+      where: {
+        tenantId,
+        companyId: company.id,
+        isActive: true,
+      },
+      orderBy: [{ name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        code: true,
+      },
+    });
+
+    return res.json({
+      ok: true,
+      locations: locations.map((location) => ({
+        id: location.id,
+        name: location.name,
+        code: location.code || null,
+      })),
+    });
+  } catch (error) {
+    console.error("POS BACKOFFICE LOCATIONS ERROR", error);
+    return res.status(500).json({ ok: false, error: "Nu am putut incarca locatiile." });
+  }
+}
+
+export async function handlePosBackofficeConsumptionCreate(req: PosAuthRequest, res: Response) {
+  const auth = await resolvePosAuthContext(req);
+  if (!auth?.tenantId || !auth?.terminalId) {
+    return res.status(401).json({ ok: false, error: "POS neautentificat." });
+  }
+
+  req.auth = auth;
+  const parsed = PosBackofficeConsumptionSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    return res.status(400).json({ ok: false, error: parsed.error.flatten() });
+  }
+
+  const tenantId = auth.tenantId;
+  const terminal = await prisma.terminal.findUnique({
+    where: { id: auth.terminalId },
+    select: { locationId: true },
+  });
+  const company = await getPrimaryTenantCompany(tenantId, {
+    select: { id: true },
+  });
+
+  if (!company?.id) {
+    return res.status(400).json({ ok: false, error: "Nu exista firma activa pentru acest terminal." });
+  }
+
+  const payload = parsed.data;
+  const locationId = normalizeText(payload.locationId) || normalizeText(terminal?.locationId);
+  if (!locationId) {
+    return res.status(400).json({ ok: false, error: "Terminalul nu are locatie selectata pentru bonul de consum." });
+  }
+
+  try {
+    const location = await prisma.location.findFirst({
+      where: {
+        id: locationId,
+        tenantId,
+        companyId: company.id,
+      },
+      select: { id: true, name: true },
+    });
+
+    if (!location) {
+      return res.status(404).json({ ok: false, error: "Locatia selectata nu exista." });
+    }
+
+    const productIds = payload.items.map((item) => item.productId);
+    const products = await prisma.product.findMany({
+      where: {
+        tenantId,
+        companyId: company.id,
+        id: { in: productIds },
+      },
+      select: { id: true },
+    });
+    const productIdsSet = new Set(products.map((item) => item.id));
+    const missing = productIds.find((item) => !productIdsSet.has(item));
+    if (missing) {
+      return res.status(400).json({ ok: false, error: "Unul dintre produsele selectate nu mai exista." });
+    }
+
+    const created = await prisma.$transaction(async (tx) => {
+      const draft = await createConsumptionDraft(tx, {
+        tenantId,
+        companyId: company.id,
+        locationId,
+        warehouseId: null,
+        docDate: new Date(),
+        note: normalizeText(payload.note) || null,
+        source: "MANUAL",
+        lines: payload.items.map((item) => ({
+          ingredientId: item.productId,
+          qty: item.qty,
+          note: normalizeText(item.note) || null,
+        })),
+      });
+
+      if (payload.postNow) {
+        await validateConsumptionDoc(tx, {
+          tenantId,
+          companyId: company.id,
+          docId: draft.id,
+          actorId: null,
+        });
+        return tx.consumptionDoc.findUnique({
+          where: { id: draft.id },
+          select: {
+            id: true,
+            docNo: true,
+            status: true,
+          },
+        });
+      }
+
+      return {
+        id: draft.id,
+        docNo: draft.docNo,
+        status: draft.status,
+      };
+    });
+
+    return res.status(201).json({
+      ok: true,
+      item: {
+        id: created?.id,
+        docNo: created?.docNo,
+        status: created?.status,
+        locationId: location.id,
+        locationName: location.name,
+      },
+    });
+  } catch (error) {
+    console.error("POS BACKOFFICE CONSUMPTION ERROR", error);
+    return res.status(400).json({
+      ok: false,
+      error: error instanceof Error ? error.message : "Nu am putut salva bonul de consum.",
+    });
+  }
+}
+
+export async function handlePosBackofficeTransferCreate(req: PosAuthRequest, res: Response) {
+  const auth = await resolvePosAuthContext(req);
+  if (!auth?.tenantId || !auth?.terminalId) {
+    return res.status(401).json({ ok: false, error: "POS neautentificat." });
+  }
+
+  req.auth = auth;
+  const parsed = PosBackofficeTransferSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    return res.status(400).json({ ok: false, error: parsed.error.flatten() });
+  }
+
+  const tenantId = auth.tenantId;
+  const terminal = await prisma.terminal.findUnique({
+    where: { id: auth.terminalId },
+    select: { locationId: true },
+  });
+  const company = await getPrimaryTenantCompany(tenantId, {
+    select: { id: true },
+  });
+
+  if (!company?.id) {
+    return res.status(400).json({ ok: false, error: "Nu exista firma activa pentru acest terminal." });
+  }
+
+  const payload = parsed.data;
+  const fromLocationId = normalizeText(payload.fromLocationId) || normalizeText(terminal?.locationId);
+  const toLocationId = normalizeText(payload.toLocationId);
+  if (!fromLocationId) {
+    return res.status(400).json({ ok: false, error: "Terminalul nu are locatie sursa selectata." });
+  }
+  if (!toLocationId) {
+    return res.status(400).json({ ok: false, error: "Selecteaza locatia destinatie." });
+  }
+  if (fromLocationId === toLocationId) {
+    return res.status(400).json({ ok: false, error: "Locatia sursa si destinatia trebuie sa fie diferite." });
+  }
+
+  try {
+    const [fromLocation, toLocation] = await Promise.all([
+      prisma.location.findFirst({
+        where: { id: fromLocationId, tenantId, companyId: company.id },
+        select: { id: true, name: true },
+      }),
+      prisma.location.findFirst({
+        where: { id: toLocationId, tenantId, companyId: company.id },
+        select: { id: true, name: true },
+      }),
+    ]);
+
+    if (!fromLocation || !toLocation) {
+      return res.status(404).json({ ok: false, error: "Una dintre locatii nu exista." });
+    }
+
+    const productIds = payload.items.map((item) => item.productId);
+    const products = await prisma.product.findMany({
+      where: {
+        tenantId,
+        companyId: company.id,
+        id: { in: productIds },
+      },
+      select: { id: true, name: true, uom: { select: { code: true } } },
+    });
+    const productMap = new Map(products.map((item) => [item.id, item]));
+
+    const transferNo = await reserveNextNumber(prisma, tenantId, "transfer");
+    await prisma.$transaction(async (tx) => {
+      for (const line of payload.items) {
+        const product = productMap.get(line.productId);
+        if (!product) {
+          throw new Error("Unul dintre produsele selectate nu mai exista.");
+        }
+
+        const sourceBalance = await tx.stockBalance.findUnique({
+          where: {
+            tenantId_companyId_locationId_productId_warehouseScope: {
+              tenantId,
+              companyId: company.id,
+              locationId: fromLocationId,
+              productId: line.productId,
+              warehouseScope: "__NO_WAREHOUSE__",
+            },
+          },
+        });
+
+        const availableQty = Number(sourceBalance?.qty || 0);
+        if (availableQty < line.qty) {
+          throw new Error(
+            `Stoc insuficient pentru ${product.name}. Disponibil: ${availableQty.toFixed(2)} ${product.uom?.code || ""}`.trim()
+          );
+        }
+
+        await tx.stockBalance.update({
+          where: {
+            tenantId_companyId_locationId_productId_warehouseScope: {
+              tenantId,
+              companyId: company.id,
+              locationId: fromLocationId,
+              productId: line.productId,
+              warehouseScope: "__NO_WAREHOUSE__",
+            },
+          },
+          data: {
+            qty: {
+              decrement: line.qty,
+            },
+          },
+        });
+
+        await tx.stockBalance.upsert({
+          where: {
+            tenantId_companyId_locationId_productId_warehouseScope: {
+              tenantId,
+              companyId: company.id,
+              locationId: toLocationId,
+              productId: line.productId,
+              warehouseScope: "__NO_WAREHOUSE__",
+            },
+          },
+          update: {
+            qty: {
+              increment: line.qty,
+            },
+            warehouseScope: "__NO_WAREHOUSE__",
+          },
+          create: {
+            tenantId,
+            companyId: company.id,
+            locationId: toLocationId,
+            productId: line.productId,
+            qty: line.qty,
+            warehouseScope: "__NO_WAREHOUSE__",
+          },
+        });
+
+        await tx.stockMove.create({
+          data: {
+            tenantId,
+            companyId: company.id,
+            locationId: fromLocationId,
+            productId: line.productId,
+            type: "OUT",
+            qty: line.qty,
+            refType: "TRANSFER",
+            refId: transferNo,
+            note: normalizeText(payload.note) || `Transfer ${transferNo} catre ${toLocation.name}`,
+          },
+        });
+
+        await tx.stockMove.create({
+          data: {
+            tenantId,
+            companyId: company.id,
+            locationId: toLocationId,
+            productId: line.productId,
+            type: "IN",
+            qty: line.qty,
+            refType: "TRANSFER",
+            refId: transferNo,
+            note: normalizeText(payload.note) || `Transfer ${transferNo} din ${fromLocation.name}`,
+          },
+        });
+      }
+    });
+
+    return res.status(201).json({
+      ok: true,
+      item: {
+        transferNo,
+        fromLocationId: fromLocation.id,
+        fromLocationName: fromLocation.name,
+        toLocationId: toLocation.id,
+        toLocationName: toLocation.name,
+        lines: payload.items.length,
+      },
+    });
+  } catch (error) {
+    console.error("POS BACKOFFICE TRANSFER ERROR", error);
+    return res.status(400).json({
+      ok: false,
+      error: error instanceof Error ? error.message : "Nu am putut salva transferul.",
+    });
   }
 }
 
@@ -4436,12 +4826,24 @@ router.get("/api/v1/pos/backoffice/products", requirePosAuth, async (req: PosAut
   return handlePosBackofficeProductsSearch(req, res);
 });
 
+router.get("/api/v1/pos/backoffice/locations", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
+  return handlePosBackofficeLocationsList(req, res);
+});
+
 router.post("/api/v1/pos/backoffice/receipts", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
   return handlePosBackofficeReceiptCreate(req, res);
 });
 
 router.post("/api/v1/pos/backoffice/invoices", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
   return handlePosBackofficeInvoiceCreate(req, res);
+});
+
+router.post("/api/v1/pos/backoffice/consumption", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
+  return handlePosBackofficeConsumptionCreate(req, res);
+});
+
+router.post("/api/v1/pos/backoffice/transfers", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
+  return handlePosBackofficeTransferCreate(req, res);
 });
 
 router.get("/api/v1/pos/operators", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
