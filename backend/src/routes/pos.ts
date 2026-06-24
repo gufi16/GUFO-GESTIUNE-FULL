@@ -4101,6 +4101,107 @@ export async function handlePosBackofficeProductsSearch(req: PosAuthRequest, res
   }
 }
 
+export async function handlePosBackofficeStockLive(req: PosAuthRequest, res: Response) {
+  const auth = await resolvePosAuthContext(req);
+  if (!auth?.tenantId) {
+    return res.status(401).json({ ok: false, error: "POS neautentificat." });
+  }
+
+  req.auth = auth;
+  const tenantId = auth.tenantId;
+  const company = await getPrimaryTenantCompany(tenantId, {
+    select: { id: true },
+  });
+
+  if (!company?.id) {
+    return res.status(400).json({ ok: false, error: "Nu exista firma activa pentru acest terminal." });
+  }
+
+  try {
+    const q = normalizeText(req.query.q).slice(0, 60);
+    const terminal = auth.terminalId
+      ? await prisma.terminal.findUnique({
+          where: { id: auth.terminalId },
+          select: { locationId: true },
+        })
+      : null;
+
+    const grouped = await prisma.stockBalance.groupBy({
+      by: ["productId"],
+      where: {
+        tenantId,
+        companyId: company.id,
+        ...(terminal?.locationId ? { locationId: terminal.locationId } : {}),
+      },
+      _sum: { qty: true },
+    });
+
+    const productIds = grouped.map((item) => item.productId).filter(Boolean);
+    if (!productIds.length) {
+      return res.json({ ok: true, items: [] });
+    }
+
+    const products = await prisma.product.findMany({
+      where: {
+        tenantId,
+        companyId: company.id,
+        isActive: true,
+        id: { in: productIds },
+        ...(q
+          ? {
+              OR: [
+                { name: { contains: q, mode: "insensitive" } },
+                { sku: { contains: q, mode: "insensitive" } },
+                { barcodes: { some: { barcode: { contains: q, mode: "insensitive" } } } },
+              ],
+            }
+          : {}),
+      },
+      include: {
+        uom: true,
+        category: {
+          select: {
+            name: true,
+          },
+        },
+        department: {
+          select: {
+            name: true,
+          },
+        },
+        barcodes: {
+          select: {
+            barcode: true,
+          },
+        },
+      },
+      orderBy: [{ name: "asc" }],
+      take: q ? 120 : 300,
+    });
+
+    const qtyByProductId = new Map(grouped.map((item) => [item.productId, toNumber(item._sum.qty)]));
+
+    return res.json({
+      ok: true,
+      items: products.map((product) => ({
+        productId: product.id,
+        name: product.name,
+        sku: product.sku || null,
+        uomCode: product.uom?.code || "",
+        categoryName: product.category?.name || null,
+        departmentName: product.department?.name || null,
+        totalQty: qtyByProductId.get(product.id) || 0,
+        barcodes: Array.isArray(product.barcodes)
+          ? product.barcodes.map((item) => normalizeText(item?.barcode)).filter(Boolean)
+          : [],
+      })),
+    });
+  } catch (error) {
+    console.error("POS BACKOFFICE STOCK LIVE ERROR", error);
+    return res.status(500).json({ ok: false, error: "Nu am putut incarca stocul live." });
+  }
+}
+
 export async function handlePosBackofficeLocationsList(req: PosAuthRequest, res: Response) {
   const auth = await resolvePosAuthContext(req);
   if (!auth?.tenantId) {
@@ -4882,6 +4983,10 @@ router.get("/api/v1/pos/backoffice/suppliers", requirePosAuth, async (req: PosAu
 
 router.get("/api/v1/pos/backoffice/products", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
   return handlePosBackofficeProductsSearch(req, res);
+});
+
+router.get("/api/v1/pos/backoffice/stock-live", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
+  return handlePosBackofficeStockLive(req, res);
 });
 
 router.get("/api/v1/pos/backoffice/locations", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
