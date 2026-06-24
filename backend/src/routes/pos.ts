@@ -1381,12 +1381,22 @@ router.post("/api/v1/pos/validate", async (req: Request, res: Response) => {
       });
     }
 
-    const terminalModuleEnabled = terminal.deviceType === "KDS" ? license.modKds : license.modPos;
+    const terminalModuleEnabled =
+      terminal.deviceType === "KDS"
+        ? license.modKds
+        : terminal.deviceType === "DEPOZIT"
+          ? await hasTenantModule(terminal.tenantId, "warehouse_mobile")
+          : license.modPos;
     if (!terminalModuleEnabled) {
       return res.status(403).json({
         ok: false,
         allowed: false,
-        error: terminal.deviceType === "KDS" ? "KDS nu este activ" : "POS nu este activ",
+        error:
+          terminal.deviceType === "KDS"
+            ? "KDS nu este activ"
+            : terminal.deviceType === "DEPOZIT"
+              ? "Gufo Depozit nu este activ"
+              : "POS nu este activ",
       });
     }
 
@@ -1548,14 +1558,16 @@ router.post("/api/v1/pos/pair", async (req: Request, res: Response) => {
     const normalizedSource = normalizeText(body.source)?.toLowerCase() || "";
     const isWarehouseMobilePair = normalizedSource === "gufo-depozit";
     const requestedDeviceType =
-      normalizeText(body.deviceType ?? body.device_type)?.toUpperCase() === "KDS" || normalizedSource === "gufo-kds"
+      normalizeText(body.deviceType ?? body.device_type)?.toUpperCase() === "DEPOZIT" || isWarehouseMobilePair
+        ? "DEPOZIT"
+        : normalizeText(body.deviceType ?? body.device_type)?.toUpperCase() === "KDS" || normalizedSource === "gufo-kds"
         ? "KDS"
         : "POS";
     const licenseKey = normalizeText(body.licenseKey ?? body.license_key);
     const incomingDeviceId = normalizeText(body.deviceId ?? body.device_id);
     const terminalLabel =
       normalizeText(body.terminalLabel ?? body.terminal_label) ||
-      (requestedDeviceType === "KDS" ? "GuFo KDS" : isWarehouseMobilePair ? "Gufo Depozit" : "Android POS");
+      (requestedDeviceType === "KDS" ? "GuFo KDS" : requestedDeviceType === "DEPOZIT" ? "Gufo Depozit" : "Android POS");
 
     if (!licenseKey || licenseKey.length < 3) {
       return res.status(400).json({
@@ -1614,15 +1626,30 @@ router.post("/api/v1/pos/pair", async (req: Request, res: Response) => {
     if (terminal.deviceType !== requestedDeviceType) {
       return res.status(409).json({
         ok: false,
-        error: requestedDeviceType === "KDS" ? "Licenta KDS invalida" : "Licenta POS invalida",
+        error:
+          requestedDeviceType === "KDS"
+            ? "Licenta KDS invalida"
+            : requestedDeviceType === "DEPOZIT"
+              ? "Licenta Gufo Depozit invalida"
+              : "Licenta POS invalida",
       });
     }
 
-    const terminalModuleEnabled = terminal.deviceType === "KDS" ? license.modKds : license.modPos;
+    const terminalModuleEnabled =
+      terminal.deviceType === "KDS"
+        ? license.modKds
+        : terminal.deviceType === "DEPOZIT"
+          ? await hasTenantModule(terminal.tenantId, "warehouse_mobile")
+          : license.modPos;
     if (!terminalModuleEnabled) {
       return res.status(403).json({
         ok: false,
-        error: terminal.deviceType === "KDS" ? "KDS nu este activ" : "POS nu este activ",
+        error:
+          terminal.deviceType === "KDS"
+            ? "KDS nu este activ"
+            : terminal.deviceType === "DEPOZIT"
+              ? "Gufo Depozit nu este activ"
+              : "POS nu este activ",
       });
     }
 

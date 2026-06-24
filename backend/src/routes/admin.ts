@@ -47,6 +47,7 @@ import {
   getControlPanelModuleDefinition,
   resolveEffectiveModuleCodes,
 } from "../lib/moduleCatalog"
+import { hasTenantModule } from "../lib/tenantModules"
 
 const router = Router()
 
@@ -2088,8 +2089,17 @@ router.post("/api/v1/admin/locations/:id/devices", requireAuth, requireOwner, as
 
   const deviceType = parsed.data.deviceType || TerminalDeviceType.POS
   const isKds = deviceType === TerminalDeviceType.KDS
+  const isDepot = deviceType === TerminalDeviceType.DEPOZIT
 
-  if (isKds ? !license.modKds : !license.modPos) {
+  if (isDepot) {
+    const warehouseMobileEnabled = await hasTenantModule(location.tenantId, "warehouse_mobile")
+    if (!warehouseMobileEnabled) {
+      return res.status(400).json({
+        ok: false,
+        error: "Gufo Depozit nu este activ pe licenta clientului",
+      })
+    }
+  } else if (isKds ? !license.modKds : !license.modPos) {
     return res.status(400).json({
       ok: false,
       error: isKds ? "KDS nu este activ pe licenta clientului" : "POS nu este activ pe licenta clientului",
@@ -2103,7 +2113,9 @@ router.post("/api/v1/admin/locations/:id/devices", requireAuth, requireOwner, as
       ok: false,
       error: isKds
         ? `Clientul a atins limita de device-uri KDS (${license.limitKdsDevices})`
-        : `Clientul a atins limita de device-uri POS (${license.limitTerminals})`,
+        : isDepot
+          ? `Clientul a atins limita de device-uri Gufo Depozit (${license.limitTerminals})`
+          : `Clientul a atins limita de device-uri POS (${license.limitTerminals})`,
     })
   }
 
@@ -2128,7 +2140,7 @@ router.post("/api/v1/admin/locations/:id/devices", requireAuth, requireOwner, as
           tenantId: location.tenantId,
           actorType: "OWNER",
           actorId: req.auth?.userId,
-          action: isKds ? "KDS_DEVICE_CREATED" : "POS_DEVICE_CREATED",
+          action: isKds ? "KDS_DEVICE_CREATED" : isDepot ? "DEPOT_DEVICE_CREATED" : "POS_DEVICE_CREATED",
           entityType: "Terminal",
           entityId: created.id,
           payload: {
@@ -2153,7 +2165,10 @@ router.post("/api/v1/admin/locations/:id/devices", requireAuth, requireOwner, as
   } catch (error: unknown) {
     return res.status(500).json({
       ok: false,
-      error: getErrorMessage(error, isKds ? "Nu am putut crea device-ul KDS" : "Nu am putut crea device-ul POS"),
+      error: getErrorMessage(
+        error,
+        isKds ? "Nu am putut crea device-ul KDS" : isDepot ? "Nu am putut crea device-ul Gufo Depozit" : "Nu am putut crea device-ul POS",
+      ),
     })
   }
 })
@@ -2515,7 +2530,16 @@ async function updateTerminalHandler(req: AuthedRequest, res: Response) {
 
     if (switchingType) {
       const isKds = nextDeviceType === TerminalDeviceType.KDS
-      if (isKds ? !license.modKds : !license.modPos) {
+      const isDepot = nextDeviceType === TerminalDeviceType.DEPOZIT
+      if (isDepot) {
+        const warehouseMobileEnabled = await hasTenantModule(terminal.tenantId, "warehouse_mobile")
+        if (!warehouseMobileEnabled) {
+          return res.status(400).json({
+            ok: false,
+            error: "Gufo Depozit nu este activ pe licenta clientului",
+          })
+        }
+      } else if (isKds ? !license.modKds : !license.modPos) {
         return res.status(400).json({
           ok: false,
           error: isKds ? "KDS nu este activ pe licenta clientului" : "POS nu este activ pe licenta clientului",
@@ -2531,7 +2555,9 @@ async function updateTerminalHandler(req: AuthedRequest, res: Response) {
           ok: false,
           error: isKds
             ? `Clientul a atins limita de device-uri KDS (${license.limitKdsDevices})`
-            : `Clientul a atins limita de device-uri POS (${license.limitTerminals})`,
+            : isDepot
+              ? `Clientul a atins limita de device-uri Gufo Depozit (${license.limitTerminals})`
+              : `Clientul a atins limita de device-uri POS (${license.limitTerminals})`,
         })
       }
     }

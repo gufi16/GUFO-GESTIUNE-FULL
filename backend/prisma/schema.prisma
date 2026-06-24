@@ -21,6 +21,7 @@ enum UserRole {
 enum TerminalDeviceType {
   POS
   KDS
+  DEPOZIT
 }
 
 enum ProductClass {

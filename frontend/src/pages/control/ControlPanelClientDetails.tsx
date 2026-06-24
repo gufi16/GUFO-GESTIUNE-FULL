@@ -210,6 +210,7 @@ type DynamicModuleItem = {
 
 type ClientTab = "overview" | "license" | "locations" | "users"
 type OverviewPanel = "profile" | "companies" | null
+type DeviceType = "POS" | "KDS" | "DEPOZIT"
 
 const defaultModules: LicenseModules = {
   dashboard: false,
@@ -475,7 +476,7 @@ export default function ControlPanelClientDetails() {
   const [locationForm, setLocationForm] = useState<LocationFormState>(emptyLocationForm())
   const [locationModalOpen, setLocationModalOpen] = useState(false)
   const [editingLocationId, setEditingLocationId] = useState<string | null>(null)
-  const [deviceForms, setDeviceForms] = useState<Record<string, { label: string; deviceType: "POS" | "KDS" }>>({})
+  const [deviceForms, setDeviceForms] = useState<Record<string, { label: string; deviceType: DeviceType }>>({})
   const [openDeviceLocationId, setOpenDeviceLocationId] = useState<string | null>(null)
   const [editingDeviceId, setEditingDeviceId] = useState<string | null>(null)
   const [locationError, setLocationError] = useState<string | null>(null)
@@ -572,6 +573,7 @@ export default function ControlPanelClientDetails() {
   const devices = locations.flatMap((location) => (Array.isArray(location.devices) ? location.devices : []))
   const posDevicesCount = devices.filter((device) => (device.deviceType || "POS") === "POS").length
   const kdsDevicesCount = devices.filter((device) => (device.deviceType || "POS") === "KDS").length
+  const depotDevicesCount = devices.filter((device) => (device.deviceType || "POS") === "DEPOZIT").length
   const erpEnabled = Boolean(
     licenseForm.modules.dashboard ||
       licenseForm.modules.documents ||
@@ -994,7 +996,12 @@ export default function ControlPanelClientDetails() {
       ...prev,
       [device.id]: {
         label: String(device.label || device.deviceId || "").trim(),
-        deviceType: (String(device.deviceType || "POS").toUpperCase() === "KDS" ? "KDS" : "POS") as "POS" | "KDS",
+        deviceType:
+          String(device.deviceType || "POS").toUpperCase() === "KDS"
+            ? "KDS"
+            : String(device.deviceType || "POS").toUpperCase() === "DEPOZIT"
+              ? "DEPOZIT"
+              : "POS",
       },
     }))
   }
@@ -1246,6 +1253,7 @@ export default function ControlPanelClientDetails() {
         {metricCard("Locatii", client?.locationsCount ?? locations.length)}
         {metricCard("POS", posDevicesCount)}
         {metricCard("KDS", kdsDevicesCount)}
+        {metricCard("Depozit", depotDevicesCount)}
         {metricCard("Backup-uri", client?.backupHealth?.backupsCount ?? 0)}
       </section>
 
@@ -1482,7 +1490,7 @@ export default function ControlPanelClientDetails() {
         <section className="grid gap-4">
           <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
             <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Licenta</div>
-            <div className="mt-1 text-sm font-semibold text-[#17324D]">Stare curenta pentru ERP, POS, KDS si module, fara lista lunga in pagina</div>
+              <div className="mt-1 text-sm font-semibold text-[#17324D]">Stare curenta pentru ERP, POS, KDS, Depozit si module, fara lista lunga in pagina</div>
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {metricCard("Expirare", formatDate(client?.license?.expiresAt))}
@@ -1552,7 +1560,7 @@ export default function ControlPanelClientDetails() {
       {activeTab === "locations" ? (
       <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div><div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Locatii si device-uri</div><div className="mt-1 text-sm font-semibold text-[#17324D]">Administrare locatii, device-uri POS / KDS si chei de licenta</div></div>
+          <div><div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Locatii si device-uri</div><div className="mt-1 text-sm font-semibold text-[#17324D]">Administrare locatii, device-uri POS / KDS / Depozit si chei de licenta</div></div>
             <div className="flex flex-col gap-2 sm:flex-row">
             <button
               onClick={openCreateLocationModal}
@@ -1634,13 +1642,14 @@ export default function ControlPanelClientDetails() {
                       onChange={(e) =>
                         setDeviceForms((prev) => ({
                           ...prev,
-                          [location.id]: { ...(prev[location.id] || { label: "" }), deviceType: e.target.value as "POS" | "KDS" },
+                          [location.id]: { ...(prev[location.id] || { label: "" }), deviceType: e.target.value as DeviceType },
                         }))
                       }
                       className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#17324D]"
                     >
                       <option value="POS">POS</option>
                       <option value="KDS">KDS</option>
+                      {warehouseMobileModule?.enabled ? <option value="DEPOZIT">DEPOZIT</option> : null}
                     </select>
                     <button
                       type="button"
@@ -1679,7 +1688,12 @@ export default function ControlPanelClientDetails() {
                                         [device.id]: {
                                           ...(prev[device.id] || {
                                             label: String(device.label || device.deviceId || "").trim(),
-                                            deviceType: (String(device.deviceType || "POS").toUpperCase() === "KDS" ? "KDS" : "POS") as "POS" | "KDS",
+                                            deviceType:
+                                              String(device.deviceType || "POS").toUpperCase() === "KDS"
+                                                ? "KDS"
+                                                : String(device.deviceType || "POS").toUpperCase() === "DEPOZIT"
+                                                  ? "DEPOZIT"
+                                                  : "POS",
                                           }),
                                           label: e.target.value,
                                         },
@@ -1709,7 +1723,7 @@ export default function ControlPanelClientDetails() {
                                           label: String(device.label || device.deviceId || "").trim(),
                                           deviceType: "POS",
                                         }),
-                                        deviceType: e.target.value as "POS" | "KDS",
+                                        deviceType: e.target.value as DeviceType,
                                       },
                                     }))
                                   }
@@ -1717,6 +1731,9 @@ export default function ControlPanelClientDetails() {
                                 >
                                   <option value="POS">POS</option>
                                   <option value="KDS">KDS</option>
+                                  {warehouseMobileModule?.enabled || deviceForms[device.id]?.deviceType === "DEPOZIT" ? (
+                                    <option value="DEPOZIT">DEPOZIT</option>
+                                  ) : null}
                                 </select>
                               ) : (
                                 device.deviceType || "POS"

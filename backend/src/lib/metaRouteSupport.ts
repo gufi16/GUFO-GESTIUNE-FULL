@@ -33,12 +33,16 @@ export function inferTerminalDeviceType(terminal: {
 }) {
   const explicit = String(terminal.deviceType || "").trim().toUpperCase()
   if (explicit === "KDS") return TerminalDeviceType.KDS
+  if (explicit === "DEPOZIT") return TerminalDeviceType.DEPOZIT
   if (explicit === "POS") return TerminalDeviceType.POS
 
   const label = normalizeTerminalLabel(terminal.label).toUpperCase()
   const deviceId = String(terminal.deviceId || "").trim().toUpperCase()
   if (label.includes("KDS") || deviceId.startsWith("KDS-")) {
     return TerminalDeviceType.KDS
+  }
+  if (label.includes("DEPOZIT") || deviceId.startsWith("DEP-")) {
+    return TerminalDeviceType.DEPOZIT
   }
   return TerminalDeviceType.POS
 }

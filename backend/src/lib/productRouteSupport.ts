@@ -54,6 +54,7 @@ type ProductLike = {
   trackExpiry?: boolean | null
   costMethod?: string | null
   vatRate?: ProductVatRateLike | null
+  barcodes?: Array<{ id?: string; barcode?: unknown }> | null
 }
 
 type RecipeIngredientLike = ProductLike & {
@@ -129,6 +130,14 @@ export function serializeProduct(item: ProductLike | null | undefined) {
           rate: toNumber(item.vatRate.rate),
         }
       : item.vatRate,
+    barcodes: Array.isArray(item.barcodes)
+      ? item.barcodes
+          .map((entry) => ({
+            ...entry,
+            barcode: String(entry?.barcode || "").trim(),
+          }))
+          .filter((entry) => entry.barcode)
+      : [],
   }
 }
 

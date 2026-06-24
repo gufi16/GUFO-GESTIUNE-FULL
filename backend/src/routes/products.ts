@@ -81,6 +81,28 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback
 }
 
+function hasBarcodePayload(body: Record<string, unknown> | null | undefined) {
+  if (!body) return false
+  return Object.prototype.hasOwnProperty.call(body, "barcode") || Object.prototype.hasOwnProperty.call(body, "barcodes")
+}
+
+function normalizeBarcodeList(value: unknown) {
+  const rawValues = Array.isArray(value) ? value : value == null ? [] : [value]
+  const seen = new Set<string>()
+  const normalized: string[] = []
+
+  for (const raw of rawValues) {
+    const text = String(raw || "").trim()
+    if (!text) continue
+    const key = text.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    normalized.push(text)
+  }
+
+  return normalized
+}
+
 router.post(
   "/api/v1/products/upload-image",
   upload.single("image"),
@@ -121,6 +143,9 @@ router.get("/api/v1/products", async (req: AuthedRequest, res) => {
       uom: true,
       purchaseUom: true,
       department: true,
+      barcodes: {
+        orderBy: { createdAt: "asc" }
+      },
       category: {
         include: {
           department: true
@@ -215,6 +240,7 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
   const requestedPublishToGlovo = normalizeBoolean(req.body?.publishToGlovo, false)
   const requestedPosMenuCategory = toNullableText(req.body?.posMenuCategory)
   const posMenuCategory = requestedIsMenu ? requestedPosMenuCategory : null
+  const requestedBarcodes = normalizeBarcodeList(req.body?.barcodes ?? req.body?.barcode)
 
   if (!ALL_PRODUCT_CLASSES.includes(classValue)) {
     return res.status(400).json({ ok: false, error: "Clasificare produs invalida." })
@@ -449,6 +475,56 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
           uom: true,
           purchaseUom: true,
           department: true,
+          barcodes: {
+            orderBy: { createdAt: "asc" }
+          },
+          category: {
+            include: {
+              department: true
+            }
+          },
+          recipe: {
+            include: {
+              items: true
+            }
+          }
+        }
+      })
+
+      if (requestedBarcodes.length) {
+        const duplicateBarcode = await tx.productBarcode.findFirst({
+          where: {
+            tenantId,
+            barcode: { in: requestedBarcodes },
+          },
+          select: {
+            barcode: true,
+          },
+        })
+
+        if (duplicateBarcode) {
+          throw new Error(`Codul de bare ${duplicateBarcode.barcode} este deja folosit pe alt produs.`)
+        }
+
+        await tx.productBarcode.createMany({
+          data: requestedBarcodes.map((barcode) => ({
+            tenantId,
+            productId: created.id,
+            barcode,
+          })),
+        })
+      }
+
+      const withBarcodes = await tx.product.findUniqueOrThrow({
+        where: { id: created.id },
+        include: {
+          vatRate: true,
+          uom: true,
+          purchaseUom: true,
+          department: true,
+          barcodes: {
+            orderBy: { createdAt: "asc" }
+          },
           category: {
             include: {
               department: true
@@ -463,7 +539,7 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
       })
 
       return {
-        ...created,
+        ...withBarcodes,
         forcedInactiveBecauseMissingRecipe
       }
     })
@@ -534,6 +610,8 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   const requestedPublishToGlovo = normalizeBoolean(req.body?.publishToGlovo, false)
   const requestedPosMenuCategory = toNullableText(req.body?.posMenuCategory)
   const posMenuCategory = requestedIsMenu ? requestedPosMenuCategory : null
+  const shouldUpdateBarcodes = hasBarcodePayload(req.body as Record<string, unknown> | undefined)
+  const requestedBarcodes = normalizeBarcodeList(req.body?.barcodes ?? req.body?.barcode)
 
   if (!ALL_PRODUCT_CLASSES.includes(classValue)) {
     return res.status(400).json({ ok: false, error: "Clasificare produs invalida." })
@@ -712,52 +790,99 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
 
     const resolvedDepartmentId = category?.departmentId || department?.id || null
 
-    const item = await prisma.product.update({
-      where: { id },
-      data: {
-        name,
-        imageUrl,
-        class: classValue,
-        vatRateId: vatRate?.id || fallbackVatRate?.id || current.vatRateId,
-        uomId,
-        purchaseUomId: normalizedPurchaseUomId || uomId,
-          purchaseFactor: normalizedPurchaseFactor,
-        categoryId,
-        departmentId: resolvedDepartmentId,
-        ncCode: requestedIsFiscalRiskProduct ? ncCode : null,
-        isFiscalRiskProduct: requestedIsFiscalRiskProduct,
-        netWeightKg: requestedIsFiscalRiskProduct ? netWeightKg : 0,
-        grossWeightKg: requestedIsFiscalRiskProduct ? grossWeightKg : 0,
-        price: normalizedPrice,
-        costPrice,
-        trackLot,
-        trackExpiry,
-        costMethod: finalUpdatedCostMethod,
-        isActive: forcedInactiveBecauseMissingRecipe ? false : requestedIsActive,
-        isMenu: requestedIsMenu,
-        posMenuCategory,
-        isVisibleInPos,
-        publishToGlovo: requestedPublishToGlovo,
-        isSgr,
-        sgrValue: isSgr ? 0.5 : 0,
-        productionMode: finalUpdatedProductionMode
-      },
-      include: {
-        vatRate: true,
-        uom: true,
-        purchaseUom: true,
-        department: true,
-        category: {
-          include: {
-            department: true
-          }
-        },
-        recipe: {
-          include: {
-            items: true
-          }
+    const item = await prisma.$transaction(async (tx) => {
+      if (shouldUpdateBarcodes) {
+        const duplicateBarcode = requestedBarcodes.length
+          ? await tx.productBarcode.findFirst({
+              where: {
+                tenantId,
+                barcode: { in: requestedBarcodes },
+                productId: { not: id },
+              },
+              select: {
+                barcode: true,
+              },
+            })
+          : null
+
+        if (duplicateBarcode) {
+          throw new Error(`Codul de bare ${duplicateBarcode.barcode} este deja folosit pe alt produs.`)
         }
       }
+
+      await tx.product.update({
+        where: { id },
+        data: {
+          name,
+          imageUrl,
+          class: classValue,
+          vatRateId: vatRate?.id || fallbackVatRate?.id || current.vatRateId,
+          uomId,
+          purchaseUomId: normalizedPurchaseUomId || uomId,
+          purchaseFactor: normalizedPurchaseFactor,
+          categoryId,
+          departmentId: resolvedDepartmentId,
+          ncCode: requestedIsFiscalRiskProduct ? ncCode : null,
+          isFiscalRiskProduct: requestedIsFiscalRiskProduct,
+          netWeightKg: requestedIsFiscalRiskProduct ? netWeightKg : 0,
+          grossWeightKg: requestedIsFiscalRiskProduct ? grossWeightKg : 0,
+          price: normalizedPrice,
+          costPrice,
+          trackLot,
+          trackExpiry,
+          costMethod: finalUpdatedCostMethod,
+          isActive: forcedInactiveBecauseMissingRecipe ? false : requestedIsActive,
+          isMenu: requestedIsMenu,
+          posMenuCategory,
+          isVisibleInPos,
+          publishToGlovo: requestedPublishToGlovo,
+          isSgr,
+          sgrValue: isSgr ? 0.5 : 0,
+          productionMode: finalUpdatedProductionMode
+        }
+      })
+
+      if (shouldUpdateBarcodes) {
+        await tx.productBarcode.deleteMany({
+          where: {
+            tenantId,
+            productId: id,
+          }
+        })
+
+        if (requestedBarcodes.length) {
+          await tx.productBarcode.createMany({
+            data: requestedBarcodes.map((barcode) => ({
+              tenantId,
+              productId: id,
+              barcode,
+            })),
+          })
+        }
+      }
+
+      return tx.product.findUniqueOrThrow({
+        where: { id },
+        include: {
+          vatRate: true,
+          uom: true,
+          purchaseUom: true,
+          department: true,
+          barcodes: {
+            orderBy: { createdAt: "asc" }
+          },
+          category: {
+            include: {
+              department: true
+            }
+          },
+          recipe: {
+            include: {
+              items: true
+            }
+          }
+        }
+      })
     })
 
     console.log("[PRODUCT_UPDATE] saved", {

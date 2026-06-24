@@ -9,6 +9,7 @@ type Product = {
   id: string
   sku: string
   name: string
+  barcodes?: Array<{ id?: string; barcode: string }>
   imageUrl?: string | null
   class: string
   ncCode?: string | null
@@ -59,6 +60,7 @@ type ProductOption = {
 type FormState = {
   sku: string
   name: string
+  barcode: string
   imageUrl: string
   class: string
   uomId: string
@@ -161,6 +163,7 @@ const STOCK_COST_METHOD_OPTIONS = [
 const emptyForm: FormState = {
   sku: "",
   name: "",
+  barcode: "",
   imageUrl: "",
   class: "MARFA",
   uomId: "",
@@ -271,6 +274,7 @@ export function ProductsCatalogPage({
   const [categories, setCategories] = useState<any[]>([])
   const [productOptions, setProductOptions] = useState<ProductOption[]>([])
   const [isVatPayer, setIsVatPayer] = useState(true)
+  const [warehouseMobileEnabled, setWarehouseMobileEnabled] = useState(false)
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -373,12 +377,13 @@ export function ProductsCatalogPage({
     try {
       const headers = { Authorization: `Bearer ${token}` }
 
-      const [productsRes, uomRes, vatRes, catRes, companyRes] = await Promise.all([
+      const [productsRes, uomRes, vatRes, catRes, companyRes, licenseRes] = await Promise.all([
         fetch(`${API_BASE}/api/v1/products`, { headers }),
         fetch(`${API_BASE}/api/v1/meta/uom`, { headers }),
         fetch(`${API_BASE}/api/v1/meta/vat`, { headers }),
         fetch(`${API_BASE}/api/v1/meta/categories`, { headers }),
-        fetch(`${API_BASE}/api/v1/company`, { headers })
+        fetch(`${API_BASE}/api/v1/company`, { headers }),
+        fetch(`${API_BASE}/api/v1/license/validate`, { headers })
       ])
 
       const productsData = await productsRes.json().catch(() => ({}))
@@ -386,6 +391,7 @@ export function ProductsCatalogPage({
       const vatData = await vatRes.json().catch(() => ({}))
       const catData = await catRes.json().catch(() => ({}))
       const companyData = await companyRes.json().catch(() => ({}))
+      const licenseData = await licenseRes.json().catch(() => ({}))
 
       if ([productsRes, uomRes, vatRes, catRes, companyRes].some((r) => r.status === 401)) {
         setError("Token expirat sau invalid. Fa login din nou.")
@@ -413,6 +419,10 @@ export function ProductsCatalogPage({
       setVatRates(Array.isArray(vatData.items) ? vatData.items : [])
       setCategories(Array.isArray(catData.items) ? catData.items : [])
       setIsVatPayer(companyData?.company?.isVatPayer !== false)
+      setWarehouseMobileEnabled(
+        Array.isArray(licenseData?.modules?.dynamic) &&
+          licenseData.modules.dynamic.some((module: any) => module?.code === "warehouse_mobile")
+      )
       void loadNextSku()
     } catch {
       setError("Nu pot incarca produsele.")
@@ -462,6 +472,7 @@ function getDefaultVat(list = vatRates) {
     setForm({
       ...emptyForm,
       sku: nextSku,
+      barcode: "",
       class: defaultClass,
       uomId: defaultUom?.id || "",
       purchaseUomId: defaultUom?.id || "",
@@ -497,6 +508,7 @@ function getDefaultVat(list = vatRates) {
     setForm({
       sku: item.sku || "",
       name: item.name || "",
+      barcode: String(item.barcodes?.[0]?.barcode || "").trim(),
       imageUrl: normalizeHostedImageUrl(item.imageUrl || ""),
       class: item.class || "MARFA",
       uomId: item.uom?.id || "",
@@ -647,6 +659,7 @@ function getDefaultVat(list = vatRates) {
         body: JSON.stringify({
           sku: !editingItem ? form.sku.trim() || null : undefined,
           name: form.name.trim(),
+          barcode: warehouseMobileEnabled ? form.barcode.trim() || null : undefined,
           imageUrl: normalizeHostedImageUrl(form.imageUrl.trim()) || null,
           class: fixedClassValue || form.class,
           uomId: form.uomId,
@@ -1322,6 +1335,17 @@ function getDefaultVat(list = vatRates) {
                         style={input}
                       />
                     </Field>
+
+                    {warehouseMobileEnabled ? (
+                      <Field label="Cod de bare">
+                        <input
+                          value={form.barcode}
+                          onChange={(e) => setForm((prev) => ({ ...prev, barcode: e.target.value }))}
+                          placeholder="Scaneaza sau scrie codul de bare"
+                          style={input}
+                        />
+                      </Field>
+                    ) : null}
 
                     <Field label="Clasificare">
                       <select
