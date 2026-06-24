@@ -1173,6 +1173,25 @@ const PosBackofficeReceiptSchema = z.object({
   ).min(1),
 });
 
+const PosBackofficeInvoiceSchema = z.object({
+  customerId: z.string().optional().nullable(),
+  customerName: z.string().optional().nullable(),
+  customerCode: z.string().optional().nullable(),
+  customerCif: z.string().optional().nullable(),
+  customerAddress: z.string().optional().nullable(),
+  customerEmail: z.string().optional().nullable(),
+  customerPhone: z.string().optional().nullable(),
+  note: z.string().optional().nullable(),
+  items: z.array(
+    z.object({
+      productId: z.string().min(1),
+      qty: z.number().positive(),
+      unitPriceFc: z.number().min(0),
+      vatRateValue: z.number().min(0).max(100).optional(),
+    })
+  ).min(1),
+});
+
 async function resolveDailyClosureAuth(req: PosAuthRequest, body: z.infer<typeof PosDailyClosureSchema>) {
   const hintedTerminalIds = dedupeNonEmpty([body.terminalId]);
   const hintedDeviceIds = dedupeNonEmpty([
@@ -4004,6 +4023,7 @@ export async function handlePosBackofficeProductsSearch(req: PosAuthRequest, res
         sku: product.sku || null,
         vatRateValue: toNumber(product.vatRate?.rate),
         defaultCost: toNumber(product.costPrice),
+        salePrice: toNumber(product.price),
         uomCode: product.purchaseUom?.code || product.uom?.code || "",
       })),
     });
@@ -4218,6 +4238,184 @@ export async function handlePosBackofficeReceiptCreate(req: PosAuthRequest, res:
   }
 }
 
+export async function handlePosBackofficeInvoiceCreate(req: PosAuthRequest, res: Response) {
+  const auth = await resolvePosAuthContext(req);
+  if (!auth?.tenantId || !auth?.terminalId) {
+    return res.status(401).json({ ok: false, error: "POS neautentificat." });
+  }
+
+  req.auth = auth;
+  const parsed = PosBackofficeInvoiceSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    return res.status(400).json({ ok: false, error: parsed.error.flatten() });
+  }
+
+  const tenantId = auth.tenantId;
+  const terminalId = auth.terminalId;
+  const payload = parsed.data;
+  const company = await getPrimaryTenantCompany(tenantId, {
+    select: { id: true },
+  });
+  if (!company?.id) {
+    return res.status(400).json({ ok: false, error: "Nu exista firma activa pentru acest terminal." });
+  }
+
+  try {
+    const terminal = await prisma.terminal.findUnique({
+      where: { id: terminalId },
+      select: { id: true, locationId: true },
+    });
+
+    if (!terminal?.locationId) {
+      return res.status(400).json({ ok: false, error: "Terminal fara locatie selectata." });
+    }
+
+    let customer: Prisma.CustomerGetPayload<object> | null = null;
+    if (normalizeText(payload.customerId)) {
+      customer = await prisma.customer.findFirst({
+        where: {
+          id: normalizeText(payload.customerId),
+          tenantId,
+          companyId: company.id,
+        },
+      });
+      if (!customer) {
+        return res.status(404).json({ ok: false, error: "Clientul nu a fost gasit." });
+      }
+    }
+
+    const customerName = normalizeText(customer?.name || payload.customerName);
+    if (!customerName) {
+      return res.status(400).json({ ok: false, error: "Clientul este obligatoriu." });
+    }
+
+    const productIds = payload.items.map((item) => normalizeText(item.productId));
+    const dbProducts = await prisma.product.findMany({
+      where: {
+        id: { in: productIds },
+        tenantId,
+        companyId: company.id,
+      },
+      include: {
+        vatRate: true,
+        uom: true,
+      },
+    });
+
+    const productMap = new Map(dbProducts.map((product) => [product.id, product]));
+
+    for (const item of payload.items) {
+      if (!productMap.get(normalizeText(item.productId))) {
+        return res.status(404).json({ ok: false, error: "Un produs din factura nu a fost gasit." });
+      }
+    }
+
+    const created = await prisma.$transaction(async (tx) => {
+      const docNo = await reserveNextNumber(tx, tenantId, "invoice");
+      const invoice = await tx.salesInvoice.create({
+        data: {
+          tenantId,
+          companyId: company.id,
+          locationId: terminal.locationId!,
+          customerId: customer?.id || null,
+          docNo,
+          docDate: new Date(),
+          dueDate: new Date(),
+          customerName,
+          customerCode: customer?.code || normalizeText(payload.customerCode) || null,
+          customerCif: customer?.cif || normalizeText(payload.customerCif) || null,
+          customerRegNo: customer?.regNo || null,
+          customerAddress: customer?.address || normalizeText(payload.customerAddress) || null,
+          customerEmail: customer?.email || normalizeText(payload.customerEmail) || null,
+          customerPhone: customer?.phone || normalizeText(payload.customerPhone) || null,
+          currency: "RON",
+          fxRate: 1,
+          note: normalizeText(payload.note) || null,
+          status: "ISSUED",
+        },
+      });
+
+      let totalNetFc = 0;
+      let totalVatFc = 0;
+      let totalGrossFc = 0;
+
+      for (const rawItem of payload.items) {
+        const product = productMap.get(normalizeText(rawItem.productId))!;
+        const qty = toNumber(rawItem.qty);
+        const unitPriceFc = toNumber(rawItem.unitPriceFc);
+        const vatRateValue =
+          rawItem.vatRateValue !== undefined ? toNumber(rawItem.vatRateValue) : toNumber(product.vatRate?.rate);
+        const lineNetFc = qty * unitPriceFc;
+        const lineVatFc = (lineNetFc * vatRateValue) / 100;
+        const lineGrossFc = lineNetFc + lineVatFc;
+
+        totalNetFc += lineNetFc;
+        totalVatFc += lineVatFc;
+        totalGrossFc += lineGrossFc;
+
+        await tx.salesInvoiceItem.create({
+          data: {
+            invoiceId: invoice.id,
+            productId: product.id,
+            productName: product.name,
+            productCode: product.sku || null,
+            uomCode: product.uom?.code || null,
+            uomStandardCode: product.uom?.code || null,
+            vatCategoryCode: vatRateValue > 0 ? "S" : "Z",
+            qty,
+            unitPriceFc,
+            vatRateValue,
+            discountPercent: 0,
+            discountAmountFc: 0,
+            lineNetFc,
+            lineVatFc,
+            lineGrossFc,
+            sgrUnitFc: 0,
+            sgrTotalFc: 0,
+            discountAmountRon: 0,
+            lineNetRon: lineNetFc,
+            lineVatRon: lineVatFc,
+            lineGrossRon: lineGrossFc,
+            sgrTotalRon: 0,
+          },
+        });
+      }
+
+      return tx.salesInvoice.update({
+        where: { id: invoice.id },
+        data: {
+          totalNetFc,
+          totalDiscountFc: 0,
+          totalVatFc,
+          totalGrossFc,
+          totalSgrFc: 0,
+          totalWithSgrFc: totalGrossFc,
+          totalNetRon: totalNetFc,
+          totalDiscountRon: 0,
+          totalVatRon: totalVatFc,
+          totalGrossRon: totalGrossFc,
+          totalSgrRon: 0,
+          totalWithSgrRon: totalGrossFc,
+        },
+      });
+    });
+
+    return res.status(201).json({
+      ok: true,
+      invoiceId: created.id,
+      docNo: created.docNo,
+      status: created.status,
+      total: Number(created.totalGrossRon || 0),
+    });
+  } catch (error) {
+    console.error("POS BACKOFFICE INVOICE CREATE ERROR", error);
+    return res.status(400).json({
+      ok: false,
+      error: error instanceof Error ? error.message : "Nu am putut salva factura din POS.",
+    });
+  }
+}
+
 router.get("/api/v1/pos/customers", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
   return handlePosCustomersSearch(req, res);
 });
@@ -4240,6 +4438,10 @@ router.get("/api/v1/pos/backoffice/products", requirePosAuth, async (req: PosAut
 
 router.post("/api/v1/pos/backoffice/receipts", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
   return handlePosBackofficeReceiptCreate(req, res);
+});
+
+router.post("/api/v1/pos/backoffice/invoices", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
+  return handlePosBackofficeInvoiceCreate(req, res);
 });
 
 router.get("/api/v1/pos/operators", requirePosAuth, async (req: PosAuthRequest, res: Response) => {
