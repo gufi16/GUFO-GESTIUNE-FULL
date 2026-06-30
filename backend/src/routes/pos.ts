@@ -849,22 +849,29 @@ export async function buildCatalogPayload(req: Request, tenantId: string) {
   });
 
   const isVatPayer = company?.isVatPayer ?? true;
+  const scopedWhere = company?.id
+    ? {
+        tenantId,
+        OR: [{ companyId: company.id }, { companyId: null }],
+      }
+    : {
+        tenantId,
+        companyId: null,
+      };
 
   const departments = await prisma.department.findMany({
     where: {
-      tenantId,
       isActive: true,
-      companyId: company?.id || null,
+      ...scopedWhere,
     },
     orderBy: { name: "asc" },
   });
 
   const categories = await prisma.category.findMany({
     where: {
-      tenantId,
-      companyId: company?.id || null,
       isActive: true,
       isVisibleInPos: true,
+      ...scopedWhere,
     },
     include: {
       department: true,
@@ -873,11 +880,10 @@ export async function buildCatalogPayload(req: Request, tenantId: string) {
   });
 
   const rawProducts = await prisma.product.findMany({
-      where: {
-        tenantId,
-        companyId: company?.id || null,
-        isActive: true,
-        isVisibleInPos: true,
+    where: {
+      isActive: true,
+      isVisibleInPos: true,
+      ...scopedWhere,
       OR: [
         { categoryId: null },
         {
