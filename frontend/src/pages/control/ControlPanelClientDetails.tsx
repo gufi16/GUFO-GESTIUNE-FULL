@@ -6,6 +6,7 @@ import {
   Filter,
   History,
   KeyRound,
+  LayoutGrid,
   MapPin,
   PauseCircle,
   Pencil,
@@ -152,6 +153,41 @@ type UpdateDeviceResponse = {
     licenseKey?: string
     companyId?: string | null
   }
+}
+
+type TerminalCatalogConfigItem = {
+  terminal: {
+    id: string
+    label?: string | null
+    deviceId?: string | null
+    deviceType?: string | null
+    companyId?: string | null
+    locationId?: string | null
+  }
+  filtersEnabled: boolean
+  selectedDepartmentIds: string[]
+  selectedCategoryIds: string[]
+  selectedProductIds: string[]
+  availableDepartments: Array<{ id: string; name: string }>
+  availableCategories: Array<{
+    id: string
+    name: string
+    departmentId?: string | null
+    departmentName?: string | null
+  }>
+  availableProducts: Array<{
+    id: string
+    sku: string
+    name: string
+    departmentId?: string | null
+    departmentName?: string | null
+    categoryId?: string | null
+    categoryName?: string | null
+  }>
+}
+
+type TerminalCatalogConfigResponse = {
+  item?: TerminalCatalogConfigItem
 }
 
 function isRouteMissingError(error: unknown) {
@@ -479,6 +515,18 @@ export default function ControlPanelClientDetails() {
   const [deviceForms, setDeviceForms] = useState<Record<string, { label: string; deviceType: DeviceType }>>({})
   const [openDeviceLocationId, setOpenDeviceLocationId] = useState<string | null>(null)
   const [editingDeviceId, setEditingDeviceId] = useState<string | null>(null)
+  const [catalogModalOpen, setCatalogModalOpen] = useState(false)
+  const [catalogLoading, setCatalogLoading] = useState(false)
+  const [catalogSaving, setCatalogSaving] = useState(false)
+  const [catalogError, setCatalogError] = useState<string | null>(null)
+  const [catalogTerminalId, setCatalogTerminalId] = useState<string | null>(null)
+  const [catalogConfig, setCatalogConfig] = useState<TerminalCatalogConfigItem | null>(null)
+  const [catalogQuery, setCatalogQuery] = useState("")
+  const [catalogSelection, setCatalogSelection] = useState({
+    departmentIds: [] as string[],
+    categoryIds: [] as string[],
+    productIds: [] as string[],
+  })
   const [locationError, setLocationError] = useState<string | null>(null)
   const [deviceError, setDeviceError] = useState<string | null>(null)
   const [userError, setUserError] = useState<string | null>(null)
@@ -644,6 +692,28 @@ export default function ControlPanelClientDetails() {
       return matchesQuery && afterStart && beforeEnd
     })
   }, [auditLogs, historyDateFrom, historyDateTo, historyQuery])
+  const filteredCatalogDepartments = useMemo(() => {
+    const query = catalogQuery.trim().toLowerCase()
+    const items = catalogConfig?.availableDepartments || []
+    if (!query) return items
+    return items.filter((item) => item.name.toLowerCase().includes(query))
+  }, [catalogConfig, catalogQuery])
+  const filteredCatalogCategories = useMemo(() => {
+    const query = catalogQuery.trim().toLowerCase()
+    const items = catalogConfig?.availableCategories || []
+    if (!query) return items
+    return items.filter((item) =>
+      [item.name, item.departmentName || ""].join(" ").toLowerCase().includes(query),
+    )
+  }, [catalogConfig, catalogQuery])
+  const filteredCatalogProducts = useMemo(() => {
+    const query = catalogQuery.trim().toLowerCase()
+    const items = catalogConfig?.availableProducts || []
+    if (!query) return items
+    return items.filter((item) =>
+      [item.name, item.sku, item.categoryName || "", item.departmentName || ""].join(" ").toLowerCase().includes(query),
+    )
+  }, [catalogConfig, catalogQuery])
 
   async function copy(text: string, label = "Valoarea") {
     try {
@@ -1037,6 +1107,72 @@ export default function ControlPanelClientDetails() {
       setDeviceError(err?.message || "Nu am putut actualiza device-ul.")
     } finally {
       setSavingDeviceId(null)
+    }
+  }
+
+  async function openCatalogConfig(device: LocationDevice) {
+    try {
+      setCatalogModalOpen(true)
+      setCatalogLoading(true)
+      setCatalogSaving(false)
+      setCatalogError(null)
+      setCatalogQuery("")
+      setCatalogTerminalId(device.id)
+      const response = await api<TerminalCatalogConfigResponse>(`/api/v1/admin/terminals/${device.id}/catalog-config`)
+      const item = response?.item || null
+      setCatalogConfig(item)
+      setCatalogSelection({
+        departmentIds: item?.selectedDepartmentIds || [],
+        categoryIds: item?.selectedCategoryIds || [],
+        productIds: item?.selectedProductIds || [],
+      })
+    } catch (err: any) {
+      setCatalogError(err?.message || "Nu am putut incarca filtrul de catalog pentru device.")
+    } finally {
+      setCatalogLoading(false)
+    }
+  }
+
+  function toggleCatalogSelection(type: "departmentIds" | "categoryIds" | "productIds", id: string) {
+    setCatalogSelection((prev) => {
+      const current = new Set(prev[type])
+      if (current.has(id)) current.delete(id)
+      else current.add(id)
+      return {
+        ...prev,
+        [type]: Array.from(current),
+      }
+    })
+  }
+
+  async function saveCatalogConfig() {
+    if (!catalogTerminalId) return
+    try {
+      setCatalogSaving(true)
+      setCatalogError(null)
+      const response = await api<TerminalCatalogConfigResponse>(`/api/v1/admin/terminals/${catalogTerminalId}/catalog-config`, {
+        method: "PUT",
+        body: JSON.stringify(catalogSelection),
+      })
+      const item = response?.item
+      setCatalogConfig((prev) =>
+        prev
+          ? {
+              ...prev,
+              filtersEnabled: Boolean(item?.filtersEnabled),
+              selectedDepartmentIds: item?.selectedDepartmentIds || [],
+              selectedCategoryIds: item?.selectedCategoryIds || [],
+              selectedProductIds: item?.selectedProductIds || [],
+            }
+          : prev,
+      )
+      setMessage("Catalogul vizibil pentru device a fost actualizat.")
+      setCatalogModalOpen(false)
+      await load()
+    } catch (err: any) {
+      setCatalogError(err?.message || "Nu am putut salva filtrul de catalog.")
+    } finally {
+      setCatalogSaving(false)
     }
   }
 
@@ -1773,6 +1909,14 @@ export default function ControlPanelClientDetails() {
                                     Edit
                                   </button>
                                 )}
+                                <button
+                                  type="button"
+                                  onClick={() => openCatalogConfig(device)}
+                                  className="inline-flex items-center gap-1 rounded-xl border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-xs font-semibold text-sky-700"
+                                >
+                                  <LayoutGrid size={12} />
+                                  Catalog
+                                </button>
                                 <button
                                   type="button"
                                   onClick={() => copy(device.licenseKey || device.deviceId || "", "Licenta")}
@@ -2618,6 +2762,181 @@ export default function ControlPanelClientDetails() {
               >
                 <Trash2 size={15} />
                 {deletingClient ? "Se sterge..." : "Sterge definitiv"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {catalogModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
+          <div className="max-h-[90vh] w-full max-w-7xl overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-xl">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-500">Catalog pe device</div>
+                <div className="mt-1 text-lg font-semibold text-[#17324D]">
+                  {catalogConfig?.terminal?.label || "Configurare catalog"}
+                </div>
+                <div className="mt-1 text-sm text-slate-500">
+                  Selectezi exact ce departamente, categorii si produse vede acest device.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCatalogModalOpen(false)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+              >
+                Inchide
+              </button>
+            </div>
+
+            <div className="border-b border-slate-200 px-5 py-4">
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
+                <div className="relative">
+                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    value={catalogQuery}
+                    onChange={(e) => setCatalogQuery(e.target.value)}
+                    placeholder="Cauta dupa nume, SKU sau departament"
+                    className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm text-slate-700 outline-none focus:border-[#17324D] focus:bg-white"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCatalogSelection({
+                      departmentIds: [],
+                      categoryIds: [],
+                      productIds: [],
+                    })
+                  }
+                  className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"
+                >
+                  Catalog complet
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCatalogSelection({
+                      departmentIds: catalogConfig?.availableDepartments.map((item) => item.id) || [],
+                      categoryIds: catalogConfig?.availableCategories.map((item) => item.id) || [],
+                      productIds: catalogConfig?.availableProducts.map((item) => item.id) || [],
+                    })
+                  }
+                  className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm font-semibold text-sky-700"
+                >
+                  Selecteaza tot
+                </button>
+              </div>
+              {catalogError ? (
+                <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                  {catalogError}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="grid max-h-[60vh] gap-0 overflow-hidden lg:grid-cols-3">
+              <div className="border-r border-slate-200">
+                <div className="border-b border-slate-200 px-5 py-3 text-sm font-semibold text-[#17324D]">
+                  Departamente ({catalogSelection.departmentIds.length}/{catalogConfig?.availableDepartments.length || 0})
+                </div>
+                <div className="max-h-[52vh] overflow-auto px-3 py-3">
+                  {catalogLoading ? (
+                    <div className="px-2 py-6 text-sm text-slate-500">Se incarca...</div>
+                  ) : filteredCatalogDepartments.length === 0 ? (
+                    <div className="px-2 py-6 text-sm text-slate-500">Nu exista departamente pentru filtrul curent.</div>
+                  ) : (
+                    filteredCatalogDepartments.map((item) => (
+                      <label key={item.id} className="mb-2 flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 px-3 py-3 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={catalogSelection.departmentIds.includes(item.id)}
+                          onChange={() => toggleCatalogSelection("departmentIds", item.id)}
+                          className="mt-0.5 h-4 w-4 rounded border-slate-300"
+                        />
+                        <span className="font-medium text-slate-800">{item.name}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="border-r border-slate-200">
+                <div className="border-b border-slate-200 px-5 py-3 text-sm font-semibold text-[#17324D]">
+                  Categorii ({catalogSelection.categoryIds.length}/{catalogConfig?.availableCategories.length || 0})
+                </div>
+                <div className="max-h-[52vh] overflow-auto px-3 py-3">
+                  {catalogLoading ? (
+                    <div className="px-2 py-6 text-sm text-slate-500">Se incarca...</div>
+                  ) : filteredCatalogCategories.length === 0 ? (
+                    <div className="px-2 py-6 text-sm text-slate-500">Nu exista categorii pentru filtrul curent.</div>
+                  ) : (
+                    filteredCatalogCategories.map((item) => (
+                      <label key={item.id} className="mb-2 flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 px-3 py-3 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={catalogSelection.categoryIds.includes(item.id)}
+                          onChange={() => toggleCatalogSelection("categoryIds", item.id)}
+                          className="mt-0.5 h-4 w-4 rounded border-slate-300"
+                        />
+                        <span>
+                          <span className="block font-medium text-slate-800">{item.name}</span>
+                          <span className="block text-xs text-slate-500">{item.departmentName || "Fara departament"}</span>
+                        </span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <div className="border-b border-slate-200 px-5 py-3 text-sm font-semibold text-[#17324D]">
+                  Produse ({catalogSelection.productIds.length}/{catalogConfig?.availableProducts.length || 0})
+                </div>
+                <div className="max-h-[52vh] overflow-auto px-3 py-3">
+                  {catalogLoading ? (
+                    <div className="px-2 py-6 text-sm text-slate-500">Se incarca...</div>
+                  ) : filteredCatalogProducts.length === 0 ? (
+                    <div className="px-2 py-6 text-sm text-slate-500">Nu exista produse pentru filtrul curent.</div>
+                  ) : (
+                    filteredCatalogProducts.map((item) => (
+                      <label key={item.id} className="mb-2 flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 px-3 py-3 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={catalogSelection.productIds.includes(item.id)}
+                          onChange={() => toggleCatalogSelection("productIds", item.id)}
+                          className="mt-0.5 h-4 w-4 rounded border-slate-300"
+                        />
+                        <span>
+                          <span className="block font-medium text-slate-800">{item.name}</span>
+                          <span className="block text-xs text-slate-500">
+                            {item.sku} | {item.categoryName || "Fara categorie"} | {item.departmentName || "Fara departament"}
+                          </span>
+                        </span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setCatalogModalOpen(false)}
+                disabled={catalogSaving}
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Renunta
+              </button>
+              <button
+                type="button"
+                onClick={saveCatalogConfig}
+                disabled={catalogSaving || catalogLoading}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#17324D] px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Save size={15} />
+                {catalogSaving ? "Se salveaza..." : "Salveaza catalogul"}
               </button>
             </div>
           </div>

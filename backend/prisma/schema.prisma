@@ -681,6 +681,9 @@ model Terminal {
   company  Company?  @relation(fields: [companyId], references: [id])
   location Location? @relation(fields: [locationId], references: [id])
   sales    Sale[]
+  departmentAccesses TerminalDepartmentAccess[]
+  categoryAccesses   TerminalCategoryAccess[]
+  productAccesses    TerminalProductAccess[]
 
   @@unique([tenantId, companyId, deviceId])
   @@index([tenantId])
@@ -747,6 +750,7 @@ model Department {
   categories         Category[]
   products           Product[]
   kitchenTicketItems KitchenTicketItem[]
+  terminalAccesses   TerminalDepartmentAccess[]
 
   @@unique([tenantId, companyId, name])
   @@index([tenantId])
@@ -769,6 +773,7 @@ model Category {
   company    Company?    @relation(fields: [companyId], references: [id])
   department Department? @relation(fields: [departmentId], references: [id])
   products   Product[]
+  terminalAccesses TerminalCategoryAccess[]
 
   @@unique([tenantId, companyId, name])
   @@index([tenantId])
@@ -861,6 +866,7 @@ model Product {
   usedInRecipes       RecipeItem[]                @relation("RecipeIngredientProduct")
   marketplaceMappings MarketplaceProductMapping[]
   incomingEInvoiceItems IncomingEInvoiceItem[]
+  terminalAccesses      TerminalProductAccess[]
 
     @@unique([tenantId, companyId, sku])
     @@index([tenantId])
@@ -870,8 +876,50 @@ model Product {
     @@index([departmentId])
     @@index([categoryId])
     @@index([purchaseUomId])
-    @@index([accountingStockTypeId])
-  }
+  @@index([accountingStockTypeId])
+}
+
+model TerminalDepartmentAccess {
+  id           String   @id @default(cuid())
+  terminalId   String
+  departmentId String
+  createdAt    DateTime @default(now())
+
+  terminal   Terminal   @relation(fields: [terminalId], references: [id], onDelete: Cascade)
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@unique([terminalId, departmentId])
+  @@index([terminalId])
+  @@index([departmentId])
+}
+
+model TerminalCategoryAccess {
+  id         String   @id @default(cuid())
+  terminalId String
+  categoryId String
+  createdAt  DateTime @default(now())
+
+  terminal Terminal @relation(fields: [terminalId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([terminalId, categoryId])
+  @@index([terminalId])
+  @@index([categoryId])
+}
+
+model TerminalProductAccess {
+  id         String   @id @default(cuid())
+  terminalId String
+  productId  String
+  createdAt  DateTime @default(now())
+
+  terminal Terminal @relation(fields: [terminalId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([terminalId, productId])
+  @@index([terminalId])
+  @@index([productId])
+}
 
 model Recipe {
     id        String       @id @default(cuid())

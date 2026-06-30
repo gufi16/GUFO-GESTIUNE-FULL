@@ -159,6 +159,12 @@ const UpdateDeviceSchema = z.object({
   deviceType: z.nativeEnum(TerminalDeviceType).default(TerminalDeviceType.POS),
 })
 
+const UpdateTerminalCatalogSchema = z.object({
+  departmentIds: z.array(z.string().min(1)).default([]),
+  categoryIds: z.array(z.string().min(1)).default([]),
+  productIds: z.array(z.string().min(1)).default([]),
+})
+
 const PosLicenseValidateSchema = z.object({
   licenseKey: z.string().min(3),
 })
@@ -2607,10 +2613,272 @@ async function updateTerminalHandler(req: AuthedRequest, res: Response) {
     })
 }
 
+async function getTerminalCatalogConfigHandler(req: AuthedRequest, res: Response) {
+  const terminal = await prisma.terminal.findUnique({
+    where: { id: req.params.id },
+    include: {
+      departmentAccesses: { select: { departmentId: true } },
+      categoryAccesses: { select: { categoryId: true } },
+      productAccesses: { select: { productId: true } },
+    },
+  })
+
+  if (!terminal) {
+    return res.status(404).json({
+      ok: false,
+      error: "Terminal inexistent",
+    })
+  }
+
+  const scopedWhere = terminal.companyId
+    ? {
+        tenantId: terminal.tenantId,
+        OR: [{ companyId: terminal.companyId }, { companyId: null }],
+      }
+    : {
+        tenantId: terminal.tenantId,
+        companyId: null,
+      }
+
+  const [departments, categories, products] = await Promise.all([
+    prisma.department.findMany({
+      where: {
+        isActive: true,
+        ...scopedWhere,
+      },
+      orderBy: { name: "asc" },
+      select: {
+        id: true,
+        name: true,
+      },
+    }),
+    prisma.category.findMany({
+      where: {
+        isActive: true,
+        isVisibleInPos: true,
+        ...scopedWhere,
+      },
+      orderBy: [{ department: { name: "asc" } }, { name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        departmentId: true,
+        department: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    }),
+    prisma.product.findMany({
+      where: {
+        isActive: true,
+        isVisibleInPos: true,
+        ...scopedWhere,
+      },
+      orderBy: [{ category: { name: "asc" } }, { name: "asc" }],
+      select: {
+        id: true,
+        sku: true,
+        name: true,
+        departmentId: true,
+        categoryId: true,
+        department: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        category: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    }),
+  ])
+
+  const selectedDepartmentIds = terminal.departmentAccesses.map((item) => item.departmentId)
+  const selectedCategoryIds = terminal.categoryAccesses.map((item) => item.categoryId)
+  const selectedProductIds = terminal.productAccesses.map((item) => item.productId)
+
+  return res.json({
+    ok: true,
+    item: {
+      terminal: {
+        id: terminal.id,
+        label: terminal.label,
+        deviceId: terminal.deviceId,
+        deviceType: terminal.deviceType,
+        companyId: terminal.companyId,
+        locationId: terminal.locationId,
+      },
+      filtersEnabled:
+        selectedDepartmentIds.length > 0 || selectedCategoryIds.length > 0 || selectedProductIds.length > 0,
+      selectedDepartmentIds,
+      selectedCategoryIds,
+      selectedProductIds,
+      availableDepartments: departments,
+      availableCategories: categories.map((item) => ({
+        id: item.id,
+        name: item.name,
+        departmentId: item.departmentId,
+        departmentName: item.department?.name || null,
+      })),
+      availableProducts: products.map((item) => ({
+        id: item.id,
+        sku: item.sku,
+        name: item.name,
+        departmentId: item.departmentId,
+        departmentName: item.department?.name || null,
+        categoryId: item.categoryId,
+        categoryName: item.category?.name || null,
+      })),
+    },
+  })
+}
+
+async function updateTerminalCatalogConfigHandler(req: AuthedRequest, res: Response) {
+  const parsed = UpdateTerminalCatalogSchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res.status(400).json({ ok: false, error: parsed.error.flatten() })
+  }
+
+  const terminal = await prisma.terminal.findUnique({
+    where: { id: req.params.id },
+  })
+
+  if (!terminal) {
+    return res.status(404).json({
+      ok: false,
+      error: "Terminal inexistent",
+    })
+  }
+
+  const departmentIds = Array.from(new Set(parsed.data.departmentIds))
+  const categoryIds = Array.from(new Set(parsed.data.categoryIds))
+  const productIds = Array.from(new Set(parsed.data.productIds))
+
+  const scopedWhere = terminal.companyId
+    ? {
+        tenantId: terminal.tenantId,
+        OR: [{ companyId: terminal.companyId }, { companyId: null }],
+      }
+    : {
+        tenantId: terminal.tenantId,
+        companyId: null,
+      }
+
+  const [validDepartments, validCategories, validProducts] = await Promise.all([
+    prisma.department.findMany({
+      where: {
+        id: { in: departmentIds },
+        isActive: true,
+        ...scopedWhere,
+      },
+      select: { id: true },
+    }),
+    prisma.category.findMany({
+      where: {
+        id: { in: categoryIds },
+        isActive: true,
+        isVisibleInPos: true,
+        ...scopedWhere,
+      },
+      select: { id: true },
+    }),
+    prisma.product.findMany({
+      where: {
+        id: { in: productIds },
+        isActive: true,
+        isVisibleInPos: true,
+        ...scopedWhere,
+      },
+      select: { id: true },
+    }),
+  ])
+
+  const validDepartmentIds = validDepartments.map((item) => item.id)
+  const validCategoryIds = validCategories.map((item) => item.id)
+  const validProductIds = validProducts.map((item) => item.id)
+
+  await prisma.$transaction(async (tx) => {
+    await tx.terminalDepartmentAccess.deleteMany({
+      where: { terminalId: terminal.id },
+    })
+    await tx.terminalCategoryAccess.deleteMany({
+      where: { terminalId: terminal.id },
+    })
+    await tx.terminalProductAccess.deleteMany({
+      where: { terminalId: terminal.id },
+    })
+
+    if (validDepartmentIds.length) {
+      await tx.terminalDepartmentAccess.createMany({
+        data: validDepartmentIds.map((departmentId) => ({
+          terminalId: terminal.id,
+          departmentId,
+        })),
+      })
+    }
+
+    if (validCategoryIds.length) {
+      await tx.terminalCategoryAccess.createMany({
+        data: validCategoryIds.map((categoryId) => ({
+          terminalId: terminal.id,
+          categoryId,
+        })),
+      })
+    }
+
+    if (validProductIds.length) {
+      await tx.terminalProductAccess.createMany({
+        data: validProductIds.map((productId) => ({
+          terminalId: terminal.id,
+          productId,
+        })),
+      })
+    }
+
+    await tx.auditLog.create({
+      data: {
+        tenantId: terminal.tenantId,
+        actorType: "OWNER",
+        actorId: req.auth?.userId,
+        action: "DEVICE_CATALOG_UPDATED",
+        entityType: "Terminal",
+        entityId: terminal.id,
+        payload: {
+          deviceId: terminal.deviceId,
+          deviceType: terminal.deviceType,
+          departmentIds: validDepartmentIds,
+          categoryIds: validCategoryIds,
+          productIds: validProductIds,
+        },
+      },
+    })
+  })
+
+  return res.json({
+    ok: true,
+    item: {
+      terminalId: terminal.id,
+      selectedDepartmentIds: validDepartmentIds,
+      selectedCategoryIds: validCategoryIds,
+      selectedProductIds: validProductIds,
+      filtersEnabled: validDepartmentIds.length > 0 || validCategoryIds.length > 0 || validProductIds.length > 0,
+    },
+  })
+}
+
 router.patch("/api/v1/admin/terminals/:id", requireAuth, requireOwner, updateTerminalHandler)
 router.put("/api/v1/admin/terminals/:id", requireAuth, requireOwner, updateTerminalHandler)
 router.post("/api/v1/admin/terminals/:id", requireAuth, requireOwner, updateTerminalHandler)
 router.post("/api/v1/admin/terminals/:id/update", requireAuth, requireOwner, updateTerminalHandler)
+router.get("/api/v1/admin/terminals/:id/catalog-config", requireAuth, requireOwner, getTerminalCatalogConfigHandler)
+router.put("/api/v1/admin/terminals/:id/catalog-config", requireAuth, requireOwner, updateTerminalCatalogConfigHandler)
 
 router.delete(
   "/api/v1/admin/terminals/:id",

@@ -840,6 +840,8 @@ function mapCatalogProduct(req: Request, product: CatalogProductLike, isVatPayer
 }
 
 export async function buildCatalogPayload(req: Request, tenantId: string) {
+  const authReq = req as PosAuthRequest;
+  const terminalId = normalizeText(authReq.auth?.terminalId);
   const requestedCursor = normalizeText(req.query.cursor ?? req.query.since);
   const company = await getPrimaryTenantCompany(tenantId, {
     select: {
@@ -928,14 +930,85 @@ export async function buildCatalogPayload(req: Request, tenantId: string) {
     orderBy: { name: "asc" },
   });
 
-  const products = rawProducts.map((product) => mapCatalogProduct(req, product, isVatPayer));
+  const terminal = terminalId
+    ? await prisma.terminal.findUnique({
+        where: { id: terminalId },
+        select: {
+          id: true,
+          departmentAccesses: { select: { departmentId: true } },
+          categoryAccesses: { select: { categoryId: true } },
+          productAccesses: { select: { productId: true } },
+        },
+      })
+    : null;
+
+  const selectedDepartmentIds = new Set(terminal?.departmentAccesses.map((item) => item.departmentId) || []);
+  const selectedCategoryIds = new Set(terminal?.categoryAccesses.map((item) => item.categoryId) || []);
+  const selectedProductIds = new Set(terminal?.productAccesses.map((item) => item.productId) || []);
+
+  const filtersEnabled =
+    selectedDepartmentIds.size > 0 || selectedCategoryIds.size > 0 || selectedProductIds.size > 0;
+
+  const directProducts = filtersEnabled
+    ? rawProducts.filter((product) => selectedProductIds.has(product.id))
+    : [];
+
+  const effectiveCategoryIds = new Set<string>(selectedCategoryIds);
+  const effectiveDepartmentIds = new Set<string>(selectedDepartmentIds);
+
+  for (const category of categories) {
+    if (category.departmentId && selectedDepartmentIds.has(category.departmentId)) {
+      effectiveCategoryIds.add(category.id);
+    }
+  }
+
+  for (const product of directProducts) {
+    if (product.categoryId) {
+      effectiveCategoryIds.add(product.categoryId);
+    }
+    if (product.departmentId) {
+      effectiveDepartmentIds.add(product.departmentId);
+    }
+    if (product.category?.departmentId) {
+      effectiveDepartmentIds.add(product.category.departmentId);
+    }
+  }
+
+  for (const category of categories) {
+    if (effectiveCategoryIds.has(category.id) && category.departmentId) {
+      effectiveDepartmentIds.add(category.departmentId);
+    }
+  }
+
+  const visibleDepartments = filtersEnabled
+    ? departments.filter((department) => effectiveDepartmentIds.has(department.id))
+    : departments;
+
+  const visibleCategories = filtersEnabled
+    ? categories.filter((category) => {
+        if (effectiveCategoryIds.has(category.id)) return true;
+        return category.departmentId ? effectiveDepartmentIds.has(category.departmentId) : false;
+      })
+    : categories;
+
+  const visibleProducts = filtersEnabled
+    ? rawProducts.filter((product) => {
+        if (selectedProductIds.has(product.id)) return true;
+        if (product.categoryId && effectiveCategoryIds.has(product.categoryId)) return true;
+        if (product.departmentId && effectiveDepartmentIds.has(product.departmentId)) return true;
+        if (product.category?.departmentId && effectiveDepartmentIds.has(product.category.departmentId)) return true;
+        return false;
+      })
+    : rawProducts;
+
+  const products = visibleProducts.map((product) => mapCatalogProduct(req, product, isVatPayer));
   const latestProductUpdate =
-    rawProducts.reduce<number>(
+    visibleProducts.reduce<number>(
       (latest, product) => Math.max(latest, new Date(product.updatedAt).getTime()),
       0
     ) || Date.now();
 
-  const normalizedCategories = categories.map((category) => ({
+  const normalizedCategories = visibleCategories.map((category) => ({
     id: category.id,
     name: category.name,
     image: resolveImageUrl(req, category.imageUrl),
@@ -957,12 +1030,12 @@ export async function buildCatalogPayload(req: Request, tenantId: string) {
     cursor: new Date(latestProductUpdate).toISOString(),
     serverTime: new Date().toISOString(),
     requestedCursor: requestedCursor || null,
-    departments,
+    departments: visibleDepartments,
     categories: normalizedCategories,
     products,
     items: products,
     changes: {
-      departments,
+      departments: visibleDepartments,
       categories: normalizedCategories,
       products,
       items: products,
