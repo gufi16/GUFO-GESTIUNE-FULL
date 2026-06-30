@@ -2,7 +2,7 @@ import { Router } from "express"
 import path from "path"
 import fs from "fs"
 import multer from "multer"
-import { ProductClass, ProductionMode, RecipeStatus, StockCostMethod } from "@prisma/client"
+import { ProductClass, ProductionMode, RecipeStatus, StockCostMethod, TerminalDeviceType } from "@prisma/client"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { buildCompanyScopedTenantWhere, requireRequestCompanyId, resolveRequestCompany } from "../lib/companyScope"
@@ -81,6 +81,36 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback
 }
 
+async function resolveProductTerminalIds(tenantId: string, companyId: string, payload: unknown) {
+  const body = (payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>
+  const requestedIds = Array.isArray(body.terminalIds) ? body.terminalIds : []
+  const normalizedIds = Array.from(
+    new Set(
+      requestedIds
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+    )
+  )
+
+  if (!normalizedIds.length) return [] as string[]
+
+  const terminals = await prisma.terminal.findMany({
+    where: {
+      tenantId,
+      companyId,
+      deviceType: TerminalDeviceType.POS,
+      id: { in: normalizedIds },
+    },
+    select: { id: true },
+  })
+
+  if (terminals.length !== normalizedIds.length) {
+    throw new Error("Unele POS-uri selectate nu exista.")
+  }
+
+  return terminals.map((terminal) => terminal.id)
+}
+
 function hasBarcodePayload(body: Record<string, unknown> | null | undefined) {
   if (!body) return false
   return Object.prototype.hasOwnProperty.call(body, "barcode") || Object.prototype.hasOwnProperty.call(body, "barcodes")
@@ -143,6 +173,11 @@ router.get("/api/v1/products", async (req: AuthedRequest, res) => {
       uom: true,
       purchaseUom: true,
       department: true,
+      terminalAccesses: {
+        select: {
+          terminalId: true,
+        },
+      },
       barcodes: {
         orderBy: { createdAt: "asc" }
       },
@@ -238,6 +273,7 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
     req.body?.isFiscalRiskProduct === undefined ? false : Boolean(req.body?.isFiscalRiskProduct)
   const requestedIsMenu = normalizeBoolean(req.body?.isMenu, false)
   const requestedPublishToGlovo = normalizeBoolean(req.body?.publishToGlovo, false)
+  const terminalIds = await resolveProductTerminalIds(tenantId, companyId, req.body)
   const requestedPosMenuCategory = toNullableText(req.body?.posMenuCategory)
   const posMenuCategory = requestedIsMenu ? requestedPosMenuCategory : null
   const requestedBarcodes = normalizeBarcodeList(req.body?.barcodes ?? req.body?.barcode)
@@ -470,26 +506,16 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
           sgrValue: isSgr ? 0.5 : 0,
           productionMode: finalProductionMode
         },
-        include: {
-          vatRate: true,
-          uom: true,
-          purchaseUom: true,
-          department: true,
-          barcodes: {
-            orderBy: { createdAt: "asc" }
-          },
-          category: {
-            include: {
-              department: true
-            }
-          },
-          recipe: {
-            include: {
-              items: true
-            }
-          }
-        }
       })
+
+      if (terminalIds.length) {
+        await tx.terminalProductAccess.createMany({
+          data: terminalIds.map((terminalId) => ({
+            terminalId,
+            productId: created.id,
+          })),
+        })
+      }
 
       if (requestedBarcodes.length) {
         const duplicateBarcode = await tx.productBarcode.findFirst({
@@ -522,6 +548,11 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
           uom: true,
           purchaseUom: true,
           department: true,
+          terminalAccesses: {
+            select: {
+              terminalId: true,
+            },
+          },
           barcodes: {
             orderBy: { createdAt: "asc" }
           },
@@ -612,6 +643,7 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   const posMenuCategory = requestedIsMenu ? requestedPosMenuCategory : null
   const shouldUpdateBarcodes = hasBarcodePayload(req.body as Record<string, unknown> | undefined)
   const requestedBarcodes = normalizeBarcodeList(req.body?.barcodes ?? req.body?.barcode)
+  const terminalIds = await resolveProductTerminalIds(tenantId, companyId, req.body)
 
   if (!ALL_PRODUCT_CLASSES.includes(classValue)) {
     return res.status(400).json({ ok: false, error: "Clasificare produs invalida." })
@@ -861,6 +893,21 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
         }
       }
 
+      await tx.terminalProductAccess.deleteMany({
+        where: {
+          productId: id,
+        },
+      })
+
+      if (terminalIds.length) {
+        await tx.terminalProductAccess.createMany({
+          data: terminalIds.map((terminalId) => ({
+            terminalId,
+            productId: id,
+          })),
+        })
+      }
+
       return tx.product.findUniqueOrThrow({
         where: { id },
         include: {
@@ -870,6 +917,11 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
           department: true,
           barcodes: {
             orderBy: { createdAt: "asc" }
+          },
+          terminalAccesses: {
+            select: {
+              terminalId: true,
+            },
           },
           category: {
             include: {

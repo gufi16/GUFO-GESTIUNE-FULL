@@ -19,12 +19,20 @@ type Department = {
   name: string
 }
 
+type PosTerminal = {
+  id: string
+  label: string
+  deviceId?: string | null
+  location?: { id: string; name: string; code?: string | null } | null
+}
+
 type Category = {
   id: string
   name: string
   departmentId: string
   imageUrl?: string | null
   isVisibleInPos?: boolean
+  terminalIds?: string[]
   department?: Department | null
 }
 
@@ -56,11 +64,13 @@ export default function CategoriiPage() {
 
   const [list, setList] = useState<Category[]>([])
   const [deps, setDeps] = useState<Department[]>([])
+  const [terminals, setTerminals] = useState<PosTerminal[]>([])
 
   const [name, setName] = useState("")
   const [departmentId, setDepartmentId] = useState("")
   const [imageUrl, setImageUrl] = useState("")
   const [isVisibleInPos, setIsVisibleInPos] = useState(true)
+  const [selectedTerminalIds, setSelectedTerminalIds] = useState<string[]>([])
   const [uploading, setUploading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -75,6 +85,7 @@ export default function CategoriiPage() {
       withImage: list.filter((item) => Boolean(item.imageUrl)).length,
       visibleInPos: list.filter((item) => item.isVisibleInPos !== false).length,
       departments: new Set(list.map((item) => item.department?.name || item.departmentId).filter(Boolean)).size,
+      scopedPos: list.filter((item) => Array.isArray(item.terminalIds) && item.terminalIds.length > 0).length,
     }),
     [list]
   )
@@ -92,23 +103,27 @@ export default function CategoriiPage() {
     try {
       const headers = { Authorization: `Bearer ${token}` }
 
-      const [categoriesRes, depsRes] = await Promise.all([
+      const [categoriesRes, depsRes, terminalsRes] = await Promise.all([
         fetch(`${API}/api/v1/meta/categories`, { headers }),
         fetch(`${API}/api/v1/meta/departments`, { headers }),
+        fetch(`${API}/api/v1/meta/terminals?deviceType=POS`, { headers }),
       ])
 
       const categoriesData = await categoriesRes.json().catch(() => ({}))
       const depsData = await depsRes.json().catch(() => ({}))
+      const terminalsData = await terminalsRes.json().catch(() => ({}))
 
       setList(
         Array.isArray(categoriesData.items)
           ? categoriesData.items.map((item: Category) => ({
               ...item,
               imageUrl: normalizeHostedImageUrl(item?.imageUrl || ""),
+              terminalIds: Array.isArray(item?.terminalIds) ? item.terminalIds.map((value) => String(value)) : [],
             }))
           : []
       )
       setDeps(Array.isArray(depsData.items) ? depsData.items : [])
+      setTerminals(Array.isArray(terminalsData.items) ? terminalsData.items : [])
     } catch {
       setError("Nu pot incarca categoriile.")
     } finally {
@@ -121,6 +136,7 @@ export default function CategoriiPage() {
     setDepartmentId("")
     setImageUrl("")
     setIsVisibleInPos(true)
+    setSelectedTerminalIds([])
     setEditingId("")
     setError("")
     setMessage("")
@@ -202,6 +218,7 @@ export default function CategoriiPage() {
           departmentId,
           imageUrl: normalizeHostedImageUrl(imageUrl.trim()) || null,
           isVisibleInPos,
+          terminalIds: selectedTerminalIds,
           ...(isEdit ? { isActive: true } : {}),
         }),
       })
@@ -229,6 +246,7 @@ export default function CategoriiPage() {
     setDepartmentId(item.departmentId || "")
     setImageUrl(normalizeHostedImageUrl(item.imageUrl || ""))
     setIsVisibleInPos(item.isVisibleInPos !== false)
+    setSelectedTerminalIds(Array.isArray(item.terminalIds) ? item.terminalIds : [])
     setError("")
     setMessage("")
     setPreviewImageFailed(false)
@@ -262,6 +280,12 @@ export default function CategoriiPage() {
     } catch {
       setError("Nu am putut sterge categoria.")
     }
+  }
+
+  function toggleTerminal(terminalId: string) {
+    setSelectedTerminalIds((prev) =>
+      prev.includes(terminalId) ? prev.filter((item) => item !== terminalId) : [...prev, terminalId]
+    )
   }
 
   function renderCategoryForm(isEdit: boolean) {
@@ -329,6 +353,58 @@ export default function CategoriiPage() {
             )}
           </div>
         </div>
+
+        <div className="mt-5 rounded-[24px] border border-slate-200 bg-white p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-slate-900">Vizibilitate pe device POS</div>
+              <div className="mt-1 text-xs text-slate-500">
+                Daca nu alegi niciun POS, categoria ramane vizibila pe toate device-urile POS ale firmei.
+              </div>
+            </div>
+            <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+              {selectedTerminalIds.length ? `${selectedTerminalIds.length} selectate` : "Toate POS-urile"}
+            </span>
+          </div>
+
+          {terminals.length ? (
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+              {terminals.map((terminal) => {
+                const active = selectedTerminalIds.includes(terminal.id)
+                return (
+                  <label
+                    key={terminal.id}
+                    className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 transition ${
+                      active
+                        ? "border-emerald-200 bg-emerald-50"
+                        : "border-slate-200 bg-slate-50 hover:border-slate-300"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={active}
+                      onChange={() => toggleTerminal(terminal.id)}
+                      className="mt-1"
+                    />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                        <MonitorSmartphone size={14} className="text-slate-500" />
+                        <span>{terminal.label}</span>
+                      </div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        {[terminal.deviceId, terminal.location?.name].filter(Boolean).join(" · ") || "POS fara locatie"}
+                      </div>
+                    </div>
+                  </label>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+              Nu exista inca device-uri POS pe care sa filtrezi categoria.
+            </div>
+          )}
+        </div>
       </>
     )
   }
@@ -345,7 +421,7 @@ export default function CategoriiPage() {
         <DocumentMetric title="Categorii" value={stats.total} tone="slate" />
         <DocumentMetric title="Cu imagine" value={stats.withImage} tone="blue" />
         <DocumentMetric title="Vizibile in POS" value={stats.visibleInPos} tone="emerald" />
-        <DocumentMetric title="Departamente active" value={stats.departments} tone="amber" />
+        <DocumentMetric title="Filtrate pe POS" value={stats.scopedPos} tone="amber" />
       </div>
 
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
@@ -377,6 +453,7 @@ export default function CategoriiPage() {
                   <th className="px-4 py-3 text-left font-medium">Categorie</th>
                   <th className="px-4 py-3 text-left font-medium">Departament</th>
                   <th className="px-4 py-3 text-left font-medium">Vizibila POS</th>
+                  <th className="px-4 py-3 text-left font-medium">POS-uri</th>
                   <th className="px-4 py-3 text-right font-medium">Actiuni</th>
                 </tr>
               </thead>
@@ -413,6 +490,9 @@ export default function CategoriiPage() {
                       >
                         {category.isVisibleInPos !== false ? "Da" : "Nu"}
                       </span>
+                    </td>
+                    <td className="px-4 py-4 text-slate-600">
+                      {category.terminalIds?.length ? `${category.terminalIds.length} POS` : "Toate POS-urile"}
                     </td>
                     <td className="px-4 py-4">
                       <div className="flex justify-end gap-2">

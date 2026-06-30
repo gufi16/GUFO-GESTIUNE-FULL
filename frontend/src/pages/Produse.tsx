@@ -10,6 +10,7 @@ type Product = {
   sku: string
   name: string
   barcodes?: Array<{ id?: string; barcode: string }>
+  terminalIds?: string[]
   imageUrl?: string | null
   class: string
   ncCode?: string | null
@@ -57,10 +58,18 @@ type ProductOption = {
   isActive?: boolean
 }
 
+type PosTerminal = {
+  id: string
+  label: string
+  deviceId?: string | null
+  location?: { id: string; name: string; code?: string | null } | null
+}
+
 type FormState = {
   sku: string
   name: string
   barcode: string
+  terminalIds: string[]
   imageUrl: string
   class: string
   uomId: string
@@ -164,6 +173,7 @@ const emptyForm: FormState = {
   sku: "",
   name: "",
   barcode: "",
+  terminalIds: [],
   imageUrl: "",
   class: "MARFA",
   uomId: "",
@@ -292,6 +302,7 @@ export function ProductsCatalogPage({
   const [uoms, setUoms] = useState<any[]>([])
   const [vatRates, setVatRates] = useState<any[]>([])
   const [categories, setCategories] = useState<any[]>([])
+  const [terminals, setTerminals] = useState<PosTerminal[]>([])
   const [productOptions, setProductOptions] = useState<ProductOption[]>([])
   const [isVatPayer, setIsVatPayer] = useState(true)
   const [warehouseMobileEnabled, setWarehouseMobileEnabled] = useState(false)
@@ -398,11 +409,12 @@ export function ProductsCatalogPage({
     try {
       const headers = { Authorization: `Bearer ${token}` }
 
-      const [productsRes, uomRes, vatRes, catRes, companyRes, licenseRes] = await Promise.all([
+      const [productsRes, uomRes, vatRes, catRes, terminalsRes, companyRes, licenseRes] = await Promise.all([
         fetch(`${API_BASE}/api/v1/products`, { headers }),
         fetch(`${API_BASE}/api/v1/meta/uom`, { headers }),
         fetch(`${API_BASE}/api/v1/meta/vat`, { headers }),
         fetch(`${API_BASE}/api/v1/meta/categories`, { headers }),
+        fetch(`${API_BASE}/api/v1/meta/terminals?deviceType=POS`, { headers }),
         fetch(`${API_BASE}/api/v1/company`, { headers }),
         fetch(`${API_BASE}/api/v1/license/validate`, { headers })
       ])
@@ -411,10 +423,11 @@ export function ProductsCatalogPage({
       const uomData = await uomRes.json().catch(() => ({}))
       const vatData = await vatRes.json().catch(() => ({}))
       const catData = await catRes.json().catch(() => ({}))
+      const terminalsData = await terminalsRes.json().catch(() => ({}))
       const companyData = await companyRes.json().catch(() => ({}))
       const licenseData = await licenseRes.json().catch(() => ({}))
 
-      if ([productsRes, uomRes, vatRes, catRes, companyRes].some((r) => r.status === 401)) {
+      if ([productsRes, uomRes, vatRes, catRes, terminalsRes, companyRes].some((r) => r.status === 401)) {
         setError("Token expirat sau invalid. Fa login din nou.")
         setLoading(false)
         return
@@ -431,6 +444,7 @@ export function ProductsCatalogPage({
             trackLot: item?.trackLot === true,
             trackExpiry: item?.trackExpiry === true,
             costMethod: item?.costMethod || "AVG",
+            terminalIds: Array.isArray(item?.terminalIds) ? item.terminalIds.map((value: any) => String(value)) : [],
           }))
         : []
 
@@ -439,6 +453,7 @@ export function ProductsCatalogPage({
       setUoms(Array.isArray(uomData.items) ? uomData.items : [])
       setVatRates(Array.isArray(vatData.items) ? vatData.items : [])
       setCategories(Array.isArray(catData.items) ? catData.items : [])
+      setTerminals(Array.isArray(terminalsData.items) ? terminalsData.items : [])
       setIsVatPayer(companyData?.company?.isVatPayer !== false)
       setWarehouseMobileEnabled(
         Array.isArray(licenseData?.modules?.dynamic) &&
@@ -494,6 +509,7 @@ function getDefaultVat(list = vatRates) {
       ...emptyForm,
       sku: nextSku,
       barcode: "",
+      terminalIds: [],
       class: defaultClass,
       uomId: defaultUom?.id || "",
       purchaseUomId: defaultUom?.id || "",
@@ -530,6 +546,7 @@ function getDefaultVat(list = vatRates) {
       sku: item.sku || "",
       name: item.name || "",
       barcode: String(item.barcodes?.[0]?.barcode || "").trim(),
+      terminalIds: Array.isArray(item.terminalIds) ? item.terminalIds : [],
       imageUrl: normalizeHostedImageUrl(item.imageUrl || ""),
       class: item.class || "MARFA",
       uomId: item.uom?.id || "",
@@ -681,6 +698,7 @@ function getDefaultVat(list = vatRates) {
           sku: !editingItem ? form.sku.trim() || null : undefined,
           name: form.name.trim(),
           barcode: form.barcode.trim() || null,
+          terminalIds: form.terminalIds,
           imageUrl: normalizeHostedImageUrl(form.imageUrl.trim()) || null,
           class: fixedClassValue || form.class,
           uomId: form.uomId,
@@ -857,6 +875,15 @@ function getDefaultVat(list = vatRates) {
     } catch {
       setError("Nu am putut sterge produsul.")
     }
+  }
+
+  function toggleTerminal(terminalId: string) {
+    setForm((prev) => ({
+      ...prev,
+      terminalIds: prev.terminalIds.includes(terminalId)
+        ? prev.terminalIds.filter((id) => id !== terminalId)
+        : [...prev.terminalIds, terminalId]
+    }))
   }
 
   async function openRecipeModal(item: Product) {
@@ -1241,6 +1268,7 @@ function getDefaultVat(list = vatRates) {
                     <th style={th}>Cost / UM</th>
                     <th style={th}>Lot / FIFO</th>
                     <th style={th}>POS</th>
+                    <th style={th}>POS-uri</th>
                     <th style={th}>Glovo</th>
                     <th style={th}>SGR</th>
                     <th style={th}>Activ</th>
@@ -1302,6 +1330,7 @@ function getDefaultVat(list = vatRates) {
                         )}
                       </td>
                       <td style={td}>{item.isVisibleInPos !== false ? "Da" : "Nu"}</td>
+                      <td style={td}>{item.terminalIds?.length ? `${item.terminalIds.length} POS` : "Toate POS-urile"}</td>
                       <td style={td}>{item.publishToGlovo ? "Da" : "Nu"}</td>
                       <td style={td}>{item.isSgr ? "Da" : "Nu"}</td>
                       <td style={td}>{item.isActive ? "Da" : "Nu"}</td>
@@ -1924,6 +1953,62 @@ function getDefaultVat(list = vatRates) {
                         <span>Vizibil in POS</span>
                       </label>
                       <div style={checkHint}>Daca este debifat, produsul nu apare in Android POS.</div>
+                    </div>
+
+                    <div style={checkBlock}>
+                      <div style={{ display: "grid", gap: 10 }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                          <span style={{ fontWeight: 700, color: "#0f172a" }}>Vizibilitate pe device POS</span>
+                          <span style={{ color: "#64748b", fontSize: 12 }}>
+                            {form.terminalIds.length ? `${form.terminalIds.length} selectate` : "Toate POS-urile"}
+                          </span>
+                        </div>
+
+                        {!terminals.length ? (
+                          <div style={checkHint}>
+                            Nu exista device-uri POS active pe tenant. Daca nu selectezi nimic, produsul ramane vizibil pe toate device-urile.
+                          </div>
+                        ) : (
+                          <div
+                            style={{
+                              display: "grid",
+                              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                              gap: 10,
+                            }}
+                          >
+                            {terminals.map((terminal) => {
+                              const checked = form.terminalIds.includes(terminal.id)
+                              return (
+                                <label
+                                  key={terminal.id}
+                                  style={{
+                                    border: checked ? "1px solid #67e8f9" : "1px solid #dbeafe",
+                                    background: checked ? "#ecfeff" : "#f8fafc",
+                                    borderRadius: 14,
+                                    padding: "12px 14px",
+                                    display: "grid",
+                                    gap: 6,
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      onChange={() => toggleTerminal(terminal.id)}
+                                    />
+                                    <span style={{ fontWeight: 700, color: "#0f172a" }}>{terminal.label}</span>
+                                  </div>
+                                  <span style={{ color: "#64748b", fontSize: 12, lineHeight: 1.4 }}>
+                                    {terminal.location?.name || "Fara locatie"}
+                                    {terminal.deviceId ? ` · ${terminal.deviceId}` : ""}
+                                  </span>
+                                </label>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     <div style={checkBlock}>

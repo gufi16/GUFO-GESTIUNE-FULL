@@ -104,6 +104,36 @@ router.post(
   }
 )
 
+async function resolveCategoryTerminalIds(tenantId: string, companyId: string, payload: unknown) {
+  const body = (payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>
+  const requestedIds = Array.isArray(body.terminalIds) ? body.terminalIds : []
+  const normalizedIds = Array.from(
+    new Set(
+      requestedIds
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+    )
+  )
+
+  if (!normalizedIds.length) return [] as string[]
+
+  const terminals = await prisma.terminal.findMany({
+    where: {
+      tenantId,
+      deviceType: TerminalDeviceType.POS,
+      id: { in: normalizedIds },
+      OR: buildCompanyScope(companyId),
+    },
+    select: { id: true },
+  })
+
+  if (terminals.length !== normalizedIds.length) {
+    throw new Error("Unele POS-uri selectate nu exista.")
+  }
+
+  return terminals.map((terminal) => terminal.id)
+}
+
 /* =========================
    LOCATIONS
 ========================= */
@@ -1534,12 +1564,24 @@ router.get("/api/v1/meta/categories", async (req: AuthedRequest, res) => {
       OR: buildCompanyScope(companyId),
     },
     include: {
-      department: true
+      department: true,
+      terminalAccesses: {
+        select: {
+          terminalId: true,
+        },
+      },
     },
     orderBy: { name: "asc" }
   })
 
-  res.json({ ok: true, items })
+  res.json({
+    ok: true,
+    items: items.map((item) => ({
+      ...item,
+      terminalIds: item.terminalAccesses.map((entry) => entry.terminalId),
+      terminalAccesses: undefined,
+    })),
+  })
 })
 
 router.post("/api/v1/meta/categories", async (req: AuthedRequest, res) => {
@@ -1561,6 +1603,8 @@ router.post("/api/v1/meta/categories", async (req: AuthedRequest, res) => {
   }
 
   try {
+    const terminalIds = await resolveCategoryTerminalIds(tenantId, companyId, req.body)
+
     if (departmentId) {
       const dep = await prisma.department.findFirst({
         where: {
@@ -1578,22 +1622,49 @@ router.post("/api/v1/meta/categories", async (req: AuthedRequest, res) => {
       }
     }
 
-    const item = await prisma.category.create({
-      data: {
-        tenantId,
-        companyId,
-        name,
-        imageUrl,
-        departmentId,
-        isActive: true,
-        isVisibleInPos
-      },
-      include: {
-        department: true
+    const item = await prisma.$transaction(async (tx) => {
+      const created = await tx.category.create({
+        data: {
+          tenantId,
+          companyId,
+          name,
+          imageUrl,
+          departmentId,
+          isActive: true,
+          isVisibleInPos
+        },
+      })
+
+      if (terminalIds.length) {
+        await tx.terminalCategoryAccess.createMany({
+          data: terminalIds.map((terminalId) => ({
+            terminalId,
+            categoryId: created.id,
+          })),
+        })
       }
+
+      return tx.category.findUniqueOrThrow({
+        where: { id: created.id },
+        include: {
+          department: true,
+          terminalAccesses: {
+            select: {
+              terminalId: true,
+            },
+          },
+        },
+      })
     })
 
-    res.json({ ok: true, item })
+    res.json({
+      ok: true,
+      item: {
+        ...item,
+        terminalIds: item.terminalAccesses.map((entry) => entry.terminalId),
+        terminalAccesses: undefined,
+      },
+    })
   } catch {
     res.status(400).json({
       ok: false,
@@ -1623,6 +1694,7 @@ router.put("/api/v1/meta/categories/:id", async (req: AuthedRequest, res) => {
   }
 
   try {
+    const terminalIds = await resolveCategoryTerminalIds(tenantId, companyId, req.body)
     const current = await prisma.category.findFirst({
       where: {
         id,
@@ -1657,21 +1729,54 @@ router.put("/api/v1/meta/categories/:id", async (req: AuthedRequest, res) => {
       }
     }
 
-    const item = await prisma.category.update({
-      where: { id },
-      data: {
-        name,
-        imageUrl,
-        departmentId,
-        isActive,
-        isVisibleInPos
-      },
-      include: {
-        department: true
+    const item = await prisma.$transaction(async (tx) => {
+      await tx.category.update({
+        where: { id },
+        data: {
+          name,
+          imageUrl,
+          departmentId,
+          isActive,
+          isVisibleInPos
+        },
+      })
+
+      await tx.terminalCategoryAccess.deleteMany({
+        where: {
+          categoryId: id,
+        },
+      })
+
+      if (terminalIds.length) {
+        await tx.terminalCategoryAccess.createMany({
+          data: terminalIds.map((terminalId) => ({
+            terminalId,
+            categoryId: id,
+          })),
+        })
       }
+
+      return tx.category.findUniqueOrThrow({
+        where: { id },
+        include: {
+          department: true,
+          terminalAccesses: {
+            select: {
+              terminalId: true,
+            },
+          },
+        },
+      })
     })
 
-    res.json({ ok: true, item })
+    res.json({
+      ok: true,
+      item: {
+        ...item,
+        terminalIds: item.terminalAccesses.map((entry) => entry.terminalId),
+        terminalAccesses: undefined,
+      },
+    })
   } catch {
     res.status(400).json({
       ok: false,
