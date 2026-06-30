@@ -1275,8 +1275,6 @@ function getDefaultVat(list = vatRates) {
                     <th style={th}>Lot / FIFO</th>
                     <th style={th}>POS</th>
                     <th style={th}>POS-uri</th>
-                    <th style={th}>Glovo</th>
-                    <th style={th}>SGR</th>
                     <th style={th}>Activ</th>
                     <th style={th}>Retetar</th>
                     <th style={th}>Actiuni</th>
@@ -1337,8 +1335,6 @@ function getDefaultVat(list = vatRates) {
                       </td>
                       <td style={td}>{item.isVisibleInPos !== false ? "Da" : "Nu"}</td>
                       <td style={td}>{item.terminalIds?.length ? `${item.terminalIds.length} POS` : "Toate POS-urile"}</td>
-                      <td style={td}>{item.publishToGlovo ? "Da" : "Nu"}</td>
-                      <td style={td}>{item.isSgr ? "Da" : "Nu"}</td>
                       <td style={td}>{item.isActive ? "Da" : "Nu"}</td>
                       <td style={td}>
                         {recipeEligibleClasses.includes(item.class) ? (
