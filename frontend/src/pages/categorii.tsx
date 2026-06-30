@@ -123,7 +123,13 @@ export default function CategoriiPage() {
           : []
       )
       setDeps(Array.isArray(depsData.items) ? depsData.items : [])
-      setTerminals(Array.isArray(terminalsData.items) ? terminalsData.items : [])
+      setTerminals(
+        Array.isArray(terminalsData.terminals)
+          ? terminalsData.terminals
+          : Array.isArray(terminalsData.items)
+            ? terminalsData.items
+            : []
+      )
     } catch {
       setError("Nu pot incarca categoriile.")
     } finally {

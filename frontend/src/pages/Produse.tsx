@@ -453,7 +453,13 @@ export function ProductsCatalogPage({
       setUoms(Array.isArray(uomData.items) ? uomData.items : [])
       setVatRates(Array.isArray(vatData.items) ? vatData.items : [])
       setCategories(Array.isArray(catData.items) ? catData.items : [])
-      setTerminals(Array.isArray(terminalsData.items) ? terminalsData.items : [])
+      setTerminals(
+        Array.isArray(terminalsData.terminals)
+          ? terminalsData.terminals
+          : Array.isArray(terminalsData.items)
+            ? terminalsData.items
+            : []
+      )
       setIsVatPayer(companyData?.company?.isVatPayer !== false)
       setWarehouseMobileEnabled(
         Array.isArray(licenseData?.modules?.dynamic) &&
