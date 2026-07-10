@@ -64,6 +64,7 @@ const CreateClientSchema = z.object({
   email: z.string().email().optional(),
   phone: z.string().optional(),
   contactName: z.string().optional(),
+  password: z.string().min(6).optional(),
   licenseKey: z.string().min(6),
   expiresAt: z.string().optional(),
   limitLocations: z.coerce.number().int().min(1).default(1),
@@ -1381,12 +1382,12 @@ router.post("/api/v1/admin/clients", requireAuth, requireOwner, async (req: Auth
         },
       })
 
-      const defaultPassword = "123456"
+      const defaultPassword = data.password?.trim() || "123456"
       const passwordHash = await bcrypt.hash(defaultPassword, 10)
 
       const erpUser = await tx.user.create({
         data: {
-          email: data.email?.trim() || `admin@${tenant.id}.local`,
+          email: data.email?.trim().toLowerCase() || `admin@${tenant.id}.local`,
           name: data.contactName?.trim() || "Administrator",
           passwordHash,
           role: UserRole.OWNER,

@@ -82,6 +82,7 @@ type CreateClientPayload = {
   email?: string
   phone?: string
   contactName?: string
+  password?: string
   licenseKey: string
   limitLocations: number
   limitTerminals: number
@@ -297,6 +298,7 @@ export default function ControlPanelClients() {
     email: "",
     phone: "",
     contactName: "",
+    password: "",
     licenseKey: "",
     limitLocations: 1,
     limitTerminals: 1,
@@ -421,6 +423,7 @@ export default function ControlPanelClients() {
         email: "",
         phone: "",
         contactName: "",
+        password: "",
         licenseKey: "",
         limitLocations: 1,
         limitTerminals: 1,
@@ -692,11 +695,13 @@ export default function ControlPanelClients() {
                     ["email", "Email", "office@client.ro"],
                     ["phone", "Telefon", "+40 7xx xxx xxx"],
                     ["contactName", "Contact", "Administrator"],
+                    ["password", "Parola ERP", "minim 6 caractere"],
                     ["licenseKey", "Cheie licenta", "GUFO-XXXX-XXXX"],
                   ].map(([field, label, placeholder]) => (
                     <label key={field} className="block">
                       <div className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</div>
                       <input
+                        type={field === "password" ? "password" : "text"}
                         value={(form as any)[field] || ""}
                         onChange={(e) => setForm((prev) => ({ ...prev, [field]: e.target.value }))}
                         placeholder={placeholder}

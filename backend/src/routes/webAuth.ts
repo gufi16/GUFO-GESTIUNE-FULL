@@ -241,7 +241,8 @@ router.post("/api/v1/auth/login", async (req, res) => {
   }
   if (!checkSimpleRateLimit(req as AuthedRequest, res, "erpLogin", parsed.data.email)) return
 
-  const { email, password, tenantId, tenantSubdomain } = parsed.data
+  const { password, tenantId, tenantSubdomain } = parsed.data
+  const email = parsed.data.email.trim().toLowerCase()
   let scopedTenantId: string | undefined
   try {
     scopedTenantId = await resolveRequestedTenantId(req, tenantId, tenantSubdomain, {
@@ -260,7 +261,10 @@ router.post("/api/v1/auth/login", async (req, res) => {
 
   const candidates = await prisma.user.findMany({
     where: {
-      email,
+      email: {
+        equals: email,
+        mode: "insensitive",
+      },
       isActive: true,
       ...(scopedTenantId ? { tenantId: scopedTenantId } : {}),
     },
@@ -642,7 +646,10 @@ router.post("/api/v1/auth/forgot-password", async (req, res) => {
 
   const users = await prisma.user.findMany({
     where: {
-      email,
+      email: {
+        equals: email,
+        mode: "insensitive",
+      },
       isActive: true,
       ...(scopedTenantId ? { tenantId: scopedTenantId } : {}),
     },
