@@ -3,6 +3,10 @@ import { prisma } from "./prisma"
 
 export const ERP_TENANT_COOKIE = "gufo_erp_tenant"
 
+type TenantSubdomainRequestOptions = {
+  includeCookieFallback?: boolean
+}
+
 export function getHostnameFromUrl(value: string) {
   try {
     return new URL(value).hostname.toLowerCase()
@@ -58,7 +62,8 @@ export function getTenantSubdomainFromHostname(hostname: string) {
   return subdomain
 }
 
-export function getTenantSubdomainFromRequest(req: Request) {
+export function getTenantSubdomainFromRequest(req: Request, options: TenantSubdomainRequestOptions = {}) {
+  const { includeCookieFallback = true } = options
   const explicitHeader = String(req.headers["x-tenant-subdomain"] || "").trim().toLowerCase()
   const validExplicitHeader = explicitHeader && /^[a-z0-9-]+$/.test(explicitHeader) ? explicitHeader : ""
 
@@ -80,6 +85,10 @@ export function getTenantSubdomainFromRequest(req: Request) {
   if (validExplicitHeader) return validExplicitHeader
   if (hostDerivedSubdomain) return hostDerivedSubdomain
 
+  if (!includeCookieFallback) {
+    return null
+  }
+
   const cookieSubdomain = String(req.cookies?.[ERP_TENANT_COOKIE] || "").trim().toLowerCase()
   if (cookieSubdomain && /^[a-z0-9-]+$/.test(cookieSubdomain)) {
     return cookieSubdomain
@@ -88,8 +97,8 @@ export function getTenantSubdomainFromRequest(req: Request) {
   return null
 }
 
-export async function resolveTenantIdFromRequestHost(req: Request) {
-  const subdomain = getTenantSubdomainFromRequest(req)
+export async function resolveTenantIdFromRequestHost(req: Request, options: TenantSubdomainRequestOptions = {}) {
+  const subdomain = getTenantSubdomainFromRequest(req, options)
   if (!subdomain) return null
 
   const tenant = await prisma.tenant.findFirst({
@@ -103,9 +112,10 @@ export async function resolveTenantIdFromRequestHost(req: Request) {
 export async function resolveRequestedTenantId(
   req: Request,
   tenantId?: string | null,
-  tenantSubdomain?: string | null
+  tenantSubdomain?: string | null,
+  options: TenantSubdomainRequestOptions = {}
 ) {
-  const hostTenantId = await resolveTenantIdFromRequestHost(req)
+  const hostTenantId = await resolveTenantIdFromRequestHost(req, options)
   let requestedTenantId = String(tenantId || "").trim() || undefined
 
   if (!requestedTenantId && tenantSubdomain) {

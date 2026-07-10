@@ -244,7 +244,9 @@ router.post("/api/v1/auth/login", async (req, res) => {
   const { email, password, tenantId, tenantSubdomain } = parsed.data
   let scopedTenantId: string | undefined
   try {
-    scopedTenantId = await resolveRequestedTenantId(req, tenantId, tenantSubdomain)
+    scopedTenantId = await resolveRequestedTenantId(req, tenantId, tenantSubdomain, {
+      includeCookieFallback: false,
+    })
   } catch (error: unknown) {
     return res.status(403).json({ ok: false, error: error instanceof Error ? error.message : "Tenant invalid." })
   }
@@ -292,14 +294,15 @@ router.post("/api/v1/auth/login", async (req, res) => {
     return res.status(401).json({ ok: false, error: "Invalid credentials" })
   }
 
-  let loginTenantSubdomain = ""
-  const requestedSubdomain = getTenantSubdomainFromRequest(req)
+  const requestedSubdomain = getTenantSubdomainFromRequest(req, {
+    includeCookieFallback: false,
+  })
+  const loginTenant = await prisma.tenant.findUnique({
+    where: { id: user.tenantId },
+    select: { subdomain: true },
+  })
+  const loginTenantSubdomain = String(loginTenant?.subdomain || "").trim().toLowerCase()
   if (requestedSubdomain) {
-    const loginTenant = await prisma.tenant.findUnique({
-      where: { id: user.tenantId },
-      select: { subdomain: true },
-    })
-    loginTenantSubdomain = String(loginTenant?.subdomain || "").trim().toLowerCase()
     if (!loginTenantSubdomain || loginTenantSubdomain !== requestedSubdomain) {
       return res.status(403).json({
         ok: false,
@@ -339,9 +342,8 @@ router.post("/api/v1/auth/login", async (req, res) => {
   })
   setErpAuthCookie(req, res, token)
   setErpCsrfCookie(req, res, csrfToken)
-  if (loginTenantSubdomain) {
-    setErpTenantCookie(req, res, loginTenantSubdomain)
-  }
+  if (loginTenantSubdomain) setErpTenantCookie(req, res, loginTenantSubdomain)
+  else clearErpTenantCookie(req, res)
 
   void writeExplicitAuditLog({
     tenantId: user.tenantId,
@@ -628,7 +630,9 @@ router.post("/api/v1/auth/forgot-password", async (req, res) => {
   const email = parsed.data.email.trim().toLowerCase()
   let scopedTenantId: string | undefined
   try {
-    scopedTenantId = await resolveRequestedTenantId(req, parsed.data.tenantId, parsed.data.tenantSubdomain)
+    scopedTenantId = await resolveRequestedTenantId(req, parsed.data.tenantId, parsed.data.tenantSubdomain, {
+      includeCookieFallback: false,
+    })
   } catch {
     return res.json({
       ok: true,

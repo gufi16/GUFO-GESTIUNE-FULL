@@ -4,6 +4,7 @@ const ERP_TOKEN_KEY = "erp_session_token"
 const CONTROL_TOKEN_KEY = "control_session_token"
 const ERP_CSRF_COOKIE = "gufo_erp_csrf"
 const CONTROL_CSRF_COOKIE = "gufo_control_csrf"
+const ERP_TENANT_COOKIE = "gufo_erp_tenant"
 const LEGACY_ERP_TOKEN_KEYS = ["access_token", "token"] as const
 const LEGACY_CONTROL_TOKEN_KEYS = ["control_token"] as const
 
@@ -69,6 +70,11 @@ function readCookieValue(name: string) {
     .find((item) => item.startsWith(pattern))
   if (!match) return ""
   return decodeURIComponent(match.slice(pattern.length))
+}
+
+function clearCookieValue(name: string) {
+  if (typeof document === "undefined") return
+  document.cookie = `${name}=; Max-Age=0; path=/; SameSite=Lax`
 }
 
 function resolveCsrfTokenByPath(path?: string) {
@@ -138,6 +144,7 @@ export function clearErpToken() {
   LEGACY_ERP_TOKEN_KEYS.forEach((key) => {
     if (typeof window !== "undefined") window.localStorage.removeItem(key)
   })
+  clearCookieValue(ERP_TENANT_COOKIE)
 }
 
 export function clearControlToken() {
