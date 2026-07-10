@@ -450,7 +450,7 @@ export async function resolvePosAuthContext(req: PosAuthRequest) {
     }
   }
 
-  const sessionResolution = resolveScopedOrLatestSessionAuth(req, { allowLatest: true });
+  const sessionResolution = resolveScopedOrLatestSessionAuth(req, { allowLatest: false });
   if (sessionResolution) {
     return sessionResolution.auth;
   }
@@ -458,35 +458,6 @@ export async function resolvePosAuthContext(req: PosAuthRequest) {
   const headerResolved = await resolvePosHeaderTerminalContext(req);
   if (headerResolved) {
     return headerResolved;
-  }
-
-  const latestTerminal = await prisma.terminal.findFirst({
-    orderBy: { createdAt: "desc" },
-    include: {
-      tenant: {
-        include: {
-          licenses: {
-            orderBy: { createdAt: "desc" },
-            take: 1,
-          },
-        },
-      },
-    },
-  });
-
-  const license = latestTerminal?.tenant.licenses[0];
-  if (
-    latestTerminal &&
-    license &&
-    !license.isSuspended &&
-    license.expiresAt > new Date() &&
-    license.modPos
-  ) {
-    return {
-      tenantId: latestTerminal.tenantId,
-      terminalId: latestTerminal.id,
-      deviceId: latestTerminal.deviceId,
-    };
   }
 
   return null;
@@ -501,7 +472,7 @@ async function requirePosAuth(req: PosAuthRequest, res: Response, next: NextFunc
       return next();
     }
 
-    const sessionResolution = resolveScopedOrLatestSessionAuth(req, { allowLatest: true });
+    const sessionResolution = resolveScopedOrLatestSessionAuth(req, { allowLatest: false });
     if (sessionResolution) {
       applyPosAuth(req, sessionResolution.auth);
       console.warn(
@@ -536,7 +507,7 @@ async function requirePosAuth(req: PosAuthRequest, res: Response, next: NextFunc
       return next();
     }
 
-    const sessionResolution = resolveScopedOrLatestSessionAuth(req, { allowLatest: true });
+    const sessionResolution = resolveScopedOrLatestSessionAuth(req, { allowLatest: false });
     if (sessionResolution) {
       applyPosAuth(req, sessionResolution.auth);
       console.warn(
