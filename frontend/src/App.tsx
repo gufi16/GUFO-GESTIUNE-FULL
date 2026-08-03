@@ -35,6 +35,7 @@ import ETransportPage from "./pages/ETransport"
 import UomPage from "./pages/uom"
 import DepartamentePage from "./pages/departamente"
 import CategoriiPage from "./pages/categorii"
+import SubcategoriiPage from "./pages/subcategorii"
 import TvaPage from "./pages/tva"
 import FirmaPage from "./pages/Firma"
 import SetariNumerotarePage from "./pages/SetariNumerotare"
@@ -165,6 +166,7 @@ export default function App() {
         <Route path="/nomenclator/uom" element={<RequireModule code="nomenclature"><UomPage /></RequireModule>} />
         <Route path="/nomenclator/departamente" element={<RequireModule code="nomenclature"><DepartamentePage /></RequireModule>} />
         <Route path="/nomenclator/categorii" element={<RequireModule code="nomenclature"><CategoriiPage /></RequireModule>} />
+        <Route path="/nomenclator/subcategorii" element={<RequireModule code="nomenclature"><SubcategoriiPage /></RequireModule>} />
 
         <Route path="/setari" element={<RequireModule code="settings"><Setari /></RequireModule>} />
         <Route path="/setari/firma" element={<RequireModule code="settings"><FirmaPage /></RequireModule>} />

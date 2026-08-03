@@ -274,6 +274,11 @@ export default function MeniuriPage() {
       ),
     [categories, selectedMainCategoryId]
   )
+  const categoryPlacementMode = useMemo<"category" | "subcategory">(() => {
+    if (!form.categoryId) return "category"
+    const current = categories.find((item) => item.id === form.categoryId)
+    return current?.parentCategoryId ? "subcategory" : "category"
+  }, [categories, form.categoryId])
 
   const imagePreviewSrc = livePreviewUrl || form.imageUrl.trim()
 
@@ -1020,9 +1025,44 @@ export default function MeniuriPage() {
                     </select>
                   </Field>
 
+                  <Field label="Incadrare meniu">
+                    <div style={checkBlock}>
+                      <label style={checkLabel}>
+                        <input
+                          type="radio"
+                          name="menu-category-placement"
+                          checked={categoryPlacementMode === "category"}
+                          onChange={() => {
+                            if (!selectedMainCategoryId) return
+                            setForm((prev) => ({ ...prev, categoryId: selectedMainCategoryId }))
+                          }}
+                        />
+                        <span>Direct in categorie</span>
+                      </label>
+                      <label style={checkLabel}>
+                        <input
+                          type="radio"
+                          name="menu-category-placement"
+                          checked={categoryPlacementMode === "subcategory"}
+                          disabled={!selectedMainCategoryId || !availableSubcategories.length}
+                          onChange={() => {
+                            if (!selectedMainCategoryId || !availableSubcategories.length) return
+                            setForm((prev) => ({ ...prev, categoryId: availableSubcategories[0].id }))
+                          }}
+                        />
+                        <span>In subcategorie</span>
+                      </label>
+                      <div style={checkHint}>
+                        {availableSubcategories.length
+                          ? "Poti lasa meniul direct in categorie sau il poti lega de o subcategorie anume."
+                          : "Categoria aleasa nu are inca subcategorii."}
+                      </div>
+                    </div>
+                  </Field>
+
                   <Field label="Subcategorie ERP">
                     <select
-                      value={form.categoryId}
+                      value={categoryPlacementMode === "subcategory" ? form.categoryId : ""}
                       onChange={(e) =>
                         setForm((prev) => ({
                           ...prev,
@@ -1030,10 +1070,10 @@ export default function MeniuriPage() {
                         }))
                       }
                       style={input}
-                      disabled={!selectedMainCategoryId}
+                      disabled={!selectedMainCategoryId || categoryPlacementMode !== "subcategory" || !availableSubcategories.length}
                     >
-                      <option value={selectedMainCategoryId}>
-                        {availableSubcategories.length ? "Fara subcategorie" : "Nu exista subcategorii"}
+                      <option value="">
+                        {availableSubcategories.length ? "Selecteaza subcategoria" : "Nu exista subcategorii"}
                       </option>
                       {availableSubcategories.map((c) => (
                         <option key={c.id} value={c.id}>

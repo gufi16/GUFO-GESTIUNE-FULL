@@ -14,6 +14,7 @@ const items = [
   { name: "Unitati de masura", route: "/nomenclator/uom", icon: Ruler, description: "U.M. standard." },
   { name: "Departamente", route: "/nomenclator/departamente", icon: BookOpen, description: "Structura comerciala." },
   { name: "Categorii produse", route: "/nomenclator/categorii", icon: FolderTree, description: "Grupare produse." },
+  { name: "Subcategorii produse", route: "/nomenclator/subcategorii", icon: FolderTree, description: "Variante in interiorul categoriilor." },
 ]
 
 export default function Nomenclator() {

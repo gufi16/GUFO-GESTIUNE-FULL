@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { ImagePlus, MonitorSmartphone } from "lucide-react"
+import { useSearchParams } from "react-router-dom"
 import PageHeader from "../components/PageHeader"
 import {
   DocumentField,
@@ -61,17 +62,17 @@ function normalizeHostedImageUrl(value: any) {
   return text
 }
 
-export default function CategoriiPage() {
+export default function SubcategoriiPage() {
   const token = getToken() || ""
+  const [searchParams] = useSearchParams()
+  const initialParentId = searchParams.get("parent") || ""
 
   const [list, setList] = useState<Category[]>([])
-  const [deps, setDeps] = useState<Department[]>([])
   const [terminals, setTerminals] = useState<PosTerminal[]>([])
 
   const [name, setName] = useState("")
-  const [departmentId, setDepartmentId] = useState("")
+  const [parentCategoryId, setParentCategoryId] = useState(initialParentId)
   const [imageUrl, setImageUrl] = useState("")
-  const [parentCategoryId, setParentCategoryId] = useState("")
   const [posSortOrderInput, setPosSortOrderInput] = useState("")
   const [isVisibleInPos, setIsVisibleInPos] = useState(true)
   const [selectedTerminalIds, setSelectedTerminalIds] = useState<string[]>([])
@@ -83,25 +84,16 @@ export default function CategoriiPage() {
   const [editingId, setEditingId] = useState("")
   const [previewImageFailed, setPreviewImageFailed] = useState(false)
 
-  const stats = useMemo(
-    () => ({
-      total: list.filter((item) => !item.parentCategoryId).length,
-      subcategories: list.filter((item) => Boolean(item.parentCategoryId)).length,
-      withImage: list.filter((item) => !item.parentCategoryId && Boolean(item.imageUrl)).length,
-      visibleInPos: list.filter((item) => !item.parentCategoryId && item.isVisibleInPos !== false).length,
-    }),
-    [list]
-  )
-
   const topLevelCategories = useMemo(() => list.filter((item) => !item.parentCategoryId), [list])
-  const subcategoryCounts = useMemo(() => {
-    const counts = new Map<string, number>()
-    list.forEach((item) => {
-      if (!item.parentCategoryId) return
-      counts.set(item.parentCategoryId, (counts.get(item.parentCategoryId) || 0) + 1)
-    })
-    return counts
-  }, [list])
+  const subcategories = useMemo(() => list.filter((item) => Boolean(item.parentCategoryId)), [list])
+  const selectedParentCategory = useMemo(
+    () => topLevelCategories.find((item) => item.id === parentCategoryId) || null,
+    [topLevelCategories, parentCategoryId]
+  )
+  const filteredSubcategories = useMemo(() => {
+    if (!parentCategoryId) return subcategories
+    return subcategories.filter((item) => item.parentCategoryId === parentCategoryId)
+  }, [parentCategoryId, subcategories])
 
   useEffect(() => {
     load()
@@ -116,14 +108,12 @@ export default function CategoriiPage() {
     try {
       const headers = { Authorization: `Bearer ${token}` }
 
-      const [categoriesRes, depsRes, terminalsRes] = await Promise.all([
+      const [categoriesRes, terminalsRes] = await Promise.all([
         fetch(`${API}/api/v1/meta/categories`, { headers }),
-        fetch(`${API}/api/v1/meta/departments`, { headers }),
         fetch(`${API}/api/v1/meta/terminals?deviceType=POS`, { headers }),
       ])
 
       const categoriesData = await categoriesRes.json().catch(() => ({}))
-      const depsData = await depsRes.json().catch(() => ({}))
       const terminalsData = await terminalsRes.json().catch(() => ({}))
 
       setList(
@@ -135,7 +125,6 @@ export default function CategoriiPage() {
             }))
           : []
       )
-      setDeps(Array.isArray(depsData.items) ? depsData.items : [])
       setTerminals(
         Array.isArray(terminalsData.terminals)
           ? terminalsData.terminals
@@ -144,7 +133,7 @@ export default function CategoriiPage() {
             : []
       )
     } catch {
-      setError("Nu pot incarca categoriile.")
+      setError("Nu pot incarca subcategoriile.")
     } finally {
       setLoading(false)
     }
@@ -152,9 +141,7 @@ export default function CategoriiPage() {
 
   function resetForm() {
     setName("")
-    setDepartmentId("")
     setImageUrl("")
-    setParentCategoryId("")
     setPosSortOrderInput("")
     setIsVisibleInPos(true)
     setSelectedTerminalIds([])
@@ -195,7 +182,7 @@ export default function CategoriiPage() {
 
       setImageUrl(normalizeHostedImageUrl(data.imageUrl || ""))
       setPreviewImageFailed(false)
-      setMessage("Imaginea categoriei a fost incarcata.")
+      setMessage("Imaginea subcategoriei a fost incarcata.")
     } catch {
       setError("Nu am putut incarca imaginea.")
     } finally {
@@ -209,13 +196,13 @@ export default function CategoriiPage() {
       return
     }
 
-    if (!name.trim()) {
-      setError("Completeaza numele categoriei.")
+    if (!parentCategoryId) {
+      setError("Alege categoria principala.")
       return
     }
 
-    if (!departmentId) {
-      setError("Selecteaza departamentul.")
+    if (!name.trim()) {
+      setError("Completeaza numele subcategoriei.")
       return
     }
 
@@ -236,8 +223,8 @@ export default function CategoriiPage() {
         },
         body: JSON.stringify({
           name: name.trim(),
-          departmentId,
-          parentCategoryId: null,
+          departmentId: selectedParentCategory?.departmentId || "",
+          parentCategoryId,
           imageUrl: normalizeHostedImageUrl(imageUrl.trim()) || null,
           posSortOrder: parsePosSortOrderInput(posSortOrderInput),
           isVisibleInPos,
@@ -249,15 +236,15 @@ export default function CategoriiPage() {
       const data = await res.json().catch(() => ({}))
 
       if (!res.ok || !data.ok) {
-        setError(data.error || "Nu am putut salva categoria.")
+        setError(data.error || "Nu am putut salva subcategoria.")
         return
       }
 
-      setMessage(isEdit ? "Categoria a fost actualizata." : "Categoria a fost adaugata.")
+      setMessage(isEdit ? "Subcategoria a fost actualizata." : "Subcategoria a fost adaugata.")
       resetForm()
       await load()
     } catch {
-      setError("Nu am putut salva categoria.")
+      setError("Nu am putut salva subcategoria.")
     } finally {
       setSaving(false)
     }
@@ -266,9 +253,8 @@ export default function CategoriiPage() {
   function startEdit(item: Category) {
     setEditingId(item.id)
     setName(item.name || "")
-    setDepartmentId(item.departmentId || "")
+    setParentCategoryId(item.parentCategoryId || "")
     setImageUrl(normalizeHostedImageUrl(item.imageUrl || ""))
-    setParentCategoryId("")
     setPosSortOrderInput(item.posSortOrder && item.posSortOrder > 0 ? String(item.posSortOrder) : "")
     setIsVisibleInPos(item.isVisibleInPos !== false)
     setSelectedTerminalIds(Array.isArray(item.terminalIds) ? item.terminalIds : [])
@@ -278,7 +264,7 @@ export default function CategoriiPage() {
   }
 
   async function remove(id: string) {
-    if (!window.confirm("Stergi categoria?")) return
+    if (!window.confirm("Stergi subcategoria?")) return
 
     setError("")
     setMessage("")
@@ -292,7 +278,7 @@ export default function CategoriiPage() {
       const data = await res.json().catch(() => ({}))
 
       if (!res.ok || !data.ok) {
-        setError(data.error || "Nu am putut sterge categoria.")
+        setError(data.error || "Nu am putut sterge subcategoria.")
         return
       }
 
@@ -300,10 +286,10 @@ export default function CategoriiPage() {
         resetForm()
       }
 
-      setMessage("Categoria a fost stearsa.")
+      setMessage("Subcategoria a fost stearsa.")
       await load()
     } catch {
-      setError("Nu am putut sterge categoria.")
+      setError("Nu am putut sterge subcategoria.")
     }
   }
 
@@ -319,28 +305,34 @@ export default function CategoriiPage() {
     return Math.max(0, Math.round(parsed))
   }
 
-  function renderCategoryForm(isEdit: boolean) {
+  function renderForm() {
     return (
       <>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <DocumentField label="Nume categorie">
+          <DocumentField label="Categorie principala">
+            <select
+              value={parentCategoryId}
+              onChange={(e) => setParentCategoryId(e.target.value)}
+              className={documentInputClass}
+            >
+              <option value="">Alege categoria principala</option>
+              {topLevelCategories
+                .filter((item) => item.id !== editingId)
+                .map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+            </select>
+          </DocumentField>
+
+          <DocumentField label="Nume subcategorie">
             <input
-              placeholder="Ex: Shaorma"
+              placeholder="Ex: Lipie"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className={documentInputClass}
             />
-          </DocumentField>
-
-          <DocumentField label="Departament">
-            <select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} className={documentInputClass}>
-              <option value="">Departament</option>
-              {deps.map((department) => (
-                <option key={department.id} value={department.id}>
-                  {department.name}
-                </option>
-              ))}
-            </select>
           </DocumentField>
 
           <DocumentField label="Pozitie Gufo POS">
@@ -363,9 +355,16 @@ export default function CategoriiPage() {
           </DocumentField>
         </div>
 
+        {selectedParentCategory ? (
+          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Subcategoria va sta sub <strong>{selectedParentCategory.name}</strong>
+            {selectedParentCategory.department?.name ? ` in departamentul ${selectedParentCategory.department.name}` : ""}.
+          </div>
+        ) : null}
+
         <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[1.1fr_0.9fr]">
           <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
-            <div className="mb-3 text-sm font-semibold text-slate-900">Imagine categorie</div>
+            <div className="mb-3 text-sm font-semibold text-slate-900">Imagine subcategorie</div>
 
             <div className="flex flex-wrap gap-3">
               <label className={documentButtonSecondaryClass}>
@@ -379,24 +378,24 @@ export default function CategoriiPage() {
                   }}
                 />
                 <ImagePlus size={16} className="mr-2" />
-                {uploading ? "Se incarca..." : "Incarca poza categorie"}
+                {uploading ? "Se incarca..." : "Incarca poza subcategorie"}
               </label>
             </div>
           </div>
 
           <div className="rounded-[24px] border border-slate-200 bg-white p-4">
-            <div className="mb-3 text-sm font-semibold text-slate-900">Preview categorie</div>
+            <div className="mb-3 text-sm font-semibold text-slate-900">Preview subcategorie</div>
             {imageUrl.trim() && !previewImageFailed ? (
               <img
                 key={imageUrl}
                 src={imageUrl}
-                alt="Preview categorie"
+                alt="Preview subcategorie"
                 className="h-36 w-36 rounded-2xl border border-slate-200 object-cover"
                 onError={() => setPreviewImageFailed(true)}
               />
             ) : (
               <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
-                Categoria nu are inca poza. Pentru schimbare, incarca alta imagine.
+                Subcategoria nu are inca poza. Pentru schimbare, incarca alta imagine.
               </div>
             )}
           </div>
@@ -407,7 +406,7 @@ export default function CategoriiPage() {
             <div>
               <div className="text-sm font-semibold text-slate-900">Vizibilitate pe device POS</div>
               <div className="mt-1 text-xs text-slate-500">
-                Daca nu alegi niciun POS, categoria ramane vizibila pe toate device-urile POS ale firmei.
+                Daca nu alegi niciun POS, subcategoria ramane vizibila pe toate device-urile POS ale firmei.
               </div>
             </div>
             <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
@@ -449,7 +448,7 @@ export default function CategoriiPage() {
             </div>
           ) : (
             <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-              Nu exista inca device-uri POS pe care sa filtrezi categoria.
+              Nu exista inca device-uri POS pe care sa filtrezi subcategoria.
             </div>
           )}
         </div>
@@ -461,38 +460,38 @@ export default function CategoriiPage() {
     <div className="space-y-6">
       <PageHeader
         badge="nomenclator"
-        title="Categorii produse"
-        subtitle="Gestionezi categoriile principale din ERP. Subcategoriile se administreaza separat, dar raman legate de categoriile tale pentru fluxul Gufo POS."
+        title="Subcategorii produse"
+        subtitle="Aici legi variantele sub categoriile principale, ca sa ai structura curata pentru produse si Gufo POS."
       />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-        <DocumentMetric title="Categorii" value={stats.total} tone="slate" />
-        <DocumentMetric title="Subcategorii" value={stats.subcategories} tone="amber" />
-        <DocumentMetric title="Cu imagine" value={stats.withImage} tone="blue" />
-        <DocumentMetric title="Vizibile in POS" value={stats.visibleInPos} tone="emerald" />
+        <DocumentMetric title="Subcategorii" value={subcategories.length} tone="amber" />
+        <DocumentMetric title="Categorii principale" value={topLevelCategories.length} tone="slate" />
+        <DocumentMetric title="Cu imagine" value={subcategories.filter((item) => Boolean(item.imageUrl)).length} tone="blue" />
+        <DocumentMetric title="Vizibile in POS" value={subcategories.filter((item) => item.isVisibleInPos !== false).length} tone="emerald" />
       </div>
 
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
 
       <DocumentSection
-        title="Adauga categorie"
-        description="Aici adaugi doar categoria principala. Pentru variante precum lipie, farfurie sau chifla folosesti pagina dedicata de subcategorii."
+        title="Adauga subcategorie"
+        description="Fiecare subcategorie sta sub o categorie principala. Exemplu: Shaorma -> Lipie, Farfurie, Chifla."
         actions={
           <div className="flex flex-wrap gap-2">
-            <a href="/nomenclator/subcategorii" className={documentButtonSecondaryClass}>
-              Gestioneaza subcategorii
+            <a href="/nomenclator/categorii" className={documentButtonSecondaryClass}>
+              Inapoi la categorii
             </a>
             <button type="button" onClick={save} className={documentButtonPrimaryClass} disabled={saving || uploading}>
-              {saving ? "Se salveaza..." : "Adauga categorie"}
+              {saving ? "Se salveaza..." : "Adauga subcategorie"}
             </button>
           </div>
         }
       >
-        {renderCategoryForm(false)}
+        {renderForm()}
       </DocumentSection>
 
-      <DocumentSection title="Categorii existente" description="Ai registrul complet al categoriilor principale, cu departamentul, pozitia in POS si numarul de subcategorii legate de fiecare.">
+      <DocumentSection title="Subcategorii existente" description="Vezi toate subcategoriile si categoria parinte din care fac parte.">
         {loading ? (
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
             Se incarca...
@@ -503,8 +502,8 @@ export default function CategoriiPage() {
               <thead className="bg-slate-50 text-slate-500">
                 <tr>
                   <th className="px-4 py-3 text-left font-medium">Poza</th>
+                  <th className="px-4 py-3 text-left font-medium">Subcategorie</th>
                   <th className="px-4 py-3 text-left font-medium">Categorie</th>
-                  <th className="px-4 py-3 text-left font-medium">Subcategorii</th>
                   <th className="px-4 py-3 text-left font-medium">Pozitie POS</th>
                   <th className="px-4 py-3 text-left font-medium">Departament</th>
                   <th className="px-4 py-3 text-left font-medium">Vizibila POS</th>
@@ -513,7 +512,7 @@ export default function CategoriiPage() {
                 </tr>
               </thead>
               <tbody>
-                {topLevelCategories.map((category) => (
+                {filteredSubcategories.map((category) => (
                   <tr key={category.id} className="border-t border-slate-200">
                     <td className="px-4 py-4">
                       {category.imageUrl ? (
@@ -531,10 +530,8 @@ export default function CategoriiPage() {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-4">
-                      <div className="font-semibold text-slate-900">{category.name}</div>
-                    </td>
-                    <td className="px-4 py-4 text-slate-600">{subcategoryCounts.get(category.id) || 0}</td>
+                    <td className="px-4 py-4 font-semibold text-slate-900">{category.name}</td>
+                    <td className="px-4 py-4 text-slate-600">{category.parentCategory?.name || "-"}</td>
                     <td className="px-4 py-4 text-slate-600">{category.posSortOrder && category.posSortOrder > 0 ? category.posSortOrder : "-"}</td>
                     <td className="px-4 py-4 text-slate-600">{category.department?.name || "-"}</td>
                     <td className="px-4 py-4">
@@ -553,9 +550,6 @@ export default function CategoriiPage() {
                     </td>
                     <td className="px-4 py-4">
                       <div className="flex justify-end gap-2">
-                        <a href={`/nomenclator/subcategorii?parent=${category.id}`} className={documentButtonSecondaryClass}>
-                          Subcategorii
-                        </a>
                         <button type="button" onClick={() => startEdit(category)} className={documentButtonSecondaryClass}>
                           Edit
                         </button>
@@ -576,30 +570,20 @@ export default function CategoriiPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
           <div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-[28px] bg-white shadow-2xl">
             <DocumentSection
-              title="Edit categorie"
-              description="Editezi categoria principala, iar subcategoriile ei le gestionezi separat, ca sa ramai cu o structura curata in ERP."
+              title="Edit subcategorie"
+              description="Editezi rapid subcategoria fara sa pierzi categoria parinte din care face parte."
               actions={
                 <>
-                  {editingId ? (
-                    <a href={`/nomenclator/subcategorii?parent=${editingId}`} className={documentButtonSecondaryClass}>
-                      Vezi subcategorii
-                    </a>
-                  ) : null}
                   <button type="button" onClick={resetForm} className={documentButtonSecondaryClass}>
                     Inchide
                   </button>
-                  <button
-                    type="button"
-                    onClick={save}
-                    className={documentButtonPrimaryClass}
-                    disabled={saving || uploading}
-                  >
+                  <button type="button" onClick={save} className={documentButtonPrimaryClass} disabled={saving || uploading}>
                     {saving ? "Se salveaza..." : "Salveaza"}
                   </button>
                 </>
               }
             >
-              {renderCategoryForm(true)}
+              {renderForm()}
             </DocumentSection>
           </div>
         </div>

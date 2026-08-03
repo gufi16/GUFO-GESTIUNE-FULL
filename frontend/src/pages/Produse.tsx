@@ -375,6 +375,11 @@ export function ProductsCatalogPage({
       ),
     [categories, selectedMainCategoryId]
   )
+  const categoryPlacementMode = useMemo<"category" | "subcategory">(() => {
+    if (!form.categoryId) return "category"
+    const current = categories.find((item) => item.id === form.categoryId)
+    return current?.parentCategoryId ? "subcategory" : "category"
+  }, [categories, form.categoryId])
 
   const selectedUom = useMemo(() => {
     return uoms.find((u) => u.id === form.uomId) || null
@@ -1573,9 +1578,44 @@ function getDefaultVat(list = vatRates) {
                       </select>
                     </Field>
 
+                    <Field label="Incadrare produs">
+                      <div style={checkBlock}>
+                        <label style={checkLabel}>
+                          <input
+                            type="radio"
+                            name="product-category-placement"
+                            checked={categoryPlacementMode === "category"}
+                            onChange={() => {
+                              if (!selectedMainCategoryId) return
+                              setForm((prev) => ({ ...prev, categoryId: selectedMainCategoryId }))
+                            }}
+                          />
+                          <span>Direct in categorie</span>
+                        </label>
+                        <label style={checkLabel}>
+                          <input
+                            type="radio"
+                            name="product-category-placement"
+                            checked={categoryPlacementMode === "subcategory"}
+                            disabled={!selectedMainCategoryId || !availableSubcategories.length}
+                            onChange={() => {
+                              if (!selectedMainCategoryId || !availableSubcategories.length) return
+                              setForm((prev) => ({ ...prev, categoryId: availableSubcategories[0].id }))
+                            }}
+                          />
+                          <span>In subcategorie</span>
+                        </label>
+                        <div style={checkHint}>
+                          {availableSubcategories.length
+                            ? "Poti lasa produsul direct in categoria principala sau il poti muta intr-o subcategorie."
+                            : "Categoria aleasa nu are inca subcategorii."}
+                        </div>
+                      </div>
+                    </Field>
+
                     <Field label="Subcategorie">
                       <select
-                        value={form.categoryId}
+                        value={categoryPlacementMode === "subcategory" ? form.categoryId : ""}
                         onChange={(e) => {
                           const nextCategoryId = e.target.value
                           setForm((prev) => ({
@@ -1584,10 +1624,10 @@ function getDefaultVat(list = vatRates) {
                           }))
                         }}
                         style={input}
-                        disabled={!selectedMainCategoryId}
+                        disabled={!selectedMainCategoryId || categoryPlacementMode !== "subcategory" || !availableSubcategories.length}
                       >
-                        <option value={selectedMainCategoryId}>
-                          {availableSubcategories.length ? "Fara subcategorie" : "Nu exista subcategorii"}
+                        <option value="">
+                          {availableSubcategories.length ? "Selecteaza subcategoria" : "Nu exista subcategorii"}
                         </option>
                         {availableSubcategories.map((c) => (
                           <option key={c.id} value={c.id}>
