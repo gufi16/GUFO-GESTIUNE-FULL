@@ -595,7 +595,29 @@ export async function resolvePosAuthContext(req: PosAuthRequest) {
 
   if (token) {
     try {
-      return applyPosAuth(req, decodePosToken(token));
+      const decodedAuth = decodePosToken(token);
+      const headerResolved = await resolvePosHeaderTerminalContext(req);
+
+      if (
+        headerResolved &&
+        (headerResolved.tenantId !== decodedAuth.tenantId ||
+          headerResolved.terminalId !== decodedAuth.terminalId ||
+          headerResolved.deviceId !== decodedAuth.deviceId)
+      ) {
+        console.warn("POS AUTH TOKEN OVERRIDDEN BY EXPLICIT TERMINAL CONTEXT", {
+          path: req.path,
+          method: req.method,
+          tokenTenantId: decodedAuth.tenantId,
+          tokenTerminalId: decodedAuth.terminalId,
+          tokenDeviceId: decodedAuth.deviceId,
+          headerTenantId: headerResolved.tenantId,
+          headerTerminalId: headerResolved.terminalId,
+          headerDeviceId: headerResolved.deviceId,
+        });
+        return applyPosAuth(req, headerResolved);
+      }
+
+      return applyPosAuth(req, decodedAuth);
     } catch (error) {
       console.warn("POS AUTH INVALID TOKEN IN CONTEXT", {
         path: req.path,
