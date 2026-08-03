@@ -53,6 +53,24 @@ async function requireMetaCompanyId(req: AuthedRequest) {
   return companyId
 }
 
+function normalizeCategoryPosSortOrder(value: unknown) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return 0
+  return Math.max(0, Math.round(parsed))
+}
+
+function compareCategoryPosSortOrder<T extends { posSortOrder?: number | null; name?: string | null }>(left: T, right: T) {
+  const leftOrder = Number(left.posSortOrder || 0)
+  const rightOrder = Number(right.posSortOrder || 0)
+  const leftBucket = leftOrder > 0 ? 0 : 1
+  const rightBucket = rightOrder > 0 ? 0 : 1
+
+  if (leftBucket !== rightBucket) return leftBucket - rightBucket
+  if (leftOrder !== rightOrder) return leftOrder - rightOrder
+
+  return String(left.name || "").localeCompare(String(right.name || ""), "ro")
+}
+
 const uploadsDir = ensureUploadSubdir("categories")
 
 const storage = multer.diskStorage({
@@ -1571,16 +1589,18 @@ router.get("/api/v1/meta/categories", async (req: AuthedRequest, res) => {
         },
       },
     },
-    orderBy: { name: "asc" }
+    orderBy: [{ name: "asc" }]
   })
 
   res.json({
     ok: true,
-    items: items.map((item) => ({
-      ...item,
-      terminalIds: item.terminalAccesses.map((entry) => entry.terminalId),
-      terminalAccesses: undefined,
-    })),
+    items: items
+      .map((item) => ({
+        ...item,
+        terminalIds: item.terminalAccesses.map((entry) => entry.terminalId),
+        terminalAccesses: undefined,
+      }))
+      .sort(compareCategoryPosSortOrder),
   })
 })
 
@@ -1593,6 +1613,7 @@ router.post("/api/v1/meta/categories", async (req: AuthedRequest, res) => {
   const imageUrl = normalizeImageUrl(req.body?.imageUrl, normalizeStoredUploadUrl)
   const departmentIdRaw = String(req.body?.departmentId || "").trim()
   const departmentId = departmentIdRaw || null
+  const posSortOrder = normalizeCategoryPosSortOrder(req.body?.posSortOrder)
   const isVisibleInPos = req.body?.isVisibleInPos === undefined ? true : Boolean(req.body?.isVisibleInPos)
 
   if (!name) {
@@ -1630,6 +1651,7 @@ router.post("/api/v1/meta/categories", async (req: AuthedRequest, res) => {
           name,
           imageUrl,
           departmentId,
+          posSortOrder,
           isActive: true,
           isVisibleInPos
         },
@@ -1683,6 +1705,7 @@ router.put("/api/v1/meta/categories/:id", async (req: AuthedRequest, res) => {
   const requestedImageUrl = normalizeImageUrl(req.body?.imageUrl, normalizeStoredUploadUrl)
   const departmentIdRaw = String(req.body?.departmentId || "").trim()
   const departmentId = departmentIdRaw || null
+  const posSortOrder = normalizeCategoryPosSortOrder(req.body?.posSortOrder)
   const isActive = Boolean(req.body?.isActive)
   const isVisibleInPos = req.body?.isVisibleInPos === undefined ? true : Boolean(req.body?.isVisibleInPos)
 
@@ -1736,6 +1759,7 @@ router.put("/api/v1/meta/categories/:id", async (req: AuthedRequest, res) => {
           name,
           imageUrl,
           departmentId,
+          posSortOrder,
           isActive,
           isVisibleInPos
         },

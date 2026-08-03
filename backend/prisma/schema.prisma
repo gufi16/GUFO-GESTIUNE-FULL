@@ -765,6 +765,7 @@ model Category {
   departmentId   String?
   name           String
   imageUrl       String?
+  posSortOrder   Int      @default(0)
   isActive       Boolean  @default(true)
   isVisibleInPos Boolean  @default(true)
   createdAt      DateTime @default(now())
@@ -780,6 +781,7 @@ model Category {
   @@index([tenantId, companyId])
   @@index([companyId])
   @@index([departmentId])
+  @@index([tenantId, companyId, posSortOrder])
 }
 
 model SkuCounter {

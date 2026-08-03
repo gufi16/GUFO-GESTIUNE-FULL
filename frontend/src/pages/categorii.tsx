@@ -31,6 +31,7 @@ type Category = {
   name: string
   departmentId: string
   imageUrl?: string | null
+  posSortOrder?: number | null
   isVisibleInPos?: boolean
   terminalIds?: string[]
   department?: Department | null
@@ -69,6 +70,7 @@ export default function CategoriiPage() {
   const [name, setName] = useState("")
   const [departmentId, setDepartmentId] = useState("")
   const [imageUrl, setImageUrl] = useState("")
+  const [posSortOrderInput, setPosSortOrderInput] = useState("")
   const [isVisibleInPos, setIsVisibleInPos] = useState(true)
   const [selectedTerminalIds, setSelectedTerminalIds] = useState<string[]>([])
   const [uploading, setUploading] = useState(false)
@@ -141,6 +143,7 @@ export default function CategoriiPage() {
     setName("")
     setDepartmentId("")
     setImageUrl("")
+    setPosSortOrderInput("")
     setIsVisibleInPos(true)
     setSelectedTerminalIds([])
     setEditingId("")
@@ -223,6 +226,7 @@ export default function CategoriiPage() {
           name: name.trim(),
           departmentId,
           imageUrl: normalizeHostedImageUrl(imageUrl.trim()) || null,
+          posSortOrder: parsePosSortOrderInput(posSortOrderInput),
           isVisibleInPos,
           terminalIds: selectedTerminalIds,
           ...(isEdit ? { isActive: true } : {}),
@@ -251,6 +255,7 @@ export default function CategoriiPage() {
     setName(item.name || "")
     setDepartmentId(item.departmentId || "")
     setImageUrl(normalizeHostedImageUrl(item.imageUrl || ""))
+    setPosSortOrderInput(item.posSortOrder && item.posSortOrder > 0 ? String(item.posSortOrder) : "")
     setIsVisibleInPos(item.isVisibleInPos !== false)
     setSelectedTerminalIds(Array.isArray(item.terminalIds) ? item.terminalIds : [])
     setError("")
@@ -294,10 +299,16 @@ export default function CategoriiPage() {
     )
   }
 
+  function parsePosSortOrderInput(value: string) {
+    const parsed = Number(value)
+    if (!Number.isFinite(parsed)) return 0
+    return Math.max(0, Math.round(parsed))
+  }
+
   function renderCategoryForm(isEdit: boolean) {
     return (
       <>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           <DocumentField label="Categorie">
             <input placeholder="Categorie" value={name} onChange={(e) => setName(e.target.value)} className={documentInputClass} />
           </DocumentField>
@@ -311,6 +322,18 @@ export default function CategoriiPage() {
                 </option>
               ))}
             </select>
+          </DocumentField>
+
+          <DocumentField label="Pozitie Gufo POS">
+            <input
+              type="number"
+              min={0}
+              step={1}
+              placeholder="Ex: 1"
+              value={posSortOrderInput}
+              onChange={(e) => setPosSortOrderInput(e.target.value)}
+              className={documentInputClass}
+            />
           </DocumentField>
 
           <DocumentField label="Vizibilitate POS">
@@ -457,6 +480,7 @@ export default function CategoriiPage() {
                 <tr>
                   <th className="px-4 py-3 text-left font-medium">Poza</th>
                   <th className="px-4 py-3 text-left font-medium">Categorie</th>
+                  <th className="px-4 py-3 text-left font-medium">Pozitie POS</th>
                   <th className="px-4 py-3 text-left font-medium">Departament</th>
                   <th className="px-4 py-3 text-left font-medium">Vizibila POS</th>
                   <th className="px-4 py-3 text-left font-medium">POS-uri</th>
@@ -485,6 +509,7 @@ export default function CategoriiPage() {
                     <td className="px-4 py-4">
                       <div className="font-semibold text-slate-900">{category.name}</div>
                     </td>
+                    <td className="px-4 py-4 text-slate-600">{category.posSortOrder && category.posSortOrder > 0 ? category.posSortOrder : "-"}</td>
                     <td className="px-4 py-4 text-slate-600">{category.department?.name || "-"}</td>
                     <td className="px-4 py-4">
                       <span

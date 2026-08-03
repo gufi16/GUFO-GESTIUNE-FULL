@@ -208,6 +208,18 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
+function compareCategoryPosSortOrder<T extends { posSortOrder?: number | null; name?: string | null }>(left: T, right: T) {
+  const leftOrder = Number(left.posSortOrder || 0);
+  const rightOrder = Number(right.posSortOrder || 0);
+  const leftBucket = leftOrder > 0 ? 0 : 1;
+  const rightBucket = rightOrder > 0 ? 0 : 1;
+
+  if (leftBucket !== rightBucket) return leftBucket - rightBucket;
+  if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+
+  return String(left.name || "").localeCompare(String(right.name || ""), "ro");
+}
+
 function buildPosSessionKey(req: Request) {
   const userAgent = normalizeText(req.headers["user-agent"]).slice(0, 200);
   return `${req.ip}|${userAgent}`;
@@ -955,12 +967,12 @@ export async function buildCatalogPayload(req: Request, tenantId: string) {
     ? departments.filter((department) => effectiveDepartmentIds.has(department.id))
     : departments;
 
-  const visibleCategories = filtersEnabled
+  const visibleCategories = (filtersEnabled
     ? categories.filter((category) => {
         if (effectiveCategoryIds.has(category.id)) return true;
         return category.departmentId ? effectiveDepartmentIds.has(category.departmentId) : false;
       })
-    : categories;
+    : categories).sort(compareCategoryPosSortOrder);
 
   const visibleProducts = filtersEnabled
     ? rawProducts.filter((product) => {
@@ -984,6 +996,7 @@ export async function buildCatalogPayload(req: Request, tenantId: string) {
     name: category.name,
     image: resolveImageUrl(req, category.imageUrl),
     departmentId: category.departmentId,
+    posSortOrder: category.posSortOrder,
     isVisibleInPos: Boolean(category.isVisibleInPos),
     department: category.department
       ? {
