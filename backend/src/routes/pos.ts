@@ -52,6 +52,31 @@ type PosFallbackResolution = {
   source: PosFallbackSource;
 };
 
+type PosTerminalWithRelations = Prisma.TerminalGetPayload<{
+  include: {
+    location: true;
+    tenant: {
+      include: {
+        licenses: {
+          orderBy: { createdAt: "desc" };
+          take: 1;
+        };
+      };
+    };
+  };
+}>;
+
+type PosResolvedTerminalWithLicense = {
+  terminal: PosTerminalWithRelations | null;
+  license: {
+    id: string;
+    isSuspended: boolean;
+    expiresAt: Date;
+    modPos: boolean;
+    modKds: boolean;
+  } | null;
+};
+
 type PosSaleLineLike = {
   qty?: unknown;
   unitPrice?: unknown;
@@ -207,6 +232,131 @@ function parseJsonText(text: string): unknown {
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function getTenantSubdomainFromHostname(hostname: string) {
+  if (!hostname) return null;
+  const normalized = hostname.trim().toLowerCase().replace(/:\d+$/, "");
+  if (!normalized.endsWith(".gufo.ink")) return null;
+  if (normalized === "gufo.ink" || normalized === "api.gufo.ink" || normalized === "app.gufo.ink") return null;
+  const parts = normalized.split(".");
+  if (parts.length < 3) return null;
+  const subdomain = parts[0];
+  if (!subdomain || ["app", "api", "www", "admin", "cp"].includes(subdomain)) return null;
+  return subdomain;
+}
+
+function getPosTenantSubdomainHint(req: Request) {
+  const explicit = normalizeText(req.headers["x-tenant-subdomain"]).toLowerCase();
+  if (explicit && /^[a-z0-9-]+$/.test(explicit)) {
+    return explicit;
+  }
+
+  const origin = normalizeText(req.headers.origin);
+  if (origin) {
+    try {
+      const hostname = new URL(origin).hostname;
+      const subdomain = getTenantSubdomainFromHostname(hostname);
+      if (subdomain) return subdomain;
+    } catch {}
+  }
+
+  const referer = normalizeText(req.headers.referer);
+  if (referer) {
+    try {
+      const hostname = new URL(referer).hostname;
+      const subdomain = getTenantSubdomainFromHostname(hostname);
+      if (subdomain) return subdomain;
+    } catch {}
+  }
+
+  return null;
+}
+
+async function findActiveTerminalCandidates(params: {
+  deviceIds?: string[];
+  terminalIds?: string[];
+  requestedDeviceType?: string | null;
+  tenantSubdomain?: string | null;
+}) {
+  const deviceIds = Array.from(new Set((params.deviceIds || []).map((value) => normalizeText(value)).filter(Boolean)));
+  const terminalIds = Array.from(new Set((params.terminalIds || []).map((value) => normalizeText(value)).filter(Boolean)));
+
+  if (!deviceIds.length && !terminalIds.length) {
+    return [] as Array<NonNullable<PosResolvedTerminalWithLicense["terminal"]>>;
+  }
+
+  const requestedDeviceType = normalizeText(params.requestedDeviceType).toUpperCase();
+
+  const terminals = await prisma.terminal.findMany({
+    where: {
+      OR: [
+        ...(terminalIds.length ? [{ id: { in: terminalIds } }] : []),
+        ...(deviceIds.length ? [{ deviceId: { in: deviceIds } }] : []),
+      ],
+      ...(requestedDeviceType ? { deviceType: requestedDeviceType as never } : {}),
+      ...(params.tenantSubdomain
+        ? {
+            tenant: {
+              subdomain: params.tenantSubdomain,
+            },
+          }
+        : {}),
+    },
+    include: {
+      location: true,
+      tenant: {
+        include: {
+          licenses: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
+        },
+      },
+    },
+  });
+
+  return terminals.filter((terminal) => {
+    const license = terminal.tenant.licenses[0];
+    if (!license || license.isSuspended || license.expiresAt <= new Date()) return false;
+    return terminal.deviceType === "KDS"
+      ? Boolean(license.modKds)
+      : terminal.deviceType === "DEPOZIT"
+        ? true
+        : Boolean(license.modPos);
+  });
+}
+
+async function resolveSingleActiveTerminal(params: {
+  req?: Request;
+  deviceIds?: string[];
+  terminalIds?: string[];
+  requestedDeviceType?: string | null;
+}) {
+  const tenantSubdomain = params.req ? getPosTenantSubdomainHint(params.req) : null;
+  const terminals = await findActiveTerminalCandidates({
+    deviceIds: params.deviceIds,
+    terminalIds: params.terminalIds,
+    requestedDeviceType: params.requestedDeviceType,
+    tenantSubdomain,
+  });
+
+  if (terminals.length !== 1) {
+    return {
+      terminal: null,
+      license: null,
+      error:
+        terminals.length > 1
+          ? "Ambiguous POS terminal mapping"
+          : "No active POS terminal mapping",
+    };
+  }
+
+  return {
+    terminal: terminals[0],
+    license: terminals[0].tenant.licenses[0] || null,
+    error: null,
+  };
 }
 
 function compareCategoryPosSortOrder<T extends { posSortOrder?: number | null; name?: string | null }>(left: T, right: T) {
@@ -372,26 +522,20 @@ async function resolvePosHeaderTerminalContext(req: Request) {
     headerAndroidDeviceId,
   });
 
-  const terminal = await prisma.terminal.findFirst({
-    where: {
-      OR: [
-        ...(headerTerminalId ? [{ id: headerTerminalId }] : []),
-        ...(headerLicenseKey ? [{ deviceId: headerLicenseKey }] : []),
-        ...(headerTerminalDeviceId ? [{ deviceId: headerTerminalDeviceId }] : []),
-        ...(headerAndroidDeviceId ? [{ deviceId: headerAndroidDeviceId }] : []),
-      ],
-    },
-    include: {
-      tenant: {
-        include: {
-          licenses: {
-            orderBy: { createdAt: "desc" },
-            take: 1,
-          },
-        },
-      },
-    },
-  });
+  const resolvedTerminal = headerLicenseKey
+    ? await resolveTerminalFromPublicLicense({
+        req,
+        licenseKey: headerLicenseKey,
+        deviceId: headerAndroidDeviceId || headerTerminalDeviceId || null,
+      })
+    : await resolveSingleActiveTerminal({
+        req,
+        terminalIds: headerTerminalId ? [headerTerminalId] : [],
+        deviceIds: [headerTerminalDeviceId, headerAndroidDeviceId].filter(Boolean) as string[],
+      });
+
+  const terminal = resolvedTerminal.terminal;
+  const license = resolvedTerminal.license;
 
   if (!terminal) {
     console.warn("POS AUTH HEADER LOOKUP MISS", {
@@ -401,11 +545,11 @@ async function resolvePosHeaderTerminalContext(req: Request) {
       headerLicenseKey,
       headerTerminalDeviceId,
       headerAndroidDeviceId,
+      resolutionError: resolvedTerminal.error || null,
     });
     return null;
   }
 
-  const license = terminal?.tenant.licenses?.[0];
   if (!license || license.isSuspended || license.expiresAt <= new Date() || !license.modPos) {
     console.warn("POS AUTH HEADER LOOKUP LICENSE BYPASS", {
       path: req.path,
@@ -1110,9 +1254,10 @@ async function findActiveLicenseByKey(licenseKey: string) {
 }
 
 async function resolveTerminalFromPublicLicense(input: {
+  req?: Request;
   licenseKey: string;
   deviceId?: string | null;
-  requestedDeviceType?: "POS" | "KDS";
+  requestedDeviceType?: "POS" | "KDS" | "DEPOZIT";
   terminalLabel?: string | null;
 }) {
   const normalizedLicenseKey = normalizeText(input.licenseKey);
@@ -1120,28 +1265,19 @@ async function resolveTerminalFromPublicLicense(input: {
   const requestedDeviceType = input.requestedDeviceType || "POS";
   const terminalLabel = normalizeText(input.terminalLabel);
 
-  let terminal = await prisma.terminal.findFirst({
-    where: {
-      deviceId: normalizedLicenseKey,
-    },
-    include: {
-      location: true,
-      tenant: {
-        include: {
-          licenses: {
-            orderBy: { createdAt: "desc" },
-            take: 1,
-          },
-        },
-      },
-    },
+  const resolvedTerminal = await resolveSingleActiveTerminal({
+    req: input.req,
+    deviceIds: [normalizedLicenseKey],
+    requestedDeviceType,
   });
+  let terminal = resolvedTerminal.terminal;
 
   if (terminal) {
     return {
       terminal,
-      license: terminal.tenant.licenses[0] || null,
+      license: resolvedTerminal.license,
       matchedBy: "terminal-license-key" as const,
+      error: null,
     };
   }
 
@@ -1151,6 +1287,7 @@ async function resolveTerminalFromPublicLicense(input: {
       terminal: null,
       license: matchedLicense,
       matchedBy: matchedLicense ? ("license-only" as const) : ("none" as const),
+      error: resolvedTerminal.error,
     };
   }
 
@@ -1220,6 +1357,7 @@ async function resolveTerminalFromPublicLicense(input: {
     terminal,
     license: matchedLicense,
     matchedBy: "license-hash" as const,
+    error: null,
   };
 }
 
@@ -1311,26 +1449,13 @@ async function resolveDailyClosureAuth(req: PosAuthRequest, body: z.infer<typeof
   ]);
 
   if (hintedTerminalIds.length > 0 || hintedDeviceIds.length > 0) {
-    const hintedTerminal = await prisma.terminal.findFirst({
-      where: {
-        OR: [
-          ...(hintedTerminalIds.length ? [{ id: { in: hintedTerminalIds } }] : []),
-          ...(hintedDeviceIds.length ? [{ deviceId: { in: hintedDeviceIds } }] : []),
-        ],
-      },
-      include: {
-        tenant: {
-          include: {
-            licenses: {
-              orderBy: { createdAt: "desc" },
-              take: 1,
-            },
-          },
-        },
-      },
+    const hintedResolution = await resolveSingleActiveTerminal({
+      req,
+      terminalIds: hintedTerminalIds,
+      deviceIds: hintedDeviceIds,
     });
-
-    const hintedLicense = hintedTerminal?.tenant.licenses[0];
+    const hintedTerminal = hintedResolution.terminal;
+    const hintedLicense = hintedResolution.license;
     if (
       hintedTerminal &&
       hintedLicense &&
@@ -1357,26 +1482,18 @@ async function resolveDailyClosureAuth(req: PosAuthRequest, body: z.infer<typeof
     return null;
   }
 
-  const terminal = await prisma.terminal.findFirst({
-    where: {
-      OR: [
-        ...(licenseKey ? [{ deviceId: licenseKey }] : []),
-        ...(deviceId ? [{ deviceId }] : []),
-      ],
-    },
-    include: {
-      tenant: {
-        include: {
-          licenses: {
-            orderBy: { createdAt: "desc" },
-            take: 1,
-          },
-        },
-      },
-    },
-  });
-
-  const license = terminal?.tenant.licenses[0];
+  const resolvedTerminal = licenseKey
+    ? await resolveTerminalFromPublicLicense({
+        req,
+        licenseKey,
+        deviceId,
+      })
+    : await resolveSingleActiveTerminal({
+        req,
+        deviceIds: [deviceId],
+      });
+  const terminal = resolvedTerminal.terminal;
+  const license = resolvedTerminal.license;
   if (
     !terminal ||
     !license ||
@@ -1407,6 +1524,8 @@ router.post("/api/v1/pos/validate", async (req: Request, res: Response) => {
     }
 
     const licenseKey = normalizeText(parsed.data.licenseKey ?? parsed.data.license_key);
+    const incomingDeviceId = normalizeText((req.body as Record<string, unknown> | null)?.deviceId) ||
+      normalizeText((req.body as Record<string, unknown> | null)?.device_id);
     if (!licenseKey || licenseKey.length < 3) {
       return res.status(400).json({
         ok: false,
@@ -1415,32 +1534,25 @@ router.post("/api/v1/pos/validate", async (req: Request, res: Response) => {
       });
     }
 
-    const terminal = await prisma.terminal.findFirst({
-      where: {
-        deviceId: licenseKey,
-      },
-      include: {
-        location: true,
-        tenant: {
-          include: {
-            licenses: {
-              orderBy: { createdAt: "desc" },
-              take: 1,
-            },
-          },
-        },
-      },
+    const resolved = await resolveTerminalFromPublicLicense({
+      req,
+      licenseKey,
+      deviceId: incomingDeviceId,
     });
+    const terminal = resolved.terminal;
 
     if (!terminal) {
       return res.status(404).json({
         ok: false,
         allowed: false,
-        error: "Licenta invalida",
+        error:
+          resolved.error === "Ambiguous POS terminal mapping"
+            ? "Licenta POS este asociata ambiguu. Verifica alocarea device-ului in Control Panel."
+            : "Licenta invalida",
       });
     }
 
-    const license = terminal.tenant.licenses[0];
+    const license = resolved.license;
 
     if (!license) {
       return res.status(404).json({
@@ -1661,31 +1773,26 @@ router.post("/api/v1/pos/pair", async (req: Request, res: Response) => {
       });
     }
 
-    const terminal = await prisma.terminal.findFirst({
-      where: {
-        deviceId: licenseKey,
-      },
-      include: {
-        location: true,
-        tenant: {
-          include: {
-            licenses: {
-              orderBy: { createdAt: "desc" },
-              take: 1,
-            },
-          },
-        },
-      },
+    const resolved = await resolveTerminalFromPublicLicense({
+      req,
+      licenseKey,
+      deviceId: incomingDeviceId,
+      requestedDeviceType,
+      terminalLabel,
     });
+    const terminal = resolved.terminal;
 
     if (!terminal) {
       return res.status(404).json({
         ok: false,
-        error: "Licenta invalida",
+        error:
+          resolved.error === "Ambiguous POS terminal mapping"
+            ? "Licenta POS este asociata ambiguu. Verifica alocarea device-ului in Control Panel."
+            : "Licenta invalida",
       });
     }
 
-    const license = terminal.tenant.licenses[0];
+    const license = resolved.license;
 
     if (!license) {
       return res.status(404).json({
