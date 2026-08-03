@@ -29,6 +29,7 @@ type Product = {
     id: string
     name: string
     imageUrl?: string | null
+    parentCategory?: { id: string; name: string } | null
     department?: { id: string; name: string } | null
   } | null
 }
@@ -153,6 +154,15 @@ function normalizeHostedImageUrl(value: any) {
   return text
 }
 
+function formatCategoryLabel(category?: {
+  name?: string | null
+  parentCategory?: { name?: string | null } | null
+} | null) {
+  if (!category?.name) return "-"
+  const parentName = category.parentCategory?.name?.trim()
+  return parentName ? `${parentName} / ${category.name}` : category.name
+}
+
 function buildProductSearchLabel(product?: { name?: string | null; sku?: string | null } | null) {
   if (!product) return ""
   const name = String(product.name || "").trim()
@@ -238,6 +248,16 @@ export default function MeniuriPage() {
   const selectedCategory = useMemo(() => {
     return categories.find((c) => c.id === form.categoryId) || null
   }, [categories, form.categoryId])
+
+  const categoryOptions = useMemo(() => {
+    const topLevel = categories.filter((item) => item.isActive !== false && !item.parentCategoryId)
+    return topLevel.flatMap((item) => {
+      const children = categories.filter(
+        (entry) => entry.isActive !== false && entry.parentCategoryId === item.id,
+      )
+      return children.length ? [item, ...children] : [item]
+    })
+  }, [categories])
 
   const imagePreviewSrc = livePreviewUrl || form.imageUrl.trim()
 
@@ -804,7 +824,8 @@ export default function MeniuriPage() {
       const name = String(item.name || "").toLowerCase()
       const sku = String(item.sku || "").toLowerCase()
       const category = String(item.category?.name || "").toLowerCase()
-      return name.includes(qq) || sku.includes(qq) || category.includes(qq)
+      const parentCategory = String(item.category?.parentCategory?.name || "").toLowerCase()
+      return name.includes(qq) || sku.includes(qq) || category.includes(qq) || parentCategory.includes(qq)
     })
   }, [items, q])
 
@@ -904,7 +925,7 @@ export default function MeniuriPage() {
                     </td>
                     <td style={td}>{item.sku}</td>
                     <td style={td}>{item.name}</td>
-                    <td style={td}>{item.category?.name || "-"}</td>
+                    <td style={td}>{formatCategoryLabel(item.category)}</td>
                     <td style={td}>{formatMoney(item.price || 0)}</td>
                     <td style={td}>{formatMoney(item.costPrice || 0)}</td>
                     <td style={td}>
@@ -975,13 +996,11 @@ export default function MeniuriPage() {
                       style={input}
                     >
                       <option value="">Selecteaza categoria</option>
-                      {categories
-                        .filter((c) => c.isActive !== false)
-                        .map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
+                      {categoryOptions.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {formatCategoryLabel(c)}
                           </option>
-                        ))}
+                      ))}
                     </select>
                   </Field>
 

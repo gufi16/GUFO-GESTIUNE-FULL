@@ -44,6 +44,7 @@ type Product = {
     id: string
     name: string
     imageUrl?: string | null
+    parentCategory?: { id: string; name: string } | null
     department?: { id: string; name: string } | null
   } | null
   department?: { id: string; name: string } | null
@@ -284,6 +285,15 @@ function normalizeHostedImageUrl(value: any) {
   return text
 }
 
+function formatCategoryLabel(category?: {
+  name?: string | null
+  parentCategory?: { name?: string | null } | null
+} | null) {
+  if (!category?.name) return "-"
+  const parentName = category.parentCategory?.name?.trim()
+  return parentName ? `${parentName} / ${category.name}` : category.name
+}
+
 export function ProductsCatalogPage({
   title = "Produse",
   subtitle = "Controlezi catalogul complet de produse, clasificarea operationala, setarile POS, SGR si logica de lot, expirare sau retetare.",
@@ -339,6 +349,16 @@ export function ProductsCatalogPage({
   const selectedCategory = useMemo(() => {
     return categories.find((c) => c.id === form.categoryId) || null
   }, [categories, form.categoryId])
+
+  const categoryOptions = useMemo(() => {
+    const topLevel = categories.filter((item) => item.isActive !== false && !item.parentCategoryId)
+    return topLevel.flatMap((item) => {
+      const children = categories.filter(
+        (entry) => entry.isActive !== false && entry.parentCategoryId === item.id,
+      )
+      return children.length ? [item, ...children] : [item]
+    })
+  }, [categories])
 
   const selectedUom = useMemo(() => {
     return uoms.find((u) => u.id === form.uomId) || null
@@ -1108,6 +1128,7 @@ function getDefaultVat(list = vatRates) {
       const sku = String(item.sku || "").toLowerCase()
       const barcode = barcodeValue.toLowerCase()
       const cat = String(item.category?.name || "").toLowerCase()
+      const parentCategory = String(item.category?.parentCategory?.name || "").toLowerCase()
       const dep = String(item.category?.department?.name || item.department?.name || "").toLowerCase()
       const ambalaj = String(item.purchaseUom?.code || item.purchaseUom?.name || "").toLowerCase()
 
@@ -1116,6 +1137,7 @@ function getDefaultVat(list = vatRates) {
         sku.includes(qq) ||
         barcode.includes(qq) ||
         cat.includes(qq) ||
+        parentCategory.includes(qq) ||
         dep.includes(qq) ||
         ambalaj.includes(qq)
       )
@@ -1308,7 +1330,7 @@ function getDefaultVat(list = vatRates) {
                       <td style={td}>{item.name}</td>
                       <td style={td}>{item.isMenu ? "Meniu" : "Produs"}</td>
                       <td style={td}>{CLASS_LABEL_MAP[item.class] || item.class}</td>
-                      <td style={td}>{item.category?.name || "-"}</td>
+                      <td style={td}>{formatCategoryLabel(item.category)}</td>
                       <td style={td}>{item.posMenuCategory || "-"}</td>
                       <td style={td}>{item.category?.department?.name || item.department?.name || "-"}</td>
                       <td style={td}>{formatUomOption(item.uom)}</td>
@@ -1524,13 +1546,11 @@ function getDefaultVat(list = vatRates) {
                         style={input}
                       >
                         <option value="">Selecteaza categoria</option>
-                        {categories
-                          .filter((c) => c.isActive !== false)
-                          .map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
+                        {categoryOptions.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {formatCategoryLabel(c)}
                             </option>
-                          ))}
+                        ))}
                       </select>
                     </Field>
 

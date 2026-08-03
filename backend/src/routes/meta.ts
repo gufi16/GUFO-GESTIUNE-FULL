@@ -59,6 +59,11 @@ function normalizeCategoryPosSortOrder(value: unknown) {
   return Math.max(0, Math.round(parsed))
 }
 
+function normalizeCategoryParentId(value: unknown) {
+  const text = String(value || "").trim()
+  return text || null
+}
+
 function compareCategoryPosSortOrder<T extends { posSortOrder?: number | null; name?: string | null }>(left: T, right: T) {
   const leftOrder = Number(left.posSortOrder || 0)
   const rightOrder = Number(right.posSortOrder || 0)
@@ -1583,6 +1588,12 @@ router.get("/api/v1/meta/categories", async (req: AuthedRequest, res) => {
     },
     include: {
       department: true,
+      parentCategory: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
       terminalAccesses: {
         select: {
           terminalId: true,
@@ -1613,6 +1624,7 @@ router.post("/api/v1/meta/categories", async (req: AuthedRequest, res) => {
   const imageUrl = normalizeImageUrl(req.body?.imageUrl, normalizeStoredUploadUrl)
   const departmentIdRaw = String(req.body?.departmentId || "").trim()
   const departmentId = departmentIdRaw || null
+  const parentCategoryId = normalizeCategoryParentId(req.body?.parentCategoryId)
   const posSortOrder = normalizeCategoryPosSortOrder(req.body?.posSortOrder)
   const isVisibleInPos = req.body?.isVisibleInPos === undefined ? true : Boolean(req.body?.isVisibleInPos)
 
@@ -1626,22 +1638,54 @@ router.post("/api/v1/meta/categories", async (req: AuthedRequest, res) => {
   try {
     const terminalIds = await resolveCategoryTerminalIds(tenantId, companyId, req.body)
 
-    if (departmentId) {
-      const dep = await prisma.department.findFirst({
-        where: {
-          id: departmentId,
-          tenantId,
-          OR: buildCompanyScope(companyId),
-        }
-      })
+    const [dep, parentCategory] = await Promise.all([
+      departmentId
+        ? prisma.department.findFirst({
+            where: {
+              id: departmentId,
+              tenantId,
+              OR: buildCompanyScope(companyId),
+            }
+          })
+        : Promise.resolve(null),
+      parentCategoryId
+        ? prisma.category.findFirst({
+            where: {
+              id: parentCategoryId,
+              tenantId,
+              OR: buildCompanyScope(companyId),
+            },
+            select: {
+              id: true,
+              departmentId: true,
+              parentCategoryId: true,
+            },
+          })
+        : Promise.resolve(null),
+    ])
 
-      if (!dep) {
-        return res.status(404).json({
-          ok: false,
-          error: "Departamentul selectat nu exista."
-        })
-      }
+    if (departmentId && !dep) {
+      return res.status(404).json({
+        ok: false,
+        error: "Departamentul selectat nu exista."
+      })
     }
+
+    if (parentCategoryId && !parentCategory) {
+      return res.status(404).json({
+        ok: false,
+        error: "Categoria parinte nu exista."
+      })
+    }
+
+    if (parentCategory?.parentCategoryId) {
+      return res.status(400).json({
+        ok: false,
+        error: "Poti crea doar un singur nivel de subcategorie."
+      })
+    }
+
+    const resolvedDepartmentId = parentCategory?.departmentId || departmentId
 
     const item = await prisma.$transaction(async (tx) => {
       const created = await tx.category.create({
@@ -1650,7 +1694,8 @@ router.post("/api/v1/meta/categories", async (req: AuthedRequest, res) => {
           companyId,
           name,
           imageUrl,
-          departmentId,
+          departmentId: resolvedDepartmentId,
+          parentCategoryId,
           posSortOrder,
           isActive: true,
           isVisibleInPos
@@ -1670,6 +1715,12 @@ router.post("/api/v1/meta/categories", async (req: AuthedRequest, res) => {
         where: { id: created.id },
         include: {
           department: true,
+          parentCategory: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
           terminalAccesses: {
             select: {
               terminalId: true,
@@ -1705,6 +1756,7 @@ router.put("/api/v1/meta/categories/:id", async (req: AuthedRequest, res) => {
   const requestedImageUrl = normalizeImageUrl(req.body?.imageUrl, normalizeStoredUploadUrl)
   const departmentIdRaw = String(req.body?.departmentId || "").trim()
   const departmentId = departmentIdRaw || null
+  const parentCategoryId = normalizeCategoryParentId(req.body?.parentCategoryId)
   const posSortOrder = normalizeCategoryPosSortOrder(req.body?.posSortOrder)
   const isActive = Boolean(req.body?.isActive)
   const isVisibleInPos = req.body?.isVisibleInPos === undefined ? true : Boolean(req.body?.isVisibleInPos)
@@ -1733,24 +1785,63 @@ router.put("/api/v1/meta/categories/:id", async (req: AuthedRequest, res) => {
       })
     }
 
+    if (parentCategoryId === id) {
+      return res.status(400).json({
+        ok: false,
+        error: "Categoria nu poate fi subcategorie a ei insasi."
+      })
+    }
+
     const imageUrl = mergeImageUrl(requestedImageUrl, current.imageUrl, normalizeStoredUploadUrl)
 
-    if (departmentId) {
-      const dep = await prisma.department.findFirst({
-        where: {
-          id: departmentId,
-          tenantId,
-          OR: buildCompanyScope(companyId),
-        }
-      })
+    const [dep, parentCategory] = await Promise.all([
+      departmentId
+        ? prisma.department.findFirst({
+            where: {
+              id: departmentId,
+              tenantId,
+              OR: buildCompanyScope(companyId),
+            }
+          })
+        : Promise.resolve(null),
+      parentCategoryId
+        ? prisma.category.findFirst({
+            where: {
+              id: parentCategoryId,
+              tenantId,
+              OR: buildCompanyScope(companyId),
+            },
+            select: {
+              id: true,
+              departmentId: true,
+              parentCategoryId: true,
+            },
+          })
+        : Promise.resolve(null),
+    ])
 
-      if (!dep) {
-        return res.status(404).json({
-          ok: false,
-          error: "Departamentul selectat nu exista."
-        })
-      }
+    if (departmentId && !dep) {
+      return res.status(404).json({
+        ok: false,
+        error: "Departamentul selectat nu exista."
+      })
     }
+
+    if (parentCategoryId && !parentCategory) {
+      return res.status(404).json({
+        ok: false,
+        error: "Categoria parinte nu exista."
+      })
+    }
+
+    if (parentCategory?.parentCategoryId) {
+      return res.status(400).json({
+        ok: false,
+        error: "Poti crea doar un singur nivel de subcategorie."
+      })
+    }
+
+    const resolvedDepartmentId = parentCategory?.departmentId || departmentId
 
     const item = await prisma.$transaction(async (tx) => {
       await tx.category.update({
@@ -1758,7 +1849,8 @@ router.put("/api/v1/meta/categories/:id", async (req: AuthedRequest, res) => {
         data: {
           name,
           imageUrl,
-          departmentId,
+          departmentId: resolvedDepartmentId,
+          parentCategoryId,
           posSortOrder,
           isActive,
           isVisibleInPos
@@ -1784,6 +1876,12 @@ router.put("/api/v1/meta/categories/:id", async (req: AuthedRequest, res) => {
         where: { id },
         include: {
           department: true,
+          parentCategory: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
           terminalAccesses: {
             select: {
               terminalId: true,

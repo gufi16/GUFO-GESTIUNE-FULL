@@ -183,7 +183,13 @@ router.get("/api/v1/products", async (req: AuthedRequest, res) => {
       },
       category: {
         include: {
-          department: true
+          department: true,
+          parentCategory: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
         }
       },
       recipe: {
@@ -401,7 +407,13 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
             ...buildCompanyScopedTenantWhere(tenantId, companyId)
           },
           include: {
-            department: true
+            department: true,
+            parentCategory: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
           }
         })
       : Promise.resolve(null),
@@ -435,9 +447,13 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
     return res.status(404).json({ ok: false, error: "UM achizitie inexistenta." })
   }
 
-  if (categoryId && !category) {
-    return res.status(404).json({ ok: false, error: "Categoria nu exista." })
-  }
+    if (categoryId && !category) {
+      return res.status(404).json({ ok: false, error: "Categoria nu exista." })
+    }
+
+    if (category?.parentCategory?.id && category.parentCategory.id === category.id) {
+      return res.status(400).json({ ok: false, error: "Subcategoria selectata este invalida." })
+    }
 
   if (requestedDepartmentId && !department) {
     return res.status(404).json({ ok: false, error: "Departamentul nu exista." })
@@ -558,7 +574,13 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
           },
           category: {
             include: {
-              department: true
+              department: true,
+              parentCategory: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
             }
           },
           recipe: {
@@ -774,7 +796,13 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
             ...buildCompanyScopedTenantWhere(tenantId, companyId)
           },
           include: {
-            department: true
+            department: true,
+            parentCategory: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
           }
         })
       : Promise.resolve(null),
@@ -807,9 +835,13 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
     return res.status(404).json({ ok: false, error: "UM achizitie inexistenta." })
   }
 
-  if (categoryId && !category) {
-    return res.status(404).json({ ok: false, error: "Categoria nu exista." })
-  }
+    if (categoryId && !category) {
+      return res.status(404).json({ ok: false, error: "Categoria nu exista." })
+    }
+
+    if (category?.parentCategory?.id && category.parentCategory.id === category.id) {
+      return res.status(400).json({ ok: false, error: "Subcategoria selectata este invalida." })
+    }
 
   if (requestedDepartmentId && !department) {
     return res.status(404).json({ ok: false, error: "Departamentul nu exista." })
@@ -925,7 +957,13 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
           },
           category: {
             include: {
-              department: true
+              department: true,
+              parentCategory: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
             }
           },
           recipe: {

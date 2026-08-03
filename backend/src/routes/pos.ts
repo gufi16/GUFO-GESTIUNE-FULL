@@ -126,6 +126,7 @@ type CatalogProductLike = {
     name?: string | null;
     imageUrl?: unknown;
     departmentId?: string | null;
+    parentCategoryId?: string | null;
     department?: {
       id?: string | null;
       name?: string | null;
@@ -809,6 +810,7 @@ function mapCatalogProduct(req: Request, product: CatalogProductLike, isVatPayer
           name: product.category.name,
           image: resolveImageUrl(req, product.category.imageUrl),
           departmentId: effectiveDepartmentId,
+          parentCategoryId: product.category.parentCategoryId || null,
         }
       : null,
     categoryId: product.categoryId || null,
@@ -860,6 +862,11 @@ export async function buildCatalogPayload(req: Request, tenantId: string) {
     },
     include: {
       department: true,
+      parentCategory: {
+        select: {
+          id: true,
+        },
+      },
     },
     orderBy: [{ department: { name: "asc" } }, { name: "asc" }],
   });
@@ -939,6 +946,17 @@ export async function buildCatalogPayload(req: Request, tenantId: string) {
   const effectiveCategoryIds = new Set<string>(selectedCategoryIds);
   const effectiveDepartmentIds = new Set<string>(selectedDepartmentIds);
 
+  let categoryTreeChanged = true;
+  while (categoryTreeChanged) {
+    categoryTreeChanged = false;
+    for (const category of categories) {
+      if (category.parentCategoryId && effectiveCategoryIds.has(category.parentCategoryId) && !effectiveCategoryIds.has(category.id)) {
+        effectiveCategoryIds.add(category.id);
+        categoryTreeChanged = true;
+      }
+    }
+  }
+
   for (const category of categories) {
     if (category.departmentId && selectedDepartmentIds.has(category.departmentId)) {
       effectiveCategoryIds.add(category.id);
@@ -948,6 +966,9 @@ export async function buildCatalogPayload(req: Request, tenantId: string) {
   for (const product of directProducts) {
     if (product.categoryId) {
       effectiveCategoryIds.add(product.categoryId);
+    }
+    if (product.category?.parentCategoryId) {
+      effectiveCategoryIds.add(product.category.parentCategoryId);
     }
     if (product.departmentId) {
       effectiveDepartmentIds.add(product.departmentId);
@@ -996,6 +1017,7 @@ export async function buildCatalogPayload(req: Request, tenantId: string) {
     name: category.name,
     image: resolveImageUrl(req, category.imageUrl),
     departmentId: category.departmentId,
+    parentCategoryId: category.parentCategoryId,
     posSortOrder: category.posSortOrder,
     isVisibleInPos: Boolean(category.isVisibleInPos),
     department: category.department

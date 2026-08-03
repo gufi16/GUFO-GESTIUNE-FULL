@@ -763,6 +763,7 @@ model Category {
   tenantId       String
   companyId      String?
   departmentId   String?
+  parentCategoryId String?
   name           String
   imageUrl       String?
   posSortOrder   Int      @default(0)
@@ -773,6 +774,8 @@ model Category {
   tenant     Tenant      @relation(fields: [tenantId], references: [id])
   company    Company?    @relation(fields: [companyId], references: [id])
   department Department? @relation(fields: [departmentId], references: [id])
+  parentCategory Category? @relation("CategoryHierarchy", fields: [parentCategoryId], references: [id], onDelete: SetNull)
+  childCategories Category[] @relation("CategoryHierarchy")
   products   Product[]
   terminalAccesses TerminalCategoryAccess[]
 
@@ -781,6 +784,7 @@ model Category {
   @@index([tenantId, companyId])
   @@index([companyId])
   @@index([departmentId])
+  @@index([parentCategoryId])
   @@index([tenantId, companyId, posSortOrder])
 }
 

@@ -31,6 +31,8 @@ type Category = {
   name: string
   departmentId: string
   imageUrl?: string | null
+  parentCategoryId?: string | null
+  parentCategory?: { id: string; name: string } | null
   posSortOrder?: number | null
   isVisibleInPos?: boolean
   terminalIds?: string[]
@@ -70,6 +72,7 @@ export default function CategoriiPage() {
   const [name, setName] = useState("")
   const [departmentId, setDepartmentId] = useState("")
   const [imageUrl, setImageUrl] = useState("")
+  const [parentCategoryId, setParentCategoryId] = useState("")
   const [posSortOrderInput, setPosSortOrderInput] = useState("")
   const [isVisibleInPos, setIsVisibleInPos] = useState(true)
   const [selectedTerminalIds, setSelectedTerminalIds] = useState<string[]>([])
@@ -84,12 +87,20 @@ export default function CategoriiPage() {
   const stats = useMemo(
     () => ({
       total: list.length,
+      topLevel: list.filter((item) => !item.parentCategoryId).length,
+      subcategories: list.filter((item) => Boolean(item.parentCategoryId)).length,
       withImage: list.filter((item) => Boolean(item.imageUrl)).length,
       visibleInPos: list.filter((item) => item.isVisibleInPos !== false).length,
       departments: new Set(list.map((item) => item.department?.name || item.departmentId).filter(Boolean)).size,
       scopedPos: list.filter((item) => Array.isArray(item.terminalIds) && item.terminalIds.length > 0).length,
     }),
     [list]
+  )
+
+  const topLevelCategories = useMemo(() => list.filter((item) => !item.parentCategoryId), [list])
+  const selectedParentCategory = useMemo(
+    () => topLevelCategories.find((item) => item.id === parentCategoryId) || null,
+    [topLevelCategories, parentCategoryId]
   )
 
   useEffect(() => {
@@ -143,6 +154,7 @@ export default function CategoriiPage() {
     setName("")
     setDepartmentId("")
     setImageUrl("")
+    setParentCategoryId("")
     setPosSortOrderInput("")
     setIsVisibleInPos(true)
     setSelectedTerminalIds([])
@@ -225,6 +237,7 @@ export default function CategoriiPage() {
         body: JSON.stringify({
           name: name.trim(),
           departmentId,
+          parentCategoryId: parentCategoryId || null,
           imageUrl: normalizeHostedImageUrl(imageUrl.trim()) || null,
           posSortOrder: parsePosSortOrderInput(posSortOrderInput),
           isVisibleInPos,
@@ -255,6 +268,7 @@ export default function CategoriiPage() {
     setName(item.name || "")
     setDepartmentId(item.departmentId || "")
     setImageUrl(normalizeHostedImageUrl(item.imageUrl || ""))
+    setParentCategoryId(item.parentCategoryId || "")
     setPosSortOrderInput(item.posSortOrder && item.posSortOrder > 0 ? String(item.posSortOrder) : "")
     setIsVisibleInPos(item.isVisibleInPos !== false)
     setSelectedTerminalIds(Array.isArray(item.terminalIds) ? item.terminalIds : [])
@@ -313,6 +327,30 @@ export default function CategoriiPage() {
             <input placeholder="Categorie" value={name} onChange={(e) => setName(e.target.value)} className={documentInputClass} />
           </DocumentField>
 
+          <DocumentField label="Categorie parinte">
+            <select
+              value={parentCategoryId}
+              onChange={(e) => {
+                const nextParentId = e.target.value
+                setParentCategoryId(nextParentId)
+                const nextParent = topLevelCategories.find((item) => item.id === nextParentId) || null
+                if (nextParent?.department?.id) {
+                  setDepartmentId(nextParent.department.id)
+                }
+              }}
+              className={documentInputClass}
+            >
+              <option value="">Categorie principala</option>
+              {topLevelCategories
+                .filter((item) => item.id !== editingId)
+                .map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+            </select>
+          </DocumentField>
+
           <DocumentField label="Departament">
             <select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} className={documentInputClass}>
               <option value="">Departament</option>
@@ -343,6 +381,13 @@ export default function CategoriiPage() {
             </label>
           </DocumentField>
         </div>
+
+        {selectedParentCategory ? (
+          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Subcategoria va mosteni departamentul din categoria parinte: <strong>{selectedParentCategory.name}</strong>
+            {selectedParentCategory.department?.name ? ` (${selectedParentCategory.department.name})` : ""}.
+          </div>
+        ) : null}
 
         <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[1.1fr_0.9fr]">
           <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
@@ -446,11 +491,12 @@ export default function CategoriiPage() {
         subtitle="Gestionezi categoriile de produse pe departamente, cu imagine si vizibilitate clara pentru meniurile si fluxurile Android POS."
       />
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
         <DocumentMetric title="Categorii" value={stats.total} tone="slate" />
+        <DocumentMetric title="Principale" value={stats.topLevel} tone="blue" />
+        <DocumentMetric title="Subcategorii" value={stats.subcategories} tone="amber" />
         <DocumentMetric title="Cu imagine" value={stats.withImage} tone="blue" />
         <DocumentMetric title="Vizibile in POS" value={stats.visibleInPos} tone="emerald" />
-        <DocumentMetric title="Filtrate pe POS" value={stats.scopedPos} tone="amber" />
       </div>
 
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
@@ -480,6 +526,7 @@ export default function CategoriiPage() {
                 <tr>
                   <th className="px-4 py-3 text-left font-medium">Poza</th>
                   <th className="px-4 py-3 text-left font-medium">Categorie</th>
+                  <th className="px-4 py-3 text-left font-medium">Parinte</th>
                   <th className="px-4 py-3 text-left font-medium">Pozitie POS</th>
                   <th className="px-4 py-3 text-left font-medium">Departament</th>
                   <th className="px-4 py-3 text-left font-medium">Vizibila POS</th>
@@ -509,6 +556,7 @@ export default function CategoriiPage() {
                     <td className="px-4 py-4">
                       <div className="font-semibold text-slate-900">{category.name}</div>
                     </td>
+                    <td className="px-4 py-4 text-slate-600">{category.parentCategory?.name || "-"}</td>
                     <td className="px-4 py-4 text-slate-600">{category.posSortOrder && category.posSortOrder > 0 ? category.posSortOrder : "-"}</td>
                     <td className="px-4 py-4 text-slate-600">{category.department?.name || "-"}</td>
                     <td className="px-4 py-4">
