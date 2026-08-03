@@ -83,6 +83,8 @@ export default function CategoriiPage() {
   const [error, setError] = useState("")
   const [editingId, setEditingId] = useState("")
   const [previewImageFailed, setPreviewImageFailed] = useState(false)
+  const [editorMode, setEditorMode] = useState<"main" | "sub">("main")
+  const [listScope, setListScope] = useState<"all" | "main" | "sub">("all")
 
   const stats = useMemo(
     () => ({
@@ -102,6 +104,11 @@ export default function CategoriiPage() {
     () => topLevelCategories.find((item) => item.id === parentCategoryId) || null,
     [topLevelCategories, parentCategoryId]
   )
+  const filteredList = useMemo(() => {
+    if (listScope === "main") return list.filter((item) => !item.parentCategoryId)
+    if (listScope === "sub") return list.filter((item) => Boolean(item.parentCategoryId))
+    return list
+  }, [list, listScope])
 
   useEffect(() => {
     load()
@@ -159,6 +166,7 @@ export default function CategoriiPage() {
     setIsVisibleInPos(true)
     setSelectedTerminalIds([])
     setEditingId("")
+    setEditorMode("main")
     setError("")
     setMessage("")
     setPreviewImageFailed(false)
@@ -269,6 +277,7 @@ export default function CategoriiPage() {
     setDepartmentId(item.departmentId || "")
     setImageUrl(normalizeHostedImageUrl(item.imageUrl || ""))
     setParentCategoryId(item.parentCategoryId || "")
+    setEditorMode(item.parentCategoryId ? "sub" : "main")
     setPosSortOrderInput(item.posSortOrder && item.posSortOrder > 0 ? String(item.posSortOrder) : "")
     setIsVisibleInPos(item.isVisibleInPos !== false)
     setSelectedTerminalIds(Array.isArray(item.terminalIds) ? item.terminalIds : [])
@@ -322,34 +331,69 @@ export default function CategoriiPage() {
   function renderCategoryForm(isEdit: boolean) {
     return (
       <>
+        <div className="mb-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setEditorMode("main")
+              setParentCategoryId("")
+            }}
+            className={
+              editorMode === "main"
+                ? "rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+                : "rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600"
+            }
+          >
+            Categorie principala
+          </button>
+          <button
+            type="button"
+            onClick={() => setEditorMode("sub")}
+            className={
+              editorMode === "sub"
+                ? "rounded-full bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950"
+                : "rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600"
+            }
+          >
+            Subcategorie
+          </button>
+        </div>
+
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <DocumentField label="Categorie">
-            <input placeholder="Categorie" value={name} onChange={(e) => setName(e.target.value)} className={documentInputClass} />
+          <DocumentField label={editorMode === "sub" ? "Nume subcategorie" : "Nume categorie"}>
+            <input
+              placeholder={editorMode === "sub" ? "Ex: Lipie" : "Ex: Shaorma"}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className={documentInputClass}
+            />
           </DocumentField>
 
-          <DocumentField label="Categorie parinte">
-            <select
-              value={parentCategoryId}
-              onChange={(e) => {
-                const nextParentId = e.target.value
-                setParentCategoryId(nextParentId)
-                const nextParent = topLevelCategories.find((item) => item.id === nextParentId) || null
-                if (nextParent?.department?.id) {
-                  setDepartmentId(nextParent.department.id)
-                }
-              }}
-              className={documentInputClass}
-            >
-              <option value="">Categorie principala</option>
-              {topLevelCategories
-                .filter((item) => item.id !== editingId)
-                .map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-            </select>
-          </DocumentField>
+          {editorMode === "sub" ? (
+            <DocumentField label="Categorie principala">
+              <select
+                value={parentCategoryId}
+                onChange={(e) => {
+                  const nextParentId = e.target.value
+                  setParentCategoryId(nextParentId)
+                  const nextParent = topLevelCategories.find((item) => item.id === nextParentId) || null
+                  if (nextParent?.department?.id) {
+                    setDepartmentId(nextParent.department.id)
+                  }
+                }}
+                className={documentInputClass}
+              >
+                <option value="">Alege categoria principala</option>
+                {topLevelCategories
+                  .filter((item) => item.id !== editingId)
+                  .map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+              </select>
+            </DocumentField>
+          ) : null}
 
           <DocumentField label="Departament">
             <select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} className={documentInputClass}>
@@ -503,18 +547,43 @@ export default function CategoriiPage() {
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
 
       <DocumentSection
-        title="Adauga categorie"
-        description="Salvezi categoria, apoi poti intra pe edit pentru poza si alte ajustari."
+        title={editorMode === "sub" ? "Adauga subcategorie" : "Adauga categorie"}
+        description={
+          editorMode === "sub"
+            ? "Creezi o subcategorie legata de o categorie principala, buna pentru variante precum lipie, farfurie sau chifla."
+            : "Salvezi categoria principala, apoi poti intra pe edit pentru poza si alte ajustari."
+        }
         actions={
           <button type="button" onClick={save} className={documentButtonPrimaryClass} disabled={saving || uploading}>
-            {saving ? "Se salveaza..." : "Adauga"}
+            {saving ? "Se salveaza..." : editorMode === "sub" ? "Adauga subcategorie" : "Adauga categorie"}
           </button>
         }
       >
         {renderCategoryForm(false)}
       </DocumentSection>
 
-      <DocumentSection title="Categorii existente" description="Ai registrul complet al categoriilor, cu departamentul, vizibilitatea in POS si imaginea folosita in interfetele comerciale.">
+      <DocumentSection title="Categorii existente" description="Ai registrul complet al categoriilor si subcategoriilor, cu departamentul, vizibilitatea in POS si imaginea folosita in interfetele comerciale.">
+        <div className="mb-4 flex flex-wrap gap-2">
+          {[
+            { id: "all", label: `Toate (${stats.total})` },
+            { id: "main", label: `Principale (${stats.topLevel})` },
+            { id: "sub", label: `Subcategorii (${stats.subcategories})` },
+          ].map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => setListScope(option.id as "all" | "main" | "sub")}
+              className={
+                listScope === option.id
+                  ? "rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+                  : "rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600"
+              }
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
         {loading ? (
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
             Se incarca...
@@ -535,7 +604,7 @@ export default function CategoriiPage() {
                 </tr>
               </thead>
               <tbody>
-                {list.map((category) => (
+                {filteredList.map((category) => (
                   <tr key={category.id} className="border-t border-slate-200">
                     <td className="px-4 py-4">
                       {category.imageUrl ? (
@@ -555,6 +624,9 @@ export default function CategoriiPage() {
                     </td>
                     <td className="px-4 py-4">
                       <div className="font-semibold text-slate-900">{category.name}</div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        {category.parentCategoryId ? "Subcategorie" : "Categorie principala"}
+                      </div>
                     </td>
                     <td className="px-4 py-4 text-slate-600">{category.parentCategory?.name || "-"}</td>
                     <td className="px-4 py-4 text-slate-600">{category.posSortOrder && category.posSortOrder > 0 ? category.posSortOrder : "-"}</td>

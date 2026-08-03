@@ -294,6 +294,15 @@ function formatCategoryLabel(category?: {
   return parentName ? `${parentName} / ${category.name}` : category.name
 }
 
+function getTopLevelCategoryId(
+  categoryId: string,
+  categories: Array<{ id: string; parentCategoryId?: string | null }>
+) {
+  if (!categoryId) return ""
+  const current = categories.find((item) => item.id === categoryId)
+  return current?.parentCategoryId || current?.id || ""
+}
+
 export function ProductsCatalogPage({
   title = "Produse",
   subtitle = "Controlezi catalogul complet de produse, clasificarea operationala, setarile POS, SGR si logica de lot, expirare sau retetare.",
@@ -349,16 +358,23 @@ export function ProductsCatalogPage({
   const selectedCategory = useMemo(() => {
     return categories.find((c) => c.id === form.categoryId) || null
   }, [categories, form.categoryId])
-
-  const categoryOptions = useMemo(() => {
-    const topLevel = categories.filter((item) => item.isActive !== false && !item.parentCategoryId)
-    return topLevel.flatMap((item) => {
-      const children = categories.filter(
-        (entry) => entry.isActive !== false && entry.parentCategoryId === item.id,
-      )
-      return children.length ? [item, ...children] : [item]
-    })
-  }, [categories])
+  const topLevelCategories = useMemo(
+    () => categories.filter((item) => item.isActive !== false && !item.parentCategoryId),
+    [categories]
+  )
+  const selectedMainCategoryId = useMemo(
+    () => getTopLevelCategoryId(form.categoryId, categories),
+    [categories, form.categoryId]
+  )
+  const availableSubcategories = useMemo(
+    () =>
+      categories.filter(
+        (item) =>
+          item.isActive !== false &&
+          item.parentCategoryId === selectedMainCategoryId
+      ),
+    [categories, selectedMainCategoryId]
+  )
 
   const selectedUom = useMemo(() => {
     return uoms.find((u) => u.id === form.uomId) || null
@@ -1539,17 +1555,44 @@ function getDefaultVat(list = vatRates) {
                       </select>
                     </Field>
 
-                    <Field label="Categorie">
+                    <Field label="Categorie principala">
                       <select
-                        value={form.categoryId}
-                        onChange={(e) => setForm((prev) => ({ ...prev, categoryId: e.target.value }))}
+                        value={selectedMainCategoryId}
+                        onChange={(e) => {
+                          const nextMainId = e.target.value
+                          setForm((prev) => ({ ...prev, categoryId: nextMainId }))
+                        }}
                         style={input}
                       >
-                        <option value="">Selecteaza categoria</option>
-                        {categoryOptions.map((c) => (
+                        <option value="">Selecteaza categoria principala</option>
+                        {topLevelCategories.map((c) => (
                           <option key={c.id} value={c.id}>
-                            {formatCategoryLabel(c)}
-                            </option>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+
+                    <Field label="Subcategorie">
+                      <select
+                        value={form.categoryId}
+                        onChange={(e) => {
+                          const nextCategoryId = e.target.value
+                          setForm((prev) => ({
+                            ...prev,
+                            categoryId: nextCategoryId || selectedMainCategoryId,
+                          }))
+                        }}
+                        style={input}
+                        disabled={!selectedMainCategoryId}
+                      >
+                        <option value={selectedMainCategoryId}>
+                          {availableSubcategories.length ? "Fara subcategorie" : "Nu exista subcategorii"}
+                        </option>
+                        {availableSubcategories.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
                         ))}
                       </select>
                     </Field>
