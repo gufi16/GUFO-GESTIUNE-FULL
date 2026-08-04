@@ -1547,6 +1547,24 @@ function getDefaultVat(list = vatRates) {
                       </select>
                     </Field>
 
+                    {recipeEligibleClasses.includes(form.class) ? (
+                      <Field label="Retetar">
+                        <div style={checkBlock}>
+                          <label style={checkLabel}>
+                            <input
+                              type="checkbox"
+                              checked={form.requiresRecipe}
+                              onChange={(e) => setForm((prev) => ({ ...prev, requiresRecipe: e.target.checked }))}
+                            />
+                            <span>Retetar obligatoriu</span>
+                          </label>
+                          <div style={checkHint}>
+                            Daca este bifat, produsul ramane inactiv pana completezi retetarul. Daca il scoti, retetarul devine optional.
+                          </div>
+                        </div>
+                      </Field>
+                    ) : null}
+
                     <Field label="Tip articol">
                       <select
                         value={form.isMenu ? "MENU" : "PRODUCT"}
@@ -2153,24 +2171,6 @@ function getDefaultVat(list = vatRates) {
                       <div style={checkHint}>
                         Marcaj pentru produsele sau meniurile pe care vrei sa le trimiti in Glovo Merchant.
                       </div>
-                    </div>
-
-                    <div style={checkBlock}>
-                      {recipeEligibleClasses.includes(form.class) ? (
-                        <>
-                          <label style={checkLabel}>
-                            <input
-                              type="checkbox"
-                              checked={form.requiresRecipe}
-                              onChange={(e) => setForm((prev) => ({ ...prev, requiresRecipe: e.target.checked }))}
-                            />
-                            <span>Retetar obligatoriu</span>
-                          </label>
-                          <div style={checkHint}>
-                            Daca este bifat, produsul ramane inactiv pana completezi retetarul. Daca il scoti, retetarul devine optional.
-                          </div>
-                        </>
-                      ) : null}
                     </div>
 
                     <div style={checkBlock}>
