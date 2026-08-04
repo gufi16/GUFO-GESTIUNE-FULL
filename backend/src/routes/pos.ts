@@ -643,31 +643,14 @@ export async function resolvePosAuthContext(req: PosAuthRequest) {
 }
 async function requirePosAuth(req: PosAuthRequest, res: Response, next: NextFunction) {
   const { authHeader, token } = getPosToken(req);
+  const resolvedAuth = await resolvePosAuthContext(req);
+
+  if (resolvedAuth) {
+    req.auth = resolvedAuth;
+    return next();
+  }
 
   if (!token) {
-    const headerResolved = await resolvePosHeaderTerminalContext(req);
-    if (headerResolved) {
-      applyPosAuth(req, headerResolved);
-      return next();
-    }
-
-    const sessionResolution = resolveScopedOrLatestSessionAuth(req, { allowLatest: false });
-    if (sessionResolution) {
-      applyPosAuth(req, sessionResolution.auth);
-      console.warn(
-        sessionResolution.source === "scopedSession"
-          ? "POS AUTH FALLBACK SESSION"
-          : "POS AUTH GLOBAL FALLBACK SESSION",
-        {
-        path: req.path,
-        method: req.method,
-          terminalId: sessionResolution.auth.terminalId,
-          deviceId: sessionResolution.auth.deviceId,
-        }
-      );
-      return next();
-    }
-
     console.warn("POS AUTH MISSING TOKEN", {
       path: req.path,
       method: req.method,
@@ -677,32 +660,10 @@ async function requirePosAuth(req: PosAuthRequest, res: Response, next: NextFunc
   }
 
   try {
-    applyPosAuth(req, decodePosToken(token));
-    next();
+    const decoded = decodePosToken(token);
+    applyPosAuth(req, decoded);
+    return next();
   } catch (error) {
-    const headerResolved = await resolvePosHeaderTerminalContext(req);
-    if (headerResolved) {
-      applyPosAuth(req, headerResolved);
-      return next();
-    }
-
-    const sessionResolution = resolveScopedOrLatestSessionAuth(req, { allowLatest: false });
-    if (sessionResolution) {
-      applyPosAuth(req, sessionResolution.auth);
-      console.warn(
-        sessionResolution.source === "scopedSession"
-          ? "POS AUTH FALLBACK SESSION AFTER INVALID TOKEN"
-          : "POS AUTH GLOBAL FALLBACK SESSION AFTER INVALID TOKEN",
-        {
-        path: req.path,
-        method: req.method,
-          terminalId: sessionResolution.auth.terminalId,
-          deviceId: sessionResolution.auth.deviceId,
-        }
-      );
-      return next();
-    }
-
     console.warn("POS AUTH INVALID TOKEN", {
       path: req.path,
       method: req.method,
