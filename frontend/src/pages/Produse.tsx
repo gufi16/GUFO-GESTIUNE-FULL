@@ -1547,23 +1547,29 @@ function getDefaultVat(list = vatRates) {
                       </select>
                     </Field>
 
-                    {recipeEligibleClasses.includes(form.class) ? (
-                      <Field label="Retetar">
-                        <div style={checkBlock}>
-                          <label style={checkLabel}>
-                            <input
-                              type="checkbox"
-                              checked={form.requiresRecipe}
-                              onChange={(e) => setForm((prev) => ({ ...prev, requiresRecipe: e.target.checked }))}
-                            />
-                            <span>Retetar obligatoriu</span>
-                          </label>
-                          <div style={checkHint}>
-                            Daca este bifat, produsul ramane inactiv pana completezi retetarul. Daca il scoti, retetarul devine optional.
-                          </div>
+                    <Field label="Retetar">
+                      <div style={checkBlock}>
+                        <label
+                          style={{
+                            ...checkLabel,
+                            opacity: recipeEligibleClasses.includes(form.class) ? 1 : 0.55,
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={form.requiresRecipe}
+                            disabled={!recipeEligibleClasses.includes(form.class)}
+                            onChange={(e) => setForm((prev) => ({ ...prev, requiresRecipe: e.target.checked }))}
+                          />
+                          <span>Retetar obligatoriu</span>
+                        </label>
+                        <div style={checkHint}>
+                          {recipeEligibleClasses.includes(form.class)
+                            ? "Daca este bifat, produsul ramane inactiv pana completezi retetarul. Daca il scoti, retetarul devine optional."
+                            : "Disponibil doar pentru produs finit si semifabricate."}
                         </div>
-                      </Field>
-                    ) : null}
+                      </div>
+                    </Field>
 
                     <Field label="Tip articol">
                       <select
