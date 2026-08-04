@@ -20,6 +20,7 @@ type Product = {
   price: number
   costPrice?: number
   purchaseFactor?: number
+  requiresRecipe?: boolean
   isActive: boolean
   isMenu?: boolean
   posMenuCategory?: string | null
@@ -94,6 +95,7 @@ type FormState = {
   trackLot: boolean
   trackExpiry: boolean
   costMethod: "AVG" | "FIFO" | "FEFO"
+  requiresRecipe: boolean
 }
 
 type RecipeLine = {
@@ -197,7 +199,8 @@ const emptyForm: FormState = {
   productionMode: "AUTO",
   trackLot: false,
   trackExpiry: false,
-  costMethod: "AVG"
+  costMethod: "AVG",
+  requiresRecipe: false
 }
 
 const emptyRecipeForm: RecipeForm = {
@@ -575,7 +578,8 @@ function getDefaultVat(list = vatRates) {
       productionMode: "AUTO",
       trackLot: false,
       trackExpiry: false,
-      costMethod: "AVG"
+      costMethod: "AVG",
+      requiresRecipe: defaultClass === "PRODUS_FIN" || defaultClass === "SEMIFABRICATE"
     })
     setError("")
     setMessage("")
@@ -616,7 +620,8 @@ function getDefaultVat(list = vatRates) {
       productionMode: item.productionMode === "MANUAL" ? "MANUAL" : "AUTO",
       trackLot: item.trackLot === true,
       trackExpiry: item.trackExpiry === true,
-      costMethod: item.costMethod === "FEFO" ? "FEFO" : item.costMethod === "FIFO" ? "FIFO" : "AVG"
+      costMethod: item.costMethod === "FEFO" ? "FEFO" : item.costMethod === "FIFO" ? "FIFO" : "AVG",
+      requiresRecipe: item.requiresRecipe === true
     })
     setError("")
     setMessage("")
@@ -768,7 +773,8 @@ function getDefaultVat(list = vatRates) {
           productionMode: form.productionMode,
           trackLot: form.trackLot,
           trackExpiry: form.trackExpiry,
-          costMethod: form.costMethod
+          costMethod: form.costMethod,
+          requiresRecipe: recipeEligibleClasses.includes(fixedClassValue || form.class) ? form.requiresRecipe : false
         })
       })
 
@@ -788,13 +794,14 @@ function getDefaultVat(list = vatRates) {
       const needsRecipeFlow =
         !editingItem &&
         savedItem &&
-        ["PRODUS_FIN", "SEMIFABRICATE"].includes(savedItem.class)
+        savedItem.requiresRecipe === true &&
+        recipeEligibleClasses.includes(savedItem.class)
 
       setShowModal(false)
 
       if (needsRecipeFlow) {
         setMessage(
-          `Produsul ${savedItem.name} a fost salvat initial ca inactiv. Completeaza acum retetarul ca sa devina utilizabil.`
+          `Produsul ${savedItem.name} a fost salvat cu retetar obligatoriu. Completeaza acum retetarul ca sa devina utilizabil.`
         )
         await loadAll()
         await openRecipeModal(savedItem)
@@ -1512,7 +1519,23 @@ function getDefaultVat(list = vatRates) {
                     <Field label="Clasificare">
                       <select
                         value={form.class}
-                        onChange={(e) => setForm((prev) => ({ ...prev, class: e.target.value }))}
+                        onChange={(e) =>
+                          setForm((prev) => {
+                            const nextClass = e.target.value
+                            const allowsRecipe = recipeEligibleClasses.includes(nextClass)
+                            return {
+                              ...prev,
+                              class: nextClass,
+                              requiresRecipe: allowsRecipe
+                                ? prev.class === nextClass
+                                  ? prev.requiresRecipe
+                                  : editingItem
+                                    ? prev.requiresRecipe
+                                    : true
+                                : false,
+                            }
+                          })
+                        }
                         disabled={Boolean(fixedClassValue)}
                         style={input}
                       >
@@ -2133,6 +2156,24 @@ function getDefaultVat(list = vatRates) {
                     </div>
 
                     <div style={checkBlock}>
+                      {recipeEligibleClasses.includes(form.class) ? (
+                        <>
+                          <label style={checkLabel}>
+                            <input
+                              type="checkbox"
+                              checked={form.requiresRecipe}
+                              onChange={(e) => setForm((prev) => ({ ...prev, requiresRecipe: e.target.checked }))}
+                            />
+                            <span>Retetar obligatoriu</span>
+                          </label>
+                          <div style={checkHint}>
+                            Daca este bifat, produsul ramane inactiv pana completezi retetarul. Daca il scoti, retetarul devine optional.
+                          </div>
+                        </>
+                      ) : null}
+                    </div>
+
+                    <div style={checkBlock}>
                       <label style={checkLabel}>
                         <input
                           type="checkbox"
@@ -2142,7 +2183,7 @@ function getDefaultVat(list = vatRates) {
                         <span>Produs activ</span>
                       </label>
                       <div style={checkHint}>
-                        Pentru produs finit si semifabricate, daca nu exista retetar, produsul poate fi salvat automat inactiv.
+                        Activeaza produsul pentru lucru curent. Daca retetarul este obligatoriu si lipseste, sistemul il tine inactiv.
                       </div>
                     </div>
                   </div>
@@ -2194,9 +2235,9 @@ function getDefaultVat(list = vatRates) {
                   )}
                 </SectionCard>
 
-                {(form.class === "PRODUS_FIN" || form.class === "SEMIFABRICATE") && (
+                {recipeEligibleClasses.includes(form.class) && form.requiresRecipe && (
                   <div style={warningBox}>
-                    Pentru aceasta clasificare, produsul se salveaza intai ca inactiv si trebuie completat imediat retetarul.
+                    Pentru acest produs ai activat retetar obligatoriu, deci se salveaza intai ca inactiv pana completezi retetarul.
                   </div>
                 )}
                 </>

@@ -50,6 +50,7 @@ type ProductLike = {
   netWeightKg?: unknown
   grossWeightKg?: unknown
   sgrValue?: unknown
+  requiresRecipe?: boolean | null
   trackLot?: boolean | null
   trackExpiry?: boolean | null
   costMethod?: string | null
@@ -122,6 +123,7 @@ export function serializeProduct(item: ProductLike | null | undefined) {
     netWeightKg: toNumber(item.netWeightKg || 0),
     grossWeightKg: toNumber(item.grossWeightKg || 0),
     sgrValue: toNumber(item.sgrValue || 0),
+    requiresRecipe: item.requiresRecipe === true,
     trackLot: item.trackLot === true,
     trackExpiry: item.trackExpiry === true,
     costMethod: item.costMethod || "AVG",

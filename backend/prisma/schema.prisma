@@ -830,6 +830,7 @@ model Product {
   trackLot       Boolean        @default(false)
   trackExpiry    Boolean        @default(false)
   costMethod     StockCostMethod @default(AVG)
+  requiresRecipe Boolean        @default(false)
   isActive       Boolean        @default(true)
   isMenu         Boolean        @default(false)
   posMenuCategory String?

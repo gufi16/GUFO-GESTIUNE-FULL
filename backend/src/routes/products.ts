@@ -272,6 +272,10 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
   const trackExpiry = Boolean(req.body?.trackExpiry)
   let costMethod = normalizeStockCostMethod(req.body?.costMethod || "AVG") as StockCostMethod | null
   const requestedIsActive = req.body?.isActive === undefined ? true : Boolean(req.body?.isActive)
+  const requestedRequiresRecipe =
+    req.body?.requiresRecipe === undefined
+      ? RECIPE_REQUIRED_CLASSES.includes(classValue as (typeof RECIPE_REQUIRED_CLASSES)[number])
+      : Boolean(req.body?.requiresRecipe)
   const requestedVisibleInPos =
     req.body?.isVisibleInPos === undefined ? true : Boolean(req.body?.isVisibleInPos)
   const requestedIsSgr = req.body?.isSgr === undefined ? false : Boolean(req.body?.isSgr)
@@ -484,9 +488,7 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
           create: { tenantId, key: "product", value: preview.value }
         })
       }
-      const forcedInactiveBecauseMissingRecipe = RECIPE_REQUIRED_CLASSES.includes(
-        classValue as (typeof RECIPE_REQUIRED_CLASSES)[number]
-      )
+      const forcedInactiveBecauseMissingRecipe = requestedRequiresRecipe
 
       const resolvedDepartmentId = category?.departmentId || department?.id || null
 
@@ -513,6 +515,7 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
           trackLot,
           trackExpiry,
           costMethod: finalCostMethod,
+          requiresRecipe: requestedRequiresRecipe,
           isActive: forcedInactiveBecauseMissingRecipe ? false : requestedIsActive,
           isMenu: requestedIsMenu,
           posMenuCategory,
@@ -654,6 +657,8 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   const trackExpiry = Boolean(req.body?.trackExpiry)
   let costMethod = normalizeStockCostMethod(req.body?.costMethod ?? "AVG") as StockCostMethod | null
   const requestedIsActive = req.body?.isActive === undefined ? true : Boolean(req.body?.isActive)
+  const requestedRequiresRecipe =
+    req.body?.requiresRecipe === undefined ? undefined : Boolean(req.body?.requiresRecipe)
   const requestedVisibleInPos =
     req.body?.isVisibleInPos === undefined ? true : Boolean(req.body?.isVisibleInPos)
   const requestedIsSgr = req.body?.isSgr === undefined ? false : Boolean(req.body?.isSgr)
@@ -745,6 +750,8 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   costMethod = normalizeStockCostMethod(
     req.body?.costMethod ?? current.costMethod ?? "AVG"
   ) as StockCostMethod | null
+  const finalRequestedRequiresRecipe =
+    requestedRequiresRecipe === undefined ? current.requiresRecipe === true : requestedRequiresRecipe
 
   if (!productionMode) {
     return res.status(400).json({ ok: false, error: "Mod de productie invalid." })
@@ -848,9 +855,7 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   }
 
   try {
-    const forcedInactiveBecauseMissingRecipe =
-      RECIPE_REQUIRED_CLASSES.includes(classValue as (typeof RECIPE_REQUIRED_CLASSES)[number]) &&
-      !existingRecipe
+    const forcedInactiveBecauseMissingRecipe = finalRequestedRequiresRecipe && !existingRecipe
 
     const resolvedDepartmentId = category?.departmentId || department?.id || null
 
@@ -895,6 +900,7 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
           trackLot,
           trackExpiry,
           costMethod: finalUpdatedCostMethod,
+          requiresRecipe: finalRequestedRequiresRecipe,
           isActive: forcedInactiveBecauseMissingRecipe ? false : requestedIsActive,
           isMenu: requestedIsMenu,
           posMenuCategory,
