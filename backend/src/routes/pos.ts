@@ -123,6 +123,7 @@ type CatalogProductLike = {
   imageUrl?: unknown;
   class?: string | null;
   price?: unknown;
+  posSortOrder?: unknown;
   isActive?: unknown;
   isVisibleInPos?: unknown;
   isSgr?: unknown;
@@ -942,6 +943,7 @@ function mapCatalogProduct(req: Request, product: CatalogProductLike, isVatPayer
       : null,
     categoryId: product.categoryId || null,
     departmentId: effectiveDepartmentId,
+    posSortOrder: Math.max(0, Math.round(toNumber(product.posSortOrder || 0))),
     sgrLabel: product.isSgr ? "SGR" : null,
     isMenu: Boolean(product.isMenu),
     menuComponents,
@@ -1132,9 +1134,20 @@ export async function buildCatalogPayload(req: Request, tenantId: string) {
       })
     : rawProducts;
 
-  const products = visibleProducts.map((product) => mapCatalogProduct(req, product, isVatPayer));
+  const sortedVisibleProducts = [...visibleProducts].sort((left, right) => {
+    const leftOrder = Math.max(0, Math.round(toNumber(left.posSortOrder || 0)));
+    const rightOrder = Math.max(0, Math.round(toNumber(right.posSortOrder || 0)));
+    const leftBucket = leftOrder > 0 ? 0 : 1;
+    const rightBucket = rightOrder > 0 ? 0 : 1;
+
+    if (leftBucket !== rightBucket) return leftBucket - rightBucket;
+    if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+    return String(left.name || "").localeCompare(String(right.name || ""), "ro");
+  });
+
+  const products = sortedVisibleProducts.map((product) => mapCatalogProduct(req, product, isVatPayer));
   const latestProductUpdate =
-    visibleProducts.reduce<number>(
+    sortedVisibleProducts.reduce<number>(
       (latest, product) => Math.max(latest, new Date(product.updatedAt).getTime()),
       0
     ) || Date.now();

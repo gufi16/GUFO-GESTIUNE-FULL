@@ -133,6 +133,12 @@ function normalizeBarcodeList(value: unknown) {
   return normalized
 }
 
+function normalizeProductPosSortOrder(value: unknown) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return 0
+  return Math.max(0, Math.round(parsed))
+}
+
 router.post(
   "/api/v1/products/upload-image",
   upload.single("image"),
@@ -198,7 +204,7 @@ router.get("/api/v1/products", async (req: AuthedRequest, res) => {
         }
       }
     },
-    orderBy: { name: "asc" }
+    orderBy: [{ posSortOrder: "asc" }, { name: "asc" }]
   })
 
   res.json({ ok: true, items: items.map(serializeProduct) })
@@ -286,6 +292,7 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
   const terminalIds = await resolveProductTerminalIds(tenantId, companyId, req.body)
   const requestedPosMenuCategory = toNullableText(req.body?.posMenuCategory)
   const posMenuCategory = requestedIsMenu ? requestedPosMenuCategory : null
+  const posSortOrder = normalizeProductPosSortOrder(req.body?.posSortOrder)
   const requestedBarcodes = normalizeBarcodeList(req.body?.barcodes ?? req.body?.barcode)
 
   if (!ALL_PRODUCT_CLASSES.includes(classValue)) {
@@ -516,6 +523,7 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
           trackExpiry,
           costMethod: finalCostMethod,
           requiresRecipe: requestedRequiresRecipe,
+          posSortOrder,
           isActive: forcedInactiveBecauseMissingRecipe ? false : requestedIsActive,
           isMenu: requestedIsMenu,
           posMenuCategory,
@@ -668,6 +676,7 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   const requestedPublishToGlovo = normalizeBoolean(req.body?.publishToGlovo, false)
   const requestedPosMenuCategory = toNullableText(req.body?.posMenuCategory)
   const posMenuCategory = requestedIsMenu ? requestedPosMenuCategory : null
+  const requestedPosSortOrder = req.body?.posSortOrder
   const shouldUpdateBarcodes = hasBarcodePayload(req.body as Record<string, unknown> | undefined)
   const requestedBarcodes = normalizeBarcodeList(req.body?.barcodes ?? req.body?.barcode)
   const terminalIds = await resolveProductTerminalIds(tenantId, companyId, req.body)
@@ -743,6 +752,7 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   }
 
   const imageUrl = mergeImageUrl(requestedImageUrl, current.imageUrl, normalizeStoredUploadUrl)
+  const posSortOrder = normalizeProductPosSortOrder(requestedPosSortOrder ?? current.posSortOrder ?? 0)
 
   productionMode = normalizeProductionMode(
     req.body?.productionMode ?? current.productionMode ?? "AUTO"
@@ -901,6 +911,7 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
           trackExpiry,
           costMethod: finalUpdatedCostMethod,
           requiresRecipe: finalRequestedRequiresRecipe,
+          posSortOrder,
           isActive: forcedInactiveBecauseMissingRecipe ? false : requestedIsActive,
           isMenu: requestedIsMenu,
           posMenuCategory,

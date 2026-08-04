@@ -831,6 +831,7 @@ model Product {
   trackExpiry    Boolean        @default(false)
   costMethod     StockCostMethod @default(AVG)
   requiresRecipe Boolean        @default(false)
+  posSortOrder   Int            @default(0)
   isActive       Boolean        @default(true)
   isMenu         Boolean        @default(false)
   posMenuCategory String?
@@ -882,6 +883,7 @@ model Product {
     @@index([companyId])
     @@index([departmentId])
     @@index([categoryId])
+    @@index([posSortOrder])
     @@index([purchaseUomId])
   @@index([accountingStockTypeId])
 }

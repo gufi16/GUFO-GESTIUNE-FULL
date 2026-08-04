@@ -21,6 +21,7 @@ type Product = {
   costPrice?: number
   purchaseFactor?: number
   requiresRecipe?: boolean
+  posSortOrder?: number
   isActive: boolean
   isMenu?: boolean
   posMenuCategory?: string | null
@@ -96,6 +97,7 @@ type FormState = {
   trackExpiry: boolean
   costMethod: "AVG" | "FIFO" | "FEFO"
   requiresRecipe: boolean
+  posSortOrder: string
 }
 
 type RecipeLine = {
@@ -200,7 +202,8 @@ const emptyForm: FormState = {
   trackLot: false,
   trackExpiry: false,
   costMethod: "AVG",
-  requiresRecipe: false
+  requiresRecipe: false,
+  posSortOrder: "0"
 }
 
 const emptyRecipeForm: RecipeForm = {
@@ -579,7 +582,8 @@ function getDefaultVat(list = vatRates) {
       trackLot: false,
       trackExpiry: false,
       costMethod: "AVG",
-      requiresRecipe: defaultClass === "PRODUS_FIN" || defaultClass === "SEMIFABRICATE"
+      requiresRecipe: defaultClass === "PRODUS_FIN" || defaultClass === "SEMIFABRICATE",
+      posSortOrder: "0"
     })
     setError("")
     setMessage("")
@@ -621,7 +625,8 @@ function getDefaultVat(list = vatRates) {
       trackLot: item.trackLot === true,
       trackExpiry: item.trackExpiry === true,
       costMethod: item.costMethod === "FEFO" ? "FEFO" : item.costMethod === "FIFO" ? "FIFO" : "AVG",
-      requiresRecipe: item.requiresRecipe === true
+      requiresRecipe: item.requiresRecipe === true,
+      posSortOrder: String(Math.max(0, Math.round(Number(item.posSortOrder || 0))))
     })
     setError("")
     setMessage("")
@@ -774,7 +779,8 @@ function getDefaultVat(list = vatRates) {
           trackLot: form.trackLot,
           trackExpiry: form.trackExpiry,
           costMethod: form.costMethod,
-          requiresRecipe: recipeEligibleClasses.includes(fixedClassValue || form.class) ? form.requiresRecipe : false
+          requiresRecipe: recipeEligibleClasses.includes(fixedClassValue || form.class) ? form.requiresRecipe : false,
+          posSortOrder: Math.max(0, Math.round(toNumberSafe(form.posSortOrder || 0)))
         })
       })
 
@@ -1699,6 +1705,27 @@ function getDefaultVat(list = vatRates) {
                         readOnly
                         style={{ ...input, background: "#f8fafc" }}
                       />
+                    </Field>
+
+                    <Field label="Pozitie Gufo POS">
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={form.posSortOrder}
+                        onChange={(e) => setForm((prev) => ({ ...prev, posSortOrder: e.target.value }))}
+                        onBlur={() =>
+                          setForm((prev) => ({
+                            ...prev,
+                            posSortOrder: String(Math.max(0, Math.round(toNumberSafe(prev.posSortOrder || 0)))),
+                          }))
+                        }
+                        placeholder="Ex: 1"
+                        style={input}
+                      />
+                      <div style={fieldHint}>
+                        Pozitia ordoneaza produsul in categoria sau subcategoria aleasa din Gufo POS. `0` lasa ordinea alfabetica.
+                      </div>
                     </Field>
 
                     {form.isMenu ? (
