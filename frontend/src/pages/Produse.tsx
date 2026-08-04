@@ -1547,8 +1547,17 @@ function getDefaultVat(list = vatRates) {
                       </select>
                     </Field>
 
-                    <Field label="Retetar">
-                      <div style={checkBlock}>
+                    <Field label="Mod retetar">
+                      <div
+                        style={{
+                          border: recipeEligibleClasses.includes(form.class) ? "1px solid #fbbf24" : "1px solid #dbeafe",
+                          background: recipeEligibleClasses.includes(form.class) ? "#fffbeb" : "#f8fafc",
+                          borderRadius: 14,
+                          padding: "14px 16px",
+                          display: "grid",
+                          gap: 8,
+                        }}
+                      >
                         <label
                           style={{
                             ...checkLabel,
@@ -1565,7 +1574,7 @@ function getDefaultVat(list = vatRates) {
                         </label>
                         <div style={checkHint}>
                           {recipeEligibleClasses.includes(form.class)
-                            ? "Daca este bifat, produsul ramane inactiv pana completezi retetarul. Daca il scoti, retetarul devine optional."
+                            ? "Daca este bifat, la final iti cere retetar. Daca il scoti, produsul se salveaza fara sa-ti mai ceara retetar."
                             : "Disponibil doar pentru produs finit si semifabricate."}
                         </div>
                       </div>
