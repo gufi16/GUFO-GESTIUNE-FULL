@@ -68,6 +68,7 @@ type ProductOption = {
   class: string
   uom?: { id: string; code: string; name: string; standardCode?: string | null } | null
   isActive?: boolean
+  isVisibleInPos?: boolean
 }
 
 type PosTerminal = {
@@ -416,6 +417,18 @@ export function ProductsCatalogPage({
       return name.includes(needle) || sku.includes(needle) || classLabel.includes(needle)
     })
   }, [availableCrossSellOptions, crossSellSearch])
+  const unselectedCrossSellOptions = useMemo(
+    () => filteredCrossSellOptions.filter((option) => !form.crossSellProductIds.includes(option.id)),
+    [filteredCrossSellOptions, form.crossSellProductIds]
+  )
+  const hiddenCrossSellOptions = useMemo(
+    () => unselectedCrossSellOptions.filter((option) => option.isVisibleInPos === false),
+    [unselectedCrossSellOptions]
+  )
+  const visibleCrossSellOptions = useMemo(
+    () => unselectedCrossSellOptions.filter((option) => option.isVisibleInPos !== false),
+    [unselectedCrossSellOptions]
+  )
   const selectedCrossSellOptions = useMemo(
     () =>
       form.crossSellProductIds
@@ -1931,39 +1944,112 @@ function getDefaultVat(list = vatRates) {
                                   paddingRight: 4,
                                 }}
                               >
-                                {filteredCrossSellOptions
-                                  .filter((option) => !form.crossSellProductIds.includes(option.id))
-                                  .map((option) => (
-                                    <button
-                                      key={option.id}
-                                      type="button"
-                                      onClick={() => {
-                                        setForm((prev) => ({
-                                          ...prev,
-                                          crossSellProductIds: prev.crossSellProductIds.includes(option.id)
-                                            ? prev.crossSellProductIds
-                                            : [...prev.crossSellProductIds, option.id],
-                                        }))
-                                        setCrossSellSearch("")
-                                      }}
+                                {hiddenCrossSellOptions.length ? (
+                                  <div
+                                    style={{
+                                      display: "grid",
+                                      gap: 8,
+                                    }}
+                                  >
+                                    <div
                                       style={{
-                                        textAlign: "left",
-                                        border: "1px solid #e2e8f0",
-                                        background: "#f8fafc",
-                                        borderRadius: 12,
-                                        padding: "10px 12px",
-                                        display: "grid",
-                                        gap: 3,
-                                        cursor: "pointer",
+                                        fontSize: 12,
+                                        fontWeight: 800,
+                                        letterSpacing: "0.08em",
+                                        textTransform: "uppercase",
+                                        color: "#92400e",
                                       }}
                                     >
-                                      <strong style={{ color: "#17324d", fontSize: 14 }}>{option.name}</strong>
-                                      <span style={fieldHint}>
-                                        {option.sku} · {CLASS_LABEL_MAP[option.class] || option.class.toLowerCase()}
-                                      </span>
-                                    </button>
-                                  ))}
-                                {!filteredCrossSellOptions.filter((option) => !form.crossSellProductIds.includes(option.id)).length ? (
+                                      Doar cross-sell
+                                    </div>
+                                    {hiddenCrossSellOptions.map((option) => (
+                                      <button
+                                        key={option.id}
+                                        type="button"
+                                        onClick={() => {
+                                          setForm((prev) => ({
+                                            ...prev,
+                                            crossSellProductIds: prev.crossSellProductIds.includes(option.id)
+                                              ? prev.crossSellProductIds
+                                              : [...prev.crossSellProductIds, option.id],
+                                          }))
+                                          setCrossSellSearch("")
+                                        }}
+                                        style={{
+                                          textAlign: "left",
+                                          border: "1px solid #fde68a",
+                                          background: "#fffbeb",
+                                          borderRadius: 12,
+                                          padding: "10px 12px",
+                                          display: "grid",
+                                          gap: 3,
+                                          cursor: "pointer",
+                                        }}
+                                      >
+                                        <strong style={{ color: "#92400e", fontSize: 14 }}>{option.name}</strong>
+                                        <span style={fieldHint}>
+                                          {option.sku} · ascuns din POS · {CLASS_LABEL_MAP[option.class] || option.class.toLowerCase()}
+                                        </span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                ) : null}
+
+                                {visibleCrossSellOptions.length ? (
+                                  <div
+                                    style={{
+                                      display: "grid",
+                                      gap: 8,
+                                    }}
+                                  >
+                                    {hiddenCrossSellOptions.length ? (
+                                      <div
+                                        style={{
+                                          fontSize: 12,
+                                          fontWeight: 800,
+                                          letterSpacing: "0.08em",
+                                          textTransform: "uppercase",
+                                          color: "#64748b",
+                                          marginTop: 2,
+                                        }}
+                                      >
+                                        Produse POS
+                                      </div>
+                                    ) : null}
+                                    {visibleCrossSellOptions.map((option) => (
+                                      <button
+                                        key={option.id}
+                                        type="button"
+                                        onClick={() => {
+                                          setForm((prev) => ({
+                                            ...prev,
+                                            crossSellProductIds: prev.crossSellProductIds.includes(option.id)
+                                              ? prev.crossSellProductIds
+                                              : [...prev.crossSellProductIds, option.id],
+                                          }))
+                                          setCrossSellSearch("")
+                                        }}
+                                        style={{
+                                          textAlign: "left",
+                                          border: "1px solid #e2e8f0",
+                                          background: "#f8fafc",
+                                          borderRadius: 12,
+                                          padding: "10px 12px",
+                                          display: "grid",
+                                          gap: 3,
+                                          cursor: "pointer",
+                                        }}
+                                      >
+                                        <strong style={{ color: "#17324d", fontSize: 14 }}>{option.name}</strong>
+                                        <span style={fieldHint}>
+                                          {option.sku} · {CLASS_LABEL_MAP[option.class] || option.class.toLowerCase()}
+                                        </span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                ) : null}
+
+                                {!unselectedCrossSellOptions.length ? (
                                   <div style={fieldHint}>
                                     Nu exista rezultate pentru cautarea curenta.
                                   </div>
