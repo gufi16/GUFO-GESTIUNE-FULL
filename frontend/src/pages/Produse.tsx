@@ -2589,17 +2589,34 @@ function getDefaultVat(list = vatRates) {
                       ) : null}
                     </div>
 
-                    <div style={checkBlock}>
-                      <label style={checkLabel}>
-                        <input
-                          type="checkbox"
-                          checked={form.isVisibleInPos}
-                          onChange={(e) => setForm((prev) => ({ ...prev, isVisibleInPos: e.target.checked }))}
-                        />
-                        <span>Vizibil in POS</span>
-                      </label>
-                      <div style={checkHint}>Daca este debifat, produsul nu apare in Android POS.</div>
-                    </div>
+                    {form.isVisibleInPos ? (
+                      <div style={checkBlock}>
+                        <label style={checkLabel}>
+                          <input
+                            type="checkbox"
+                            checked={form.isVisibleInPos}
+                            onChange={(e) => setForm((prev) => ({ ...prev, isVisibleInPos: e.target.checked }))}
+                          />
+                          <span>Vizibil in POS</span>
+                        </label>
+                        <div style={checkHint}>Daca este debifat, produsul nu apare in Android POS.</div>
+                      </div>
+                    ) : (
+                      <div
+                        style={{
+                          ...checkBlock,
+                          border: "1px solid #fde68a",
+                          background: "#fffbeb",
+                        }}
+                      >
+                        <div style={{ display: "grid", gap: 6 }}>
+                          <strong style={{ color: "#92400e", fontSize: 14 }}>Produs marcat doar cross-sell</strong>
+                          <div style={checkHint}>
+                            Pentru acest produs am ascuns controlul `Vizibil in POS`. El nu mai apare in categoriile din Gufo POS si ramane disponibil doar in popup-ul de extra.
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     <div style={checkBlock}>
                       <div style={{ display: "grid", gap: 10 }}>
