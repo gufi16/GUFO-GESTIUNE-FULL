@@ -400,7 +400,6 @@ export function ProductsCatalogPage({
       productOptions.filter(
         (option) =>
           option.id !== editingItem?.id &&
-          option.isActive !== false &&
           option.class !== "MATERIE_PRIMA" &&
           option.class !== "ALTE_MATERIALE"
       ),
@@ -426,7 +425,10 @@ export function ProductsCatalogPage({
     [unselectedCrossSellOptions]
   )
   const visibleCrossSellOptions = useMemo(
-    () => unselectedCrossSellOptions.filter((option) => option.isVisibleInPos !== false),
+    () =>
+      unselectedCrossSellOptions.filter(
+        (option) => option.isVisibleInPos !== false && option.isActive !== false
+      ),
     [unselectedCrossSellOptions]
   )
   const selectedCrossSellOptions = useMemo(
