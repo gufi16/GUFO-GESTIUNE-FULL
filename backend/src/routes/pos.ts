@@ -928,7 +928,23 @@ function mapCatalogProduct(req: Request, product: CatalogProductLike, isVatPayer
   const crossSellProducts = Array.isArray(product.crossSellLinks)
     ? product.crossSellLinks
         .map((entry) => {
-          const target = entry?.targetProduct;
+          const target = entry?.targetProduct as
+            | {
+                id?: string | null;
+                sku?: string | null;
+                name?: string | null;
+                imageUrl?: unknown;
+                price?: unknown;
+                posSortOrder?: unknown;
+                departmentId?: string | null;
+                categoryId?: string | null;
+                isSgr?: unknown;
+                sgrValue?: unknown;
+                vatRate?: { rate?: unknown; fiscalCode?: string | null } | null;
+                uom?: { code?: string | null; name?: string | null } | null;
+              }
+            | null
+            | undefined;
           const id = String(target?.id || "").trim();
           if (!id) return null;
           return {
@@ -938,6 +954,13 @@ function mapCatalogProduct(req: Request, product: CatalogProductLike, isVatPayer
             name: String(target?.name || "").trim() || null,
             image: resolveImageUrl(req, target?.imageUrl),
             price: toNumber(target?.price || 0),
+            vatRate: isVatPayer ? toNumber(target?.vatRate?.rate || 0) : 0,
+            fiscalCode: isVatPayer ? target?.vatRate?.fiscalCode ?? null : null,
+            um: String(target?.uom?.code || target?.uom?.name || "buc").trim() || "buc",
+            departmentId: String(target?.departmentId || effectiveDepartmentId || "").trim() || null,
+            categoryId: String(target?.categoryId || product.categoryId || "").trim() || null,
+            isSgr: Boolean(target?.isSgr),
+            sgrValue: Boolean(target?.isSgr) ? toNumber(target?.sgrValue || 0.5) : 0,
             posSortOrder: Math.max(0, Math.round(toNumber(target?.posSortOrder || entry?.sortOrder || 0))),
           };
         })
@@ -1108,6 +1131,22 @@ export async function buildCatalogPayload(req: Request, tenantId: string) {
               imageUrl: true,
               price: true,
               posSortOrder: true,
+              departmentId: true,
+              categoryId: true,
+              isSgr: true,
+              sgrValue: true,
+              vatRate: {
+                select: {
+                  rate: true,
+                  fiscalCode: true,
+                },
+              },
+              uom: {
+                select: {
+                  code: true,
+                  name: true,
+                },
+              },
             },
           },
         },
