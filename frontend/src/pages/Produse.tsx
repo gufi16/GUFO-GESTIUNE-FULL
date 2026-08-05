@@ -397,12 +397,7 @@ export function ProductsCatalogPage({
   )
   const availableCrossSellOptions = useMemo(
     () =>
-      productOptions.filter(
-        (option) =>
-          option.id !== editingItem?.id &&
-          option.class !== "MATERIE_PRIMA" &&
-          option.class !== "ALTE_MATERIALE"
-      ),
+      productOptions.filter((option) => option.id !== editingItem?.id),
     [editingItem?.id, productOptions]
   )
   const filteredCrossSellOptions = useMemo(() => {
