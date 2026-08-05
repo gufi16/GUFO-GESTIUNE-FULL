@@ -795,11 +795,32 @@ function buildPublicBaseUrl(req: Request) {
   return `${protocol}://${host}`.replace(/\/+$/, "").replace(/^http:\/\//i, "https://");
 }
 
+function buildPublicAssetBaseUrl(req: Request) {
+  const configured = normalizeText(process.env.PUBLIC_ASSET_BASE_URL);
+  if (configured) {
+    return configured
+      .replace(/\/+$/, "")
+      .replace(/^http:\/\//i, "https://");
+  }
+
+  const baseUrl = buildPublicBaseUrl(req);
+
+  try {
+    const parsed = new URL(baseUrl);
+    const hostname = parsed.hostname.trim().toLowerCase();
+    if (hostname.endsWith(".gufo.ink") && hostname !== "api.gufo.ink") {
+      return "https://api.gufo.ink";
+    }
+  } catch {}
+
+  return baseUrl;
+}
+
 function resolveImageUrl(req: Request, rawUrl: unknown) {
   const value = normalizeText(rawUrl);
   if (!value) return null;
 
-  const baseUrl = buildPublicBaseUrl(req);
+  const baseUrl = buildPublicAssetBaseUrl(req);
   const internalHostPattern =
     /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?/i;
   if (internalHostPattern.test(value)) {
@@ -807,7 +828,15 @@ function resolveImageUrl(req: Request, rawUrl: unknown) {
   }
 
   if (/^https?:\/\//i.test(value)) {
-    return value.replace(/^http:\/\//i, "https://");
+    const normalized = value.replace(/^http:\/\//i, "https://");
+    try {
+      const parsed = new URL(normalized);
+      const hostname = parsed.hostname.trim().toLowerCase();
+      if (hostname.endsWith(".gufo.ink") && hostname !== "api.gufo.ink" && parsed.pathname.startsWith("/uploads/")) {
+        return `https://api.gufo.ink${parsed.pathname}${parsed.search || ""}`;
+      }
+    } catch {}
+    return normalized;
   }
 
   if (value.startsWith("/")) {
