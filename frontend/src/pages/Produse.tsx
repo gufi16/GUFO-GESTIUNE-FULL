@@ -365,6 +365,7 @@ export function ProductsCatalogPage({
   const [classFilter, setClassFilter] = useState<string>(fixedClassValue || "ALL")
   const [barcodeFilter, setBarcodeFilter] = useState<"ALL" | "WITH" | "WITHOUT">("ALL")
   const [nextSku, setNextSku] = useState("")
+  const [crossSellSearch, setCrossSellSearch] = useState("")
 
   const [form, setForm] = useState<FormState>(emptyForm)
   const [recipeForm, setRecipeForm] = useState<RecipeForm>(emptyRecipeForm)
@@ -402,6 +403,24 @@ export function ProductsCatalogPage({
           option.class !== "ALTE_MATERIALE"
       ),
     [editingItem?.id, productOptions]
+  )
+  const filteredCrossSellOptions = useMemo(() => {
+    const needle = crossSellSearch.trim().toLowerCase()
+    if (!needle) return availableCrossSellOptions
+
+    return availableCrossSellOptions.filter((option) => {
+      const name = String(option.name || "").toLowerCase()
+      const sku = String(option.sku || "").toLowerCase()
+      const classLabel = String(CLASS_LABEL_MAP[option.class] || option.class || "").toLowerCase()
+      return name.includes(needle) || sku.includes(needle) || classLabel.includes(needle)
+    })
+  }, [availableCrossSellOptions, crossSellSearch])
+  const selectedCrossSellOptions = useMemo(
+    () =>
+      form.crossSellProductIds
+        .map((id) => availableCrossSellOptions.find((option) => option.id === id))
+        .filter((option): option is ProductOption => Boolean(option)),
+    [availableCrossSellOptions, form.crossSellProductIds]
   )
   const categoryPlacementMode = useMemo<"category" | "subcategory">(() => {
     if (!form.categoryId) return "category"
@@ -622,6 +641,7 @@ function getDefaultVat(list = vatRates) {
     setMessage("")
     setNcSuggestion(null)
     setNcCodeManual(false)
+    setCrossSellSearch("")
     setPreviewImageFailed(false)
     setActiveProductTab("general")
     setLivePreviewUrl("")
@@ -666,6 +686,7 @@ function getDefaultVat(list = vatRates) {
     setMessage("")
     setNcSuggestion(null)
     setNcCodeManual(false)
+    setCrossSellSearch("")
     setPreviewImageFailed(false)
     setActiveProductTab("general")
     setLivePreviewUrl("")
@@ -1773,11 +1794,81 @@ function getDefaultVat(list = vatRates) {
                             padding: "12px 14px",
                             display: "grid",
                             gap: 10,
-                            maxHeight: 240,
-                            overflowY: "auto",
                           }}
                         >
                           {availableCrossSellOptions.length ? (
+                            <>
+                              <input
+                                value={crossSellSearch}
+                                onChange={(e) => setCrossSellSearch(e.target.value)}
+                                placeholder="Cauta produs cross-sell..."
+                                style={input}
+                              />
+                              {selectedCrossSellOptions.length ? (
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    flexWrap: "wrap",
+                                    gap: 8,
+                                  }}
+                                >
+                                  {selectedCrossSellOptions.map((option) => (
+                                    <button
+                                      key={option.id}
+                                      type="button"
+                                      onClick={() =>
+                                        setForm((prev) => ({
+                                          ...prev,
+                                          crossSellProductIds: prev.crossSellProductIds.filter((id) => id !== option.id),
+                                        }))
+                                      }
+                                      style={{
+                                        border: "1px solid #bfdbfe",
+                                        background: "#e8f2ff",
+                                        color: "#1d4ed8",
+                                        borderRadius: 999,
+                                        padding: "6px 10px",
+                                        fontSize: 13,
+                                        fontWeight: 700,
+                                        cursor: "pointer",
+                                      }}
+                                    >
+                                      {option.name} x
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : null}
+                              <select
+                                value=""
+                                onChange={(e) => {
+                                  const nextId = String(e.target.value || "").trim()
+                                  if (!nextId) return
+                                  setForm((prev) => ({
+                                    ...prev,
+                                    crossSellProductIds: prev.crossSellProductIds.includes(nextId)
+                                      ? prev.crossSellProductIds
+                                      : [...prev.crossSellProductIds, nextId],
+                                  }))
+                                  setCrossSellSearch("")
+                                }}
+                                style={input}
+                              >
+                                <option value="">
+                                  {filteredCrossSellOptions.filter((option) => !form.crossSellProductIds.includes(option.id)).length
+                                    ? "Selecteaza produs pentru popup"
+                                    : "Nu exista rezultate pentru cautarea curenta"}
+                                </option>
+                                {filteredCrossSellOptions
+                                  .filter((option) => !form.crossSellProductIds.includes(option.id))
+                                  .map((option) => (
+                                    <option key={option.id} value={option.id}>
+                                      {option.name} - {option.sku} - {CLASS_LABEL_MAP[option.class] || option.class.toLowerCase()}
+                                    </option>
+                                  ))}
+                              </select>
+                            </>
+                          ) : null}
+                          {false ? (
                             availableCrossSellOptions.map((option) => {
                               const checked = form.crossSellProductIds.includes(option.id)
                               return (
