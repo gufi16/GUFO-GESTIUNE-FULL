@@ -242,6 +242,7 @@ model Tenant {
   categories  Category[]
   skuCounters SkuCounter[]
   products    Product[]
+  productCrossSells ProductCrossSell[]
   suppliers   Supplier[]
   customers   Customer[]
   recipes     Recipe[]
@@ -875,6 +876,8 @@ model Product {
   marketplaceMappings MarketplaceProductMapping[]
   incomingEInvoiceItems IncomingEInvoiceItem[]
   terminalAccesses      TerminalProductAccess[]
+  crossSellLinks        ProductCrossSell[]        @relation("ProductCrossSellSource")
+  crossSellLinkedFrom   ProductCrossSell[]        @relation("ProductCrossSellTarget")
 
     @@unique([tenantId, companyId, sku])
     @@index([tenantId])
@@ -884,8 +887,27 @@ model Product {
     @@index([departmentId])
     @@index([categoryId])
     @@index([posSortOrder])
-    @@index([purchaseUomId])
+  @@index([purchaseUomId])
   @@index([accountingStockTypeId])
+}
+
+model ProductCrossSell {
+  id              String   @id @default(cuid())
+  tenantId        String
+  sourceProductId String
+  targetProductId String
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant        Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sourceProduct Product @relation("ProductCrossSellSource", fields: [sourceProductId], references: [id], onDelete: Cascade)
+  targetProduct Product @relation("ProductCrossSellTarget", fields: [targetProductId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceProductId, targetProductId])
+  @@index([tenantId])
+  @@index([sourceProductId, sortOrder])
+  @@index([targetProductId])
 }
 
 model TerminalDepartmentAccess {

@@ -30,6 +30,15 @@ type Product = {
   isSgr?: boolean
   sgrValue?: number
   productionMode?: "AUTO" | "MANUAL"
+  crossSellProductIds?: string[]
+  crossSellProducts?: Array<{
+    id: string
+    sku?: string | null
+    name?: string | null
+    imageUrl?: string | null
+    price?: number
+    class?: string | null
+  }>
   trackLot?: boolean
   trackExpiry?: boolean
   costMethod?: "AVG" | "FIFO" | "FEFO"
@@ -98,6 +107,7 @@ type FormState = {
   costMethod: "AVG" | "FIFO" | "FEFO"
   requiresRecipe: boolean
   posSortOrder: string
+  crossSellProductIds: string[]
 }
 
 type RecipeLine = {
@@ -203,7 +213,8 @@ const emptyForm: FormState = {
   trackExpiry: false,
   costMethod: "AVG",
   requiresRecipe: false,
-  posSortOrder: "0"
+  posSortOrder: "0",
+  crossSellProductIds: []
 }
 
 const emptyRecipeForm: RecipeForm = {
@@ -381,6 +392,17 @@ export function ProductsCatalogPage({
       ),
     [categories, selectedMainCategoryId]
   )
+  const availableCrossSellOptions = useMemo(
+    () =>
+      productOptions.filter(
+        (option) =>
+          option.id !== editingItem?.id &&
+          option.isActive !== false &&
+          option.class !== "MATERIE_PRIMA" &&
+          option.class !== "ALTE_MATERIALE"
+      ),
+    [editingItem?.id, productOptions]
+  )
   const categoryPlacementMode = useMemo<"category" | "subcategory">(() => {
     if (!form.categoryId) return "category"
     const current = categories.find((item) => item.id === form.categoryId)
@@ -484,6 +506,16 @@ export function ProductsCatalogPage({
         ? productsData.items.map((item: any) => ({
             ...item,
             imageUrl: normalizeHostedImageUrl(item?.imageUrl || ""),
+            crossSellProducts: Array.isArray(item?.crossSellProducts)
+              ? item.crossSellProducts.map((entry: any) => ({
+                  ...entry,
+                  imageUrl: normalizeHostedImageUrl(entry?.imageUrl || ""),
+                  price: toNumberSafe(entry?.price || 0),
+                }))
+              : [],
+            crossSellProductIds: Array.isArray(item?.crossSellProductIds)
+              ? item.crossSellProductIds.map((value: any) => String(value))
+              : [],
             price: toNumberSafe(item?.price),
             costPrice: toNumberSafe(item?.costPrice),
             purchaseFactor: toNumberSafe(item?.purchaseFactor || 1),
@@ -583,7 +615,8 @@ function getDefaultVat(list = vatRates) {
       trackExpiry: false,
       costMethod: "AVG",
       requiresRecipe: defaultClass === "PRODUS_FIN" || defaultClass === "SEMIFABRICATE",
-      posSortOrder: "0"
+      posSortOrder: "0",
+      crossSellProductIds: []
     })
     setError("")
     setMessage("")
@@ -626,7 +659,8 @@ function getDefaultVat(list = vatRates) {
       trackExpiry: item.trackExpiry === true,
       costMethod: item.costMethod === "FEFO" ? "FEFO" : item.costMethod === "FIFO" ? "FIFO" : "AVG",
       requiresRecipe: item.requiresRecipe === true,
-      posSortOrder: String(Math.max(0, Math.round(Number(item.posSortOrder || 0))))
+      posSortOrder: String(Math.max(0, Math.round(Number(item.posSortOrder || 0)))),
+      crossSellProductIds: Array.isArray(item.crossSellProductIds) ? item.crossSellProductIds : []
     })
     setError("")
     setMessage("")
@@ -780,7 +814,8 @@ function getDefaultVat(list = vatRates) {
           trackExpiry: form.trackExpiry,
           costMethod: form.costMethod,
           requiresRecipe: recipeEligibleClasses.includes(fixedClassValue || form.class) ? form.requiresRecipe : false,
-          posSortOrder: Math.max(0, Math.round(toNumberSafe(form.posSortOrder || 0)))
+          posSortOrder: Math.max(0, Math.round(toNumberSafe(form.posSortOrder || 0))),
+          crossSellProductIds: form.crossSellProductIds
         })
       })
 
@@ -1727,6 +1762,70 @@ function getDefaultVat(list = vatRates) {
                         Pozitia ordoneaza produsul in categoria sau subcategoria aleasa din Gufo POS. `0` lasa ordinea alfabetica.
                       </div>
                     </Field>
+
+                    {!form.isMenu ? (
+                      <Field label="Produse cross-sell">
+                        <div
+                          style={{
+                            border: "1px solid #dbe5f0",
+                            background: "#f8fafc",
+                            borderRadius: 14,
+                            padding: "12px 14px",
+                            display: "grid",
+                            gap: 10,
+                            maxHeight: 240,
+                            overflowY: "auto",
+                          }}
+                        >
+                          {availableCrossSellOptions.length ? (
+                            availableCrossSellOptions.map((option) => {
+                              const checked = form.crossSellProductIds.includes(option.id)
+                              return (
+                                <label
+                                  key={option.id}
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 10,
+                                    padding: "8px 10px",
+                                    borderRadius: 12,
+                                    background: checked ? "#e8f2ff" : "#ffffff",
+                                    border: checked ? "1px solid #93c5fd" : "1px solid #e2e8f0",
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={(e) =>
+                                      setForm((prev) => ({
+                                        ...prev,
+                                        crossSellProductIds: e.target.checked
+                                          ? [...prev.crossSellProductIds, option.id]
+                                          : prev.crossSellProductIds.filter((id) => id !== option.id),
+                                      }))
+                                    }
+                                  />
+                                  <div style={{ display: "grid", gap: 2 }}>
+                                    <strong>{option.name}</strong>
+                                    <span style={fieldHint}>
+                                      {option.sku} · {CLASS_LABEL_MAP[option.class] || option.class.toLowerCase()}
+                                    </span>
+                                  </div>
+                                </label>
+                              )
+                            })
+                          ) : (
+                            <div style={fieldHint}>
+                              Nu exista inca produse eligibile pentru popup-ul de extra.
+                            </div>
+                          )}
+                        </div>
+                        <div style={fieldHint}>
+                          Dupa ce operatorul alege produsul in Gufo POS, apare popup-ul cu aceste produse extra. Daca nu selecteaza nimic, bonul ramane cu produsul simplu.
+                        </div>
+                      </Field>
+                    ) : null}
 
                     {form.isMenu ? (
                       <Field label="Categorie meniu POS">

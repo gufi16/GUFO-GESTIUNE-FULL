@@ -58,6 +58,19 @@ type ProductLike = {
   vatRate?: ProductVatRateLike | null
   barcodes?: Array<{ id?: string; barcode?: unknown }> | null
   terminalAccesses?: Array<{ terminalId?: string | null }> | null
+  crossSellLinks?: Array<{
+    sortOrder?: unknown
+    targetProduct?: {
+      id?: string | null
+      sku?: string | null
+      name?: string | null
+      imageUrl?: string | null
+      price?: unknown
+      class?: string | null
+      isActive?: boolean | null
+      isVisibleInPos?: boolean | null
+    } | null
+  }> | null
 }
 
 type RecipeIngredientLike = ProductLike & {
@@ -116,6 +129,32 @@ export function toNumber(value: unknown) {
 export function serializeProduct(item: ProductLike | null | undefined) {
   if (!item) return item
 
+  const crossSellProducts = Array.isArray(item.crossSellLinks)
+    ? item.crossSellLinks
+        .map((entry) => {
+          const target = entry?.targetProduct
+          const id = String(target?.id || "").trim()
+          if (!id) return null
+          return {
+            id,
+            sku: String(target?.sku || "").trim(),
+            name: String(target?.name || "").trim(),
+            imageUrl: target?.imageUrl || null,
+            price: toNumber(target?.price || 0),
+            class: String(target?.class || "").trim() || null,
+            isActive: target?.isActive !== false,
+            isVisibleInPos: target?.isVisibleInPos !== false,
+            sortOrder: Math.max(0, Math.round(toNumber(entry?.sortOrder || 0))),
+          }
+        })
+        .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+        .sort((left, right) => {
+          const orderDiff = left.sortOrder - right.sortOrder
+          if (orderDiff != 0) return orderDiff
+          return left.name.localeCompare(right.name, "ro")
+        })
+    : []
+
   return {
     ...item,
     price: toNumber(item.price),
@@ -146,6 +185,8 @@ export function serializeProduct(item: ProductLike | null | undefined) {
     terminalIds: Array.isArray(item.terminalAccesses)
       ? item.terminalAccesses.map((entry) => String(entry?.terminalId || "").trim()).filter(Boolean)
       : [],
+    crossSellProducts,
+    crossSellProductIds: crossSellProducts.map((entry) => entry.id),
   }
 }
 

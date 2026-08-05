@@ -133,6 +133,22 @@ function normalizeBarcodeList(value: unknown) {
   return normalized
 }
 
+function normalizeCrossSellProductIds(value: unknown) {
+  const rawValues = Array.isArray(value) ? value : value == null ? [] : [value]
+  const seen = new Set<string>()
+  const normalized: string[] = []
+
+  for (const raw of rawValues) {
+    const text = String(raw || "").trim()
+    if (!text) continue
+    if (seen.has(text)) continue
+    seen.add(text)
+    normalized.push(text)
+  }
+
+  return normalized
+}
+
 function normalizeProductPosSortOrder(value: unknown) {
   const parsed = Number(value)
   if (!Number.isFinite(parsed)) return 0
@@ -197,6 +213,12 @@ router.get("/api/v1/products", async (req: AuthedRequest, res) => {
             },
           },
         }
+      },
+      crossSellLinks: {
+        include: {
+          targetProduct: true,
+        },
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }]
       },
       recipe: {
         include: {
@@ -294,6 +316,7 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
   const posMenuCategory = requestedIsMenu ? requestedPosMenuCategory : null
   const posSortOrder = normalizeProductPosSortOrder(req.body?.posSortOrder)
   const requestedBarcodes = normalizeBarcodeList(req.body?.barcodes ?? req.body?.barcode)
+  const requestedCrossSellProductIds = normalizeCrossSellProductIds(req.body?.crossSellProductIds)
 
   if (!ALL_PRODUCT_CLASSES.includes(classValue)) {
     return res.status(400).json({ ok: false, error: "Clasificare produs invalida." })
@@ -379,7 +402,7 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
     }
   }
 
-  const [vatRate, fallbackVatRate, uom, purchaseUom, category, department] = await Promise.all([
+  const [vatRate, fallbackVatRate, uom, purchaseUom, category, department, crossSellProducts] = await Promise.all([
     vatRateId
       ? prisma.vatRate.findFirst({
           where: {
@@ -435,7 +458,18 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
             ...buildCompanyScopedTenantWhere(tenantId, companyId)
           }
         })
-      : Promise.resolve(null)
+      : Promise.resolve(null),
+    requestedCrossSellProductIds.length
+      ? prisma.product.findMany({
+          where: {
+            id: { in: requestedCrossSellProductIds },
+            tenantId,
+            companyId,
+            isActive: true,
+          },
+          select: { id: true },
+        })
+      : Promise.resolve([])
   ])
 
   if (isVatPayer && !vatRate) {
@@ -468,6 +502,10 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
 
   if (requestedDepartmentId && !department) {
     return res.status(404).json({ ok: false, error: "Departamentul nu exista." })
+  }
+
+  if (crossSellProducts.length !== requestedCrossSellProductIds.length) {
+    return res.status(400).json({ ok: false, error: "Unele produse cross-sell nu exista sau nu apartin companiei active." })
   }
 
   try {
@@ -568,6 +606,19 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
         })
       }
 
+      if (requestedCrossSellProductIds.length) {
+        await tx.productCrossSell.createMany({
+          data: requestedCrossSellProductIds
+            .filter((targetProductId) => targetProductId != created.id)
+            .map((targetProductId, index) => ({
+              tenantId,
+              sourceProductId: created.id,
+              targetProductId,
+              sortOrder: index + 1,
+            })),
+        })
+      }
+
       const withBarcodes = await tx.product.findUniqueOrThrow({
         where: { id: created.id },
         include: {
@@ -593,6 +644,12 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
                 },
               },
             }
+          },
+          crossSellLinks: {
+            include: {
+              targetProduct: true,
+            },
+            orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
           },
           recipe: {
             include: {
@@ -679,6 +736,7 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   const requestedPosSortOrder = req.body?.posSortOrder
   const shouldUpdateBarcodes = hasBarcodePayload(req.body as Record<string, unknown> | undefined)
   const requestedBarcodes = normalizeBarcodeList(req.body?.barcodes ?? req.body?.barcode)
+  const requestedCrossSellProductIds = normalizeCrossSellProductIds(req.body?.crossSellProductIds)
   const terminalIds = await resolveProductTerminalIds(tenantId, companyId, req.body)
 
   if (!ALL_PRODUCT_CLASSES.includes(classValue)) {
@@ -774,7 +832,7 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   const finalUpdatedProductionMode = productionMode
   const finalUpdatedCostMethod = costMethod
 
-  const [vatRate, fallbackVatRate, uom, purchaseUom, category, department, existingRecipe] = await Promise.all([
+  const [vatRate, fallbackVatRate, uom, purchaseUom, category, department, existingRecipe, crossSellProducts] = await Promise.all([
     vatRateId
       ? prisma.vatRate.findFirst({
           where: {
@@ -837,7 +895,18 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
         companyId,
         productId: id
       }
-    })
+    }),
+    requestedCrossSellProductIds.length
+      ? prisma.product.findMany({
+          where: {
+            id: { in: requestedCrossSellProductIds },
+            tenantId,
+            companyId,
+            isActive: true,
+          },
+          select: { id: true },
+        })
+      : Promise.resolve([])
   ])
 
   if (isVatPayer && !vatRate) {
@@ -862,6 +931,14 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
 
   if (requestedDepartmentId && !department) {
     return res.status(404).json({ ok: false, error: "Departamentul nu exista." })
+  }
+
+  if (requestedCrossSellProductIds.some((productId) => productId === id)) {
+    return res.status(400).json({ ok: false, error: "Produsul nu poate avea cross-sell catre el insusi." })
+  }
+
+  if (crossSellProducts.length !== requestedCrossSellProductIds.length) {
+    return res.status(400).json({ ok: false, error: "Unele produse cross-sell nu exista sau nu apartin companiei active." })
   }
 
   try {
@@ -957,6 +1034,23 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
         })
       }
 
+      await tx.productCrossSell.deleteMany({
+        where: {
+          sourceProductId: id,
+        },
+      })
+
+      if (requestedCrossSellProductIds.length) {
+        await tx.productCrossSell.createMany({
+          data: requestedCrossSellProductIds.map((targetProductId, index) => ({
+            tenantId,
+            sourceProductId: id,
+            targetProductId,
+            sortOrder: index + 1,
+          })),
+        })
+      }
+
       return tx.product.findUniqueOrThrow({
         where: { id },
         include: {
@@ -982,6 +1076,12 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
                 },
               },
             }
+          },
+          crossSellLinks: {
+            include: {
+              targetProduct: true,
+            },
+            orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
           },
           recipe: {
             include: {

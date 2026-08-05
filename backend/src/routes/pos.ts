@@ -162,6 +162,17 @@ type CatalogProductLike = {
   recipe?: {
     items?: CatalogRecipeItemLike[] | null;
   } | null;
+  crossSellLinks?: Array<{
+    sortOrder?: unknown;
+    targetProduct?: {
+      id?: string | null;
+      sku?: string | null;
+      name?: string | null;
+      imageUrl?: unknown;
+      price?: unknown;
+      posSortOrder?: unknown;
+    } | null;
+  }> | null;
 };
 
 type MarketplaceIntegrationLike = {
@@ -914,6 +925,24 @@ function mapCatalogProduct(req: Request, product: CatalogProductLike, isVatPayer
           })
           .filter(Boolean)
       : [];
+  const crossSellProducts = Array.isArray(product.crossSellLinks)
+    ? product.crossSellLinks
+        .map((entry) => {
+          const target = entry?.targetProduct;
+          const id = String(target?.id || "").trim();
+          if (!id) return null;
+          return {
+            id,
+            code: String(target?.sku || id).trim() || id,
+            sku: String(target?.sku || "").trim() || null,
+            name: String(target?.name || "").trim() || null,
+            image: resolveImageUrl(req, target?.imageUrl),
+            price: toNumber(target?.price || 0),
+            posSortOrder: Math.max(0, Math.round(toNumber(target?.posSortOrder || entry?.sortOrder || 0))),
+          };
+        })
+        .filter(Boolean)
+    : [];
 
   return {
     id: product.id,
@@ -970,6 +999,7 @@ function mapCatalogProduct(req: Request, product: CatalogProductLike, isVatPayer
     sgrLabel: product.isSgr ? "SGR" : null,
     isMenu: Boolean(product.isMenu),
     menuComponents,
+    crossSellProducts,
     barcodes: Array.isArray(product.barcodes)
       ? product.barcodes.map((barcode: { barcode?: string | null }) => barcode.barcode)
       : [],
@@ -1067,6 +1097,21 @@ export async function buildCatalogPayload(req: Request, tenantId: string) {
             },
           },
         },
+      },
+      crossSellLinks: {
+        include: {
+          targetProduct: {
+            select: {
+              id: true,
+              sku: true,
+              name: true,
+              imageUrl: true,
+              price: true,
+              posSortOrder: true,
+            },
+          },
+        },
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
       },
     },
     orderBy: { name: "asc" },
