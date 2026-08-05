@@ -802,21 +802,27 @@ function resolveImageUrl(req: Request, rawUrl: unknown) {
   if (!value) return null;
 
   const baseUrl = buildPublicBaseUrl(req);
+  const assetBaseUrl = baseUrl.replace(
+    /:\/\/(?!api\.gufo\.ink)([^/]+\.gufo\.ink)(:\d+)?/i,
+    "://api.gufo.ink"
+  );
   const internalHostPattern =
     /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?/i;
   if (internalHostPattern.test(value)) {
-    return value.replace(internalHostPattern, baseUrl).replace(/^http:\/\//i, "https://");
+    return value.replace(internalHostPattern, assetBaseUrl).replace(/^http:\/\//i, "https://");
   }
 
   if (/^https?:\/\//i.test(value)) {
-    return value.replace(/^http:\/\//i, "https://");
+    return value
+      .replace(/^http:\/\//i, "https://")
+      .replace(/:\/\/(?!api\.gufo\.ink)([^/]+\.gufo\.ink)(:\d+)?/i, "://api.gufo.ink");
   }
 
   if (value.startsWith("/")) {
-    return `${baseUrl}${value}`.replace(/^http:\/\//i, "https://");
+    return `${assetBaseUrl}${value}`.replace(/^http:\/\//i, "https://");
   }
 
-  return `${baseUrl}/${value}`.replace(/^http:\/\//i, "https://");
+  return `${assetBaseUrl}/${value}`.replace(/^http:\/\//i, "https://");
 }
 
 function buildSgrLine(product: CatalogProductLike | null | undefined, qty: number) {
