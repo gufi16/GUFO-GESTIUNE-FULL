@@ -366,6 +366,7 @@ export function ProductsCatalogPage({
   const [barcodeFilter, setBarcodeFilter] = useState<"ALL" | "WITH" | "WITHOUT">("ALL")
   const [nextSku, setNextSku] = useState("")
   const [crossSellSearch, setCrossSellSearch] = useState("")
+  const [crossSellDropdownOpen, setCrossSellDropdownOpen] = useState(false)
 
   const [form, setForm] = useState<FormState>(emptyForm)
   const [recipeForm, setRecipeForm] = useState<RecipeForm>(emptyRecipeForm)
@@ -642,6 +643,7 @@ function getDefaultVat(list = vatRates) {
     setNcSuggestion(null)
     setNcCodeManual(false)
     setCrossSellSearch("")
+    setCrossSellDropdownOpen(false)
     setPreviewImageFailed(false)
     setActiveProductTab("general")
     setLivePreviewUrl("")
@@ -687,6 +689,7 @@ function getDefaultVat(list = vatRates) {
     setNcSuggestion(null)
     setNcCodeManual(false)
     setCrossSellSearch("")
+    setCrossSellDropdownOpen(false)
     setPreviewImageFailed(false)
     setActiveProductTab("general")
     setLivePreviewUrl("")
@@ -1793,10 +1796,189 @@ function getDefaultVat(list = vatRates) {
                             borderRadius: 14,
                             padding: "12px 14px",
                             display: "grid",
-                            gap: 10,
+                            gap: 12,
+                            position: "relative",
                           }}
                         >
-                          {availableCrossSellOptions.length ? (
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              gap: 12,
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            <div style={{ display: "grid", gap: 2 }}>
+                              <strong style={{ color: "#17324d", fontSize: 14 }}>
+                                {selectedCrossSellOptions.length
+                                  ? `${selectedCrossSellOptions.length} produs${selectedCrossSellOptions.length === 1 ? "" : "e"} selectat${selectedCrossSellOptions.length === 1 ? "" : "e"}`
+                                  : "Niciun produs selectat"}
+                              </strong>
+                              <span style={fieldHint}>
+                                Produsele apar in popup-ul de extra din Gufo POS.
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextOpen = !crossSellDropdownOpen
+                                setCrossSellDropdownOpen(nextOpen)
+                                if (nextOpen) setCrossSellSearch("")
+                              }}
+                              disabled={!availableCrossSellOptions.length}
+                              style={{
+                                ...btnSecondarySmall,
+                                minWidth: 220,
+                                justifyContent: "center",
+                                opacity: availableCrossSellOptions.length ? 1 : 0.6,
+                                cursor: availableCrossSellOptions.length ? "pointer" : "not-allowed",
+                              }}
+                            >
+                              {crossSellDropdownOpen ? "Inchide selectorul" : "Adauga produse cross-sell"}
+                            </button>
+                          </div>
+
+                          <label
+                            style={{
+                              display: "flex",
+                              alignItems: "flex-start",
+                              gap: 10,
+                              padding: "10px 12px",
+                              borderRadius: 12,
+                              border: "1px solid #fde68a",
+                              background: "#fffbeb",
+                              cursor: "pointer",
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={!form.isVisibleInPos}
+                              onChange={(e) =>
+                                setForm((prev) => ({
+                                  ...prev,
+                                  isVisibleInPos: !e.target.checked,
+                                }))
+                              }
+                            />
+                            <div style={{ display: "grid", gap: 4 }}>
+                              <strong style={{ color: "#92400e", fontSize: 13 }}>Doar cross-sell</strong>
+                              <span style={checkHint}>
+                                Daca bifezi asta, produsul nu mai apare in nicio categorie din Gufo POS. Ramane disponibil doar in popup-ul de extra.
+                              </span>
+                            </div>
+                          </label>
+
+                          {selectedCrossSellOptions.length ? (
+                            <div
+                              style={{
+                                display: "flex",
+                                flexWrap: "wrap",
+                                gap: 8,
+                              }}
+                            >
+                              {selectedCrossSellOptions.map((option) => (
+                                <button
+                                  key={option.id}
+                                  type="button"
+                                  onClick={() =>
+                                    setForm((prev) => ({
+                                      ...prev,
+                                      crossSellProductIds: prev.crossSellProductIds.filter((id) => id !== option.id),
+                                    }))
+                                  }
+                                  style={{
+                                    border: "1px solid #bfdbfe",
+                                    background: "#e8f2ff",
+                                    color: "#1d4ed8",
+                                    borderRadius: 999,
+                                    padding: "6px 10px",
+                                    fontSize: 13,
+                                    fontWeight: 700,
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  {option.name} x
+                                </button>
+                              ))}
+                            </div>
+                          ) : null}
+
+                          {crossSellDropdownOpen ? (
+                            <div
+                              style={{
+                                border: "1px solid #dbe5f0",
+                                background: "#ffffff",
+                                borderRadius: 14,
+                                padding: 12,
+                                boxShadow: "0 18px 36px rgba(15, 23, 42, 0.12)",
+                                display: "grid",
+                                gap: 10,
+                              }}
+                            >
+                              <input
+                                value={crossSellSearch}
+                                onChange={(e) => setCrossSellSearch(e.target.value)}
+                                placeholder="Cauta produs cross-sell..."
+                                style={input}
+                              />
+                              <div
+                                style={{
+                                  maxHeight: 220,
+                                  overflowY: "auto",
+                                  display: "grid",
+                                  gap: 8,
+                                  paddingRight: 4,
+                                }}
+                              >
+                                {filteredCrossSellOptions
+                                  .filter((option) => !form.crossSellProductIds.includes(option.id))
+                                  .map((option) => (
+                                    <button
+                                      key={option.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setForm((prev) => ({
+                                          ...prev,
+                                          crossSellProductIds: prev.crossSellProductIds.includes(option.id)
+                                            ? prev.crossSellProductIds
+                                            : [...prev.crossSellProductIds, option.id],
+                                        }))
+                                        setCrossSellSearch("")
+                                      }}
+                                      style={{
+                                        textAlign: "left",
+                                        border: "1px solid #e2e8f0",
+                                        background: "#f8fafc",
+                                        borderRadius: 12,
+                                        padding: "10px 12px",
+                                        display: "grid",
+                                        gap: 3,
+                                        cursor: "pointer",
+                                      }}
+                                    >
+                                      <strong style={{ color: "#17324d", fontSize: 14 }}>{option.name}</strong>
+                                      <span style={fieldHint}>
+                                        {option.sku} · {CLASS_LABEL_MAP[option.class] || option.class.toLowerCase()}
+                                      </span>
+                                    </button>
+                                  ))}
+                                {!filteredCrossSellOptions.filter((option) => !form.crossSellProductIds.includes(option.id)).length ? (
+                                  <div style={fieldHint}>
+                                    Nu exista rezultate pentru cautarea curenta.
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+                          ) : null}
+
+                          {!availableCrossSellOptions.length ? (
+                            <div style={fieldHint}>
+                              Nu exista inca produse eligibile pentru popup-ul de extra.
+                            </div>
+                          ) : null}
+
+                          {false && availableCrossSellOptions.length ? (
                             <>
                               <input
                                 value={crossSellSearch}
@@ -3220,7 +3402,7 @@ const modalOverlay: CSSProperties = {
 
 const modalCard: CSSProperties = {
   width: "100%",
-  maxWidth: 1380,
+  maxWidth: 1240,
   background: "#ffffff",
   borderRadius: 16,
   padding: 16,
