@@ -1202,7 +1202,79 @@ export async function buildCatalogPayload(req: Request, tenantId: string) {
       })
     : rawProducts;
 
-  const sortedVisibleProducts = [...visibleProducts].sort((left, right) => {
+  const crossSellTargetIds = Array.from(
+    new Set(
+      visibleProducts.flatMap((product) =>
+        Array.isArray(product.crossSellLinks)
+          ? product.crossSellLinks
+              .map((entry) => String(entry?.targetProduct?.id || "").trim())
+              .filter(Boolean)
+          : []
+      )
+    )
+  );
+
+  const hiddenCrossSellProducts = crossSellTargetIds.length
+    ? await prisma.product.findMany({
+        where: {
+          isActive: true,
+          ...scopedWhere,
+          id: { in: crossSellTargetIds },
+        },
+        include: {
+          vatRate: true,
+          uom: true,
+          department: true,
+          category: {
+            include: {
+              department: true,
+            },
+          },
+          barcodes: true,
+          recipe: {
+            include: {
+              items: {
+                include: {
+                  ingredient: {
+                    select: {
+                      id: true,
+                      sku: true,
+                      name: true,
+                    },
+                  },
+                },
+                orderBy: {
+                  sortOrder: "asc",
+                },
+              },
+            },
+          },
+          crossSellLinks: {
+            include: {
+              targetProduct: {
+                select: {
+                  id: true,
+                  sku: true,
+                  name: true,
+                  imageUrl: true,
+                  price: true,
+                  posSortOrder: true,
+                },
+              },
+            },
+            orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+          },
+        },
+        orderBy: { name: "asc" },
+      })
+    : [];
+
+  const syncedProducts = [
+    ...visibleProducts,
+    ...hiddenCrossSellProducts.filter((product) => !visibleProducts.some((visible) => visible.id === product.id)),
+  ];
+
+  const sortedVisibleProducts = [...syncedProducts].sort((left, right) => {
     const leftOrder = Math.max(0, Math.round(toNumber(left.posSortOrder || 0)));
     const rightOrder = Math.max(0, Math.round(toNumber(right.posSortOrder || 0)));
     const leftBucket = leftOrder > 0 ? 0 : 1;
