@@ -802,14 +802,10 @@ function resolveImageUrl(req: Request, rawUrl: unknown) {
   if (!value) return null;
 
   const baseUrl = buildPublicBaseUrl(req);
-  const apiBaseUrl = baseUrl
-    .replace("://app.gufo.ink", "://api.gufo.ink")
-    .replace("://test.gufo.ink", "://api.gufo.ink");
-
   const internalHostPattern =
-    /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|api\.gufo\.ink)(:\d+)?/i;
+    /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?/i;
   if (internalHostPattern.test(value)) {
-    return value.replace(internalHostPattern, apiBaseUrl).replace(/^http:\/\//i, "https://");
+    return value.replace(internalHostPattern, baseUrl).replace(/^http:\/\//i, "https://");
   }
 
   if (/^https?:\/\//i.test(value)) {
@@ -817,10 +813,10 @@ function resolveImageUrl(req: Request, rawUrl: unknown) {
   }
 
   if (value.startsWith("/")) {
-    return `${apiBaseUrl}${value}`.replace(/^http:\/\//i, "https://");
+    return `${baseUrl}${value}`.replace(/^http:\/\//i, "https://");
   }
 
-  return `${apiBaseUrl}/${value}`.replace(/^http:\/\//i, "https://");
+  return `${baseUrl}/${value}`.replace(/^http:\/\//i, "https://");
 }
 
 function buildSgrLine(product: CatalogProductLike | null | undefined, qty: number) {
