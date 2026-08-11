@@ -1383,15 +1383,14 @@ function getDefaultVat(list = vatRates) {
               <table style={table}>
                 <thead>
                   <tr>
-                    <th style={{ ...th, width: 68 }}>Poza</th>
+                    <th style={{ ...th, width: 62 }}>Poza</th>
                     <th style={{ ...th, width: "22%" }}>Produs</th>
-                    <th style={{ ...th, width: "20%" }}>Structura</th>
-                    <th style={{ ...th, width: "14%" }}>UM / ambalaj</th>
-                    <th style={{ ...th, width: "14%" }}>Fiscal / pret</th>
-                    <th style={{ ...th, width: "14%" }}>POS</th>
-                    <th style={{ ...th, width: "10%" }}>Control</th>
-                    <th style={{ ...th, width: "6%" }}>Activ</th>
-                    <th style={{ ...th, width: 150 }}>Actiuni</th>
+                    <th style={{ ...th, width: "19%" }}>Organizare</th>
+                    <th style={{ ...th, width: "16%" }}>Comercial</th>
+                    <th style={{ ...th, width: "16%" }}>Operare</th>
+                    <th style={{ ...th, width: "10%" }}>Status</th>
+                    <th style={{ ...th, width: "5%" }}>Activ</th>
+                    <th style={{ ...th, width: 132 }}>Actiuni</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1418,24 +1417,29 @@ function getDefaultVat(list = vatRates) {
                           <span style={cellMeta}>
                             {item.barcodes?.[0]?.barcode ? `Cod de bare: ${item.barcodes[0].barcode}` : "Fara cod de bare"}
                           </span>
+                          <div style={cellPillsWrap}>
+                            <span style={cellPill}>{item.isMenu ? "Meniu" : "Produs"}</span>
+                            <span style={cellPill}>{CLASS_LABEL_MAP[item.class] || item.class}</span>
+                          </div>
                         </div>
                       </td>
                       <td style={td}>
                         <div style={cellStack}>
-                          <span>{item.isMenu ? "Meniu" : "Produs"} • {CLASS_LABEL_MAP[item.class] || item.class}</span>
-                          <span style={cellMeta}>Categorie: {formatCategoryLabel(item.category)}</span>
-                          <span style={cellMeta}>Departament: {item.category?.department?.name || item.department?.name || "-"}</span>
+                          <span style={cellSectionTitle}>Categorie</span>
+                          <span>{formatCategoryLabel(item.category)}</span>
+                          <span style={cellSectionTitle}>Departament</span>
+                          <span style={cellMeta}>{item.category?.department?.name || item.department?.name || "-"}</span>
+                          {item.posMenuCategory ? (
+                            <>
+                              <span style={cellSectionTitle}>Categorie meniu POS</span>
+                              <span style={cellMeta}>{item.posMenuCategory}</span>
+                            </>
+                          ) : null}
                         </div>
                       </td>
                       <td style={td}>
                         <div style={cellStack}>
-                          <span>UM: {formatUomOption(item.uom)}</span>
-                          <span style={cellMeta}>Ambalaj: {formatUomOption(item.purchaseUom)}</span>
-                          <span style={cellMeta}>Cant./ambalaj: {formatFactorRo(item.purchaseFactor || 1)}</span>
-                        </div>
-                      </td>
-                      <td style={td}>
-                        <div style={cellStack}>
+                          <span style={cellSectionTitle}>TVA</span>
                           <span>
                             TVA: {isVatPayer
                               ? item.vatRate?.rate != null
@@ -1443,27 +1447,39 @@ function getDefaultVat(list = vatRates) {
                                 : "-"
                               : "Neplatitor"}
                           </span>
-                          {!hideSalePrice ? <span style={cellMeta}>Pret: {formatMoney(item.price || 0)}</span> : null}
-                          <span style={cellMeta}>Cost / UM: {formatMoney(item.costPrice || 0)}</span>
+                          {!hideSalePrice ? (
+                            <>
+                              <span style={cellSectionTitle}>Pret vanzare</span>
+                              <span style={cellMeta}>{formatMoney(item.price || 0)}</span>
+                            </>
+                          ) : null}
+                          <span style={cellSectionTitle}>Cost / UM</span>
+                          <span style={cellMeta}>{formatMoney(item.costPrice || 0)}</span>
                         </div>
                       </td>
                       <td style={td}>
                         <div style={cellStack}>
-                          <span>Vizibil: {item.isVisibleInPos !== false ? "Da" : "Nu"}</span>
+                          <span style={cellSectionTitle}>UM / ambalaj</span>
+                          <span>UM: {formatUomOption(item.uom)}</span>
+                          <span style={cellMeta}>Ambalaj: {formatUomOption(item.purchaseUom)}</span>
+                          <span style={cellMeta}>Cant./ambalaj: {formatFactorRo(item.purchaseFactor || 1)}</span>
+                          <span style={cellSectionTitle}>POS</span>
+                          <span style={cellMeta}>Vizibil: {item.isVisibleInPos !== false ? "Da" : "Nu"}</span>
                           <span style={cellMeta}>POS-uri: {item.terminalIds?.length ? `${item.terminalIds.length} POS` : "Toate POS-urile"}</span>
-                          <span style={cellMeta}>Cat. meniu: {item.posMenuCategory || "-"}</span>
                         </div>
                       </td>
                       <td style={td}>
                         <div style={cellStack}>
+                          <span style={cellSectionTitle}>Control stoc</span>
                           {item.trackLot ? (
                             <>
                               <span>{item.trackExpiry ? "Lot + expirare" : "Lot"}</span>
-                              <span style={cellMeta}>{item.costMethod || "AVG"}</span>
+                              <span style={cellMeta}>Metoda: {item.costMethod || "AVG"}</span>
                             </>
                           ) : (
                             <span style={cellMeta}>Standard</span>
                           )}
+                          <span style={cellSectionTitle}>Retetar</span>
                           <span style={cellMeta}>
                             {recipeEligibleClasses.includes(item.class)
                               ? item.recipe?.items?.length
@@ -1478,7 +1494,7 @@ function getDefaultVat(list = vatRates) {
                         <div style={rowActions}>
                           {recipeEligibleClasses.includes(item.class) ? (
                             <button onClick={() => openRecipeModal(item)} style={btnRecipeSmall}>
-                              {item.recipe?.items?.length ? `Retetar (${item.recipe.items.length})` : "Retetar"}
+                              Retetar
                             </button>
                           ) : null}
                           <button onClick={() => openEditModal(item)} style={btnSecondarySmall}>
@@ -3355,7 +3371,7 @@ const th: CSSProperties = {
   padding: "8px 10px",
   borderBottom: "1px solid #e5e7eb",
   background: "#f8fafc",
-  whiteSpace: "nowrap",
+  whiteSpace: "normal",
   fontSize: 12,
   color: "#475569",
   position: "sticky",
@@ -3398,6 +3414,35 @@ const cellTitle: CSSProperties = {
 const cellMeta: CSSProperties = {
   color: "#64748b",
   fontSize: 12
+}
+
+const cellPillsWrap: CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 6,
+  marginTop: 2
+}
+
+const cellPill: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  minHeight: 24,
+  padding: "4px 9px",
+  borderRadius: 999,
+  border: "1px solid #dbeafe",
+  background: "#eff6ff",
+  color: "#1d4ed8",
+  fontSize: 11,
+  fontWeight: 700
+}
+
+const cellSectionTitle: CSSProperties = {
+  color: "#94a3b8",
+  fontSize: 11,
+  fontWeight: 800,
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+  marginTop: 4
 }
 
 const warningBox: CSSProperties = {
