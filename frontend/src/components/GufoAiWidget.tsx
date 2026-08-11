@@ -346,7 +346,7 @@ export default function GufoAiWidget() {
         }}
       >
         <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/12">
-          <GufoAiAvatar size={34} />
+          <GufoAiAvatar size={34} thinking={loading} />
         </span>
         <span className="pr-1 text-sm font-semibold">Gufo AI</span>
       </button>
@@ -367,7 +367,7 @@ export default function GufoAiWidget() {
                   Asistent ERP live
                 </div>
                 <div className="mt-2 flex items-center gap-3 text-lg font-semibold">
-                  <GufoAiAvatar size={38} />
+                  <GufoAiAvatar size={46} thinking={loading} />
                   <span>Gufo AI</span>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2">
@@ -429,8 +429,12 @@ export default function GufoAiWidget() {
 
             {loading ? (
               <div className="flex justify-start">
-                <div className="rounded-[22px] rounded-bl-md border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
-                  Gufo AI iti raspunde...
+                <div className="flex items-center gap-3 rounded-[22px] rounded-bl-md border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
+                  <GufoAiAvatar size={34} thinking />
+                  <div>
+                    <div className="font-medium text-slate-700">Gufo AI gandeste...</div>
+                    <div className="text-xs text-slate-500">Analizez pagina, contextul si intrebarea ta.</div>
+                  </div>
                 </div>
               </div>
             ) : null}
