@@ -1383,26 +1383,15 @@ function getDefaultVat(list = vatRates) {
               <table style={table}>
                 <thead>
                   <tr>
-                    <th style={th}>Poza</th>
-                    <th style={th}>Cod</th>
-                    <th style={th}>Produs</th>
-                    <th style={th}>Tip</th>
-                    <th style={th}>Clasificare</th>
-                    <th style={th}>Categorie</th>
-                    <th style={th}>Cat. meniu POS</th>
-                    <th style={th}>Departament</th>
-                    <th style={th}>UM</th>
-                    <th style={th}>Ambalaj</th>
-                    <th style={th}>Cant./ambalaj</th>
-                    <th style={th}>TVA</th>
-                    {!hideSalePrice ? <th style={th}>Pret</th> : null}
-                    <th style={th}>Cost / UM</th>
-                    <th style={th}>Lot / FIFO</th>
-                    <th style={th}>POS</th>
-                    <th style={th}>POS-uri</th>
-                    <th style={th}>Activ</th>
-                    <th style={th}>Retetar</th>
-                    <th style={th}>Actiuni</th>
+                    <th style={{ ...th, width: 68 }}>Poza</th>
+                    <th style={{ ...th, width: "22%" }}>Produs</th>
+                    <th style={{ ...th, width: "20%" }}>Structura</th>
+                    <th style={{ ...th, width: "14%" }}>UM / ambalaj</th>
+                    <th style={{ ...th, width: "14%" }}>Fiscal / pret</th>
+                    <th style={{ ...th, width: "14%" }}>POS</th>
+                    <th style={{ ...th, width: "10%" }}>Control</th>
+                    <th style={{ ...th, width: "6%" }}>Activ</th>
+                    <th style={{ ...th, width: 150 }}>Actiuni</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1423,55 +1412,75 @@ function getDefaultVat(list = vatRates) {
                         )}
                       </td>
                       <td style={td}>
-                        <div style={{ display: "grid", gap: 2 }}>
-                          <span>{item.sku}</span>
-                          <span style={{ color: "#64748b", fontSize: 12 }}>
-                            {item.barcodes?.[0]?.barcode ? `Cod de bare: ${item.barcodes[0].barcode}` : "fara cod de bare"}
+                        <div style={cellStack}>
+                          <span style={cellTitle}>{item.name}</span>
+                          <span style={cellMeta}>Cod: {item.sku}</span>
+                          <span style={cellMeta}>
+                            {item.barcodes?.[0]?.barcode ? `Cod de bare: ${item.barcodes[0].barcode}` : "Fara cod de bare"}
                           </span>
                         </div>
                       </td>
-                      <td style={td}>{item.name}</td>
-                      <td style={td}>{item.isMenu ? "Meniu" : "Produs"}</td>
-                      <td style={td}>{CLASS_LABEL_MAP[item.class] || item.class}</td>
-                      <td style={td}>{formatCategoryLabel(item.category)}</td>
-                      <td style={td}>{item.posMenuCategory || "-"}</td>
-                      <td style={td}>{item.category?.department?.name || item.department?.name || "-"}</td>
-                      <td style={td}>{formatUomOption(item.uom)}</td>
-                      <td style={td}>{formatUomOption(item.purchaseUom)}</td>
-                      <td style={td}>{formatFactorRo(item.purchaseFactor || 1)}</td>
                       <td style={td}>
-                        {isVatPayer
-                          ? item.vatRate?.rate != null
-                            ? `${item.vatRate.rate}%`
-                            : "-"
-                          : "Neplatitor"}
+                        <div style={cellStack}>
+                          <span>{item.isMenu ? "Meniu" : "Produs"} • {CLASS_LABEL_MAP[item.class] || item.class}</span>
+                          <span style={cellMeta}>Categorie: {formatCategoryLabel(item.category)}</span>
+                          <span style={cellMeta}>Departament: {item.category?.department?.name || item.department?.name || "-"}</span>
+                        </div>
                       </td>
-                      {!hideSalePrice ? <td style={td}>{formatMoney(item.price || 0)}</td> : null}
-                      <td style={td}>{formatMoney(item.costPrice || 0)}</td>
                       <td style={td}>
-                        {item.trackLot ? (
-                          <div style={{ display: "grid", gap: 2 }}>
-                            <span>{item.trackExpiry ? "Lot + expirare" : "Lot"}</span>
-                            <span style={{ color: "#64748b", fontSize: 12 }}>{item.costMethod || "AVG"}</span>
-                          </div>
-                        ) : (
-                          <span style={{ color: "#94a3b8" }}>Standard</span>
-                        )}
+                        <div style={cellStack}>
+                          <span>UM: {formatUomOption(item.uom)}</span>
+                          <span style={cellMeta}>Ambalaj: {formatUomOption(item.purchaseUom)}</span>
+                          <span style={cellMeta}>Cant./ambalaj: {formatFactorRo(item.purchaseFactor || 1)}</span>
+                        </div>
                       </td>
-                      <td style={td}>{item.isVisibleInPos !== false ? "Da" : "Nu"}</td>
-                      <td style={td}>{item.terminalIds?.length ? `${item.terminalIds.length} POS` : "Toate POS-urile"}</td>
+                      <td style={td}>
+                        <div style={cellStack}>
+                          <span>
+                            TVA: {isVatPayer
+                              ? item.vatRate?.rate != null
+                                ? `${item.vatRate.rate}%`
+                                : "-"
+                              : "Neplatitor"}
+                          </span>
+                          {!hideSalePrice ? <span style={cellMeta}>Pret: {formatMoney(item.price || 0)}</span> : null}
+                          <span style={cellMeta}>Cost / UM: {formatMoney(item.costPrice || 0)}</span>
+                        </div>
+                      </td>
+                      <td style={td}>
+                        <div style={cellStack}>
+                          <span>Vizibil: {item.isVisibleInPos !== false ? "Da" : "Nu"}</span>
+                          <span style={cellMeta}>POS-uri: {item.terminalIds?.length ? `${item.terminalIds.length} POS` : "Toate POS-urile"}</span>
+                          <span style={cellMeta}>Cat. meniu: {item.posMenuCategory || "-"}</span>
+                        </div>
+                      </td>
+                      <td style={td}>
+                        <div style={cellStack}>
+                          {item.trackLot ? (
+                            <>
+                              <span>{item.trackExpiry ? "Lot + expirare" : "Lot"}</span>
+                              <span style={cellMeta}>{item.costMethod || "AVG"}</span>
+                            </>
+                          ) : (
+                            <span style={cellMeta}>Standard</span>
+                          )}
+                          <span style={cellMeta}>
+                            {recipeEligibleClasses.includes(item.class)
+                              ? item.recipe?.items?.length
+                                ? `Retetar (${item.recipe.items.length})`
+                                : "Retetar disponibil"
+                              : "Fara retetar"}
+                          </span>
+                        </div>
+                      </td>
                       <td style={td}>{item.isActive ? "Da" : "Nu"}</td>
                       <td style={td}>
-                        {recipeEligibleClasses.includes(item.class) ? (
-                          <button onClick={() => openRecipeModal(item)} style={btnRecipeSmall}>
-                            {item.recipe?.items?.length ? `Retetar (${item.recipe.items.length})` : "Retetar"}
-                          </button>
-                        ) : (
-                          <span style={{ color: "#94a3b8" }}>-</span>
-                        )}
-                      </td>
-                      <td style={td}>
                         <div style={rowActions}>
+                          {recipeEligibleClasses.includes(item.class) ? (
+                            <button onClick={() => openRecipeModal(item)} style={btnRecipeSmall}>
+                              {item.recipe?.items?.length ? `Retetar (${item.recipe.items.length})` : "Retetar"}
+                            </button>
+                          ) : null}
                           <button onClick={() => openEditModal(item)} style={btnSecondarySmall}>
                             Edit
                           </button>
@@ -3338,7 +3347,7 @@ const recipeTableWrap: CSSProperties = {
 const table: CSSProperties = {
   width: "100%",
   borderCollapse: "collapse",
-  minWidth: 1320
+  tableLayout: "fixed"
 }
 
 const th: CSSProperties = {
@@ -3357,13 +3366,15 @@ const td: CSSProperties = {
   padding: "8px 10px",
   borderBottom: "1px solid #f1f5f9",
   verticalAlign: "middle",
-  whiteSpace: "nowrap",
+  whiteSpace: "normal",
+  wordBreak: "break-word",
   fontSize: 13
 }
 
 const rowActions: CSSProperties = {
   display: "flex",
-  gap: 6
+  gap: 6,
+  flexWrap: "wrap"
 }
 
 const thumb: CSSProperties = {
@@ -3372,6 +3383,21 @@ const thumb: CSSProperties = {
   objectFit: "cover",
   borderRadius: 8,
   border: "1px solid #e5e7eb"
+}
+
+const cellStack: CSSProperties = {
+  display: "grid",
+  gap: 3
+}
+
+const cellTitle: CSSProperties = {
+  fontWeight: 700,
+  color: "#0f172a"
+}
+
+const cellMeta: CSSProperties = {
+  color: "#64748b",
+  fontSize: 12
 }
 
 const warningBox: CSSProperties = {
