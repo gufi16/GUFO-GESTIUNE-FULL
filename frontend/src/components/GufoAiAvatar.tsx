@@ -12,7 +12,7 @@ export default function GufoAiAvatar({
   return (
     <div
       className={clsx(
-        "relative inline-flex items-center justify-center",
+        "relative inline-flex items-center justify-center overflow-visible",
         thinking ? "animate-[gufoBotFloat_2.2s_ease-in-out_infinite]" : "",
         className
       )}
@@ -64,7 +64,7 @@ export default function GufoAiAvatar({
           </radialGradient>
         </defs>
 
-        <ellipse cx="60" cy="131" rx="31" ry="6.5" fill="#38bdf8" opacity="0.16" />
+        <ellipse cx="60" cy="131" rx="31" ry="6.5" fill="#38bdf8" opacity={thinking ? "0.24" : "0.12"} />
 
         <g opacity={thinking ? 1 : 0.72}>
           <line x1="27" y1="18" x2="27" y2="4" stroke="#8f99ad" strokeWidth="3" strokeLinecap="round" />

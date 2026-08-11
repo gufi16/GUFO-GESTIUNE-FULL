@@ -393,6 +393,7 @@ export default function Sidebar({
   mobileOpen?: boolean
   onCloseMobile?: () => void
 }) {
+  const location = useLocation()
   const visibleSections = sections
     .map((section) => ({
       ...section,
@@ -400,6 +401,10 @@ export default function Sidebar({
     }))
     .filter((section) => section.items.length > 0)
   const [activeDesktopSection, setActiveDesktopSection] = useState<string | null>(null)
+
+  useEffect(() => {
+    setActiveDesktopSection(null)
+  }, [location.pathname])
 
   const hasDesktopSecondary = !!activeDesktopSection
 
