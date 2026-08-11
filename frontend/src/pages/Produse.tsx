@@ -1384,13 +1384,11 @@ function getDefaultVat(list = vatRates) {
                 <thead>
                   <tr>
                     <th style={{ ...th, width: 62 }}>Poza</th>
-                    <th style={{ ...th, width: "22%" }}>Produs</th>
-                    <th style={{ ...th, width: "19%" }}>Organizare</th>
-                    <th style={{ ...th, width: "16%" }}>Comercial</th>
-                    <th style={{ ...th, width: "16%" }}>Operare</th>
-                    <th style={{ ...th, width: "10%" }}>Status</th>
-                    <th style={{ ...th, width: "5%" }}>Activ</th>
-                    <th style={{ ...th, width: 132 }}>Actiuni</th>
+                    <th style={{ ...th, width: "34%" }}>Produs</th>
+                    <th style={{ ...th, width: "20%" }}>Categorie</th>
+                    <th style={{ ...th, width: "16%" }}>Pret</th>
+                    <th style={{ ...th, width: "15%" }}>POS</th>
+                    <th style={{ ...th, width: "15%" }}>Actiuni</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1414,82 +1412,53 @@ function getDefaultVat(list = vatRates) {
                         <div style={cellStack}>
                           <span style={cellTitle}>{item.name}</span>
                           <span style={cellMeta}>Cod: {item.sku}</span>
-                          <span style={cellMeta}>
-                            {item.barcodes?.[0]?.barcode ? `Cod de bare: ${item.barcodes[0].barcode}` : "Fara cod de bare"}
-                          </span>
                           <div style={cellPillsWrap}>
-                            <span style={cellPill}>{item.isMenu ? "Meniu" : "Produs"}</span>
                             <span style={cellPill}>{CLASS_LABEL_MAP[item.class] || item.class}</span>
+                            <span style={item.isActive ? cellPillNeutral : cellPillMuted}>
+                              {item.isActive ? "Activ" : "Inactiv"}
+                            </span>
+                            {recipeEligibleClasses.includes(item.class) ? (
+                              <span style={cellPillNeutral}>
+                                {item.recipe?.items?.length ? `Retetar ${item.recipe.items.length}` : "Retetar"}
+                              </span>
+                            ) : null}
                           </div>
                         </div>
                       </td>
                       <td style={td}>
                         <div style={cellStack}>
-                          <span style={cellSectionTitle}>Categorie</span>
-                          <span>{formatCategoryLabel(item.category)}</span>
-                          <span style={cellSectionTitle}>Departament</span>
+                          <span style={cellTitleSoft}>{formatCategoryLabel(item.category)}</span>
                           <span style={cellMeta}>{item.category?.department?.name || item.department?.name || "-"}</span>
-                          {item.posMenuCategory ? (
-                            <>
-                              <span style={cellSectionTitle}>Categorie meniu POS</span>
-                              <span style={cellMeta}>{item.posMenuCategory}</span>
-                            </>
-                          ) : null}
                         </div>
                       </td>
                       <td style={td}>
                         <div style={cellStack}>
-                          <span style={cellSectionTitle}>TVA</span>
-                          <span>
-                            TVA: {isVatPayer
+                          {!hideSalePrice ? (
+                            <span style={cellTitleSoft}>{formatMoney(item.price || 0)}</span>
+                          ) : (
+                            <span style={cellTitleSoft}>-</span>
+                          )}
+                          <span style={cellMeta}>
+                            TVA {isVatPayer
                               ? item.vatRate?.rate != null
                                 ? `${item.vatRate.rate}%`
                                 : "-"
                               : "Neplatitor"}
                           </span>
-                          {!hideSalePrice ? (
-                            <>
-                              <span style={cellSectionTitle}>Pret vanzare</span>
-                              <span style={cellMeta}>{formatMoney(item.price || 0)}</span>
-                            </>
-                          ) : null}
-                          <span style={cellSectionTitle}>Cost / UM</span>
-                          <span style={cellMeta}>{formatMoney(item.costPrice || 0)}</span>
+                          <span style={cellMeta}>Cost: {formatMoney(item.costPrice || 0)}</span>
                         </div>
                       </td>
                       <td style={td}>
                         <div style={cellStack}>
-                          <span style={cellSectionTitle}>UM / ambalaj</span>
-                          <span>UM: {formatUomOption(item.uom)}</span>
-                          <span style={cellMeta}>Ambalaj: {formatUomOption(item.purchaseUom)}</span>
-                          <span style={cellMeta}>Cant./ambalaj: {formatFactorRo(item.purchaseFactor || 1)}</span>
-                          <span style={cellSectionTitle}>POS</span>
-                          <span style={cellMeta}>Vizibil: {item.isVisibleInPos !== false ? "Da" : "Nu"}</span>
-                          <span style={cellMeta}>POS-uri: {item.terminalIds?.length ? `${item.terminalIds.length} POS` : "Toate POS-urile"}</span>
-                        </div>
-                      </td>
-                      <td style={td}>
-                        <div style={cellStack}>
-                          <span style={cellSectionTitle}>Control stoc</span>
-                          {item.trackLot ? (
-                            <>
-                              <span>{item.trackExpiry ? "Lot + expirare" : "Lot"}</span>
-                              <span style={cellMeta}>Metoda: {item.costMethod || "AVG"}</span>
-                            </>
-                          ) : (
-                            <span style={cellMeta}>Standard</span>
-                          )}
-                          <span style={cellSectionTitle}>Retetar</span>
+                          <span style={cellMeta}>{item.isVisibleInPos !== false ? "Vizibil in POS" : "Ascuns din POS"}</span>
                           <span style={cellMeta}>
-                            {recipeEligibleClasses.includes(item.class)
-                              ? item.recipe?.items?.length
-                                ? `Retetar (${item.recipe.items.length})`
-                                : "Retetar disponibil"
-                              : "Fara retetar"}
+                            Ambalaj: {formatUomOption(item.purchaseUom)} · {formatFactorRo(item.purchaseFactor || 1)}
+                          </span>
+                          <span style={cellMeta}>
+                            POS: {item.isVisibleInPos !== false ? "Vizibil" : "Ascuns"} · {item.terminalIds?.length ? `${item.terminalIds.length} POS` : "Toate POS-urile"}
                           </span>
                         </div>
                       </td>
-                      <td style={td}>{item.isActive ? "Da" : "Nu"}</td>
                       <td style={td}>
                         <div style={rowActions}>
                           {recipeEligibleClasses.includes(item.class) ? (
@@ -3379,8 +3348,8 @@ const th: CSSProperties = {
 }
 
 const td: CSSProperties = {
-  padding: "8px 10px",
-  borderBottom: "1px solid #f1f5f9",
+  padding: "6px 10px",
+  borderBottom: "1px solid #eef2f7",
   verticalAlign: "middle",
   whiteSpace: "normal",
   wordBreak: "break-word",
@@ -3390,7 +3359,8 @@ const td: CSSProperties = {
 const rowActions: CSSProperties = {
   display: "flex",
   gap: 6,
-  flexWrap: "wrap"
+  flexWrap: "wrap",
+  alignItems: "center"
 }
 
 const thumb: CSSProperties = {
@@ -3403,11 +3373,16 @@ const thumb: CSSProperties = {
 
 const cellStack: CSSProperties = {
   display: "grid",
-  gap: 3
+  gap: 2
 }
 
 const cellTitle: CSSProperties = {
   fontWeight: 700,
+  color: "#0f172a"
+}
+
+const cellTitleSoft: CSSProperties = {
+  fontWeight: 600,
   color: "#0f172a"
 }
 
@@ -3426,12 +3401,38 @@ const cellPillsWrap: CSSProperties = {
 const cellPill: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
-  minHeight: 24,
-  padding: "4px 9px",
+  minHeight: 20,
+  padding: "2px 8px",
   borderRadius: 999,
   border: "1px solid #dbeafe",
   background: "#eff6ff",
   color: "#1d4ed8",
+  fontSize: 11,
+  fontWeight: 700
+}
+
+const cellPillNeutral: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  minHeight: 20,
+  padding: "2px 8px",
+  borderRadius: 999,
+  border: "1px solid #dbeafe",
+  background: "#f8fafc",
+  color: "#475569",
+  fontSize: 11,
+  fontWeight: 700
+}
+
+const cellPillMuted: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  minHeight: 20,
+  padding: "2px 8px",
+  borderRadius: 999,
+  border: "1px solid #e2e8f0",
+  background: "#f8fafc",
+  color: "#94a3b8",
   fontSize: 11,
   fontWeight: 700
 }
