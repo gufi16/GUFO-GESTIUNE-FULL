@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import PageHeader from "../components/PageHeader"
 import { useNavigate } from "react-router-dom"
-import { Archive, Building2, FileDigit, History, Percent, ReceiptText, RefreshCcw, Settings2, Store, Users, Warehouse } from "lucide-react"
+import { Archive, Bot, Building2, FileDigit, History, Percent, ReceiptText, RefreshCcw, Settings2, Store, Users, Warehouse } from "lucide-react"
 import {
   DocumentMetric,
   InlineNotice,
@@ -49,6 +49,12 @@ const items = [
     desc: "Conectezi Glovo, Wolt si Bolt Food, mapezi produsele si urmaresti comenzile intrate din platforme.",
     route: "/setari/marketplace",
     icon: Store,
+  },
+  {
+    name: "Gufo AI",
+    desc: "Configurezi drepturile, modul de lucru si comportamentul asistentului inteligent din ERP.",
+    route: "/setari/gufo-ai",
+    icon: Bot,
   },
   {
     name: "Gestiuni",

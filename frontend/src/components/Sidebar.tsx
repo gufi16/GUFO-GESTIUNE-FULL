@@ -117,6 +117,7 @@ const sections: SidebarSection[] = [
     collapsible: true,
     items: [
       { to: "/setari", label: "Setari", icon: Settings, module: "settings" },
+      { to: "/setari/gufo-ai", label: "Gufo AI", icon: Store, module: "settings" },
       { to: "/setari/marketplace", label: "Marketplace", icon: Store, module: "settings" },
     ],
   },

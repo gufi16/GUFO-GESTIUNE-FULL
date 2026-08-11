@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Bot, SendHorizonal, Sparkles, X } from "lucide-react"
+import { BrainCircuit, Eye, SendHorizonal, ShieldCheck, Sparkles, Wand2, X } from "lucide-react"
 import { useLocation } from "react-router-dom"
 import { api } from "../lib/api"
+import GufoAiAvatar from "./GufoAiAvatar"
+import { readGufoAiConfig, subscribeGufoAiConfig, type GufoAiConfig } from "../lib/gufoAiConfig"
 
 type ChatMessage = {
   id: string
@@ -53,6 +55,7 @@ function routeLabel(pathname: string) {
   if (pathname.startsWith("/financiar/vanzari-bon")) return "Vanzari / Bon"
   if (pathname.startsWith("/financiar/inchideri-zilnice")) return "Inchideri zilnice"
   if (pathname.startsWith("/setari/efactura")) return "Setari SPV"
+  if (pathname.startsWith("/setari/gufo-ai")) return "Setari Gufo AI"
   if (pathname.startsWith("/setari/firma")) return "Setari firma"
   if (pathname.startsWith("/setari/tva")) return "Setari TVA"
   if (pathname.startsWith("/setari/numerotare")) return "Numerotare"
@@ -98,14 +101,42 @@ function defaultSuggestions(pathname: string) {
   if (pathname.startsWith("/setari/istoric")) {
     return ["Cum caut dupa utilizator?", "Cum filtrez pe perioada?", "De ce nu vad evenimente?"]
   }
+  if (pathname.startsWith("/setari/gufo-ai")) {
+    return ["Cum setez modul observer?", "Ce roluri au acces la AI?", "Ce las blocat pentru siguranta?"]
+  }
   if (pathname.startsWith("/setari")) {
     return ["Unde schimb datele firmei?", "Unde schimb seria facturii?", "Cum verific setarea de TVA?"]
   }
   return ["Ce module are aplicatia?", "Cum lucrez cu SPV si ANAF?", "Cum fac un NIR?"]
 }
 
+function modeLabel(mode: GufoAiConfig["mode"]) {
+  if (mode === "observer") return "Observer"
+  if (mode === "action") return "Action"
+  return "Copilot"
+}
+
+function modeDescription(config: GufoAiConfig) {
+  if (config.mode === "observer") {
+    return "Vede pagina curenta si te avertizeaza cand ceva nu pare in regula."
+  }
+  if (config.mode === "action") {
+    return config.requireConfirmation
+      ? "Pregateste actiuni ghidate, dar asteapta confirmarea ta."
+      : "Poate merge mai departe cu asistenta activa in zonele permise."
+  }
+  return "Explica, sugereaza si pregateste pasi urmatori ca un coleg virtual."
+}
+
+function modeIcon(mode: GufoAiConfig["mode"]) {
+  if (mode === "observer") return Eye
+  if (mode === "action") return Wand2
+  return BrainCircuit
+}
+
 export default function GufoAiWidget() {
   const location = useLocation()
+  const [config, setConfig] = useState<GufoAiConfig>(() => readGufoAiConfig())
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
@@ -138,6 +169,7 @@ export default function GufoAiWidget() {
   })
 
   const pageLabel = useMemo(() => routeLabel(location.pathname), [location.pathname])
+  const ModeIcon = modeIcon(config.mode)
   const chatPosition = useMemo(() => {
     if (typeof window === "undefined") {
       return { left: FAB_MARGIN, top: FAB_MARGIN }
@@ -161,17 +193,19 @@ export default function GufoAiWidget() {
     setSuggestions(defaultSuggestions(location.pathname))
   }, [location.pathname])
 
+  useEffect(() => subscribeGufoAiConfig(setConfig), [])
+
   useEffect(() => {
     if (!messages.length) {
       setMessages([
         {
           id: "welcome",
           role: "assistant",
-          text: `Salut! Sunt Gufo AI.\n\nStiu zonele importante din aplicatie: documente, stoc, productie, SPV/ANAF, e-Transport, rapoarte, financiar, nomenclator si setari. Acum esti in zona ${pageLabel}. Vorbeste cu mine natural, exact cum ai vorbi cu un coleg: spune-mi ce vrei sa faci, unde te-ai blocat sau ce nu intelegi.`,
+          text: `Salut! Sunt Gufo AI.\n\nAcum rulez in modul ${modeLabel(config.mode)}. ${modeDescription(config)}\n\nStiu zonele importante din aplicatie: documente, stoc, productie, SPV/ANAF, e-Transport, rapoarte, financiar, nomenclator si setari. Acum esti in zona ${pageLabel}. Vorbeste cu mine natural, exact cum ai vorbi cu un coleg: spune-mi ce vrei sa faci, unde te-ai blocat sau ce nu intelegi.`,
         },
       ])
     }
-  }, [messages.length, pageLabel])
+  }, [config.mode, messages.length, pageLabel])
 
   useEffect(() => {
     if (!scrollRef.current) return
@@ -239,7 +273,7 @@ export default function GufoAiWidget() {
 
   async function submitQuestion(text: string) {
     const question = text.trim()
-    if (!question || loading) return
+    if (!question || loading || !config.enabled || !config.conversationalHelp) return
 
     const userMessage: ChatMessage = {
       id: `${Date.now()}-user`,
@@ -308,10 +342,11 @@ export default function GufoAiWidget() {
           top: `${position.y}px`,
           touchAction: "none",
           cursor: "grab",
+          opacity: config.enabled ? 1 : 0.78,
         }}
       >
         <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/12">
-          <Bot size={20} />
+          <GufoAiAvatar size={34} />
         </span>
         <span className="pr-1 text-sm font-semibold">Gufo AI</span>
       </button>
@@ -329,10 +364,31 @@ export default function GufoAiWidget() {
               <div className="min-w-0">
                 <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.18em] text-white/70">
                   <Sparkles size={14} />
-                  Asistent ERP
+                  Asistent ERP live
                 </div>
-                <div className="mt-2 text-lg font-semibold">Gufo AI</div>
-                <div className="mt-1 text-sm text-slate-200">Asistent ERP conversational</div>
+                <div className="mt-2 flex items-center gap-3 text-lg font-semibold">
+                  <GufoAiAvatar size={38} />
+                  <span>Gufo AI</span>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white">
+                    <ModeIcon size={12} />
+                    {modeLabel(config.mode)}
+                  </span>
+                  {config.watchCurrentPage ? (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white">
+                      <Eye size={12} />
+                      Context live
+                    </span>
+                  ) : null}
+                  {config.requireConfirmation ? (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white">
+                      <ShieldCheck size={12} />
+                      Confirmare
+                    </span>
+                  ) : null}
+                </div>
+                <div className="mt-2 text-sm text-slate-200">{modeDescription(config)}</div>
                 <div className="mt-1 text-xs text-slate-300">Pagina curenta: {pageLabel}</div>
               </div>
 
@@ -348,6 +404,11 @@ export default function GufoAiWidget() {
           </div>
 
           <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto bg-slate-50 px-4 py-4">
+            {!config.enabled ? (
+              <div className="rounded-[18px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                Gufo AI este momentan pus pe pauza din Setari AI. Il poti reactiva din <strong>Setari &gt; Gufo AI</strong>.
+              </div>
+            ) : null}
             {messages.map((message) => (
               <div
                 key={message.id}
@@ -400,14 +461,19 @@ export default function GufoAiWidget() {
                   }
                 }}
                 rows={2}
-                placeholder="Scrie-mi natural, de exemplu: salut, cum fac un NIR sau de ce nu pot salva..."
+                placeholder={
+                  config.enabled && config.conversationalHelp
+                    ? "Scrie-mi natural, de exemplu: salut, cum fac un NIR sau de ce nu pot salva..."
+                    : "Conversatia este pusa pe pauza din Setari AI."
+                }
                 className="min-h-[52px] flex-1 resize-none rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-[#17324D] focus:bg-white focus:ring-4 focus:ring-blue-100"
+                disabled={!config.enabled || !config.conversationalHelp}
               />
 
               <button
                 type="button"
                 onClick={() => submitQuestion(input)}
-                disabled={loading || !input.trim()}
+                disabled={loading || !input.trim() || !config.enabled || !config.conversationalHelp}
                 className="inline-flex h-[52px] w-[52px] items-center justify-center rounded-[18px] bg-[#17324D] text-white transition hover:bg-[#0F2740] disabled:cursor-not-allowed disabled:bg-slate-300"
                 aria-label="Trimite mesajul"
               >
