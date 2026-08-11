@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { NavLink, useLocation } from "react-router-dom"
 import clsx from "clsx"
 import {
@@ -174,12 +174,16 @@ function SidebarAccordion({
   icon: Icon,
   items,
   flyout = false,
+  forceOpen,
+  onToggle,
   onNavigate,
 }: {
   title: string
   icon: any
   items: SidebarItem[]
   flyout?: boolean
+  forceOpen?: boolean
+  onToggle?: () => void
   onNavigate?: () => void
 }) {
   const location = useLocation()
@@ -188,30 +192,24 @@ function SidebarAccordion({
     [items, location.pathname]
   )
   const [open, setOpen] = useState(hasActiveChild)
-  const wrapperRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (hasActiveChild) setOpen(true)
   }, [hasActiveChild])
 
-  useEffect(() => {
-    if (!flyout || !open) return
-
-    function handlePointerDown(event: MouseEvent) {
-      if (!wrapperRef.current?.contains(event.target as Node)) {
-        setOpen(false)
-      }
-    }
-
-    document.addEventListener("mousedown", handlePointerDown)
-    return () => document.removeEventListener("mousedown", handlePointerDown)
-  }, [flyout, open])
+  const isOpen = flyout ? !!forceOpen : open
 
   return (
-    <div ref={wrapperRef} className="relative">
+    <div className="relative">
       <button
         type="button"
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => {
+          if (flyout) {
+            onToggle?.()
+            return
+          }
+          setOpen((value) => !value)
+        }}
         className={clsx(
           "group relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-all duration-200",
           hasActiveChild
@@ -236,42 +234,19 @@ function SidebarAccordion({
             hasActiveChild ? "bg-white text-[#17324D]/75" : "text-slate-400"
           )}
         >
-          {flyout ? <ChevronRight size={15} className={clsx(open ? "text-[#17324D]" : "")} /> : open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+          {flyout ? <ChevronRight size={15} className={clsx(isOpen ? "text-[#17324D]" : "")} /> : isOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
         </span>
 
         {hasActiveChild ? <span className="absolute inset-y-2 left-0 w-1 rounded-full bg-[#17324D]" /> : null}
       </button>
 
       {flyout ? (
-        <div
-          className={clsx(
-            "absolute left-full top-0 z-50 ml-3 w-72 rounded-2xl border border-slate-200/90 bg-white p-3 shadow-[0_18px_45px_rgba(15,23,42,0.18)] transition-all duration-200",
-            open ? "pointer-events-auto translate-x-0 opacity-100" : "pointer-events-none -translate-x-2 opacity-0"
-          )}
-        >
-          <div className="mb-2 border-b border-slate-100 px-2 pb-2">
-            <div className="text-sm font-semibold text-[#17324D]">{title}</div>
-            <div className="mt-1 text-xs text-slate-500">Acces rapid la modulele din aceasta sectiune.</div>
-          </div>
-          <div className="space-y-1">
-            {items.map((item) => (
-              <SidebarLink
-                key={`${title}-${item.label}`}
-                item={item}
-                nested
-                onNavigate={() => {
-                  setOpen(false)
-                  onNavigate?.()
-                }}
-              />
-            ))}
-          </div>
-        </div>
+        null
       ) : (
         <div
           className={clsx(
             "grid overflow-hidden transition-all duration-300",
-            open ? "mt-2 grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-80"
+            isOpen ? "mt-2 grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-80"
           )}
         >
           <div className="min-h-0 overflow-hidden">
@@ -296,73 +271,125 @@ function SidebarContent({
   mobile?: boolean
   onCloseMobile?: () => void
 }) {
+  const location = useLocation()
+  const defaultDesktopSection = useMemo(
+    () =>
+      visibleSections.find(
+        (section) =>
+          section.collapsible &&
+          section.items.some((item) => item.to && location.pathname.startsWith(item.to))
+      )?.title || null,
+    [location.pathname, visibleSections]
+  )
+  const [activeDesktopSection, setActiveDesktopSection] = useState<string | null>(defaultDesktopSection)
+
+  useEffect(() => {
+    if (!mobile) {
+      setActiveDesktopSection(defaultDesktopSection)
+    }
+  }, [defaultDesktopSection, mobile])
+
+  const activeDesktopItems =
+    !mobile && activeDesktopSection
+      ? visibleSections.find((section) => section.title === activeDesktopSection)?.items || []
+      : []
+
   return (
-    <div className={clsx("flex h-full w-full flex-col bg-white", mobile ? "overflow-hidden" : "overflow-visible")}>
-      <div className="border-b border-slate-200/80 px-5 pb-5 pt-5">
-        {mobile ? (
-          <div className="mb-2 flex items-center justify-between">
-            <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Meniu ERP</div>
-            <button
-              type="button"
-              onClick={onCloseMobile}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500"
-              aria-label="Inchide meniul"
-            >
-              <ChevronLeft size={18} />
-            </button>
+    <div className={clsx("flex h-full w-full bg-white", mobile ? "overflow-hidden" : "overflow-visible")}>
+      <div className="flex h-full w-64 shrink-0 flex-col border-r border-slate-200/80 bg-white">
+        <div className="border-b border-slate-200/80 px-5 pb-5 pt-5">
+          {mobile ? (
+            <div className="mb-2 flex items-center justify-between">
+              <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Meniu ERP</div>
+              <button
+                type="button"
+                onClick={onCloseMobile}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500"
+                aria-label="Inchide meniul"
+              >
+                <ChevronLeft size={18} />
+              </button>
+            </div>
+          ) : null}
+
+          <div className="flex flex-col items-center text-center">
+            <img
+              src="/gufo-logo.png?v=20260417-6"
+              alt="Gufo"
+              className={clsx("object-contain", mobile ? "h-10 w-10" : "h-11 w-11")}
+            />
+            <div className="mt-2 text-sm font-semibold tracking-[0.01em] text-[#17324D]">Gufo Backoffice</div>
           </div>
-        ) : null}
-
-        <div className="flex flex-col items-center text-center">
-          <img
-            src="/gufo-logo.png?v=20260417-6"
-            alt="Gufo"
-            className={clsx("object-contain", mobile ? "h-10 w-10" : "h-11 w-11")}
-          />
-          <div className="mt-2 text-sm font-semibold tracking-[0.01em] text-[#17324D]">Gufo Backoffice</div>
         </div>
-      </div>
 
-      <div className={clsx("min-h-0 flex-1 px-3 py-4", mobile ? "overflow-y-auto" : "overflow-y-auto overflow-x-visible")}>
-        <div className="space-y-4">
-          {visibleSections.map((section) =>
-            section.collapsible && section.icon ? (
-              <div key={section.title}>
-                <div className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                  {section.title}
-                </div>
-                <SidebarAccordion
-                  title={section.title}
-                  icon={section.icon}
-                  items={section.items}
-                  flyout={!mobile}
-                  onNavigate={mobile ? onCloseMobile : undefined}
-                />
-              </div>
-            ) : (
-              <div key={section.title}>
-                <div className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                  {section.title}
-                </div>
-                {section.items.map((item) => (
-                  <SidebarLink
-                    key={`${section.title}-${item.label}`}
-                    item={item}
+        <div className={clsx("min-h-0 flex-1 px-3 py-4", mobile ? "overflow-y-auto" : "overflow-y-auto")}>
+          <div className="space-y-4">
+            {visibleSections.map((section) =>
+              section.collapsible && section.icon ? (
+                <div key={section.title}>
+                  <div className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                    {section.title}
+                  </div>
+                  <SidebarAccordion
+                    title={section.title}
+                    icon={section.icon}
+                    items={section.items}
+                    flyout={!mobile}
+                    forceOpen={!mobile && activeDesktopSection === section.title}
+                    onToggle={
+                      mobile
+                        ? undefined
+                        : () =>
+                            setActiveDesktopSection((current) =>
+                              current === section.title ? null : section.title
+                            )
+                    }
                     onNavigate={mobile ? onCloseMobile : undefined}
                   />
-                ))}
-              </div>
-            )
-          )}
+                </div>
+              ) : (
+                <div key={section.title}>
+                  <div className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                    {section.title}
+                  </div>
+                  {section.items.map((item) => (
+                    <SidebarLink
+                      key={`${section.title}-${item.label}`}
+                      item={item}
+                      onNavigate={mobile ? onCloseMobile : undefined}
+                    />
+                  ))}
+                </div>
+              )
+            )}
+          </div>
+        </div>
+
+        <div className="border-t border-slate-200/80 px-5 py-3">
+          <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+            <div>Versiunea: {APP_VERSION}</div>
+            <div className="text-emerald-700">Activ</div>
+          </div>
         </div>
       </div>
 
-      <div className="border-t border-slate-200/80 px-5 py-3">
-        <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          <div>Versiunea: {APP_VERSION}</div>
-          <div className="text-emerald-700">Activ</div>
+      {!mobile && activeDesktopSection ? (
+        <div className="hidden h-full w-72 shrink-0 border-r border-slate-200/80 bg-[#F8FAFC] xl:flex xl:flex-col">
+          <div className="border-b border-slate-200/80 px-5 pb-4 pt-5">
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Submeniu</div>
+            <div className="mt-2 text-lg font-semibold text-[#17324D]">{activeDesktopSection}</div>
+            <div className="mt-1 text-sm text-slate-500">Acces rapid la modulele din aceasta sectiune.</div>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
+            <div className="space-y-1">
+              {activeDesktopItems.map((item) => (
+                <SidebarLink key={`${activeDesktopSection}-${item.label}`} item={item} nested />
+              ))}
+            </div>
+          </div>
         </div>
-      </div>
+      ) : null}
     </div>
   )
 }
@@ -387,8 +414,8 @@ export default function Sidebar({
         <div className="fixed inset-0 z-50 bg-slate-950/45 backdrop-blur-[1px] xl:hidden" onClick={onCloseMobile} />
       ) : null}
 
-      <aside className="hidden xl:block xl:w-64 xl:shrink-0">
-        <div className="fixed left-0 top-0 z-40 hidden h-screen w-64 overflow-visible border-r border-slate-200/80 bg-white/95 backdrop-blur xl:flex">
+      <aside className="hidden xl:block xl:w-[544px] xl:shrink-0">
+        <div className="fixed left-0 top-0 z-40 hidden h-screen w-[544px] overflow-hidden border-r border-slate-200/80 bg-white/95 backdrop-blur xl:flex">
           <SidebarContent visibleSections={visibleSections} />
         </div>
       </aside>
