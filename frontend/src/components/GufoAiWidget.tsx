@@ -347,7 +347,7 @@ export default function GufoAiWidget() {
           opacity: config.enabled ? 1 : 0.78,
         }}
       >
-        <GufoAiAvatar size={84} thinking={loading} className="shrink-0" />
+        <GufoAiAvatar size={84} thinking={loading} mode={loading ? "thinking" : open ? "active" : "idle"} className="shrink-0" />
       </button>
 
       {open ? (
@@ -366,7 +366,7 @@ export default function GufoAiWidget() {
                   Asistent ERP live
                 </div>
                 <div className="mt-2 flex items-center gap-3 text-lg font-semibold">
-                  <GufoAiAvatar size={56} thinking={loading} className="shrink-0" />
+                  <GufoAiAvatar size={56} thinking={loading} mode={loading ? "thinking" : "active"} className="shrink-0" />
                   <span>Gufo AI</span>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2">
@@ -429,7 +429,7 @@ export default function GufoAiWidget() {
             {loading ? (
               <div className="flex justify-start">
                 <div className="flex items-center gap-3 rounded-[22px] rounded-bl-md border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
-                  <GufoAiAvatar size={42} thinking className="shrink-0" />
+                  <GufoAiAvatar size={42} thinking mode="thinking" className="shrink-0" />
                   <div>
                     <div className="font-medium text-slate-700">Gufo AI gandeste...</div>
                     <div className="text-xs text-slate-500">Analizez pagina, contextul si intrebarea ta.</div>
