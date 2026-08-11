@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { NavLink, useLocation } from "react-router-dom"
 import clsx from "clsx"
 import {
@@ -173,11 +173,13 @@ function SidebarAccordion({
   title,
   icon: Icon,
   items,
+  flyout = false,
   onNavigate,
 }: {
   title: string
   icon: any
   items: SidebarItem[]
+  flyout?: boolean
   onNavigate?: () => void
 }) {
   const location = useLocation()
@@ -186,9 +188,27 @@ function SidebarAccordion({
     [items, location.pathname]
   )
   const [open, setOpen] = useState(hasActiveChild)
+  const wrapperRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (hasActiveChild) setOpen(true)
+  }, [hasActiveChild])
+
+  useEffect(() => {
+    if (!flyout || !open) return
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!wrapperRef.current?.contains(event.target as Node)) {
+        setOpen(false)
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown)
+    return () => document.removeEventListener("mousedown", handlePointerDown)
+  }, [flyout, open])
 
   return (
-    <div>
+    <div ref={wrapperRef} className="relative">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
@@ -216,26 +236,53 @@ function SidebarAccordion({
             hasActiveChild ? "bg-white text-[#17324D]/75" : "text-slate-400"
           )}
         >
-          {open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+          {flyout ? <ChevronRight size={15} className={clsx(open ? "text-[#17324D]" : "")} /> : open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
         </span>
 
         {hasActiveChild ? <span className="absolute inset-y-2 left-0 w-1 rounded-full bg-[#17324D]" /> : null}
       </button>
 
-      <div
-        className={clsx(
-          "grid overflow-hidden transition-all duration-300",
-          open ? "mt-2 grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-80"
-        )}
-      >
-        <div className="min-h-0 overflow-hidden">
-          <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-3">
+      {flyout ? (
+        <div
+          className={clsx(
+            "absolute left-full top-0 z-50 ml-3 w-72 rounded-2xl border border-slate-200/90 bg-white p-3 shadow-[0_18px_45px_rgba(15,23,42,0.18)] transition-all duration-200",
+            open ? "pointer-events-auto translate-x-0 opacity-100" : "pointer-events-none -translate-x-2 opacity-0"
+          )}
+        >
+          <div className="mb-2 border-b border-slate-100 px-2 pb-2">
+            <div className="text-sm font-semibold text-[#17324D]">{title}</div>
+            <div className="mt-1 text-xs text-slate-500">Acces rapid la modulele din aceasta sectiune.</div>
+          </div>
+          <div className="space-y-1">
             {items.map((item) => (
-              <SidebarLink key={`${title}-${item.label}`} item={item} nested onNavigate={onNavigate} />
+              <SidebarLink
+                key={`${title}-${item.label}`}
+                item={item}
+                nested
+                onNavigate={() => {
+                  setOpen(false)
+                  onNavigate?.()
+                }}
+              />
             ))}
           </div>
         </div>
-      </div>
+      ) : (
+        <div
+          className={clsx(
+            "grid overflow-hidden transition-all duration-300",
+            open ? "mt-2 grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-80"
+          )}
+        >
+          <div className="min-h-0 overflow-hidden">
+            <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-3">
+              {items.map((item) => (
+                <SidebarLink key={`${title}-${item.label}`} item={item} nested onNavigate={onNavigate} />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -250,7 +297,7 @@ function SidebarContent({
   onCloseMobile?: () => void
 }) {
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden bg-white">
+    <div className={clsx("flex h-full w-full flex-col bg-white", mobile ? "overflow-hidden" : "overflow-visible")}>
       <div className="border-b border-slate-200/80 px-5 pb-5 pt-5">
         {mobile ? (
           <div className="mb-2 flex items-center justify-between">
@@ -276,7 +323,7 @@ function SidebarContent({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
+      <div className={clsx("min-h-0 flex-1 px-3 py-4", mobile ? "overflow-y-auto" : "overflow-y-auto overflow-x-visible")}>
         <div className="space-y-4">
           {visibleSections.map((section) =>
             section.collapsible && section.icon ? (
@@ -288,6 +335,7 @@ function SidebarContent({
                   title={section.title}
                   icon={section.icon}
                   items={section.items}
+                  flyout={!mobile}
                   onNavigate={mobile ? onCloseMobile : undefined}
                 />
               </div>
@@ -340,7 +388,7 @@ export default function Sidebar({
       ) : null}
 
       <aside className="hidden xl:block xl:w-64 xl:shrink-0">
-        <div className="fixed left-0 top-0 z-40 hidden h-screen w-64 border-r border-slate-200/80 bg-white/95 backdrop-blur xl:flex">
+        <div className="fixed left-0 top-0 z-40 hidden h-screen w-64 overflow-visible border-r border-slate-200/80 bg-white/95 backdrop-blur xl:flex">
           <SidebarContent visibleSections={visibleSections} />
         </div>
       </aside>
