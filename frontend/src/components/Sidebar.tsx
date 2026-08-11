@@ -406,6 +406,19 @@ export default function Sidebar({
     setActiveDesktopSection(null)
   }, [location.pathname])
 
+  useEffect(() => {
+    if (!activeDesktopSection) return
+
+    const activeSection = visibleSections.find((section) => section.title === activeDesktopSection)
+    const stillInsideActiveSection = !!activeSection?.items.some(
+      (item) => item.to && location.pathname.startsWith(item.to)
+    )
+
+    if (!stillInsideActiveSection) {
+      setActiveDesktopSection(null)
+    }
+  }, [activeDesktopSection, location.pathname, visibleSections])
+
   const hasDesktopSecondary = !!activeDesktopSection
 
   return (
