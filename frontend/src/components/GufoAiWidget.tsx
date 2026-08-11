@@ -26,8 +26,8 @@ type WidgetPosition = {
 }
 
 const POSITION_STORAGE_KEY = "gufo-ai-widget-position"
-const FAB_WIDTH = 176
-const FAB_HEIGHT = 64
+const FAB_WIDTH = 92
+const FAB_HEIGHT = 92
 const FAB_MARGIN = 20
 const CHAT_GAP = 20
 const CHAT_WIDTH = 420
@@ -336,17 +336,18 @@ export default function GufoAiWidget() {
           if (draggedRef.current) return
           setOpen((prev) => !prev)
         }}
-        className="fixed z-50 inline-flex h-16 items-center gap-3 rounded-full border border-[#17324D] bg-[#17324D] px-4 text-white shadow-[0_18px_45px_rgba(23,50,77,0.28)] transition hover:-translate-y-0.5 hover:bg-[#0F2740]"
+        className="fixed z-50 inline-flex items-center justify-center border-0 bg-transparent p-0 shadow-none transition hover:-translate-y-0.5"
         style={{
           left: `${position.x}px`,
           top: `${position.y}px`,
+          width: `${FAB_WIDTH}px`,
+          height: `${FAB_HEIGHT}px`,
           touchAction: "none",
           cursor: "grab",
           opacity: config.enabled ? 1 : 0.78,
         }}
       >
-        <GufoAiAvatar size={42} thinking={loading} className="shrink-0" />
-        <span className="pr-1 text-sm font-semibold">Gufo AI</span>
+        <GufoAiAvatar size={84} thinking={loading} className="shrink-0" />
       </button>
 
       {open ? (
