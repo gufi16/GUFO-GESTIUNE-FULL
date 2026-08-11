@@ -264,31 +264,17 @@ function SidebarAccordion({
 
 function SidebarContent({
   visibleSections,
+  activeDesktopSection,
+  onActiveDesktopSectionChange,
   mobile = false,
   onCloseMobile,
 }: {
   visibleSections: SidebarSection[]
+  activeDesktopSection?: string | null
+  onActiveDesktopSectionChange?: (section: string | null) => void
   mobile?: boolean
   onCloseMobile?: () => void
 }) {
-  const location = useLocation()
-  const defaultDesktopSection = useMemo(
-    () =>
-      visibleSections.find(
-        (section) =>
-          section.collapsible &&
-          section.items.some((item) => item.to && location.pathname.startsWith(item.to))
-      )?.title || null,
-    [location.pathname, visibleSections]
-  )
-  const [activeDesktopSection, setActiveDesktopSection] = useState<string | null>(defaultDesktopSection)
-
-  useEffect(() => {
-    if (!mobile) {
-      setActiveDesktopSection(defaultDesktopSection)
-    }
-  }, [defaultDesktopSection, mobile])
-
   const activeDesktopItems =
     !mobile && activeDesktopSection
       ? visibleSections.find((section) => section.title === activeDesktopSection)?.items || []
@@ -340,8 +326,8 @@ function SidebarContent({
                       mobile
                         ? undefined
                         : () =>
-                            setActiveDesktopSection((current) =>
-                              current === section.title ? null : section.title
+                            onActiveDesktopSectionChange?.(
+                              activeDesktopSection === section.title ? null : section.title
                             )
                     }
                     onNavigate={mobile ? onCloseMobile : undefined}
@@ -401,6 +387,7 @@ export default function Sidebar({
   mobileOpen?: boolean
   onCloseMobile?: () => void
 }) {
+  const location = useLocation()
   const visibleSections = sections
     .map((section) => ({
       ...section,
@@ -408,15 +395,41 @@ export default function Sidebar({
     }))
     .filter((section) => section.items.length > 0)
 
+  const defaultDesktopSection = useMemo(
+    () =>
+      visibleSections.find(
+        (section) =>
+          section.collapsible &&
+          section.items.some((item) => item.to && location.pathname.startsWith(item.to))
+      )?.title || null,
+    [location.pathname, visibleSections]
+  )
+  const [activeDesktopSection, setActiveDesktopSection] = useState<string | null>(defaultDesktopSection)
+
+  useEffect(() => {
+    setActiveDesktopSection(defaultDesktopSection)
+  }, [defaultDesktopSection])
+
+  const hasDesktopSecondary = !!activeDesktopSection
+
   return (
     <>
       {mobileOpen ? (
         <div className="fixed inset-0 z-50 bg-slate-950/45 backdrop-blur-[1px] xl:hidden" onClick={onCloseMobile} />
       ) : null}
 
-      <aside className="hidden xl:block xl:w-[544px] xl:shrink-0">
-        <div className="fixed left-0 top-0 z-40 hidden h-screen w-[544px] overflow-hidden border-r border-slate-200/80 bg-white/95 backdrop-blur xl:flex">
-          <SidebarContent visibleSections={visibleSections} />
+      <aside className={clsx("hidden xl:block xl:shrink-0", hasDesktopSecondary ? "xl:w-[544px]" : "xl:w-64")}>
+        <div
+          className={clsx(
+            "fixed left-0 top-0 z-40 hidden h-screen overflow-hidden border-r border-slate-200/80 bg-white/95 backdrop-blur xl:flex",
+            hasDesktopSecondary ? "w-[544px]" : "w-64"
+          )}
+        >
+          <SidebarContent
+            visibleSections={visibleSections}
+            activeDesktopSection={activeDesktopSection}
+            onActiveDesktopSectionChange={setActiveDesktopSection}
+          />
         </div>
       </aside>
 
