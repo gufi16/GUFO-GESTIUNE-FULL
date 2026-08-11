@@ -370,7 +370,12 @@ function SidebarContent({
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
             <div className="space-y-1">
               {activeDesktopItems.map((item) => (
-                <SidebarLink key={`${activeDesktopSection}-${item.label}`} item={item} nested />
+                <SidebarLink
+                  key={`${activeDesktopSection}-${item.label}`}
+                  item={item}
+                  nested
+                  onNavigate={() => onActiveDesktopSectionChange?.(null)}
+                />
               ))}
             </div>
           </div>
@@ -387,28 +392,13 @@ export default function Sidebar({
   mobileOpen?: boolean
   onCloseMobile?: () => void
 }) {
-  const location = useLocation()
   const visibleSections = sections
     .map((section) => ({
       ...section,
       items: section.items.filter((item) => !item.module || hasModule(item.module)),
     }))
     .filter((section) => section.items.length > 0)
-
-  const defaultDesktopSection = useMemo(
-    () =>
-      visibleSections.find(
-        (section) =>
-          section.collapsible &&
-          section.items.some((item) => item.to && location.pathname.startsWith(item.to))
-      )?.title || null,
-    [location.pathname, visibleSections]
-  )
-  const [activeDesktopSection, setActiveDesktopSection] = useState<string | null>(defaultDesktopSection)
-
-  useEffect(() => {
-    setActiveDesktopSection(defaultDesktopSection)
-  }, [defaultDesktopSection])
+  const [activeDesktopSection, setActiveDesktopSection] = useState<string | null>(null)
 
   const hasDesktopSecondary = !!activeDesktopSection
 
