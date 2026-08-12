@@ -46,6 +46,7 @@ type LocalGuideTarget = {
   title: string
   hint: string
   anchors: string[]
+  tabs?: string[]
 }
 
 type RobotBubble = {
@@ -291,6 +292,7 @@ function resolveLocalGuide(pathname: string, rawQuestion: string): LocalGuideTar
         title: "Unitate de masura",
         hint: "Aici alegi UM-ul produsului din zona Unitati si achizitie.",
         anchors: ["UM vanzare", "UM", "Unitati si achizitie"],
+        tabs: ["Unitati si achizitie"],
       }
     }
     if (normalizedIncludes(question, ["cod de bare", "barcode"])) {
@@ -298,6 +300,7 @@ function resolveLocalGuide(pathname: string, rawQuestion: string): LocalGuideTar
         title: "Cod de bare",
         hint: "Aici completezi sau generezi codul de bare pentru produs.",
         anchors: ["Cod de bare", "Genereaza cod"],
+        tabs: ["Date generale"],
       }
     }
     if (normalizedIncludes(question, ["retetar"])) {
@@ -305,6 +308,7 @@ function resolveLocalGuide(pathname: string, rawQuestion: string): LocalGuideTar
         title: "Retetar",
         hint: "Aici verifici modul de retetar si daca produsul cere retetar obligatoriu.",
         anchors: ["Mod retetar", "Retetar obligatoriu"],
+        tabs: ["Date generale", "Control si loturi"],
       }
     }
     if (normalizedIncludes(question, ["categorie", "subcategorie"])) {
@@ -312,6 +316,7 @@ function resolveLocalGuide(pathname: string, rawQuestion: string): LocalGuideTar
         title: "Categorie produs",
         hint: "Aici alegi categoria principala si, daca este cazul, subcategoria produsului.",
         anchors: ["Categorie principala", "Subcategorie", "Incadrare produs"],
+        tabs: ["Date generale"],
       }
     }
     if (normalizedIncludes(question, ["pret", "pret vanzare", "cost"])) {
@@ -319,6 +324,7 @@ function resolveLocalGuide(pathname: string, rawQuestion: string): LocalGuideTar
         title: "Pret si cost",
         hint: "Aici verifici pretul de vanzare, costul si unitatile de achizitie.",
         anchors: ["Pret vanzare", "Cost achizitie / UM", "Unitati si achizitie"],
+        tabs: ["Unitati si achizitie"],
       }
     }
   }
@@ -329,6 +335,7 @@ function resolveLocalGuide(pathname: string, rawQuestion: string): LocalGuideTar
         title: "Pozitie Gufo POS",
         hint: "Aici setezi ordinea in care categoria apare in Gufo POS.",
         anchors: ["Pozitie Gufo POS", "Categorie", "Categorie parinte"],
+        tabs: ["Categorii produse"],
       }
     }
   }
@@ -339,6 +346,7 @@ function resolveLocalGuide(pathname: string, rawQuestion: string): LocalGuideTar
         title: "Acces pe rol",
         hint: "Aici alegi ce roluri pot vedea si folosi Gufo AI.",
         anchors: ["Acces pe rol", "Proprietar", "Administrator", "Operator", "Casier"],
+        tabs: ["Setari Gufo AI"],
       }
     }
   }
@@ -370,6 +378,18 @@ function locateGuideElement(anchors: string[]) {
     if (partial) return partial
   }
   return null
+}
+
+function openGuideTabs(tabTitles?: string[]) {
+  if (typeof document === "undefined" || !tabTitles?.length) return
+  const buttons = Array.from(document.querySelectorAll("button"))
+  for (const tabTitle of tabTitles) {
+    const normalizedTab = normalizeText(tabTitle).toLowerCase()
+    const tabButton = buttons.find((button) => normalizeText(button.textContent).toLowerCase() === normalizedTab)
+    if (tabButton) {
+      ;(tabButton as HTMLButtonElement).click()
+    }
+  }
 }
 
 function extractPageContext(pageLabel: string): GufoAiPageContext | undefined {
@@ -710,8 +730,24 @@ export default function GufoAiWidget() {
   }
 
   function activateGuide(target: LocalGuideTarget) {
-    const element = locateGuideElement(target.anchors)
-    if (!element || typeof window === "undefined") return false
+    if (typeof window === "undefined") return false
+
+    openGuideTabs(target.tabs)
+
+    const locateTarget = () => locateGuideElement(target.anchors)
+    let element = locateTarget()
+    if (!element) {
+      window.setTimeout(() => {
+        const delayedElement = locateTarget()
+        if (delayedElement) {
+          activateGuide({
+            ...target,
+            tabs: [],
+          })
+        }
+      }, 220)
+      return false
+    }
 
     const guideElement = (element.parentElement || element) as HTMLElement
     guideElement.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" })
@@ -827,15 +863,62 @@ export default function GufoAiWidget() {
           0%, 100% { box-shadow: 0 0 0 8px rgba(34, 211, 238, 0.16); }
           50% { box-shadow: 0 0 0 14px rgba(34, 211, 238, 0.22); }
         }
+        .gufo-ai-cloud {
+          position: relative;
+          border-radius: 28px;
+        }
+        .gufo-ai-cloud::before,
+        .gufo-ai-cloud::after {
+          content: "";
+          position: absolute;
+          border-radius: 999px;
+          background: rgba(255,255,255,0.95);
+          border: 1px solid rgba(226,232,240,0.92);
+          z-index: -1;
+        }
+        .gufo-ai-cloud::before {
+          width: 72px;
+          height: 72px;
+          left: 18px;
+          top: -24px;
+        }
+        .gufo-ai-cloud::after {
+          width: 92px;
+          height: 92px;
+          right: 24px;
+          top: -30px;
+        }
+        .gufo-ai-cloud-tail {
+          position: absolute;
+          right: 28px;
+          bottom: -16px;
+          width: 28px;
+          height: 28px;
+          border-radius: 999px;
+          background: rgba(255,255,255,0.95);
+          border: 1px solid rgba(226,232,240,0.92);
+          box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+        }
+        .gufo-ai-cloud-tail::after {
+          content: "";
+          position: absolute;
+          right: -12px;
+          bottom: -10px;
+          width: 18px;
+          height: 18px;
+          border-radius: 999px;
+          background: rgba(255,255,255,0.95);
+          border: 1px solid rgba(226,232,240,0.92);
+        }
       `}</style>
       {!hasRoleAccess ? null : (
         <>
           {!open && robotBubble ? (
             <div
-              className="fixed z-50 max-w-[280px] rounded-[22px] border border-slate-200 bg-white/95 px-4 py-3 text-left shadow-[0_18px_40px_rgba(15,23,42,0.16)] backdrop-blur"
+              className="gufo-ai-cloud fixed z-50 max-w-[300px] border border-slate-200 bg-white/95 px-4 py-3 text-left shadow-[0_18px_40px_rgba(15,23,42,0.16)] backdrop-blur"
               style={{
                 left: `${Math.max(FAB_MARGIN, position.x - 190)}px`,
-                top: `${Math.max(FAB_MARGIN, position.y - 94)}px`,
+                top: `${Math.max(FAB_MARGIN, position.y - 110)}px`,
               }}
             >
               <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
@@ -846,6 +929,7 @@ export default function GufoAiWidget() {
                 <ArrowRight size={12} />
                 Apasa robotul pentru chat
               </div>
+              <div className="gufo-ai-cloud-tail" />
             </div>
           ) : null}
 
