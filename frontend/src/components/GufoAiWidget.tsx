@@ -1038,67 +1038,27 @@ export default function GufoAiWidget() {
         }
         .gufo-ai-cloud {
           position: relative;
-          width: 280px;
-          min-width: 280px;
-          border-radius: 32px;
+          width: 300px;
+          min-width: 300px;
+          border-radius: 24px;
           background: rgba(255,255,255,0.97);
+          box-shadow: 0 18px 40px rgba(15,23,42,0.16);
         }
-        .gufo-ai-cloud::before,
-        .gufo-ai-cloud::after {
-          content: "";
-          position: absolute;
-          border-radius: 999px;
-          background: rgba(255,255,255,0.95);
-          border: 1px solid rgba(226,232,240,0.92);
-          z-index: -1;
-        }
-        .gufo-ai-cloud--left::before,
-        .gufo-ai-cloud--right::before {
-          width: 86px;
-          height: 86px;
-          top: -30px;
-        }
-        .gufo-ai-cloud--left::after,
-        .gufo-ai-cloud--right::after {
-          width: 104px;
-          height: 104px;
-          top: -38px;
-        }
-        .gufo-ai-cloud--left::before { left: 18px; }
-        .gufo-ai-cloud--left::after { right: 30px; }
-        .gufo-ai-cloud--right::before { left: 30px; }
-        .gufo-ai-cloud--right::after { right: 18px; }
         .gufo-ai-cloud-tail {
           position: absolute;
-          bottom: -16px;
-          width: 24px;
-          height: 24px;
-          border-radius: 999px;
-          background: rgba(255,255,255,0.95);
-          border: 1px solid rgba(226,232,240,0.92);
-          box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
-        }
-        .gufo-ai-cloud-tail::after {
-          content: "";
-          position: absolute;
-          bottom: -10px;
-          width: 14px;
-          height: 14px;
-          border-radius: 999px;
-          background: rgba(255,255,255,0.95);
-          border: 1px solid rgba(226,232,240,0.92);
+          bottom: 18px;
+          width: 18px;
+          height: 18px;
+          background: rgba(255,255,255,0.97);
+          border-right: 1px solid rgba(226,232,240,0.92);
+          border-bottom: 1px solid rgba(226,232,240,0.92);
+          transform: rotate(-45deg);
         }
         .gufo-ai-cloud-tail--left {
-          right: 28px;
-        }
-        .gufo-ai-cloud-tail--left::after {
-          right: -12px;
+          right: -9px;
         }
         .gufo-ai-cloud-tail--right {
-          left: 28px;
-        }
-        .gufo-ai-cloud-tail--right::after {
-          left: -12px;
+          left: -9px;
         }
         @keyframes gufoAiPointerBounce {
           0%, 100% { transform: translateY(0px); }
