@@ -696,7 +696,7 @@ export default function GufoAiWidget() {
   }, [])
 
   useEffect(() => {
-    if (open) {
+    if (open || !loading) {
       setRobotBubble(null)
       setGuideMarker(null)
       return
@@ -712,12 +712,12 @@ export default function GufoAiWidget() {
     }
 
     setRobotBubble({
-      title: pageLabel,
+      title: "Gufo AI",
       text: hasModuleAccess
-        ? "Te pot ghida direct in campurile din pagina asta."
-        : "Aici iti explic si iti arat unde trebuie sa verifici.",
+        ? "Ma gandesc si verific pagina curenta pentru tine."
+        : "Ma gandesc si verific ce pot explica sigur in pagina asta.",
     })
-  }, [config.enabled, hasModuleAccess, hasRoleAccess, open, pageContext, pageLabel])
+  }, [config.enabled, hasModuleAccess, hasRoleAccess, loading, open, pageContext])
 
   useEffect(() => {
     if (!config.enabled || !config.proactiveWarnings || !config.watchCurrentPage) return
@@ -1107,7 +1107,7 @@ export default function GufoAiWidget() {
               <div
                 className="gufo-ai-cloud absolute px-5 py-5 text-left backdrop-blur"
                 style={{
-                  left: `${Math.round((FAB_WIDTH - 320) / 2)}px`,
+                  left: `${Math.round((FAB_WIDTH - 320) / 2) - 44}px`,
                   top: "-178px",
                   pointerEvents: "auto",
                 }}
