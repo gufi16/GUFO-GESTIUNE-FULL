@@ -1038,6 +1038,8 @@ export default function GufoAiWidget() {
         }
         .gufo-ai-cloud {
           position: relative;
+          width: 280px;
+          min-width: 280px;
           border-radius: 32px;
           background: rgba(255,255,255,0.97);
         }
@@ -1062,15 +1064,15 @@ export default function GufoAiWidget() {
           height: 104px;
           top: -38px;
         }
-        .gufo-ai-cloud--left::before { left: 10px; }
-        .gufo-ai-cloud--left::after { right: 18px; }
-        .gufo-ai-cloud--right::before { left: 18px; }
-        .gufo-ai-cloud--right::after { right: 10px; }
+        .gufo-ai-cloud--left::before { left: 18px; }
+        .gufo-ai-cloud--left::after { right: 30px; }
+        .gufo-ai-cloud--right::before { left: 30px; }
+        .gufo-ai-cloud--right::after { right: 18px; }
         .gufo-ai-cloud-tail {
           position: absolute;
           bottom: -16px;
-          width: 28px;
-          height: 28px;
+          width: 24px;
+          height: 24px;
           border-radius: 999px;
           background: rgba(255,255,255,0.95);
           border: 1px solid rgba(226,232,240,0.92);
@@ -1080,8 +1082,8 @@ export default function GufoAiWidget() {
           content: "";
           position: absolute;
           bottom: -10px;
-          width: 18px;
-          height: 18px;
+          width: 14px;
+          height: 14px;
           border-radius: 999px;
           background: rgba(255,255,255,0.95);
           border: 1px solid rgba(226,232,240,0.92);
@@ -1130,17 +1132,17 @@ export default function GufoAiWidget() {
           >
             {!open && robotBubble ? (
               <div
-                className={`gufo-ai-cloud ${bubbleOpensRight ? "gufo-ai-cloud--right" : "gufo-ai-cloud--left"} absolute max-w-[320px] border border-slate-200 bg-white/95 px-4 py-3 text-left shadow-[0_18px_40px_rgba(15,23,42,0.16)] backdrop-blur`}
+                className={`gufo-ai-cloud ${bubbleOpensRight ? "gufo-ai-cloud--right" : "gufo-ai-cloud--left"} absolute border border-slate-200 bg-white/95 px-4 py-3 text-left shadow-[0_18px_40px_rgba(15,23,42,0.16)] backdrop-blur`}
                 style={
                   bubbleOpensRight
-                    ? { left: `${FAB_WIDTH + 16}px`, top: "-16px", pointerEvents: "auto" }
-                    : { right: `${FAB_WIDTH + 16}px`, top: "-16px", pointerEvents: "auto" }
+                    ? { left: `${FAB_WIDTH + 18}px`, top: "-10px", pointerEvents: "auto" }
+                    : { right: `${FAB_WIDTH + 18}px`, top: "-10px", pointerEvents: "auto" }
                 }
               >
                 <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
                   {robotBubble.title}
                 </div>
-                <div className="mt-1 text-sm leading-5 text-slate-700">{robotBubble.text}</div>
+                <div className="mt-1 text-sm leading-5 text-slate-700 break-words">{robotBubble.text}</div>
                 <div className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[#17324D]">
                   <ArrowRight size={12} />
                   Apasa robotul pentru chat
