@@ -1038,27 +1038,56 @@ export default function GufoAiWidget() {
         }
         .gufo-ai-cloud {
           position: relative;
-          width: 300px;
-          min-width: 300px;
-          border-radius: 24px;
-          background: rgba(255,255,255,0.97);
-          box-shadow: 0 18px 40px rgba(15,23,42,0.16);
+          width: 320px;
+          min-width: 320px;
+          border-radius: 999px;
+          background: linear-gradient(180deg, rgba(241,249,255,0.98) 0%, rgba(255,255,255,0.98) 100%);
+          border: 2px solid rgba(103,132,170,0.72);
+          box-shadow: 0 18px 40px rgba(15,23,42,0.12);
         }
-        .gufo-ai-cloud-tail {
+        .gufo-ai-cloud-tail,
+        .gufo-ai-cloud-tail-secondary,
+        .gufo-ai-cloud-tail-tertiary {
           position: absolute;
-          bottom: 18px;
-          width: 18px;
-          height: 18px;
-          background: rgba(255,255,255,0.97);
-          border-right: 1px solid rgba(226,232,240,0.92);
-          border-bottom: 1px solid rgba(226,232,240,0.92);
-          transform: rotate(-45deg);
+          border-radius: 999px;
+          background: linear-gradient(180deg, rgba(241,249,255,0.98) 0%, rgba(255,255,255,0.98) 100%);
+          border: 2px solid rgba(103,132,170,0.72);
         }
         .gufo-ai-cloud-tail--left {
-          right: -9px;
+          right: 54px;
+          bottom: -28px;
+          width: 34px;
+          height: 34px;
         }
         .gufo-ai-cloud-tail--right {
-          left: -9px;
+          left: 54px;
+          bottom: -28px;
+          width: 34px;
+          height: 34px;
+        }
+        .gufo-ai-cloud-tail-secondary--left {
+          right: 28px;
+          bottom: -52px;
+          width: 24px;
+          height: 24px;
+        }
+        .gufo-ai-cloud-tail-secondary--right {
+          left: 28px;
+          bottom: -52px;
+          width: 24px;
+          height: 24px;
+        }
+        .gufo-ai-cloud-tail-tertiary--left {
+          right: 8px;
+          bottom: -70px;
+          width: 16px;
+          height: 16px;
+        }
+        .gufo-ai-cloud-tail-tertiary--right {
+          left: 8px;
+          bottom: -70px;
+          width: 16px;
+          height: 16px;
         }
         @keyframes gufoAiPointerBounce {
           0%, 100% { transform: translateY(0px); }
@@ -1092,11 +1121,11 @@ export default function GufoAiWidget() {
           >
             {!open && robotBubble ? (
               <div
-                className={`gufo-ai-cloud ${bubbleOpensRight ? "gufo-ai-cloud--right" : "gufo-ai-cloud--left"} absolute border border-slate-200 bg-white/95 px-4 py-3 text-left shadow-[0_18px_40px_rgba(15,23,42,0.16)] backdrop-blur`}
+                className="gufo-ai-cloud absolute px-5 py-5 text-left backdrop-blur"
                 style={
                   bubbleOpensRight
-                    ? { left: `${FAB_WIDTH + 18}px`, top: "-10px", pointerEvents: "auto" }
-                    : { right: `${FAB_WIDTH + 18}px`, top: "-10px", pointerEvents: "auto" }
+                    ? { left: `${FAB_WIDTH + 12}px`, top: "-26px", pointerEvents: "auto" }
+                    : { right: `${FAB_WIDTH + 12}px`, top: "-26px", pointerEvents: "auto" }
                 }
               >
                 <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
@@ -1108,6 +1137,8 @@ export default function GufoAiWidget() {
                   Apasa robotul pentru chat
                 </div>
                 <div className={`gufo-ai-cloud-tail ${bubbleOpensRight ? "gufo-ai-cloud-tail--right" : "gufo-ai-cloud-tail--left"}`} />
+                <div className={`gufo-ai-cloud-tail-secondary ${bubbleOpensRight ? "gufo-ai-cloud-tail-secondary--right" : "gufo-ai-cloud-tail-secondary--left"}`} />
+                <div className={`gufo-ai-cloud-tail-tertiary ${bubbleOpensRight ? "gufo-ai-cloud-tail-tertiary--right" : "gufo-ai-cloud-tail-tertiary--left"}`} />
               </div>
             ) : null}
 
