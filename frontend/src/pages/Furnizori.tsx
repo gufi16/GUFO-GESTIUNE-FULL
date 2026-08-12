@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { useSearchParams } from "react-router-dom"
 import PageHeader from "../components/PageHeader"
 import {
   DocumentMetric,
@@ -31,12 +32,13 @@ function emptyForm() {
 }
 
 export default function FurnizoriPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const token = getToken() || ""
   const [items, setItems] = useState<Supplier[]>([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [lookupBusy, setLookupBusy] = useState(false)
-  const [query, setQuery] = useState("")
+  const [query, setQuery] = useState(() => searchParams.get("q") || "")
   const [error, setError] = useState("")
   const [modalOpen, setModalOpen] = useState(false)
   const [form, setForm] = useState<any>(emptyForm())
@@ -45,7 +47,23 @@ export default function FurnizoriPage() {
   useEffect(() => {
     loadSuppliers()
     loadNumbering()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    const nextQuery = searchParams.get("q") || ""
+    setQuery((prev) => (prev === nextQuery ? prev : nextQuery))
+  }, [searchParams])
+
+  useEffect(() => {
+    const current = searchParams.get("q") || ""
+    const normalized = query.trim()
+    if (current === normalized) return
+    const next = new URLSearchParams(searchParams)
+    if (normalized) next.set("q", normalized)
+    else next.delete("q")
+    setSearchParams(next, { replace: true })
+  }, [query, searchParams, setSearchParams])
 
   async function loadNumbering() {
     try {
@@ -166,6 +184,28 @@ export default function FurnizoriPage() {
   }
 
   const filtered = useMemo(() => items, [items])
+
+  useEffect(() => {
+    void loadSuppliers(query.trim())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query])
+
+  useEffect(() => {
+    if (searchParams.get("open") !== "1" || modalOpen || !query.trim() || filtered.length === 0) return
+    const needle = query.trim().toLowerCase()
+    const match =
+      filtered.find((item) => String(item.name || "").trim().toLowerCase() === needle) ||
+      filtered.find((item) => String(item.code || "").trim().toLowerCase() === needle) ||
+      filtered.find((item) => String(item.cif || "").trim().toLowerCase() === needle) ||
+      filtered.find((item) => [item.name, item.code, item.cif, item.phone, item.email].filter(Boolean).join(" ").toLowerCase().includes(needle))
+
+    if (!match) return
+
+    openEditModal(match)
+    const next = new URLSearchParams(searchParams)
+    next.delete("open")
+    setSearchParams(next, { replace: true })
+  }, [filtered, modalOpen, query, searchParams, setSearchParams])
   const stats = useMemo(
     () => ({
       total: items.length,

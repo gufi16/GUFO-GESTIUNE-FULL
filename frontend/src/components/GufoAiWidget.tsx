@@ -285,14 +285,126 @@ function uniqueCompactTexts(values: Array<string | null | undefined>, maxItems: 
   return items
 }
 
-function normalizedIncludes(value: string, keywords: string[]) {
+function normalizedIncludes(value: string, keywords: readonly string[]) {
   const normalized = normalizeText(value).toLowerCase()
   return keywords.some((keyword) => normalized.includes(keyword))
 }
 
+function buildRouteTarget(title: string, hint: string, route: string, anchors: string[] = []) {
+  return {
+    title,
+    hint,
+    route,
+    anchors: anchors.length ? anchors : [title],
+  } satisfies LocalGuideTarget
+}
+
+function buildSearchRoute(pathname: string, query: string, extraParams?: Record<string, string>) {
+  const params = new URLSearchParams()
+  if (query.trim()) params.set("q", query.trim())
+  Object.entries(extraParams || {}).forEach(([key, value]) => {
+    if (value) params.set(key, value)
+  })
+  const search = params.toString()
+  return search ? `${pathname}?${search}` : pathname
+}
+
 function resolveLocalGuide(pathname: string, rawQuestion: string): LocalGuideTarget | null {
   const question = normalizeText(rawQuestion).toLowerCase()
+  const searchCommandPatterns = [
+    {
+      regex: /(?:deschide|cauta|cauta-mi|gaseste|arata-mi)\s+produs(?:ul)?\s+(.+)/i,
+      title: "Produse",
+      hint: "Te duc direct in Produse si aplic cautarea ceruta.",
+      route: (value: string) => buildSearchRoute("/nomenclator/produse", value, { open: /deschide/i.test(question) ? "1" : "" }),
+      anchors: ["Produse", "Cauta rapid dupa produs"],
+    },
+    {
+      regex: /(?:deschide|cauta|cauta-mi|gaseste|arata-mi)\s+client(?:ul)?\s+(.+)/i,
+      title: "Clienti",
+      hint: "Te duc direct in Clienti si aplic cautarea ceruta.",
+      route: (value: string) => buildSearchRoute("/nomenclator/clienti", value, { open: /deschide/i.test(question) ? "1" : "" }),
+      anchors: ["Clienti", "Lista clienti"],
+    },
+    {
+      regex: /(?:deschide|cauta|cauta-mi|gaseste|arata-mi)\s+furnizor(?:ul)?\s+(.+)/i,
+      title: "Furnizori",
+      hint: "Te duc direct in Furnizori si aplic cautarea ceruta.",
+      route: (value: string) => buildSearchRoute("/nomenclator/furnizori", value, { open: /deschide/i.test(question) ? "1" : "" }),
+      anchors: ["Furnizori", "Lista furnizori"],
+    },
+    {
+      regex: /(?:deschide|cauta|cauta-mi|gaseste|arata-mi)\s+(?:receptia|nir(?:ul)?|nota de receptie)\s+(.+)/i,
+      title: "Receptii NIR",
+      hint: "Te duc direct in lista NIR si aplic cautarea ceruta.",
+      route: (value: string) => buildSearchRoute("/inregistrare-document/nir", value, { open: /deschide/i.test(question) ? "1" : "" }),
+      anchors: ["Receptii NIR", "Cauta dupa numar, furnizor sau locatie"],
+    },
+    {
+      regex: /(?:deschide|cauta|cauta-mi|gaseste|arata-mi)\s+factur(?:a|i?le?)\s+(.+)/i,
+      title: "Facturi",
+      hint: "Te duc direct in Documente > Facturi si aplic cautarea ceruta.",
+      route: (value: string) => buildSearchRoute("/documente", value, { tab: "invoice", open: /deschide/i.test(question) ? "1" : "" }),
+      anchors: ["Facturi", "Documente"],
+    },
+    {
+      regex: /(?:deschide|cauta|cauta-mi|gaseste|arata-mi)\s+transfer(?:ul)?\s+(.+)/i,
+      title: "Transferuri",
+      hint: "Te duc direct in Documente > Transferuri si aplic cautarea ceruta.",
+      route: (value: string) => buildSearchRoute("/documente", value, { tab: "transfer" }),
+      anchors: ["Transferuri", "Documente"],
+    },
+    {
+      regex: /(?:deschide|cauta|cauta-mi|gaseste|arata-mi)\s+inventar(?:ul)?\s+(.+)/i,
+      title: "Inventare",
+      hint: "Te duc direct in Documente > Inventare si aplic cautarea ceruta.",
+      route: (value: string) => buildSearchRoute("/documente", value, { tab: "inventory" }),
+      anchors: ["Inventare", "Documente"],
+    },
+  ] as const
+  const routeIntentMatchers = [
+    { keywords: ["unde sunt produsele", "unde gasesc produsele", "du-ma la produse", "mergi la produse", "deschide produse"], target: buildRouteTarget("Produse", "Te duc direct in Nomenclator > Produse.", "/nomenclator/produse", ["Produse", "Adauga produs", "Cauta rapid dupa produs"]) },
+    { keywords: ["unde sunt clientii", "unde gasesc clientii", "du-ma la clienti", "mergi la clienti", "deschide clienti"], target: buildRouteTarget("Clienti", "Te duc direct in Nomenclator > Clienti.", "/nomenclator/clienti", ["Clienti", "Lista clienti"]) },
+    { keywords: ["unde sunt furnizorii", "unde gasesc furnizorii", "du-ma la furnizori", "mergi la furnizori", "deschide furnizori"], target: buildRouteTarget("Furnizori", "Te duc direct in Nomenclator > Furnizori.", "/nomenclator/furnizori", ["Furnizori", "Lista furnizori"]) },
+    { keywords: ["unde sunt locatiile", "unde gasesc locatiile", "du-ma la locatii", "mergi la locatii", "deschide locatii"], target: buildRouteTarget("Locatii", "Te duc direct in Nomenclator > Locatii.", "/nomenclator/locatii", ["Locatii"]) },
+    { keywords: ["unde sunt unitatile de masura", "unde gasesc unitatile de masura", "du-ma la unitati de masura", "mergi la unitati de masura", "deschide unitati de masura"], target: buildRouteTarget("Unitati de masura", "Te duc direct in Nomenclator > Unitati de masura.", "/nomenclator/uom", ["Unitati de masura"]) },
+    { keywords: ["unde sunt departamentele", "unde gasesc departamentele", "du-ma la departamente", "mergi la departamente", "deschide departamente"], target: buildRouteTarget("Departamente", "Te duc direct in Nomenclator > Departamente.", "/nomenclator/departamente", ["Departamente"]) },
+    { keywords: ["unde sunt categoriile", "unde gasesc categoriile", "du-ma la categorii", "mergi la categorii", "deschide categorii"], target: buildRouteTarget("Categorii", "Te duc direct in Nomenclator > Categorii.", "/nomenclator/categorii", ["Categorii produse", "Adauga categorie"]) },
+    { keywords: ["unde sunt subcategoriile", "unde gasesc subcategoriile", "du-ma la subcategorii", "mergi la subcategorii", "deschide subcategorii"], target: buildRouteTarget("Subcategorii", "Te duc direct in Nomenclator > Subcategorii.", "/nomenclator/subcategorii", ["Subcategorii produse", "Adauga subcategorie"]) },
+    { keywords: ["unde sunt facturile", "unde gasesc facturile", "du-ma la facturi", "mergi la facturi", "deschide facturi"], target: buildRouteTarget("Facturi", "Te duc direct in Documente > Facturi.", buildSearchRoute("/documente", "", { tab: "invoice" }), ["Facturi", "Documente"]) },
+    { keywords: ["unde sunt receptiile", "unde gasesc receptiile", "unde este nir", "du-ma la nir", "mergi la nir", "deschide nir"], target: buildRouteTarget("Receptii NIR", "Te duc direct in Operatiuni > Receptii NIR.", "/inregistrare-document/nir", ["Receptii NIR", "Cauta dupa numar, furnizor sau locatie"]) },
+    { keywords: ["unde sunt transferurile", "unde gasesc transferurile", "du-ma la transferuri", "mergi la transferuri", "deschide transferuri"], target: buildRouteTarget("Transferuri", "Te duc direct in Documente > Transferuri.", buildSearchRoute("/documente", "", { tab: "transfer" }), ["Transferuri", "Documente"]) },
+    { keywords: ["unde sunt inventarele", "unde gasesc inventarele", "du-ma la inventare", "mergi la inventare", "deschide inventare"], target: buildRouteTarget("Inventare", "Te duc direct in Documente > Inventare.", buildSearchRoute("/documente", "", { tab: "inventory" }), ["Inventare", "Documente"]) },
+    { keywords: ["unde sunt rapoartele", "unde gasesc rapoartele", "du-ma la rapoarte", "mergi la rapoarte", "deschide rapoarte"], target: buildRouteTarget("Rapoarte", "Te duc direct in Rapoarte.", "/rapoarte", ["Rapoarte"]) },
+    { keywords: ["unde sunt bonurile", "unde gasesc bonurile", "du-ma la vanzari bon", "mergi la vanzari bon", "deschide vanzari bon"], target: buildRouteTarget("Vanzari / Bon", "Te duc direct in Financiar > Vanzari / Bon.", "/financiar/vanzari-bon", ["Vanzari / Bon"]) },
+    { keywords: ["unde sunt inchiderile zilnice", "unde gasesc inchiderile zilnice", "du-ma la inchideri zilnice", "mergi la inchideri zilnice", "deschide inchideri zilnice"], target: buildRouteTarget("Inchideri zilnice", "Te duc direct in Financiar > Inchideri zilnice.", "/financiar/inchideri-zilnice", ["Inchideri zilnice"]) },
+    { keywords: ["unde sunt setarile", "unde gasesc setarile", "du-ma la setari", "mergi la setari", "deschide setari"], target: buildRouteTarget("Setari", "Te duc direct in Setari.", "/setari", ["Setari"]) },
+    { keywords: ["unde este setarea tva", "unde sunt setarile tva", "du-ma la tva", "mergi la tva", "deschide tva"], target: buildRouteTarget("Setari TVA", "Te duc direct in Setari > TVA.", "/setari/tva", ["Setari TVA"]) },
+    { keywords: ["unde sunt utilizatorii", "unde gasesc utilizatorii", "du-ma la utilizatori", "mergi la utilizatori", "deschide utilizatori"], target: buildRouteTarget("Utilizatori ERP", "Te duc direct in Setari > Utilizatori.", "/setari/utilizatori", ["Utilizatori ERP"]) },
+    { keywords: ["unde este backup", "unde sunt backupurile", "du-ma la backup", "mergi la backup", "deschide backup"], target: buildRouteTarget("Backup", "Te duc direct in Setari > Backup.", "/setari/backup", ["Backup"]) },
+    { keywords: ["unde este istoricul", "unde gasesc istoricul", "du-ma la istoric", "mergi la istoric", "deschide istoric"], target: buildRouteTarget("Istoric actiuni", "Te duc direct in Setari > Istoric.", "/setari/istoric", ["Istoric actiuni"]) },
+    { keywords: ["unde este dashboard", "du-ma la dashboard", "mergi la dashboard", "deschide dashboard"], target: buildRouteTarget("Dashboard", "Te duc direct in dashboard.", "/dashboard", ["Dashboard operational"]) },
+  ] as const
   const openProductMatch = question.match(/deschide produsul\s+(.+)/i)
+
+  const searchCommandMatch = searchCommandPatterns.find((item) => item.regex.test(rawQuestion))
+  if (searchCommandMatch) {
+    const result = rawQuestion.match(searchCommandMatch.regex)
+    const value = normalizeText(result?.[1])
+    if (value) {
+      return {
+        title: searchCommandMatch.title,
+        hint: searchCommandMatch.hint,
+        anchors: [...searchCommandMatch.anchors, value],
+        route: searchCommandMatch.route(value),
+      }
+    }
+  }
+
+  const routeIntent = routeIntentMatchers.find((item) => normalizedIncludes(question, item.keywords))
+  if (routeIntent) {
+    return routeIntent.target
+  }
 
   if (openProductMatch?.[1]) {
     const productName = normalizeText(openProductMatch[1])
@@ -301,24 +413,6 @@ function resolveLocalGuide(pathname: string, rawQuestion: string): LocalGuideTar
       hint: `Te duc direct in Produse si caut ${productName}.`,
       anchors: [productName, "Cauta rapid dupa produs", "Produse"],
       route: `/nomenclator/produse?q=${encodeURIComponent(productName)}`,
-    }
-  }
-
-  if (normalizedIncludes(question, ["unde gasesc produsele", "unde sunt produsele", "catalog produse"])) {
-    return {
-      title: "Produse",
-      hint: "Te duc direct in Nomenclator > Produse.",
-      anchors: ["Produse", "Adauga produs", "Cauta rapid dupa produs"],
-      route: "/nomenclator/produse",
-    }
-  }
-
-  if (normalizedIncludes(question, ["unde gasesc categoriile", "unde sunt categoriile", "categorii produse"])) {
-    return {
-      title: "Categorii",
-      hint: "Te duc direct in Nomenclator > Categorii.",
-      anchors: ["Categorii produse", "Adauga categorie"],
-      route: "/nomenclator/categorii",
     }
   }
 

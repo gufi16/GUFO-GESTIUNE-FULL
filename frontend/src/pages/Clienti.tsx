@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { useSearchParams } from "react-router-dom"
 import PageHeader from "../components/PageHeader"
 import {
   DocumentMetric,
@@ -76,10 +77,11 @@ function isCustomerReadyForEfactura(item: Partial<CustomerForm | Customer>) {
 }
 
 export default function ClientiPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const token = getToken() || ""
   const efacturaEnabled = hasModule("efactura")
   const [items, setItems] = useState<Customer[]>([])
-  const [search, setSearch] = useState("")
+  const [search, setSearch] = useState(() => searchParams.get("q") || "")
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [lookupBusy, setLookupBusy] = useState(false)
@@ -242,6 +244,38 @@ export default function ClientiPage() {
       [item.name, item.code, item.cif, item.phone, item.email, item.city, item.county].filter(Boolean).join(" ").toLowerCase().includes(q),
     )
   }, [items, search])
+
+  useEffect(() => {
+    const nextQuery = searchParams.get("q") || ""
+    setSearch((prev) => (prev === nextQuery ? prev : nextQuery))
+  }, [searchParams])
+
+  useEffect(() => {
+    const current = searchParams.get("q") || ""
+    const normalized = search.trim()
+    if (current === normalized) return
+    const next = new URLSearchParams(searchParams)
+    if (normalized) next.set("q", normalized)
+    else next.delete("q")
+    setSearchParams(next, { replace: true })
+  }, [search, searchParams, setSearchParams])
+
+  useEffect(() => {
+    if (searchParams.get("open") !== "1" || modalOpen || !search.trim() || filtered.length === 0) return
+    const needle = search.trim().toLowerCase()
+    const match =
+      filtered.find((item) => String(item.name || "").trim().toLowerCase() === needle) ||
+      filtered.find((item) => String(item.code || "").trim().toLowerCase() === needle) ||
+      filtered.find((item) => String(item.cif || "").trim().toLowerCase() === needle) ||
+      filtered.find((item) => [item.name, item.code, item.cif, item.phone, item.email].filter(Boolean).join(" ").toLowerCase().includes(needle))
+
+    if (!match) return
+
+    openEditModal(match)
+    const next = new URLSearchParams(searchParams)
+    next.delete("open")
+    setSearchParams(next, { replace: true })
+  }, [filtered, modalOpen, search, searchParams, setSearchParams])
 
   const stats = useMemo(
     () => ({

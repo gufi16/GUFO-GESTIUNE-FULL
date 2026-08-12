@@ -570,7 +570,7 @@ function PaginationBar({
 
 export default function Documente() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const initialTab = (
     searchParams.get("tab") === "inventory"
       ? "inventory"
@@ -600,7 +600,7 @@ export default function Documente() {
   const [dateTo, setDateTo] = useState(
     `${today.getFullYear()}-${`${today.getMonth() + 1}`.padStart(2, "0")}-${`${today.getDate()}`.padStart(2, "0")}`
   )
-  const [search, setSearch] = useState("")
+  const [search, setSearch] = useState(() => searchParams.get("q") || "")
   const [efacturaFilter, setEfacturaFilter] = useState("all")
   const [minutesFilter, setMinutesFilter] = useState<"all" | "DETERIORATION" | "PRICE_CHANGE">("all")
   const [loading, setLoading] = useState(true)
@@ -658,6 +658,21 @@ export default function Documente() {
       setActiveTab(tab as ActiveTab)
     }
   }, [searchParams])
+
+  useEffect(() => {
+    const nextQuery = searchParams.get("q") || ""
+    setSearch((prev) => (prev === nextQuery ? prev : nextQuery))
+  }, [searchParams])
+
+  useEffect(() => {
+    const current = searchParams.get("q") || ""
+    const normalized = search.trim()
+    if (current === normalized) return
+    const next = new URLSearchParams(searchParams)
+    if (normalized) next.set("q", normalized)
+    else next.delete("q")
+    setSearchParams(next, { replace: true })
+  }, [search, searchParams, setSearchParams])
 
   useEffect(() => {
     loadLocations()
@@ -1809,6 +1824,43 @@ export default function Documente() {
       return values.includes(q)
     })
   }, [receiptDocs, search])
+
+  useEffect(() => {
+    if (searchParams.get("open") !== "1") return
+    const needle = search.trim().toLowerCase()
+    if (!needle) return
+
+    if (activeTab === "invoice" && filteredInvoiceDocs.length > 0) {
+      const match =
+        filteredInvoiceDocs.find((doc) => String(doc.docNo || "").trim().toLowerCase() === needle) ||
+        filteredInvoiceDocs.find((doc) => [doc.docNo, doc.customerName, doc.customerCif].filter(Boolean).join(" ").toLowerCase().includes(needle))
+      if (match?.id) {
+        const next = new URLSearchParams(searchParams)
+        next.delete("open")
+        setSearchParams(next, { replace: true })
+        navigate(`/inregistrare-document/factura/edit?id=${match.id}`)
+        return
+      }
+    }
+
+    if (activeTab === "receipt" && filteredReceiptDocs.length > 0) {
+      const match =
+        filteredReceiptDocs.find((doc) => String(doc.docNo || doc.number || "").trim().toLowerCase() === needle) ||
+        filteredReceiptDocs.find((doc) =>
+          [doc.docNo, doc.number, doc.supplier?.name, doc.supplierName, doc.location?.name, doc.warehouse?.name]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase()
+            .includes(needle)
+        )
+      if (match?.id) {
+        const next = new URLSearchParams(searchParams)
+        next.delete("open")
+        setSearchParams(next, { replace: true })
+        navigate(`/inregistrare-document/nir/edit?id=${match.id}`)
+      }
+    }
+  }, [activeTab, filteredInvoiceDocs, filteredReceiptDocs, navigate, search, searchParams, setSearchParams])
 
   const filteredMinutesDocs = useMemo(() => {
     const q = search.trim().toLowerCase()

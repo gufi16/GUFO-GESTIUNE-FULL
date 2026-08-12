@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { ArrowRight, Printer } from "lucide-react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
 import PageHeader from "../components/PageHeader"
 import {
   DocumentMetric,
@@ -62,12 +62,13 @@ const PAGE_SIZE = 10
 
 export default function NirListPage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const token = getToken() || ""
 
   const [rows, setRows] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
-  const [search, setSearch] = useState("")
+  const [search, setSearch] = useState(() => searchParams.get("q") || "")
   const [statusFilter, setStatusFilter] = useState("ALL")
   const [supplierFilter, setSupplierFilter] = useState("ALL")
   const [locationFilter, setLocationFilter] = useState("ALL")
@@ -79,6 +80,21 @@ export default function NirListPage() {
     return subscribeToActiveLocation((locationId) => setActiveLocationIdState(locationId))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    const nextQuery = searchParams.get("q") || ""
+    setSearch((prev) => (prev === nextQuery ? prev : nextQuery))
+  }, [searchParams])
+
+  useEffect(() => {
+    const current = searchParams.get("q") || ""
+    const normalized = search.trim()
+    if (current === normalized) return
+    const next = new URLSearchParams(searchParams)
+    if (normalized) next.set("q", normalized)
+    else next.delete("q")
+    setSearchParams(next, { replace: true })
+  }, [search, searchParams, setSearchParams])
 
   async function loadRows() {
     setLoading(true)
@@ -195,6 +211,30 @@ export default function NirListPage() {
   useEffect(() => {
     setPage(1)
   }, [search, statusFilter, supplierFilter, locationFilter, activeLocationId])
+
+  useEffect(() => {
+    if (searchParams.get("open") !== "1" || !search.trim() || filteredRows.length === 0) return
+    const needle = search.trim().toLowerCase()
+    const match =
+      filteredRows.find((row) => String(row?.docNo || row?.number || "").trim().toLowerCase() === needle) ||
+      filteredRows.find((row) =>
+        [
+          row?.docNo || row?.number || "",
+          row?.supplier?.name || row?.supplierName || row?.vendor?.name || "",
+          row?.location?.name || row?.warehouse?.name || "",
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(needle)
+      )
+
+    if (!match?.id) return
+
+    const next = new URLSearchParams(searchParams)
+    next.delete("open")
+    setSearchParams(next, { replace: true })
+    navigate(`/inregistrare-document/nir/edit?id=${match.id}`)
+  }, [filteredRows, navigate, search, searchParams, setSearchParams])
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE))
   const safePage = Math.min(page, totalPages)

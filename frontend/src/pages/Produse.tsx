@@ -1269,6 +1269,22 @@ function getDefaultVat(list = vatRates) {
   }, [q, searchParams, setSearchParams])
 
   useEffect(() => {
+    if (searchParams.get("open") !== "1" || showModal || !q.trim() || filtered.length === 0) return
+    const needle = q.trim().toLowerCase()
+    const match =
+      filtered.find((item) => String(item.name || "").trim().toLowerCase() === needle) ||
+      filtered.find((item) => String(item.sku || "").trim().toLowerCase() === needle) ||
+      filtered.find((item) => String(item.name || "").toLowerCase().includes(needle))
+
+    if (!match) return
+
+    openEditModal(match)
+    const next = new URLSearchParams(searchParams)
+    next.delete("open")
+    setSearchParams(next, { replace: true })
+  }, [filtered, q, searchParams, setSearchParams, showModal])
+
+  useEffect(() => {
     if (fixedClassValue) {
       setClassFilter(fixedClassValue)
     }
