@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { BrainCircuit, Eye, SendHorizonal, ShieldCheck, Sparkles, Wand2, X } from "lucide-react"
+import { ArrowRight, BrainCircuit, Eye, SendHorizonal, ShieldCheck, Sparkles, Wand2, X } from "lucide-react"
 import { useLocation } from "react-router-dom"
 import { api } from "../lib/api"
 import { me } from "../lib/auth"
@@ -41,6 +41,17 @@ type AssistantAction = {
 }
 
 type GufoAiModuleScope = "nomenclature" | "inventory" | "financial" | "settings" | "generic"
+
+type LocalGuideTarget = {
+  title: string
+  hint: string
+  anchors: string[]
+}
+
+type RobotBubble = {
+  title: string
+  text: string
+}
 
 const POSITION_STORAGE_KEY = "gufo-ai-widget-position"
 const FAB_WIDTH = 92
@@ -266,6 +277,75 @@ function uniqueCompactTexts(values: Array<string | null | undefined>, maxItems: 
   return items
 }
 
+function normalizedIncludes(value: string, keywords: string[]) {
+  const normalized = normalizeText(value).toLowerCase()
+  return keywords.some((keyword) => normalized.includes(keyword))
+}
+
+function resolveLocalGuide(pathname: string, rawQuestion: string): LocalGuideTarget | null {
+  const question = normalizeText(rawQuestion).toLowerCase()
+
+  if (pathname.startsWith("/nomenclator/produse")) {
+    if (normalizedIncludes(question, ["unitate de masura", "unitatea de masura", "um", "masura"])) {
+      return {
+        title: "Unitate de masura",
+        hint: "Aici alegi UM-ul produsului din zona Unitati si achizitie.",
+        anchors: ["UM vanzare", "UM", "Unitati si achizitie"],
+      }
+    }
+    if (normalizedIncludes(question, ["cod de bare", "barcode"])) {
+      return {
+        title: "Cod de bare",
+        hint: "Aici completezi sau generezi codul de bare pentru produs.",
+        anchors: ["Cod de bare", "Genereaza cod"],
+      }
+    }
+    if (normalizedIncludes(question, ["retetar"])) {
+      return {
+        title: "Retetar",
+        hint: "Aici verifici modul de retetar si daca produsul cere retetar obligatoriu.",
+        anchors: ["Mod retetar", "Retetar obligatoriu"],
+      }
+    }
+    if (normalizedIncludes(question, ["categorie", "subcategorie"])) {
+      return {
+        title: "Categorie produs",
+        hint: "Aici alegi categoria principala si, daca este cazul, subcategoria produsului.",
+        anchors: ["Categorie principala", "Subcategorie", "Incadrare produs"],
+      }
+    }
+    if (normalizedIncludes(question, ["pret", "pret vanzare", "cost"])) {
+      return {
+        title: "Pret si cost",
+        hint: "Aici verifici pretul de vanzare, costul si unitatile de achizitie.",
+        anchors: ["Pret vanzare", "Cost achizitie / UM", "Unitati si achizitie"],
+      }
+    }
+  }
+
+  if (pathname.startsWith("/nomenclator/categorii")) {
+    if (normalizedIncludes(question, ["pozitie", "ordine", "pos"])) {
+      return {
+        title: "Pozitie Gufo POS",
+        hint: "Aici setezi ordinea in care categoria apare in Gufo POS.",
+        anchors: ["Pozitie Gufo POS", "Categorie", "Categorie parinte"],
+      }
+    }
+  }
+
+  if (pathname.startsWith("/setari/gufo-ai")) {
+    if (normalizedIncludes(question, ["rol", "acces"])) {
+      return {
+        title: "Acces pe rol",
+        hint: "Aici alegi ce roluri pot vedea si folosi Gufo AI.",
+        anchors: ["Acces pe rol", "Proprietar", "Administrator", "Operator", "Casier"],
+      }
+    }
+  }
+
+  return null
+}
+
 function extractFieldLabel(element: Element) {
   const parent = element.parentElement
   const previous = element.previousElementSibling
@@ -277,6 +357,19 @@ function extractFieldLabel(element: Element) {
   if (fromLabel && fromLabel.length <= 40) return fromLabel
 
   return ""
+}
+
+function locateGuideElement(anchors: string[]) {
+  if (typeof document === "undefined") return null
+  const candidates = Array.from(document.querySelectorAll("label, button, h1, h2, h3, h4, span, div, p"))
+  for (const anchor of anchors) {
+    const normalizedAnchor = normalizeText(anchor).toLowerCase()
+    const exact = candidates.find((element) => normalizeText(element.textContent).toLowerCase() === normalizedAnchor)
+    if (exact) return exact
+    const partial = candidates.find((element) => normalizeText(element.textContent).toLowerCase().includes(normalizedAnchor))
+    if (partial) return partial
+  }
+  return null
 }
 
 function extractPageContext(pageLabel: string): GufoAiPageContext | undefined {
@@ -362,10 +455,12 @@ export default function GufoAiWidget() {
   const [loading, setLoading] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [suggestions, setSuggestions] = useState<string[]>(defaultSuggestions(location.pathname))
+  const [robotBubble, setRobotBubble] = useState<RobotBubble | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const dragOffsetRef = useRef<{ x: number; y: number } | null>(null)
   const draggedRef = useRef(false)
   const announcedWarningKeyRef = useRef("")
+  const guideTimerRef = useRef<number | null>(null)
   const [position, setPosition] = useState<WidgetPosition>(() => {
     if (typeof window === "undefined") {
       return { x: 0, y: 0 }
@@ -421,6 +516,37 @@ export default function GufoAiWidget() {
   useEffect(() => {
     setSuggestions(defaultSuggestions(location.pathname))
   }, [location.pathname])
+
+  useEffect(() => {
+    return () => {
+      if (guideTimerRef.current) {
+        window.clearTimeout(guideTimerRef.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (open) {
+      setRobotBubble(null)
+      return
+    }
+    if (!config.enabled || !hasRoleAccess) return
+
+    if (pageContext?.warnings?.length) {
+      setRobotBubble({
+        title: "Am observat ceva",
+        text: pageContext.warnings[0] || "Merita verificata pagina curenta.",
+      })
+      return
+    }
+
+    setRobotBubble({
+      title: pageLabel,
+      text: hasModuleAccess
+        ? "Te pot ghida direct in campurile din pagina asta."
+        : "Aici iti explic si iti arat unde trebuie sa verifici.",
+    })
+  }, [config.enabled, hasModuleAccess, hasRoleAccess, open, pageContext, pageLabel])
 
   useEffect(() => {
     if (!config.enabled || !config.proactiveWarnings || !config.watchCurrentPage) return
@@ -583,9 +709,55 @@ export default function GufoAiWidget() {
     draggedRef.current = false
   }
 
+  function activateGuide(target: LocalGuideTarget) {
+    const element = locateGuideElement(target.anchors)
+    if (!element || typeof window === "undefined") return false
+
+    const guideElement = (element.parentElement || element) as HTMLElement
+    guideElement.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" })
+    guideElement.classList.add("gufo-ai-guide-target")
+
+    const rect = guideElement.getBoundingClientRect()
+    const maxX = Math.max(FAB_MARGIN, window.innerWidth - FAB_WIDTH - FAB_MARGIN)
+    const maxY = Math.max(FAB_MARGIN, window.innerHeight - FAB_HEIGHT - FAB_MARGIN)
+    setPosition({
+      x: Math.max(FAB_MARGIN, Math.min(rect.right + 18, maxX)),
+      y: Math.max(FAB_MARGIN, Math.min(rect.top - 8, maxY)),
+    })
+
+    setRobotBubble({
+      title: target.title,
+      text: target.hint,
+    })
+    setOpen(false)
+    setInput("")
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `${Date.now()}-guide`,
+        role: "assistant",
+        text: `${target.title}: ${target.hint}`,
+      },
+    ])
+
+    if (guideTimerRef.current) {
+      window.clearTimeout(guideTimerRef.current)
+    }
+    guideTimerRef.current = window.setTimeout(() => {
+      guideElement.classList.remove("gufo-ai-guide-target")
+    }, 5000)
+
+    return true
+  }
+
   async function submitQuestion(text: string) {
     const question = text.trim()
     if (!question || loading || !config.enabled || !config.conversationalHelp) return
+
+    const localGuide = resolveLocalGuide(location.pathname, question)
+    if (localGuide && activateGuide(localGuide)) {
+      return
+    }
 
     const userMessage: ChatMessage = {
       id: `${Date.now()}-user`,
@@ -642,32 +814,67 @@ export default function GufoAiWidget() {
 
   return (
     <>
+      <style>{`
+        .gufo-ai-guide-target {
+          position: relative;
+          outline: 3px solid rgba(34, 211, 238, 0.92);
+          box-shadow: 0 0 0 8px rgba(34, 211, 238, 0.16);
+          border-radius: 18px;
+          animation: gufoAiGuidePulse 1.1s ease-in-out infinite;
+          transition: box-shadow .2s ease, outline-color .2s ease;
+        }
+        @keyframes gufoAiGuidePulse {
+          0%, 100% { box-shadow: 0 0 0 8px rgba(34, 211, 238, 0.16); }
+          50% { box-shadow: 0 0 0 14px rgba(34, 211, 238, 0.22); }
+        }
+      `}</style>
       {!hasRoleAccess ? null : (
-      <button
-        type="button"
-        onPointerDown={startDrag}
-        onClick={() => {
-          if (draggedRef.current) return
-          setOpen((prev) => !prev)
-        }}
-        className="fixed z-50 inline-flex items-center justify-center border-0 bg-transparent p-0 shadow-none transition hover:-translate-y-0.5"
-        style={{
-          left: `${position.x}px`,
-          top: `${position.y}px`,
-          width: `${FAB_WIDTH}px`,
-          height: `${FAB_HEIGHT}px`,
-          touchAction: "none",
-          cursor: "grab",
-          opacity: config.enabled ? 1 : 0.78,
-        }}
-      >
-        <GufoAiAvatar size={84} thinking={loading} mode={loading ? "thinking" : open ? "active" : "idle"} className="shrink-0" />
-      </button>
+        <>
+          {!open && robotBubble ? (
+            <div
+              className="fixed z-50 max-w-[280px] rounded-[22px] border border-slate-200 bg-white/95 px-4 py-3 text-left shadow-[0_18px_40px_rgba(15,23,42,0.16)] backdrop-blur"
+              style={{
+                left: `${Math.max(FAB_MARGIN, position.x - 190)}px`,
+                top: `${Math.max(FAB_MARGIN, position.y - 94)}px`,
+              }}
+            >
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                {robotBubble.title}
+              </div>
+              <div className="mt-1 text-sm leading-5 text-slate-700">{robotBubble.text}</div>
+              <div className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[#17324D]">
+                <ArrowRight size={12} />
+                Apasa robotul pentru chat
+              </div>
+            </div>
+          ) : null}
+
+          <button
+            type="button"
+            onPointerDown={startDrag}
+            onClick={() => {
+              if (draggedRef.current) return
+              setOpen((prev) => !prev)
+            }}
+            className="fixed z-50 inline-flex items-center justify-center border-0 bg-transparent p-0 shadow-none transition hover:-translate-y-0.5"
+            style={{
+              left: `${position.x}px`,
+              top: `${position.y}px`,
+              width: `${FAB_WIDTH}px`,
+              height: `${FAB_HEIGHT}px`,
+              touchAction: "none",
+              cursor: "grab",
+              opacity: config.enabled ? 1 : 0.78,
+            }}
+          >
+            <GufoAiAvatar size={84} thinking={loading} mode={loading ? "thinking" : open ? "active" : "idle"} className="shrink-0" />
+          </button>
+        </>
       )}
 
       {open && hasRoleAccess ? (
         <div
-          className="fixed z-50 flex h-[min(78vh,680px)] w-[min(92vw,420px)] flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_22px_60px_rgba(15,23,42,0.2)]"
+          className="fixed z-50 flex h-[min(66vh,520px)] w-[min(92vw,360px)] flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_22px_60px_rgba(15,23,42,0.2)]"
           style={{
             left: `${chatPosition.left}px`,
             top: `${chatPosition.top}px`,
@@ -705,7 +912,6 @@ export default function GufoAiWidget() {
                     </span>
                   ) : null}
                 </div>
-                <div className="mt-2 text-sm text-slate-200">{modeDescription(config)}</div>
                 <div className="mt-1 text-xs text-slate-300">Pagina curenta: {pageLabel}</div>
                 {!hasModuleAccess ? (
                   <div className="mt-2 rounded-2xl border border-amber-200/40 bg-amber-100/10 px-3 py-2 text-xs leading-5 text-amber-100">
@@ -763,35 +969,17 @@ export default function GufoAiWidget() {
           </div>
 
           <div className="border-t border-slate-200 bg-white px-4 py-4">
-            {hasModuleAccess ? (
-            <div className="mb-3">
-              <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                Actiuni asistate
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {assistantActions.slice(0, 3).map((action) => (
-                  <button
-                    key={action.label}
-                    type="button"
-                    onClick={() => submitQuestion(action.prompt)}
-                    className="rounded-full border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-[#17324D] transition hover:border-[#17324D] hover:bg-blue-100"
-                  >
-                    {action.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            ) : null}
-
             <div className="mb-3 flex flex-wrap gap-2">
-              {suggestions.slice(0, 3).map((suggestion) => (
+              {(hasModuleAccess ? assistantActions.map((action) => action.prompt) : suggestions).slice(0, 3).map((suggestion) => (
                 <button
                   key={suggestion}
                   type="button"
                   onClick={() => submitQuestion(suggestion)}
                   className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 transition hover:border-[#17324D] hover:bg-slate-100"
                 >
-                  {suggestion}
+                  {hasModuleAccess
+                    ? assistantActions.find((action) => action.prompt === suggestion)?.label || suggestion
+                    : suggestion}
                 </button>
               ))}
             </div>
@@ -809,7 +997,7 @@ export default function GufoAiWidget() {
                 rows={2}
                 placeholder={
                   config.enabled && config.conversationalHelp
-                    ? "Scrie-mi natural, de exemplu: salut, cum fac un NIR sau de ce nu pot salva..."
+                    ? "Intreaba scurt, de exemplu: unde gasesc UM?"
                     : "Conversatia este pusa pe pauza din Setari AI."
                 }
                 className="min-h-[52px] flex-1 resize-none rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-[#17324D] focus:bg-white focus:ring-4 focus:ring-blue-100"
