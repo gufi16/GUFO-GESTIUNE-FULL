@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import type { CSSProperties, ReactNode } from "react"
+import { useSearchParams } from "react-router-dom"
 import PageHeader from "../components/PageHeader"
 import { DocumentTabs } from "../components/DocumentUi"
 import { API_BASE, getToken } from "../lib/api"
@@ -329,6 +330,7 @@ export function ProductsCatalogPage({
   searchPlaceholder = "Cauta rapid dupa produs, cod, categorie, departament sau ambalaj...",
   hideSalePrice = false,
 }: ProdusePageProps) {
+  const [searchParams, setSearchParams] = useSearchParams()
   const token =
     getToken() ||
     localStorage.getItem("token") ||
@@ -351,7 +353,7 @@ export function ProductsCatalogPage({
   const [recipeSaving, setRecipeSaving] = useState(false)
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
-  const [q, setQ] = useState("")
+  const [q, setQ] = useState(() => searchParams.get("q") || "")
   const [showModal, setShowModal] = useState(false)
   const [showRecipeModal, setShowRecipeModal] = useState(false)
   const [editingItem, setEditingItem] = useState<Product | null>(null)
@@ -1250,6 +1252,21 @@ function getDefaultVat(list = vatRates) {
   useEffect(() => {
     setPage(1)
   }, [q, effectiveClassFilter, barcodeFilter])
+
+  useEffect(() => {
+    const nextQuery = searchParams.get("q") || ""
+    setQ((prev) => (prev === nextQuery ? prev : nextQuery))
+  }, [searchParams])
+
+  useEffect(() => {
+    const current = searchParams.get("q") || ""
+    const normalized = q.trim()
+    if (current === normalized) return
+    const next = new URLSearchParams(searchParams)
+    if (normalized) next.set("q", normalized)
+    else next.delete("q")
+    setSearchParams(next, { replace: true })
+  }, [q, searchParams, setSearchParams])
 
   useEffect(() => {
     if (fixedClassValue) {

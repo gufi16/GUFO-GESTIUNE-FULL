@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { ArrowRight, BrainCircuit, Eye, MousePointer2, SendHorizonal, ShieldCheck, Sparkles, Wand2, X } from "lucide-react"
-import { useLocation } from "react-router-dom"
+import { useLocation, useNavigate } from "react-router-dom"
 import { api } from "../lib/api"
 import { me } from "../lib/auth"
 import GufoAiAvatar from "./GufoAiAvatar"
@@ -47,6 +47,7 @@ type LocalGuideTarget = {
   hint: string
   anchors: string[]
   tabs?: string[]
+  route?: string
 }
 
 type RobotBubble = {
@@ -291,6 +292,35 @@ function normalizedIncludes(value: string, keywords: string[]) {
 
 function resolveLocalGuide(pathname: string, rawQuestion: string): LocalGuideTarget | null {
   const question = normalizeText(rawQuestion).toLowerCase()
+  const openProductMatch = question.match(/deschide produsul\s+(.+)/i)
+
+  if (openProductMatch?.[1]) {
+    const productName = normalizeText(openProductMatch[1])
+    return {
+      title: `Produs: ${productName}`,
+      hint: `Te duc direct in Produse si caut ${productName}.`,
+      anchors: [productName, "Cauta rapid dupa produs", "Produse"],
+      route: `/nomenclator/produse?q=${encodeURIComponent(productName)}`,
+    }
+  }
+
+  if (normalizedIncludes(question, ["unde gasesc produsele", "unde sunt produsele", "catalog produse"])) {
+    return {
+      title: "Produse",
+      hint: "Te duc direct in Nomenclator > Produse.",
+      anchors: ["Produse", "Adauga produs", "Cauta rapid dupa produs"],
+      route: "/nomenclator/produse",
+    }
+  }
+
+  if (normalizedIncludes(question, ["unde gasesc categoriile", "unde sunt categoriile", "categorii produse"])) {
+    return {
+      title: "Categorii",
+      hint: "Te duc direct in Nomenclator > Categorii.",
+      anchors: ["Categorii produse", "Adauga categorie"],
+      route: "/nomenclator/categorii",
+    }
+  }
 
   if (pathname.startsWith("/nomenclator/produse")) {
     if (normalizedIncludes(question, ["unitate de masura", "unitatea de masura", "um", "masura"])) {
@@ -471,6 +501,7 @@ function extractPageContext(pageLabel: string): GufoAiPageContext | undefined {
 
 export default function GufoAiWidget() {
   const location = useLocation()
+  const navigate = useNavigate()
   const [config, setConfig] = useState<GufoAiConfig>(() => readGufoAiConfig())
   const [userRole, setUserRole] = useState<string>(() => {
     if (typeof window === "undefined") return ""
@@ -739,6 +770,24 @@ export default function GufoAiWidget() {
 
   function activateGuide(target: LocalGuideTarget) {
     if (typeof window === "undefined") return false
+
+    if (target.route && location.pathname !== target.route) {
+      setRobotBubble({
+        title: target.title,
+        text: target.hint,
+      })
+      setGuideMarker(null)
+      setOpen(false)
+      setInput("")
+      navigate(target.route)
+      window.setTimeout(() => {
+        activateGuide({
+          ...target,
+          route: undefined,
+        })
+      }, 450)
+      return true
+    }
 
     openGuideTabs(target.tabs)
 
