@@ -664,7 +664,6 @@ export default function GufoAiWidget() {
   const hasRoleAccess = config.roleAccess[resolveAiRoleKey(userRole)]
   const hasModuleAccess = hasModuleDraftAccess(config, moduleScope)
   const ModeIcon = modeIcon(config.mode)
-  const bubbleOpensRight = position.x < 320
   const chatPosition = useMemo(() => {
     if (typeof window === "undefined") {
       return { left: FAB_MARGIN, top: FAB_MARGIN }
@@ -1053,38 +1052,23 @@ export default function GufoAiWidget() {
           background: linear-gradient(180deg, rgba(241,249,255,0.98) 0%, rgba(255,255,255,0.98) 100%);
           border: 2px solid rgba(103,132,170,0.72);
         }
-        .gufo-ai-cloud-tail--left {
-          right: 54px;
+        .gufo-ai-cloud-tail--center {
+          left: 50%;
+          transform: translateX(-50%);
           bottom: -28px;
           width: 34px;
           height: 34px;
         }
-        .gufo-ai-cloud-tail--right {
-          left: 54px;
-          bottom: -28px;
-          width: 34px;
-          height: 34px;
-        }
-        .gufo-ai-cloud-tail-secondary--left {
-          right: 28px;
+        .gufo-ai-cloud-tail-secondary--center {
+          left: 50%;
+          transform: translateX(-50%);
           bottom: -52px;
           width: 24px;
           height: 24px;
         }
-        .gufo-ai-cloud-tail-secondary--right {
-          left: 28px;
-          bottom: -52px;
-          width: 24px;
-          height: 24px;
-        }
-        .gufo-ai-cloud-tail-tertiary--left {
-          right: 8px;
-          bottom: -70px;
-          width: 16px;
-          height: 16px;
-        }
-        .gufo-ai-cloud-tail-tertiary--right {
-          left: 8px;
+        .gufo-ai-cloud-tail-tertiary--center {
+          left: 50%;
+          transform: translateX(-50%);
           bottom: -70px;
           width: 16px;
           height: 16px;
@@ -1122,11 +1106,11 @@ export default function GufoAiWidget() {
             {!open && robotBubble ? (
               <div
                 className="gufo-ai-cloud absolute px-5 py-5 text-left backdrop-blur"
-                style={
-                  bubbleOpensRight
-                    ? { left: `${FAB_WIDTH + 12}px`, top: "-26px", pointerEvents: "auto" }
-                    : { right: `${FAB_WIDTH + 12}px`, top: "-26px", pointerEvents: "auto" }
-                }
+                style={{
+                  left: `${Math.round((FAB_WIDTH - 320) / 2)}px`,
+                  top: "-178px",
+                  pointerEvents: "auto",
+                }}
               >
                 <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
                   {robotBubble.title}
@@ -1136,9 +1120,9 @@ export default function GufoAiWidget() {
                   <ArrowRight size={12} />
                   Apasa robotul pentru chat
                 </div>
-                <div className={`gufo-ai-cloud-tail ${bubbleOpensRight ? "gufo-ai-cloud-tail--right" : "gufo-ai-cloud-tail--left"}`} />
-                <div className={`gufo-ai-cloud-tail-secondary ${bubbleOpensRight ? "gufo-ai-cloud-tail-secondary--right" : "gufo-ai-cloud-tail-secondary--left"}`} />
-                <div className={`gufo-ai-cloud-tail-tertiary ${bubbleOpensRight ? "gufo-ai-cloud-tail-tertiary--right" : "gufo-ai-cloud-tail-tertiary--left"}`} />
+                <div className="gufo-ai-cloud-tail gufo-ai-cloud-tail--center" />
+                <div className="gufo-ai-cloud-tail-secondary gufo-ai-cloud-tail-secondary--center" />
+                <div className="gufo-ai-cloud-tail-tertiary gufo-ai-cloud-tail-tertiary--center" />
               </div>
             ) : null}
 
