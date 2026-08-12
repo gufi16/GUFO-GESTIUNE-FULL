@@ -664,6 +664,7 @@ export default function GufoAiWidget() {
   const hasRoleAccess = config.roleAccess[resolveAiRoleKey(userRole)]
   const hasModuleAccess = hasModuleDraftAccess(config, moduleScope)
   const ModeIcon = modeIcon(config.mode)
+  const bubbleOpensRight = position.x < 320
   const chatPosition = useMemo(() => {
     if (typeof window === "undefined") {
       return { left: FAB_MARGIN, top: FAB_MARGIN }
@@ -1049,21 +1050,24 @@ export default function GufoAiWidget() {
           border: 1px solid rgba(226,232,240,0.92);
           z-index: -1;
         }
-        .gufo-ai-cloud::before {
+        .gufo-ai-cloud--left::before,
+        .gufo-ai-cloud--right::before {
           width: 86px;
           height: 86px;
-          left: 10px;
           top: -30px;
         }
-        .gufo-ai-cloud::after {
+        .gufo-ai-cloud--left::after,
+        .gufo-ai-cloud--right::after {
           width: 104px;
           height: 104px;
-          right: 18px;
           top: -38px;
         }
+        .gufo-ai-cloud--left::before { left: 10px; }
+        .gufo-ai-cloud--left::after { right: 18px; }
+        .gufo-ai-cloud--right::before { left: 18px; }
+        .gufo-ai-cloud--right::after { right: 10px; }
         .gufo-ai-cloud-tail {
           position: absolute;
-          right: 28px;
           bottom: -16px;
           width: 28px;
           height: 28px;
@@ -1075,13 +1079,24 @@ export default function GufoAiWidget() {
         .gufo-ai-cloud-tail::after {
           content: "";
           position: absolute;
-          right: -12px;
           bottom: -10px;
           width: 18px;
           height: 18px;
           border-radius: 999px;
           background: rgba(255,255,255,0.95);
           border: 1px solid rgba(226,232,240,0.92);
+        }
+        .gufo-ai-cloud-tail--left {
+          right: 28px;
+        }
+        .gufo-ai-cloud-tail--left::after {
+          right: -12px;
+        }
+        .gufo-ai-cloud-tail--right {
+          left: 28px;
+        }
+        .gufo-ai-cloud-tail--right::after {
+          left: -12px;
         }
         @keyframes gufoAiPointerBounce {
           0%, 100% { transform: translateY(0px); }
@@ -1103,46 +1118,55 @@ export default function GufoAiWidget() {
               Aici: {guideMarker.title}
             </div>
           ) : null}
-          {!open && robotBubble ? (
-            <div
-              className="gufo-ai-cloud fixed z-50 max-w-[300px] border border-slate-200 bg-white/95 px-4 py-3 text-left shadow-[0_18px_40px_rgba(15,23,42,0.16)] backdrop-blur"
-              style={{
-                left: `${Math.max(FAB_MARGIN, position.x - 190)}px`,
-                top: `${Math.max(FAB_MARGIN, position.y - 110)}px`,
-              }}
-            >
-              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                {robotBubble.title}
-              </div>
-              <div className="mt-1 text-sm leading-5 text-slate-700">{robotBubble.text}</div>
-              <div className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[#17324D]">
-                <ArrowRight size={12} />
-                Apasa robotul pentru chat
-              </div>
-              <div className="gufo-ai-cloud-tail" />
-            </div>
-          ) : null}
-
-          <button
-            type="button"
-            onPointerDown={startDrag}
-            onClick={() => {
-              if (draggedRef.current) return
-              setOpen((prev) => !prev)
-            }}
-            className="fixed z-50 inline-flex items-center justify-center border-0 bg-transparent p-0 shadow-none transition hover:-translate-y-0.5"
+          <div
+            className="fixed z-50"
             style={{
               left: `${position.x}px`,
               top: `${position.y}px`,
               width: `${FAB_WIDTH}px`,
               height: `${FAB_HEIGHT}px`,
-              touchAction: "none",
-              cursor: "grab",
-              opacity: config.enabled ? 1 : 0.78,
+              pointerEvents: "none",
             }}
           >
-            <GufoAiAvatar size={84} thinking={loading} mode={loading ? "thinking" : open ? "active" : "idle"} className="shrink-0" />
-          </button>
+            {!open && robotBubble ? (
+              <div
+                className={`gufo-ai-cloud ${bubbleOpensRight ? "gufo-ai-cloud--right" : "gufo-ai-cloud--left"} absolute max-w-[320px] border border-slate-200 bg-white/95 px-4 py-3 text-left shadow-[0_18px_40px_rgba(15,23,42,0.16)] backdrop-blur`}
+                style={
+                  bubbleOpensRight
+                    ? { left: `${FAB_WIDTH + 16}px`, top: "-16px", pointerEvents: "auto" }
+                    : { right: `${FAB_WIDTH + 16}px`, top: "-16px", pointerEvents: "auto" }
+                }
+              >
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                  {robotBubble.title}
+                </div>
+                <div className="mt-1 text-sm leading-5 text-slate-700">{robotBubble.text}</div>
+                <div className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[#17324D]">
+                  <ArrowRight size={12} />
+                  Apasa robotul pentru chat
+                </div>
+                <div className={`gufo-ai-cloud-tail ${bubbleOpensRight ? "gufo-ai-cloud-tail--right" : "gufo-ai-cloud-tail--left"}`} />
+              </div>
+            ) : null}
+
+            <button
+              type="button"
+              onPointerDown={startDrag}
+              onClick={() => {
+                if (draggedRef.current) return
+                setOpen((prev) => !prev)
+              }}
+              className="absolute inset-0 inline-flex items-center justify-center border-0 bg-transparent p-0 shadow-none transition hover:-translate-y-0.5"
+              style={{
+                touchAction: "none",
+                cursor: "grab",
+                opacity: config.enabled ? 1 : 0.78,
+                pointerEvents: "auto",
+              }}
+            >
+              <GufoAiAvatar size={84} thinking={loading} mode={loading ? "thinking" : open ? "active" : "idle"} className="shrink-0" />
+            </button>
+          </div>
         </>
       )}
 
