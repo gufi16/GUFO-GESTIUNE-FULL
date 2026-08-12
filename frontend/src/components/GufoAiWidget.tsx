@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { ArrowRight, BrainCircuit, Eye, SendHorizonal, ShieldCheck, Sparkles, Wand2, X } from "lucide-react"
+import { ArrowRight, BrainCircuit, Eye, MousePointer2, SendHorizonal, ShieldCheck, Sparkles, Wand2, X } from "lucide-react"
 import { useLocation } from "react-router-dom"
 import { api } from "../lib/api"
 import { me } from "../lib/auth"
@@ -52,6 +52,12 @@ type LocalGuideTarget = {
 type RobotBubble = {
   title: string
   text: string
+}
+
+type GuideMarker = {
+  title: string
+  left: number
+  top: number
 }
 
 const POSITION_STORAGE_KEY = "gufo-ai-widget-position"
@@ -476,6 +482,7 @@ export default function GufoAiWidget() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [suggestions, setSuggestions] = useState<string[]>(defaultSuggestions(location.pathname))
   const [robotBubble, setRobotBubble] = useState<RobotBubble | null>(null)
+  const [guideMarker, setGuideMarker] = useState<GuideMarker | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const dragOffsetRef = useRef<{ x: number; y: number } | null>(null)
   const draggedRef = useRef(false)
@@ -548,6 +555,7 @@ export default function GufoAiWidget() {
   useEffect(() => {
     if (open) {
       setRobotBubble(null)
+      setGuideMarker(null)
       return
     }
     if (!config.enabled || !hasRoleAccess) return
@@ -738,15 +746,12 @@ export default function GufoAiWidget() {
     let element = locateTarget()
     if (!element) {
       window.setTimeout(() => {
-        const delayedElement = locateTarget()
-        if (delayedElement) {
-          activateGuide({
-            ...target,
-            tabs: [],
-          })
-        }
+        activateGuide({
+          ...target,
+          tabs: [],
+        })
       }, 220)
-      return false
+      return true
     }
 
     const guideElement = (element.parentElement || element) as HTMLElement
@@ -759,6 +764,11 @@ export default function GufoAiWidget() {
     setPosition({
       x: Math.max(FAB_MARGIN, Math.min(rect.right + 18, maxX)),
       y: Math.max(FAB_MARGIN, Math.min(rect.top - 8, maxY)),
+    })
+    setGuideMarker({
+      title: target.title,
+      left: Math.max(FAB_MARGIN, Math.min(rect.right - 16, window.innerWidth - 180)),
+      top: Math.max(FAB_MARGIN, rect.top - 54),
     })
 
     setRobotBubble({
@@ -781,6 +791,7 @@ export default function GufoAiWidget() {
     }
     guideTimerRef.current = window.setTimeout(() => {
       guideElement.classList.remove("gufo-ai-guide-target")
+      setGuideMarker(null)
     }, 5000)
 
     return true
@@ -865,7 +876,8 @@ export default function GufoAiWidget() {
         }
         .gufo-ai-cloud {
           position: relative;
-          border-radius: 28px;
+          border-radius: 32px;
+          background: rgba(255,255,255,0.97);
         }
         .gufo-ai-cloud::before,
         .gufo-ai-cloud::after {
@@ -877,16 +889,16 @@ export default function GufoAiWidget() {
           z-index: -1;
         }
         .gufo-ai-cloud::before {
-          width: 72px;
-          height: 72px;
-          left: 18px;
-          top: -24px;
+          width: 86px;
+          height: 86px;
+          left: 10px;
+          top: -30px;
         }
         .gufo-ai-cloud::after {
-          width: 92px;
-          height: 92px;
-          right: 24px;
-          top: -30px;
+          width: 104px;
+          height: 104px;
+          right: 18px;
+          top: -38px;
         }
         .gufo-ai-cloud-tail {
           position: absolute;
@@ -910,9 +922,26 @@ export default function GufoAiWidget() {
           background: rgba(255,255,255,0.95);
           border: 1px solid rgba(226,232,240,0.92);
         }
+        @keyframes gufoAiPointerBounce {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-7px); }
+        }
       `}</style>
       {!hasRoleAccess ? null : (
         <>
+          {!open && guideMarker ? (
+            <div
+              className="fixed z-[60] flex items-center gap-2 rounded-full bg-[#17324D] px-3 py-2 text-xs font-semibold text-white shadow-[0_16px_36px_rgba(15,23,42,0.26)]"
+              style={{
+                left: `${guideMarker.left}px`,
+                top: `${guideMarker.top}px`,
+                animation: "gufoAiPointerBounce 1.05s ease-in-out infinite",
+              }}
+            >
+              <MousePointer2 size={14} />
+              Aici: {guideMarker.title}
+            </div>
+          ) : null}
           {!open && robotBubble ? (
             <div
               className="gufo-ai-cloud fixed z-50 max-w-[300px] border border-slate-200 bg-white/95 px-4 py-3 text-left shadow-[0_18px_40px_rgba(15,23,42,0.16)] backdrop-blur"
