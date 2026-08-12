@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { BrainCircuit, Eye, SendHorizonal, ShieldCheck, Sparkles, Wand2, X } from "lucide-react"
 import { useLocation } from "react-router-dom"
 import { api } from "../lib/api"
+import { me } from "../lib/auth"
 import GufoAiAvatar from "./GufoAiAvatar"
 import { readGufoAiConfig, subscribeGufoAiConfig, type GufoAiConfig } from "../lib/gufoAiConfig"
 
@@ -20,10 +21,26 @@ type GufoAiResponse = {
   }
 }
 
+type GufoAiPageContext = {
+  pageLabel: string
+  title?: string
+  headings: string[]
+  selectedValues: string[]
+  visibleActions: string[]
+  warnings: string[]
+}
+
 type WidgetPosition = {
   x: number
   y: number
 }
+
+type AssistantAction = {
+  label: string
+  prompt: string
+}
+
+type GufoAiModuleScope = "nomenclature" | "inventory" | "financial" | "settings" | "generic"
 
 const POSITION_STORAGE_KEY = "gufo-ai-widget-position"
 const FAB_WIDTH = 92
@@ -134,9 +151,212 @@ function modeIcon(mode: GufoAiConfig["mode"]) {
   return BrainCircuit
 }
 
+function resolveModuleScope(pathname: string): GufoAiModuleScope {
+  if (pathname.startsWith("/nomenclator")) return "nomenclature"
+  if (
+    pathname.startsWith("/gestiune") ||
+    pathname.startsWith("/transfer") ||
+    pathname.startsWith("/inregistrare-document") ||
+    pathname.startsWith("/documente")
+  ) {
+    return "inventory"
+  }
+  if (pathname.startsWith("/financiar")) return "financial"
+  if (pathname.startsWith("/setari")) return "settings"
+  return "generic"
+}
+
+function moduleLabel(scope: GufoAiModuleScope) {
+  if (scope === "nomenclature") return "Nomenclator"
+  if (scope === "inventory") return "Stoc si operatiuni"
+  if (scope === "financial") return "Financiar"
+  if (scope === "settings") return "Setari"
+  return "ERP"
+}
+
+function hasModuleDraftAccess(config: GufoAiConfig, scope: GufoAiModuleScope) {
+  if (scope === "nomenclature") return config.allowNomenclatureDrafts
+  if (scope === "inventory") return config.allowInventoryDrafts
+  if (scope === "financial") return config.allowFinancialDrafts
+  if (scope === "settings") return config.allowSettingsGuidance
+  return true
+}
+
+function resolveAiRoleKey(role: string | null | undefined): keyof GufoAiConfig["roleAccess"] {
+  const value = String(role || "").trim().toUpperCase()
+  if (value === "OWNER") return "owner"
+  if (value === "ADMIN") return "admin"
+  if (value === "MANAGER") return "manager"
+  if (value === "CASHIER") return "cashier"
+  return "operator"
+}
+
+function buildAssistantActions(pathname: string): AssistantAction[] {
+  if (pathname.startsWith("/nomenclator/produse")) {
+    return [
+      { label: "Verifica produs", prompt: "Verifica ce campuri lipsesc la produsul pe care il editez acum." },
+      { label: "Explica retetar", prompt: "Explica-mi exact cand trebuie retetar si ce verific daca nu pot salva produsul." },
+      { label: "Verifica POS", prompt: "Spune-mi ce verific ca produsul sa apara corect in POS." },
+    ]
+  }
+  if (pathname.startsWith("/nomenclator/categorii") || pathname.startsWith("/nomenclator/subcategorii")) {
+    return [
+      { label: "Verifica structura", prompt: "Verifica structura actuala de categorie sau subcategorie si spune-mi daca lipseste ceva important." },
+      { label: "Ordine POS", prompt: "Spune-mi ce verific pentru ordinea in POS la categorii si subcategorii." },
+      { label: "Poze catalog", prompt: "Spune-mi ce verific daca pozele de categorie sau subcategorie nu apar in POS." },
+    ]
+  }
+  if (pathname.startsWith("/dashboard")) {
+    return [
+      { label: "Verifica filtre", prompt: "Verifica filtrele vizibile din dashboard si spune-mi daca ceva pare gresit." },
+      { label: "Explica cifrele", prompt: "Explica-mi pe scurt ce inseamna cardurile principale din dashboardul curent." },
+      { label: "De ce lipsesc vanzari", prompt: "Spune-mi ce verific daca in dashboard nu apar vanzari sau indicatorii sunt goi." },
+    ]
+  }
+  if (pathname.startsWith("/financiar/vanzari-bon")) {
+    return [
+      { label: "Verifica bonuri", prompt: "Verifica pagina curenta si spune-mi ce filtre sau selectie pot afecta lista de bonuri." },
+      { label: "Explica totaluri", prompt: "Explica-mi totalurile din pagina de vanzari bon dupa contextul curent." },
+      { label: "Lipsesc bonuri", prompt: "Ce verific daca nu apar bonurile emise de Android POS in aceasta pagina?" },
+    ]
+  }
+  if (pathname.startsWith("/financiar/inchideri-zilnice")) {
+    return [
+      { label: "Verifica inchideri", prompt: "Verifica pagina si spune-mi ce trebuie verificat daca inchiderile zilnice lipsesc." },
+      { label: "Explica Z", prompt: "Explica-mi simplu diferenta dintre vanzari, bonuri si inchideri zilnice." },
+      { label: "Filtre financiar", prompt: "Spune-mi exact ce filtre conteaza pe pagina asta." },
+    ]
+  }
+  if (pathname.startsWith("/setari")) {
+    return [
+      { label: "Verifica setarea", prompt: "Verifica contextul curent si spune-mi ce setari importante vezi pe pagina aceasta." },
+      { label: "Ce risc exista", prompt: "Spune-mi daca exista ceva sensibil in pagina curenta care merita confirmare inainte de schimbare." },
+      { label: "Ghideaza-ma", prompt: "Ghideaza-ma pas cu pas pe pagina curenta, ca pentru un client nou." },
+    ]
+  }
+
+  return [
+    { label: "Analizeaza pagina", prompt: "Analizeaza pagina curenta si spune-mi ce este important aici." },
+    { label: "Ce verific", prompt: "Spune-mi ce merita verificat acum in pagina curenta." },
+    { label: "Ghid rapid", prompt: "Da-mi un ghid rapid pentru pagina curenta." },
+  ]
+}
+
+function normalizeText(value: string | null | undefined) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function uniqueCompactTexts(values: Array<string | null | undefined>, maxItems: number, maxLength = 80) {
+  const seen = new Set<string>()
+  const items: string[] = []
+
+  for (const rawValue of values) {
+    const value = normalizeText(rawValue)
+    if (!value) continue
+    if (value.length < 2 || value.length > maxLength) continue
+    const lower = value.toLowerCase()
+    if (seen.has(lower)) continue
+    seen.add(lower)
+    items.push(value)
+    if (items.length >= maxItems) break
+  }
+
+  return items
+}
+
+function extractFieldLabel(element: Element) {
+  const parent = element.parentElement
+  const previous = element.previousElementSibling
+  const fromPrevious = normalizeText(previous?.textContent)
+  if (fromPrevious && fromPrevious.length <= 40) return fromPrevious
+
+  const label = parent?.querySelector("label")
+  const fromLabel = normalizeText(label?.textContent)
+  if (fromLabel && fromLabel.length <= 40) return fromLabel
+
+  return ""
+}
+
+function extractPageContext(pageLabel: string): GufoAiPageContext | undefined {
+  if (typeof document === "undefined") return undefined
+
+  const title = normalizeText(document.querySelector("h1")?.textContent) || pageLabel
+  const bodyText = normalizeText(document.body?.innerText)
+
+  const headings = uniqueCompactTexts(
+    Array.from(document.querySelectorAll("h1, h2, h3")).map((node) => node.textContent),
+    6,
+    90
+  )
+
+  const selectedValues = uniqueCompactTexts(
+    Array.from(document.querySelectorAll("select, input[type='text'], input[type='date'], input[type='search']"))
+      .map((element) => {
+        const input = element as HTMLInputElement | HTMLSelectElement
+        const rawValue =
+          input instanceof HTMLSelectElement
+            ? input.selectedOptions?.[0]?.textContent || input.value
+            : input.value || input.placeholder
+        const label = extractFieldLabel(element)
+        return label ? `${label}: ${normalizeText(rawValue)}` : normalizeText(rawValue)
+      }),
+    6,
+    120
+  )
+
+  const visibleActions = uniqueCompactTexts(
+    Array.from(document.querySelectorAll("button, a[role='button']"))
+      .map((element) => normalizeText(element.textContent))
+      .filter((value) => value && value.length <= 40),
+    8,
+    40
+  )
+
+  const warnings = uniqueCompactTexts(
+    [
+      bodyText.includes("nu pot incarca") ? "Vad un mesaj de eroare de incarcare in pagina." : "",
+      bodyText.includes("eroare") ? "Exista un mesaj de eroare vizibil in pagina." : "",
+      bodyText.includes("offline") ? "Aplicatia sau modulul curent pare sa fie offline." : "",
+      bodyText.includes("invalid") ? "Exista un mesaj de validare sau credențiale invalide in pagina." : "",
+      selectedValues.some((value) => value.toLowerCase().includes("selecteaza categoria principala"))
+        ? "Categoria principala nu este selectata in formularul curent."
+        : "",
+      selectedValues.some((value) => value.toLowerCase().includes("nu exista subcategorii"))
+        ? "Categoria aleasa nu are inca subcategorii disponibile."
+        : "",
+      pageLabel === "Panou principal" && !selectedValues.length
+        ? "Nu vad filtre clare selectate; daca lipsesc date, merita verificata perioada sau locatia."
+        : "",
+      (pageLabel === "Rapoarte" || pageLabel === "Vanzari / Bon" || pageLabel === "Inchideri zilnice") &&
+      !selectedValues.length
+        ? "Pe rapoarte si financiar merita verificate perioada, locatia si device-ul daca rezultatele par goale."
+        : "",
+    ],
+    4,
+    140
+  )
+
+  if (!title && !headings.length && !selectedValues.length && !visibleActions.length && !warnings.length) return undefined
+
+  return {
+    pageLabel,
+    title,
+    headings,
+    selectedValues,
+    visibleActions,
+    warnings,
+  }
+}
+
 export default function GufoAiWidget() {
   const location = useLocation()
   const [config, setConfig] = useState<GufoAiConfig>(() => readGufoAiConfig())
+  const [userRole, setUserRole] = useState<string>(() => {
+    if (typeof window === "undefined") return ""
+    return window.localStorage.getItem("role") || ""
+  })
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
@@ -145,6 +365,7 @@ export default function GufoAiWidget() {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const dragOffsetRef = useRef<{ x: number; y: number } | null>(null)
   const draggedRef = useRef(false)
+  const announcedWarningKeyRef = useRef("")
   const [position, setPosition] = useState<WidgetPosition>(() => {
     if (typeof window === "undefined") {
       return { x: 0, y: 0 }
@@ -169,6 +390,14 @@ export default function GufoAiWidget() {
   })
 
   const pageLabel = useMemo(() => routeLabel(location.pathname), [location.pathname])
+  const moduleScope = useMemo(() => resolveModuleScope(location.pathname), [location.pathname])
+  const pageContext = useMemo(
+    () => (config.watchCurrentPage ? extractPageContext(pageLabel) : undefined),
+    [config.watchCurrentPage, pageLabel, location.pathname]
+  )
+  const assistantActions = useMemo(() => buildAssistantActions(location.pathname), [location.pathname])
+  const hasRoleAccess = config.roleAccess[resolveAiRoleKey(userRole)]
+  const hasModuleAccess = hasModuleDraftAccess(config, moduleScope)
   const ModeIcon = modeIcon(config.mode)
   const chatPosition = useMemo(() => {
     if (typeof window === "undefined") {
@@ -193,7 +422,90 @@ export default function GufoAiWidget() {
     setSuggestions(defaultSuggestions(location.pathname))
   }, [location.pathname])
 
+  useEffect(() => {
+    if (!config.enabled || !config.proactiveWarnings || !config.watchCurrentPage) return
+    if (!pageContext?.warnings?.length) return
+
+    const warningKey = `${location.pathname}::${pageContext.warnings.join("|")}`
+    if (announcedWarningKeyRef.current === warningKey) return
+    announcedWarningKeyRef.current = warningKey
+
+    setMessages((prev) => {
+      const alreadyExists = prev.some(
+        (item) =>
+          item.role === "assistant" &&
+          item.text.includes("Am observat ceva") &&
+          pageContext.warnings.every((warning) => item.text.includes(warning))
+      )
+      if (alreadyExists) return prev
+
+      return [
+        ...prev,
+        {
+          id: `${Date.now()}-observer`,
+          role: "assistant",
+          text: `Am observat ceva in pagina curenta:\n- ${pageContext.warnings.join("\n- ")}\n\nDaca vrei, iti spun imediat si ce merita verificat sau cum rezolvi.`,
+        },
+      ]
+    })
+  }, [
+    config.enabled,
+    config.proactiveWarnings,
+    config.watchCurrentPage,
+    location.pathname,
+    pageContext,
+  ])
+
   useEffect(() => subscribeGufoAiConfig(setConfig), [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    void me()
+      .then((profile) => {
+        if (cancelled) return
+        const role = String(profile?.role || "").trim()
+        if (!role) return
+        setUserRole(role)
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem("role", role)
+        }
+      })
+      .catch(() => null)
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!hasRoleAccess && open) {
+      setOpen(false)
+    }
+  }, [hasRoleAccess, open])
+
+  useEffect(() => {
+    if (!config.enabled || !hasRoleAccess) return
+    if (hasModuleAccess) return
+
+    const infoKey = `module-lock::${location.pathname}::${moduleScope}`
+    if (announcedWarningKeyRef.current === infoKey) return
+    announcedWarningKeyRef.current = infoKey
+
+    setMessages((prev) => {
+      const text = `Pe modulul ${moduleLabel(moduleScope)}, Gufo AI este acum in mod sigur: pot explica si ghida, dar drafturile sau asistenta activa sunt oprite din Setari Gufo AI.`
+      const alreadyExists = prev.some((item) => item.role === "assistant" && item.text === text)
+      if (alreadyExists) return prev
+      return [
+        ...prev,
+        {
+          id: `${Date.now()}-module-lock`,
+          role: "assistant",
+          text,
+        },
+      ]
+    })
+  }, [config.enabled, hasRoleAccess, hasModuleAccess, location.pathname, moduleScope])
 
   useEffect(() => {
     if (!messages.length) {
@@ -291,6 +603,7 @@ export default function GufoAiWidget() {
         body: JSON.stringify({
           message: question,
           currentPath: location.pathname,
+          pageContext,
           history: messages.slice(-8).map((item) => ({
             role: item.role,
             text: item.text,
@@ -329,6 +642,7 @@ export default function GufoAiWidget() {
 
   return (
     <>
+      {!hasRoleAccess ? null : (
       <button
         type="button"
         onPointerDown={startDrag}
@@ -349,8 +663,9 @@ export default function GufoAiWidget() {
       >
         <GufoAiAvatar size={84} thinking={loading} mode={loading ? "thinking" : open ? "active" : "idle"} className="shrink-0" />
       </button>
+      )}
 
-      {open ? (
+      {open && hasRoleAccess ? (
         <div
           className="fixed z-50 flex h-[min(78vh,680px)] w-[min(92vw,420px)] flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_22px_60px_rgba(15,23,42,0.2)]"
           style={{
@@ -374,6 +689,9 @@ export default function GufoAiWidget() {
                     <ModeIcon size={12} />
                     {modeLabel(config.mode)}
                   </span>
+                  <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white">
+                    {moduleLabel(moduleScope)}
+                  </span>
                   {config.watchCurrentPage ? (
                     <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white">
                       <Eye size={12} />
@@ -389,6 +707,11 @@ export default function GufoAiWidget() {
                 </div>
                 <div className="mt-2 text-sm text-slate-200">{modeDescription(config)}</div>
                 <div className="mt-1 text-xs text-slate-300">Pagina curenta: {pageLabel}</div>
+                {!hasModuleAccess ? (
+                  <div className="mt-2 rounded-2xl border border-amber-200/40 bg-amber-100/10 px-3 py-2 text-xs leading-5 text-amber-100">
+                    Pe acest modul pot doar sa explic si sa ghidez. Asistenta activa este oprita din Setari Gufo AI.
+                  </div>
+                ) : null}
               </div>
 
               <button
@@ -440,6 +763,26 @@ export default function GufoAiWidget() {
           </div>
 
           <div className="border-t border-slate-200 bg-white px-4 py-4">
+            {hasModuleAccess ? (
+            <div className="mb-3">
+              <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                Actiuni asistate
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {assistantActions.slice(0, 3).map((action) => (
+                  <button
+                    key={action.label}
+                    type="button"
+                    onClick={() => submitQuestion(action.prompt)}
+                    className="rounded-full border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-[#17324D] transition hover:border-[#17324D] hover:bg-blue-100"
+                  >
+                    {action.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            ) : null}
+
             <div className="mb-3 flex flex-wrap gap-2">
               {suggestions.slice(0, 3).map((suggestion) => (
                 <button

@@ -14,6 +14,14 @@ type GufoAiGuide = {
 type GufoAiInput = {
   message: string
   currentPath?: string | null
+  pageContext?: {
+    pageLabel: string
+    title?: string
+    headings?: string[]
+    selectedValues?: string[]
+    visibleActions?: string[]
+    warnings?: string[]
+  }
   history?: Array<{ role: "user" | "assistant"; text: string }>
 }
 
@@ -38,6 +46,39 @@ const FORBIDDEN_KEYWORDS = [
   "developer",
   "dezvoltator",
 ]
+
+function normalizeContextList(values?: string[], maxItems = 4) {
+  return (values || [])
+    .map((value) => String(value || "").replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .slice(0, maxItems)
+}
+
+function buildPageContextSummary(pageContext?: GufoAiInput["pageContext"]) {
+  if (!pageContext) return ""
+
+  const parts: string[] = []
+  const title = String(pageContext.title || pageContext.pageLabel || "").trim()
+  const headings = normalizeContextList(pageContext.headings)
+  const selectedValues = normalizeContextList(pageContext.selectedValues)
+  const visibleActions = normalizeContextList(pageContext.visibleActions, 5)
+  const warnings = normalizeContextList(pageContext.warnings, 4)
+
+  if (title) parts.push(`Pagina deschisa acum este ${title}.`)
+  if (headings.length > 1) parts.push(`In zona asta se vad si sectiunile: ${headings.slice(1).join(", ")}.`)
+  if (selectedValues.length) parts.push(`Valorile sau filtrele vizibile acum sunt: ${selectedValues.join(", ")}.`)
+  if (visibleActions.length) parts.push(`Actiunile rapide pe care le vad acum sunt: ${visibleActions.join(", ")}.`)
+  if (warnings.length) parts.push(`Observatii importante vazute direct in pagina: ${warnings.join(" ")}.`)
+
+  return parts.join("\n")
+}
+
+function appendLiveContext(answer: string, pageContext?: GufoAiInput["pageContext"]) {
+  const summary = buildPageContextSummary(pageContext)
+  if (!summary) return answer
+  if (answer.includes("Pagina deschisa acum este")) return answer
+  return `${answer}\n\nCe vad acum in ERP:\n${summary}`
+}
 
 const GUIDES: GufoAiGuide[] = [
   {
@@ -1071,9 +1112,12 @@ export function generateGufoAiReply(input: GufoAiInput): GufoAiReply {
   if (!rawMessage) {
     return {
       title: "Gufo AI",
-      answer: pathGuide
+      answer: appendLiveContext(
+        pathGuide
         ? `Salut! Sunt Gufo AI.\n\nTe pot ajuta cu tot ce tine de ERP, iar acum esti in zona ${pathGuide.title}. Poti sa ma intrebi natural: ce vrei sa faci, ce nu merge, unde gasesti ceva sau ce trebuie verificat.`
         : "Salut! Sunt Gufo AI. Spune-mi ce vrei sa faci in ERP, unde te-ai blocat sau ce vrei sa intelegi mai bine, iar eu iti raspund pas cu pas.",
+        input.pageContext
+      ),
       suggestions: pathGuide
         ? pathGuide.suggestions
         : ["Ce module are aplicatia?", "Cum lucrez cu SPV si ANAF?", "Cum fac un NIR?"],
@@ -1098,9 +1142,12 @@ export function generateGufoAiReply(input: GufoAiInput): GufoAiReply {
   if (isHelpPrompt(rawMessage)) {
     return {
       title: "Gufo AI",
-      answer: pathGuide
+      answer: appendLiveContext(
+        pathGuide
         ? `Da, sigur.\n\nPot sa te ajut pe pagina ${pathGuide.title} sau cu orice alta functie din ERP: Dashboard, documente, stoc, productie, SPV/ANAF, e-Transport, facturi primite/trimise, rapoarte, export contabilitate, financiar, nomenclator si setari.\n\nSpune-mi direct ce vrei sa faci sau unde te-ai blocat.`
         : "Da, sigur.\n\nPot sa te ajut cu Dashboard, documente, stoc, productie, SPV/ANAF, e-Transport, facturi primite/trimise, rapoarte, export contabilitate, financiar, nomenclator si setari. Spune-mi direct ce vrei sa faci sau unde te-ai blocat.",
+        input.pageContext
+      ),
       suggestions: pathGuide
         ? pathGuide.suggestions
         : ["Cum fac un NIR?", "Cum aduc facturile din SPV?", "Cum trimit e-Transport la ANAF?"],
@@ -1122,7 +1169,7 @@ export function generateGufoAiReply(input: GufoAiInput): GufoAiReply {
   if (guide) {
     return {
       title: guide.title,
-      answer: buildGuideAnswer(guide, intent, currentPath),
+      answer: appendLiveContext(buildGuideAnswer(guide, intent, currentPath), input.pageContext),
       suggestions: guide.suggestions,
     }
   }
@@ -1130,7 +1177,7 @@ export function generateGufoAiReply(input: GufoAiInput): GufoAiReply {
   if (pathGuide && intent !== "generic") {
     return {
       title: pathGuide.title,
-      answer: buildGuideAnswer(pathGuide, intent, currentPath),
+      answer: appendLiveContext(buildGuideAnswer(pathGuide, intent, currentPath), input.pageContext),
       suggestions: pathGuide.suggestions,
     }
   }
@@ -1138,15 +1185,20 @@ export function generateGufoAiReply(input: GufoAiInput): GufoAiReply {
   if (pathGuide && rawMessage.split(/\s+/).length <= 3) {
     return {
       title: pathGuide.title,
-      answer: `Esti in zona ${pathGuide.title}.\n\nSpune-mi direct ce vrei sa faci aici si iti raspund ca intr-o conversatie normala, nu doar cu descrierea paginii. De exemplu poti sa-mi spui ce vrei sa creezi, ce nu merge sau ce camp nu intelegi.`,
+      answer: appendLiveContext(
+        `Esti in zona ${pathGuide.title}.\n\nSpune-mi direct ce vrei sa faci aici si iti raspund ca intr-o conversatie normala, nu doar cu descrierea paginii. De exemplu poti sa-mi spui ce vrei sa creezi, ce nu merge sau ce camp nu intelegi.`,
+        input.pageContext
+      ),
       suggestions: pathGuide.suggestions,
     }
   }
 
   return {
     title: "Gufo AI",
-    answer:
+    answer: appendLiveContext(
       `Nu sunt sigur inca ce operatie vrei sa faci.\n\nSpune-mi mai direct, de exemplu:\n1. ce document sau modul folosesti\n2. ce vrei sa obtii\n3. unde te blochezi\n\nExemple bune: "cum fac un NIR cu 3 produse", "cum aduc facturile din SPV", "cum trimit e-Transport la ANAF", "de ce nu vad vanzari pe locatie", "unde schimb seria facturii".${pathGuide ? `\n\nDaca intrebi despre pagina curenta, esti acum in zona ${pathGuide.title}.` : ""}`,
+      input.pageContext
+    ),
     suggestions: [
       "Cum fac un NIR?",
       "Cum aduc facturile din SPV?",

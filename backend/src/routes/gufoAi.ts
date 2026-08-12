@@ -8,6 +8,16 @@ const router = Router()
 const ChatSchema = z.object({
   message: z.string().trim().min(1).max(2000),
   currentPath: z.string().trim().max(200).optional(),
+  pageContext: z
+    .object({
+      pageLabel: z.string().trim().max(120),
+      title: z.string().trim().max(160).optional(),
+      headings: z.array(z.string().trim().min(1).max(160)).max(8).optional(),
+      selectedValues: z.array(z.string().trim().min(1).max(180)).max(8).optional(),
+      visibleActions: z.array(z.string().trim().min(1).max(80)).max(10).optional(),
+      warnings: z.array(z.string().trim().min(1).max(180)).max(6).optional(),
+    })
+    .optional(),
   history: z
     .array(
       z.object({
@@ -32,6 +42,7 @@ router.post("/api/v1/gufo-ai/chat", requireAuth, async (req: AuthedRequest, res)
   const reply = generateGufoAiReply({
     message: parsed.data.message,
     currentPath: parsed.data.currentPath,
+    pageContext: parsed.data.pageContext,
     history: parsed.data.history,
   })
 
