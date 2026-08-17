@@ -112,37 +112,54 @@ router.get("/api/v1/finance/pos-receipts", requireAuth, async (req: AuthedReques
     const dateTo = asDate(req.query.dateTo, dayEnd(now), true)
     const locationId = typeof req.query.locationId === "string" ? req.query.locationId.trim() : ""
     const terminalId = typeof req.query.terminalId === "string" ? req.query.terminalId.trim() : ""
+    const saleWhere = {
+      tenantId,
+      companyId: company.id,
+      soldAt: { gte: dateFrom, lte: dateTo },
+      ...(locationId ? { locationId } : {}),
+      ...(terminalId ? { terminalId } : {}),
+    }
 
-    const sales = await prisma.sale.findMany({
-      where: {
-        tenantId,
-        companyId: company.id,
-        soldAt: { gte: dateFrom, lte: dateTo },
-        ...(locationId ? { locationId } : {}),
-        ...(terminalId ? { terminalId } : {}),
-      },
-      include: {
-        location: { select: { id: true, name: true, code: true } },
-        terminal: { select: { id: true, label: true, deviceId: true } },
-        items: {
-          include: {
-            product: {
-              select: {
-                id: true,
-                sku: true,
-                name: true,
-                isSgr: true,
-                sgrValue: true,
-                uom: { select: { code: true, name: true } },
+    const [sales, salesAgg, paymentSales] = await Promise.all([
+      prisma.sale.findMany({
+        where: saleWhere,
+        include: {
+          location: { select: { id: true, name: true, code: true } },
+          terminal: { select: { id: true, label: true, deviceId: true } },
+          items: {
+            include: {
+              product: {
+                select: {
+                  id: true,
+                  sku: true,
+                  name: true,
+                  isSgr: true,
+                  sgrValue: true,
+                  uom: { select: { code: true, name: true } },
+                },
               },
             },
+            orderBy: { id: "asc" },
           },
-          orderBy: { id: "asc" },
         },
-      },
-      orderBy: [{ soldAt: "desc" }, { createdAt: "desc" }],
-      take: 500,
-    })
+        orderBy: [{ soldAt: "desc" }, { createdAt: "desc" }],
+        take: 500,
+      }),
+      prisma.sale.aggregate({
+        where: saleWhere,
+        _sum: { total: true },
+        _count: { id: true },
+      }),
+      prisma.sale.findMany({
+        where: saleWhere,
+        select: {
+          total: true,
+          paymentType: true,
+          cashAmount: true,
+          cardAmount: true,
+        },
+      }),
+    ])
 
     const items = sales.map((sale) => ({
       id: sale.id,
@@ -185,17 +202,21 @@ router.get("/api/v1/finance/pos-receipts", requireAuth, async (req: AuthedReques
       }),
     }))
 
-    const totals = items.reduce(
+    const paymentTotals = paymentSales.reduce(
       (acc, sale) => {
-        acc.total += sale.total
         const buckets = deriveSalePaymentBuckets(sale)
         acc.cash += buckets.cash
         acc.card += buckets.card
-        acc.count += 1
         return acc
       },
-      { total: 0, cash: 0, card: 0, count: 0 }
+      { cash: 0, card: 0 }
     )
+    const totals = {
+      total: numberValue(salesAgg._sum.total),
+      cash: paymentTotals.cash,
+      card: paymentTotals.card,
+      count: Number(salesAgg._count.id || 0),
+    }
 
     res.json({ ok: true, items, totals })
   } catch (error) {
@@ -215,6 +236,13 @@ router.get("/api/v1/finance/daily-closures", requireAuth, async (req: AuthedRequ
     const dateTo = asDate(req.query.dateTo, dayEnd(now), true)
     const locationId = typeof req.query.locationId === "string" ? req.query.locationId.trim() : ""
     const terminalId = typeof req.query.terminalId === "string" ? req.query.terminalId.trim() : ""
+    const closureWhere = {
+      tenantId,
+      companyId: company.id,
+      closedAt: { gte: dateFrom, lte: dateTo },
+      ...(locationId ? { locationId } : {}),
+      ...(terminalId ? { terminalId } : {}),
+    }
     const companyLocations = await prisma.location.findMany({
       where: {
         tenantId,
@@ -224,17 +252,23 @@ router.get("/api/v1/finance/daily-closures", requireAuth, async (req: AuthedRequ
     })
     const companyLocationIds = companyLocations.map((item) => item.id)
 
-    const items = await prisma.posDailyClosure.findMany({
-      where: {
-        tenantId,
-        companyId: company.id,
-        closedAt: { gte: dateFrom, lte: dateTo },
-        ...(locationId ? { locationId } : {}),
-        ...(terminalId ? { terminalId } : {}),
-      },
-      orderBy: [{ closedAt: "desc" }, { createdAt: "desc" }],
-      take: 500,
-    })
+    const [items, closuresAgg] = await Promise.all([
+      prisma.posDailyClosure.findMany({
+        where: closureWhere,
+        orderBy: [{ closedAt: "desc" }, { createdAt: "desc" }],
+        take: 500,
+      }),
+      prisma.posDailyClosure.aggregate({
+        where: closureWhere,
+        _sum: {
+          total: true,
+          cashTotal: true,
+          cardTotal: true,
+          otherTotal: true,
+        },
+        _count: { id: true },
+      }),
+    ])
 
     const mapped = items.map((item) => ({
       id: item.id,
@@ -253,17 +287,13 @@ router.get("/api/v1/finance/daily-closures", requireAuth, async (req: AuthedRequ
       reportText: item.reportText,
     }))
 
-    const totals = mapped.reduce(
-      (acc, item) => {
-        acc.total += item.total
-        acc.cash += item.cashTotal
-        acc.card += item.cardTotal
-        acc.other += item.otherTotal
-        acc.count += 1
-        return acc
-      },
-      { total: 0, cash: 0, card: 0, other: 0, count: 0 }
-    )
+    const totals = {
+      total: numberValue(closuresAgg._sum.total),
+      cash: numberValue(closuresAgg._sum.cashTotal),
+      card: numberValue(closuresAgg._sum.cardTotal),
+      other: numberValue(closuresAgg._sum.otherTotal),
+      count: Number(closuresAgg._count.id || 0),
+    }
 
     res.json({ ok: true, items: mapped, totals })
   } catch (error) {
