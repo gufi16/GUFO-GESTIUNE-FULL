@@ -296,6 +296,40 @@ export function extractXmlFromAnafDownload(buffer: Buffer) {
   throw new Error("Nu am putut extrage XML-ul facturii din raspunsul ANAF.")
 }
 
+export function extractPdfFromAnafDownload(buffer: Buffer) {
+  if (buffer.length >= 4 && buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46) {
+    return { pdfBuffer: buffer, fileName: "factura-spv.pdf" }
+  }
+
+  const rawText = buffer.toString("utf8")
+  const payload = parseAnafPayload(rawText)
+  if (payload) {
+    const base64Content = readStringField(payload, ["pdfBase64", "base64", "contentBase64", "continutBase64", "documentBase64"])
+    if (base64Content) {
+      const decoded = Buffer.from(base64Content, "base64")
+      if (decoded.length >= 4 && decoded[0] === 0x25 && decoded[1] === 0x50 && decoded[2] === 0x44 && decoded[3] === 0x46) {
+        return { pdfBuffer: decoded, fileName: readStringField(payload, ["pdfFileName", "fileName"]) || "factura-spv.pdf" }
+      }
+    }
+  }
+
+  if (buffer.length >= 2 && buffer[0] === 0x50 && buffer[1] === 0x4b) {
+    const zip = new AdmZip(buffer)
+    const pdfEntry = zip
+      .getEntries()
+      .find((item: ZipXmlEntry) => !item.isDirectory && item.entryName.toLowerCase().endsWith(".pdf"))
+
+    if (pdfEntry) {
+      return {
+        pdfBuffer: pdfEntry.getData(),
+        fileName: pdfEntry.entryName || "factura-spv.pdf",
+      }
+    }
+  }
+
+  return null
+}
+
 export function parseIncomingEInvoiceXml(xmlText: string) {
   const parsed = xmlParser.parse(xmlText) as AnyObj
   const invoice = findInvoiceNode(parsed) as AnyObj | null

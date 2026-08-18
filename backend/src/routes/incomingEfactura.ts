@@ -26,6 +26,7 @@ import {
 import { ensureUploadSubdir } from "../lib/uploads"
 import {
   extractDownloadId,
+  extractPdfFromAnafDownload,
   extractUploadIndex,
   extractXmlFromAnafDownload,
   getEfacturaBaseUrl,
@@ -1269,10 +1270,13 @@ router.get("/api/v1/efactura/incoming/:id/pdf", async (req: AuthedRequest, res) 
     return res.status(404).json({ ok: false, error: "Factura primita SPV nu a fost gasita." })
   }
 
+  const rawPayload = item.rawPayload && typeof item.rawPayload === "object" ? (item.rawPayload as Record<string, unknown>) : null
+  const originalPdfBase64 = String(rawPayload?.spvPdfBase64 || "").trim()
   const parsed = item.xmlText ? parseIncomingEInvoiceXml(String(item.xmlText)) : null
   const filename = `Factura_SPV_${safeFilePart(String(parsed?.invoiceNo || item.invoiceNo || item.spvDownloadId || "document"))}.pdf`
-  const pdfPath = await ensureIncomingInvoicePdfSaved(item)
-  const buffer = fs.readFileSync(pdfPath)
+  const buffer = originalPdfBase64
+    ? Buffer.from(originalPdfBase64, "base64")
+    : fs.readFileSync(await ensureIncomingInvoicePdfSaved(item))
   res.setHeader("Content-Type", "application/pdf")
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`)
   return res.send(buffer)
@@ -1334,7 +1338,13 @@ router.post("/api/v1/efactura/incoming/import-from-spv-bridge", async (req: Auth
     const buffer = Buffer.from(downloadBase64, "base64")
     const extracted = extractXmlFromAnafDownload(buffer)
     const parsedInvoice = parseIncomingEInvoiceXml(extracted.xmlText)
-    const item = await upsertIncomingInvoice(tenantId, companyId, rawMessage, extracted.xmlText, parsedInvoice)
+    const extractedPdf = extractPdfFromAnafDownload(buffer)
+    const enrichedMessage = {
+      ...(rawMessage as Record<string, unknown>),
+      spvPdfBase64: extractedPdf?.pdfBuffer?.toString("base64") || null,
+      spvPdfFileName: extractedPdf?.fileName || null,
+    }
+    const item = await upsertIncomingInvoice(tenantId, companyId, enrichedMessage, extracted.xmlText, parsedInvoice)
     if (!item) {
       throw new Error("Factura importata nu a putut fi reincarcata dupa salvare.")
     }
