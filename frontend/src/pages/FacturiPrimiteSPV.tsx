@@ -221,6 +221,19 @@ function getInvoiceGrossValue(item: Pick<IncomingInvoice, "totalGross" | "totalN
   return Number(item.totalNet || 0) + Number(item.totalVat || 0)
 }
 
+async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = 15000) {
+  const controller = new AbortController()
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal,
+    })
+  } finally {
+    window.clearTimeout(timeoutId)
+  }
+}
+
 function efacturaStatusClass(status?: string | null) {
   const normalized = String(status || "").toUpperCase()
   if (normalized === "ACCEPTED") return "bg-[#E5F3E8] text-[#215D2A]"
@@ -1041,7 +1054,7 @@ export default function FacturiPrimiteSPVPage() {
         const localAgent = await getLocalAgentConnection()
         if (localAgent?.bridgeToken && String(item.spvDownloadId || "").trim()) {
           const bridgeConfig = await loadBridgeConfig()
-          const bridgeRes = await fetch(`${localAgent.bridgeUrl.replace(/\/+$/, "")}/api/v1/efactura/download-message`, {
+          const bridgeRes = await fetchWithTimeout(`${localAgent.bridgeUrl.replace(/\/+$/, "")}/api/v1/efactura/download-message`, {
             method: "POST",
             headers: {
               Authorization: `Bearer ${localAgent.bridgeToken}`,
@@ -1052,16 +1065,27 @@ export default function FacturiPrimiteSPVPage() {
               accessToken: bridgeConfig.accessToken,
               environment: bridgeConfig.environment,
             }),
-          })
+          }, 12000)
           const bridgeData = await bridgeRes.json().catch(() => ({}))
           const originalPdfBase64 = String(bridgeData?.response?.artifacts?.pdfBase64 || "").trim()
           if (bridgeRes.ok && bridgeData?.ok && originalPdfBase64) {
             const bytes = Uint8Array.from(atob(originalPdfBase64), (char) => char.charCodeAt(0))
             const blob = new Blob([bytes], { type: "application/pdf" })
+            void fetch(`${API_BASE}/api/v1/efactura/incoming/${item.id}/store-original-pdf`, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                pdfBase64: originalPdfBase64,
+                fileName: bridgeData?.response?.artifacts?.pdfFileName || null,
+              }),
+            }).catch(() => null)
             const url = window.URL.createObjectURL(blob)
             const link = document.createElement("a")
             link.href = url
-            link.download = `factura-spv-${item.invoiceNo || item.spvDownloadId}.pdf`
+            link.download = String(bridgeData?.response?.artifacts?.pdfFileName || "").trim() || `factura-spv-${item.invoiceNo || item.spvDownloadId}.pdf`
             document.body.appendChild(link)
             link.click()
             link.remove()
@@ -1070,18 +1094,23 @@ export default function FacturiPrimiteSPVPage() {
           }
         }
       } catch {
-        // daca browserul blocheaza accesul la bridge-ul local, continuam cu backend fallback
+        // daca browserul nu poate lua direct originalul din bridge, incercam varianta deja salvata in backend
       }
 
-      const fallbackRes = await fetch(`${API_BASE}/api/v1/efactura/incoming/${item.id}/pdf`, {
+      const fallbackRes = await fetchWithTimeout(`${API_BASE}/api/v1/efactura/incoming/${item.id}/pdf?originalOnly=1`, {
         headers: { Authorization: `Bearer ${token}` },
-      })
+      }, 12000)
       if (!fallbackRes.ok) {
-        throw new Error("Nu am putut genera PDF-ul facturii din XML.")
+        const fallbackData = await fallbackRes.json().catch(() => ({}))
+        throw new Error(fallbackData?.error || "Nu am putut descarca PDF-ul original din SPV.")
       }
       await downloadPdfFile(fallbackRes, `factura-spv-${item.invoiceNo || item.spvDownloadId}.pdf`)
     } catch (err: any) {
-      setError(err?.message || "Nu am putut descarca PDF-ul facturii.")
+      if (err?.name === "AbortError") {
+        setError("Descarcarea PDF-ului original din SPV a expirat. Verifica bridge-ul local si incearca din nou.")
+        return
+      }
+      setError(err?.message || "Nu am putut descarca PDF-ul original din SPV.")
     }
   }
 

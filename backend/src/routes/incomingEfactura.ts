@@ -1301,6 +1301,13 @@ router.get("/api/v1/efactura/incoming/:id/pdf", async (req: AuthedRequest, res) 
 
   const rawPayload = item.rawPayload && typeof item.rawPayload === "object" ? (item.rawPayload as Record<string, unknown>) : null
   let originalPdfBase64 = String(rawPayload?.spvPdfBase64 || "").trim()
+  const originalOnly =
+    String(req.query.originalOnly || "")
+      .trim()
+      .toLowerCase() === "1" ||
+    String(req.query.originalOnly || "")
+      .trim()
+      .toLowerCase() === "true"
 
   if (!originalPdfBase64 && String(item.spvDownloadId || "").trim()) {
     try {
@@ -1328,13 +1335,66 @@ router.get("/api/v1/efactura/incoming/:id/pdf", async (req: AuthedRequest, res) 
   }
 
   const parsed = item.xmlText ? parseIncomingEInvoiceXml(String(item.xmlText)) : null
-  const filename = `Factura_SPV_${safeFilePart(String(parsed?.invoiceNo || item.invoiceNo || item.spvDownloadId || "document"))}.pdf`
+  const filename = originalPdfBase64
+    ? String(rawPayload?.spvPdfFileName || "").trim() || `factura-spv-${safeFilePart(String(parsed?.invoiceNo || item.invoiceNo || item.spvDownloadId || "document"))}.pdf`
+    : `Factura_SPV_${safeFilePart(String(parsed?.invoiceNo || item.invoiceNo || item.spvDownloadId || "document"))}.pdf`
+
+  if (originalOnly && !originalPdfBase64) {
+    return res.status(409).json({
+      ok: false,
+      error: "PDF-ul original din SPV nu este disponibil momentan. Verifica bridge-ul local SPV si reincearca.",
+    })
+  }
+
   const buffer = originalPdfBase64
     ? Buffer.from(originalPdfBase64, "base64")
     : fs.readFileSync(await ensureIncomingInvoicePdfSaved(item))
   res.setHeader("Content-Type", "application/pdf")
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`)
   return res.send(buffer)
+})
+
+router.post("/api/v1/efactura/incoming/:id/store-original-pdf", async (req: AuthedRequest, res) => {
+  const tenantId = String(req.auth?.tenantId || "").trim()
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Unauthorized" })
+  const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ ok: false, error: "Compania activa lipseste." })
+  const moduleCheck = await requireTenantModule(tenantId, "efactura")
+  if (!moduleCheck.enabled) {
+    return res.status(403).json({ ok: false, error: "Modulul e-Factura nu este activ pe licenta acestui client." })
+  }
+
+  const item = await prisma.incomingEInvoice.findFirst({
+    where: { tenantId, companyId, id: req.params.id },
+    select: { id: true, rawPayload: true },
+  })
+
+  if (!item) {
+    return res.status(404).json({ ok: false, error: "Factura primita SPV nu a fost gasita." })
+  }
+
+  const pdfBase64 = String(req.body?.pdfBase64 || "").trim()
+  const fileName = String(req.body?.fileName || "").trim() || null
+  if (!pdfBase64) {
+    return res.status(400).json({ ok: false, error: "Lipseste continutul PDF original." })
+  }
+
+  const nextPayload =
+    item.rawPayload && typeof item.rawPayload === "object"
+      ? { ...(item.rawPayload as Record<string, unknown>) }
+      : {}
+
+  nextPayload.spvPdfBase64 = pdfBase64
+  nextPayload.spvPdfFileName = fileName
+
+  await prisma.incomingEInvoice.update({
+    where: { id: item.id },
+    data: {
+      rawPayload: nextPayload as Prisma.InputJsonValue,
+    },
+  })
+
+  return res.json({ ok: true })
 })
 
 router.get("/api/v1/efactura/incoming/:id/xml", async (req: AuthedRequest, res) => {
