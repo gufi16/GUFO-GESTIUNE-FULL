@@ -215,6 +215,12 @@ function getUnitPriceWithVat(line: IncomingInvoiceItem) {
   return net + (net * vatRate) / 100
 }
 
+function getInvoiceGrossValue(item: Pick<IncomingInvoice, "totalGross" | "totalNet" | "totalVat">) {
+  const gross = Number(item.totalGross || 0)
+  if (gross > 0) return gross
+  return Number(item.totalNet || 0) + Number(item.totalVat || 0)
+}
+
 function efacturaStatusClass(status?: string | null) {
   const normalized = String(status || "").toUpperCase()
   if (normalized === "ACCEPTED") return "bg-[#E5F3E8] text-[#215D2A]"
@@ -1031,6 +1037,38 @@ export default function FacturiPrimiteSPVPage() {
   async function downloadInvoicePdf(item: IncomingInvoice) {
     if (!token) return
     try {
+      const localAgent = await getLocalAgentConnection()
+      if (localAgent?.bridgeToken && String(item.spvDownloadId || "").trim()) {
+        const bridgeConfig = await loadBridgeConfig()
+        const bridgeRes = await fetch(`${localAgent.bridgeUrl.replace(/\/+$/, "")}/api/v1/efactura/download-message`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${localAgent.bridgeToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            id: item.spvDownloadId,
+            accessToken: bridgeConfig.accessToken,
+            environment: bridgeConfig.environment,
+          }),
+        })
+        const bridgeData = await bridgeRes.json().catch(() => ({}))
+        const originalPdfBase64 = String(bridgeData?.response?.artifacts?.pdfBase64 || "").trim()
+        if (bridgeRes.ok && bridgeData?.ok && originalPdfBase64) {
+          const bytes = Uint8Array.from(atob(originalPdfBase64), (char) => char.charCodeAt(0))
+          const blob = new Blob([bytes], { type: "application/pdf" })
+          const url = window.URL.createObjectURL(blob)
+          const link = document.createElement("a")
+          link.href = url
+          link.download = `factura-spv-${item.invoiceNo || item.spvDownloadId}.pdf`
+          document.body.appendChild(link)
+          link.click()
+          link.remove()
+          window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000)
+          return
+        }
+      }
+
       const fallbackRes = await fetch(`${API_BASE}/api/v1/efactura/incoming/${item.id}/pdf`, {
         headers: { Authorization: `Bearer ${token}` },
       })
@@ -1425,7 +1463,7 @@ export default function FacturiPrimiteSPVPage() {
                         <div className="text-xs text-slate-500">{item.supplierCif || "-"}</div>
                       </td>
                       <td className="px-3 py-2.5 text-slate-700">
-                        <div className="font-semibold text-slate-900">{formatMoneyRo(item.totalGross, item.currency)}</div>
+                        <div className="font-semibold text-slate-900">{formatMoneyRo(getInvoiceGrossValue(item), item.currency)}</div>
                         <div className="text-xs text-slate-500">
                           Net {formatMoneyRo(item.totalNet || 0, item.currency)} • TVA {formatMoneyRo(item.totalVat || 0, item.currency)}
                         </div>
