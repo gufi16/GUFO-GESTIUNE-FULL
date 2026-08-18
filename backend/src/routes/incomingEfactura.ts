@@ -419,14 +419,27 @@ function serializeIncomingInvoice(entry: IncomingInvoiceEntryLike | null | undef
   const computedNet = itemLines.reduce((sum, line) => sum + toNumber(line?.lineNet), 0)
   const computedVat = itemLines.reduce((sum, line) => sum + toNumber(line?.lineVat), 0)
   const computedGross = itemLines.reduce((sum, line) => sum + toNumber(line?.lineGross), 0)
+  let parsedTotals: { totalNet?: number; totalVat?: number; totalGross?: number } | null = null
+  if (String(entry.xmlText || "").trim()) {
+    try {
+      const parsed = parseIncomingEInvoiceXml(String(entry.xmlText))
+      parsedTotals = {
+        totalNet: toNumber(parsed.totalNet),
+        totalVat: toNumber(parsed.totalVat),
+        totalGross: toNumber(parsed.totalGross),
+      }
+    } catch {
+      parsedTotals = null
+    }
+  }
   const totalNet = toNumber(entry.totalNet)
   const totalVat = toNumber(entry.totalVat)
   const totalGross = toNumber(entry.totalGross)
   return {
     ...entry,
-    totalNet: totalNet > 0 ? totalNet : computedNet,
-    totalVat: totalVat > 0 ? totalVat : computedVat,
-    totalGross: totalGross > 0 ? totalGross : computedGross,
+    totalNet: totalNet > 0 ? totalNet : (parsedTotals?.totalNet || computedNet),
+    totalVat: totalVat > 0 ? totalVat : (parsedTotals?.totalVat || computedVat),
+    totalGross: totalGross > 0 ? totalGross : (parsedTotals?.totalGross || computedGross),
     items: itemLines
       ? itemLines.map((line) => ({
           ...line,
