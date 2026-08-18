@@ -415,13 +415,20 @@ function isMalformedIncomingInvoice(entry: IncomingInvoiceEntryLike | null | und
 
 function serializeIncomingInvoice(entry: IncomingInvoiceEntryLike | null | undefined) {
   if (!entry) return null
+  const itemLines = Array.isArray(entry.items) ? entry.items : []
+  const computedNet = itemLines.reduce((sum, line) => sum + toNumber(line?.lineNet), 0)
+  const computedVat = itemLines.reduce((sum, line) => sum + toNumber(line?.lineVat), 0)
+  const computedGross = itemLines.reduce((sum, line) => sum + toNumber(line?.lineGross), 0)
+  const totalNet = toNumber(entry.totalNet)
+  const totalVat = toNumber(entry.totalVat)
+  const totalGross = toNumber(entry.totalGross)
   return {
     ...entry,
-    totalNet: toNumber(entry.totalNet),
-    totalVat: toNumber(entry.totalVat),
-    totalGross: toNumber(entry.totalGross),
-    items: Array.isArray(entry.items)
-      ? entry.items.map((line) => ({
+    totalNet: totalNet > 0 ? totalNet : computedNet,
+    totalVat: totalVat > 0 ? totalVat : computedVat,
+    totalGross: totalGross > 0 ? totalGross : computedGross,
+    items: itemLines
+      ? itemLines.map((line) => ({
           ...line,
           qty: toNumber(line?.qty),
           unitPrice: toNumber(line?.unitPrice),
@@ -910,6 +917,9 @@ async function generateIncomingInvoiceOfficialPdfBuffer(item: Pick<IncomingInvoi
 
 async function ensureIncomingInvoicePdfSaved(item: Pick<IncomingInvoiceEntryLike, "tenantId" | "id" | "xmlText" | "currency" | "totalNet" | "totalVat" | "totalGross" | "items" | "invoiceNo" | "spvDownloadId" | "supplierName" | "supplierCif" | "customerName" | "customerCif">) {
   const pdfPath = getIncomingInvoicePdfPath(item.tenantId, item.id)
+  if (fs.existsSync(pdfPath)) {
+    return pdfPath
+  }
   let buffer: Buffer
   try {
     buffer = await generateIncomingInvoiceOfficialPdfBuffer(item)
@@ -1092,7 +1102,13 @@ router.post("/api/v1/efactura/incoming/sync", async (req: AuthedRequest, res) =>
         downloaded += 1
         const extracted = extractXmlFromAnafDownload(downloadResult.response.buffer)
         const parsedInvoice = parseIncomingEInvoiceXml(extracted.xmlText)
-        const item = await upsertIncomingInvoice(tenantId, companyId, message, extracted.xmlText, parsedInvoice)
+        const extractedPdf = extractPdfFromAnafDownload(downloadResult.response.buffer)
+        const enrichedMessage = {
+          ...(message as Record<string, unknown>),
+          spvPdfBase64: extractedPdf?.pdfBuffer?.toString("base64") || null,
+          spvPdfFileName: extractedPdf?.fileName || null,
+        }
+        const item = await upsertIncomingInvoice(tenantId, companyId, enrichedMessage, extracted.xmlText, parsedInvoice)
         if (!item) {
           throw new Error(`Factura ${String(downloadId)} nu a putut fi reincarcata dupa import.`)
         }
@@ -1271,7 +1287,33 @@ router.get("/api/v1/efactura/incoming/:id/pdf", async (req: AuthedRequest, res) 
   }
 
   const rawPayload = item.rawPayload && typeof item.rawPayload === "object" ? (item.rawPayload as Record<string, unknown>) : null
-  const originalPdfBase64 = String(rawPayload?.spvPdfBase64 || "").trim()
+  let originalPdfBase64 = String(rawPayload?.spvPdfBase64 || "").trim()
+
+  if (!originalPdfBase64 && String(item.spvDownloadId || "").trim()) {
+    try {
+      const company = await loadAnafCompanyContext(tenantId, companyId)
+      if (company) {
+        const downloadResult = await anafDownloadById(company, String(item.spvDownloadId))
+        const extractedPdf = extractPdfFromAnafDownload(downloadResult.response.buffer)
+        if (extractedPdf?.pdfBuffer) {
+          originalPdfBase64 = extractedPdf.pdfBuffer.toString("base64")
+          await prisma.incomingEInvoice.update({
+            where: { id: item.id },
+            data: {
+              rawPayload: {
+                ...(rawPayload || {}),
+                spvPdfBase64: originalPdfBase64,
+                spvPdfFileName: extractedPdf.fileName || null,
+              } as Prisma.InputJsonValue,
+            },
+          })
+        }
+      }
+    } catch {
+      // fallback below to generated PDF from XML
+    }
+  }
+
   const parsed = item.xmlText ? parseIncomingEInvoiceXml(String(item.xmlText)) : null
   const filename = `Factura_SPV_${safeFilePart(String(parsed?.invoiceNo || item.invoiceNo || item.spvDownloadId || "document"))}.pdf`
   const buffer = originalPdfBase64
