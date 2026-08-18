@@ -1037,12 +1037,32 @@ export default function GufoAiWidget() {
         }
         .gufo-ai-cloud {
           position: relative;
-          width: 320px;
-          min-width: 320px;
+          width: 300px;
+          min-width: 300px;
           border-radius: 999px;
           background: linear-gradient(180deg, rgba(241,249,255,0.98) 0%, rgba(255,255,255,0.98) 100%);
           border: 2px solid rgba(103,132,170,0.72);
           box-shadow: 0 18px 40px rgba(15,23,42,0.12);
+        }
+        .gufo-ai-cloud::before,
+        .gufo-ai-cloud::after {
+          content: "";
+          position: absolute;
+          border-radius: 999px;
+          background: linear-gradient(180deg, rgba(241,249,255,0.98) 0%, rgba(255,255,255,0.98) 100%);
+          border: 2px solid rgba(103,132,170,0.72);
+        }
+        .gufo-ai-cloud::before {
+          width: 86px;
+          height: 86px;
+          left: 24px;
+          top: -36px;
+        }
+        .gufo-ai-cloud::after {
+          width: 72px;
+          height: 72px;
+          right: 28px;
+          top: -28px;
         }
         .gufo-ai-cloud-tail,
         .gufo-ai-cloud-tail-secondary,
@@ -1053,25 +1073,25 @@ export default function GufoAiWidget() {
           border: 2px solid rgba(103,132,170,0.72);
         }
         .gufo-ai-cloud-tail--center {
-          left: 50%;
+          left: 40%;
           transform: translateX(-50%);
-          bottom: -28px;
-          width: 34px;
-          height: 34px;
+          bottom: -24px;
+          width: 28px;
+          height: 28px;
         }
         .gufo-ai-cloud-tail-secondary--center {
-          left: 50%;
+          left: 33%;
           transform: translateX(-50%);
-          bottom: -52px;
-          width: 24px;
-          height: 24px;
+          bottom: -44px;
+          width: 20px;
+          height: 20px;
         }
         .gufo-ai-cloud-tail-tertiary--center {
-          left: 50%;
+          left: 26%;
           transform: translateX(-50%);
-          bottom: -70px;
-          width: 16px;
-          height: 16px;
+          bottom: -60px;
+          width: 14px;
+          height: 14px;
         }
         @keyframes gufoAiPointerBounce {
           0%, 100% { transform: translateY(0px); }
@@ -1107,8 +1127,9 @@ export default function GufoAiWidget() {
               <div
                 className="gufo-ai-cloud absolute px-5 py-5 text-left backdrop-blur"
                 style={{
-                  left: `${Math.round((FAB_WIDTH - 320) / 2) - 44}px`,
-                  top: "-178px",
+                  left: "50%",
+                  bottom: `${FAB_HEIGHT - 4}px`,
+                  transform: "translateX(-62%)",
                   pointerEvents: "auto",
                 }}
               >
