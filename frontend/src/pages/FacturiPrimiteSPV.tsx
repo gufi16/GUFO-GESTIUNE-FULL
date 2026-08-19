@@ -45,6 +45,7 @@ type IncomingInvoice = {
   totalGross: number
   spvDownloadId: string
   spvUploadIndex?: string | null
+  spvMessageId?: string | null
   linkedReceiptId?: string | null
   items: IncomingInvoiceItem[]
 }
@@ -409,6 +410,58 @@ export default function FacturiPrimiteSPVPage() {
     }).catch(() => null)
   }
 
+  async function fetchOriginalPdfFromBridge(item: Pick<IncomingInvoice, "spvDownloadId" | "spvMessageId">) {
+    const localAgent = await getLocalAgentConnection()
+    if (!localAgent?.bridgeToken) return null
+
+    const bridgeConfig = await loadBridgeConfig()
+    const headers = {
+      Authorization: `Bearer ${localAgent.bridgeToken}`,
+      "Content-Type": "application/json",
+    }
+    const trimmedBridgeUrl = localAgent.bridgeUrl.replace(/\/+$/, "")
+    const downloadId = String(item.spvDownloadId || "").trim()
+
+    if (downloadId) {
+      const efacturaRes = await fetchWithTimeout(`${trimmedBridgeUrl}/api/v1/efactura/download-message`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          id: downloadId,
+          accessToken: bridgeConfig.accessToken,
+          environment: bridgeConfig.environment,
+        }),
+      }, 12000)
+      const efacturaData = await efacturaRes.json().catch(() => ({}))
+      const efacturaPdfBase64 = String(efacturaData?.response?.artifacts?.pdfBase64 || "").trim()
+      if (efacturaRes.ok && efacturaData?.ok && efacturaPdfBase64) {
+        return {
+          pdfBase64: efacturaPdfBase64,
+          fileName: String(efacturaData?.response?.artifacts?.pdfFileName || "").trim() || null,
+        }
+      }
+    }
+
+    const classicId = String(item.spvMessageId || item.spvDownloadId || "").trim()
+    if (!classicId) return null
+
+    const classicRes = await fetchWithTimeout(`${trimmedBridgeUrl}/api/v1/spvws2/download-message`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ id: classicId }),
+    }, 12000)
+    const classicData = await classicRes.json().catch(() => ({}))
+    const classicPdfBase64 = String(classicData?.response?.artifacts?.pdfBase64 || "").trim()
+    if (classicRes.ok && classicData?.ok && classicPdfBase64) {
+      return {
+        pdfBase64: classicPdfBase64,
+        fileName: String(classicData?.response?.artifacts?.pdfFileName || "").trim() || null,
+      }
+    }
+
+    return null
+  }
+
   async function syncItems() {
     if (!token) return
     setSyncing(true)
@@ -537,9 +590,16 @@ export default function FacturiPrimiteSPVPage() {
           for (const entry of batchDownloadData.response.items) {
             const downloadId = String(entry?.id || "").trim()
             const currentInvoice = existingInvoiceMap.get(downloadId)
-            const pdfBase64 = String(entry?.artifacts?.pdfBase64 || "").trim()
-            if (!currentInvoice || !pdfBase64) continue
-            await storeOriginalPdf(currentInvoice.id, pdfBase64, entry?.artifacts?.pdfFileName || null)
+            if (!currentInvoice) continue
+            let pdfBase64 = String(entry?.artifacts?.pdfBase64 || "").trim()
+            let pdfFileName = entry?.artifacts?.pdfFileName || null
+            if (!pdfBase64) {
+              const bridgePdf = await fetchOriginalPdfFromBridge(currentInvoice)
+              pdfBase64 = String(bridgePdf?.pdfBase64 || "").trim()
+              pdfFileName = bridgePdf?.fileName || pdfFileName
+            }
+            if (!pdfBase64) continue
+            await storeOriginalPdf(currentInvoice.id, pdfBase64, pdfFileName)
             refreshedCount += 1
           }
           return refreshedCount
@@ -1108,24 +1168,10 @@ export default function FacturiPrimiteSPVPage() {
     if (!token) return
     try {
       try {
-        const localAgent = await getLocalAgentConnection()
-        if (localAgent?.bridgeToken && String(item.spvDownloadId || "").trim()) {
-          const bridgeConfig = await loadBridgeConfig()
-          const bridgeRes = await fetchWithTimeout(`${localAgent.bridgeUrl.replace(/\/+$/, "")}/api/v1/efactura/download-message`, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${localAgent.bridgeToken}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              id: item.spvDownloadId,
-              accessToken: bridgeConfig.accessToken,
-              environment: bridgeConfig.environment,
-            }),
-          }, 12000)
-          const bridgeData = await bridgeRes.json().catch(() => ({}))
-          const originalPdfBase64 = String(bridgeData?.response?.artifacts?.pdfBase64 || "").trim()
-          if (bridgeRes.ok && bridgeData?.ok && originalPdfBase64) {
+        if (String(item.spvDownloadId || "").trim() || String(item.spvMessageId || "").trim()) {
+          const bridgePdf = await fetchOriginalPdfFromBridge(item)
+          const originalPdfBase64 = String(bridgePdf?.pdfBase64 || "").trim()
+          if (originalPdfBase64) {
             const bytes = Uint8Array.from(atob(originalPdfBase64), (char) => char.charCodeAt(0))
             const blob = new Blob([bytes], { type: "application/pdf" })
             void fetch(`${API_BASE}/api/v1/efactura/incoming/${item.id}/store-original-pdf`, {
@@ -1136,13 +1182,13 @@ export default function FacturiPrimiteSPVPage() {
               },
               body: JSON.stringify({
                 pdfBase64: originalPdfBase64,
-                fileName: bridgeData?.response?.artifacts?.pdfFileName || null,
+                fileName: bridgePdf?.fileName || null,
               }),
             }).catch(() => null)
             const url = window.URL.createObjectURL(blob)
             const link = document.createElement("a")
             link.href = url
-            link.download = String(bridgeData?.response?.artifacts?.pdfFileName || "").trim() || `factura-spv-${item.invoiceNo || item.spvDownloadId}.pdf`
+            link.download = String(bridgePdf?.fileName || "").trim() || `factura-spv-${item.invoiceNo || item.spvDownloadId}.pdf`
             document.body.appendChild(link)
             link.click()
             link.remove()

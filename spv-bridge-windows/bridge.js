@@ -2060,6 +2060,7 @@ const server = http.createServer(async (req, res) => {
       const id = String(body.id || "").trim()
       console.log(`[gufo-spv-bridge] HTTP download-message serial=${serial} id=${id}`)
       const data = await downloadMessage(serial, id)
+      const artifacts = data?.result?.base64Content ? await extractAnafArtifacts(data.result.base64Content) : null
       sendJson(res, 200, {
         ok: Boolean(data.result.ok),
         request: {
@@ -2074,6 +2075,12 @@ const server = http.createServer(async (req, res) => {
           contentType: data.result.contentType || null,
           preview: data.result.preview || null,
           base64Content: data.result.base64Content || null,
+          artifacts: artifacts || {
+            pdfBase64: null,
+            pdfFileName: null,
+            xmlBase64: null,
+            xmlFileName: null,
+          },
           trace: Array.isArray(data.result.trace)
             ? data.result.trace.map((step) => ({
                 ...step,
