@@ -1301,14 +1301,6 @@ router.get("/api/v1/efactura/incoming/:id/pdf", async (req: AuthedRequest, res) 
 
   const rawPayload = item.rawPayload && typeof item.rawPayload === "object" ? (item.rawPayload as Record<string, unknown>) : null
   let originalPdfBase64 = String(rawPayload?.spvPdfBase64 || "").trim()
-  const originalOnly =
-    String(req.query.originalOnly || "")
-      .trim()
-      .toLowerCase() === "1" ||
-    String(req.query.originalOnly || "")
-      .trim()
-      .toLowerCase() === "true"
-
   if (!originalPdfBase64 && String(item.spvDownloadId || "").trim()) {
     try {
       const company = await loadAnafCompanyContext(tenantId, companyId)
@@ -1338,13 +1330,6 @@ router.get("/api/v1/efactura/incoming/:id/pdf", async (req: AuthedRequest, res) 
   const filename = originalPdfBase64
     ? String(rawPayload?.spvPdfFileName || "").trim() || `factura-spv-${safeFilePart(String(parsed?.invoiceNo || item.invoiceNo || item.spvDownloadId || "document"))}.pdf`
     : `Factura_SPV_${safeFilePart(String(parsed?.invoiceNo || item.invoiceNo || item.spvDownloadId || "document"))}.pdf`
-
-  if (originalOnly && !originalPdfBase64) {
-    return res.status(409).json({
-      ok: false,
-      error: "PDF-ul original din SPV nu este disponibil momentan. Reincearca sincronizarea sau descarcarea din ANAF.",
-    })
-  }
 
   const buffer = originalPdfBase64
     ? Buffer.from(originalPdfBase64, "base64")
