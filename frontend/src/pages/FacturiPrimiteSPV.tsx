@@ -1166,68 +1166,16 @@ export default function FacturiPrimiteSPVPage() {
 
   async function downloadInvoicePdf(item: IncomingInvoice) {
     if (!token) return
-    setError("")
     try {
-      try {
-        if (String(item.spvDownloadId || "").trim() || String(item.spvMessageId || "").trim()) {
-          const bridgePdf = await fetchOriginalPdfFromBridge(item)
-          const originalPdfBase64 = String(bridgePdf?.pdfBase64 || "").trim()
-          if (originalPdfBase64) {
-            const bytes = Uint8Array.from(atob(originalPdfBase64), (char) => char.charCodeAt(0))
-            const blob = new Blob([bytes], { type: "application/pdf" })
-            void fetch(`${API_BASE}/api/v1/efactura/incoming/${item.id}/store-original-pdf`, {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                pdfBase64: originalPdfBase64,
-                fileName: bridgePdf?.fileName || null,
-              }),
-            }).catch(() => null)
-            const url = window.URL.createObjectURL(blob)
-            const link = document.createElement("a")
-            link.href = url
-            link.download = String(bridgePdf?.fileName || "").trim() || `factura-spv-${item.invoiceNo || item.spvDownloadId}.pdf`
-            document.body.appendChild(link)
-            link.click()
-            link.remove()
-            window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000)
-            return
-          }
-        }
-      } catch {
-        // daca browserul nu poate lua direct originalul din bridge, incercam varianta deja salvata in backend
-      }
-
-      const fallbackRes = await fetchWithTimeout(`${API_BASE}/api/v1/efactura/incoming/${item.id}/pdf?originalOnly=1`, {
+      const fallbackRes = await fetch(`${API_BASE}/api/v1/efactura/incoming/${item.id}/pdf`, {
         headers: { Authorization: `Bearer ${token}` },
-      }, 12000)
+      })
       if (!fallbackRes.ok) {
-        const fallbackData = await fallbackRes.json().catch(() => ({}))
-        if (fallbackRes.status === 409) {
-          const generatedPdfRes = await fetchWithTimeout(`${API_BASE}/api/v1/efactura/incoming/${item.id}/pdf`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }, 12000)
-          if (!generatedPdfRes.ok) {
-            throw new Error(fallbackData?.error || "Nu am putut descarca PDF-ul facturii din SPV.")
-          }
-          await downloadPdfFile(generatedPdfRes, `factura-spv-${item.invoiceNo || item.spvDownloadId}.pdf`)
-          setMessage("PDF-ul original ANAF nu a fost disponibil. Am descarcat PDF-ul facturii din ERP.")
-          setError("")
-          return
-        }
-        throw new Error(fallbackData?.error || "Nu am putut descarca PDF-ul original din SPV.")
+        throw new Error("Nu am putut genera PDF-ul facturii din XML.")
       }
       await downloadPdfFile(fallbackRes, `factura-spv-${item.invoiceNo || item.spvDownloadId}.pdf`)
-      setMessage("")
     } catch (err: any) {
-      if (err?.name === "AbortError") {
-        setError("Descarcarea PDF-ului original din SPV a expirat. Incearca din nou.")
-        return
-      }
-      setError(err?.message || "Nu am putut descarca PDF-ul original din SPV.")
+      setError(err?.message || "Nu am putut descarca PDF-ul facturii.")
     }
   }
 
