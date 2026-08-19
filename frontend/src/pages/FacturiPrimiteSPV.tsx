@@ -394,6 +394,21 @@ export default function FacturiPrimiteSPVPage() {
     }
   }
 
+  async function storeOriginalPdf(itemId: string, pdfBase64: string, fileName?: string | null) {
+    if (!token || !itemId || !pdfBase64) return
+    await fetch(`${API_BASE}/api/v1/efactura/incoming/${itemId}/store-original-pdf`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        pdfBase64,
+        fileName: fileName || null,
+      }),
+    }).catch(() => null)
+  }
+
   async function syncItems() {
     if (!token) return
     setSyncing(true)
@@ -491,6 +506,44 @@ export default function FacturiPrimiteSPVPage() {
 
         const invoiceMessages = messages.filter((entry: any) => isEfacturaInvoiceMessage(entry))
         const newInvoiceMessages = invoiceMessages.filter((entry: any) => !existingDownloadIds.has(String(entry?.id || "").trim()))
+        const existingInvoiceMap = new Map(
+          items
+            .map((entry) => [String(entry.spvDownloadId || "").trim(), entry] as const)
+            .filter(([downloadId]) => Boolean(downloadId))
+        )
+
+        async function refreshExistingOriginalPdfs(targetMessages: any[]) {
+          const existingIdsToRefresh = targetMessages
+            .map((entry: any) => String(entry?.id || "").trim())
+            .filter((downloadId) => Boolean(downloadId) && existingInvoiceMap.has(downloadId))
+
+          if (!existingIdsToRefresh.length) return 0
+
+          const batchDownloadRes = await fetch(`${trimmedBridgeUrl}/api/v1/efactura/download-many`, {
+            method: "POST",
+            headers: bridgeHeaders,
+            body: JSON.stringify({
+              ids: existingIdsToRefresh,
+              accessToken: bridgeConfig.accessToken,
+              environment: bridgeConfig.environment,
+            }),
+          })
+          const batchDownloadData = await batchDownloadRes.json().catch(() => ({}))
+          if (!batchDownloadRes.ok || !batchDownloadData?.ok || !Array.isArray(batchDownloadData?.response?.items)) {
+            return 0
+          }
+
+          let refreshedCount = 0
+          for (const entry of batchDownloadData.response.items) {
+            const downloadId = String(entry?.id || "").trim()
+            const currentInvoice = existingInvoiceMap.get(downloadId)
+            const pdfBase64 = String(entry?.artifacts?.pdfBase64 || "").trim()
+            if (!currentInvoice || !pdfBase64) continue
+            await storeOriginalPdf(currentInvoice.id, pdfBase64, entry?.artifacts?.pdfFileName || null)
+            refreshedCount += 1
+          }
+          return refreshedCount
+        }
 
         if (!invoiceMessages.length) {
           setMessage(`Bridge local conectat, dar in e-Factura nu exista facturi de importat pentru ${selectedMonth}.`)
@@ -513,6 +566,7 @@ export default function FacturiPrimiteSPVPage() {
         }
 
         if (!newInvoiceMessages.length) {
+          const refreshedExisting = await refreshExistingOriginalPdfs(invoiceMessages)
           setMessage(`Facturile pentru ${selectedMonth} sunt deja sincronizate in Gufo.`)
           setSpvTestResult({
             ok: true,
@@ -527,6 +581,7 @@ export default function FacturiPrimiteSPVPage() {
               `Mesaje totale: ${messages.length}`,
               `Facturi gasite: ${invoiceMessages.length}`,
               "Facturi noi de importat: 0",
+              `PDF-uri originale reimprospatate: ${refreshedExisting}`,
             ],
           })
           await loadItems()
