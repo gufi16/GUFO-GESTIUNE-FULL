@@ -1207,13 +1207,6 @@ export default function FacturiPrimiteSPVPage() {
       if (!fallbackRes.ok) {
         const fallbackData = await fallbackRes.json().catch(() => ({}))
         if (fallbackRes.status === 409) {
-          const spvDownloadId = String(item.spvDownloadId || "").trim()
-          if (spvDownloadId) {
-            window.open(`https://webserviced.anaf.ro/SPVWS2/rest/descarcare?id=${encodeURIComponent(spvDownloadId)}`, "_blank", "noopener,noreferrer")
-            setMessage("PDF-ul original nu a venit din ERP. Am deschis descarcarea directa din ANAF pentru acest ID.")
-            setError("")
-            return
-          }
           const generatedPdfRes = await fetchWithTimeout(`${API_BASE}/api/v1/efactura/incoming/${item.id}/pdf`, {
             headers: { Authorization: `Bearer ${token}` },
           }, 12000)
