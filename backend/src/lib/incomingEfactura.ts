@@ -288,6 +288,45 @@ function isInvoiceLikeXml(xmlText: string) {
   )
 }
 
+function extractPdfFromInvoiceXml(xmlText: string): { pdfBuffer: Buffer; fileName: string } | null {
+  if (!String(xmlText || "").trim().startsWith("<")) return null
+  try {
+    const parsed = xmlParser.parse(xmlText) as AnyObj
+    const invoice = findInvoiceNode(parsed) as AnyObj | null
+    if (!invoice || typeof invoice !== "object") return null
+
+    const references = asArray((invoice as AnyObj).AdditionalDocumentReference)
+    for (const reference of references) {
+      const refNode = (reference ?? {}) as AnyObj
+      const attachment = (refNode.Attachment ?? {}) as AnyObj
+      const embedded = (attachment.EmbeddedDocumentBinaryObject ?? {}) as AnyObj
+      const base64Content = textValue(embedded)
+      if (!base64Content) continue
+
+      const mimeCode = String(embedded.mimeCode || embedded["@_mimeCode"] || "").trim().toLowerCase()
+      const fileName =
+        textValue(firstDefined(embedded.filename, embedded["@_filename"], refNode.ID, refNode.DocumentType)) ||
+        "factura-spv.pdf"
+
+      if (mimeCode && !mimeCode.includes("pdf")) {
+        continue
+      }
+
+      const decoded = tryDecodeBase64Document(base64Content)
+      if (decoded && decoded.length >= 4 && decoded[0] === 0x25 && decoded[1] === 0x50 && decoded[2] === 0x44 && decoded[3] === 0x46) {
+        return {
+          pdfBuffer: decoded,
+          fileName: fileName.toLowerCase().endsWith(".pdf") ? fileName : `${fileName}.pdf`,
+        }
+      }
+    }
+  } catch {
+    return null
+  }
+
+  return null
+}
+
 export function extractXmlFromAnafDownload(buffer: Buffer) {
   const rawText = buffer.toString("utf8")
   const trimmed = rawText.trim()
@@ -356,6 +395,11 @@ export function extractPdfFromAnafDownload(buffer: Buffer): { pdfBuffer: Buffer;
   }
 
   const rawText = buffer.toString("utf8")
+  const xmlEmbeddedPdf = extractPdfFromInvoiceXml(rawText)
+  if (xmlEmbeddedPdf?.pdfBuffer) {
+    return xmlEmbeddedPdf
+  }
+
   const payload = parseAnafPayload(rawText)
   if (payload) {
     const base64Content = readStringField(payload, [
