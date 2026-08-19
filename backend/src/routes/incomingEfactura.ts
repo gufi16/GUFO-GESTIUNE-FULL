@@ -161,6 +161,32 @@ function getClassicPdfFileName(
   return normalized.toLowerCase().endsWith(".pdf") ? normalized : `${normalized}.pdf`
 }
 
+function collectOriginalPdfCandidateIds(
+  item: Pick<IncomingInvoiceEntryLike, "spvDownloadId" | "spvMessageId" | "spvUploadIndex" | "rawPayload">
+) {
+  const rawPayload = item.rawPayload && typeof item.rawPayload === "object"
+    ? (item.rawPayload as Record<string, unknown>)
+    : null
+  const rawText = rawPayload ? JSON.stringify(rawPayload) : ""
+
+  return Array.from(
+    new Set(
+      [
+        String(item.spvDownloadId || "").trim(),
+        String(item.spvMessageId || "").trim(),
+        String(item.spvUploadIndex || "").trim(),
+        extractDownloadId(rawPayload, rawText),
+        extractUploadIndex(rawPayload, rawText),
+        readStringField(rawPayload, ["id", "messageId", "mesajId"]),
+        readStringField(rawPayload, ["id_descarcare", "idDescarcare", "downloadId"]),
+        readStringField(rawPayload, ["index_incarcare", "indexIncarcare", "uploadIndex", "id_incarcare"]),
+      ]
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+    )
+  )
+}
+
 function joinAddressParts(address: Parameters<typeof joinIncomingEfacturaAddressParts>[0]) {
   return joinIncomingEfacturaAddressParts(address)
 }
@@ -1329,47 +1355,60 @@ router.get("/api/v1/efactura/incoming/:id/pdf", async (req: AuthedRequest, res) 
       .trim()
       .toLowerCase() === "true"
 
-  if (!originalPdfBase64 && String(item.spvDownloadId || "").trim()) {
+  if (!originalPdfBase64 && (String(item.spvDownloadId || "").trim() || String(item.spvMessageId || "").trim() || String(item.spvUploadIndex || "").trim())) {
     try {
       const company = await loadAnafCompanyContext(tenantId, companyId)
       if (company) {
-        const downloadResult = await anafDownloadById(company, String(item.spvDownloadId))
-        const extractedPdf = extractPdfFromAnafDownload(downloadResult.response.buffer)
-        if (extractedPdf?.pdfBuffer) {
-          originalPdfBase64 = extractedPdf.pdfBuffer.toString("base64")
-          await prisma.incomingEInvoice.update({
-            where: { id: item.id },
-            data: {
-              rawPayload: {
-                ...(rawPayload || {}),
-                spvPdfBase64: originalPdfBase64,
-                spvPdfFileName: extractedPdf.fileName || null,
-              } as Prisma.InputJsonValue,
-            },
-          })
-        }
+        const candidateIds = collectOriginalPdfCandidateIds(item)
+        const oauthIds = Array.from(new Set([String(item.spvDownloadId || "").trim(), extractDownloadId(rawPayload, rawPayload ? JSON.stringify(rawPayload) : "")].filter(Boolean)))
 
-        if (!originalPdfBase64) {
+        for (const downloadId of oauthIds) {
           try {
-            const classicResult = await spvClassicDownloadMessage(company, String(item.spvDownloadId))
-            if (looksLikePdfBuffer(classicResult.response.buffer)) {
-              originalPdfBase64 = classicResult.response.buffer.toString("base64")
+            const downloadResult = await anafDownloadById(company, downloadId)
+            const extractedPdf = extractPdfFromAnafDownload(downloadResult.response.buffer)
+            if (extractedPdf?.pdfBuffer) {
+              originalPdfBase64 = extractedPdf.pdfBuffer.toString("base64")
               await prisma.incomingEInvoice.update({
                 where: { id: item.id },
                 data: {
                   rawPayload: {
                     ...(rawPayload || {}),
                     spvPdfBase64: originalPdfBase64,
-                    spvPdfFileName: getClassicPdfFileName(
-                      classicResult.response.headers,
-                      `${String(item.spvDownloadId).trim() || "factura-spv"}.pdf`
-                    ),
+                    spvPdfFileName: extractedPdf.fileName || null,
                   } as Prisma.InputJsonValue,
                 },
               })
+              break
             }
           } catch {
-            // daca mesajul nu are PDF direct prin SPV clasic, ramanem pe fallbackul de mai jos
+            // continuam cu celelalte ID-uri si fallbackul clasic
+          }
+        }
+
+        if (!originalPdfBase64) {
+          for (const candidateId of candidateIds) {
+            try {
+              const classicResult = await spvClassicDownloadMessage(company, candidateId)
+              if (looksLikePdfBuffer(classicResult.response.buffer)) {
+                originalPdfBase64 = classicResult.response.buffer.toString("base64")
+                await prisma.incomingEInvoice.update({
+                  where: { id: item.id },
+                  data: {
+                    rawPayload: {
+                      ...(rawPayload || {}),
+                      spvPdfBase64: originalPdfBase64,
+                      spvPdfFileName: getClassicPdfFileName(
+                        classicResult.response.headers,
+                        `${candidateId || "factura-spv"}.pdf`
+                      ),
+                    } as Prisma.InputJsonValue,
+                  },
+                })
+                break
+              }
+            } catch {
+              // continuam pana gasim ID-ul care intoarce PDF-ul original
+            }
           }
         }
 
