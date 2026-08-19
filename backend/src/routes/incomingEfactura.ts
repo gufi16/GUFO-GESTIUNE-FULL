@@ -1440,6 +1440,8 @@ router.post("/api/v1/efactura/incoming/import-from-spv-bridge", async (req: Auth
 
   const rawMessage = req.body?.message || null
   const downloadBase64 = String(req.body?.downloadBase64 || "").trim()
+  const originalPdfBase64 = String(req.body?.pdfBase64 || "").trim()
+  const originalPdfFileName = String(req.body?.pdfFileName || "").trim() || null
 
   if (!rawMessage || typeof rawMessage !== "object") {
     return res.status(400).json({ ok: false, error: "Mesajul SPV lipseste." })
@@ -1456,8 +1458,8 @@ router.post("/api/v1/efactura/incoming/import-from-spv-bridge", async (req: Auth
     const extractedPdf = extractPdfFromAnafDownload(buffer)
     const enrichedMessage = {
       ...(rawMessage as Record<string, unknown>),
-      spvPdfBase64: extractedPdf?.pdfBuffer?.toString("base64") || null,
-      spvPdfFileName: extractedPdf?.fileName || null,
+      spvPdfBase64: originalPdfBase64 || extractedPdf?.pdfBuffer?.toString("base64") || null,
+      spvPdfFileName: originalPdfFileName || extractedPdf?.fileName || null,
     }
     const item = await upsertIncomingInvoice(tenantId, companyId, enrichedMessage, extracted.xmlText, parsedInvoice)
     if (!item) {

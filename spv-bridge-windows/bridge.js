@@ -2176,13 +2176,27 @@ const server = http.createServer(async (req, res) => {
         `[gufo-spv-bridge] HTTP efactura download-many serial=${serial} env=${environment} count=${ids.length}`
       )
       const data = await downloadManyIncomingEfacturaMessages(serial, accessToken, environment, ids)
+      const itemsWithArtifacts = await Promise.all(
+        (Array.isArray(data.result.items) ? data.result.items : []).map(async (entry) => {
+          const artifacts = entry?.base64Content ? await extractAnafArtifacts(entry.base64Content) : null
+          return {
+            ...entry,
+            artifacts: artifacts || {
+              pdfBase64: null,
+              pdfFileName: null,
+              xmlBase64: null,
+              xmlFileName: null,
+            },
+          }
+        })
+      )
       sendJson(res, 200, {
         ok: Boolean(data.result.ok),
         request: { environment, count: ids.length },
         certificate: data.certificate,
         response: {
           ok: Boolean(data.result.ok),
-          items: Array.isArray(data.result.items) ? data.result.items : [],
+          items: itemsWithArtifacts,
         },
       })
     } catch (error) {
@@ -2208,6 +2222,20 @@ const server = http.createServer(async (req, res) => {
         `[gufo-spv-bridge] HTTP efactura sync-batch serial=${serial} env=${environment} cif=${cif} days=${days} existing=${existingIds.length}`
       )
       const data = await syncIncomingEfacturaMessages(serial, accessToken, environment, cif, days, existingIds)
+      const itemsWithArtifacts = await Promise.all(
+        (Array.isArray(data.result.items) ? data.result.items : []).map(async (entry) => {
+          const artifacts = entry?.base64Content ? await extractAnafArtifacts(entry.base64Content) : null
+          return {
+            ...entry,
+            artifacts: artifacts || {
+              pdfBase64: null,
+              pdfFileName: null,
+              xmlBase64: null,
+              xmlFileName: null,
+            },
+          }
+        })
+      )
       sendJson(res, 200, {
         ok: Boolean(data.result.ok),
         request: { environment, cif, days, existingIds: existingIds.length },
@@ -2215,7 +2243,7 @@ const server = http.createServer(async (req, res) => {
         response: {
           ok: Boolean(data.result.ok),
           list: data.result.list || null,
-          items: Array.isArray(data.result.items) ? data.result.items : [],
+          items: itemsWithArtifacts,
         },
       })
     } catch (error) {

@@ -581,6 +581,8 @@ export default function FacturiPrimiteSPVPage() {
             body: JSON.stringify({
               message,
               downloadBase64: downloadData.base64Content,
+              pdfBase64: downloadData?.artifacts?.pdfBase64 || null,
+              pdfFileName: downloadData?.artifacts?.pdfFileName || null,
             }),
           })
           const importData = await importRes.json().catch(() => ({}))
