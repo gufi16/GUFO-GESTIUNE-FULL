@@ -296,7 +296,7 @@ export function extractXmlFromAnafDownload(buffer: Buffer) {
   throw new Error("Nu am putut extrage XML-ul facturii din raspunsul ANAF.")
 }
 
-export function extractPdfFromAnafDownload(buffer: Buffer) {
+export function extractPdfFromAnafDownload(buffer: Buffer): { pdfBuffer: Buffer; fileName: string } | null {
   if (buffer.length >= 4 && buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46) {
     return { pdfBuffer: buffer, fileName: "factura-spv.pdf" }
   }
@@ -307,8 +307,12 @@ export function extractPdfFromAnafDownload(buffer: Buffer) {
     const base64Content = readStringField(payload, ["pdfBase64", "base64", "contentBase64", "continutBase64", "documentBase64"])
     if (base64Content) {
       const decoded = Buffer.from(base64Content, "base64")
-      if (decoded.length >= 4 && decoded[0] === 0x25 && decoded[1] === 0x50 && decoded[2] === 0x44 && decoded[3] === 0x46) {
-        return { pdfBuffer: decoded, fileName: readStringField(payload, ["pdfFileName", "fileName"]) || "factura-spv.pdf" }
+      const nestedPdf: { pdfBuffer: Buffer; fileName: string } | null = extractPdfFromAnafDownload(decoded)
+      if (nestedPdf?.pdfBuffer) {
+        return {
+          pdfBuffer: nestedPdf.pdfBuffer,
+          fileName: readStringField(payload, ["pdfFileName", "fileName"]) || nestedPdf.fileName || "factura-spv.pdf",
+        }
       }
     }
   }

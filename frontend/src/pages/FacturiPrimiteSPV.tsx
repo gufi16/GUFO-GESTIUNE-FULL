@@ -1210,7 +1210,7 @@ export default function FacturiPrimiteSPVPage() {
       await downloadPdfFile(fallbackRes, `factura-spv-${item.invoiceNo || item.spvDownloadId}.pdf`)
     } catch (err: any) {
       if (err?.name === "AbortError") {
-        setError("Descarcarea PDF-ului original din SPV a expirat. Verifica bridge-ul local si incearca din nou.")
+        setError("Descarcarea PDF-ului original din SPV a expirat. Incearca din nou.")
         return
       }
       setError(err?.message || "Nu am putut descarca PDF-ul original din SPV.")

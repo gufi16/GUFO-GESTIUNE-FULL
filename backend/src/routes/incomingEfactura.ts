@@ -1342,7 +1342,7 @@ router.get("/api/v1/efactura/incoming/:id/pdf", async (req: AuthedRequest, res) 
   if (originalOnly && !originalPdfBase64) {
     return res.status(409).json({
       ok: false,
-      error: "PDF-ul original din SPV nu este disponibil momentan. Verifica bridge-ul local SPV si reincearca.",
+      error: "PDF-ul original din SPV nu este disponibil momentan. Reincearca sincronizarea sau descarcarea din ANAF.",
     })
   }
 
