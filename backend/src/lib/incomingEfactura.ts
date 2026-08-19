@@ -76,6 +76,60 @@ export function readStringField(source: unknown, keys: string[]) {
   return ""
 }
 
+function looksLikeBase64Document(value: string) {
+  const compact = String(value || "").trim().replace(/\s+/g, "")
+  if (compact.length < 32 || compact.length % 4 !== 0) return false
+  return /^[A-Za-z0-9+/=]+$/.test(compact)
+}
+
+function tryDecodeBase64Document(value: string) {
+  const compact = String(value || "").trim().replace(/\s+/g, "")
+  if (!looksLikeBase64Document(compact)) return null
+  try {
+    return Buffer.from(compact, "base64")
+  } catch {
+    return null
+  }
+}
+
+function findNestedPdfCandidate(source: unknown, seen = new Set<unknown>()): { buffer: Buffer; fileName: string | null } | null {
+  if (!source || typeof source !== "object") return null
+  if (seen.has(source)) return null
+  seen.add(source)
+
+  if (Array.isArray(source)) {
+    for (const entry of source) {
+      const found = findNestedPdfCandidate(entry, seen)
+      if (found) return found
+    }
+    return null
+  }
+
+  for (const [key, rawValue] of Object.entries(source as Record<string, unknown>)) {
+    if (typeof rawValue === "string") {
+      const decoded = tryDecodeBase64Document(rawValue)
+      if (!decoded) continue
+      const nestedPdf = extractPdfFromAnafDownload(decoded)
+      if (nestedPdf?.pdfBuffer) {
+        const loweredKey = key.toLowerCase()
+        const fileName =
+          loweredKey.includes("name") || loweredKey.includes("filename")
+            ? String(rawValue || "").trim() || null
+            : null
+        return {
+          buffer: nestedPdf.pdfBuffer,
+          fileName: fileName || nestedPdf.fileName || null,
+        }
+      }
+    } else if (rawValue && typeof rawValue === "object") {
+      const found = findNestedPdfCandidate(rawValue, seen)
+      if (found) return found
+    }
+  }
+
+  return null
+}
+
 export function collectMessageItems(payload: MessagePayload) {
   if (Array.isArray(payload)) return payload
   const keys = ["mesaje", "messages", "lista", "items", "facturi", "messageList"]
@@ -304,15 +358,36 @@ export function extractPdfFromAnafDownload(buffer: Buffer): { pdfBuffer: Buffer;
   const rawText = buffer.toString("utf8")
   const payload = parseAnafPayload(rawText)
   if (payload) {
-    const base64Content = readStringField(payload, ["pdfBase64", "base64", "contentBase64", "continutBase64", "documentBase64"])
+    const base64Content = readStringField(payload, [
+      "pdfBase64",
+      "base64",
+      "contentBase64",
+      "continutBase64",
+      "documentBase64",
+      "continut",
+      "content",
+      "document",
+      "fisier",
+      "attachment",
+    ])
     if (base64Content) {
-      const decoded = Buffer.from(base64Content, "base64")
-      const nestedPdf: { pdfBuffer: Buffer; fileName: string } | null = extractPdfFromAnafDownload(decoded)
-      if (nestedPdf?.pdfBuffer) {
-        return {
-          pdfBuffer: nestedPdf.pdfBuffer,
-          fileName: readStringField(payload, ["pdfFileName", "fileName"]) || nestedPdf.fileName || "factura-spv.pdf",
+      const decoded = tryDecodeBase64Document(base64Content)
+      if (decoded) {
+        const nestedPdf: { pdfBuffer: Buffer; fileName: string } | null = extractPdfFromAnafDownload(decoded)
+        if (nestedPdf?.pdfBuffer) {
+          return {
+            pdfBuffer: nestedPdf.pdfBuffer,
+            fileName: readStringField(payload, ["pdfFileName", "fileName"]) || nestedPdf.fileName || "factura-spv.pdf",
+          }
         }
+      }
+    }
+
+    const nestedCandidate = findNestedPdfCandidate(payload)
+    if (nestedCandidate?.buffer) {
+      return {
+        pdfBuffer: nestedCandidate.buffer,
+        fileName: nestedCandidate.fileName || readStringField(payload, ["pdfFileName", "fileName"]) || "factura-spv.pdf",
       }
     }
   }
