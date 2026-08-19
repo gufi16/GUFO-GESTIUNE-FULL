@@ -1206,6 +1206,25 @@ export default function FacturiPrimiteSPVPage() {
       }, 12000)
       if (!fallbackRes.ok) {
         const fallbackData = await fallbackRes.json().catch(() => ({}))
+        if (fallbackRes.status === 409) {
+          const spvDownloadId = String(item.spvDownloadId || "").trim()
+          if (spvDownloadId) {
+            window.open(`https://webserviced.anaf.ro/SPVWS2/rest/descarcare?id=${encodeURIComponent(spvDownloadId)}`, "_blank", "noopener,noreferrer")
+            setMessage("PDF-ul original nu a venit din ERP. Am deschis descarcarea directa din ANAF pentru acest ID.")
+            setError("")
+            return
+          }
+          const generatedPdfRes = await fetchWithTimeout(`${API_BASE}/api/v1/efactura/incoming/${item.id}/pdf`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }, 12000)
+          if (!generatedPdfRes.ok) {
+            throw new Error(fallbackData?.error || "Nu am putut descarca PDF-ul facturii din SPV.")
+          }
+          await downloadPdfFile(generatedPdfRes, `factura-spv-${item.invoiceNo || item.spvDownloadId}.pdf`)
+          setMessage("PDF-ul original ANAF nu a fost disponibil. Am descarcat PDF-ul facturii din ERP.")
+          setError("")
+          return
+        }
         throw new Error(fallbackData?.error || "Nu am putut descarca PDF-ul original din SPV.")
       }
       await downloadPdfFile(fallbackRes, `factura-spv-${item.invoiceNo || item.spvDownloadId}.pdf`)
