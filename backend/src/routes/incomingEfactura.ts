@@ -7,11 +7,13 @@ import PDFDocument from "pdfkit"
 import { promisify } from "util"
 import { prisma } from "../lib/prisma"
 import { anafDownloadById, anafListMessages, loadAnafCompanyContext } from "../lib/anafClient"
+import { readAnafHeader } from "../lib/anafHttp"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { requireTenantModule } from "../lib/tenantModules"
 import { reserveNextNumber } from "../lib/numbering"
 import { resolveTenantCompany } from "../lib/companyResolver"
 import { requireRequestCompanyId } from "../lib/companyScope"
+import { spvClassicDownloadMessage } from "../lib/spvClassicClient"
 import {
   incomingEfacturaDateRo,
   incomingEfacturaMoney,
@@ -139,6 +141,24 @@ function fmtQtyRo(value: unknown) {
 
 function fmtDateRo(value: unknown) {
   return incomingEfacturaDateRo(value)
+}
+
+function looksLikePdfBuffer(buffer: Buffer | null | undefined) {
+  return Boolean(buffer && buffer.length >= 4 && buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46)
+}
+
+function getClassicPdfFileName(
+  headers: Record<string, string | string[] | undefined>,
+  fallbackName: string
+) {
+  const disposition = String(readAnafHeader(headers, "content-disposition") || "")
+  const match =
+    disposition.match(/filename\*=(?:UTF-8'')?([^;]+)/i) ||
+    disposition.match(/filename="?([^";]+)"?/i)
+  const rawName = match?.[1] ? decodeURIComponent(String(match[1]).trim().replace(/^["']|["']$/g, "")) : ""
+  const normalized = rawName.trim()
+  if (!normalized) return fallbackName
+  return normalized.toLowerCase().endsWith(".pdf") ? normalized : `${normalized}.pdf`
 }
 
 function joinAddressParts(address: Parameters<typeof joinIncomingEfacturaAddressParts>[0]) {
@@ -1327,6 +1347,30 @@ router.get("/api/v1/efactura/incoming/:id/pdf", async (req: AuthedRequest, res) 
               } as Prisma.InputJsonValue,
             },
           })
+        }
+
+        if (!originalPdfBase64) {
+          try {
+            const classicResult = await spvClassicDownloadMessage(company, String(item.spvDownloadId))
+            if (looksLikePdfBuffer(classicResult.response.buffer)) {
+              originalPdfBase64 = classicResult.response.buffer.toString("base64")
+              await prisma.incomingEInvoice.update({
+                where: { id: item.id },
+                data: {
+                  rawPayload: {
+                    ...(rawPayload || {}),
+                    spvPdfBase64: originalPdfBase64,
+                    spvPdfFileName: getClassicPdfFileName(
+                      classicResult.response.headers,
+                      `${String(item.spvDownloadId).trim() || "factura-spv"}.pdf`
+                    ),
+                  } as Prisma.InputJsonValue,
+                },
+              })
+            }
+          } catch {
+            // daca mesajul nu are PDF direct in SPV clasic, ramanem pe fallbackul de mai jos
+          }
         }
       }
     } catch {
