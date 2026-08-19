@@ -943,6 +943,15 @@ async function ensureIncomingInvoicePdfSaved(item: Pick<IncomingInvoiceEntryLike
   return pdfPath
 }
 
+async function refreshIncomingInvoiceOfficialPdfBuffer(
+  item: Pick<IncomingInvoiceEntryLike, "tenantId" | "id" | "xmlText" | "currency" | "totalNet" | "totalVat" | "totalGross" | "items" | "invoiceNo" | "spvDownloadId" | "supplierName" | "supplierCif" | "customerName" | "customerCif">
+) {
+  const pdfPath = getIncomingInvoicePdfPath(item.tenantId, item.id)
+  const buffer = await generateIncomingInvoiceOfficialPdfBuffer(item)
+  fs.writeFileSync(pdfPath, buffer)
+  return buffer
+}
+
 router.get("/api/v1/efactura/incoming", async (req: AuthedRequest, res) => {
   const tenantId = String(req.auth?.tenantId || "").trim()
   if (!tenantId) return res.status(401).json({ ok: false, error: "Unauthorized" })
@@ -1331,9 +1340,16 @@ router.get("/api/v1/efactura/incoming/:id/pdf", async (req: AuthedRequest, res) 
     ? String(rawPayload?.spvPdfFileName || "").trim() || `factura-spv-${safeFilePart(String(parsed?.invoiceNo || item.invoiceNo || item.spvDownloadId || "document"))}.pdf`
     : `Factura_SPV_${safeFilePart(String(parsed?.invoiceNo || item.invoiceNo || item.spvDownloadId || "document"))}.pdf`
 
-  const buffer = originalPdfBase64
-    ? Buffer.from(originalPdfBase64, "base64")
-    : fs.readFileSync(await ensureIncomingInvoicePdfSaved(item))
+  let buffer: Buffer
+  if (originalPdfBase64) {
+    buffer = Buffer.from(originalPdfBase64, "base64")
+  } else {
+    try {
+      buffer = await refreshIncomingInvoiceOfficialPdfBuffer(item)
+    } catch {
+      buffer = fs.readFileSync(await ensureIncomingInvoicePdfSaved(item))
+    }
+  }
   res.setHeader("Content-Type", "application/pdf")
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`)
   return res.send(buffer)
