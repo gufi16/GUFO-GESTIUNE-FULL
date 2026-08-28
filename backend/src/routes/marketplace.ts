@@ -3,6 +3,7 @@ import crypto from "crypto"
 import { z } from "zod"
 import { Prisma, TerminalDeviceType } from "@prisma/client"
 import { prisma } from "../lib/prisma"
+import { buildCompanyScopedTenantWhere } from "../lib/companyScope"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 
 const router = Router()
@@ -89,6 +90,20 @@ type GlovoCatalogPushHistoryEntry = {
 }
 type HistoryStatus = Prisma.ExternalOrderStatusHistoryCreateInput["status"]
 type HistorySource = Prisma.ExternalOrderStatusHistoryCreateInput["source"]
+type GufoDeliveryIntegrationPublic = Prisma.ExternalIntegrationGetPayload<{
+  include: {
+    location: {
+      include: {
+        company: {
+          select: {
+            id: true
+            isVatPayer: true
+          }
+        }
+      }
+    }
+  }
+}>
 
 const ConnectIntegrationSchema = z.object({
   locationId: z.string().min(1),
@@ -184,6 +199,351 @@ function normalizeDeliveryCatalogMode(value: unknown): DeliveryCatalogMode {
   if (normalized === "CATEGORY_SELECTION") return "CATEGORY_SELECTION"
   if (normalized === "MANUAL_SELECTION") return "MANUAL_SELECTION"
   return "ALL_VISIBLE"
+}
+
+function slugifyDeliveryText(value: unknown) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+}
+
+function buildPublicBaseUrl(req: Request) {
+  const forwardedProto = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim()
+  const protocol = forwardedProto || req.protocol || "http"
+  const host = String(req.headers["x-forwarded-host"] || req.get("host") || "").split(",")[0].trim()
+  return host ? `${protocol}://${host}` : ""
+}
+
+function resolvePublicImageUrl(req: Request, rawUrl: unknown) {
+  const text = String(rawUrl || "").trim()
+  if (!text) return null
+  if (/^https?:\/\//i.test(text)) return text
+  const normalized = text.startsWith("/") ? text : `/${text.replace(/^\/+/, "")}`
+  const baseUrl = buildPublicBaseUrl(req)
+  return baseUrl ? `${baseUrl}${normalized}` : normalized
+}
+
+function compareDeliveryCategorySort(left: { posSortOrder?: number | null; name?: string | null }, right: { posSortOrder?: number | null; name?: string | null }) {
+  const leftOrder = Number(left.posSortOrder || 0)
+  const rightOrder = Number(right.posSortOrder || 0)
+  const leftBucket = leftOrder > 0 ? 0 : 1
+  const rightBucket = rightOrder > 0 ? 0 : 1
+  if (leftBucket !== rightBucket) return leftBucket - rightBucket
+  if (leftOrder !== rightOrder) return leftOrder - rightOrder
+  return String(left.name || "").localeCompare(String(right.name || ""), "ro")
+}
+
+async function getPublicGufoDeliveryIntegrations() {
+  const items = await db.externalIntegration.findMany({
+    where: {
+      platform: "GUFO_DELIVERY",
+      status: "ACTIVE",
+      locationId: { not: null },
+      location: {
+        is: {
+          isActive: true,
+        },
+      },
+    },
+    include: {
+      location: {
+        include: {
+          company: {
+            select: {
+              id: true,
+              isVatPayer: true,
+            },
+          },
+        },
+      },
+    },
+    orderBy: [{ updatedAt: "desc" }],
+  })
+
+  return items.filter((item) => {
+    const settings = integrationSettings(item.settingsJson)
+    return settings.deliveryEnabled !== false && Boolean(item.location?.id)
+  })
+}
+
+async function resolvePublicGufoDeliveryIntegration(restaurantId: string) {
+  const items = await getPublicGufoDeliveryIntegrations()
+  return items.find((item) => item.id === restaurantId) || null
+}
+
+async function buildGufoDeliveryMenuPayload(req: Request, integration: GufoDeliveryIntegrationPublic) {
+  const settings = integrationSettings(integration.settingsJson)
+  const location = integration.location
+  if (!location?.id) {
+    throw new Error("Locatia Gufo Delivery nu este configurata.")
+  }
+
+  const targetTerminalId = String(settings.targetTerminalId || "").trim()
+  if (!targetTerminalId) {
+    throw new Error("POS-ul tinta pentru Gufo Delivery lipseste.")
+  }
+
+  const companyId = String(location.companyId || location.company?.id || "").trim()
+  const scopedWhere = companyId
+    ? buildCompanyScopedTenantWhere(integration.tenantId, companyId)
+    : { tenantId: integration.tenantId, companyId: null }
+
+  const categories = await db.category.findMany({
+    where: {
+      isActive: true,
+      isVisibleInPos: true,
+      ...scopedWhere,
+    },
+    include: {
+      department: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      parentCategory: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+    orderBy: [{ name: "asc" }],
+  })
+
+  const rawProducts = await db.product.findMany({
+    where: {
+      isActive: true,
+      isVisibleInPos: true,
+      ...scopedWhere,
+      OR: [
+        { categoryId: null },
+        {
+          category: {
+            is: {
+              isActive: true,
+              isVisibleInPos: true,
+            },
+          },
+        },
+      ],
+    },
+    include: {
+      vatRate: {
+        select: {
+          id: true,
+          name: true,
+          rate: true,
+          fiscalCode: true,
+        },
+      },
+      uom: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+        },
+      },
+      department: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      category: {
+        include: {
+          department: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      },
+      barcodes: {
+        select: {
+          barcode: true,
+        },
+      },
+    },
+    orderBy: [{ posSortOrder: "asc" }, { name: "asc" }],
+  })
+
+  const terminal = await db.terminal.findFirst({
+    where: {
+      id: targetTerminalId,
+      tenantId: integration.tenantId,
+      locationId: location.id,
+      deviceType: TerminalDeviceType.POS,
+    },
+    select: {
+      id: true,
+      label: true,
+      deviceId: true,
+      departmentAccesses: { select: { departmentId: true } },
+      categoryAccesses: { select: { categoryId: true } },
+      productAccesses: { select: { productId: true } },
+    },
+  })
+
+  if (!terminal) {
+    throw new Error("POS-ul tinta configurat pentru Gufo Delivery nu este valid.")
+  }
+
+  const selectedDepartmentIds = new Set(terminal.departmentAccesses.map((item) => item.departmentId))
+  const selectedCategoryIds = new Set(terminal.categoryAccesses.map((item) => item.categoryId))
+  const selectedProductIds = new Set(terminal.productAccesses.map((item) => item.productId))
+  const terminalFiltersEnabled =
+    selectedDepartmentIds.size > 0 || selectedCategoryIds.size > 0 || selectedProductIds.size > 0
+
+  const effectiveCategoryIds = new Set<string>(selectedCategoryIds)
+  const effectiveDepartmentIds = new Set<string>(selectedDepartmentIds)
+
+  let terminalTreeChanged = true
+  while (terminalTreeChanged) {
+    terminalTreeChanged = false
+    for (const category of categories) {
+      if (category.parentCategoryId && effectiveCategoryIds.has(category.parentCategoryId) && !effectiveCategoryIds.has(category.id)) {
+        effectiveCategoryIds.add(category.id)
+        terminalTreeChanged = true
+      }
+    }
+  }
+
+  for (const category of categories) {
+    if (category.departmentId && selectedDepartmentIds.has(category.departmentId)) {
+      effectiveCategoryIds.add(category.id)
+    }
+  }
+
+  const terminalVisibleProducts = terminalFiltersEnabled
+    ? rawProducts.filter((product) => {
+        if (selectedProductIds.has(product.id)) return true
+        if (product.categoryId && effectiveCategoryIds.has(product.categoryId)) return true
+        if (product.departmentId && effectiveDepartmentIds.has(product.departmentId)) return true
+        if (product.category?.departmentId && effectiveDepartmentIds.has(product.category.departmentId)) return true
+        return false
+      })
+    : rawProducts
+
+  const deliveryCatalogMode = normalizeDeliveryCatalogMode(settings.deliveryCatalogMode)
+  const includedCategoryIds = new Set(normalizeUniqueStringArray(settings.includedCategoryIds))
+  const includedProductIds = new Set(normalizeUniqueStringArray(settings.includedProductIds))
+  const deliveryShowCategories = settings.deliveryShowCategories !== false
+
+  const effectiveDeliveryCategoryIds = new Set<string>(includedCategoryIds)
+  if (deliveryCatalogMode === "CATEGORY_SELECTION") {
+    let categoryTreeChanged = true
+    while (categoryTreeChanged) {
+      categoryTreeChanged = false
+      for (const category of categories) {
+        if (category.parentCategoryId && effectiveDeliveryCategoryIds.has(category.parentCategoryId) && !effectiveDeliveryCategoryIds.has(category.id)) {
+          effectiveDeliveryCategoryIds.add(category.id)
+          categoryTreeChanged = true
+        }
+      }
+    }
+  }
+
+  const deliveryProducts = terminalVisibleProducts.filter((product) => {
+    if (deliveryCatalogMode === "MANUAL_SELECTION") {
+      return includedProductIds.has(product.id)
+    }
+    if (deliveryCatalogMode === "CATEGORY_SELECTION") {
+      return Boolean(product.categoryId && effectiveDeliveryCategoryIds.has(product.categoryId))
+    }
+    return true
+  })
+
+  const productCategoryIds = new Set(
+    deliveryProducts
+      .map((product) => String(product.categoryId || "").trim())
+      .filter(Boolean)
+  )
+
+  const deliveryCategories = deliveryShowCategories
+    ? categories
+        .filter((category) => {
+          if (deliveryCatalogMode === "CATEGORY_SELECTION") {
+            return effectiveDeliveryCategoryIds.has(category.id) || productCategoryIds.has(category.id)
+          }
+          return productCategoryIds.has(category.id)
+        })
+        .sort(compareDeliveryCategorySort)
+    : []
+
+  const isVatPayer = location.company?.isVatPayer ?? true
+  const products = deliveryProducts
+    .map((product) => {
+      const vatRate = Number(product.vatRate?.rate || 0)
+      return {
+        id: product.id,
+        sku: String(product.sku || "").trim(),
+        name: String(product.name || "").trim(),
+        imageUrl: resolvePublicImageUrl(req, product.imageUrl),
+        price: Number(product.price || 0),
+        currency: "RON",
+        isAvailable: true,
+        categoryId: product.categoryId || null,
+        category: product.category
+          ? {
+              id: product.category.id,
+              name: product.category.name,
+              parentCategoryId: product.category.parentCategoryId || null,
+            }
+          : null,
+        vatRate: isVatPayer ? vatRate : 0,
+        fiscalCode: isVatPayer ? product.vatRate?.fiscalCode || null : null,
+        uom: product.uom
+          ? {
+              id: product.uom.id,
+              code: product.uom.code,
+              name: product.uom.name,
+            }
+          : null,
+        posSortOrder: Math.max(0, Number(product.posSortOrder || 0)),
+        barcode: Array.isArray(product.barcodes) && product.barcodes[0]?.barcode ? product.barcodes[0].barcode : null,
+      }
+    })
+    .sort((left, right) => {
+      const leftBucket = left.posSortOrder > 0 ? 0 : 1
+      const rightBucket = right.posSortOrder > 0 ? 0 : 1
+      if (leftBucket !== rightBucket) return leftBucket - rightBucket
+      if (left.posSortOrder !== right.posSortOrder) return left.posSortOrder - right.posSortOrder
+      return left.name.localeCompare(right.name, "ro")
+    })
+
+  return {
+    ok: true,
+    restaurant: {
+      id: integration.id,
+      slug: slugifyDeliveryText(location.code || location.name || integration.id),
+      name: location.name,
+      code: location.code,
+      address: location.address || null,
+      city: location.city || null,
+      county: location.county || null,
+      country: location.country || "RO",
+      postalCode: location.postalCode || null,
+    },
+    catalog: {
+      mode: deliveryCatalogMode,
+      showCategories: deliveryShowCategories,
+      categories: deliveryCategories.map((category) => ({
+        id: category.id,
+        name: category.name,
+        imageUrl: resolvePublicImageUrl(req, category.imageUrl),
+        parentCategoryId: category.parentCategoryId || null,
+        posSortOrder: category.posSortOrder,
+      })),
+      products,
+    },
+    updatedAt: integration.updatedAt.toISOString(),
+  }
 }
 
 function buildDraftCart(payload: z.infer<typeof ImportMarketplaceOrderSchema>) {
@@ -1488,6 +1848,55 @@ router.post("/api/v1/marketplace/webhooks/glovo/order/:storeId?", async (req, re
 
 router.post("/api/v1/marketplace/webhooks/glovo/cancel/:storeId?", async (req, res) => {
   return processGlovoWebhook(req, res, "CANCEL")
+})
+
+router.get("/api/v1/public/delivery/restaurants", async (req, res) => {
+  try {
+    const integrations = await getPublicGufoDeliveryIntegrations()
+    const items = integrations.map((integration) => {
+      const settings = integrationSettings(integration.settingsJson)
+      const location = integration.location
+      return {
+        id: integration.id,
+        slug: slugifyDeliveryText(location?.code || location?.name || integration.id),
+        name: location?.name || "Restaurant",
+        code: location?.code || null,
+        imageUrl: null,
+        address: location?.address || null,
+        city: location?.city || null,
+        county: location?.county || null,
+        country: location?.country || "RO",
+        postalCode: location?.postalCode || null,
+        isOpen: true,
+        catalogMode: normalizeDeliveryCatalogMode(settings.deliveryCatalogMode),
+        showCategories: settings.deliveryShowCategories !== false,
+        updatedAt: integration.updatedAt.toISOString(),
+      }
+    })
+
+    return res.json({ ok: true, items })
+  } catch (error: unknown) {
+    return res.status(500).json({ ok: false, error: getErrorMessage(error, "Nu am putut incarca restaurantele Gufo Delivery.") })
+  }
+})
+
+router.get("/api/v1/public/delivery/restaurants/:restaurantId/menu", async (req, res) => {
+  try {
+    const restaurantId = String(req.params.restaurantId || "").trim()
+    if (!restaurantId) {
+      return res.status(400).json({ ok: false, error: "restaurantId este obligatoriu." })
+    }
+
+    const integration = await resolvePublicGufoDeliveryIntegration(restaurantId)
+    if (!integration) {
+      return res.status(404).json({ ok: false, error: "Restaurantul Gufo Delivery nu a fost gasit." })
+    }
+
+    const payload = await buildGufoDeliveryMenuPayload(req, integration)
+    return res.json(payload)
+  } catch (error: unknown) {
+    return res.status(500).json({ ok: false, error: getErrorMessage(error, "Nu am putut incarca meniul Gufo Delivery.") })
+  }
 })
 
 router.use(requireAuth)
