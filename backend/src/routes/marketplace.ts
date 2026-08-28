@@ -679,6 +679,17 @@ async function buildGufoDeliveryCheckoutImportPayload(
   }
 }
 
+function mapPublicGufoDeliveryOrderStatus(status: string) {
+  const normalized = String(status || "").trim().toUpperCase()
+  if (normalized === "RECEIVED") return "PLACED"
+  if (normalized === "ACKNOWLEDGED") return "CONFIRMED"
+  if (normalized === "IN_KITCHEN") return "IN_PREPARATION"
+  if (normalized === "READY" || normalized === "READY_FOR_FISCAL" || normalized === "FISCALIZED") return "READY"
+  if (normalized === "DELIVERED") return "COMPLETED"
+  if (normalized === "CANCELLED" || normalized === "FAILED") return "CANCELLED"
+  return normalized || "PLACED"
+}
+
 function buildDraftCart(payload: z.infer<typeof ImportMarketplaceOrderSchema>) {
   return {
     source: "MARKETPLACE",
@@ -2057,6 +2068,85 @@ router.post("/api/v1/public/delivery/checkout", async (req, res) => {
     })
   } catch (error: unknown) {
     return res.status(400).json({ ok: false, error: getErrorMessage(error, "Nu am putut crea comanda Gufo Delivery.") })
+  }
+})
+
+router.get("/api/v1/public/delivery/orders/:orderId/status", async (req, res) => {
+  try {
+    const orderId = String(req.params.orderId || "").trim()
+    if (!orderId) {
+      return res.status(400).json({ ok: false, error: "orderId este obligatoriu." })
+    }
+
+    const order = await db.externalOrder.findFirst({
+      where: {
+        platform: "GUFO_DELIVERY",
+        OR: [{ id: orderId }, { externalOrderId: orderId }],
+      },
+      include: {
+        location: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+          },
+        },
+        kitchenTicket: {
+          select: {
+            id: true,
+            status: true,
+            displayNumber: true,
+            readyAt: true,
+            completedAt: true,
+          },
+        },
+        statusHistory: {
+          orderBy: { createdAt: "desc" },
+          take: 10,
+        },
+      },
+    })
+
+    if (!order) {
+      return res.status(404).json({ ok: false, error: "Comanda Gufo Delivery nu a fost gasita." })
+    }
+
+    return res.json({
+      ok: true,
+      order: {
+        id: order.id,
+        externalOrderId: order.externalOrderId,
+        externalOrderNumber: order.externalOrderNumber || order.kitchenTicket?.displayNumber || null,
+        status: order.status,
+        publicStatus: mapPublicGufoDeliveryOrderStatus(order.status),
+        customerName: order.customerName || null,
+        paymentLabel: order.paymentLabel || null,
+        total: Number(order.total || 0),
+        currency: order.currency,
+        placedAt: order.placedAt?.toISOString() || order.createdAt.toISOString(),
+        acknowledgedAt: order.acknowledgedAt?.toISOString() || null,
+        readyAt: order.readyAt?.toISOString() || order.kitchenTicket?.readyAt?.toISOString() || null,
+        deliveredAt: order.fiscalizedAt?.toISOString() || null,
+        cancelledAt: order.cancelledAt?.toISOString() || null,
+        restaurant: order.location
+          ? {
+              id: order.location.id,
+              name: order.location.name,
+              code: order.location.code || null,
+            }
+          : null,
+        history: order.statusHistory.map((entry) => ({
+          id: entry.id,
+          status: entry.status,
+          publicStatus: mapPublicGufoDeliveryOrderStatus(entry.status),
+          source: entry.source,
+          message: entry.message || null,
+          createdAt: entry.createdAt.toISOString(),
+        })),
+      },
+    })
+  } catch (error: unknown) {
+    return res.status(500).json({ ok: false, error: getErrorMessage(error, "Nu am putut incarca statusul comenzii Gufo Delivery.") })
   }
 })
 
