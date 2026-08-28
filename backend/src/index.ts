@@ -73,6 +73,7 @@ import incomingEfacturaRouter from "./routes/incomingEfactura"
 import spvClassicRouter from "./routes/spvClassic"
 import usersRouter from "./routes/users"
 import webAuthRouter from "./routes/webAuth"
+import deliveryAuthRouter from "./routes/deliveryAuth"
 import auditRouter from "./routes/audit"
 import gufoAiRouter from "./routes/gufoAi"
 import financeRouter from "./routes/finance"
@@ -231,6 +232,7 @@ app.get("/api/v1/company/efactura/oauth/callback", handleAnafOauthCallback)
 
 // Mount public and mixed-auth routers before fully protected routers.
 app.use(webAuthRouter)
+app.use(deliveryAuthRouter)
 app.use(posRouter)
 app.use(companyRouter)
 app.use(marketplaceRouter)

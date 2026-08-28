@@ -108,6 +108,12 @@ enum PaymentType {
   MIXED
 }
 
+enum DeliveryCustomerAuthProvider {
+  PASSWORD
+  GOOGLE
+  FACEBOOK
+}
+
 enum InventoryStatus {
   DRAFT
   FINALIZED
@@ -530,6 +536,62 @@ model WebSession {
   @@index([userId])
   @@index([expiresAt])
   @@index([revokedAt])
+}
+
+model DeliveryCustomerAccount {
+  id             String                       @id @default(cuid())
+  email          String?                      @unique
+  phone          String?                      @unique
+  fullName       String
+  passwordHash   String?
+  authProvider   DeliveryCustomerAuthProvider @default(PASSWORD)
+  providerUserId String?
+  isActive       Boolean                      @default(true)
+  lastLoginAt    DateTime?
+  createdAt      DateTime                     @default(now())
+  updatedAt      DateTime                     @updatedAt
+
+  addresses DeliveryCustomerAddress[]
+  sessions  DeliveryCustomerSession[]
+
+  @@unique([authProvider, providerUserId])
+  @@index([createdAt])
+}
+
+model DeliveryCustomerSession {
+  id         String   @id @default(cuid())
+  customerId String
+  expiresAt  DateTime
+  lastSeenAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  customer DeliveryCustomerAccount @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@index([expiresAt])
+  @@index([revokedAt])
+}
+
+model DeliveryCustomerAddress {
+  id          String   @id @default(cuid())
+  customerId  String
+  label       String
+  addressLine String
+  details     String?
+  city        String?
+  county      String?
+  country     String?
+  postalCode  String?
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  customer DeliveryCustomerAccount @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@index([customerId, isDefault])
 }
 
 model UserCompanyAccess {
