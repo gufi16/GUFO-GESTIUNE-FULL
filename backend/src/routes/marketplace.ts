@@ -104,6 +104,7 @@ type GufoDeliveryIntegrationPublic = Prisma.ExternalIntegrationGetPayload<{
     }
   }
 }>
+type GufoDeliveryMenuPayload = Awaited<ReturnType<typeof buildGufoDeliveryMenuPayload>>
 
 const ConnectIntegrationSchema = z.object({
   locationId: z.string().min(1),
@@ -154,6 +155,35 @@ const ImportMarketplaceOrderSchema = z.object({
 const ReadyStatusSchema = z.object({
   kitchenTicketId: z.string().min(1).optional(),
   message: z.string().trim().optional(),
+})
+
+const PublicGufoDeliveryCheckoutSchema = z.object({
+  restaurantId: z.string().min(1),
+  customer: z.object({
+    name: z.string().trim().min(1),
+    phone: z.string().trim().min(1),
+    note: z.string().trim().optional(),
+  }),
+  deliveryAddress: z.object({
+    label: z.string().trim().min(1),
+    city: z.string().trim().optional(),
+    county: z.string().trim().optional(),
+    postalCode: z.string().trim().optional(),
+    lat: z.coerce.number().optional(),
+    lng: z.coerce.number().optional(),
+    instructions: z.string().trim().optional(),
+  }),
+  payment: z.object({
+    type: z.enum(["CASH", "CARD", "PAID"]).default("CARD"),
+  }).default({ type: "CARD" }),
+  items: z.array(
+    z.object({
+      productId: z.string().min(1),
+      qty: z.coerce.number().positive(),
+      note: z.string().trim().optional(),
+      modifiers: z.array(z.string().trim().min(1)).optional(),
+    })
+  ).min(1),
 })
 
 function normalizeStatusMessage(message?: string) {
@@ -543,6 +573,109 @@ async function buildGufoDeliveryMenuPayload(req: Request, integration: GufoDeliv
       products,
     },
     updatedAt: integration.updatedAt.toISOString(),
+  }
+}
+
+function toMoneyValue(value: unknown) {
+  const amount = Number(value || 0)
+  if (!Number.isFinite(amount)) return 0
+  return Math.round(amount * 100) / 100
+}
+
+function createGufoDeliveryOrderId() {
+  return `GUFO-${Date.now()}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`
+}
+
+function buildGufoDeliveryDisplayNumber() {
+  return `GD-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${crypto.randomBytes(2).toString("hex").toUpperCase()}`
+}
+
+async function buildGufoDeliveryCheckoutImportPayload(
+  req: Request,
+  input: z.infer<typeof PublicGufoDeliveryCheckoutSchema>
+) {
+  const integration = await resolvePublicGufoDeliveryIntegration(input.restaurantId)
+  if (!integration) {
+    throw new Error("Restaurantul Gufo Delivery nu a fost gasit.")
+  }
+
+  const menuPayload: GufoDeliveryMenuPayload = await buildGufoDeliveryMenuPayload(req, integration)
+  const productMap = new Map(menuPayload.catalog.products.map((item) => [item.id, item]))
+
+  const normalizedItems = input.items.map((item) => {
+    const product = productMap.get(item.productId)
+    if (!product) {
+      throw new Error("Un produs din cos nu mai este disponibil in meniul Gufo Delivery.")
+    }
+
+    return {
+      product,
+      qty: item.qty,
+      note: item.note || undefined,
+      modifiers: item.modifiers?.filter(Boolean) || [],
+    }
+  })
+
+  const subtotal = toMoneyValue(
+    normalizedItems.reduce((sum, item) => sum + toMoneyValue(item.product.price) * item.qty, 0)
+  )
+  const total = subtotal
+  const paymentType = String(input.payment?.type || "CARD").trim().toUpperCase()
+  const externalOrderId = createGufoDeliveryOrderId()
+  const externalOrderNumber = buildGufoDeliveryDisplayNumber()
+
+  return {
+    tenantId: integration.tenantId,
+    importPayload: {
+      platform: "GUFO_DELIVERY" as const,
+      locationId: String(integration.locationId || "").trim(),
+      integrationId: integration.id,
+      externalOrderId,
+      externalOrderNumber,
+      customerName: input.customer.name,
+      customerPhone: input.customer.phone,
+      customerNote: input.customer.note || input.deliveryAddress.instructions || undefined,
+      paymentLabel: paymentType,
+      currency: "RON" as const,
+      subtotal,
+      total,
+      placedAt: new Date(),
+      displayNumber: externalOrderNumber,
+      station: "GUFO_DELIVERY",
+      items: normalizedItems.map((item, index) => ({
+        externalLineId: `${externalOrderId}-${index + 1}`,
+        externalProductId: item.product.id,
+        name: item.product.name,
+        sku: item.product.sku || undefined,
+        qty: item.qty,
+        unitPrice: toMoneyValue(item.product.price),
+        vatRate: Number(item.product.vatRate || 0),
+        note: item.note,
+        modifiers: item.modifiers,
+        erpProductId: item.product.id,
+        departmentId: undefined,
+        station: "GUFO_DELIVERY",
+      })),
+      rawPayload: {
+        source: "GUFO_DELIVERY_APP",
+        restaurant: menuPayload.restaurant,
+        delivery: {
+          address: input.deliveryAddress,
+        },
+        customer: {
+          name: input.customer.name,
+          phone: input.customer.phone,
+          address: input.deliveryAddress,
+        },
+        payment: {
+          type: paymentType,
+          payment_type: paymentType,
+        },
+        targetTerminalId: integration.settingsJson && typeof integration.settingsJson === "object"
+          ? String((integration.settingsJson as Record<string, unknown>).targetTerminalId || "").trim() || null
+          : null,
+      },
+    },
   }
 }
 
@@ -1896,6 +2029,34 @@ router.get("/api/v1/public/delivery/restaurants/:restaurantId/menu", async (req,
     return res.json(payload)
   } catch (error: unknown) {
     return res.status(500).json({ ok: false, error: getErrorMessage(error, "Nu am putut incarca meniul Gufo Delivery.") })
+  }
+})
+
+router.post("/api/v1/public/delivery/checkout", async (req, res) => {
+  const parsed = PublicGufoDeliveryCheckoutSchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res.status(400).json({ ok: false, error: parsed.error.flatten() })
+  }
+
+  try {
+    const { tenantId, importPayload } = await buildGufoDeliveryCheckoutImportPayload(req, parsed.data)
+    const externalOrder = await importMarketplaceOrderForTenant(tenantId, importPayload)
+
+    return res.status(201).json({
+      ok: true,
+      order: {
+        id: externalOrder?.id || null,
+        externalOrderId: importPayload.externalOrderId,
+        externalOrderNumber: importPayload.externalOrderNumber,
+        status: externalOrder?.status || "RECEIVED",
+        locationId: importPayload.locationId,
+        total: importPayload.total,
+        currency: importPayload.currency,
+        placedAt: importPayload.placedAt?.toISOString() || new Date().toISOString(),
+      },
+    })
+  } catch (error: unknown) {
+    return res.status(400).json({ ok: false, error: getErrorMessage(error, "Nu am putut crea comanda Gufo Delivery.") })
   }
 })
 
