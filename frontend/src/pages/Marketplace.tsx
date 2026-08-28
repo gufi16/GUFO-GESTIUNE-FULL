@@ -265,6 +265,11 @@ const tabs = [
   { id: "comenzi", title: "Operational" },
 ] as Array<{ id: TabId; title: string }>
 
+const gufoDeliveryTabs = [
+  { id: "integrari", title: "Configurare" },
+  { id: "mapari", title: "Catalog" },
+] as Array<{ id: TabId; title: string }>
+
 const defaultPlatforms: PlatformItem[] = [
   { code: "GLOVO", label: "Glovo" },
   { code: "WOLT", label: "Wolt" },
@@ -927,6 +932,7 @@ export default function MarketplacePage() {
   }, [deliveryProductSearch, visibleProducts])
   const selectedLocation = locations.find((item) => item.id === currentForm.locationId) || selectedIntegration?.location || null
   const gufoDeliveryInternalCode = buildGufoDeliveryInternalCode(selectedLocation)
+  const currentTabs = selectedPlatform === "GUFO_DELIVERY" ? gufoDeliveryTabs : tabs
   const platformMappings = mappings.filter((mapping) => mapping.integration.platform === selectedPlatform)
   const platformRecentExternalProducts = recentExternalProducts.filter(
     (item) => !item.platform || item.platform === selectedPlatform || item.integrationId === selectedIntegration?.id,
@@ -953,17 +959,30 @@ export default function MarketplacePage() {
   return (
     <div className="space-y-3">
       <PageHeader
-        badge="marketplace"
-        title="Marketplace"
-        subtitle="Controlezi integrarile, maparile de produse si comenzile care intra din platforme externe, totul din acelasi registru operational."
+        badge={selectedPlatform === "GUFO_DELIVERY" ? "gufo delivery" : "marketplace"}
+        title={selectedPlatform === "GUFO_DELIVERY" ? "Gufo Delivery" : "Marketplace"}
+        subtitle={
+          selectedPlatform === "GUFO_DELIVERY"
+            ? "Activezi locatiile Gufo Delivery, alegi POS-ul care primeste comenzile si controlezi catalogul publicat in aplicatia noastra."
+            : "Controlezi integrarile, maparile de produse si comenzile care intra din platforme externe, totul din acelasi registru operational."
+        }
       />
 
-      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-4">
-        <DocumentMetric title="Integrari active" value={activeIntegrations.length} tone="emerald" />
-        <DocumentMetric title="Locatii conectate" value={connectedLocations} tone="blue" />
-        <DocumentMetric title="Produse nemapate" value={unmappedCount} tone="amber" />
-        <DocumentMetric title="Comenzi in flux" value={orders.filter((item) => item.status !== "FISCALIZED" && item.status !== "DELIVERED").length} tone="slate" />
-      </div>
+      {selectedPlatform === "GUFO_DELIVERY" ? (
+        <div className="grid grid-cols-1 gap-2.5 md:grid-cols-4">
+          <DocumentMetric title="Locatii active" value={activePlatformIntegrationCount} tone="emerald" />
+          <DocumentMetric title="POS selectat" value={selectedTerminal ? 1 : 0} tone="blue" />
+          <DocumentMetric title="Categorii vizibile" value={visibleCategories.length} tone="amber" />
+          <DocumentMetric title="Produse vizibile" value={visibleProducts.length} tone="slate" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-2.5 md:grid-cols-4">
+          <DocumentMetric title="Integrari active" value={activeIntegrations.length} tone="emerald" />
+          <DocumentMetric title="Locatii conectate" value={connectedLocations} tone="blue" />
+          <DocumentMetric title="Produse nemapate" value={unmappedCount} tone="amber" />
+          <DocumentMetric title="Comenzi in flux" value={orders.filter((item) => item.status !== "FISCALIZED" && item.status !== "DELIVERED").length} tone="slate" />
+        </div>
+      )}
 
       {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
@@ -973,6 +992,7 @@ export default function MarketplacePage() {
             const integrationCount = integrations.filter((item) => item.status === "ACTIVE" && item.platform === platform.code).length
             const orderCount = orders.filter((item) => item.platform === platform.code && item.status !== "FISCALIZED" && item.status !== "DELIVERED").length
             const productCount = recentExternalProducts.filter((item) => item.platform === platform.code).length
+            const isGufoDelivery = platform.code === "GUFO_DELIVERY"
 
             return (
               <button
@@ -987,29 +1007,50 @@ export default function MarketplacePage() {
               >
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">Platforma</div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">
+                      {isGufoDelivery ? "Aplicatie proprie" : "Platforma"}
+                    </div>
                     <div className="mt-2 text-[26px] font-semibold tracking-tight text-[#17324D]">{platform.label}</div>
                   </div>
                   <img src={platformLogo(platform.code)} alt={platform.label} className="h-20 w-20 rounded-full object-cover shadow-lg shadow-slate-900/10 ring-4 ring-white/35" />
                 </div>
 
                 <div className="mt-5 grid grid-cols-3 gap-2">
-                  <div className="rounded-[18px] border border-white/70 bg-white/75 px-3 py-2">
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Integrari</div>
-                    <div className="mt-1 text-lg font-semibold text-[#17324D]">{integrationCount}</div>
-                  </div>
-                  <div className="rounded-[18px] border border-white/70 bg-white/75 px-3 py-2">
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Comenzi</div>
-                    <div className="mt-1 text-lg font-semibold text-[#17324D]">{orderCount}</div>
-                  </div>
-                  <div className="rounded-[18px] border border-white/70 bg-white/75 px-3 py-2">
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Produse</div>
-                    <div className="mt-1 text-lg font-semibold text-[#17324D]">{productCount}</div>
-                  </div>
+                  {isGufoDelivery ? (
+                    <>
+                      <div className="rounded-[18px] border border-white/70 bg-white/75 px-3 py-2">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Locatii</div>
+                        <div className="mt-1 text-lg font-semibold text-[#17324D]">{integrationCount}</div>
+                      </div>
+                      <div className="rounded-[18px] border border-white/70 bg-white/75 px-3 py-2">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Categorii</div>
+                        <div className="mt-1 text-lg font-semibold text-[#17324D]">{visibleCategories.length}</div>
+                      </div>
+                      <div className="rounded-[18px] border border-white/70 bg-white/75 px-3 py-2">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Produse</div>
+                        <div className="mt-1 text-lg font-semibold text-[#17324D]">{visibleProducts.length}</div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="rounded-[18px] border border-white/70 bg-white/75 px-3 py-2">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Integrari</div>
+                        <div className="mt-1 text-lg font-semibold text-[#17324D]">{integrationCount}</div>
+                      </div>
+                      <div className="rounded-[18px] border border-white/70 bg-white/75 px-3 py-2">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Comenzi</div>
+                        <div className="mt-1 text-lg font-semibold text-[#17324D]">{orderCount}</div>
+                      </div>
+                      <div className="rounded-[18px] border border-white/70 bg-white/75 px-3 py-2">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Produse</div>
+                        <div className="mt-1 text-lg font-semibold text-[#17324D]">{productCount}</div>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 <div className="mt-5 flex items-center justify-between rounded-[18px] border border-white/70 bg-white/70 px-4 py-3 text-sm text-slate-700">
-                  <span>Deschide configurarea si operarea</span>
+                  <span>{isGufoDelivery ? "Deschide configurarea aplicatiei" : "Deschide configurarea si operarea"}</span>
                   <span className="font-semibold text-[#17324D] transition group-hover:translate-x-0.5">Intra</span>
                 </div>
               </button>
@@ -1030,7 +1071,9 @@ export default function MarketplacePage() {
                 </button>
                 <img src={platformLogo(selectedPlatform)} alt={selectedPlatformMeta?.label || selectedPlatform} className="h-14 w-14 rounded-full object-cover shadow-sm ring-2 ring-slate-100" />
                 <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Platforma marketplace</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    {selectedPlatform === "GUFO_DELIVERY" ? "Aplicatie proprie Gufo" : "Platforma marketplace"}
+                  </div>
                   <div className="mt-1 flex items-center gap-2">
                     <h2 className="text-[26px] font-semibold tracking-tight text-[#17324D]">{selectedPlatformMeta?.label || selectedPlatform}</h2>
                     <PlatformBadge platform={selectedPlatform} />
@@ -1038,21 +1081,34 @@ export default function MarketplacePage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-                <DocumentMetric title="Integrari active" value={activePlatformIntegrationCount} tone="emerald" />
-                <DocumentMetric title="Locatie" value={selectedIntegration?.location?.code || selectedIntegration?.location?.name || "-"} tone="blue" />
-                <DocumentMetric title="Nemapate" value={platformRecentExternalProducts.filter((item) => !item.mapped).length} tone="amber" />
-                <DocumentMetric title="In flux" value={platformOrders.filter((item) => item.status !== "FISCALIZED" && item.status !== "DELIVERED").length} tone="slate" />
-              </div>
+              {selectedPlatform === "GUFO_DELIVERY" ? (
+                <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+                  <DocumentMetric title="Locatie" value={selectedIntegration?.location?.code || selectedIntegration?.location?.name || "-"} tone="blue" />
+                  <DocumentMetric title="POS tinta" value={selectedTerminal?.label || selectedTerminal?.deviceId || "-"} tone="emerald" />
+                  <DocumentMetric title="Categorii selectate" value={currentForm.includedCategoryIds.length} tone="amber" />
+                  <DocumentMetric title="Produse selectate" value={currentForm.includedProductIds.length} tone="slate" />
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+                  <DocumentMetric title="Integrari active" value={activePlatformIntegrationCount} tone="emerald" />
+                  <DocumentMetric title="Locatie" value={selectedIntegration?.location?.code || selectedIntegration?.location?.name || "-"} tone="blue" />
+                  <DocumentMetric title="Nemapate" value={platformRecentExternalProducts.filter((item) => !item.mapped).length} tone="amber" />
+                  <DocumentMetric title="In flux" value={platformOrders.filter((item) => item.status !== "FISCALIZED" && item.status !== "DELIVERED").length} tone="slate" />
+                </div>
+              )}
             </div>
           </div>
 
-          <DocumentTabs items={tabs} activeId={activeTab} onChange={setActiveTab} />
+          <DocumentTabs items={currentTabs} activeId={activeTab} onChange={setActiveTab} />
 
           {activeTab === "integrari" ? (
             <div className="space-y-3">
               <DocumentSection
-                title={`Rutare si conectare ${platforms.find((item) => item.code === selectedPlatform)?.label || selectedPlatform}`}
+                title={
+                  selectedPlatform === "GUFO_DELIVERY"
+                    ? "Configurare locatie si POS"
+                    : `Rutare si conectare ${platforms.find((item) => item.code === selectedPlatform)?.label || selectedPlatform}`
+                }
                 description={
                   selectedPlatform === "GUFO_DELIVERY"
                     ? "Configurezi locatia, POS-ul tinta si regulile de publicare pentru aplicatia proprie Gufo Delivery."
@@ -1070,7 +1126,7 @@ export default function MarketplacePage() {
                     <div className="rounded-[18px] border border-slate-200 bg-slate-50 p-4">
                       <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
                         <Truck size={16} className="text-[#17324D]" />
-                        Rutare operationala
+                        {selectedPlatform === "GUFO_DELIVERY" ? "Activare locatie" : "Rutare operationala"}
                       </div>
 
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -1487,7 +1543,7 @@ export default function MarketplacePage() {
                 <div className="flex flex-wrap gap-2">
                   <button type="button" className={documentButtonPrimaryClass} onClick={() => saveIntegration(selectedPlatform)} disabled={saving}>
                     <Save size={14} className="mr-1.5" />
-                    {saving ? "Se salveaza..." : "Salveaza conectarea"}
+                    {saving ? "Se salveaza..." : selectedPlatform === "GUFO_DELIVERY" ? "Salveaza configurarea" : "Salveaza conectarea"}
                   </button>
                 </div>
               </div>
@@ -1514,19 +1570,19 @@ export default function MarketplacePage() {
                 <div className="rounded-[18px] border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
                     <Link2 size={16} className="text-emerald-600" />
-                    Status integrare
+                    {selectedPlatform === "GUFO_DELIVERY" ? "Status activare" : "Status integrare"}
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${selectedIntegration?.status === "ACTIVE" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
-                      {selectedIntegration?.status || "DISCONNECTED"}
+                      {selectedIntegration?.status || "INACTIV"}
                     </span>
                     <span className="text-sm text-slate-600">
-                      {selectedIntegration?.location?.name || "Alege locatia pentru conectare"}
+                      {selectedIntegration?.location?.name || (selectedPlatform === "GUFO_DELIVERY" ? "Alege locatia pentru activare" : "Alege locatia pentru conectare")}
                     </span>
                   </div>
                   {selectedTerminal ? (
                     <div className="mt-3 rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                      Device activ pentru comenzi: <span className="font-semibold">{selectedTerminal.label || selectedTerminal.deviceId}</span>
+                      POS selectat pentru comenzi: <span className="font-semibold">{selectedTerminal.label || selectedTerminal.deviceId}</span>
                     </div>
                   ) : null}
                 </div>
@@ -1811,7 +1867,35 @@ export default function MarketplacePage() {
         </div>
       ) : null}
 
-      {activeTab === "mapari" ? (
+      {activeTab === "mapari" && selectedPlatform === "GUFO_DELIVERY" ? (
+        <div className="space-y-3">
+          <DocumentSection
+            title="Catalog Gufo Delivery"
+            description="Verifici rapid ce pleaca spre aplicatia noastra, in functie de modul ales pentru locatie."
+            actions={
+              <button type="button" className={documentButtonSecondaryClass} onClick={initialLoad} disabled={loading || saving}>
+                <RefreshCcw size={14} className="mr-1.5" />
+                Reincarca
+              </button>
+            }
+          >
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+              <DocumentMetric title="Mod catalog" value={currentForm.deliveryCatalogMode} tone="blue" />
+              <DocumentMetric title="Categorii alese" value={currentForm.includedCategoryIds.length} tone="amber" />
+              <DocumentMetric title="Produse alese" value={currentForm.includedProductIds.length} tone="slate" />
+              <DocumentMetric title="Produse POS vizibile" value={visibleProducts.length} tone="emerald" />
+            </div>
+
+            <div className="mt-4 rounded-[18px] border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+              {currentForm.deliveryCatalogMode === "ALL_VISIBLE"
+                ? "Pentru aceasta locatie vor merge in Gufo Delivery toate produsele marcate vizibile in POS."
+                : currentForm.deliveryCatalogMode === "CATEGORY_SELECTION"
+                  ? `Pentru aceasta locatie vor merge doar produsele din ${currentForm.includedCategoryIds.length} categorii selectate.`
+                  : `Pentru aceasta locatie vor merge doar cele ${currentForm.includedProductIds.length} produse selectate manual.`}
+            </div>
+          </DocumentSection>
+        </div>
+      ) : activeTab === "mapari" ? (
         <div className="space-y-3">
           <DocumentSection
             title={`Catalog merchant ${selectedPlatformMeta?.label || selectedPlatform}`}
@@ -1929,7 +2013,7 @@ export default function MarketplacePage() {
         </div>
       ) : null}
 
-      {activeTab === "comenzi" ? (
+      {activeTab === "comenzi" && selectedPlatform !== "GUFO_DELIVERY" ? (
         <div className="space-y-3">
           <DocumentSection
             title="Comenzi marketplace"
