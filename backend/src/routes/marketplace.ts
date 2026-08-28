@@ -257,6 +257,24 @@ function resolvePublicImageUrl(req: Request, rawUrl: unknown) {
   return baseUrl ? `${baseUrl}${normalized}` : normalized
 }
 
+async function resolveDeliveryRestaurantCoverImage(req: Request, integration: GufoDeliveryIntegrationPublic) {
+  try {
+    const payload = await buildGufoDeliveryMenuPayload(req, integration)
+    const restaurantImage = resolvePublicImageUrl(req, payload.restaurant.imageUrl)
+    if (restaurantImage) return restaurantImage
+
+    const productImage = payload.catalog.products.find((item) => Boolean(item.imageUrl))?.imageUrl
+    if (productImage) return resolvePublicImageUrl(req, productImage)
+
+    const categoryImage = payload.catalog.categories.find((item) => Boolean(item.imageUrl))?.imageUrl
+    if (categoryImage) return resolvePublicImageUrl(req, categoryImage)
+  } catch {
+    return null
+  }
+
+  return null
+}
+
 function compareDeliveryCategorySort(left: { posSortOrder?: number | null; name?: string | null }, right: { posSortOrder?: number | null; name?: string | null }) {
   const leftOrder = Number(left.posSortOrder || 0)
   const rightOrder = Number(right.posSortOrder || 0)
@@ -554,6 +572,10 @@ async function buildGufoDeliveryMenuPayload(req: Request, integration: GufoDeliv
       slug: slugifyDeliveryText(location.code || location.name || integration.id),
       name: location.name,
       code: location.code,
+      imageUrl: resolvePublicImageUrl(
+        req,
+        categories.find((item) => Boolean(item.imageUrl))?.imageUrl || products.find((item) => Boolean(item.imageUrl))?.imageUrl || null
+      ),
       address: location.address || null,
       city: location.city || null,
       county: location.county || null,
@@ -1997,15 +2019,16 @@ router.post("/api/v1/marketplace/webhooks/glovo/cancel/:storeId?", async (req, r
 router.get("/api/v1/public/delivery/restaurants", async (req, res) => {
   try {
     const integrations = await getPublicGufoDeliveryIntegrations()
-    const items = integrations.map((integration) => {
+    const items = await Promise.all(integrations.map(async (integration) => {
       const settings = integrationSettings(integration.settingsJson)
       const location = integration.location
+      const imageUrl = await resolveDeliveryRestaurantCoverImage(req, integration)
       return {
         id: integration.id,
         slug: slugifyDeliveryText(location?.code || location?.name || integration.id),
         name: location?.name || "Restaurant",
         code: location?.code || null,
-        imageUrl: null,
+        imageUrl,
         address: location?.address || null,
         city: location?.city || null,
         county: location?.county || null,
@@ -2016,7 +2039,7 @@ router.get("/api/v1/public/delivery/restaurants", async (req, res) => {
         showCategories: settings.deliveryShowCategories !== false,
         updatedAt: integration.updatedAt.toISOString(),
       }
-    })
+    }))
 
     return res.json({ ok: true, items })
   } catch (error: unknown) {
