@@ -15,7 +15,7 @@ import {
 import { API_BASE, api, authHeaders, getToken } from "../lib/api"
 
 type TabId = "integrari" | "mapari" | "comenzi"
-type PlatformCode = "GLOVO" | "WOLT" | "BOLT_FOOD"
+type PlatformCode = "GLOVO" | "WOLT" | "BOLT_FOOD" | "GUFO_DELIVERY"
 
 type PlatformItem = {
   code: PlatformCode
@@ -244,6 +244,7 @@ const defaultPlatforms: PlatformItem[] = [
   { code: "GLOVO", label: "Glovo" },
   { code: "WOLT", label: "Wolt" },
   { code: "BOLT_FOOD", label: "Bolt Food" },
+  { code: "GUFO_DELIVERY", label: "Gufo Delivery" },
 ]
 
 function emptyForm(): IntegrationForm {
@@ -273,6 +274,7 @@ function platformPill(platform: string) {
   if (platform === "GLOVO") return "bg-emerald-100 text-emerald-700"
   if (platform === "WOLT") return "bg-sky-100 text-sky-700"
   if (platform === "BOLT_FOOD") return "bg-lime-100 text-lime-700"
+  if (platform === "GUFO_DELIVERY") return "bg-[#E7F4FF] text-[#0F5EA8]"
   return "bg-slate-100 text-slate-700"
 }
 
@@ -280,6 +282,7 @@ function platformLogo(platform: string) {
   if (platform === "GLOVO") return "/marketplace/glovo-badge.png"
   if (platform === "WOLT") return "/marketplace/wolt-badge.png"
   if (platform === "BOLT_FOOD") return "/marketplace/bolt-food-badge.jpg"
+  if (platform === "GUFO_DELIVERY") return "/gufo-logo.png"
   return "/marketplace/glovo-badge.png"
 }
 
@@ -287,6 +290,7 @@ function platformCardTheme(platform: string) {
   if (platform === "GLOVO") return "from-[#FFF7CC] via-[#FFF1A3] to-[#FDE36A]"
   if (platform === "WOLT") return "from-[#D8F6FD] via-[#B7ECFA] to-[#8CE0F7]"
   if (platform === "BOLT_FOOD") return "from-[#DDF9E7] via-[#B6F0CD] to-[#86E4AF]"
+  if (platform === "GUFO_DELIVERY") return "from-[#D8ECFF] via-[#B5DAFF] to-[#8CC7FF]"
   return "from-slate-100 via-slate-50 to-white"
 }
 
@@ -294,7 +298,13 @@ function platformLabel(platform: string) {
   if (platform === "GLOVO") return "Glovo"
   if (platform === "WOLT") return "Wolt"
   if (platform === "BOLT_FOOD") return "Bolt Food"
+  if (platform === "GUFO_DELIVERY") return "Gufo Delivery"
   return platform || "Marketplace"
+}
+
+function platformSuccessMessage(platform: PlatformCode) {
+  if (platform === "GUFO_DELIVERY") return "Gufo Delivery a fost configurat pentru rutare interna."
+  return `${platformLabel(platform)} a fost conectat.`
 }
 
 function PlatformBadge({ platform, uppercase = false }: { platform: string; uppercase?: boolean }) {
@@ -379,6 +389,7 @@ export default function MarketplacePage() {
     GLOVO: emptyForm(),
     WOLT: emptyForm(),
     BOLT_FOOD: emptyForm(),
+    GUFO_DELIVERY: emptyForm(),
   })
 
   useEffect(() => {
@@ -677,7 +688,7 @@ export default function MarketplacePage() {
         }),
       })
 
-      setMessage(`${platform === "GLOVO" ? "Glovo" : platform === "WOLT" ? "Wolt" : "Bolt Food"} a fost conectat.`)
+      setMessage(platformSuccessMessage(platform))
       await initialLoad()
     } catch (e: any) {
       setError(e?.message || "Nu am putut salva integrarea.")
@@ -1027,6 +1038,12 @@ export default function MarketplacePage() {
                         Date integrare platforma
                       </div>
 
+                {selectedPlatform === "GUFO_DELIVERY" ? (
+                  <div className="mb-3 rounded-[16px] border border-[#BFDBFE] bg-[#EFF6FF] px-3 py-2 text-sm text-[#17324D]">
+                    Gufo Delivery este sursa proprie de comenzi pentru clientii finali. Aici configurezi doar locatia, POS-ul tinta si identificatorii interni folositi pentru rutare segura pe tenant.
+                  </div>
+                ) : null}
+
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <DocumentField label="Tip autentificare">
                     <select
@@ -1080,21 +1097,21 @@ export default function MarketplacePage() {
                     </DocumentField>
                   ) : null}
 
-                  <DocumentField label="Merchant ID">
+                  <DocumentField label={selectedPlatform === "GUFO_DELIVERY" ? "Restaurant ID intern" : "Merchant ID"}>
                     <input
                       value={currentForm.merchantId}
                       onChange={(e) => setForms((prev) => ({ ...prev, [selectedPlatform]: { ...prev[selectedPlatform], merchantId: e.target.value } }))}
                       className={documentInputClass}
-                      placeholder="merchant-123"
+                      placeholder={selectedPlatform === "GUFO_DELIVERY" ? "restaurant-tenant-01" : "merchant-123"}
                     />
                   </DocumentField>
 
-                  <DocumentField label="Store ID">
+                  <DocumentField label={selectedPlatform === "GUFO_DELIVERY" ? "Cod magazin / locatie Delivery" : "Store ID"}>
                     <input
                       value={currentForm.storeId}
                       onChange={(e) => setForms((prev) => ({ ...prev, [selectedPlatform]: { ...prev[selectedPlatform], storeId: e.target.value } }))}
                       className={documentInputClass}
-                      placeholder={selectedPlatform === "GLOVO" ? "partner__store-id" : "store-01"}
+                      placeholder={selectedPlatform === "GLOVO" ? "partner__store-id" : selectedPlatform === "GUFO_DELIVERY" ? "gufo-delivery-store-01" : "store-01"}
                     />
                   </DocumentField>
 
@@ -1111,23 +1128,27 @@ export default function MarketplacePage() {
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <DocumentField label="Access token">
-                    <input
-                      value={currentForm.accessToken}
-                      onChange={(e) => setForms((prev) => ({ ...prev, [selectedPlatform]: { ...prev[selectedPlatform], accessToken: e.target.value } }))}
-                      className={documentInputClass}
-                      placeholder="token acces platforma"
-                    />
-                  </DocumentField>
+                  {selectedPlatform !== "GUFO_DELIVERY" ? (
+                    <DocumentField label="Access token">
+                      <input
+                        value={currentForm.accessToken}
+                        onChange={(e) => setForms((prev) => ({ ...prev, [selectedPlatform]: { ...prev[selectedPlatform], accessToken: e.target.value } }))}
+                        className={documentInputClass}
+                        placeholder="token acces platforma"
+                      />
+                    </DocumentField>
+                  ) : null}
 
-                  <DocumentField label="Webhook secret">
-                    <input
-                      value={currentForm.webhookSecret}
-                      onChange={(e) => setForms((prev) => ({ ...prev, [selectedPlatform]: { ...prev[selectedPlatform], webhookSecret: e.target.value } }))}
-                      className={documentInputClass}
-                      placeholder="secret webhook"
-                    />
-                  </DocumentField>
+                  {selectedPlatform !== "GUFO_DELIVERY" ? (
+                    <DocumentField label="Webhook secret">
+                      <input
+                        value={currentForm.webhookSecret}
+                        onChange={(e) => setForms((prev) => ({ ...prev, [selectedPlatform]: { ...prev[selectedPlatform], webhookSecret: e.target.value } }))}
+                        className={documentInputClass}
+                        placeholder="secret webhook"
+                      />
+                    </DocumentField>
+                  ) : null}
 
                   {selectedPlatform === "GLOVO" ? (
                     <DocumentField label="Timp preparare fallback (minute)">
@@ -1186,14 +1207,23 @@ export default function MarketplacePage() {
               </div>
 
               <div className="space-y-3">
-                <div className="rounded-[18px] border border-slate-200 bg-slate-50 p-4">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Webhook</div>
-                  <div className="mt-2 text-sm font-semibold text-[#17324D] break-all">
-                    {selectedPlatform === "WOLT"
-                      ? `${API_BASE}/api/v1/marketplace/webhooks/wolt`
-                      : `${API_BASE}/api/v1/marketplace/webhooks/glovo/${currentForm.storeId || "{storeId}"}`}
+                {selectedPlatform !== "GUFO_DELIVERY" ? (
+                  <div className="rounded-[18px] border border-slate-200 bg-slate-50 p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Webhook</div>
+                    <div className="mt-2 text-sm font-semibold text-[#17324D] break-all">
+                      {selectedPlatform === "WOLT"
+                        ? `${API_BASE}/api/v1/marketplace/webhooks/wolt`
+                        : `${API_BASE}/api/v1/marketplace/webhooks/glovo/${currentForm.storeId || "{storeId}"}`}
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="rounded-[18px] border border-slate-200 bg-slate-50 p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Rutare interna</div>
+                    <div className="mt-2 text-sm font-semibold text-[#17324D]">
+                      Comenzile Gufo Delivery vor fi rutate intern catre locatia si POS-ul selectat, fara webhook extern.
+                    </div>
+                  </div>
+                )}
 
                 <div className="rounded-[18px] border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">

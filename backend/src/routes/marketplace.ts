@@ -8,7 +8,7 @@ import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 const router = Router()
 const db = prisma
 
-const PLATFORMS = ["GLOVO", "WOLT", "BOLT_FOOD"] as const
+const PLATFORMS = ["GLOVO", "WOLT", "BOLT_FOOD", "GUFO_DELIVERY"] as const
 const PLATFORM_ENUM = z.enum(PLATFORMS)
 const EXTERNAL_ORDER_STATUSES = [
   "RECEIVED",
@@ -1478,6 +1478,7 @@ router.get("/api/v1/marketplace/platforms", (_req, res) => {
       { code: "GLOVO", label: "Glovo", capabilities: ["ORDERS", "KDS", "READY_FOR_FISCAL"] },
       { code: "WOLT", label: "Wolt", capabilities: ["ORDERS", "KDS", "READY_FOR_FISCAL"] },
       { code: "BOLT_FOOD", label: "Bolt Food", capabilities: ["ORDERS_PENDING_ACCESS", "KDS", "READY_FOR_FISCAL"] },
+      { code: "GUFO_DELIVERY", label: "Gufo Delivery", capabilities: ["ORDERS", "KDS", "READY_FOR_FISCAL", "TENANT_ROUTING"] },
     ],
   })
 })

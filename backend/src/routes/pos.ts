@@ -2860,7 +2860,7 @@ export async function createPosMarketplaceHistory(
     if (["POS", "KDS", "ERP", "BACKEND", "PLATFORM"].includes(value)) {
       return value;
     }
-    if (["GLOVO", "WOLT", "BOLT", "BOLT_FOOD"].includes(value)) {
+    if (["GLOVO", "WOLT", "BOLT", "BOLT_FOOD", "GUFO_DELIVERY"].includes(value)) {
       return "PLATFORM";
     }
     return "BACKEND";

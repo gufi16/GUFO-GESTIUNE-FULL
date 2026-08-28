@@ -162,6 +162,7 @@ enum MarketplacePlatform {
   GLOVO
   WOLT
   BOLT_FOOD
+  GUFO_DELIVERY
 }
 
 enum IntegrationStatus {
