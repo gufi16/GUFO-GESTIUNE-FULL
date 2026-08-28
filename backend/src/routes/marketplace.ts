@@ -2050,12 +2050,12 @@ router.post("/api/v1/marketplace/integrations/:platform/connect", async (req: Au
 
   const integrationUpdatePayload: Prisma.ExternalIntegrationUncheckedUpdateInput = {
     status: "ACTIVE",
-    authType: bodyParsed.data.authType,
-    merchantId: bodyParsed.data.merchantId || null,
-    storeId: bodyParsed.data.storeId || null,
-    accessToken: bodyParsed.data.accessToken || null,
-    refreshToken: bodyParsed.data.refreshToken || null,
-    webhookSecret: bodyParsed.data.webhookSecret || null,
+    authType: platformParsed.data === "GUFO_DELIVERY" ? "PARTNER" : bodyParsed.data.authType,
+    merchantId: platformParsed.data === "GUFO_DELIVERY" ? null : bodyParsed.data.merchantId || null,
+    storeId: platformParsed.data === "GUFO_DELIVERY" ? null : bodyParsed.data.storeId || null,
+    accessToken: platformParsed.data === "GUFO_DELIVERY" ? null : bodyParsed.data.accessToken || null,
+    refreshToken: platformParsed.data === "GUFO_DELIVERY" ? null : bodyParsed.data.refreshToken || null,
+    webhookSecret: platformParsed.data === "GUFO_DELIVERY" ? null : bodyParsed.data.webhookSecret || null,
     settingsJson: integrationSettingsJson,
   }
 
@@ -2064,12 +2064,12 @@ router.post("/api/v1/marketplace/integrations/:platform/connect", async (req: Au
     locationId: location.id,
     platform: platformParsed.data,
     status: "ACTIVE",
-    authType: bodyParsed.data.authType,
-    merchantId: bodyParsed.data.merchantId || null,
-    storeId: bodyParsed.data.storeId || null,
-    accessToken: bodyParsed.data.accessToken || null,
-    refreshToken: bodyParsed.data.refreshToken || null,
-    webhookSecret: bodyParsed.data.webhookSecret || null,
+    authType: platformParsed.data === "GUFO_DELIVERY" ? "PARTNER" : bodyParsed.data.authType,
+    merchantId: platformParsed.data === "GUFO_DELIVERY" ? null : bodyParsed.data.merchantId || null,
+    storeId: platformParsed.data === "GUFO_DELIVERY" ? null : bodyParsed.data.storeId || null,
+    accessToken: platformParsed.data === "GUFO_DELIVERY" ? null : bodyParsed.data.accessToken || null,
+    refreshToken: platformParsed.data === "GUFO_DELIVERY" ? null : bodyParsed.data.refreshToken || null,
+    webhookSecret: platformParsed.data === "GUFO_DELIVERY" ? null : bodyParsed.data.webhookSecret || null,
     settingsJson: integrationSettingsJson,
   }
 
