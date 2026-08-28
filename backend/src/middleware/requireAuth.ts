@@ -127,6 +127,15 @@ export async function requireAuth(req: AuthedRequest, res: Response, next: NextF
     return next()
   }
 
+  if (
+    req.path === "/api/v1/public/delivery/restaurants" ||
+    req.path === "/api/v1/public/delivery/checkout" ||
+    req.path.startsWith("/api/v1/public/delivery/restaurants/") ||
+    req.path.startsWith("/api/v1/public/delivery/orders/")
+  ) {
+    return next()
+  }
+
   if (req.path === "/api/v1/company/cui-lookup") {
     return next()
   }
