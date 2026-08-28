@@ -233,6 +233,46 @@ type GlovoCatalogPushHistoryEntry = {
   rejectedProductIds: string[]
 }
 
+type GufoDeliveryCatalogPreview = {
+  restaurant: {
+    id: string
+    slug: string
+    name: string
+    code?: string | null
+    address?: string | null
+    city?: string | null
+    county?: string | null
+    country?: string | null
+    postalCode?: string | null
+  }
+  catalog: {
+    mode: DeliveryCatalogMode
+    showCategories: boolean
+    categories: Array<{
+      id: string
+      name: string
+      parentCategoryId?: string | null
+      posSortOrder?: number | null
+    }>
+    products: Array<{
+      id: string
+      sku?: string | null
+      name: string
+      price: number
+      currency?: string
+      isAvailable?: boolean
+      categoryId?: string | null
+      category?: {
+        id: string
+        name: string
+        parentCategoryId?: string | null
+      } | null
+      posSortOrder?: number
+    }>
+  }
+  updatedAt: string
+}
+
 type IntegrationForm = {
   locationId: string
   targetTerminalId: string
@@ -430,6 +470,8 @@ export default function MarketplacePage() {
   const [loadingGlovoPush, setLoadingGlovoPush] = useState(false)
   const [loadingGlovoPushStatus, setLoadingGlovoPushStatus] = useState(false)
   const [retryingGlovoPush, setRetryingGlovoPush] = useState(false)
+  const [gufoDeliveryPreview, setGufoDeliveryPreview] = useState<GufoDeliveryCatalogPreview | null>(null)
+  const [loadingGufoDeliveryPreview, setLoadingGufoDeliveryPreview] = useState(false)
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
   const [forms, setForms] = useState<Record<PlatformCode, IntegrationForm>>({
@@ -466,6 +508,16 @@ export default function MarketplacePage() {
     void loadGlovoPreview(integration.id)
     void loadGlovoPushHistory(integration.id)
   }, [integrations])
+
+  useEffect(() => {
+    if (selectedPlatform !== "GUFO_DELIVERY") return
+    const integration = integrations.find((item) => item.platform === "GUFO_DELIVERY")
+    if (!integration?.id) {
+      setGufoDeliveryPreview(null)
+      return
+    }
+    void loadGufoDeliveryPreview(integration.id)
+  }, [integrations, selectedPlatform])
 
   async function initialLoad() {
     if (!token) {
@@ -681,6 +733,19 @@ export default function MarketplacePage() {
     } catch (e: any) {
       setError(e?.message || "Nu am putut incarca istoricul Glovo.")
       setGlovoPushHistory([])
+    }
+  }
+
+  async function loadGufoDeliveryPreview(integrationId: string) {
+    setLoadingGufoDeliveryPreview(true)
+    try {
+      const data = await api<GufoDeliveryCatalogPreview>(`/api/v1/public/delivery/restaurants/${encodeURIComponent(integrationId)}/menu`)
+      setGufoDeliveryPreview(data)
+    } catch (e: any) {
+      setError(e?.message || "Nu am putut incarca preview-ul public Gufo Delivery.")
+      setGufoDeliveryPreview(null)
+    } finally {
+      setLoadingGufoDeliveryPreview(false)
     }
   }
 
@@ -921,6 +986,16 @@ export default function MarketplacePage() {
     () => products.filter((item) => item.isVisibleInPos !== false),
     [products],
   )
+  const publishedGufoProducts = useMemo(() => {
+    const items = gufoDeliveryPreview?.catalog?.products || []
+    const query = deliveryProductSearch.trim().toLowerCase()
+    if (!query) return items
+    return items.filter((item) =>
+      [item.name, item.sku, item.category?.name]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query)),
+    )
+  }, [deliveryProductSearch, gufoDeliveryPreview])
   const filteredDeliveryProducts = useMemo(() => {
     const query = deliveryProductSearch.trim().toLowerCase()
     if (!query) return visibleProducts
@@ -946,6 +1021,8 @@ export default function MarketplacePage() {
   const selectedPlatformMeta =
     platforms.find((item) => item.code === selectedPlatform) || defaultPlatforms.find((item) => item.code === selectedPlatform)
   const activePlatformIntegrationCount = integrations.filter((item) => item.status === "ACTIVE" && item.platform === selectedPlatform).length
+  const gufoDeliveryPublishedCategories = gufoDeliveryPreview?.catalog?.categories || []
+  const gufoDeliveryPublishedProducts = gufoDeliveryPreview?.catalog?.products || []
   const filteredPlatformRecentExternalProducts = useMemo(() => {
     const query = productMappingSearch.trim().toLowerCase()
     if (!query) return platformRecentExternalProducts
@@ -1871,11 +1948,21 @@ export default function MarketplacePage() {
         <div className="space-y-3">
           <DocumentSection
             title="Catalog Gufo Delivery"
-            description="Verifici rapid ce pleaca spre aplicatia noastra, in functie de modul ales pentru locatie."
+            description="Verifici exact ce restaurant si ce produse pleaca acum spre aplicatia clientului, pe baza configuratiei ERP."
             actions={
-              <button type="button" className={documentButtonSecondaryClass} onClick={initialLoad} disabled={loading || saving}>
+              <button
+                type="button"
+                className={documentButtonSecondaryClass}
+                onClick={() => {
+                  void initialLoad()
+                  if (selectedIntegration?.id) {
+                    void loadGufoDeliveryPreview(selectedIntegration.id)
+                  }
+                }}
+                disabled={loading || saving || loadingGufoDeliveryPreview}
+              >
                 <RefreshCcw size={14} className="mr-1.5" />
-                Reincarca
+                {loadingGufoDeliveryPreview ? "Se verifica..." : "Reincarca"}
               </button>
             }
           >
@@ -1883,7 +1970,7 @@ export default function MarketplacePage() {
               <DocumentMetric title="Mod catalog" value={currentForm.deliveryCatalogMode} tone="blue" />
               <DocumentMetric title="Categorii alese" value={currentForm.includedCategoryIds.length} tone="amber" />
               <DocumentMetric title="Produse alese" value={currentForm.includedProductIds.length} tone="slate" />
-              <DocumentMetric title="Produse POS vizibile" value={visibleProducts.length} tone="emerald" />
+              <DocumentMetric title="Produse publicate" value={gufoDeliveryPublishedProducts.length} tone="emerald" />
             </div>
 
             <div className="mt-4 rounded-[18px] border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
@@ -1893,6 +1980,121 @@ export default function MarketplacePage() {
                   ? `Pentru aceasta locatie vor merge doar produsele din ${currentForm.includedCategoryIds.length} categorii selectate.`
                   : `Pentru aceasta locatie vor merge doar cele ${currentForm.includedProductIds.length} produse selectate manual.`}
             </div>
+
+            {!selectedIntegration?.id ? (
+              <div className="mt-4">
+                <InlineNotice>Salveaza mai intai configurarea locatiei ca sa putem verifica preview-ul public.</InlineNotice>
+              </div>
+            ) : null}
+
+            {gufoDeliveryPreview ? (
+              <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-[0.9fr_1.1fr]">
+                <div className="space-y-3">
+                  <div className="rounded-[20px] border border-[#BFDBFE] bg-[#F8FBFF] p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#0F5EA8]">Restaurant public</div>
+                    <div className="mt-2 text-[22px] font-semibold tracking-tight text-[#17324D]">
+                      {gufoDeliveryPreview.restaurant.name}
+                    </div>
+                    <div className="mt-2 text-sm text-slate-600">
+                      {[gufoDeliveryPreview.restaurant.address, gufoDeliveryPreview.restaurant.city, gufoDeliveryPreview.restaurant.county]
+                        .filter(Boolean)
+                        .join(", ") || "Adresa nu este completata in locatie."}
+                    </div>
+                    <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
+                      <div className="rounded-[14px] border border-white bg-white px-3 py-3">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Slug public</div>
+                        <div className="mt-1 text-sm font-semibold text-slate-900">{gufoDeliveryPreview.restaurant.slug}</div>
+                      </div>
+                      <div className="rounded-[14px] border border-white bg-white px-3 py-3">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Ultima regenerare</div>
+                        <div className="mt-1 text-sm font-semibold text-slate-900">{formatDate(gufoDeliveryPreview.updatedAt)}</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[18px] border border-slate-200 bg-white p-4 shadow-sm">
+                    <div className="text-sm font-semibold text-slate-900">Rutare activa</div>
+                    <div className="mt-2 rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
+                      Comenzile plasate de client intra in locatia <span className="font-semibold">{selectedIntegration?.location?.name || "-"}</span> si ajung in POS-ul
+                      {" "}
+                      <span className="font-semibold">{selectedTerminal?.label || selectedTerminal?.deviceId || "-"}</span>.
+                    </div>
+                  </div>
+
+                  <div className="rounded-[18px] border border-slate-200 bg-white p-4 shadow-sm">
+                    <div className="text-sm font-semibold text-slate-900">Structura publicata</div>
+                    <div className="mt-3 grid grid-cols-3 gap-2">
+                      <DocumentMetric title="Categorii publice" value={gufoDeliveryPublishedCategories.length} tone="amber" />
+                      <DocumentMetric title="Produse publice" value={gufoDeliveryPublishedProducts.length} tone="emerald" />
+                      <DocumentMetric title="Categorii afisate" value={gufoDeliveryPreview.catalog.showCategories ? "Da" : "Nu"} tone="blue" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[18px] border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-slate-900">Preview produse publicate</div>
+                      <div className="mt-1 text-sm text-slate-500">
+                        Aici vezi exact ce poate comanda clientul in aplicatia Gufo Delivery.
+                      </div>
+                    </div>
+                    <div className="w-full md:w-[280px]">
+                      <DocumentField label="Cauta in preview">
+                        <input
+                          value={deliveryProductSearch}
+                          onChange={(e) => setDeliveryProductSearch(e.target.value)}
+                          className={documentInputClass}
+                          placeholder="pizza, cola, burger..."
+                        />
+                      </DocumentField>
+                    </div>
+                  </div>
+
+                  {gufoDeliveryPublishedCategories.length ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {gufoDeliveryPublishedCategories.map((category) => (
+                        <span key={category.id} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
+                          {category.name}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  <div className="mt-4 grid max-h-[520px] grid-cols-1 gap-2 overflow-auto">
+                    {!publishedGufoProducts.length ? (
+                      <InlineNotice>
+                        {deliveryProductSearch.trim()
+                          ? "Nu exista produse in preview pentru cautarea actuala."
+                          : "Nu exista produse publicate pentru configuratia curenta."}
+                      </InlineNotice>
+                    ) : (
+                      publishedGufoProducts.map((product) => (
+                        <div key={product.id} className="rounded-[16px] border border-slate-200 bg-slate-50 px-3 py-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="text-sm font-semibold text-slate-900">{product.name}</div>
+                              <div className="mt-1 text-xs text-slate-500">
+                                {[product.sku, product.category?.name].filter(Boolean).join(" • ") || "Fara categorie"}
+                              </div>
+                            </div>
+                            <div className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                              {formatMoney(product.price)}
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : selectedIntegration?.id && !loadingGufoDeliveryPreview ? (
+              <div className="mt-4">
+                <InlineNotice tone="info">
+                  Preview-ul public nu a putut fi generat inca. Verifica daca locatia are POS selectat si produse vizibile in POS.
+                </InlineNotice>
+              </div>
+            ) : null}
           </DocumentSection>
         </div>
       ) : activeTab === "mapari" ? (

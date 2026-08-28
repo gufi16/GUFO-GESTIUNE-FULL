@@ -507,6 +507,7 @@ router.get("/api/v1/meta/terminals", async (req: AuthedRequest, res) => {
     where: {
       tenantId,
       companyId,
+      deviceType,
       ...(locationId ? { locationId } : {}),
     },
     select: {
