@@ -29,6 +29,17 @@ type LocationItem = {
   code?: string
 }
 
+type CategoryItem = {
+  id: string
+  name: string
+  imageUrl?: string | null
+  isVisibleInPos?: boolean
+  parentCategory?: {
+    id: string
+    name: string
+  } | null
+}
+
 type TerminalItem = {
   id: string
   label: string
@@ -45,10 +56,19 @@ type ProductItem = {
   id: string
   sku: string
   name: string
+  imageUrl?: string | null
+  isVisibleInPos?: boolean
+  categoryId?: string | null
+  category?: {
+    id: string
+    name: string
+  } | null
   trackLot?: boolean
   trackExpiry?: boolean
   costMethod?: string
 }
+
+type DeliveryCatalogMode = "ALL_VISIBLE" | "CATEGORY_SELECTION" | "MANUAL_SELECTION"
 
 type IntegrationItem = {
   id: string
@@ -217,6 +237,11 @@ type IntegrationForm = {
   locationId: string
   targetTerminalId: string
   targetTerminalDeviceId: string
+  deliveryEnabled: boolean
+  deliveryCatalogMode: DeliveryCatalogMode
+  deliveryShowCategories: boolean
+  includedCategoryIds: string[]
+  includedProductIds: string[]
   authType: "PARTNER" | "OAUTH" | "API_KEY"
   partnerName: string
   glovoClientId: string
@@ -252,6 +277,11 @@ function emptyForm(): IntegrationForm {
     locationId: "",
     targetTerminalId: "",
     targetTerminalDeviceId: "",
+    deliveryEnabled: true,
+    deliveryCatalogMode: "ALL_VISIBLE",
+    deliveryShowCategories: true,
+    includedCategoryIds: [],
+    includedProductIds: [],
     authType: "PARTNER",
     partnerName: "",
     glovoClientId: "",
@@ -357,6 +387,7 @@ export default function MarketplacePage() {
   const [activeTab, setActiveTab] = useState<TabId>("integrari")
   const [platforms, setPlatforms] = useState<PlatformItem[]>(defaultPlatforms)
   const [locations, setLocations] = useState<LocationItem[]>([])
+  const [categories, setCategories] = useState<CategoryItem[]>([])
   const [products, setProducts] = useState<ProductItem[]>([])
   const [terminals, setTerminals] = useState<TerminalItem[]>([])
   const [integrations, setIntegrations] = useState<IntegrationItem[]>([])
@@ -371,6 +402,7 @@ export default function MarketplacePage() {
   const [testGlovoPaymentType, setTestGlovoPaymentType] = useState<"PAID" | "CASH">("PAID")
   const [testGlovoScenario, setTestGlovoScenario] = useState<"DELIVERY" | "CUSTOMER_PICKUP">("DELIVERY")
   const [productMappingSearch, setProductMappingSearch] = useState("")
+  const [deliveryProductSearch, setDeliveryProductSearch] = useState("")
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [loadingOrders, setLoadingOrders] = useState(false)
@@ -430,15 +462,17 @@ export default function MarketplacePage() {
     setError("")
 
     try {
-      const [platformsData, locationsData, productsData, integrationsData] = await Promise.all([
+      const [platformsData, locationsData, categoriesData, productsData, integrationsData] = await Promise.all([
         api<{ ok: boolean; items: PlatformItem[] }>("/api/v1/marketplace/platforms"),
         api<{ ok: boolean; locations: LocationItem[] }>("/api/v1/meta/locations"),
+        api<{ ok: boolean; items: CategoryItem[] }>("/api/v1/meta/categories"),
         api<{ items: ProductItem[] }>("/api/v1/products"),
         api<{ ok: boolean; items: IntegrationItem[] }>("/api/v1/marketplace/integrations"),
       ])
 
       setPlatforms(Array.isArray(platformsData?.items) ? platformsData.items : defaultPlatforms)
       setLocations(Array.isArray(locationsData?.locations) ? locationsData.locations : [])
+      setCategories(Array.isArray(categoriesData?.items) ? categoriesData.items : [])
       setProducts(Array.isArray(productsData?.items) ? productsData.items : [])
       const nextIntegrations = Array.isArray(integrationsData?.items) ? integrationsData.items : []
       setIntegrations(nextIntegrations)
@@ -472,7 +506,7 @@ export default function MarketplacePage() {
   async function loadTerminals(locationId: string) {
     try {
       const data = await api<{ ok: boolean; terminals: TerminalItem[] }>(
-        `/api/v1/meta/terminals?locationId=${encodeURIComponent(locationId)}`,
+        `/api/v1/meta/terminals?locationId=${encodeURIComponent(locationId)}&deviceType=POS`,
       )
       setTerminals(Array.isArray(data?.terminals) ? data.terminals : [])
     } catch (e: any) {
@@ -489,6 +523,19 @@ export default function MarketplacePage() {
         next[platform.code] = integration
           ? {
               locationId: integration.locationId || "",
+              deliveryEnabled: integration.settingsJson?.deliveryEnabled !== false,
+              deliveryCatalogMode:
+                integration.settingsJson?.deliveryCatalogMode === "CATEGORY_SELECTION" ||
+                integration.settingsJson?.deliveryCatalogMode === "MANUAL_SELECTION"
+                  ? integration.settingsJson.deliveryCatalogMode
+                  : "ALL_VISIBLE",
+              deliveryShowCategories: integration.settingsJson?.deliveryShowCategories !== false,
+              includedCategoryIds: Array.isArray(integration.settingsJson?.includedCategoryIds)
+                ? integration.settingsJson.includedCategoryIds.filter((item: unknown): item is string => typeof item === "string")
+                : [],
+              includedProductIds: Array.isArray(integration.settingsJson?.includedProductIds)
+                ? integration.settingsJson.includedProductIds.filter((item: unknown): item is string => typeof item === "string")
+                : [],
               authType: (integration.authType as IntegrationForm["authType"]) || "PARTNER",
               partnerName:
                 typeof integration.settingsJson?.partnerName === "string"
@@ -658,6 +705,21 @@ export default function MarketplacePage() {
 
     try {
       const settings = form.settingsJson.trim() ? JSON.parse(form.settingsJson) : undefined
+      if (platform === "GUFO_DELIVERY" && !form.targetTerminalId) {
+        setError("Alege POS-ul care trebuie sa primeasca comenzile Gufo Delivery.")
+        setSaving(false)
+        return
+      }
+      if (platform === "GUFO_DELIVERY" && form.deliveryCatalogMode === "CATEGORY_SELECTION" && form.includedCategoryIds.length === 0) {
+        setError("Selecteaza cel putin o categorie pentru catalogul Gufo Delivery.")
+        setSaving(false)
+        return
+      }
+      if (platform === "GUFO_DELIVERY" && form.deliveryCatalogMode === "MANUAL_SELECTION" && form.includedProductIds.length === 0) {
+        setError("Selecteaza cel putin un produs pentru catalogul Gufo Delivery.")
+        setSaving(false)
+        return
+      }
       await api(`/api/v1/marketplace/integrations/${platform}/connect`, {
         method: "POST",
         body: JSON.stringify({
@@ -684,6 +746,11 @@ export default function MarketplacePage() {
             targetTerminalDeviceId: selectedTerminal?.deviceId || form.targetTerminalDeviceId || undefined,
             targetTerminalLabel: selectedTerminal?.label || undefined,
             dispatchMode: "POS_CONFIRM",
+            deliveryEnabled: form.deliveryEnabled,
+            deliveryCatalogMode: form.deliveryCatalogMode,
+            deliveryShowCategories: form.deliveryShowCategories,
+            includedCategoryIds: form.includedCategoryIds,
+            includedProductIds: form.includedProductIds,
           },
         }),
       })
@@ -831,6 +898,23 @@ export default function MarketplacePage() {
   const currentForm = forms[selectedPlatform] || emptyForm()
   const selectedIntegration = integrations.find((item) => item.platform === selectedPlatform) || null
   const selectedTerminal = terminals.find((item) => item.id === currentForm.targetTerminalId) || null
+  const visibleCategories = useMemo(
+    () => categories.filter((item) => item.isVisibleInPos !== false),
+    [categories],
+  )
+  const visibleProducts = useMemo(
+    () => products.filter((item) => item.isVisibleInPos !== false),
+    [products],
+  )
+  const filteredDeliveryProducts = useMemo(() => {
+    const query = deliveryProductSearch.trim().toLowerCase()
+    if (!query) return visibleProducts
+    return visibleProducts.filter((item) =>
+      [item.name, item.sku, item.category?.name]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query)),
+    )
+  }, [deliveryProductSearch, visibleProducts])
   const platformMappings = mappings.filter((mapping) => mapping.integration.platform === selectedPlatform)
   const platformRecentExternalProducts = recentExternalProducts.filter(
     (item) => !item.platform || item.platform === selectedPlatform || item.integrationId === selectedIntegration?.id,
@@ -1030,6 +1114,11 @@ export default function MarketplacePage() {
                           ? `Comenzile marketplace vor intra in POS-ul: ${selectedTerminal.label || selectedTerminal.deviceId}`
                           : "Alege device-ul/licenta Android POS care trebuie sa primeasca comenzile din platforma."}
                       </div>
+                      {!terminals.length && currentForm.locationId ? (
+                        <div className="mt-3 rounded-[14px] border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                          Pentru locatia selectata nu exista inca niciun POS Android configurat in ERP.
+                        </div>
+                      ) : null}
                     </div>
 
                     <div className="rounded-[18px] border border-slate-200 bg-white p-4 shadow-sm">
@@ -1161,6 +1250,163 @@ export default function MarketplacePage() {
                     </DocumentField>
                   ) : null}
                 </div>
+
+                {selectedPlatform === "GUFO_DELIVERY" ? (
+                  <div className="space-y-3 rounded-[18px] border border-[#BFDBFE] bg-[#F8FBFF] p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold text-[#17324D]">Catalog Gufo Delivery</div>
+                        <div className="text-sm text-slate-600">
+                          Alegi daca publicam toate produsele vizibile in POS, doar anumite categorii sau produse selectate manual.
+                        </div>
+                      </div>
+                      <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={currentForm.deliveryEnabled}
+                          onChange={(e) =>
+                            setForms((prev) => ({
+                              ...prev,
+                              [selectedPlatform]: { ...prev[selectedPlatform], deliveryEnabled: e.target.checked },
+                            }))
+                          }
+                        />
+                        Delivery activ
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                      <DocumentField label="Mod publicare catalog">
+                        <select
+                          value={currentForm.deliveryCatalogMode}
+                          onChange={(e) =>
+                            setForms((prev) => ({
+                              ...prev,
+                              [selectedPlatform]: {
+                                ...prev[selectedPlatform],
+                                deliveryCatalogMode: e.target.value as DeliveryCatalogMode,
+                                includedCategoryIds: e.target.value === "CATEGORY_SELECTION" ? prev[selectedPlatform].includedCategoryIds : [],
+                                includedProductIds: e.target.value === "MANUAL_SELECTION" ? prev[selectedPlatform].includedProductIds : [],
+                                deliveryShowCategories: e.target.value === "MANUAL_SELECTION" ? false : prev[selectedPlatform].deliveryShowCategories,
+                              },
+                            }))
+                          }
+                          className={documentInputClass}
+                        >
+                          <option value="ALL_VISIBLE">Toate produsele vizibile in POS</option>
+                          <option value="CATEGORY_SELECTION">Doar categorii selectate</option>
+                          <option value="MANUAL_SELECTION">Selectie manuala de produse</option>
+                        </select>
+                      </DocumentField>
+
+                      <label className="flex items-start gap-2 rounded-[14px] border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={currentForm.deliveryShowCategories}
+                          disabled={currentForm.deliveryCatalogMode === "MANUAL_SELECTION"}
+                          onChange={(e) =>
+                            setForms((prev) => ({
+                              ...prev,
+                              [selectedPlatform]: { ...prev[selectedPlatform], deliveryShowCategories: e.target.checked },
+                            }))
+                          }
+                          className="mt-0.5"
+                        />
+                        <span>Afiseaza categoriile si in aplicatia Gufo Delivery</span>
+                      </label>
+                    </div>
+
+                    {currentForm.deliveryCatalogMode === "ALL_VISIBLE" ? (
+                      <div className="rounded-[14px] border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                        Vor fi incluse toate produsele care sunt marcate vizibile in POS.
+                      </div>
+                    ) : null}
+
+                    {currentForm.deliveryCatalogMode === "CATEGORY_SELECTION" ? (
+                      <div className="space-y-2">
+                        <div className="text-sm font-medium text-slate-800">Categorii incluse</div>
+                        <div className="grid max-h-72 grid-cols-1 gap-2 overflow-auto rounded-[16px] border border-slate-200 bg-white p-3 md:grid-cols-2">
+                          {visibleCategories.map((category) => {
+                            const checked = currentForm.includedCategoryIds.includes(category.id)
+                            return (
+                              <label key={category.id} className="flex items-start gap-2 rounded-[14px] border border-slate-200 px-3 py-2 text-sm text-slate-700">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={(e) =>
+                                    setForms((prev) => ({
+                                      ...prev,
+                                      [selectedPlatform]: {
+                                        ...prev[selectedPlatform],
+                                        includedCategoryIds: e.target.checked
+                                          ? [...prev[selectedPlatform].includedCategoryIds, category.id]
+                                          : prev[selectedPlatform].includedCategoryIds.filter((item) => item !== category.id),
+                                      },
+                                    }))
+                                  }
+                                  className="mt-0.5"
+                                />
+                                <span>{category.parentCategory?.name ? `${category.parentCategory.name} / ${category.name}` : category.name}</span>
+                              </label>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {currentForm.deliveryCatalogMode === "MANUAL_SELECTION" ? (
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-[0.9fr_1.1fr]">
+                          <DocumentField label="Cauta produs">
+                            <input
+                              value={deliveryProductSearch}
+                              onChange={(e) => setDeliveryProductSearch(e.target.value)}
+                              className={documentInputClass}
+                              placeholder="pizza, cola, burger..."
+                            />
+                          </DocumentField>
+                          <div className="rounded-[14px] border border-slate-200 bg-white px-3 py-3 text-sm text-slate-600">
+                            Selectate acum: <span className="font-semibold text-slate-900">{currentForm.includedProductIds.length}</span> produse
+                          </div>
+                        </div>
+
+                        <div className="grid max-h-80 grid-cols-1 gap-2 overflow-auto rounded-[16px] border border-slate-200 bg-white p-3">
+                          {filteredDeliveryProducts.map((product) => {
+                            const checked = currentForm.includedProductIds.includes(product.id)
+                            return (
+                              <label key={product.id} className="flex items-start justify-between gap-3 rounded-[14px] border border-slate-200 px-3 py-2 text-sm text-slate-700">
+                                <span className="flex items-start gap-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={(e) =>
+                                      setForms((prev) => ({
+                                        ...prev,
+                                        [selectedPlatform]: {
+                                          ...prev[selectedPlatform],
+                                          includedProductIds: e.target.checked
+                                            ? [...prev[selectedPlatform].includedProductIds, product.id]
+                                            : prev[selectedPlatform].includedProductIds.filter((item) => item !== product.id),
+                                        },
+                                      }))
+                                    }
+                                    className="mt-0.5"
+                                  />
+                                  <span>
+                                    <span className="block font-medium text-slate-900">{product.name}</span>
+                                    <span className="block text-xs text-slate-500">
+                                      {[product.sku, product.category?.name].filter(Boolean).join(" • ") || "Fara categorie"}
+                                    </span>
+                                  </span>
+                                </span>
+                              </label>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
 
                   <DocumentField label="Setari suplimentare JSON">
                     <textarea

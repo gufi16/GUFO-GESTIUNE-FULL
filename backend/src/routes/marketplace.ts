@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express"
 import crypto from "crypto"
 import { z } from "zod"
-import { Prisma } from "@prisma/client"
+import { Prisma, TerminalDeviceType } from "@prisma/client"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 
@@ -26,6 +26,7 @@ type MarketplaceOrderStatus = (typeof EXTERNAL_ORDER_STATUSES)[number]
 type JsonRecord = Record<string, unknown>
 type MarketplaceSettings = Record<string, unknown>
 type TransactionClient = Prisma.TransactionClient
+type DeliveryCatalogMode = "ALL_VISIBLE" | "CATEGORY_SELECTION" | "MANUAL_SELECTION"
 type MarketplaceOrderPayload = z.infer<typeof ImportMarketplaceOrderSchema>
 type MinimalIntegration = {
   id: string
@@ -163,6 +164,26 @@ function isMarketplaceOrderStatus(value: string): value is MarketplaceOrderStatu
 
 function integrationSettings(value: unknown): MarketplaceSettings {
   return isRecord(value) ? value : {}
+}
+
+function normalizeUniqueStringArray(value: unknown) {
+  const values = Array.isArray(value) ? value : []
+  const seen = new Set<string>()
+  const normalized: string[] = []
+  for (const item of values) {
+    const text = String(item || "").trim()
+    if (!text || seen.has(text)) continue
+    seen.add(text)
+    normalized.push(text)
+  }
+  return normalized
+}
+
+function normalizeDeliveryCatalogMode(value: unknown): DeliveryCatalogMode {
+  const normalized = String(value || "").trim().toUpperCase()
+  if (normalized === "CATEGORY_SELECTION") return "CATEGORY_SELECTION"
+  if (normalized === "MANUAL_SELECTION") return "MANUAL_SELECTION"
+  return "ALL_VISIBLE"
 }
 
 function buildDraftCart(payload: z.infer<typeof ImportMarketplaceOrderSchema>) {
@@ -1938,6 +1959,81 @@ router.post("/api/v1/marketplace/integrations/:platform/connect", async (req: Au
     incomingSettings.portalCancelNotificationsEnabled = Boolean(incomingSettings.portalCancelNotificationsEnabled)
     incomingSettings.menuManagedByIntegration = Boolean(incomingSettings.menuManagedByIntegration)
     incomingSettings.glovoStoreIdLooksValid = normalizedStoreId.includes("__")
+  }
+
+  if (platformParsed.data === "GUFO_DELIVERY") {
+    const targetTerminalId = String(incomingSettings.targetTerminalId || "").trim()
+    if (!targetTerminalId) {
+      return res.status(400).json({ ok: false, error: "Selecteaza POS-ul care va primi comenzile Gufo Delivery." })
+    }
+
+    const targetTerminal = await db.terminal.findFirst({
+      where: {
+        id: targetTerminalId,
+        tenantId,
+        locationId: location.id,
+        deviceType: TerminalDeviceType.POS,
+      },
+      select: {
+        id: true,
+        label: true,
+        deviceId: true,
+      },
+    })
+
+    if (!targetTerminal) {
+      return res.status(400).json({ ok: false, error: "POS-ul selectat nu apartine locatiei curente." })
+    }
+
+    const deliveryCatalogMode = normalizeDeliveryCatalogMode(incomingSettings.deliveryCatalogMode)
+    const includedCategoryIds = normalizeUniqueStringArray(incomingSettings.includedCategoryIds)
+    const includedProductIds = normalizeUniqueStringArray(incomingSettings.includedProductIds)
+
+    if (deliveryCatalogMode === "CATEGORY_SELECTION" && includedCategoryIds.length === 0) {
+      return res.status(400).json({ ok: false, error: "Alege cel putin o categorie pentru Gufo Delivery." })
+    }
+
+    if (deliveryCatalogMode === "MANUAL_SELECTION" && includedProductIds.length === 0) {
+      return res.status(400).json({ ok: false, error: "Alege cel putin un produs pentru Gufo Delivery." })
+    }
+
+    if (includedCategoryIds.length > 0) {
+      const categories = await db.category.findMany({
+        where: {
+          tenantId,
+          id: { in: includedCategoryIds },
+        },
+        select: { id: true },
+      })
+      if (categories.length !== includedCategoryIds.length) {
+        return res.status(400).json({ ok: false, error: "Lista de categorii Gufo Delivery contine elemente invalide." })
+      }
+    }
+
+    if (includedProductIds.length > 0) {
+      const products = await db.product.findMany({
+        where: {
+          tenantId,
+          id: { in: includedProductIds },
+        },
+        select: { id: true },
+      })
+      if (products.length !== includedProductIds.length) {
+        return res.status(400).json({ ok: false, error: "Lista de produse Gufo Delivery contine elemente invalide." })
+      }
+    }
+
+    incomingSettings.deliveryEnabled = incomingSettings.deliveryEnabled !== false
+    incomingSettings.deliveryCatalogMode = deliveryCatalogMode
+    incomingSettings.deliveryShowCategories = Boolean(incomingSettings.deliveryShowCategories)
+    incomingSettings.targetTerminalId = targetTerminal.id
+    incomingSettings.targetTerminalDeviceId = targetTerminal.deviceId || null
+    incomingSettings.targetTerminalLabel = targetTerminal.label || null
+    incomingSettings.dispatchMode = "POS_CONFIRM"
+    incomingSettings.includedCategoryIds =
+      deliveryCatalogMode === "CATEGORY_SELECTION" ? includedCategoryIds : []
+    incomingSettings.includedProductIds =
+      deliveryCatalogMode === "MANUAL_SELECTION" ? includedProductIds : []
   }
 
   const existingIntegration = await db.externalIntegration.findFirst({
