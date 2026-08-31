@@ -69,6 +69,7 @@ type ProductItem = {
 }
 
 type DeliveryCatalogMode = "ALL_VISIBLE" | "CATEGORY_SELECTION" | "MANUAL_SELECTION"
+type DeliveryPaymentMethodCode = "CASH" | "CARD" | "GOOGLE_PAY" | "APPLE_PAY"
 
 type IntegrationItem = {
   id: string
@@ -280,6 +281,8 @@ type IntegrationForm = {
   deliveryEnabled: boolean
   deliveryCatalogMode: DeliveryCatalogMode
   deliveryShowCategories: boolean
+  deliveryPaymentMethods: DeliveryPaymentMethodCode[]
+  deliveryOnlineProvider: string
   includedCategoryIds: string[]
   includedProductIds: string[]
   authType: "PARTNER" | "OAUTH" | "API_KEY"
@@ -317,6 +320,23 @@ const defaultPlatforms: PlatformItem[] = [
   { code: "GUFO_DELIVERY", label: "Gufo Delivery" },
 ]
 
+const deliveryPaymentMethodOptions: Array<{
+  code: DeliveryPaymentMethodCode
+  label: string
+  description: string
+}> = [
+  { code: "CASH", label: "Cash la livrare", description: "Clientul plateste numerar la livrare sau la ridicare." },
+  { code: "CARD", label: "Card online", description: "Plata online standard prin checkout-ul securizat Viva." },
+  { code: "GOOGLE_PAY", label: "Google Pay", description: "Disponibil pentru clientii care au Google Pay activ pe device." },
+  { code: "APPLE_PAY", label: "Apple Pay", description: "Pregatit pentru clientii iPhone atunci cand flow-ul Apple Pay este activ." },
+]
+
+function normalizeDeliveryPaymentMethods(value: unknown): DeliveryPaymentMethodCode[] {
+  const supported = new Set<DeliveryPaymentMethodCode>(["CASH", "CARD", "GOOGLE_PAY", "APPLE_PAY"])
+  const items = Array.isArray(value) ? value.filter((item): item is DeliveryPaymentMethodCode => typeof item === "string" && supported.has(item as DeliveryPaymentMethodCode)) : []
+  return items.length ? items : ["CASH", "CARD", "GOOGLE_PAY"]
+}
+
 function emptyForm(): IntegrationForm {
   return {
     locationId: "",
@@ -325,6 +345,8 @@ function emptyForm(): IntegrationForm {
     deliveryEnabled: true,
     deliveryCatalogMode: "ALL_VISIBLE",
     deliveryShowCategories: true,
+    deliveryPaymentMethods: ["CASH", "CARD", "GOOGLE_PAY"],
+    deliveryOnlineProvider: "VIVA",
     includedCategoryIds: [],
     includedProductIds: [],
     authType: "PARTNER",
@@ -597,6 +619,11 @@ export default function MarketplacePage() {
                   ? integration.settingsJson.deliveryCatalogMode
                   : "ALL_VISIBLE",
               deliveryShowCategories: integration.settingsJson?.deliveryShowCategories !== false,
+              deliveryPaymentMethods: normalizeDeliveryPaymentMethods(integration.settingsJson?.deliveryPaymentMethods),
+              deliveryOnlineProvider:
+                typeof integration.settingsJson?.deliveryOnlineProvider === "string" && integration.settingsJson.deliveryOnlineProvider.trim()
+                  ? integration.settingsJson.deliveryOnlineProvider.trim().toUpperCase()
+                  : "VIVA",
               includedCategoryIds: Array.isArray(integration.settingsJson?.includedCategoryIds)
                 ? integration.settingsJson.includedCategoryIds.filter((item: unknown): item is string => typeof item === "string")
                 : [],
@@ -790,6 +817,11 @@ export default function MarketplacePage() {
         setSaving(false)
         return
       }
+      if (platform === "GUFO_DELIVERY" && form.deliveryPaymentMethods.length === 0) {
+        setError("Selecteaza cel putin o metoda de plata pentru Gufo Delivery.")
+        setSaving(false)
+        return
+      }
       if (platform === "GUFO_DELIVERY" && form.deliveryCatalogMode === "CATEGORY_SELECTION" && form.includedCategoryIds.length === 0) {
         setError("Selecteaza cel putin o categorie pentru catalogul Gufo Delivery.")
         setSaving(false)
@@ -829,6 +861,8 @@ export default function MarketplacePage() {
             deliveryEnabled: form.deliveryEnabled,
             deliveryCatalogMode: form.deliveryCatalogMode,
             deliveryShowCategories: form.deliveryShowCategories,
+            deliveryPaymentMethods: form.deliveryPaymentMethods,
+            deliveryOnlineProvider: form.deliveryOnlineProvider || "VIVA",
             includedCategoryIds: form.includedCategoryIds,
             includedProductIds: form.includedProductIds,
           },
@@ -1293,6 +1327,50 @@ export default function MarketplacePage() {
                         <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Canal comenzi</div>
                         <div className="mt-1 text-sm font-semibold text-slate-900">Gufo Delivery internal</div>
                         <div className="mt-1 text-xs text-slate-500">Fara integrare externa de tip Glovo/Wolt/Bolt.</div>
+                      </div>
+                    </div>
+                    <div className="rounded-[16px] border border-slate-200 bg-slate-50 p-3">
+                      <div className="mb-2 text-sm font-semibold text-slate-900">Plata in aplicatie</div>
+                      <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                        {deliveryPaymentMethodOptions.map((option) => {
+                          const checked = currentForm.deliveryPaymentMethods.includes(option.code)
+                          return (
+                            <label
+                              key={option.code}
+                              className="flex items-start gap-2 rounded-[14px] border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(e) =>
+                                  setForms((prev) => ({
+                                    ...prev,
+                                    [selectedPlatform]: {
+                                      ...prev[selectedPlatform],
+                                      deliveryPaymentMethods: e.target.checked
+                                        ? [...prev[selectedPlatform].deliveryPaymentMethods, option.code]
+                                        : prev[selectedPlatform].deliveryPaymentMethods.filter((item) => item !== option.code),
+                                      deliveryOnlineProvider: "VIVA",
+                                    },
+                                  }))
+                                }
+                                className="mt-0.5"
+                              />
+                              <span>
+                                <span className="block font-medium text-slate-900">{option.label}</span>
+                                <span className="block text-xs text-slate-500">{option.description}</span>
+                              </span>
+                            </label>
+                          )
+                        })}
+                      </div>
+                      <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <DocumentField label="Provider plata online">
+                          <input value={currentForm.deliveryOnlineProvider || "VIVA"} className={documentInputClass} disabled readOnly />
+                        </DocumentField>
+                        <div className="rounded-[14px] border border-[#BFDBFE] bg-[#F8FBFF] px-3 py-3 text-sm text-[#17324D]">
+                          Toate platile online din Gufo Delivery vor merge prin Viva. Cash ramane disponibil separat, iar Apple Pay apare pentru device-uri compatibile.
+                        </div>
                       </div>
                     </div>
                   </div>
