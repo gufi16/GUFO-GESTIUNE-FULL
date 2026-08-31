@@ -28,6 +28,7 @@ type JsonRecord = Record<string, unknown>
 type MarketplaceSettings = Record<string, unknown>
 type TransactionClient = Prisma.TransactionClient
 type DeliveryCatalogMode = "ALL_VISIBLE" | "CATEGORY_SELECTION" | "MANUAL_SELECTION"
+type DeliveryPaymentMethodCode = "CASH" | "CARD" | "GOOGLE_PAY" | "APPLE_PAY"
 type MarketplaceOrderPayload = z.infer<typeof ImportMarketplaceOrderSchema>
 type MinimalIntegration = {
   id: string
@@ -174,7 +175,7 @@ const PublicGufoDeliveryCheckoutSchema = z.object({
     instructions: z.string().trim().optional(),
   }),
   payment: z.object({
-    type: z.enum(["CASH", "CARD", "PAID"]).default("CARD"),
+    type: z.enum(["CASH", "CARD", "GOOGLE_PAY", "APPLE_PAY", "PAID"]).default("CARD"),
   }).default({ type: "CARD" }),
   items: z.array(
     z.object({
@@ -229,6 +230,45 @@ function normalizeDeliveryCatalogMode(value: unknown): DeliveryCatalogMode {
   if (normalized === "CATEGORY_SELECTION") return "CATEGORY_SELECTION"
   if (normalized === "MANUAL_SELECTION") return "MANUAL_SELECTION"
   return "ALL_VISIBLE"
+}
+
+function normalizeDeliveryPaymentMethods(value: unknown): DeliveryPaymentMethodCode[] {
+  const supported: DeliveryPaymentMethodCode[] = ["CASH", "CARD", "GOOGLE_PAY", "APPLE_PAY"]
+  const values = Array.isArray(value) ? value : []
+  const seen = new Set<DeliveryPaymentMethodCode>()
+  const methods: DeliveryPaymentMethodCode[] = []
+
+  for (const item of values) {
+    const normalized = String(item || "").trim().toUpperCase() as DeliveryPaymentMethodCode
+    if (!supported.includes(normalized) || seen.has(normalized)) continue
+    seen.add(normalized)
+    methods.push(normalized)
+  }
+
+  return methods.length > 0 ? methods : ["CASH", "CARD", "GOOGLE_PAY"]
+}
+
+function buildGufoDeliveryPaymentConfig(settings: MarketplaceSettings) {
+  const methods = normalizeDeliveryPaymentMethods(settings.deliveryPaymentMethods)
+  const onlineProvider = String(settings.deliveryOnlineProvider || "VIVA").trim().toUpperCase() || "VIVA"
+  const vivaEnabled = methods.some((method) => method !== "CASH") && onlineProvider === "VIVA"
+
+  return {
+    provider: onlineProvider,
+    vivaEnabled,
+    methods: methods.map((code) => ({
+      code,
+      label:
+        code === "CASH"
+          ? "Numerar la livrare"
+          : code === "CARD"
+            ? "Card online"
+            : code === "GOOGLE_PAY"
+              ? "Google Pay"
+              : "Apple Pay",
+      requiresOnlinePayment: code !== "CASH",
+    })),
+  }
 }
 
 function slugifyDeliveryText(value: unknown) {
@@ -482,6 +522,7 @@ async function buildGufoDeliveryMenuPayload(req: Request, integration: GufoDeliv
   const includedCategoryIds = new Set(normalizeUniqueStringArray(settings.includedCategoryIds))
   const includedProductIds = new Set(normalizeUniqueStringArray(settings.includedProductIds))
   const deliveryShowCategories = settings.deliveryShowCategories !== false
+  const paymentConfig = buildGufoDeliveryPaymentConfig(settings)
 
   const effectiveDeliveryCategoryIds = new Set<string>(includedCategoryIds)
   if (deliveryCatalogMode === "CATEGORY_SELECTION") {
@@ -585,6 +626,7 @@ async function buildGufoDeliveryMenuPayload(req: Request, integration: GufoDeliv
     catalog: {
       mode: deliveryCatalogMode,
       showCategories: deliveryShowCategories,
+      paymentConfig,
       categories: deliveryCategories.map((category) => ({
         id: category.id,
         name: category.name,
@@ -2037,6 +2079,7 @@ router.get("/api/v1/public/delivery/restaurants", async (req, res) => {
         isOpen: true,
         catalogMode: normalizeDeliveryCatalogMode(settings.deliveryCatalogMode),
         showCategories: settings.deliveryShowCategories !== false,
+        paymentConfig: buildGufoDeliveryPaymentConfig(settings),
         updatedAt: integration.updatedAt.toISOString(),
       }
     }))
@@ -2063,6 +2106,32 @@ router.get("/api/v1/public/delivery/restaurants/:restaurantId/menu", async (req,
     return res.json(payload)
   } catch (error: unknown) {
     return res.status(500).json({ ok: false, error: getErrorMessage(error, "Nu am putut incarca meniul Gufo Delivery.") })
+  }
+})
+
+router.get("/api/v1/public/delivery/restaurants/:restaurantId/checkout-config", async (req, res) => {
+  try {
+    const restaurantId = String(req.params.restaurantId || "").trim()
+    if (!restaurantId) {
+      return res.status(400).json({ ok: false, error: "restaurantId este obligatoriu." })
+    }
+
+    const integration = await resolvePublicGufoDeliveryIntegration(restaurantId)
+    if (!integration) {
+      return res.status(404).json({ ok: false, error: "Restaurantul Gufo Delivery nu a fost gasit." })
+    }
+
+    const settings = integrationSettings(integration.settingsJson)
+    return res.json({
+      ok: true,
+      restaurant: {
+        id: integration.id,
+        name: integration.location?.name || "Restaurant",
+      },
+      paymentConfig: buildGufoDeliveryPaymentConfig(settings),
+    })
+  } catch (error: unknown) {
+    return res.status(500).json({ ok: false, error: getErrorMessage(error, "Nu am putut incarca configurarea de checkout.") })
   }
 })
 
@@ -2709,6 +2778,8 @@ router.post("/api/v1/marketplace/integrations/:platform/connect", async (req: Au
     incomingSettings.deliveryEnabled = incomingSettings.deliveryEnabled !== false
     incomingSettings.deliveryCatalogMode = deliveryCatalogMode
     incomingSettings.deliveryShowCategories = Boolean(incomingSettings.deliveryShowCategories)
+    incomingSettings.deliveryPaymentMethods = normalizeDeliveryPaymentMethods(incomingSettings.deliveryPaymentMethods)
+    incomingSettings.deliveryOnlineProvider = "VIVA"
     incomingSettings.targetTerminalId = targetTerminal.id
     incomingSettings.targetTerminalDeviceId = targetTerminal.deviceId || null
     incomingSettings.targetTerminalLabel = targetTerminal.label || null
