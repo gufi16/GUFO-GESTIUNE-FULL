@@ -5,6 +5,7 @@ import { Prisma, TerminalDeviceType } from "@prisma/client"
 import { prisma } from "../lib/prisma"
 import { buildCompanyScopedTenantWhere } from "../lib/companyScope"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
+import { requireDeliveryCustomerAuth, type DeliveryCustomerAuthRequest } from "./deliveryAuth"
 
 const router = Router()
 const db = prisma
@@ -185,6 +186,12 @@ const PublicGufoDeliveryCheckoutSchema = z.object({
       modifiers: z.array(z.string().trim().min(1)).optional(),
     })
   ).min(1),
+})
+
+const PublicGufoDeliveryVivaPrepareSchema = PublicGufoDeliveryCheckoutSchema.extend({
+  payment: z.object({
+    type: z.enum(["CARD", "GOOGLE_PAY", "APPLE_PAY"]),
+  }),
 })
 
 function normalizeStatusMessage(message?: string) {
@@ -652,6 +659,147 @@ function createGufoDeliveryOrderId() {
 
 function buildGufoDeliveryDisplayNumber() {
   return `GD-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${crypto.randomBytes(2).toString("hex").toUpperCase()}`
+}
+
+function getVivaEnvironmentConfig() {
+  const environment = String(process.env.VIVA_ENVIRONMENT || "production").trim().toLowerCase()
+  const isDemo = environment === "demo" || environment === "sandbox" || environment === "test"
+  return {
+    environment,
+    isDemo,
+    accountsBaseUrl: isDemo ? "https://demo-accounts.vivapayments.com" : "https://accounts.vivapayments.com",
+    apiBaseUrl: isDemo ? "https://demo-api.vivapayments.com" : "https://api.vivapayments.com",
+    checkoutBaseUrl: isDemo ? "https://demo.vivapayments.com" : "https://www.vivapayments.com",
+  }
+}
+
+function getRequiredVivaConfig() {
+  const clientId = String(process.env.VIVA_CLIENT_ID || "").trim()
+  const clientSecret = String(process.env.VIVA_CLIENT_SECRET || "").trim()
+  const sourceCode = String(process.env.VIVA_SOURCE_CODE || "").trim()
+  const successUrl = String(process.env.VIVA_SUCCESS_URL || "").trim()
+  const failureUrl = String(process.env.VIVA_FAILURE_URL || "").trim()
+
+  if (!clientId || !clientSecret || !sourceCode || !successUrl || !failureUrl) {
+    throw new Error("Viva nu este configurat complet. Lipsesc VIVA_CLIENT_ID, VIVA_CLIENT_SECRET, VIVA_SOURCE_CODE, VIVA_SUCCESS_URL sau VIVA_FAILURE_URL.")
+  }
+
+  return {
+    ...getVivaEnvironmentConfig(),
+    clientId,
+    clientSecret,
+    sourceCode,
+    successUrl,
+    failureUrl,
+  }
+}
+
+async function getVivaAccessToken() {
+  const config = getRequiredVivaConfig()
+  const body = new URLSearchParams({
+    grant_type: "client_credentials",
+  })
+  const response = await fetch(`${config.accountsBaseUrl}/connect/token`, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${Buffer.from(`${config.clientId}:${config.clientSecret}`).toString("base64")}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+      Accept: "application/json",
+    },
+    body: body.toString(),
+  })
+
+  const json = await response.json().catch(() => ({}))
+  if (!response.ok || !json?.access_token) {
+    throw new Error(`Viva token failed with HTTP ${response.status}.`)
+  }
+
+  return {
+    config,
+    accessToken: String(json.access_token),
+  }
+}
+
+function vivaPaymentMethodParameter(methodCode: string) {
+  const normalized = String(methodCode || "").trim().toUpperCase()
+  if (normalized === "GOOGLE_PAY") return "21"
+  if (normalized === "APPLE_PAY") return "20"
+  return ""
+}
+
+async function createVivaPaymentOrder(input: {
+  amount: number
+  customerName: string
+  customerEmail?: string | null
+  customerPhone?: string | null
+  merchantTrns: string
+  customerTrns: string
+  methodCode: string
+}) {
+  const { config, accessToken } = await getVivaAccessToken()
+  const amountInMinorUnits = Math.round(Math.max(0, input.amount) * 100)
+  const payload = {
+    amount: amountInMinorUnits,
+    customerTrns: input.customerTrns,
+    customer: {
+      email: input.customerEmail || undefined,
+      fullName: input.customerName,
+      phone: input.customerPhone || undefined,
+    },
+    merchantTrns: input.merchantTrns,
+    sourceCode: config.sourceCode,
+    paymentTimeout: 1800,
+    preauth: false,
+    allowRecurring: false,
+    isTaxFree: false,
+    maxInstallments: 1,
+    successUrl: config.successUrl,
+    failureUrl: config.failureUrl,
+  }
+
+  const response = await fetch(`${config.apiBaseUrl}/checkout/v2/orders`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(payload),
+  })
+  const json = await response.json().catch(() => ({}))
+  if (!response.ok || !json?.orderCode) {
+    throw new Error(`Viva create order failed with HTTP ${response.status}.`)
+  }
+
+  const ref = encodeURIComponent(String(json.orderCode))
+  const paymentMethod = vivaPaymentMethodParameter(input.methodCode)
+  const checkoutUrl = paymentMethod
+    ? `${config.checkoutBaseUrl}/web/checkout?ref=${ref}&paymentMethod=${encodeURIComponent(paymentMethod)}`
+    : `${config.checkoutBaseUrl}/web/checkout?ref=${ref}`
+
+  return {
+    config,
+    requestPayload: payload,
+    responsePayload: json,
+    orderCode: String(json.orderCode),
+    checkoutUrl,
+  }
+}
+
+async function retrieveVivaTransaction(transactionId: string) {
+  const { config, accessToken } = await getVivaAccessToken()
+  const response = await fetch(`${config.apiBaseUrl}/checkout/v2/transactions/${encodeURIComponent(transactionId)}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "application/json",
+    },
+  })
+  const json = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    throw new Error(`Viva retrieve transaction failed with HTTP ${response.status}.`)
+  }
+  return json
 }
 
 async function buildGufoDeliveryCheckoutImportPayload(
@@ -2132,6 +2280,254 @@ router.get("/api/v1/public/delivery/restaurants/:restaurantId/checkout-config", 
     })
   } catch (error: unknown) {
     return res.status(500).json({ ok: false, error: getErrorMessage(error, "Nu am putut incarca configurarea de checkout.") })
+  }
+})
+
+router.post("/api/v1/public/delivery/payments/viva/prepare", requireDeliveryCustomerAuth, async (req: DeliveryCustomerAuthRequest, res) => {
+  const parsed = PublicGufoDeliveryVivaPrepareSchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res.status(400).json({ ok: false, error: parsed.error.flatten() })
+  }
+
+  try {
+    const { tenantId, importPayload } = await buildGufoDeliveryCheckoutImportPayload(req, parsed.data)
+    const integration = await resolvePublicGufoDeliveryIntegration(parsed.data.restaurantId)
+    if (!integration?.locationId) {
+      return res.status(404).json({ ok: false, error: "Restaurantul Gufo Delivery nu este configurat corect." })
+    }
+
+    const customerId = String(req.deliveryCustomer?.customerId || "").trim() || null
+    const customerEmail = String(req.deliveryCustomer?.email || "").trim() || null
+    const customerPhone = parsed.data.customer.phone || String(req.deliveryCustomer?.phone || "").trim() || null
+
+    const attempt = await db.deliveryPaymentAttempt.create({
+      data: {
+        customerId,
+        tenantId,
+        locationId: integration.locationId,
+        integrationId: integration.id,
+        provider: "VIVA",
+        methodCode: parsed.data.payment.type,
+        status: "PENDING",
+        currency: "RON",
+        amount: new Prisma.Decimal(importPayload.total),
+        checkoutPayloadJson: parsed.data as unknown as Prisma.InputJsonValue,
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      },
+    })
+
+    const vivaOrder = await createVivaPaymentOrder({
+      amount: importPayload.total,
+      customerName: parsed.data.customer.name,
+      customerEmail,
+      customerPhone,
+      merchantTrns: `Gufo Delivery ${importPayload.externalOrderNumber}`,
+      customerTrns: `Comanda Gufo Delivery ${importPayload.externalOrderNumber}`,
+      methodCode: parsed.data.payment.type,
+    })
+
+    const updatedAttempt = await db.deliveryPaymentAttempt.update({
+      where: { id: attempt.id },
+      data: {
+        status: "REDIRECTED",
+        vivaOrderCode: vivaOrder.orderCode,
+        checkoutUrl: vivaOrder.checkoutUrl,
+        requestPayloadJson: vivaOrder.requestPayload as Prisma.InputJsonValue,
+        responsePayloadJson: vivaOrder.responsePayload as Prisma.InputJsonValue,
+      },
+    })
+
+    return res.status(201).json({
+      ok: true,
+      payment: {
+        attemptId: updatedAttempt.id,
+        provider: "VIVA",
+        methodCode: updatedAttempt.methodCode,
+        amount: Number(updatedAttempt.amount),
+        currency: updatedAttempt.currency,
+        status: updatedAttempt.status,
+        vivaOrderCode: updatedAttempt.vivaOrderCode,
+        checkoutUrl: updatedAttempt.checkoutUrl,
+        expiresAt: updatedAttempt.expiresAt?.toISOString() || null,
+      },
+    })
+  } catch (error: unknown) {
+    return res.status(400).json({ ok: false, error: getErrorMessage(error, "Nu am putut initializa plata Viva.") })
+  }
+})
+
+router.get("/api/v1/public/delivery/payments/attempts/:attemptId", requireDeliveryCustomerAuth, async (req: DeliveryCustomerAuthRequest, res) => {
+  try {
+    const attemptId = String(req.params.attemptId || "").trim()
+    const customerId = String(req.deliveryCustomer?.customerId || "").trim()
+    if (!attemptId || !customerId) {
+      return res.status(400).json({ ok: false, error: "Lipseste contextul platii." })
+    }
+
+    const attempt = await db.deliveryPaymentAttempt.findFirst({
+      where: {
+        id: attemptId,
+        customerId,
+      },
+    })
+
+    if (!attempt) {
+      return res.status(404).json({ ok: false, error: "Tentativa de plata nu a fost gasita." })
+    }
+
+    let order: Record<string, unknown> | null = null
+    if (attempt.externalOrderId) {
+      const externalOrder = await db.externalOrder.findUnique({
+        where: { id: attempt.externalOrderId },
+        include: {
+          location: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+            },
+          },
+          kitchenTicket: {
+            select: {
+              displayNumber: true,
+              readyAt: true,
+            },
+          },
+          statusHistory: {
+            orderBy: { createdAt: "desc" },
+            take: 10,
+          },
+        },
+      })
+
+      if (externalOrder) {
+        order = {
+          id: externalOrder.id,
+          externalOrderId: externalOrder.externalOrderId,
+          externalOrderNumber: externalOrder.externalOrderNumber || externalOrder.kitchenTicket?.displayNumber || null,
+          status: externalOrder.status,
+          publicStatus: mapPublicGufoDeliveryOrderStatus(externalOrder.status),
+          paymentLabel: externalOrder.paymentLabel || null,
+          total: Number(externalOrder.total || 0),
+          currency: externalOrder.currency,
+          placedAt: externalOrder.placedAt?.toISOString() || externalOrder.createdAt.toISOString(),
+          restaurant: externalOrder.location
+            ? {
+                id: externalOrder.location.id,
+                name: externalOrder.location.name,
+                code: externalOrder.location.code || null,
+              }
+            : null,
+          history: externalOrder.statusHistory.map((entry) => ({
+            id: entry.id,
+            status: entry.status,
+            publicStatus: mapPublicGufoDeliveryOrderStatus(entry.status),
+            source: entry.source,
+            message: entry.message || null,
+            createdAt: entry.createdAt.toISOString(),
+          })),
+        }
+      }
+    }
+
+    return res.json({
+      ok: true,
+      payment: {
+        attemptId: attempt.id,
+        provider: attempt.provider,
+        methodCode: attempt.methodCode,
+        status: attempt.status,
+        amount: Number(attempt.amount),
+        currency: attempt.currency,
+        vivaOrderCode: attempt.vivaOrderCode,
+        vivaTransactionId: attempt.vivaTransactionId,
+        checkoutUrl: attempt.checkoutUrl,
+        expiresAt: attempt.expiresAt?.toISOString() || null,
+        paidAt: attempt.paidAt?.toISOString() || null,
+        failedAt: attempt.failedAt?.toISOString() || null,
+      },
+      order,
+    })
+  } catch (error: unknown) {
+    return res.status(500).json({ ok: false, error: getErrorMessage(error, "Nu am putut incarca statusul platii.") })
+  }
+})
+
+router.post("/api/v1/public/delivery/payments/viva/webhook", async (req, res) => {
+  try {
+    const source = isRecord(req.body) ? req.body : {}
+    const orderCode = String(source.OrderCode || source.orderCode || "").trim()
+    const transactionId = String(source.TransactionId || source.transactionId || "").trim()
+    const statusId = String(source.StatusId || source.statusId || "").trim().toUpperCase()
+
+    if (!orderCode) {
+      return res.status(400).json({ ok: false, error: "OrderCode lipseste din webhook." })
+    }
+
+    const attempt = await db.deliveryPaymentAttempt.findFirst({
+      where: { vivaOrderCode: orderCode },
+    })
+
+    if (!attempt) {
+      return res.status(404).json({ ok: false, error: "Tentativa de plata Viva nu a fost gasita." })
+    }
+
+    if (attempt.externalOrderId) {
+      return res.json({ ok: true, attemptId: attempt.id, externalOrderId: attempt.externalOrderId, status: attempt.status })
+    }
+
+    if (!transactionId) {
+      await db.deliveryPaymentAttempt.update({
+        where: { id: attempt.id },
+        data: {
+          status: statusId === "X" ? "EXPIRED" : "FAILED",
+          failedAt: new Date(),
+          responsePayloadJson: req.body as Prisma.InputJsonValue,
+        },
+      })
+      return res.json({ ok: true, attemptId: attempt.id, status: statusId || "FAILED" })
+    }
+
+    const transaction = await retrieveVivaTransaction(transactionId)
+    const transactionStatusId = String(transaction?.statusId || transaction?.StatusId || statusId).trim().toUpperCase()
+    if (transactionStatusId !== "F") {
+      await db.deliveryPaymentAttempt.update({
+        where: { id: attempt.id },
+        data: {
+          status: transactionStatusId === "X" ? "EXPIRED" : "FAILED",
+          vivaTransactionId: transactionId,
+          failedAt: new Date(),
+          responsePayloadJson: transaction as Prisma.InputJsonValue,
+        },
+      })
+      return res.json({ ok: true, attemptId: attempt.id, status: transactionStatusId })
+    }
+
+    const checkoutPayloadParsed = PublicGufoDeliveryCheckoutSchema.safeParse(attempt.checkoutPayloadJson)
+    if (!checkoutPayloadParsed.success) {
+      throw new Error("Payloadul platii nu mai poate fi reconstruit pentru ERP.")
+    }
+
+    const { tenantId, importPayload } = await buildGufoDeliveryCheckoutImportPayload(req, checkoutPayloadParsed.data)
+    const externalOrder = await importMarketplaceOrderForTenant(tenantId, importPayload)
+    if (!externalOrder?.id) {
+      throw new Error("Nu am putut crea comanda ERP dupa confirmarea platii Viva.")
+    }
+
+    await db.deliveryPaymentAttempt.update({
+      where: { id: attempt.id },
+      data: {
+        status: "PAID",
+        vivaTransactionId: transactionId,
+        externalOrderId: externalOrder.id,
+        paidAt: new Date(),
+        responsePayloadJson: transaction as Prisma.InputJsonValue,
+      },
+    })
+
+    return res.json({ ok: true, attemptId: attempt.id, externalOrderId: externalOrder.id, status: "PAID" })
+  } catch (error: unknown) {
+    return res.status(500).json({ ok: false, error: getErrorMessage(error, "Webhook-ul Viva a esuat.") })
   }
 })
 

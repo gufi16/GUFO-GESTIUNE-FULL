@@ -114,6 +114,14 @@ enum DeliveryCustomerAuthProvider {
   FACEBOOK
 }
 
+enum DeliveryPaymentAttemptStatus {
+  PENDING
+  REDIRECTED
+  PAID
+  FAILED
+  EXPIRED
+}
+
 enum InventoryStatus {
   DRAFT
   FINALIZED
@@ -592,6 +600,38 @@ model DeliveryCustomerAddress {
 
   @@index([customerId])
   @@index([customerId, isDefault])
+}
+
+model DeliveryPaymentAttempt {
+  id                  String                       @id @default(cuid())
+  customerId          String?
+  tenantId            String
+  locationId          String
+  integrationId       String
+  provider            String
+  methodCode          String
+  status              DeliveryPaymentAttemptStatus @default(PENDING)
+  vivaOrderCode       String?                      @unique
+  vivaTransactionId   String?
+  externalOrderId     String?
+  currency            CurrencyCode                 @default(RON)
+  amount              Decimal                      @default(0) @db.Decimal(12, 2)
+  checkoutUrl         String?
+  requestPayloadJson  Json?
+  responsePayloadJson Json?
+  checkoutPayloadJson Json
+  expiresAt           DateTime?
+  paidAt              DateTime?
+  failedAt            DateTime?
+  createdAt           DateTime                     @default(now())
+  updatedAt           DateTime                     @updatedAt
+
+  @@index([customerId])
+  @@index([tenantId])
+  @@index([locationId])
+  @@index([integrationId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model UserCompanyAccess {

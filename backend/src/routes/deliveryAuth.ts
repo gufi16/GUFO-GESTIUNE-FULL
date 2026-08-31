@@ -11,7 +11,7 @@ const authRateLimitBuckets = new Map<string, { count: number; resetAt: number }>
 const AUTH_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000
 const AUTH_RATE_LIMIT_LIMIT = 12
 
-type DeliveryCustomerAuthRequest = Request & {
+export type DeliveryCustomerAuthRequest = Request & {
   deliveryCustomer?: {
     customerId: string
     sessionId: string
@@ -166,7 +166,7 @@ function mapDeliveryCustomerResponse(customer: {
   }
 }
 
-async function requireDeliveryCustomerAuth(
+export async function requireDeliveryCustomerAuth(
   req: DeliveryCustomerAuthRequest,
   res: Response,
   next: NextFunction
