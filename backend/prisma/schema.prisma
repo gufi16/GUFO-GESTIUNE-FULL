@@ -606,6 +606,7 @@ model DeliveryCustomerAddress {
 model DeliveryCustomerPaymentMethod {
   id                  String   @id @default(cuid())
   customerId          String
+  integrationId       String
   provider            String
   token               String
   cardUniqueReference String
@@ -619,13 +620,15 @@ model DeliveryCustomerPaymentMethod {
 
   customer DeliveryCustomerAccount @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
-  @@unique([customerId, provider, cardUniqueReference])
+  @@unique([customerId, provider, integrationId, cardUniqueReference])
   @@index([customerId, isDefault])
+  @@index([customerId, integrationId, isActive])
 }
 
 model DeliveryCardVerificationAttempt {
   id                String                       @id @default(cuid())
   customerId        String
+  integrationId     String
   status            DeliveryPaymentAttemptStatus @default(PENDING)
   vivaOrderCode     String?                      @unique
   vivaTransactionId String?
@@ -637,6 +640,7 @@ model DeliveryCardVerificationAttempt {
   updatedAt         DateTime                     @updatedAt
 
   @@index([customerId])
+  @@index([customerId, integrationId])
   @@index([status])
 }
 

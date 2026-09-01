@@ -283,6 +283,11 @@ type IntegrationForm = {
   deliveryShowCategories: boolean
   deliveryPaymentMethods: DeliveryPaymentMethodCode[]
   deliveryOnlineProvider: string
+  deliveryVivaEnvironment: "demo" | "production"
+  deliveryVivaClientId: string
+  deliveryVivaClientSecret: string
+  deliveryVivaSourceCode: string
+  deliveryVivaConfigured: boolean
   includedCategoryIds: string[]
   includedProductIds: string[]
   authType: "PARTNER" | "OAUTH" | "API_KEY"
@@ -347,6 +352,11 @@ function emptyForm(): IntegrationForm {
     deliveryShowCategories: true,
     deliveryPaymentMethods: ["CASH", "CARD", "GOOGLE_PAY"],
     deliveryOnlineProvider: "VIVA",
+    deliveryVivaEnvironment: "demo",
+    deliveryVivaClientId: "",
+    deliveryVivaClientSecret: "",
+    deliveryVivaSourceCode: "",
+    deliveryVivaConfigured: false,
     includedCategoryIds: [],
     includedProductIds: [],
     authType: "PARTNER",
@@ -624,6 +634,18 @@ export default function MarketplacePage() {
                 typeof integration.settingsJson?.deliveryOnlineProvider === "string" && integration.settingsJson.deliveryOnlineProvider.trim()
                   ? integration.settingsJson.deliveryOnlineProvider.trim().toUpperCase()
                   : "VIVA",
+              deliveryVivaEnvironment:
+                integration.settingsJson?.deliveryVivaEnvironment === "production" ? "production" : "demo",
+              deliveryVivaClientId:
+                typeof integration.settingsJson?.deliveryVivaClientId === "string"
+                  ? integration.settingsJson.deliveryVivaClientId
+                  : "",
+              deliveryVivaClientSecret: "",
+              deliveryVivaSourceCode:
+                typeof integration.settingsJson?.deliveryVivaSourceCode === "string"
+                  ? integration.settingsJson.deliveryVivaSourceCode
+                  : "",
+              deliveryVivaConfigured: Boolean(integration.settingsJson?.deliveryVivaConfigured),
               includedCategoryIds: Array.isArray(integration.settingsJson?.includedCategoryIds)
                 ? integration.settingsJson.includedCategoryIds.filter((item: unknown): item is string => typeof item === "string")
                 : [],
@@ -863,6 +885,10 @@ export default function MarketplacePage() {
             deliveryShowCategories: form.deliveryShowCategories,
             deliveryPaymentMethods: form.deliveryPaymentMethods,
             deliveryOnlineProvider: form.deliveryOnlineProvider || "VIVA",
+            deliveryVivaEnvironment: form.deliveryVivaEnvironment,
+            deliveryVivaClientId: form.deliveryVivaClientId.trim() || undefined,
+            deliveryVivaClientSecret: form.deliveryVivaClientSecret.trim() || undefined,
+            deliveryVivaSourceCode: form.deliveryVivaSourceCode.trim() || undefined,
             includedCategoryIds: form.includedCategoryIds,
             includedProductIds: form.includedProductIds,
           },
@@ -1370,6 +1396,34 @@ export default function MarketplacePage() {
                         </DocumentField>
                         <div className="rounded-[14px] border border-[#BFDBFE] bg-[#F8FBFF] px-3 py-3 text-sm text-[#17324D]">
                           Toate platile online din Gufo Delivery vor merge prin Viva. Cash ramane disponibil separat, iar Apple Pay apare pentru device-uri compatibile.
+                        </div>
+                      </div>
+                      <div className="mt-3 rounded-[16px] border border-slate-200 bg-white p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <div className="text-sm font-semibold text-slate-900">Cont plata online al locatiei</div>
+                            <div className="mt-1 text-xs text-slate-500">Datele sunt folosite numai de server pentru aceasta locatie. Secretul nu este afisat dupa salvare.</div>
+                          </div>
+                          <span className={currentForm.deliveryVivaConfigured ? "rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700" : "rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800"}>
+                            {currentForm.deliveryVivaConfigured ? "Configurat" : "Neconfigurat"}
+                          </span>
+                        </div>
+                        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                          <DocumentField label="Mediu">
+                            <select value={currentForm.deliveryVivaEnvironment} onChange={(e) => setForms((prev) => ({ ...prev, [selectedPlatform]: { ...prev[selectedPlatform], deliveryVivaEnvironment: e.target.value === "production" ? "production" : "demo" } }))} className={documentInputClass}>
+                              <option value="demo">Test / demo</option>
+                              <option value="production">Productie</option>
+                            </select>
+                          </DocumentField>
+                          <DocumentField label="Client ID">
+                            <input value={currentForm.deliveryVivaClientId} onChange={(e) => setForms((prev) => ({ ...prev, [selectedPlatform]: { ...prev[selectedPlatform], deliveryVivaClientId: e.target.value } }))} className={documentInputClass} autoComplete="off" />
+                          </DocumentField>
+                          <DocumentField label="Client Secret">
+                            <input type="password" value={currentForm.deliveryVivaClientSecret} onChange={(e) => setForms((prev) => ({ ...prev, [selectedPlatform]: { ...prev[selectedPlatform], deliveryVivaClientSecret: e.target.value } }))} placeholder={currentForm.deliveryVivaConfigured ? "Lasă gol pentru a păstra secretul salvat" : "Introdu Client Secret"} className={documentInputClass} autoComplete="new-password" />
+                          </DocumentField>
+                          <DocumentField label="Source Code">
+                            <input value={currentForm.deliveryVivaSourceCode} onChange={(e) => setForms((prev) => ({ ...prev, [selectedPlatform]: { ...prev[selectedPlatform], deliveryVivaSourceCode: e.target.value } }))} className={documentInputClass} autoComplete="off" />
+                          </DocumentField>
                         </div>
                       </div>
                     </div>
