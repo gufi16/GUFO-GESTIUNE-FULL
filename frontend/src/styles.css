@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Google Places renders its suggestion menu outside the app root. Keep it above maps and dialogs. */
+.pac-container {
+  z-index: 2147483647 !important;
+}
+
 :root {
   color-scheme: light;
   font-size: 14px;
