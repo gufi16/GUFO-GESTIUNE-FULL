@@ -722,6 +722,7 @@ async function getVivaAccessToken() {
 
 function vivaPaymentMethodParameter(methodCode: string) {
   const normalized = String(methodCode || "").trim().toUpperCase()
+  if (normalized === "CARD") return "0"
   if (normalized === "GOOGLE_PAY") return "21"
   if (normalized === "APPLE_PAY") return "20"
   return ""
@@ -736,11 +737,12 @@ async function createVivaPaymentOrder(input: {
   customerTrns: string
   methodCode: string
   cardTokens?: string[]
+  isCardVerification?: boolean
 }) {
   const { config, accessToken } = await getVivaAccessToken()
   const amountInMinorUnits = Math.round(Math.max(0, input.amount) * 100)
   const payload = {
-    amount: amountInMinorUnits,
+    amount: input.isCardVerification ? 0 : amountInMinorUnits,
     customerTrns: input.customerTrns,
     customer: {
       email: input.customerEmail || undefined,
@@ -752,11 +754,13 @@ async function createVivaPaymentOrder(input: {
     paymentTimeout: 1800,
     preauth: false,
     allowRecurring: true,
+    isCardVerification: input.isCardVerification === true,
     isTaxFree: false,
     maxInstallments: 1,
     successUrl: config.successUrl,
     failureUrl: config.failureUrl,
-    cardTokens: input.cardTokens?.filter(Boolean).slice(0, 10),
+    // Card verification only accepts a new card; saved-card tokens are for a payment order.
+    ...(input.isCardVerification ? {} : { cardTokens: input.cardTokens?.filter(Boolean).slice(0, 10) }),
   }
 
   const response = await fetch(`${config.apiBaseUrl}/checkout/v2/orders`, {
@@ -2327,6 +2331,50 @@ router.get("/api/v1/public/delivery/restaurants/:restaurantId/checkout-config", 
   }
 })
 
+router.post("/api/v1/public/delivery/account/payment-methods/card/setup", requireDeliveryCustomerAuth, async (req: DeliveryCustomerAuthRequest, res) => {
+  try {
+    const customerId = String(req.deliveryCustomer?.customerId || "").trim()
+    if (!customerId) return res.status(401).json({ ok: false, error: "Sesiunea clientului lipseste." })
+    const customer = await db.deliveryCustomerAccount.findUnique({ where: { id: customerId } })
+    if (!customer) return res.status(404).json({ ok: false, error: "Contul clientului nu a fost gasit." })
+
+    const attempt = await db.deliveryCardVerificationAttempt.create({
+      data: { customerId, expiresAt: new Date(Date.now() + 30 * 60 * 1000) },
+    })
+    const verification = await createVivaPaymentOrder({
+      amount: 0,
+      customerName: customer.fullName,
+      customerEmail: customer.email,
+      customerPhone: customer.phone,
+      merchantTrns: "Gufo Delivery - verificare card",
+      customerTrns: "Verificare card pentru plati viitoare",
+      methodCode: "CARD",
+      isCardVerification: true,
+    })
+    const saved = await db.deliveryCardVerificationAttempt.update({
+      where: { id: attempt.id },
+      data: { status: "REDIRECTED", vivaOrderCode: verification.orderCode, checkoutUrl: verification.checkoutUrl },
+    })
+    return res.status(201).json({
+      ok: true,
+      verification: {
+        attemptId: saved.id,
+        checkoutUrl: saved.checkoutUrl,
+        expiresAt: saved.expiresAt?.toISOString() || null,
+      },
+    })
+  } catch (error: unknown) {
+    return res.status(400).json({ ok: false, error: getErrorMessage(error, "Nu am putut deschide verificarea cardului.") })
+  }
+})
+
+router.get("/api/v1/public/delivery/account/payment-methods/card/setup/:attemptId", requireDeliveryCustomerAuth, async (req: DeliveryCustomerAuthRequest, res) => {
+  const customerId = String(req.deliveryCustomer?.customerId || "").trim()
+  const attempt = await db.deliveryCardVerificationAttempt.findFirst({ where: { id: String(req.params.attemptId || ""), customerId } })
+  if (!attempt) return res.status(404).json({ ok: false, error: "Verificarea cardului nu a fost gasita." })
+  return res.json({ ok: true, verification: { attemptId: attempt.id, status: attempt.status, checkoutUrl: attempt.checkoutUrl, expiresAt: attempt.expiresAt?.toISOString() || null } })
+})
+
 router.post("/api/v1/public/delivery/payments/viva/prepare", requireDeliveryCustomerAuth, async (req: DeliveryCustomerAuthRequest, res) => {
   const parsed = PublicGufoDeliveryVivaPrepareSchema.safeParse(req.body)
   if (!parsed.success) {
@@ -2514,6 +2562,41 @@ router.post("/api/v1/public/delivery/payments/viva/webhook", async (req, res) =>
 
     if (!orderCode) {
       return res.status(400).json({ ok: false, error: "OrderCode lipseste din webhook." })
+    }
+
+    const verificationAttempt = await db.deliveryCardVerificationAttempt.findFirst({
+      where: { vivaOrderCode: orderCode },
+    })
+
+    if (verificationAttempt) {
+      if (!transactionId) {
+        await db.deliveryCardVerificationAttempt.update({
+          where: { id: verificationAttempt.id },
+          data: { status: statusId === "X" ? "EXPIRED" : "FAILED", failedAt: new Date() },
+        })
+        return res.json({ ok: true, attemptId: verificationAttempt.id, status: statusId || "FAILED" })
+      }
+
+      const transaction = await retrieveVivaTransaction(transactionId)
+      const transactionStatusId = String(transaction?.statusId || transaction?.StatusId || statusId).trim().toUpperCase()
+      if (transactionStatusId !== "F") {
+        await db.deliveryCardVerificationAttempt.update({
+          where: { id: verificationAttempt.id },
+          data: {
+            status: transactionStatusId === "X" ? "EXPIRED" : "FAILED",
+            vivaTransactionId: transactionId,
+            failedAt: new Date(),
+          },
+        })
+        return res.json({ ok: true, attemptId: verificationAttempt.id, status: transactionStatusId || "FAILED" })
+      }
+
+      await saveDeliveryCustomerCardFromTransaction(verificationAttempt.customerId, transactionId, transaction)
+      await db.deliveryCardVerificationAttempt.update({
+        where: { id: verificationAttempt.id },
+        data: { status: "PAID", vivaTransactionId: transactionId, verifiedAt: new Date() },
+      })
+      return res.json({ ok: true, attemptId: verificationAttempt.id, status: "PAID" })
     }
 
     const attempt = await db.deliveryPaymentAttempt.findFirst({

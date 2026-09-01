@@ -623,6 +623,23 @@ model DeliveryCustomerPaymentMethod {
   @@index([customerId, isDefault])
 }
 
+model DeliveryCardVerificationAttempt {
+  id                String                       @id @default(cuid())
+  customerId        String
+  status            DeliveryPaymentAttemptStatus @default(PENDING)
+  vivaOrderCode     String?                      @unique
+  vivaTransactionId String?
+  checkoutUrl       String?
+  expiresAt         DateTime?
+  verifiedAt        DateTime?
+  failedAt          DateTime?
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
+
+  @@index([customerId])
+  @@index([status])
+}
+
 model DeliveryPaymentAttempt {
   id                  String                       @id @default(cuid())
   customerId          String?
