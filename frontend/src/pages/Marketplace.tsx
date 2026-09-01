@@ -437,7 +437,7 @@ function loadGoogleMapsScript() {
 
   googleMapsScriptPromise = new Promise((resolve, reject) => {
     const script = document.createElement("script")
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&v=weekly`
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=places&v=weekly`
     script.async = true
     script.onload = () => resolve()
     script.onerror = () => reject(new Error("Google Maps nu a putut fi incarcat."))
@@ -448,10 +448,18 @@ function loadGoogleMapsScript() {
 
 function DeliveryServiceAreaEditor({ value, onChange }: { value: DeliveryServiceAreaForm; onChange: (next: DeliveryServiceAreaForm) => void }) {
   const mapElement = useRef<HTMLDivElement | null>(null)
+  const searchInput = useRef<HTMLInputElement | null>(null)
   const mapInstance = useRef<any>(null)
   const circleInstance = useRef<any>(null)
   const polygonInstance = useRef<any>(null)
+  const latestValue = useRef(value)
+  const latestOnChange = useRef(onChange)
   const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "error">("loading")
+
+  useEffect(() => {
+    latestValue.current = value
+    latestOnChange.current = onChange
+  }, [onChange, value])
 
   useEffect(() => {
     let disposed = false
@@ -482,12 +490,31 @@ function DeliveryServiceAreaEditor({ value, onChange }: { value: DeliveryService
     mapInstance.current = map
     map.addListener("click", (event: any) => {
       const point = { lat: event.latLng.lat(), lng: event.latLng.lng() }
-      if (value.mode === "POLYGON") {
-        onChange({ ...value, polygon: [...value.polygon, point] })
+      const currentValue = latestValue.current
+      if (currentValue.mode === "POLYGON") {
+        latestOnChange.current({ ...currentValue, polygon: [...currentValue.polygon, point] })
       } else {
-        onChange({ ...value, centerLat: point.lat.toFixed(6), centerLng: point.lng.toFixed(6) })
+        latestOnChange.current({ ...currentValue, centerLat: point.lat.toFixed(6), centerLng: point.lng.toFixed(6) })
       }
     })
+    if (searchInput.current && maps.places?.Autocomplete) {
+      const autocomplete = new maps.places.Autocomplete(searchInput.current, {
+        componentRestrictions: { country: "ro" },
+        fields: ["geometry", "formatted_address", "name"],
+        types: ["geocode"],
+      })
+      autocomplete.bindTo("bounds", map)
+      autocomplete.addListener("place_changed", () => {
+        const place = autocomplete.getPlace()
+        const location = place.geometry?.location
+        if (!location) return
+        const point = { lat: location.lat(), lng: location.lng() }
+        const currentValue = latestValue.current
+        map.panTo(point)
+        map.setZoom(14)
+        latestOnChange.current({ ...currentValue, centerLat: point.lat.toFixed(6), centerLng: point.lng.toFixed(6) })
+      })
+    }
   }, [mapStatus, onChange, value])
 
   useEffect(() => {
@@ -578,6 +605,10 @@ function DeliveryServiceAreaEditor({ value, onChange }: { value: DeliveryService
           <div className="rounded-[14px] border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">Puncte salvate: <span className="font-semibold text-slate-900">{value.polygon.length}</span></div>
         )}
       </div>
+
+      <DocumentField label="Cauta strada si numarul">
+        <input ref={searchInput} className={documentInputClass} placeholder="Ex.: Strada Memorandumului 21, Cluj-Napoca" autoComplete="off" />
+      </DocumentField>
 
       {value.mode === "RADIUS" ? (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
