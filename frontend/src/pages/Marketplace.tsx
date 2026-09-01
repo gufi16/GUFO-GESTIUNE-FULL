@@ -14,7 +14,7 @@ import {
 } from "../components/DocumentUi"
 import { API_BASE, api, authHeaders, getToken } from "../lib/api"
 
-type TabId = "integrari" | "mapari" | "comenzi"
+type TabId = "integrari" | "acoperire" | "mapari" | "comenzi"
 type PlatformCode = "GLOVO" | "WOLT" | "BOLT_FOOD" | "GUFO_DELIVERY"
 
 type PlatformItem = {
@@ -325,6 +325,7 @@ const tabs = [
 
 const gufoDeliveryTabs = [
   { id: "integrari", title: "Configurare" },
+  { id: "acoperire", title: "Zona de livrare" },
   { id: "mapari", title: "Catalog" },
 ] as Array<{ id: TabId; title: string }>
 
@@ -1463,7 +1464,7 @@ export default function MarketplacePage() {
 
           <DocumentTabs items={currentTabs} activeId={activeTab} onChange={setActiveTab} />
 
-          {activeTab === "integrari" ? (
+      {activeTab === "integrari" ? (
             <div className="space-y-3">
               <DocumentSection
                 title={
@@ -1629,12 +1630,6 @@ export default function MarketplacePage() {
                         </div>
                       </div>
                     </div>
-                    <DeliveryServiceAreaEditor
-                      value={currentForm.deliveryServiceArea}
-                      onChange={(deliveryServiceArea) =>
-                        setForms((prev) => ({ ...prev, [selectedPlatform]: { ...prev[selectedPlatform], deliveryServiceArea } }))
-                      }
-                    />
                   </div>
                 ) : null}
 
@@ -2262,6 +2257,28 @@ export default function MarketplacePage() {
                   </div>
                 ) : null}
               </div>
+            </div>
+          </DocumentSection>
+        </div>
+      ) : null}
+
+      {activeTab === "acoperire" && selectedPlatform === "GUFO_DELIVERY" ? (
+        <div className="space-y-3">
+          <DocumentSection
+            title="Zona de livrare"
+            description="Deseneaza aria in care acest restaurant accepta comenzi. Filtrarea este aplicata dupa adresa clientului si este verificata din nou la checkout."
+          >
+            <DeliveryServiceAreaEditor
+              value={currentForm.deliveryServiceArea}
+              onChange={(deliveryServiceArea) =>
+                setForms((prev) => ({ ...prev, [selectedPlatform]: { ...prev[selectedPlatform], deliveryServiceArea } }))
+              }
+            />
+            <div className="mt-4 flex justify-end">
+              <button type="button" className={documentButtonPrimaryClass} onClick={() => void saveIntegration("GUFO_DELIVERY")} disabled={saving}>
+                <Save size={15} className="mr-1.5" />
+                {saving ? "Se salveaza..." : "Salveaza zona"}
+              </button>
             </div>
           </DocumentSection>
         </div>
