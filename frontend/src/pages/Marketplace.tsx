@@ -551,7 +551,7 @@ export default function MarketplacePage() {
     void loadGufoDeliveryPreview(integration.id)
   }, [integrations, selectedPlatform])
 
-  async function initialLoad() {
+  async function initialLoad(preferredPlatform?: PlatformCode) {
     if (!token) {
       setError("Nu exista token de autentificare. Fa login din nou.")
       return
@@ -576,9 +576,10 @@ export default function MarketplacePage() {
       const nextIntegrations = Array.isArray(integrationsData?.items) ? integrationsData.items : []
       setIntegrations(nextIntegrations)
 
-      const firstIntegration = nextIntegrations[0]
-      if (firstIntegration?.platform) setSelectedPlatform(firstIntegration.platform)
-      if (firstIntegration?.id) setMappingIntegrationId(firstIntegration.id)
+      const activeIntegration =
+        nextIntegrations.find((item) => item.platform === (preferredPlatform ?? selectedPlatform)) ?? nextIntegrations[0]
+      if (activeIntegration?.platform) setSelectedPlatform(activeIntegration.platform)
+      if (activeIntegration?.id) setMappingIntegrationId(activeIntegration.id)
     } catch (e: any) {
       setError(e?.message || "Nu am putut incarca modulul Marketplace.")
     } finally {
@@ -896,7 +897,7 @@ export default function MarketplacePage() {
       })
 
       setMessage(platformSuccessMessage(platform))
-      await initialLoad()
+      await initialLoad(platform)
     } catch (e: any) {
       setError(e?.message || "Nu am putut salva integrarea.")
     } finally {
