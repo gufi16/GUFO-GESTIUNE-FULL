@@ -390,6 +390,29 @@ function buildDeliveryServiceArea(value: DeliveryServiceAreaForm) {
   return { mode: "POLYGON", polygon: value.polygon }
 }
 
+function getDeliveryAreaMapCenter(value: DeliveryServiceAreaForm): DeliveryGeoPoint {
+  const centerLat = Number(value.centerLat)
+  const centerLng = Number(value.centerLng)
+  if (Number.isFinite(centerLat) && Number.isFinite(centerLng)) return { lat: centerLat, lng: centerLng }
+  if (value.polygon.length) {
+    const total = value.polygon.reduce((accumulator, point) => ({ lat: accumulator.lat + point.lat, lng: accumulator.lng + point.lng }), { lat: 0, lng: 0 })
+    return { lat: total.lat / value.polygon.length, lng: total.lng / value.polygon.length }
+  }
+  return { lat: 45.9432, lng: 24.9668 }
+}
+
+function buildPolygonFromCircle(center: DeliveryGeoPoint, radiusKm: number, points = 10): DeliveryGeoPoint[] {
+  const latitudeOffset = radiusKm / 111.32
+  const longitudeOffset = radiusKm / Math.max(111.32 * Math.cos(center.lat * Math.PI / 180), 0.01)
+  return Array.from({ length: points }, (_, index) => {
+    const angle = (Math.PI * 2 * index) / points
+    return {
+      lat: Number((center.lat + latitudeOffset * Math.cos(angle)).toFixed(6)),
+      lng: Number((center.lng + longitudeOffset * Math.sin(angle)).toFixed(6)),
+    }
+  })
+}
+
 function emptyForm(): IntegrationForm {
   return {
     locationId: "",
@@ -454,12 +477,19 @@ function DeliveryServiceAreaEditor({ value, onChange }: { value: DeliveryService
   const polygonInstance = useRef<any>(null)
   const latestValue = useRef(value)
   const latestOnChange = useRef(onChange)
+  const hasFittedSavedArea = useRef(false)
+  const isPolygonDrawingRef = useRef(false)
   const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "error">("loading")
+  const [isPolygonDrawing, setIsPolygonDrawing] = useState(false)
 
   useEffect(() => {
     latestValue.current = value
     latestOnChange.current = onChange
   }, [onChange, value])
+
+  useEffect(() => {
+    isPolygonDrawingRef.current = isPolygonDrawing
+  }, [isPolygonDrawing])
 
   useEffect(() => {
     let disposed = false
@@ -476,13 +506,10 @@ function DeliveryServiceAreaEditor({ value, onChange }: { value: DeliveryService
   useEffect(() => {
     if (mapStatus !== "ready" || !mapElement.current || mapInstance.current) return
     const maps = (window as any).google.maps
-    const initialCenter = {
-      lat: Number(value.centerLat) || 45.9432,
-      lng: Number(value.centerLng) || 24.9668,
-    }
+    const initialCenter = getDeliveryAreaMapCenter(value)
     const map = new maps.Map(mapElement.current, {
       center: initialCenter,
-      zoom: Number(value.centerLat) && Number(value.centerLng) ? 12 : 6,
+      zoom: value.centerLat || value.centerLng || value.polygon.length ? 12 : 6,
       streetViewControl: false,
       mapTypeControl: false,
       fullscreenControl: false,
@@ -491,9 +518,9 @@ function DeliveryServiceAreaEditor({ value, onChange }: { value: DeliveryService
     map.addListener("click", (event: any) => {
       const point = { lat: event.latLng.lat(), lng: event.latLng.lng() }
       const currentValue = latestValue.current
-      if (currentValue.mode === "POLYGON") {
+      if (currentValue.mode === "POLYGON" && isPolygonDrawingRef.current) {
         latestOnChange.current({ ...currentValue, polygon: [...currentValue.polygon, point] })
-      } else {
+      } else if (currentValue.mode === "RADIUS") {
         latestOnChange.current({ ...currentValue, centerLat: point.lat.toFixed(6), centerLng: point.lng.toFixed(6) })
       }
     })
@@ -553,7 +580,11 @@ function DeliveryServiceAreaEditor({ value, onChange }: { value: DeliveryService
           if (latestValue.current.radiusKm !== nextRadius) latestOnChange.current({ ...latestValue.current, radiusKm: nextRadius })
         })
         circleInstance.current = circle
-        mapInstance.current.panTo({ lat, lng })
+        if (!hasFittedSavedArea.current) {
+          const bounds = circle.getBounds()
+          if (bounds) mapInstance.current.fitBounds(bounds, 48)
+          hasFittedSavedArea.current = true
+        }
         return
       }
 
@@ -562,6 +593,11 @@ function DeliveryServiceAreaEditor({ value, onChange }: { value: DeliveryService
       if (!center || Math.abs(center.lat() - lat) > 0.000001 || Math.abs(center.lng() - lng) > 0.000001) circle.setCenter({ lat, lng })
       const nextRadiusMeters = (Number.isFinite(radiusKm) && radiusKm > 0 ? radiusKm : 5) * 1000
       if (Math.abs(circle.getRadius() - nextRadiusMeters) > 1) circle.setRadius(nextRadiusMeters)
+      if (!hasFittedSavedArea.current) {
+        const bounds = circle.getBounds()
+        if (bounds) mapInstance.current.fitBounds(bounds, 48)
+        hasFittedSavedArea.current = true
+      }
       return
     }
 
@@ -590,6 +626,14 @@ function DeliveryServiceAreaEditor({ value, onChange }: { value: DeliveryService
       polygon.getPath().addListener("insert_at", syncPolygon)
       polygon.getPath().addListener("remove_at", syncPolygon)
       polygonInstance.current = polygon
+      if (!hasFittedSavedArea.current) {
+        const bounds = new maps.LatLngBounds()
+        value.polygon.forEach((point) => bounds.extend(point))
+        mapInstance.current.fitBounds(bounds, 48)
+        hasFittedSavedArea.current = true
+      }
+    } else if (value.polygon.length >= 2 && polygonInstance.current) {
+      polygonInstance.current.setPaths(value.polygon)
     }
   }, [mapStatus, value])
 
@@ -600,7 +644,7 @@ function DeliveryServiceAreaEditor({ value, onChange }: { value: DeliveryService
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 text-sm font-semibold text-[#17324D]"><MapPin size={16} /> Zona de livrare</div>
-          <p className="mt-1 text-xs leading-5 text-slate-600">Clientii vad restaurantul numai cand adresa lor este in aceasta zona. Click pe harta seteaza centrul cercului sau adauga puncte in poligon.</p>
+          <p className="mt-1 text-xs leading-5 text-slate-600">Clientii vad restaurantul numai cand adresa lor este in aceasta zona. Zona salvata se redeschide automat pe harta si este verificata din nou la checkout.</p>
         </div>
         <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#17324D] shadow-sm">Verificata si la checkout</span>
       </div>
@@ -637,8 +681,26 @@ function DeliveryServiceAreaEditor({ value, onChange }: { value: DeliveryService
       {mapStatus === "error" ? <div className="text-xs text-rose-700">Harta nu s-a incarcat. Verifica cheia Google Maps si domeniul autorizat.</div> : null}
       {value.mode === "POLYGON" ? (
         <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              const center = getDeliveryAreaMapCenter(value)
+              const radiusKm = Number(value.radiusKm)
+              if (!Number.isFinite(Number(value.centerLat)) || !Number.isFinite(Number(value.centerLng)) || !Number.isFinite(radiusKm) || radiusKm <= 0) return
+              setIsPolygonDrawing(false)
+              onChange({ ...value, polygon: buildPolygonFromCircle(center, radiusKm) })
+            }}
+            disabled={!Number.isFinite(Number(value.centerLat)) || !Number.isFinite(Number(value.centerLng)) || !Number.isFinite(Number(value.radiusKm)) || Number(value.radiusKm) <= 0}
+            className={documentButtonSecondaryClass}
+          >
+            Porneste poligon din cerc
+          </button>
+          <button type="button" onClick={() => setIsPolygonDrawing((current) => !current)} className={isPolygonDrawing ? documentButtonPrimaryClass : documentButtonSecondaryClass}>
+            {isPolygonDrawing ? "Opreste adaugarea punctelor" : "Adauga puncte pe harta"}
+          </button>
           <button type="button" onClick={() => onChange({ ...value, polygon: value.polygon.slice(0, -1) })} disabled={!value.polygon.length} className={documentButtonSecondaryClass}>Sterge ultimul punct</button>
-          <button type="button" onClick={() => onChange({ ...value, polygon: [] })} disabled={!value.polygon.length} className={documentButtonSecondaryClass}>Sterge poligonul</button>
+          <button type="button" onClick={() => { setIsPolygonDrawing(false); onChange({ ...value, polygon: [] }) }} disabled={!value.polygon.length} className={documentButtonSecondaryClass}>Sterge poligonul</button>
+          <span className="self-center text-xs text-slate-600">Porneste din cerc, apoi trage de varfuri. Activeaza adaugarea de puncte numai cand vrei sa extinzi zona.</span>
         </div>
       ) : (
         <div className="flex items-center gap-2 text-xs text-slate-600"><Crosshair size={14} /> Poti trage cercul sau marginea lui pentru a regla acoperirea.</div>
