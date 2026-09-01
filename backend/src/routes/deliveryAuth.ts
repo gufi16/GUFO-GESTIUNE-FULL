@@ -43,6 +43,8 @@ const AddressSchema = z.object({
   county: z.string().trim().optional(),
   country: z.string().trim().optional(),
   postalCode: z.string().trim().optional(),
+  latitude: z.coerce.number().min(-90).max(90).optional(),
+  longitude: z.coerce.number().min(-180).max(180).optional(),
 })
 
 function normalizeEmail(value: unknown) {
@@ -143,6 +145,8 @@ function mapDeliveryCustomerResponse(customer: {
     county: string | null
     country: string | null
     postalCode: string | null
+    latitude: unknown
+    longitude: unknown
     isDefault: boolean
   }>
 }) {
@@ -161,6 +165,8 @@ function mapDeliveryCustomerResponse(customer: {
       county: address.county,
       country: address.country,
       postalCode: address.postalCode,
+      latitude: address.latitude == null ? null : Number(address.latitude),
+      longitude: address.longitude == null ? null : Number(address.longitude),
       isDefault: address.isDefault,
     })),
   }
@@ -395,6 +401,8 @@ router.post("/api/v1/public/delivery/account/addresses", requireDeliveryCustomer
         county: parsed.data.county || null,
         country: parsed.data.country || "Romania",
         postalCode: parsed.data.postalCode || null,
+        latitude: parsed.data.latitude ?? null,
+        longitude: parsed.data.longitude ?? null,
         isDefault: existingCount === 0,
       },
     })
