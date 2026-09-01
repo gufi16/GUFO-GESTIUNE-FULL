@@ -415,6 +415,41 @@ router.post("/api/v1/public/delivery/account/addresses", requireDeliveryCustomer
   })
 })
 
+router.put("/api/v1/public/delivery/account/addresses/:addressId/default", requireDeliveryCustomerAuth, async (req: DeliveryCustomerAuthRequest, res) => {
+  const customerId = String(req.deliveryCustomer?.customerId || "").trim()
+  const addressId = String(req.params.addressId || "").trim()
+  const address = await prisma.deliveryCustomerAddress.findFirst({ where: { id: addressId, customerId } })
+  if (!address) return res.status(404).json({ ok: false, error: "Adresa nu a fost gasita." })
+
+  await prisma.$transaction([
+    prisma.deliveryCustomerAddress.updateMany({ where: { customerId }, data: { isDefault: false } }),
+    prisma.deliveryCustomerAddress.update({ where: { id: addressId }, data: { isDefault: true } }),
+  ])
+  const customer = await prisma.deliveryCustomerAccount.findUnique({
+    where: { id: customerId },
+    include: { addresses: { orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }] } },
+  })
+  return res.json({ ok: true, customer: customer ? mapDeliveryCustomerResponse(customer) : null })
+})
+
+router.delete("/api/v1/public/delivery/account/addresses/:addressId", requireDeliveryCustomerAuth, async (req: DeliveryCustomerAuthRequest, res) => {
+  const customerId = String(req.deliveryCustomer?.customerId || "").trim()
+  const addressId = String(req.params.addressId || "").trim()
+  const address = await prisma.deliveryCustomerAddress.findFirst({ where: { id: addressId, customerId } })
+  if (!address) return res.status(404).json({ ok: false, error: "Adresa nu a fost gasita." })
+
+  await prisma.deliveryCustomerAddress.delete({ where: { id: addressId } })
+  if (address.isDefault) {
+    const replacement = await prisma.deliveryCustomerAddress.findFirst({ where: { customerId }, orderBy: { createdAt: "asc" } })
+    if (replacement) await prisma.deliveryCustomerAddress.update({ where: { id: replacement.id }, data: { isDefault: true } })
+  }
+  const customer = await prisma.deliveryCustomerAccount.findUnique({
+    where: { id: customerId },
+    include: { addresses: { orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }] } },
+  })
+  return res.json({ ok: true, customer: customer ? mapDeliveryCustomerResponse(customer) : null })
+})
+
 router.post("/api/v1/public/delivery/auth/social", async (_req, res) => {
   return res.status(501).json({
     ok: false,
