@@ -520,39 +520,54 @@ function DeliveryServiceAreaEditor({ value, onChange }: { value: DeliveryService
   useEffect(() => {
     if (mapStatus !== "ready" || !mapInstance.current) return
     const maps = (window as any).google.maps
-    circleInstance.current?.setMap(null)
-    polygonInstance.current?.setMap(null)
-    circleInstance.current = null
-    polygonInstance.current = null
 
     if (value.mode === "RADIUS") {
+      polygonInstance.current?.setMap(null)
+      polygonInstance.current = null
       const lat = Number(value.centerLat)
       const lng = Number(value.centerLng)
       const radiusKm = Number(value.radiusKm)
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
-      const circle = new maps.Circle({
-        map: mapInstance.current,
-        center: { lat, lng },
-        radius: (Number.isFinite(radiusKm) && radiusKm > 0 ? radiusKm : 5) * 1000,
-        editable: true,
-        draggable: true,
-        fillColor: "#ff5a1f",
-        fillOpacity: 0.16,
-        strokeColor: "#ff5a1f",
-        strokeOpacity: 0.9,
-        strokeWeight: 2,
-      })
-      circle.addListener("center_changed", () => {
-        const center = circle.getCenter()
-        if (center) onChange({ ...value, centerLat: center.lat().toFixed(6), centerLng: center.lng().toFixed(6) })
-      })
-      circle.addListener("radius_changed", () => onChange({ ...value, radiusKm: (circle.getRadius() / 1000).toFixed(2) }))
-      circleInstance.current = circle
-      mapInstance.current.panTo({ lat, lng })
+      if (!circleInstance.current) {
+        const circle = new maps.Circle({
+          map: mapInstance.current,
+          center: { lat, lng },
+          radius: (Number.isFinite(radiusKm) && radiusKm > 0 ? radiusKm : 5) * 1000,
+          editable: true,
+          draggable: true,
+          fillColor: "#ff5a1f",
+          fillOpacity: 0.16,
+          strokeColor: "#ff5a1f",
+          strokeOpacity: 0.9,
+          strokeWeight: 2,
+        })
+        circle.addListener("center_changed", () => {
+          const center = circle.getCenter()
+          const currentValue = latestValue.current
+          if (center && (Math.abs(Number(currentValue.centerLat) - center.lat()) > 0.000001 || Math.abs(Number(currentValue.centerLng) - center.lng()) > 0.000001)) {
+            latestOnChange.current({ ...currentValue, centerLat: center.lat().toFixed(6), centerLng: center.lng().toFixed(6) })
+          }
+        })
+        circle.addListener("radius_changed", () => {
+          const nextRadius = (circle.getRadius() / 1000).toFixed(2)
+          if (latestValue.current.radiusKm !== nextRadius) latestOnChange.current({ ...latestValue.current, radiusKm: nextRadius })
+        })
+        circleInstance.current = circle
+        mapInstance.current.panTo({ lat, lng })
+        return
+      }
+
+      const circle = circleInstance.current
+      const center = circle.getCenter()
+      if (!center || Math.abs(center.lat() - lat) > 0.000001 || Math.abs(center.lng() - lng) > 0.000001) circle.setCenter({ lat, lng })
+      const nextRadiusMeters = (Number.isFinite(radiusKm) && radiusKm > 0 ? radiusKm : 5) * 1000
+      if (Math.abs(circle.getRadius() - nextRadiusMeters) > 1) circle.setRadius(nextRadiusMeters)
       return
     }
 
-    if (value.polygon.length >= 2) {
+    circleInstance.current?.setMap(null)
+    circleInstance.current = null
+    if (value.polygon.length >= 2 && !polygonInstance.current) {
       const polygon = new maps.Polygon({
         map: mapInstance.current,
         paths: value.polygon,
@@ -569,14 +584,14 @@ function DeliveryServiceAreaEditor({ value, onChange }: { value: DeliveryService
           const point = path.getAt(index)
           return { lat: point.lat(), lng: point.lng() }
         })
-        onChange({ ...value, polygon: points })
+        latestOnChange.current({ ...latestValue.current, polygon: points })
       }
       polygon.getPath().addListener("set_at", syncPolygon)
       polygon.getPath().addListener("insert_at", syncPolygon)
       polygon.getPath().addListener("remove_at", syncPolygon)
       polygonInstance.current = polygon
     }
-  }, [mapStatus, onChange, value])
+  }, [mapStatus, value])
 
   const setField = (field: keyof DeliveryServiceAreaForm, fieldValue: string) => onChange({ ...value, [field]: fieldValue })
 
