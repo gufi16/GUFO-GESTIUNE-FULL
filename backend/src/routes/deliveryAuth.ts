@@ -450,6 +450,48 @@ router.delete("/api/v1/public/delivery/account/addresses/:addressId", requireDel
   return res.json({ ok: true, customer: customer ? mapDeliveryCustomerResponse(customer) : null })
 })
 
+router.get("/api/v1/public/delivery/account/payment-methods", requireDeliveryCustomerAuth, async (req: DeliveryCustomerAuthRequest, res) => {
+  const customerId = String(req.deliveryCustomer?.customerId || "").trim()
+  const items = await prisma.deliveryCustomerPaymentMethod.findMany({
+    where: { customerId, isActive: true },
+    orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+  })
+  return res.json({
+    ok: true,
+    items: items.map((item) => ({
+      id: item.id,
+      label: item.label,
+      maskedValue: item.maskedPan || "Card salvat",
+      type: item.brand || "Card",
+      kind: "CARD",
+      isDefault: item.isDefault,
+    })),
+  })
+})
+
+router.put("/api/v1/public/delivery/account/payment-methods/:paymentMethodId/default", requireDeliveryCustomerAuth, async (req: DeliveryCustomerAuthRequest, res) => {
+  const customerId = String(req.deliveryCustomer?.customerId || "").trim()
+  const paymentMethodId = String(req.params.paymentMethodId || "").trim()
+  const method = await prisma.deliveryCustomerPaymentMethod.findFirst({ where: { id: paymentMethodId, customerId, isActive: true } })
+  if (!method) return res.status(404).json({ ok: false, error: "Metoda de plata nu a fost gasita." })
+  await prisma.$transaction([
+    prisma.deliveryCustomerPaymentMethod.updateMany({ where: { customerId }, data: { isDefault: false } }),
+    prisma.deliveryCustomerPaymentMethod.update({ where: { id: paymentMethodId }, data: { isDefault: true } }),
+  ])
+  return res.json({ ok: true })
+})
+
+router.delete("/api/v1/public/delivery/account/payment-methods/:paymentMethodId", requireDeliveryCustomerAuth, async (req: DeliveryCustomerAuthRequest, res) => {
+  const customerId = String(req.deliveryCustomer?.customerId || "").trim()
+  const paymentMethodId = String(req.params.paymentMethodId || "").trim()
+  const method = await prisma.deliveryCustomerPaymentMethod.findFirst({ where: { id: paymentMethodId, customerId, isActive: true } })
+  if (!method) return res.status(404).json({ ok: false, error: "Metoda de plata nu a fost gasita." })
+  await prisma.deliveryCustomerPaymentMethod.update({ where: { id: paymentMethodId }, data: { isActive: false, isDefault: false } })
+  const replacement = await prisma.deliveryCustomerPaymentMethod.findFirst({ where: { customerId, isActive: true }, orderBy: { createdAt: "asc" } })
+  if (method.isDefault && replacement) await prisma.deliveryCustomerPaymentMethod.update({ where: { id: replacement.id }, data: { isDefault: true } })
+  return res.json({ ok: true })
+})
+
 router.post("/api/v1/public/delivery/auth/social", async (_req, res) => {
   return res.status(501).json({
     ok: false,

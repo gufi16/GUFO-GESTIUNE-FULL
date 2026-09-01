@@ -561,6 +561,7 @@ model DeliveryCustomerAccount {
 
   addresses DeliveryCustomerAddress[]
   sessions  DeliveryCustomerSession[]
+  paymentMethods DeliveryCustomerPaymentMethod[]
 
   @@unique([authProvider, providerUserId])
   @@index([createdAt])
@@ -599,6 +600,26 @@ model DeliveryCustomerAddress {
   customer DeliveryCustomerAccount @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
   @@index([customerId])
+  @@index([customerId, isDefault])
+}
+
+model DeliveryCustomerPaymentMethod {
+  id                  String   @id @default(cuid())
+  customerId          String
+  provider            String
+  token               String
+  cardUniqueReference String
+  label               String
+  brand               String?
+  maskedPan           String?
+  isDefault           Boolean  @default(false)
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  customer DeliveryCustomerAccount @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, provider, cardUniqueReference])
   @@index([customerId, isDefault])
 }
 

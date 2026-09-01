@@ -735,6 +735,7 @@ async function createVivaPaymentOrder(input: {
   merchantTrns: string
   customerTrns: string
   methodCode: string
+  cardTokens?: string[]
 }) {
   const { config, accessToken } = await getVivaAccessToken()
   const amountInMinorUnits = Math.round(Math.max(0, input.amount) * 100)
@@ -750,11 +751,12 @@ async function createVivaPaymentOrder(input: {
     sourceCode: config.sourceCode,
     paymentTimeout: 1800,
     preauth: false,
-    allowRecurring: false,
+    allowRecurring: true,
     isTaxFree: false,
     maxInstallments: 1,
     successUrl: config.successUrl,
     failureUrl: config.failureUrl,
+    cardTokens: input.cardTokens?.filter(Boolean).slice(0, 10),
   }
 
   const response = await fetch(`${config.apiBaseUrl}/checkout/v2/orders`, {
@@ -784,6 +786,48 @@ async function createVivaPaymentOrder(input: {
     orderCode: String(json.orderCode),
     checkoutUrl,
   }
+}
+
+async function createVivaCardToken(transactionId: string) {
+  const { config, accessToken } = await getVivaAccessToken()
+  const response = await fetch(`${config.apiBaseUrl}/acquiring/v1/cards/tokens`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ transactionId }),
+  })
+  const json = await response.json().catch(() => ({}))
+  if (!response.ok || !json?.token) {
+    throw new Error(`Viva create card token failed with HTTP ${response.status}.`)
+  }
+  return String(json.token)
+}
+
+async function saveDeliveryCustomerCardFromTransaction(customerId: string | null, transactionId: string, transaction: Record<string, unknown>) {
+  if (!customerId) return
+  const cardUniqueReference = String(transaction.cardUniqueReference || transaction.CardUniqueReference || "").trim()
+  if (!cardUniqueReference) return
+  const token = await createVivaCardToken(transactionId)
+  const brand = String(transaction.cardType || transaction.CardType || transaction.cardBrand || transaction.CardBrand || "").trim() || null
+  const maskedPan = String(transaction.cardNumber || transaction.CardNumber || transaction.maskedPan || transaction.MaskedPan || "").trim() || null
+  const existing = await db.deliveryCustomerPaymentMethod.count({ where: { customerId, isActive: true } })
+  await db.deliveryCustomerPaymentMethod.upsert({
+    where: { customerId_provider_cardUniqueReference: { customerId, provider: "VIVA", cardUniqueReference } },
+    create: {
+      customerId,
+      provider: "VIVA",
+      token,
+      cardUniqueReference,
+      label: brand || "Card bancar",
+      brand,
+      maskedPan,
+      isDefault: existing === 0,
+    },
+    update: { token, brand, maskedPan, isActive: true },
+  })
 }
 
 async function retrieveVivaTransaction(transactionId: string) {
@@ -2316,6 +2360,13 @@ router.post("/api/v1/public/delivery/payments/viva/prepare", requireDeliveryCust
       },
     })
 
+    const savedCards = customerId
+      ? await db.deliveryCustomerPaymentMethod.findMany({
+          where: { customerId, provider: "VIVA", isActive: true },
+          orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+          select: { token: true },
+        })
+      : []
     const vivaOrder = await createVivaPaymentOrder({
       amount: importPayload.total,
       customerName: parsed.data.customer.name,
@@ -2324,6 +2375,7 @@ router.post("/api/v1/public/delivery/payments/viva/prepare", requireDeliveryCust
       merchantTrns: `Gufo Delivery ${importPayload.externalOrderNumber}`,
       customerTrns: `Comanda Gufo Delivery ${importPayload.externalOrderNumber}`,
       methodCode: parsed.data.payment.type,
+      cardTokens: savedCards.map((card) => card.token),
     })
 
     const updatedAttempt = await db.deliveryPaymentAttempt.update({
@@ -2523,6 +2575,10 @@ router.post("/api/v1/public/delivery/payments/viva/webhook", async (req, res) =>
         paidAt: new Date(),
         responsePayloadJson: transaction as Prisma.InputJsonValue,
       },
+    })
+
+    await saveDeliveryCustomerCardFromTransaction(attempt.customerId, transactionId, transaction).catch((error: unknown) => {
+      console.warn("Could not save Gufo Delivery payment card:", getErrorMessage(error, "Unknown card tokenization error"))
     })
 
     return res.json({ ok: true, attemptId: attempt.id, externalOrderId: externalOrder.id, status: "PAID" })
