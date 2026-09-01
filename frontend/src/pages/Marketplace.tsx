@@ -350,7 +350,7 @@ function emptyForm(): IntegrationForm {
     deliveryEnabled: true,
     deliveryCatalogMode: "ALL_VISIBLE",
     deliveryShowCategories: true,
-    deliveryPaymentMethods: ["CASH", "CARD", "GOOGLE_PAY"],
+    deliveryPaymentMethods: ["CASH", "CARD"],
     deliveryOnlineProvider: "VIVA",
     deliveryVivaEnvironment: "demo",
     deliveryVivaClientId: "",
@@ -1219,11 +1219,9 @@ export default function MarketplacePage() {
               </div>
 
               {selectedPlatform === "GUFO_DELIVERY" ? (
-                <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-                  <DocumentMetric title="Locatie" value={selectedIntegration?.location?.code || selectedIntegration?.location?.name || "-"} tone="blue" />
-                  <DocumentMetric title="POS tinta" value={selectedTerminal?.label || selectedTerminal?.deviceId || "-"} tone="emerald" />
-                  <DocumentMetric title="Categorii selectate" value={currentForm.includedCategoryIds.length} tone="amber" />
-                  <DocumentMetric title="Produse selectate" value={currentForm.includedProductIds.length} tone="slate" />
+                <div className="flex items-center gap-2 rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                  <span className={currentForm.deliveryEnabled ? "h-2 w-2 rounded-full bg-emerald-500" : "h-2 w-2 rounded-full bg-slate-300"} />
+                  <span className="font-semibold text-slate-800">{currentForm.deliveryEnabled ? "Gufo Delivery activ" : "Gufo Delivery oprit"}</span>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
@@ -1248,22 +1246,26 @@ export default function MarketplacePage() {
                 }
                 description={
                   selectedPlatform === "GUFO_DELIVERY"
-                    ? "Configurezi locatia, POS-ul tinta si regulile de publicare pentru aplicatia proprie Gufo Delivery."
+                    ? "Configureaza restaurantul pentru aplicatia Gufo Delivery: unde ajung comenzile, ce meniu este public si cum incasezi online."
                     : "Configurezi locatia, device-ul tinta si credentialele platformei, apoi verifici rapid daca integrarea este pregatita pentru comenzi reale."
                 }
-                actions={
-                  <button type="button" className={documentButtonSecondaryClass} onClick={initialLoad} disabled={loading || saving}>
-                    <RefreshCcw size={14} className="mr-1.5" />
-                    Reincarca
-                  </button>
-                }
+                actions={null}
               >
                 <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.2fr_0.8fr]">
                   <div className="space-y-3">
                     <div className="rounded-[18px] border border-slate-200 bg-slate-50 p-4">
-                      <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
-                        <Truck size={16} className="text-[#17324D]" />
-                        {selectedPlatform === "GUFO_DELIVERY" ? "Activare locatie" : "Rutare operationala"}
+                      <div className="mb-3 flex items-center justify-between gap-2 text-sm font-semibold text-slate-800">
+                        <span className="flex items-center gap-2"><Truck size={16} className="text-[#17324D]" />Restaurant si POS</span>
+                        {selectedPlatform === "GUFO_DELIVERY" ? (
+                          <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
+                            <input
+                              type="checkbox"
+                              checked={currentForm.deliveryEnabled}
+                              onChange={(e) => setForms((prev) => ({ ...prev, [selectedPlatform]: { ...prev[selectedPlatform], deliveryEnabled: e.target.checked } }))}
+                            />
+                            Activ
+                          </label>
+                        ) : null}
                       </div>
 
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -1340,64 +1342,37 @@ export default function MarketplacePage() {
 
                 {selectedPlatform === "GUFO_DELIVERY" ? (
                   <div className="space-y-3">
-                    <div className="rounded-[16px] border border-[#BFDBFE] bg-[#EFF6FF] px-3 py-3 text-sm text-[#17324D]">
-                      Gufo Delivery este aplicatia noastra pentru clienti finali. In ERP nu configuram tokenuri, webhook-uri sau credentiale externe, ci doar activarea locatiei, POS-ul care primeste comenzile si catalogul publicat.
-                    </div>
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                      <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-3">
-                        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Cod intern restaurant</div>
-                        <div className="mt-1 text-sm font-semibold text-slate-900">{`gufo-${gufoDeliveryInternalCode}`}</div>
-                        <div className="mt-1 text-xs text-slate-500">Generat din locatia ERP pentru rutare interna sigura.</div>
-                      </div>
-                      <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-3">
-                        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Canal comenzi</div>
-                        <div className="mt-1 text-sm font-semibold text-slate-900">Gufo Delivery internal</div>
-                        <div className="mt-1 text-xs text-slate-500">Fara integrare externa de tip Glovo/Wolt/Bolt.</div>
-                      </div>
-                    </div>
                     <div className="rounded-[16px] border border-slate-200 bg-slate-50 p-3">
-                      <div className="mb-2 text-sm font-semibold text-slate-900">Plata in aplicatie</div>
-                      <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                        {deliveryPaymentMethodOptions.map((option) => {
-                          const checked = currentForm.deliveryPaymentMethods.includes(option.code)
-                          return (
-                            <label
-                              key={option.code}
-                              className="flex items-start gap-2 rounded-[14px] border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={(e) =>
-                                  setForms((prev) => ({
-                                    ...prev,
-                                    [selectedPlatform]: {
-                                      ...prev[selectedPlatform],
-                                      deliveryPaymentMethods: e.target.checked
-                                        ? [...prev[selectedPlatform].deliveryPaymentMethods, option.code]
-                                        : prev[selectedPlatform].deliveryPaymentMethods.filter((item) => item !== option.code),
-                                      deliveryOnlineProvider: "VIVA",
-                                    },
-                                  }))
-                                }
-                                className="mt-0.5"
-                              />
-                              <span>
-                                <span className="block font-medium text-slate-900">{option.label}</span>
-                                <span className="block text-xs text-slate-500">{option.description}</span>
-                              </span>
-                            </label>
-                          )
-                        })}
-                      </div>
-                      <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-                        <DocumentField label="Provider plata online">
-                          <input value={currentForm.deliveryOnlineProvider || "VIVA"} className={documentInputClass} disabled readOnly />
-                        </DocumentField>
-                        <div className="rounded-[14px] border border-[#BFDBFE] bg-[#F8FBFF] px-3 py-3 text-sm text-[#17324D]">
-                          Toate platile online din Gufo Delivery vor merge prin Viva. Cash ramane disponibil separat, iar Apple Pay apare pentru device-uri compatibile.
+                      <div className="mb-1 flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-semibold text-slate-900">Metode de plata</div>
+                          <div className="mt-1 text-xs text-slate-500">Alege o singura configuratie pentru acest restaurant.</div>
                         </div>
+                        <span className="rounded-full bg-[#EFF6FF] px-2 py-1 text-xs font-semibold text-[#17324D]">Checkout securizat</span>
                       </div>
+                      <DocumentField label="Clientul poate plati cu">
+                        <select
+                          value={
+                            currentForm.deliveryPaymentMethods.includes("GOOGLE_PAY") || currentForm.deliveryPaymentMethods.includes("APPLE_PAY")
+                              ? "CARD,GOOGLE_PAY,APPLE_PAY"
+                              : currentForm.deliveryPaymentMethods.includes("CARD") && currentForm.deliveryPaymentMethods.includes("CASH")
+                                ? "CASH,CARD"
+                                : currentForm.deliveryPaymentMethods.includes("CARD")
+                                  ? "CARD"
+                                  : "CASH"
+                          }
+                          onChange={(e) => {
+                            const methods = e.target.value.split(",").filter(Boolean) as DeliveryPaymentMethodCode[]
+                            setForms((prev) => ({ ...prev, [selectedPlatform]: { ...prev[selectedPlatform], deliveryPaymentMethods: methods, deliveryOnlineProvider: "VIVA" } }))
+                          }}
+                          className={documentInputClass}
+                        >
+                          <option value="CASH,CARD">Numerar la livrare si card online</option>
+                          <option value="CARD">Doar card online</option>
+                          <option value="CASH">Doar numerar la livrare</option>
+                          <option value="CARD,GOOGLE_PAY,APPLE_PAY">Card, Google Pay si Apple Pay</option>
+                        </select>
+                      </DocumentField>
                       <div className="mt-3 rounded-[16px] border border-slate-200 bg-white p-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div>
@@ -1555,27 +1530,14 @@ export default function MarketplacePage() {
                 </div>
 
                 {selectedPlatform === "GUFO_DELIVERY" ? (
-                  <div className="space-y-3 rounded-[18px] border border-[#BFDBFE] bg-[#F8FBFF] p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-semibold text-[#17324D]">Catalog Gufo Delivery</div>
+                    <div className="space-y-3 rounded-[18px] border border-[#BFDBFE] bg-[#F8FBFF] p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-semibold text-[#17324D]">Catalog Gufo Delivery</div>
                         <div className="text-sm text-slate-600">
                           Alegi daca publicam toate produsele vizibile in POS, doar anumite categorii sau produse selectate manual.
                         </div>
                       </div>
-                      <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                        <input
-                          type="checkbox"
-                          checked={currentForm.deliveryEnabled}
-                          onChange={(e) =>
-                            setForms((prev) => ({
-                              ...prev,
-                              [selectedPlatform]: { ...prev[selectedPlatform], deliveryEnabled: e.target.checked },
-                            }))
-                          }
-                        />
-                        Delivery activ
-                      </label>
                     </div>
 
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -1602,21 +1564,17 @@ export default function MarketplacePage() {
                         </select>
                       </DocumentField>
 
-                      <label className="flex items-start gap-2 rounded-[14px] border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700">
-                        <input
-                          type="checkbox"
-                          checked={currentForm.deliveryShowCategories}
+                      <DocumentField label="Afisare categorii in aplicatie">
+                        <select
+                          value={currentForm.deliveryShowCategories ? "yes" : "no"}
                           disabled={currentForm.deliveryCatalogMode === "MANUAL_SELECTION"}
-                          onChange={(e) =>
-                            setForms((prev) => ({
-                              ...prev,
-                              [selectedPlatform]: { ...prev[selectedPlatform], deliveryShowCategories: e.target.checked },
-                            }))
-                          }
-                          className="mt-0.5"
-                        />
-                        <span>Afiseaza categoriile si in aplicatia Gufo Delivery</span>
-                      </label>
+                          onChange={(e) => setForms((prev) => ({ ...prev, [selectedPlatform]: { ...prev[selectedPlatform], deliveryShowCategories: e.target.value === "yes" } }))}
+                          className={documentInputClass}
+                        >
+                          <option value="yes">Afiseaza categorii</option>
+                          <option value="no">Afiseaza toate produsele impreuna</option>
+                        </select>
+                      </DocumentField>
                     </div>
 
                     {currentForm.deliveryCatalogMode === "ALL_VISIBLE" ? (
