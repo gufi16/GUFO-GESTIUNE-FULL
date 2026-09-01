@@ -31,6 +31,17 @@ type MarketplaceSettings = Record<string, unknown>
 type TransactionClient = Prisma.TransactionClient
 type DeliveryCatalogMode = "ALL_VISIBLE" | "CATEGORY_SELECTION" | "MANUAL_SELECTION"
 type DeliveryPaymentMethodCode = "CASH" | "CARD" | "GOOGLE_PAY" | "APPLE_PAY"
+type DeliveryServiceAreaMode = "RADIUS" | "POLYGON"
+type DeliveryGeoPoint = {
+  lat: number
+  lng: number
+}
+type DeliveryServiceArea = {
+  mode: DeliveryServiceAreaMode
+  center: DeliveryGeoPoint | null
+  radiusKm: number
+  polygon: DeliveryGeoPoint[]
+}
 type VivaMerchantConfig = {
   environment: string
   isDemo: boolean
@@ -270,6 +281,70 @@ function normalizeDeliveryPaymentMethods(value: unknown): DeliveryPaymentMethodC
   }
 
   return methods.length > 0 ? methods : ["CASH", "CARD", "GOOGLE_PAY"]
+}
+
+function normalizeDeliveryGeoPoint(value: unknown): DeliveryGeoPoint | null {
+  if (!isRecord(value)) return null
+  const lat = Number(value.lat)
+  const lng = Number(value.lng)
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    return null
+  }
+  return { lat, lng }
+}
+
+function normalizeDeliveryServiceArea(value: unknown): DeliveryServiceArea | null {
+  if (!isRecord(value)) return null
+
+  const mode: DeliveryServiceAreaMode = String(value.mode || "").trim().toUpperCase() === "POLYGON" ? "POLYGON" : "RADIUS"
+  const center = normalizeDeliveryGeoPoint(value.center)
+  const radiusKm = Number(value.radiusKm)
+  const polygon = Array.isArray(value.polygon)
+    ? value.polygon.map(normalizeDeliveryGeoPoint).filter((point): point is DeliveryGeoPoint => Boolean(point))
+    : []
+
+  if (mode === "RADIUS") {
+    if (!center || !Number.isFinite(radiusKm) || radiusKm <= 0 || radiusKm > 100) return null
+    return { mode, center, radiusKm, polygon: [] }
+  }
+
+  if (polygon.length < 3) return null
+  return { mode, center, radiusKm: 0, polygon }
+}
+
+function distanceInKilometers(from: DeliveryGeoPoint, to: DeliveryGeoPoint) {
+  const earthRadiusKm = 6371
+  const toRadians = (degrees: number) => (degrees * Math.PI) / 180
+  const latDelta = toRadians(to.lat - from.lat)
+  const lngDelta = toRadians(to.lng - from.lng)
+  const a = Math.sin(latDelta / 2) ** 2
+    + Math.cos(toRadians(from.lat)) * Math.cos(toRadians(to.lat)) * Math.sin(lngDelta / 2) ** 2
+  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+function pointIsInsideDeliveryPolygon(point: DeliveryGeoPoint, polygon: DeliveryGeoPoint[]) {
+  let inside = false
+  for (let current = 0, previous = polygon.length - 1; current < polygon.length; previous = current++) {
+    const currentPoint = polygon[current]
+    const previousPoint = polygon[previous]
+    const crossesLatitude = (currentPoint.lat > point.lat) !== (previousPoint.lat > point.lat)
+    const intersectionLng = ((previousPoint.lng - currentPoint.lng) * (point.lat - currentPoint.lat))
+      / (previousPoint.lat - currentPoint.lat) + currentPoint.lng
+    if (crossesLatitude && point.lng < intersectionLng) inside = !inside
+  }
+  return inside
+}
+
+function deliveryServiceAreaContainsPoint(area: DeliveryServiceArea, point: DeliveryGeoPoint) {
+  if (area.mode === "RADIUS") {
+    const center = area.center
+    return center !== null && distanceInKilometers(center, point) <= area.radiusKm
+  }
+  return pointIsInsideDeliveryPolygon(point, area.polygon)
+}
+
+function parseDeliveryGeoPoint(lat: unknown, lng: unknown): DeliveryGeoPoint | null {
+  return normalizeDeliveryGeoPoint({ lat, lng })
 }
 
 function buildGufoDeliveryPaymentConfig(settings: MarketplaceSettings) {
@@ -892,6 +967,18 @@ async function buildGufoDeliveryCheckoutImportPayload(
   const integration = await resolvePublicGufoDeliveryIntegration(input.restaurantId)
   if (!integration) {
     throw new Error("Restaurantul Gufo Delivery nu a fost gasit.")
+  }
+
+  const deliverySettings = integrationSettings(integration.settingsJson)
+  const deliveryArea = normalizeDeliveryServiceArea(deliverySettings.deliveryServiceArea)
+  if (deliveryArea) {
+    const deliveryPoint = parseDeliveryGeoPoint(input.deliveryAddress.lat, input.deliveryAddress.lng)
+    if (!deliveryPoint) {
+      throw new Error("Adresa de livrare trebuie pozitionata pe harta inainte de plasarea comenzii.")
+    }
+    if (!deliveryServiceAreaContainsPoint(deliveryArea, deliveryPoint)) {
+      throw new Error("Restaurantul selectat nu livreaza la aceasta adresa.")
+    }
   }
 
   const menuPayload: GufoDeliveryMenuPayload = await buildGufoDeliveryMenuPayload(req, integration)
@@ -2292,9 +2379,18 @@ router.post("/api/v1/marketplace/webhooks/glovo/cancel/:storeId?", async (req, r
 router.get("/api/v1/public/delivery/restaurants", async (req, res) => {
   try {
     const integrations = await getPublicGufoDeliveryIntegrations()
-    const items = await Promise.all(integrations.map(async (integration) => {
+    const deliveryPoint = parseDeliveryGeoPoint(req.query.lat, req.query.lng)
+    const coveredIntegrations = integrations.filter((integration) => {
+      if (!deliveryPoint) return true
+      const settings = integrationSettings(integration.settingsJson)
+      const area = normalizeDeliveryServiceArea(settings.deliveryServiceArea)
+      // Existing active restaurants continue to work until their administrator draws a delivery area.
+      return !area || deliveryServiceAreaContainsPoint(area, deliveryPoint)
+    })
+    const items = await Promise.all(coveredIntegrations.map(async (integration) => {
       const settings = integrationSettings(integration.settingsJson)
       const location = integration.location
+      const deliveryArea = normalizeDeliveryServiceArea(settings.deliveryServiceArea)
       const imageUrl = await resolveDeliveryRestaurantCoverImage(req, integration)
       return {
         id: integration.id,
@@ -2311,6 +2407,11 @@ router.get("/api/v1/public/delivery/restaurants", async (req, res) => {
         catalogMode: normalizeDeliveryCatalogMode(settings.deliveryCatalogMode),
         showCategories: settings.deliveryShowCategories !== false,
         paymentConfig: buildGufoDeliveryPaymentConfig(settings),
+        deliveryArea: {
+          configured: Boolean(deliveryArea),
+          mode: deliveryArea?.mode || null,
+          radiusKm: deliveryArea?.mode === "RADIUS" ? deliveryArea.radiusKm : null,
+        },
         updatedAt: integration.updatedAt.toISOString(),
       }
     }))
@@ -3334,6 +3435,12 @@ router.post("/api/v1/marketplace/integrations/:platform/connect", async (req: Au
     const deliveryCatalogMode = normalizeDeliveryCatalogMode(incomingSettings.deliveryCatalogMode)
     const includedCategoryIds = normalizeUniqueStringArray(incomingSettings.includedCategoryIds)
     const includedProductIds = normalizeUniqueStringArray(incomingSettings.includedProductIds)
+    const rawDeliveryServiceArea = incomingSettings.deliveryServiceArea
+    const deliveryServiceArea = rawDeliveryServiceArea == null ? null : normalizeDeliveryServiceArea(rawDeliveryServiceArea)
+
+    if (rawDeliveryServiceArea != null && !deliveryServiceArea) {
+      return res.status(400).json({ ok: false, error: "Zona de livrare trebuie sa aiba un cerc valid sau cel putin trei puncte de poligon." })
+    }
 
     if (deliveryCatalogMode === "CATEGORY_SELECTION" && includedCategoryIds.length === 0) {
       return res.status(400).json({ ok: false, error: "Alege cel putin o categorie pentru Gufo Delivery." })
@@ -3374,6 +3481,7 @@ router.post("/api/v1/marketplace/integrations/:platform/connect", async (req: Au
     incomingSettings.deliveryShowCategories = Boolean(incomingSettings.deliveryShowCategories)
     incomingSettings.deliveryPaymentMethods = normalizeDeliveryPaymentMethods(incomingSettings.deliveryPaymentMethods)
     incomingSettings.deliveryOnlineProvider = "VIVA"
+    incomingSettings.deliveryServiceArea = deliveryServiceArea || undefined
     incomingSettings.targetTerminalId = targetTerminal.id
     incomingSettings.targetTerminalDeviceId = targetTerminal.deviceId || null
     incomingSettings.targetTerminalLabel = targetTerminal.label || null

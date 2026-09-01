@@ -1,5 +1,5 @@
-import { ArrowLeft, CheckCircle2, Link2, Package2, RefreshCcw, Save, Search, ShoppingBag, Truck } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { ArrowLeft, CheckCircle2, Crosshair, Link2, MapPin, Package2, RefreshCcw, Save, Search, ShoppingBag, Truck } from "lucide-react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import PageHeader from "../components/PageHeader"
 import {
   DocumentField,
@@ -70,6 +70,15 @@ type ProductItem = {
 
 type DeliveryCatalogMode = "ALL_VISIBLE" | "CATEGORY_SELECTION" | "MANUAL_SELECTION"
 type DeliveryPaymentMethodCode = "CASH" | "CARD" | "GOOGLE_PAY" | "APPLE_PAY"
+type DeliveryServiceAreaMode = "RADIUS" | "POLYGON"
+type DeliveryGeoPoint = { lat: number; lng: number }
+type DeliveryServiceAreaForm = {
+  mode: DeliveryServiceAreaMode
+  centerLat: string
+  centerLng: string
+  radiusKm: string
+  polygon: DeliveryGeoPoint[]
+}
 
 type IntegrationItem = {
   id: string
@@ -288,6 +297,7 @@ type IntegrationForm = {
   deliveryVivaClientSecret: string
   deliveryVivaSourceCode: string
   deliveryVivaConfigured: boolean
+  deliveryServiceArea: DeliveryServiceAreaForm
   includedCategoryIds: string[]
   includedProductIds: string[]
   authType: "PARTNER" | "OAUTH" | "API_KEY"
@@ -342,6 +352,43 @@ function normalizeDeliveryPaymentMethods(value: unknown): DeliveryPaymentMethodC
   return items.length ? items : ["CASH", "CARD", "GOOGLE_PAY"]
 }
 
+function emptyDeliveryServiceArea(): DeliveryServiceAreaForm {
+  return { mode: "RADIUS", centerLat: "", centerLng: "", radiusKm: "5", polygon: [] }
+}
+
+function readDeliveryServiceArea(value: any): DeliveryServiceAreaForm {
+  const mode: DeliveryServiceAreaMode = value?.mode === "POLYGON" ? "POLYGON" : "RADIUS"
+  const center = value?.center && typeof value.center === "object" ? value.center : null
+  const polygon = Array.isArray(value?.polygon)
+    ? value.polygon
+        .filter((point: any) => Number.isFinite(Number(point?.lat)) && Number.isFinite(Number(point?.lng)))
+        .map((point: any) => ({ lat: Number(point.lat), lng: Number(point.lng) }))
+    : []
+  return {
+    mode,
+    centerLat: Number.isFinite(Number(center?.lat)) ? String(center.lat) : "",
+    centerLng: Number.isFinite(Number(center?.lng)) ? String(center.lng) : "",
+    radiusKm: Number.isFinite(Number(value?.radiusKm)) ? String(value.radiusKm) : "5",
+    polygon,
+  }
+}
+
+function buildDeliveryServiceArea(value: DeliveryServiceAreaForm) {
+  const centerLat = Number(value.centerLat)
+  const centerLng = Number(value.centerLng)
+  const radiusKm = Number(value.radiusKm)
+  const hasAnyValue = value.centerLat.trim() || value.centerLng.trim() || value.polygon.length > 0
+  if (!hasAnyValue) return undefined
+  if (value.mode === "RADIUS") {
+    if (!Number.isFinite(centerLat) || !Number.isFinite(centerLng) || !Number.isFinite(radiusKm) || radiusKm <= 0) {
+      throw new Error("Alege centrul pe harta si o raza de livrare valida.")
+    }
+    return { mode: "RADIUS", center: { lat: centerLat, lng: centerLng }, radiusKm }
+  }
+  if (value.polygon.length < 3) throw new Error("Poligonul de livrare trebuie sa aiba cel putin trei puncte.")
+  return { mode: "POLYGON", polygon: value.polygon }
+}
+
 function emptyForm(): IntegrationForm {
   return {
     locationId: "",
@@ -357,6 +404,7 @@ function emptyForm(): IntegrationForm {
     deliveryVivaClientSecret: "",
     deliveryVivaSourceCode: "",
     deliveryVivaConfigured: false,
+    deliveryServiceArea: emptyDeliveryServiceArea(),
     includedCategoryIds: [],
     includedProductIds: [],
     authType: "PARTNER",
@@ -375,6 +423,181 @@ function emptyForm(): IntegrationForm {
     menuManagedByIntegration: false,
     settingsJson: "",
   }
+}
+
+let googleMapsScriptPromise: Promise<void> | null = null
+
+function loadGoogleMapsScript() {
+  if ((window as any).google?.maps) return Promise.resolve()
+  if (googleMapsScriptPromise) return googleMapsScriptPromise
+
+  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_WEB_API_KEY
+  if (!apiKey) return Promise.reject(new Error("Lipseste cheia Google Maps din configurarea frontend."))
+
+  googleMapsScriptPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script")
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&v=weekly`
+    script.async = true
+    script.onload = () => resolve()
+    script.onerror = () => reject(new Error("Google Maps nu a putut fi incarcat."))
+    document.head.appendChild(script)
+  })
+  return googleMapsScriptPromise
+}
+
+function DeliveryServiceAreaEditor({ value, onChange }: { value: DeliveryServiceAreaForm; onChange: (next: DeliveryServiceAreaForm) => void }) {
+  const mapElement = useRef<HTMLDivElement | null>(null)
+  const mapInstance = useRef<any>(null)
+  const circleInstance = useRef<any>(null)
+  const polygonInstance = useRef<any>(null)
+  const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "error">("loading")
+
+  useEffect(() => {
+    let disposed = false
+    loadGoogleMapsScript()
+      .then(() => {
+        if (!disposed) setMapStatus("ready")
+      })
+      .catch(() => {
+        if (!disposed) setMapStatus("error")
+      })
+    return () => { disposed = true }
+  }, [])
+
+  useEffect(() => {
+    if (mapStatus !== "ready" || !mapElement.current || mapInstance.current) return
+    const maps = (window as any).google.maps
+    const initialCenter = {
+      lat: Number(value.centerLat) || 45.9432,
+      lng: Number(value.centerLng) || 24.9668,
+    }
+    const map = new maps.Map(mapElement.current, {
+      center: initialCenter,
+      zoom: Number(value.centerLat) && Number(value.centerLng) ? 12 : 6,
+      streetViewControl: false,
+      mapTypeControl: false,
+      fullscreenControl: false,
+    })
+    mapInstance.current = map
+    map.addListener("click", (event: any) => {
+      const point = { lat: event.latLng.lat(), lng: event.latLng.lng() }
+      if (value.mode === "POLYGON") {
+        onChange({ ...value, polygon: [...value.polygon, point] })
+      } else {
+        onChange({ ...value, centerLat: point.lat.toFixed(6), centerLng: point.lng.toFixed(6) })
+      }
+    })
+  }, [mapStatus, onChange, value])
+
+  useEffect(() => {
+    if (mapStatus !== "ready" || !mapInstance.current) return
+    const maps = (window as any).google.maps
+    circleInstance.current?.setMap(null)
+    polygonInstance.current?.setMap(null)
+    circleInstance.current = null
+    polygonInstance.current = null
+
+    if (value.mode === "RADIUS") {
+      const lat = Number(value.centerLat)
+      const lng = Number(value.centerLng)
+      const radiusKm = Number(value.radiusKm)
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
+      const circle = new maps.Circle({
+        map: mapInstance.current,
+        center: { lat, lng },
+        radius: (Number.isFinite(radiusKm) && radiusKm > 0 ? radiusKm : 5) * 1000,
+        editable: true,
+        draggable: true,
+        fillColor: "#ff5a1f",
+        fillOpacity: 0.16,
+        strokeColor: "#ff5a1f",
+        strokeOpacity: 0.9,
+        strokeWeight: 2,
+      })
+      circle.addListener("center_changed", () => {
+        const center = circle.getCenter()
+        if (center) onChange({ ...value, centerLat: center.lat().toFixed(6), centerLng: center.lng().toFixed(6) })
+      })
+      circle.addListener("radius_changed", () => onChange({ ...value, radiusKm: (circle.getRadius() / 1000).toFixed(2) }))
+      circleInstance.current = circle
+      mapInstance.current.panTo({ lat, lng })
+      return
+    }
+
+    if (value.polygon.length >= 2) {
+      const polygon = new maps.Polygon({
+        map: mapInstance.current,
+        paths: value.polygon,
+        editable: true,
+        fillColor: "#ff5a1f",
+        fillOpacity: 0.16,
+        strokeColor: "#ff5a1f",
+        strokeOpacity: 0.9,
+        strokeWeight: 2,
+      })
+      const syncPolygon = () => {
+        const path = polygon.getPath()
+        const points = Array.from({ length: path.getLength() }, (_, index) => {
+          const point = path.getAt(index)
+          return { lat: point.lat(), lng: point.lng() }
+        })
+        onChange({ ...value, polygon: points })
+      }
+      polygon.getPath().addListener("set_at", syncPolygon)
+      polygon.getPath().addListener("insert_at", syncPolygon)
+      polygon.getPath().addListener("remove_at", syncPolygon)
+      polygonInstance.current = polygon
+    }
+  }, [mapStatus, onChange, value])
+
+  const setField = (field: keyof DeliveryServiceAreaForm, fieldValue: string) => onChange({ ...value, [field]: fieldValue })
+
+  return (
+    <div className="space-y-3 rounded-[18px] border border-[#BFDBFE] bg-[#F8FBFF] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 text-sm font-semibold text-[#17324D]"><MapPin size={16} /> Zona de livrare</div>
+          <p className="mt-1 text-xs leading-5 text-slate-600">Clientii vad restaurantul numai cand adresa lor este in aceasta zona. Click pe harta seteaza centrul cercului sau adauga puncte in poligon.</p>
+        </div>
+        <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#17324D] shadow-sm">Verificata si la checkout</span>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <DocumentField label="Tip zona">
+          <select value={value.mode} onChange={(event) => onChange({ ...value, mode: event.target.value === "POLYGON" ? "POLYGON" : "RADIUS" })} className={documentInputClass}>
+            <option value="RADIUS">Cerc / raza in jurul locatiei</option>
+            <option value="POLYGON">Poligon desenat pe harta</option>
+          </select>
+        </DocumentField>
+        {value.mode === "RADIUS" ? (
+          <DocumentField label="Raza de livrare (km)">
+            <input value={value.radiusKm} onChange={(event) => setField("radiusKm", event.target.value)} inputMode="decimal" className={documentInputClass} />
+          </DocumentField>
+        ) : (
+          <div className="rounded-[14px] border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">Puncte salvate: <span className="font-semibold text-slate-900">{value.polygon.length}</span></div>
+        )}
+      </div>
+
+      {value.mode === "RADIUS" ? (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <DocumentField label="Latitudine centru"><input value={value.centerLat} onChange={(event) => setField("centerLat", event.target.value)} inputMode="decimal" className={documentInputClass} /></DocumentField>
+          <DocumentField label="Longitudine centru"><input value={value.centerLng} onChange={(event) => setField("centerLng", event.target.value)} inputMode="decimal" className={documentInputClass} /></DocumentField>
+        </div>
+      ) : null}
+
+      <div ref={mapElement} className="h-80 overflow-hidden rounded-[16px] border border-slate-200 bg-slate-100" />
+      {mapStatus === "loading" ? <div className="text-xs text-slate-500">Se incarca harta...</div> : null}
+      {mapStatus === "error" ? <div className="text-xs text-rose-700">Harta nu s-a incarcat. Verifica cheia Google Maps si domeniul autorizat.</div> : null}
+      {value.mode === "POLYGON" ? (
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => onChange({ ...value, polygon: value.polygon.slice(0, -1) })} disabled={!value.polygon.length} className={documentButtonSecondaryClass}>Sterge ultimul punct</button>
+          <button type="button" onClick={() => onChange({ ...value, polygon: [] })} disabled={!value.polygon.length} className={documentButtonSecondaryClass}>Sterge poligonul</button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 text-xs text-slate-600"><Crosshair size={14} /> Poti trage cercul sau marginea lui pentru a regla acoperirea.</div>
+      )}
+    </div>
+  )
 }
 
 function platformPill(platform: string) {
@@ -647,6 +870,7 @@ export default function MarketplacePage() {
                   ? integration.settingsJson.deliveryVivaSourceCode
                   : "",
               deliveryVivaConfigured: Boolean(integration.settingsJson?.deliveryVivaConfigured),
+              deliveryServiceArea: readDeliveryServiceArea(integration.settingsJson?.deliveryServiceArea),
               includedCategoryIds: Array.isArray(integration.settingsJson?.includedCategoryIds)
                 ? integration.settingsJson.includedCategoryIds.filter((item: unknown): item is string => typeof item === "string")
                 : [],
@@ -835,6 +1059,7 @@ export default function MarketplacePage() {
 
     try {
       const settings = form.settingsJson.trim() ? JSON.parse(form.settingsJson) : undefined
+      const deliveryServiceArea = platform === "GUFO_DELIVERY" ? buildDeliveryServiceArea(form.deliveryServiceArea) : undefined
       if (platform === "GUFO_DELIVERY" && !form.targetTerminalId) {
         setError("Alege POS-ul care trebuie sa primeasca comenzile Gufo Delivery.")
         setSaving(false)
@@ -890,6 +1115,7 @@ export default function MarketplacePage() {
             deliveryVivaClientId: form.deliveryVivaClientId.trim() || undefined,
             deliveryVivaClientSecret: form.deliveryVivaClientSecret.trim() || undefined,
             deliveryVivaSourceCode: form.deliveryVivaSourceCode.trim() || undefined,
+            deliveryServiceArea,
             includedCategoryIds: form.includedCategoryIds,
             includedProductIds: form.includedProductIds,
           },
@@ -1403,6 +1629,12 @@ export default function MarketplacePage() {
                         </div>
                       </div>
                     </div>
+                    <DeliveryServiceAreaEditor
+                      value={currentForm.deliveryServiceArea}
+                      onChange={(deliveryServiceArea) =>
+                        setForms((prev) => ({ ...prev, [selectedPlatform]: { ...prev[selectedPlatform], deliveryServiceArea } }))
+                      }
+                    />
                   </div>
                 ) : null}
 
