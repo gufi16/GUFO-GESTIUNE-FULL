@@ -198,6 +198,12 @@ export async function requireDeliveryCustomerAuth(
     const customerId = String(decoded.userId || "").trim()
     const sessionId = String(decoded.sessionId || "").trim()
     if (!customerId || !sessionId || String(decoded.role || "").trim() !== "DELIVERY_CUSTOMER") {
+      console.warn("DELIVERY CUSTOMER AUTH REJECTED", {
+        reason: "invalid_claims",
+        hasCustomerId: Boolean(customerId),
+        hasSessionId: Boolean(sessionId),
+        role: String(decoded.role || "").trim() || null,
+      })
       return res.status(401).json({ ok: false, error: "Invalid token" })
     }
 
@@ -216,10 +222,25 @@ export async function requireDeliveryCustomerAuth(
     })
 
     if (!session || session.revokedAt || session.expiresAt <= new Date()) {
+      console.warn("DELIVERY CUSTOMER AUTH REJECTED", {
+        reason: "invalid_session",
+        customerId,
+        sessionId,
+        sessionFound: Boolean(session),
+        revoked: Boolean(session?.revokedAt),
+        expiresAt: session?.expiresAt?.toISOString() || null,
+      })
       return res.status(401).json({ ok: false, error: "Invalid session" })
     }
 
     if (!session.customer || !session.customer.isActive || session.customer.id !== customerId) {
+      console.warn("DELIVERY CUSTOMER AUTH REJECTED", {
+        reason: "invalid_customer_session",
+        customerId,
+        sessionId,
+        customerFound: Boolean(session.customer),
+        customerActive: Boolean(session.customer?.isActive),
+      })
       return res.status(401).json({ ok: false, error: "Invalid customer session" })
     }
 
@@ -238,7 +259,11 @@ export async function requireDeliveryCustomerAuth(
       phone: session.customer.phone,
     }
     return next()
-  } catch {
+  } catch (error: unknown) {
+    console.warn("DELIVERY CUSTOMER AUTH REJECTED", {
+      reason: "token_verification_failed",
+      error: error instanceof Error ? error.name : "unknown",
+    })
     return res.status(401).json({ ok: false, error: "Invalid token" })
   }
 }
