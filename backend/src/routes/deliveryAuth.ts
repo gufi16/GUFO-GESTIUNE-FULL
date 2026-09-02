@@ -35,6 +35,11 @@ const LoginSchema = z.object({
   password: z.string().min(6),
 })
 
+const UpdateProfileSchema = z.object({
+  fullName: z.string().trim().min(2),
+  phone: z.string().trim().min(6),
+})
+
 const AddressSchema = z.object({
   label: z.string().trim().min(1),
   addressLine: z.string().trim().min(3),
@@ -366,6 +371,32 @@ router.get("/api/v1/public/delivery/account/me", requireDeliveryCustomerAuth, as
     ok: true,
     customer: mapDeliveryCustomerResponse(customer),
   })
+})
+
+router.put("/api/v1/public/delivery/account/profile", requireDeliveryCustomerAuth, async (req: DeliveryCustomerAuthRequest, res) => {
+  const parsed = UpdateProfileSchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res.status(400).json({ ok: false, error: parsed.error.flatten() })
+  }
+
+  const customerId = String(req.deliveryCustomer?.customerId || "").trim()
+  if (!customerId) return res.status(401).json({ ok: false, error: "Sesiunea clientului lipseste." })
+
+  try {
+    const customer = await prisma.deliveryCustomerAccount.update({
+      where: { id: customerId },
+      data: {
+        fullName: parsed.data.fullName,
+        phone: normalizePhone(parsed.data.phone),
+      },
+      include: { addresses: { orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }] } },
+    })
+    return res.json({ ok: true, customer: mapDeliveryCustomerResponse(customer) })
+  } catch (error: unknown) {
+    const code = (error as { code?: string } | null)?.code
+    if (code === "P2002") return res.status(409).json({ ok: false, error: "Acest numar de telefon este deja folosit de alt cont." })
+    return res.status(500).json({ ok: false, error: "Nu am putut actualiza profilul." })
+  }
 })
 
 router.post("/api/v1/public/delivery/account/addresses", requireDeliveryCustomerAuth, async (req: DeliveryCustomerAuthRequest, res) => {
