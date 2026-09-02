@@ -860,8 +860,9 @@ async function createVivaPaymentOrder(input: {
 }) {
   const { config, accessToken } = await getVivaAccessToken(input.vivaConfig)
   const amountInMinorUnits = Math.round(Math.max(0, input.amount) * 100)
+  const isCardVerification = input.isCardVerification === true
   const payload = {
-    amount: input.isCardVerification ? 0 : amountInMinorUnits,
+    amount: isCardVerification ? 0 : amountInMinorUnits,
     customerTrns: input.customerTrns,
     customer: {
       email: input.customerEmail || undefined,
@@ -871,15 +872,18 @@ async function createVivaPaymentOrder(input: {
     merchantTrns: input.merchantTrns,
     sourceCode: config.sourceCode,
     paymentTimeout: 1800,
-    preauth: false,
-    allowRecurring: true,
-    isCardVerification: input.isCardVerification === true,
-    isTaxFree: false,
-    maxInstallments: 1,
     successUrl: config.successUrl,
     failureUrl: config.failureUrl,
-    // Card verification only accepts a new card; saved-card tokens are for a payment order.
-    ...(input.isCardVerification ? {} : { cardTokens: input.cardTokens?.filter(Boolean).slice(0, 10) }),
+    // Viva Card Verification supports only the minimal zero-value order fields.
+    ...(isCardVerification
+      ? { allowRecurring: true, isCardVerification: true }
+      : {
+          preauth: false,
+          allowRecurring: false,
+          isTaxFree: false,
+          maxInstallments: 0,
+          cardTokens: input.cardTokens?.filter(Boolean).slice(0, 10),
+        }),
   }
 
   const response = await fetch(`${config.apiBaseUrl}/checkout/v2/orders`, {
