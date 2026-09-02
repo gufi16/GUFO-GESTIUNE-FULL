@@ -827,6 +827,25 @@ function vivaPaymentMethodParameter(methodCode: string) {
   return ""
 }
 
+function vivaFailureSummary(payload: unknown) {
+  const data = payload && typeof payload === "object" ? payload as Record<string, unknown> : {}
+  const nestedError = data.error && typeof data.error === "object" ? data.error as Record<string, unknown> : {}
+  const values = [
+    data.code,
+    data.errorCode,
+    data.message,
+    data.error_description,
+    typeof data.error === "string" ? data.error : undefined,
+    nestedError.code,
+    nestedError.message,
+    nestedError.description,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+
+  return values.join(" - ").slice(0, 500)
+}
+
 async function createVivaPaymentOrder(input: {
   vivaConfig: VivaMerchantConfig
   amount: number
@@ -874,7 +893,18 @@ async function createVivaPaymentOrder(input: {
   })
   const json = await response.json().catch(() => ({}))
   if (!response.ok || !json?.orderCode) {
-    throw new Error(`Viva create order failed with HTTP ${response.status}.`)
+    // Never log OAuth credentials or the bearer token. The provider's code/message is
+    // enough to identify a wrong source, environment, or account permission.
+    const providerMessage = vivaFailureSummary(json)
+    console.warn("Gufo Delivery payment order rejected", {
+      status: response.status,
+      environment: config.environment,
+      sourceCode: config.sourceCode,
+      cardVerification: input.isCardVerification === true,
+      providerMessage: providerMessage || null,
+    })
+    const details = providerMessage ? ` (${providerMessage})` : ""
+    throw new Error(`Plata online a fost refuzata de procesator (HTTP ${response.status})${details}.`)
   }
 
   const ref = encodeURIComponent(String(json.orderCode))
