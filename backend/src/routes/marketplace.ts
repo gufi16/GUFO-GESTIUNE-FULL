@@ -948,7 +948,16 @@ async function createVivaCardToken(vivaConfig: VivaMerchantConfig, transactionId
   })
   const json = await response.json().catch(() => ({}))
   if (!response.ok || !json?.token) {
-    throw new Error(`Viva create card token failed with HTTP ${response.status}.`)
+    // Viva enables merchant-side card tokenization per merchant account. Keep the
+    // provider's safe error code/message for support, never credentials or card data.
+    const providerMessage = vivaFailureSummary(json)
+    console.warn("Gufo Delivery card token creation rejected", {
+      status: response.status,
+      environment: config.environment,
+      providerMessage: providerMessage || null,
+    })
+    const details = providerMessage ? ` (${providerMessage})` : ""
+    throw new Error(`Nu am putut salva cardul pentru plati viitoare (HTTP ${response.status})${details}.`)
   }
   return String(json.token)
 }
