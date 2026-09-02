@@ -184,6 +184,14 @@ export async function requireDeliveryCustomerAuth(
 ) {
   const authHeader = String(req.headers.authorization || "")
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : ""
+  const requestDiagnostics = {
+    method: req.method,
+    path: req.path,
+    hasBearerToken: Boolean(token),
+    // This is one-way and short; it lets us correlate retries without logging credentials.
+    tokenFingerprint: token ? crypto.createHash("sha256").update(token).digest("hex").slice(0, 12) : null,
+  }
+  console.info("DELIVERY CUSTOMER AUTH ATTEMPT", requestDiagnostics)
   if (!token) {
     return res.status(401).json({ ok: false, error: "Missing token" })
   }
@@ -199,6 +207,7 @@ export async function requireDeliveryCustomerAuth(
     const sessionId = String(decoded.sessionId || "").trim()
     if (!customerId || !sessionId || String(decoded.role || "").trim() !== "DELIVERY_CUSTOMER") {
       console.warn("DELIVERY CUSTOMER AUTH REJECTED", {
+        ...requestDiagnostics,
         reason: "invalid_claims",
         hasCustomerId: Boolean(customerId),
         hasSessionId: Boolean(sessionId),
@@ -223,6 +232,7 @@ export async function requireDeliveryCustomerAuth(
 
     if (!session || session.revokedAt || session.expiresAt <= new Date()) {
       console.warn("DELIVERY CUSTOMER AUTH REJECTED", {
+        ...requestDiagnostics,
         reason: "invalid_session",
         customerId,
         sessionId,
@@ -235,6 +245,7 @@ export async function requireDeliveryCustomerAuth(
 
     if (!session.customer || !session.customer.isActive || session.customer.id !== customerId) {
       console.warn("DELIVERY CUSTOMER AUTH REJECTED", {
+        ...requestDiagnostics,
         reason: "invalid_customer_session",
         customerId,
         sessionId,
@@ -261,6 +272,7 @@ export async function requireDeliveryCustomerAuth(
     return next()
   } catch (error: unknown) {
     console.warn("DELIVERY CUSTOMER AUTH REJECTED", {
+      ...requestDiagnostics,
       reason: "token_verification_failed",
       error: error instanceof Error ? error.name : "unknown",
     })
