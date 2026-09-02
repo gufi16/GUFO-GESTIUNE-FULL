@@ -2560,6 +2560,40 @@ router.get("/api/v1/public/delivery/account/payment-methods/card/setup/:attemptI
   return res.json({ ok: true, verification: { attemptId: attempt.id, status: attempt.status, checkoutUrl: attempt.checkoutUrl, expiresAt: attempt.expiresAt?.toISOString() || null } })
 })
 
+router.post("/api/v1/public/delivery/account/payment-methods/card/setup/:attemptId/complete", requireDeliveryCustomerAuth, async (req: DeliveryCustomerAuthRequest, res) => {
+  try {
+    const customerId = String(req.deliveryCustomer?.customerId || "").trim()
+    const attemptId = String(req.params.attemptId || "").trim()
+    const transactionId = String(req.body?.transactionId || "").trim()
+    if (!customerId || !attemptId || !transactionId) {
+      return res.status(400).json({ ok: false, error: "Lipseste confirmarea verificarii cardului." })
+    }
+
+    const attempt = await db.deliveryCardVerificationAttempt.findFirst({ where: { id: attemptId, customerId } })
+    if (!attempt) return res.status(404).json({ ok: false, error: "Verificarea cardului nu a fost gasita." })
+
+    const vivaConfig = await getVivaConfigForIntegrationId(attempt.integrationId)
+    const transaction = await retrieveVivaTransaction(vivaConfig, transactionId)
+    const transactionStatusId = String(transaction?.statusId || transaction?.StatusId || "").trim().toUpperCase()
+    if (transactionStatusId !== "F") {
+      await db.deliveryCardVerificationAttempt.update({
+        where: { id: attempt.id },
+        data: { status: transactionStatusId === "X" ? "EXPIRED" : "FAILED", vivaTransactionId: transactionId, failedAt: new Date() },
+      })
+      return res.json({ ok: true, verification: { attemptId: attempt.id, status: transactionStatusId || "FAILED" } })
+    }
+
+    await saveDeliveryCustomerCardFromTransaction(customerId, attempt.integrationId, vivaConfig, transactionId, transaction)
+    await db.deliveryCardVerificationAttempt.update({
+      where: { id: attempt.id },
+      data: { status: "PAID", vivaTransactionId: transactionId, verifiedAt: new Date() },
+    })
+    return res.json({ ok: true, verification: { attemptId: attempt.id, status: "PAID" } })
+  } catch (error: unknown) {
+    return res.status(400).json({ ok: false, error: getErrorMessage(error, "Nu am putut confirma verificarea cardului.") })
+  }
+})
+
 router.post("/api/v1/public/delivery/payments/viva/prepare", requireDeliveryCustomerAuth, async (req: DeliveryCustomerAuthRequest, res) => {
   const parsed = PublicGufoDeliveryVivaPrepareSchema.safeParse(req.body)
   if (!parsed.success) {
