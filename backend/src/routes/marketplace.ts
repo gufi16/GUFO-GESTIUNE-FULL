@@ -810,7 +810,16 @@ async function getVivaAccessToken(config: VivaMerchantConfig) {
 
   const json = await response.json().catch(() => ({}))
   if (!response.ok || !json?.access_token) {
-    throw new Error(`Viva token failed with HTTP ${response.status}.`)
+    const providerMessage = vivaFailureSummary(json)
+    // Credentials are intentionally not logged. Viva's returned code/message is
+    // sufficient to distinguish invalid credentials from a live/demo mismatch.
+    console.warn("Gufo Delivery payment token rejected", {
+      status: response.status,
+      environment: config.environment,
+      providerMessage: providerMessage || null,
+    })
+    const details = providerMessage ? ` (${providerMessage})` : ""
+    throw new Error(`Autentificarea platii online a fost refuzata de procesator (HTTP ${response.status})${details}.`)
   }
 
   return {
