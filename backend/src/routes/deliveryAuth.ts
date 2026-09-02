@@ -113,7 +113,9 @@ async function createDeliveryCustomerSession(customerId: string, email?: string 
     userId: customerId,
     role: "DELIVERY_CUSTOMER",
     email: email || undefined,
-    sessionId: session.id,
+    // Keep Delivery sessions separate from ERP web sessions. The generic ERP
+    // middleware reserves `sessionId` for WebSession records.
+    deliverySessionId: session.id,
   })
 
   return {
@@ -201,10 +203,11 @@ export async function requireDeliveryCustomerAuth(
       userId?: string
       email?: string
       sessionId?: string | null
+      deliverySessionId?: string | null
       role?: string
     }
     const customerId = String(decoded.userId || "").trim()
-    const sessionId = String(decoded.sessionId || "").trim()
+    const sessionId = String(decoded.deliverySessionId || decoded.sessionId || "").trim()
     if (!customerId || !sessionId || String(decoded.role || "").trim() !== "DELIVERY_CUSTOMER") {
       console.warn("DELIVERY CUSTOMER AUTH REJECTED", {
         ...requestDiagnostics,

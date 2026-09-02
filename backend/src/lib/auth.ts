@@ -45,6 +45,7 @@ export function signAccessToken(payload: {
   activeCompanyId?: string | null
   controlPanel?: boolean
   sessionId?: string | null
+  deliverySessionId?: string | null
 }) {
   const expiresIn: SignOptions["expiresIn"] = JWT_EXPIRES_IN as SignOptions["expiresIn"]
   return jwt.sign(payload, getJwtSecret(), { expiresIn });
@@ -59,6 +60,7 @@ export function verifyAccessToken(token: string) {
     activeCompanyId?: string | null
     controlPanel?: boolean
     sessionId?: string | null
+    deliverySessionId?: string | null
     iat: number
     exp: number
   };
