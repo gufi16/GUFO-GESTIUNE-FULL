@@ -482,6 +482,13 @@ function DeliveryServiceAreaEditor({ value, onChange }: { value: DeliveryService
   const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "error">("loading")
   const [isPolygonDrawing, setIsPolygonDrawing] = useState(false)
 
+  // Google Maps emits edits outside React's event cycle. Keep the ref in sync
+  // immediately so a following Save always uses the latest map geometry.
+  const publishValue = (next: DeliveryServiceAreaForm) => {
+    latestValue.current = next
+    latestOnChange.current(next)
+  }
+
   useEffect(() => {
     latestValue.current = value
     latestOnChange.current = onChange
@@ -519,9 +526,9 @@ function DeliveryServiceAreaEditor({ value, onChange }: { value: DeliveryService
       const point = { lat: event.latLng.lat(), lng: event.latLng.lng() }
       const currentValue = latestValue.current
       if (currentValue.mode === "POLYGON" && isPolygonDrawingRef.current) {
-        latestOnChange.current({ ...currentValue, polygon: [...currentValue.polygon, point] })
+        publishValue({ ...currentValue, polygon: [...currentValue.polygon, point] })
       } else if (currentValue.mode === "RADIUS") {
-        latestOnChange.current({ ...currentValue, centerLat: point.lat.toFixed(6), centerLng: point.lng.toFixed(6) })
+        publishValue({ ...currentValue, centerLat: point.lat.toFixed(6), centerLng: point.lng.toFixed(6) })
       }
     })
     if (searchInput.current && maps.places?.Autocomplete) {
@@ -539,7 +546,7 @@ function DeliveryServiceAreaEditor({ value, onChange }: { value: DeliveryService
         const currentValue = latestValue.current
         map.panTo(point)
         map.setZoom(14)
-        latestOnChange.current({ ...currentValue, centerLat: point.lat.toFixed(6), centerLng: point.lng.toFixed(6) })
+        publishValue({ ...currentValue, centerLat: point.lat.toFixed(6), centerLng: point.lng.toFixed(6) })
       })
     }
   }, [mapStatus, onChange, value])
@@ -572,12 +579,12 @@ function DeliveryServiceAreaEditor({ value, onChange }: { value: DeliveryService
           const center = circle.getCenter()
           const currentValue = latestValue.current
           if (center && (Math.abs(Number(currentValue.centerLat) - center.lat()) > 0.000001 || Math.abs(Number(currentValue.centerLng) - center.lng()) > 0.000001)) {
-            latestOnChange.current({ ...currentValue, centerLat: center.lat().toFixed(6), centerLng: center.lng().toFixed(6) })
+            publishValue({ ...currentValue, centerLat: center.lat().toFixed(6), centerLng: center.lng().toFixed(6) })
           }
         })
         circle.addListener("radius_changed", () => {
           const nextRadius = (circle.getRadius() / 1000).toFixed(2)
-          if (latestValue.current.radiusKm !== nextRadius) latestOnChange.current({ ...latestValue.current, radiusKm: nextRadius })
+          if (latestValue.current.radiusKm !== nextRadius) publishValue({ ...latestValue.current, radiusKm: nextRadius })
         })
         circleInstance.current = circle
         if (!hasFittedSavedArea.current) {
@@ -620,7 +627,7 @@ function DeliveryServiceAreaEditor({ value, onChange }: { value: DeliveryService
           const point = path.getAt(index)
           return { lat: point.lat(), lng: point.lng() }
         })
-        latestOnChange.current({ ...latestValue.current, polygon: points })
+        publishValue({ ...latestValue.current, polygon: points })
       }
       polygon.getPath().addListener("set_at", syncPolygon)
       polygon.getPath().addListener("insert_at", syncPolygon)
