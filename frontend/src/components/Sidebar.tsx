@@ -24,6 +24,7 @@ import {
   Truck,
   UtensilsCrossed,
   Warehouse,
+  X,
 } from "lucide-react"
 import { hasModule } from "../lib/modules"
 
@@ -184,7 +185,7 @@ function SidebarAccordion({
   items: SidebarItem[]
   flyout?: boolean
   forceOpen?: boolean
-  onToggle?: () => void
+  onToggle?: (anchorTop: number) => void
   onNavigate?: () => void
 }) {
   const location = useLocation()
@@ -204,9 +205,9 @@ function SidebarAccordion({
     <div className="relative">
       <button
         type="button"
-        onClick={() => {
+        onClick={(event) => {
           if (flyout) {
-            onToggle?.()
+            onToggle?.(event.currentTarget.getBoundingClientRect().top)
             return
           }
           setOpen((value) => !value)
@@ -266,13 +267,15 @@ function SidebarAccordion({
 function SidebarContent({
   visibleSections,
   activeDesktopSection,
+  activeDesktopTop,
   onActiveDesktopSectionChange,
   mobile = false,
   onCloseMobile,
 }: {
   visibleSections: SidebarSection[]
   activeDesktopSection?: string | null
-  onActiveDesktopSectionChange?: (section: string | null) => void
+  activeDesktopTop?: number
+  onActiveDesktopSectionChange?: (section: string | null, anchorTop?: number) => void
   mobile?: boolean
   onCloseMobile?: () => void
 }) {
@@ -282,7 +285,7 @@ function SidebarContent({
       : []
 
   return (
-    <div className={clsx("flex h-full w-full bg-white", mobile ? "overflow-hidden" : "overflow-visible")}>
+    <div className={clsx("relative flex h-full w-full bg-white", mobile ? "overflow-hidden" : "overflow-visible")}>
       <div className="flex h-full w-64 shrink-0 flex-col border-r border-slate-200/80 bg-white">
         <div className="border-b border-slate-200/80 px-5 pb-5 pt-5">
           {mobile ? (
@@ -326,9 +329,10 @@ function SidebarContent({
                     onToggle={
                       mobile
                         ? undefined
-                        : () =>
+                        : (anchorTop) =>
                             onActiveDesktopSectionChange?.(
-                              activeDesktopSection === section.title ? null : section.title
+                              activeDesktopSection === section.title ? null : section.title,
+                              anchorTop
                             )
                     }
                     onNavigate={mobile ? onCloseMobile : undefined}
@@ -361,14 +365,26 @@ function SidebarContent({
       </div>
 
       {!mobile && activeDesktopSection ? (
-        <div className="hidden h-full w-72 shrink-0 border-r border-slate-200/80 bg-[#F8FAFC] xl:flex xl:flex-col">
-          <div className="border-b border-slate-200/80 px-5 pb-4 pt-5">
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Submeniu</div>
-            <div className="mt-2 text-lg font-semibold text-[#17324D]">{activeDesktopSection}</div>
-            <div className="mt-1 text-sm text-slate-500">Acces rapid la modulele din aceasta sectiune.</div>
+        <div
+          className="absolute left-[calc(100%+12px)] z-50 hidden w-[292px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_20px_52px_rgba(15,35,55,0.18)] xl:flex xl:max-h-[calc(100vh-32px)] xl:flex-col"
+          style={{ top: Math.max(16, Math.min(activeDesktopTop || 96, window.innerHeight - 470)) }}
+        >
+          <div className="flex items-start justify-between border-b border-slate-100 bg-[#F8FAFC] px-4 py-3">
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Submeniu</div>
+              <div className="mt-1 text-base font-semibold text-[#17324D]">{activeDesktopSection}</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => onActiveDesktopSectionChange?.(null)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-white hover:text-[#17324D]"
+              aria-label={`Inchide submeniul ${activeDesktopSection}`}
+            >
+              <X size={16} />
+            </button>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
+          <div className="min-h-0 overflow-y-auto p-2">
             <div className="space-y-1">
               {activeDesktopItems.map((item) => (
                 <SidebarLink
@@ -401,12 +417,11 @@ export default function Sidebar({
     }))
     .filter((section) => section.items.length > 0)
   const [activeDesktopSection, setActiveDesktopSection] = useState<string | null>(null)
+  const [activeDesktopTop, setActiveDesktopTop] = useState(96)
 
   useEffect(() => {
     setActiveDesktopSection(null)
   }, [location.pathname])
-
-  const hasDesktopSecondary = !!activeDesktopSection
 
   return (
     <>
@@ -414,17 +429,18 @@ export default function Sidebar({
         <div className="fixed inset-0 z-50 bg-slate-950/45 backdrop-blur-[1px] xl:hidden" onClick={onCloseMobile} />
       ) : null}
 
-      <aside className={clsx("hidden xl:block xl:shrink-0", hasDesktopSecondary ? "xl:w-[544px]" : "xl:w-64")}>
+      <aside className="hidden xl:block xl:w-64 xl:shrink-0">
         <div
-          className={clsx(
-            "fixed left-0 top-0 z-40 hidden h-screen overflow-hidden border-r border-slate-200/80 bg-white/95 backdrop-blur xl:flex",
-            hasDesktopSecondary ? "w-[544px]" : "w-64"
-          )}
+          className="fixed left-0 top-0 z-40 hidden h-screen w-64 overflow-visible border-r border-slate-200/80 bg-white/95 backdrop-blur xl:flex"
         >
           <SidebarContent
             visibleSections={visibleSections}
             activeDesktopSection={activeDesktopSection}
-            onActiveDesktopSectionChange={setActiveDesktopSection}
+            activeDesktopTop={activeDesktopTop}
+            onActiveDesktopSectionChange={(section, anchorTop) => {
+              if (section && typeof anchorTop === "number") setActiveDesktopTop(anchorTop)
+              setActiveDesktopSection(section)
+            }}
           />
         </div>
       </aside>
