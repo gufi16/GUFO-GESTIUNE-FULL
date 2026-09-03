@@ -185,7 +185,7 @@ function SidebarAccordion({
   items: SidebarItem[]
   flyout?: boolean
   forceOpen?: boolean
-  onToggle?: () => void
+  onToggle?: (anchorTop: number) => void
   onNavigate?: () => void
 }) {
   const location = useLocation()
@@ -205,9 +205,9 @@ function SidebarAccordion({
     <div className="relative">
       <button
         type="button"
-        onClick={() => {
+        onClick={(event) => {
           if (flyout) {
-            onToggle?.()
+            onToggle?.(event.currentTarget.getBoundingClientRect().top)
             return
           }
           setOpen((value) => !value)
@@ -267,13 +267,15 @@ function SidebarAccordion({
 function SidebarContent({
   visibleSections,
   activeDesktopSection,
+  activeDesktopTop,
   onActiveDesktopSectionChange,
   mobile = false,
   onCloseMobile,
 }: {
   visibleSections: SidebarSection[]
   activeDesktopSection?: string | null
-  onActiveDesktopSectionChange?: (section: string | null) => void
+  activeDesktopTop?: number
+  onActiveDesktopSectionChange?: (section: string | null, anchorTop?: number) => void
   mobile?: boolean
   onCloseMobile?: () => void
 }) {
@@ -281,6 +283,11 @@ function SidebarContent({
     !mobile && activeDesktopSection
       ? visibleSections.find((section) => section.title === activeDesktopSection)?.items || []
       : []
+  const estimatedFlyoutHeight = 88 + activeDesktopItems.length * 52
+  const flyoutTop = Math.max(
+    16,
+    Math.min(activeDesktopTop || 96, Math.max(16, window.innerHeight - estimatedFlyoutHeight - 16))
+  )
 
   return (
     <div className={clsx("relative flex h-full w-full bg-white", mobile ? "overflow-hidden" : "overflow-visible")}>
@@ -327,9 +334,10 @@ function SidebarContent({
                     onToggle={
                       mobile
                         ? undefined
-                        : () =>
+                        : (anchorTop) =>
                             onActiveDesktopSectionChange?.(
-                              activeDesktopSection === section.title ? null : section.title
+                              activeDesktopSection === section.title ? null : section.title,
+                              anchorTop
                             )
                     }
                     onNavigate={mobile ? onCloseMobile : undefined}
@@ -364,7 +372,7 @@ function SidebarContent({
       {!mobile && activeDesktopSection ? (
         <div
           className="absolute left-[calc(100%+12px)] z-50 hidden w-[292px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_20px_52px_rgba(15,35,55,0.18)] xl:flex xl:max-h-[calc(100vh-32px)] xl:flex-col"
-          style={{ top: 16 }}
+          style={{ top: flyoutTop }}
         >
           <div className="flex items-start justify-between border-b border-slate-100 bg-[#F8FAFC] px-4 py-3">
             <div>
@@ -414,6 +422,7 @@ export default function Sidebar({
     }))
     .filter((section) => section.items.length > 0)
   const [activeDesktopSection, setActiveDesktopSection] = useState<string | null>(null)
+  const [activeDesktopTop, setActiveDesktopTop] = useState(96)
 
   useEffect(() => {
     setActiveDesktopSection(null)
@@ -432,7 +441,11 @@ export default function Sidebar({
           <SidebarContent
             visibleSections={visibleSections}
             activeDesktopSection={activeDesktopSection}
-            onActiveDesktopSectionChange={setActiveDesktopSection}
+            activeDesktopTop={activeDesktopTop}
+            onActiveDesktopSectionChange={(section, anchorTop) => {
+              if (section && typeof anchorTop === "number") setActiveDesktopTop(anchorTop)
+              setActiveDesktopSection(section)
+            }}
           />
         </div>
       </aside>
