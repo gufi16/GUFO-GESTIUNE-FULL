@@ -991,6 +991,7 @@ model Product {
   posMenuCategory String?
   isVisibleInPos Boolean        @default(true)
   publishToGlovo Boolean        @default(false)
+  includeInNomenclatorExport Boolean @default(true)
   isSgr          Boolean        @default(false)
   sgrValue       Decimal        @default(0)
   sgrPackagingType SgrPackagingType?

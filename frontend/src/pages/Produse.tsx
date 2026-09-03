@@ -28,6 +28,7 @@ type Product = {
   posMenuCategory?: string | null
   isVisibleInPos?: boolean
   publishToGlovo?: boolean
+  includeInNomenclatorExport?: boolean
   isSgr?: boolean
   sgrValue?: number
   sgrPackagingType?: "PET" | "METAL" | "STICLA" | null
@@ -103,6 +104,7 @@ type FormState = {
   posMenuCategory: string
   isVisibleInPos: boolean
   publishToGlovo: boolean
+  includeInNomenclatorExport: boolean
   isSgr: boolean
   sgrPackagingType: "" | "PET" | "METAL" | "STICLA"
   sgrVolumeLiters: string
@@ -218,6 +220,7 @@ const emptyForm: FormState = {
   posMenuCategory: "",
   isVisibleInPos: true,
   publishToGlovo: false,
+  includeInNomenclatorExport: true,
   isSgr: false,
   sgrPackagingType: "",
   sgrVolumeLiters: "",
@@ -654,6 +657,7 @@ function getDefaultVat(list = vatRates) {
       posMenuCategory: "",
       isVisibleInPos: true,
       publishToGlovo: false,
+      includeInNomenclatorExport: true,
       isSgr: false,
       sgrPackagingType: "",
       sgrVolumeLiters: "",
@@ -702,6 +706,7 @@ function getDefaultVat(list = vatRates) {
       posMenuCategory: item.posMenuCategory || "",
       isVisibleInPos: item.isVisibleInPos !== false,
       publishToGlovo: item.publishToGlovo === true,
+      includeInNomenclatorExport: item.includeInNomenclatorExport !== false,
       isSgr: item.isSgr === true,
       sgrPackagingType: item.sgrPackagingType || "",
       sgrVolumeLiters: item.sgrVolumeLiters ? normalizePositiveString(item.sgrVolumeLiters, "") : "",
@@ -872,6 +877,7 @@ function getDefaultVat(list = vatRates) {
           posMenuCategory: form.isMenu ? form.posMenuCategory.trim() || null : null,
           isVisibleInPos: form.isVisibleInPos,
           publishToGlovo: form.publishToGlovo,
+          includeInNomenclatorExport: form.includeInNomenclatorExport,
           isSgr: form.isSgr,
           sgrPackagingType: form.isSgr ? form.sgrPackagingType : null,
           sgrVolumeLiters: form.isSgr ? sgrVolumeLiters : 0,
@@ -2649,6 +2655,22 @@ function getDefaultVat(list = vatRates) {
                           />
                         </div>
                       ) : null}
+                    </div>
+
+                    <div style={checkBlock}>
+                      <label style={checkLabel}>
+                        <input
+                          type="checkbox"
+                          checked={form.includeInNomenclatorExport}
+                          onChange={(e) =>
+                            setForm((prev) => ({ ...prev, includeInNomenclatorExport: e.target.checked }))
+                          }
+                        />
+                        <span>Include in exporturile nomenclatorului</span>
+                      </label>
+                      <div style={checkHint}>
+                        Apare in Export Excel si Export PDF. Debifeaza pentru a pastra produsul in ERP fara sa-l exporti.
+                      </div>
                     </div>
 
                     <div style={checkBlock}>

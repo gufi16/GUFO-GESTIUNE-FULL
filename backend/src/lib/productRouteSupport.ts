@@ -44,6 +44,7 @@ type ProductUomLike = {
 }
 
 type ProductLike = {
+  includeInNomenclatorExport?: boolean | null
   price?: unknown
   costPrice?: unknown
   purchaseFactor?: unknown

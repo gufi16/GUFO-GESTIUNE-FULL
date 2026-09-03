@@ -123,7 +123,7 @@ async function getNomenclatorExportData(req: AuthedRequest) {
       select: { name: true, cui: true },
     }),
     prisma.product.findMany({
-      where: { tenantId, companyId },
+      where: { tenantId, companyId, includeInNomenclatorExport: true },
       include: {
         uom: { select: { code: true, name: true } },
         vatRate: { select: { rate: true } },
@@ -540,6 +540,7 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
     req.body?.isFiscalRiskProduct === undefined ? false : Boolean(req.body?.isFiscalRiskProduct)
   const requestedIsMenu = normalizeBoolean(req.body?.isMenu, false)
   const requestedPublishToGlovo = normalizeBoolean(req.body?.publishToGlovo, false)
+  const requestedIncludeInNomenclatorExport = normalizeBoolean(req.body?.includeInNomenclatorExport, true)
   const terminalIds = await resolveProductTerminalIds(tenantId, companyId, req.body)
   const requestedPosMenuCategory = toNullableText(req.body?.posMenuCategory)
   const posMenuCategory = requestedIsMenu ? requestedPosMenuCategory : null
@@ -801,6 +802,7 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
           posMenuCategory,
           isVisibleInPos,
           publishToGlovo: requestedPublishToGlovo,
+          includeInNomenclatorExport: requestedIncludeInNomenclatorExport,
           isSgr,
           sgrValue: isSgr ? 0.5 : 0,
           sgrPackagingType: sgrPackaging.sgrPackagingType,
@@ -967,6 +969,7 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
     req.body?.isFiscalRiskProduct === undefined ? false : Boolean(req.body?.isFiscalRiskProduct)
   const requestedIsMenu = normalizeBoolean(req.body?.isMenu, false)
   const requestedPublishToGlovo = normalizeBoolean(req.body?.publishToGlovo, false)
+  const requestedIncludeInNomenclatorExport = normalizeBoolean(req.body?.includeInNomenclatorExport, true)
   const requestedPosMenuCategory = toNullableText(req.body?.posMenuCategory)
   const posMenuCategory = requestedIsMenu ? requestedPosMenuCategory : null
   const requestedPosSortOrder = req.body?.posSortOrder
@@ -1235,6 +1238,7 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
           posMenuCategory,
           isVisibleInPos,
           publishToGlovo: requestedPublishToGlovo,
+          includeInNomenclatorExport: requestedIncludeInNomenclatorExport,
           isSgr,
           sgrValue: isSgr ? 0.5 : 0,
           sgrPackagingType: sgrPackaging.sgrPackagingType,
