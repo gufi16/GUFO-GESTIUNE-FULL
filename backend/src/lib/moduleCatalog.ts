@@ -352,6 +352,9 @@ export function resolveEffectiveModuleCodes(
     }
   }
 
+  // Core accounting reports are available in every ERP tenant.
+  enabled.add("reports")
+
   return enabled
 }
 

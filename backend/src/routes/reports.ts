@@ -5,7 +5,7 @@ import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { requireRequestCompanyId } from "../lib/companyScope"
 import { resolveTenantCompany } from "../lib/companyResolver"
-import { drawDocumentHero, drawInfoCards, drawSignatureRow, drawSimpleTable, drawTotalsBox, pdfDate, pdfFmt, registerPdfFonts } from "../lib/professionalPdf"
+import { drawDocumentHero, drawInfoCards, drawSignatureRow, drawTotalsBox, pdfDate, pdfFmt, registerPdfFonts } from "../lib/professionalPdf"
 
 const router = Router()
 
@@ -124,6 +124,90 @@ function isSameSgrSyntheticLine(item: ReportsSaleItemLike) {
 
 type AccountingReportKind = "sales" | "sgr"
 
+type ReportPdfFonts = { regular: string; bold: string }
+type ReportPdfColumn = { label: string; width: number; align?: "left" | "center" | "right" }
+
+function clipPdfCell(doc: PDFKit.PDFDocument, font: string, value: unknown, width: number) {
+  const text = String(value ?? "-").replace(/\s+/g, " ").trim() || "-"
+  doc.font(font).fontSize(8.3)
+  if (doc.widthOfString(text) <= width) return text
+
+  const suffix = "..."
+  let low = 0
+  let high = text.length
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2)
+    if (doc.widthOfString(`${text.slice(0, mid)}${suffix}`) <= width) low = mid
+    else high = mid - 1
+  }
+  return `${text.slice(0, Math.max(1, low))}${suffix}`
+}
+
+function drawAccountingTable(
+  doc: PDFKit.PDFDocument,
+  fonts: ReportPdfFonts,
+  options: { margin: number; y: number; title: string; columns: ReportPdfColumn[]; rows: string[][] },
+) {
+  const rowHeight = 25
+  const bottomMargin = options.margin + 108
+  let y = options.y
+
+  const drawColumns = () => {
+    let x = options.margin
+    for (const column of options.columns) {
+      doc.save().rect(x, y, column.width, rowHeight).fill("#17324D").restore()
+      doc.font(fonts.bold).fontSize(8.2).fillColor("#FFFFFF").text(column.label, x + 6, y + 8, {
+        width: column.width - 12,
+        height: 10,
+        lineBreak: false,
+        align: column.align || "left",
+      })
+      x += column.width
+    }
+    y += rowHeight
+  }
+
+  const addContinuationPage = () => {
+    doc.addPage({ size: "A4", layout: doc.page.layout === "landscape" ? "landscape" : "portrait", margin: options.margin })
+    y = options.margin
+    doc.font(fonts.bold).fontSize(10).fillColor("#17324D").text(`${options.title} - continuare`, options.margin, y)
+    y += 20
+    drawColumns()
+  }
+
+  drawColumns()
+  const rows = options.rows.length ? options.rows : [["Nu exista date pentru intervalul selectat.", ...options.columns.slice(1).map(() => "-")]]
+
+  rows.forEach((row, rowIndex) => {
+    if (y + rowHeight > doc.page.height - bottomMargin) addContinuationPage()
+    let x = options.margin
+    for (let index = 0; index < options.columns.length; index += 1) {
+      const column = options.columns[index]
+      const fill = rowIndex % 2 === 0 ? "#FFFFFF" : "#F8FAFC"
+      doc.save().rect(x, y, column.width, rowHeight).fill(fill).restore()
+      doc.save().lineWidth(0.55).strokeColor("#D7DEEA").rect(x, y, column.width, rowHeight).stroke().restore()
+      const value = clipPdfCell(doc, fonts.regular, row[index] || "-", column.width - 12)
+      doc.font(fonts.regular).fontSize(8.3).fillColor("#1E293B").text(value, x + 6, y + 8, {
+        width: column.width - 12,
+        height: 10,
+        lineBreak: false,
+        align: column.align || "left",
+      })
+      x += column.width
+    }
+    y += rowHeight
+  })
+
+  return y
+}
+
+function ensureAccountingFooterSpace(doc: PDFKit.PDFDocument, fonts: ReportPdfFonts, y: number, margin: number, title: string) {
+  if (y + 130 <= doc.page.height - margin) return y
+  doc.addPage({ size: "A4", layout: doc.page.layout === "landscape" ? "landscape" : "portrait", margin })
+  doc.font(fonts.bold).fontSize(10).fillColor("#17324D").text(`${title} - totaluri`, margin, margin)
+  return margin + 22
+}
+
 async function sendAccountingPdf(kind: AccountingReportKind, req: AuthedRequest, res: any) {
   const tenantId = String(req.auth?.tenantId || "").trim()
   if (!tenantId) return res.status(401).json({ error: "Unauthorized" })
@@ -208,7 +292,7 @@ async function sendAccountingPdf(kind: AccountingReportKind, req: AuthedRequest,
 
   let y = drawDocumentHero(doc, fonts, {
     title,
-    subtitle: isSgr ? "Centralizator garantie-returnare pentru contabilitate" : "Centralizator vanzari pentru contabilitate",
+    subtitle: `${isSgr ? "Centralizator garantie-returnare pentru contabilitate" : "Centralizator vanzari pentru contabilitate"}${company.cui ? ` · CUI ${company.cui}` : ""}`,
     companyName: company.name,
     companyLines: [company.cui ? `CUI: ${company.cui}` : "", company.address || "", company.city || ""].filter(Boolean),
     rightPairs: [
@@ -229,9 +313,10 @@ async function sendAccountingPdf(kind: AccountingReportKind, req: AuthedRequest,
         { title: "Total SGR", pairs: [{ label: "Valoare", value: reportMoney(totalSgr) }, { label: "Bonuri incluse", value: String(sales.length) }] },
       ],
     }) + 18
-    y = drawSimpleTable(doc, fonts, {
+    y = drawAccountingTable(doc, fonts, {
       margin: 36,
       y,
+      title,
       columns: [
         { label: "Produs / sursa", width: 200 },
         { label: "Cantitate", width: 70, align: "right" },
@@ -243,6 +328,7 @@ async function sendAccountingPdf(kind: AccountingReportKind, req: AuthedRequest,
         .sort((a, b) => b.value - a.value)
         .map((row) => [row.name, row.qty ? pdfFmt(row.qty, 3) : "-", row.uom, row.unit ? reportMoney(row.unit) : "-", reportMoney(row.value)]),
     }) + 16
+    y = ensureAccountingFooterSpace(doc, fonts, y, 36, title)
     y = drawTotalsBox(doc, fonts, {
       x: doc.page.width - 255,
       y,
@@ -261,9 +347,10 @@ async function sendAccountingPdf(kind: AccountingReportKind, req: AuthedRequest,
         { title: "Incasari", pairs: Array.from(paymentTotals.entries()).slice(0, 3).map(([label, value]) => ({ label, value: reportMoney(value) })) },
       ],
     }) + 18
-    y = drawSimpleTable(doc, fonts, {
+    y = drawAccountingTable(doc, fonts, {
       margin: 36,
       y,
+      title,
       columns: [
         { label: "Data / ora", width: 105 },
         { label: "Bon", width: 90 },
@@ -283,6 +370,7 @@ async function sendAccountingPdf(kind: AccountingReportKind, req: AuthedRequest,
         reportMoney(sale.total),
       ]),
     }) + 16
+    y = ensureAccountingFooterSpace(doc, fonts, y, 36, title)
     y = drawTotalsBox(doc, fonts, {
       x: doc.page.width - 275,
       y,
