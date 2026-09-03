@@ -212,6 +212,7 @@ export function drawSimpleTable(doc: PDFKit.PDFDocument, fonts: Fonts, options: 
   rows: string[][]
   rowHeight?: number
   drawHeader?: () => number
+  headerColor?: string
 }) {
   const rowHeight = options.rowHeight ?? 24
   let y = options.y
@@ -219,7 +220,7 @@ export function drawSimpleTable(doc: PDFKit.PDFDocument, fonts: Fonts, options: 
 
   options.columns.forEach((col) => {
     doc.save()
-    doc.rect(x, y, col.width, rowHeight).fill("#182033")
+    doc.rect(x, y, col.width, rowHeight).fill(options.headerColor || "#182033")
     doc.restore()
     doc.save()
     doc.lineWidth(0.6).strokeColor("#D7DEEA").rect(x, y, col.width, rowHeight).stroke()

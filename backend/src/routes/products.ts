@@ -10,7 +10,7 @@ import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { buildCompanyScopedTenantWhere, requireRequestCompanyId, resolveRequestCompany } from "../lib/companyScope"
 import { suggestNcCodes } from "../lib/ncSuggest"
 import { buildPublicUploadUrl, ensureUploadSubdir, normalizeStoredUploadUrl } from "../lib/uploads"
-import { drawDocumentHero, drawSimpleTable, registerPdfFonts } from "../lib/professionalPdf"
+import { drawSimpleTable, registerPdfFonts } from "../lib/professionalPdf"
 import {
   ALL_PRODUCT_CLASSES,
   MENU_COMPONENT_CLASSES,
@@ -135,6 +135,54 @@ async function getNomenclatorExportData(req: AuthedRequest) {
   if (!company) throw new Error("Compania activa nu a fost gasita.")
 
   return { company, products }
+}
+
+function drawProductExportHeader(doc: PDFKit.PDFDocument, fonts: ReturnType<typeof registerPdfFonts>, company: { name: string; cui: string | null }, productCount: number) {
+  const margin = 36
+  const width = doc.page.width - margin * 2
+  let y = margin
+
+  doc.font(fonts.bold).fontSize(21).fillColor("#111827").text("EXPORT PRODUSE", margin, y)
+  doc.font(fonts.regular).fontSize(11).fillColor("#50627D").text("Raport produse / nomenclator", margin, y + 28)
+  doc.save().rect(doc.page.width - margin - 142, y + 3, 142, 26).fill("#167D72").restore()
+  doc.font(fonts.bold).fontSize(8.8).fillColor("#FFFFFF").text("RAPORT CONTABIL", doc.page.width - margin - 142, y + 11, { width: 142, align: "center" })
+  y += 52
+
+  const details = [
+    ["NUME FIRMA", company.name],
+    ["CUI / CIF", company.cui || "-"],
+    ["LOCATIE / PUNCT DE LUCRU", "Toate locatiile"],
+    ["DATA EXPORTULUI", new Date().toLocaleDateString("ro-RO")],
+  ]
+  const detailWidth = width / 2
+  details.forEach(([label, value], index) => {
+    const col = index % 2
+    const row = Math.floor(index / 2)
+    const x = margin + col * detailWidth
+    const cellY = y + row * 43
+    doc.save().rect(x, cellY, detailWidth, 43).fill("#F7F9FC").restore()
+    doc.save().lineWidth(0.65).strokeColor("#C8D4E3").rect(x, cellY, detailWidth, 43).stroke().restore()
+    doc.font(fonts.bold).fontSize(7.7).fillColor("#64748B").text(label, x + 9, cellY + 8)
+    doc.font(fonts.regular).fontSize(9.6).fillColor("#334155").text(value, x + 9, cellY + 21, { width: detailWidth - 18, lineBreak: false })
+  })
+  y += 101
+
+  const summary = [
+    ["TIP RAPORT", "Export produse - lista completa"],
+    ["STATUS PRODUSE", "Toate"],
+    ["MONEDA", "RON"],
+    ["NR. PRODUSE", String(productCount)],
+  ]
+  const gap = 6
+  const summaryWidth = (width - gap * (summary.length - 1)) / summary.length
+  summary.forEach(([label, value], index) => {
+    const x = margin + index * (summaryWidth + gap)
+    doc.save().lineWidth(0.65).strokeColor("#C8D4E3").rect(x, y, summaryWidth, 43).stroke().restore()
+    doc.font(fonts.regular).fontSize(7.5).fillColor("#64748B").text(label, x + 6, y + 8, { width: summaryWidth - 12, align: "center" })
+    doc.font(fonts.bold).fontSize(8.6).fillColor("#17324D").text(value, x + 6, y + 22, { width: summaryWidth - 12, align: "center", lineBreak: false })
+  })
+
+  return y + 62
 }
 
 async function resolveProductTerminalIds(tenantId: string, companyId: string, payload: unknown) {
@@ -367,37 +415,25 @@ router.get("/api/v1/products/export/xlsx", async (req: AuthedRequest, res) => {
 router.get("/api/v1/products/export/pdf", async (req: AuthedRequest, res) => {
   try {
     const { company, products } = await getNomenclatorExportData(req)
-    const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 36, info: { Title: "Nomenclator produse", Author: "Gufo ERP" } })
+    const doc = new PDFDocument({ size: "A4", margin: 36, info: { Title: "Export produse", Author: "Gufo ERP" } })
     const fonts = registerPdfFonts(doc)
     res.setHeader("Content-Type", "application/pdf")
     res.setHeader("Content-Disposition", 'attachment; filename="Nomenclator_produse.pdf"')
     doc.pipe(res)
 
-    const y = drawDocumentHero(doc, fonts, {
-      title: "NOMENCLATOR PRODUSE",
-      subtitle: "Lista produse, TVA, SGR si preturi de vanzare cu TVA",
-      companyName: company.name,
-      companyLines: [company.cui ? `CUI: ${company.cui}` : ""].filter(Boolean),
-      rightPairs: [
-        { label: "Produse", value: String(products.length) },
-        { label: "Generat", value: new Date().toLocaleDateString("ro-RO") },
-      ],
-      margin: 36,
-    })
+    const y = drawProductExportHeader(doc, fonts, company, products.length)
 
-    drawSimpleTable(doc, fonts, {
+    const endY = drawSimpleTable(doc, fonts, {
       margin: 36,
       y,
       columns: [
-        { label: "Cod produs", width: 95 },
-        { label: "Denumire produs", width: 275 },
-        { label: "UM", width: 70, align: "center" },
-        { label: "SGR", width: 65, align: "center" },
-        { label: "Cota TVA", width: 90, align: "right" },
-        { label: "Pret vanzare cu TVA", width: 135, align: "right" },
+        { label: "Denumire produs", width: 225 },
+        { label: "UM", width: 45, align: "center" },
+        { label: "SGR", width: 50, align: "center" },
+        { label: "Cota TVA", width: 65, align: "right" },
+        { label: "Pret vanzare cu TVA", width: 138, align: "right" },
       ],
       rows: products.map((product) => [
-        product.sku,
         product.name,
         product.uom?.code || product.uom?.name || "-",
         product.isSgr ? "Da" : "Nu",
@@ -405,10 +441,19 @@ router.get("/api/v1/products/export/pdf", async (req: AuthedRequest, res) => {
         exportMoney(product.price),
       ]),
       drawHeader: () => {
-        doc.font(fonts.bold).fontSize(11).fillColor("#17324D").text("NOMENCLATOR PRODUSE - continuare", 36, 36)
+        doc.font(fonts.bold).fontSize(12).fillColor("#17324D").text("EXPORT PRODUSE - continuare", 36, 36)
         return 58
       },
+      headerColor: "#167D72",
     })
+    if (endY + 48 <= doc.page.height - 36) {
+      doc.font(fonts.regular).fontSize(8).fillColor("#64748B").text(
+        "Nota: Campul SGR indica daca produsul este supus Sistemului Garantie-Returnare. Pretul de vanzare este afisat cu TVA inclus.",
+        36,
+        endY + 18,
+        { width: doc.page.width - 72 }
+      )
+    }
     doc.end()
   } catch (error) {
     console.error("PRODUCTS PDF EXPORT ERROR:", error)
