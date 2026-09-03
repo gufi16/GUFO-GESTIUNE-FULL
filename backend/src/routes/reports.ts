@@ -346,8 +346,8 @@ async function sendAccountingPdf(kind: AccountingReportKind, req: AuthedRequest,
   })
 
   const totalGross = sales.reduce((sum, sale) => sum + toNumber(sale.total), 0)
-  const totalSgr = sales.reduce((sum, sale) => sum + toNumber(sale.sgrTotal), 0)
-  const totalWithoutSgr = totalGross - totalSgr
+  const recordedSgrTotal = sales.reduce((sum, sale) => sum + toNumber(sale.sgrTotal), 0)
+  const totalWithoutSgr = totalGross - recordedSgrTotal
   const paymentTotals = new Map<string, number>()
   for (const sale of sales) {
     const payment = String(sale.paymentType || "ALTA PLATA")
@@ -386,6 +386,9 @@ async function sendAccountingPdf(kind: AccountingReportKind, req: AuthedRequest,
       value: unallocatedSgr,
     })
   }
+  // The product rows are the auditable source for the SGR report. Older sales can contain an outdated sgrTotal.
+  const calculatedSgrTotal = Array.from(sgrRows.values()).reduce((sum, row) => sum + row.value, 0)
+  const reportSgrTotal = calculatedSgrTotal > 0 ? calculatedSgrTotal : recordedSgrTotal
 
   const isSgr = kind === "sgr"
   const title = isSgr ? "RAPORT SGR" : "RAPORT VANZARI"
@@ -420,7 +423,7 @@ async function sendAccountingPdf(kind: AccountingReportKind, req: AuthedRequest,
         pdfFmt(total.qty, 3),
         reportMoney(0.5),
         reportMoney(total.value),
-        totalSgr > 0 ? `${pdfFmt((total.value / totalSgr) * 100, 1)}%` : "-",
+        reportSgrTotal > 0 ? `${pdfFmt((total.value / reportSgrTotal) * 100, 1)}%` : "-",
       ])
 
     const unclassified = typeTotals.get("") || { qty: 0, value: 0 }
@@ -431,11 +434,11 @@ async function sendAccountingPdf(kind: AccountingReportKind, req: AuthedRequest,
         unclassified.qty ? pdfFmt(unclassified.qty, 3) : "-",
         "-",
         reportMoney(unclassified.value),
-        totalSgr > 0 ? `${pdfFmt((unclassified.value / totalSgr) * 100, 1)}%` : "-",
+        reportSgrTotal > 0 ? `${pdfFmt((unclassified.value / reportSgrTotal) * 100, 1)}%` : "-",
       ])
     }
     const totalQty = sortedSgrRows.reduce((sum, row) => sum + row.qty, 0)
-    summaryRows.push(["TOTAL", "", pdfFmt(totalQty, 3), "", reportMoney(totalSgr), totalSgr > 0 ? "100,0%" : "-"])
+    summaryRows.push(["TOTAL", "", pdfFmt(totalQty, 3), "", reportMoney(reportSgrTotal), reportSgrTotal > 0 ? "100,0%" : "-"])
 
     let y = drawSgrReportHeader(doc, fonts, {
       companyName: company.name,
@@ -444,7 +447,7 @@ async function sendAccountingPdf(kind: AccountingReportKind, req: AuthedRequest,
       generatedAt: new Date().toLocaleDateString("ro-RO"),
       totalQty,
       typeTotals,
-      totalSgr,
+      totalSgr: reportSgrTotal,
     })
     doc.font(fonts.bold).fontSize(13).fillColor("#111827").text("1. Centralizator pe tip de ambalaj", 36, y)
     y += 19
@@ -478,7 +481,7 @@ async function sendAccountingPdf(kind: AccountingReportKind, req: AuthedRequest,
       row.unit ? reportMoney(row.unit) : "-",
       reportMoney(row.value),
     ])
-    detailRows.push(["TOTAL", "", "", "", pdfFmt(totalQty, 3), "", reportMoney(totalSgr)])
+    detailRows.push(["TOTAL", "", "", "", pdfFmt(totalQty, 3), "", reportMoney(reportSgrTotal)])
     drawAccountingTable(doc, fonts, {
       margin: 36,
       y,
@@ -550,7 +553,7 @@ async function sendAccountingPdf(kind: AccountingReportKind, req: AuthedRequest,
       width: 239,
       lines: [
         { label: "Total fara SGR", value: reportMoney(totalWithoutSgr) },
-        { label: "Total SGR", value: reportMoney(totalSgr) },
+        { label: "Total SGR", value: reportMoney(recordedSgrTotal) },
         { label: "TOTAL INCASARI", value: reportMoney(totalGross) },
       ],
       highlightLast: true,
