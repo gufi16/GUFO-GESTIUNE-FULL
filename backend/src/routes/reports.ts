@@ -1,8 +1,11 @@
 ﻿
 import { Router } from "express"
+import PDFDocument from "pdfkit"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { requireRequestCompanyId } from "../lib/companyScope"
+import { resolveTenantCompany } from "../lib/companyResolver"
+import { drawDocumentHero, drawInfoCards, drawSignatureRow, drawSimpleTable, drawTotalsBox, pdfDate, pdfFmt, registerPdfFonts } from "../lib/professionalPdf"
 
 const router = Router()
 
@@ -102,6 +105,218 @@ function formatDayLabel(date: Date) {
   const month = `${date.getMonth() + 1}`.padStart(2, "0")
   return `${day}.${month}`
 }
+
+function reportFileDate(value: unknown) {
+  return String(value || "").replace(/[^0-9]/g, "") || "interval"
+}
+
+function reportMoney(value: unknown) {
+  return `${pdfFmt(value)} RON`
+}
+
+function reportPeriod(from: Date, to: Date) {
+  return `${pdfDate(from)} - ${pdfDate(to)}`
+}
+
+function isSameSgrSyntheticLine(item: ReportsSaleItemLike) {
+  return isSyntheticSgrSaleItem(item)
+}
+
+type AccountingReportKind = "sales" | "sgr"
+
+async function sendAccountingPdf(kind: AccountingReportKind, req: AuthedRequest, res: any) {
+  const tenantId = String(req.auth?.tenantId || "").trim()
+  if (!tenantId) return res.status(401).json({ error: "Unauthorized" })
+
+  const companyId = await requireRequestCompanyId(req)
+  if (!companyId) return res.status(400).json({ error: "Firma activa lipsa." })
+
+  const from = parseDateStart(req.query.dateFrom) || parseDateStart(req.query.from) || new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+  const to = parseDateEnd(req.query.dateTo) || parseDateEnd(req.query.to) || new Date()
+  const locationId = String(req.query.locationId || "").trim() || null
+  const company = await resolveTenantCompany(prisma, tenantId, companyId)
+  if (!company) return res.status(404).json({ error: "Firma activa nu a fost gasita." })
+
+  const sales = await prisma.sale.findMany({
+    where: {
+      tenantId,
+      companyId,
+      soldAt: { gte: from, lte: to },
+      ...(locationId ? { locationId } : {}),
+    },
+    include: {
+      location: { select: { name: true } },
+      terminal: { select: { label: true } },
+      items: {
+        include: {
+          product: { select: { name: true, isSgr: true, sgrValue: true, uom: { select: { code: true } } } },
+        },
+      },
+    },
+    orderBy: [{ soldAt: "asc" }, { receiptNo: "asc" }],
+  })
+
+  const totalGross = sales.reduce((sum, sale) => sum + toNumber(sale.total), 0)
+  const totalSgr = sales.reduce((sum, sale) => sum + toNumber(sale.sgrTotal), 0)
+  const totalWithoutSgr = totalGross - totalSgr
+  const paymentTotals = new Map<string, number>()
+  for (const sale of sales) {
+    const payment = String(sale.paymentType || "ALTA PLATA")
+    paymentTotals.set(payment, (paymentTotals.get(payment) || 0) + toNumber(sale.total))
+  }
+
+  const sgrRows = new Map<string, { name: string; uom: string; qty: number; unit: number; value: number }>()
+  let unallocatedSgr = 0
+  for (const sale of sales) {
+    let allocated = 0
+    for (const item of sale.items) {
+      if (!item.product?.isSgr || isSameSgrSyntheticLine(item)) continue
+      const qty = toNumber(item.qty)
+      const unit = toNumber(item.product.sgrValue || 0.5)
+      const value = qty * unit
+      if (qty <= 0 || value <= 0) continue
+      allocated += value
+      const key = `${item.product.name}|${unit}|${item.product.uom?.code || "buc"}`
+      const row = sgrRows.get(key) || { name: item.product.name, uom: item.product.uom?.code || "buc", qty: 0, unit, value: 0 }
+      row.qty += qty
+      row.value += value
+      sgrRows.set(key, row)
+    }
+    unallocatedSgr += Math.max(0, toNumber(sale.sgrTotal) - allocated)
+  }
+  if (unallocatedSgr > 0.0001) {
+    sgrRows.set("documentat", {
+      name: "SGR conform bonurilor fiscale",
+      uom: "-",
+      qty: 0,
+      unit: 0,
+      value: unallocatedSgr,
+    })
+  }
+
+  const isSgr = kind === "sgr"
+  const title = isSgr ? "RAPORT SGR" : "RAPORT VANZARI"
+  const locationName = locationId ? sales[0]?.location?.name || "Locatia selectata" : "Toate locatiile"
+  const doc = new PDFDocument({ size: "A4", layout: isSgr ? "portrait" : "landscape", margin: 36, info: { Title: title, Author: "Gufo ERP" } })
+  const fonts = registerPdfFonts(doc)
+  const safeFrom = reportFileDate(req.query.dateFrom || from.toISOString().slice(0, 10))
+  const safeTo = reportFileDate(req.query.dateTo || to.toISOString().slice(0, 10))
+
+  res.setHeader("Content-Type", "application/pdf")
+  res.setHeader("Content-Disposition", `attachment; filename=${isSgr ? "Raport_SGR" : "Raport_Vanzari"}_${safeFrom}-${safeTo}.pdf`)
+  doc.pipe(res)
+
+  let y = drawDocumentHero(doc, fonts, {
+    title,
+    subtitle: isSgr ? "Centralizator garantie-returnare pentru contabilitate" : "Centralizator vanzari pentru contabilitate",
+    companyName: company.name,
+    companyLines: [company.cui ? `CUI: ${company.cui}` : "", company.address || "", company.city || ""].filter(Boolean),
+    rightPairs: [
+      { label: "Perioada", value: reportPeriod(from, to) },
+      { label: "Locatie", value: locationName },
+      { label: "Generat", value: new Date().toLocaleDateString("ro-RO") },
+    ],
+    margin: 36,
+  })
+
+  if (isSgr) {
+    y = drawInfoCards(doc, fonts, {
+      margin: 36,
+      y,
+      height: 100,
+      cards: [
+        { title: "Document", pairs: [{ label: "Perioada", value: reportPeriod(from, to) }, { label: "Locatie", value: locationName }] },
+        { title: "Total SGR", pairs: [{ label: "Valoare", value: reportMoney(totalSgr) }, { label: "Bonuri incluse", value: String(sales.length) }] },
+      ],
+    }) + 18
+    y = drawSimpleTable(doc, fonts, {
+      margin: 36,
+      y,
+      columns: [
+        { label: "Produs / sursa", width: 200 },
+        { label: "Cantitate", width: 70, align: "right" },
+        { label: "UM", width: 45, align: "center" },
+        { label: "Valoare unitara", width: 95, align: "right" },
+        { label: "Valoare SGR", width: 95, align: "right" },
+      ],
+      rows: Array.from(sgrRows.values())
+        .sort((a, b) => b.value - a.value)
+        .map((row) => [row.name, row.qty ? pdfFmt(row.qty, 3) : "-", row.uom, row.unit ? reportMoney(row.unit) : "-", reportMoney(row.value)]),
+    }) + 16
+    y = drawTotalsBox(doc, fonts, {
+      x: doc.page.width - 255,
+      y,
+      width: 219,
+      lines: [{ label: "TOTAL SGR", value: reportMoney(totalSgr) }],
+      highlightLast: true,
+    }) + 28
+  } else {
+    y = drawInfoCards(doc, fonts, {
+      margin: 36,
+      y,
+      height: 100,
+      cards: [
+        { title: "Document", pairs: [{ label: "Perioada", value: reportPeriod(from, to) }, { label: "Locatie", value: locationName }] },
+        { title: "Vanzari", pairs: [{ label: "Bonuri", value: String(sales.length) }, { label: "Fara SGR", value: reportMoney(totalWithoutSgr) }] },
+        { title: "Incasari", pairs: Array.from(paymentTotals.entries()).slice(0, 3).map(([label, value]) => ({ label, value: reportMoney(value) })) },
+      ],
+    }) + 18
+    y = drawSimpleTable(doc, fonts, {
+      margin: 36,
+      y,
+      columns: [
+        { label: "Data / ora", width: 105 },
+        { label: "Bon", width: 90 },
+        { label: "Locatie", width: 130 },
+        { label: "Plata", width: 85 },
+        { label: "Fara SGR", width: 95, align: "right" },
+        { label: "SGR", width: 75, align: "right" },
+        { label: "Total", width: 95, align: "right" },
+      ],
+      rows: sales.map((sale) => [
+        new Date(sale.soldAt).toLocaleString("ro-RO"),
+        sale.receiptNo || sale.clientSaleId || "-",
+        sale.location?.name || "-",
+        String(sale.paymentType || "-"),
+        reportMoney(toNumber(sale.total) - toNumber(sale.sgrTotal)),
+        reportMoney(sale.sgrTotal),
+        reportMoney(sale.total),
+      ]),
+    }) + 16
+    y = drawTotalsBox(doc, fonts, {
+      x: doc.page.width - 275,
+      y,
+      width: 239,
+      lines: [
+        { label: "Total fara SGR", value: reportMoney(totalWithoutSgr) },
+        { label: "Total SGR", value: reportMoney(totalSgr) },
+        { label: "TOTAL INCASARI", value: reportMoney(totalGross) },
+      ],
+      highlightLast: true,
+    }) + 28
+  }
+
+  drawSignatureRow(doc, fonts, { margin: 36, y, labels: ["Intocmit", "Verificat", "Contabilitate"] })
+  doc.end()
+}
+
+router.get("/api/v1/reports/accounting/sales/pdf", requireAuth, async (req: AuthedRequest, res) => {
+  try {
+    await sendAccountingPdf("sales", req, res)
+  } catch (error) {
+    console.error("SALES ACCOUNTING PDF ERROR:", error)
+    if (!res.headersSent) res.status(500).json({ error: "Nu am putut genera raportul de vanzari." })
+  }
+})
+
+router.get("/api/v1/reports/accounting/sgr/pdf", requireAuth, async (req: AuthedRequest, res) => {
+  try {
+    await sendAccountingPdf("sgr", req, res)
+  } catch (error) {
+    console.error("SGR ACCOUNTING PDF ERROR:", error)
+    if (!res.headersSent) res.status(500).json({ error: "Nu am putut genera raportul SGR." })
+  }
+})
 
 router.get("/api/v1/reports/advanced", requireAuth, async (req: AuthedRequest, res) => {
   try {

@@ -60,7 +60,14 @@ const sections: SidebarSection[] = [
       { to: "/transfer", label: "Transfer intre gestiuni", icon: ArrowLeftRight },
       { to: "/gestiune/productie", label: "Productie", icon: Factory },
       { to: "/documente", label: "Documente", icon: FileText },
-      { to: "/rapoarte", label: "Rapoarte", icon: BarChart3 },
+    ],
+  },
+  {
+    title: "Rapoarte",
+    collapsible: true,
+    icon: BarChart3,
+    items: [
+      { to: "/rapoarte", label: "Vanzari si SGR", icon: BarChart3 },
       { to: "/rapoarte/export-contabilitate", label: "Export contabilitate", icon: FileSpreadsheet },
     ],
   },

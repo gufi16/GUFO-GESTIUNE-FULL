@@ -22,9 +22,10 @@ import {
   YAxis,
 } from "recharts"
 import PageHeader from "../components/PageHeader"
-import { API_BASE as API, getToken, authHeaders } from "../lib/api"
+import { API_BASE as API, api, getToken } from "../lib/api"
 import { getActiveLocationId, subscribeToActiveLocation } from "../lib/location"
 import { getActiveTerminalId, subscribeToActiveTerminal } from "../lib/terminal"
+import { downloadPdfFile } from "../lib/pdf"
 
 const BAR_COLORS = ["#2563eb", "#14b8a6", "#f59e0b", "#8b5cf6", "#ef4444", "#0ea5e9"]
 const PIE_COLORS = ["#2563eb", "#14b8a6", "#f59e0b", "#8b5cf6", "#ef4444", "#0ea5e9"]
@@ -315,6 +316,7 @@ export default function RapoartePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [data, setData] = useState<AdvancedReportsResponse | null>(null)
+  const [exportingPdf, setExportingPdf] = useState<"sales" | "sgr" | null>(null)
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [selectedLocationId, setSelectedLocationId] = useState(getActiveLocationId() || "ALL")
   const [selectedTerminalId, setSelectedTerminalId] = useState(getActiveTerminalId() || "ALL")
@@ -411,6 +413,21 @@ export default function RapoartePage() {
     }
   }
 
+  async function exportAccountingPdf(kind: "sales" | "sgr") {
+    try {
+      setExportingPdf(kind)
+      const params = new URLSearchParams({ dateFrom, dateTo })
+      if (selectedLocationId && selectedLocationId !== "ALL") params.set("locationId", selectedLocationId)
+      const response = await api<Response>(`/api/v1/reports/accounting/${kind}/pdf?${params.toString()}`, { raw: true })
+      const label = kind === "sales" ? "Raport_Vanzari" : "Raport_SGR"
+      await downloadPdfFile(response, `${label}_${dateFrom}_${dateTo}.pdf`)
+    } catch (error: any) {
+      setError(error?.message || "Nu am putut genera PDF-ul pentru contabilitate.")
+    } finally {
+      setExportingPdf(null)
+    }
+  }
+
   const salesByLocation = useMemo(() => normalizeLocationRows(data?.salesByLocation || []), [data])
   const monthlyTrend = useMemo(() => normalizeTrendRows(data?.salesTrend || data?.monthlyTrend || []), [data])
   const topProducts = useMemo(() => normalizeTopProducts(data?.topProducts || []), [data])
@@ -496,6 +513,45 @@ export default function RapoartePage() {
           {error}
         </div>
       ) : null}
+
+      <section className="rounded-[20px] border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-emerald-50 p-4 shadow-sm shadow-slate-900/[0.03]">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-blue-600">Pentru contabilitate</div>
+            <h2 className="mt-1 text-lg font-bold text-slate-900">Formulare PDF pe interval</h2>
+            <p className="mt-1 max-w-2xl text-sm text-slate-600">
+              Selecteaza perioada, apoi descarca centralizatorul de vanzari sau raportul SGR. Documentele includ firma activa si locatia selectata.
+            </p>
+          </div>
+          {filterActions}
+        </div>
+        <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <div className="rounded-2xl border border-slate-200 bg-white/90 p-4">
+            <div className="text-sm font-bold text-slate-900">Raport vanzari</div>
+            <p className="mt-1 text-sm text-slate-500">Bonuri, metode de plata, total fara SGR, SGR si total incasari.</p>
+            <button
+              type="button"
+              onClick={() => exportAccountingPdf("sales")}
+              disabled={exportingPdf !== null}
+              className="mt-4 inline-flex h-10 items-center rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {exportingPdf === "sales" ? "Se genereaza..." : "Descarca PDF vanzari"}
+            </button>
+          </div>
+          <div className="rounded-2xl border border-emerald-200 bg-white/90 p-4">
+            <div className="text-sm font-bold text-slate-900">Raport SGR</div>
+            <p className="mt-1 text-sm text-slate-500">Centralizator de garantie-returnare cu totalul SGR din bonurile fiscale.</p>
+            <button
+              type="button"
+              onClick={() => exportAccountingPdf("sgr")}
+              disabled={exportingPdf !== null}
+              className="mt-4 inline-flex h-10 items-center rounded-xl bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {exportingPdf === "sgr" ? "Se genereaza..." : "Descarca PDF SGR"}
+            </button>
+          </div>
+        </div>
+      </section>
 
       <div className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm shadow-slate-900/[0.03]">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
