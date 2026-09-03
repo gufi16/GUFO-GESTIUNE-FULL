@@ -61,6 +61,8 @@ type ReportsRecipeLike = {
 type ReportsProductLike = {
   isSgr?: boolean | null
   sgrValue?: unknown
+  sgrPackagingType?: string | null
+  sgrVolumeLiters?: unknown
   costPrice?: unknown
   recipe?: ReportsRecipeLike | null
 }
@@ -116,6 +118,24 @@ function reportMoney(value: unknown) {
 
 function reportPeriod(from: Date, to: Date) {
   return `${pdfDate(from)} - ${pdfDate(to)}`
+}
+
+function sgrPackagingLabel(value: unknown) {
+  switch (String(value || "").trim().toUpperCase()) {
+    case "PET":
+      return "PET / plastic"
+    case "METAL":
+      return "Doza metal"
+    case "STICLA":
+      return "Sticla"
+    default:
+      return "Neclasificat"
+  }
+}
+
+function sgrVolumeLabel(value: unknown) {
+  const volume = toNumber(value)
+  return volume > 0 ? `${pdfFmt(volume, 3)} L` : "-"
 }
 
 function isSameSgrSyntheticLine(item: ReportsSaleItemLike) {
@@ -233,7 +253,16 @@ async function sendAccountingPdf(kind: AccountingReportKind, req: AuthedRequest,
       terminal: { select: { label: true } },
       items: {
         include: {
-          product: { select: { name: true, isSgr: true, sgrValue: true, uom: { select: { code: true } } } },
+          product: {
+            select: {
+              name: true,
+              isSgr: true,
+              sgrValue: true,
+              sgrPackagingType: true,
+              sgrVolumeLiters: true,
+              uom: { select: { code: true } },
+            },
+          },
         },
       },
     },
@@ -249,7 +278,7 @@ async function sendAccountingPdf(kind: AccountingReportKind, req: AuthedRequest,
     paymentTotals.set(payment, (paymentTotals.get(payment) || 0) + toNumber(sale.total))
   }
 
-  const sgrRows = new Map<string, { name: string; uom: string; qty: number; unit: number; value: number }>()
+  const sgrRows = new Map<string, { name: string; packagingType: string; volumeLiters: number; qty: number; unit: number; value: number }>()
   let unallocatedSgr = 0
   for (const sale of sales) {
     let allocated = 0
@@ -260,8 +289,10 @@ async function sendAccountingPdf(kind: AccountingReportKind, req: AuthedRequest,
       const value = qty * unit
       if (qty <= 0 || value <= 0) continue
       allocated += value
-      const key = `${item.product.name}|${unit}|${item.product.uom?.code || "buc"}`
-      const row = sgrRows.get(key) || { name: item.product.name, uom: item.product.uom?.code || "buc", qty: 0, unit, value: 0 }
+      const packagingType = String(item.product.sgrPackagingType || "").trim().toUpperCase()
+      const volumeLiters = toNumber(item.product.sgrVolumeLiters)
+      const key = `${item.product.name}|${packagingType}|${volumeLiters}|${unit}`
+      const row = sgrRows.get(key) || { name: item.product.name, packagingType, volumeLiters, qty: 0, unit, value: 0 }
       row.qty += qty
       row.value += value
       sgrRows.set(key, row)
@@ -271,7 +302,8 @@ async function sendAccountingPdf(kind: AccountingReportKind, req: AuthedRequest,
   if (unallocatedSgr > 0.0001) {
     sgrRows.set("documentat", {
       name: "SGR conform bonurilor fiscale",
-      uom: "-",
+      packagingType: "",
+      volumeLiters: 0,
       qty: 0,
       unit: 0,
       value: unallocatedSgr,
@@ -309,8 +341,8 @@ async function sendAccountingPdf(kind: AccountingReportKind, req: AuthedRequest,
       y,
       height: 100,
       cards: [
-        { title: "Document", pairs: [{ label: "Perioada", value: reportPeriod(from, to) }, { label: "Locatie", value: locationName }] },
-        { title: "Total SGR", pairs: [{ label: "Valoare", value: reportMoney(totalSgr) }, { label: "Bonuri incluse", value: String(sales.length) }] },
+        { title: "Document", pairs: [{ label: "Perioada", value: reportPeriod(from, to) }, { label: "Bonuri incluse", value: String(sales.length) }] },
+        { title: "Conformitate SGR", pairs: [{ label: "Materiale", value: "PET, metal, sticla" }, { label: "Volum legal", value: "0,1 - 3 L" }] },
       ],
     }) + 18
     y = drawAccountingTable(doc, fonts, {
@@ -318,15 +350,21 @@ async function sendAccountingPdf(kind: AccountingReportKind, req: AuthedRequest,
       y,
       title,
       columns: [
-        { label: "Produs / sursa", width: 200 },
-        { label: "Cantitate", width: 70, align: "right" },
-        { label: "UM", width: 45, align: "center" },
-        { label: "Valoare unitara", width: 95, align: "right" },
-        { label: "Valoare SGR", width: 95, align: "right" },
+        { label: "Produs / sursa", width: 165 },
+        { label: "Material", width: 85 },
+        { label: "Volum", width: 58, align: "right" },
+        { label: "Cantitate", width: 75, align: "right" },
+        { label: "Valoare SGR", width: 92, align: "right" },
       ],
       rows: Array.from(sgrRows.values())
         .sort((a, b) => b.value - a.value)
-        .map((row) => [row.name, row.qty ? pdfFmt(row.qty, 3) : "-", row.uom, row.unit ? reportMoney(row.unit) : "-", reportMoney(row.value)]),
+        .map((row) => [
+          row.name,
+          sgrPackagingLabel(row.packagingType),
+          sgrVolumeLabel(row.volumeLiters),
+          row.qty ? pdfFmt(row.qty, 3) : "-",
+          reportMoney(row.value),
+        ]),
     }) + 16
     y = ensureAccountingFooterSpace(doc, fonts, y, 36, title)
     y = drawTotalsBox(doc, fonts, {

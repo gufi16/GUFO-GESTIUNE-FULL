@@ -30,6 +30,8 @@ type Product = {
   publishToGlovo?: boolean
   isSgr?: boolean
   sgrValue?: number
+  sgrPackagingType?: "PET" | "METAL" | "STICLA" | null
+  sgrVolumeLiters?: number
   productionMode?: "AUTO" | "MANUAL"
   crossSellProductIds?: string[]
   crossSellProducts?: Array<{
@@ -102,6 +104,8 @@ type FormState = {
   isVisibleInPos: boolean
   publishToGlovo: boolean
   isSgr: boolean
+  sgrPackagingType: "" | "PET" | "METAL" | "STICLA"
+  sgrVolumeLiters: string
   isFiscalRiskProduct: boolean
   productionMode: "AUTO" | "MANUAL"
   trackLot: boolean
@@ -186,6 +190,12 @@ const STOCK_COST_METHOD_OPTIONS = [
   { value: "FEFO", label: "FEFO" }
 ] as const
 
+const SGR_PACKAGING_OPTIONS = [
+  { value: "PET", label: "PET / plastic" },
+  { value: "METAL", label: "Doza metal" },
+  { value: "STICLA", label: "Sticla" },
+] as const
+
 const emptyForm: FormState = {
   sku: "",
   name: "",
@@ -209,6 +219,8 @@ const emptyForm: FormState = {
   isVisibleInPos: true,
   publishToGlovo: false,
   isSgr: false,
+  sgrPackagingType: "",
+  sgrVolumeLiters: "",
   isFiscalRiskProduct: false,
   productionMode: "AUTO",
   trackLot: false,
@@ -552,6 +564,7 @@ export function ProductsCatalogPage({
             costPrice: toNumberSafe(item?.costPrice),
             purchaseFactor: toNumberSafe(item?.purchaseFactor || 1),
             sgrValue: toNumberSafe(item?.sgrValue || 0),
+            sgrVolumeLiters: toNumberSafe(item?.sgrVolumeLiters || 0),
             trackLot: item?.trackLot === true,
             trackExpiry: item?.trackExpiry === true,
             costMethod: item?.costMethod || "AVG",
@@ -641,6 +654,8 @@ function getDefaultVat(list = vatRates) {
       isVisibleInPos: true,
       publishToGlovo: false,
       isSgr: false,
+      sgrPackagingType: "",
+      sgrVolumeLiters: "",
       isFiscalRiskProduct: false,
       productionMode: "AUTO",
       trackLot: false,
@@ -687,6 +702,8 @@ function getDefaultVat(list = vatRates) {
       isVisibleInPos: item.isVisibleInPos !== false,
       publishToGlovo: item.publishToGlovo === true,
       isSgr: item.isSgr === true,
+      sgrPackagingType: item.sgrPackagingType || "",
+      sgrVolumeLiters: item.sgrVolumeLiters ? normalizePositiveString(item.sgrVolumeLiters, "") : "",
       isFiscalRiskProduct: item.isFiscalRiskProduct === true,
       productionMode: item.productionMode === "MANUAL" ? "MANUAL" : "AUTO",
       trackLot: item.trackLot === true,
@@ -803,6 +820,17 @@ function getDefaultVat(list = vatRates) {
     const normalizedGrossWeightKg = Math.max(0, toNumberSafe(form.grossWeightKg || 0))
     const normalizedPrice = hideSalePrice ? 0 : Math.max(0, toNumberSafe(form.price || 0))
     const normalizedCost = Math.max(0, toNumberSafe(form.costPrice || 0))
+    const sgrVolumeLiters = toNumberSafe(form.sgrVolumeLiters || 0)
+
+    if (form.isSgr && !form.sgrPackagingType) {
+      setError("Selecteaza tipul ambalajului SGR.")
+      return
+    }
+
+    if (form.isSgr && (sgrVolumeLiters < 0.1 || sgrVolumeLiters > 3)) {
+      setError("Volumul SGR trebuie sa fie intre 0,1 si 3 litri.")
+      return
+    }
 
     setSaving(true)
     setError("")
@@ -844,6 +872,8 @@ function getDefaultVat(list = vatRates) {
           isVisibleInPos: form.isVisibleInPos,
           publishToGlovo: form.publishToGlovo,
           isSgr: form.isSgr,
+          sgrPackagingType: form.isSgr ? form.sgrPackagingType : null,
+          sgrVolumeLiters: form.isSgr ? sgrVolumeLiters : 0,
           isFiscalRiskProduct: form.isFiscalRiskProduct,
           productionMode: form.productionMode,
           trackLot: form.trackLot,
@@ -2541,11 +2571,39 @@ function getDefaultVat(list = vatRates) {
                         <input
                           type="checkbox"
                           checked={form.isSgr}
-                          onChange={(e) => setForm((prev) => ({ ...prev, isSgr: e.target.checked }))}
+                          onChange={(e) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              isSgr: e.target.checked,
+                              sgrPackagingType: e.target.checked ? prev.sgrPackagingType : "",
+                              sgrVolumeLiters: e.target.checked ? prev.sgrVolumeLiters : "",
+                            }))
+                          }
                         />
                         <span>SGR</span>
                       </label>
                       <div style={checkHint}>SGR = 0.50 lei fara TVA.</div>
+                      {form.isSgr ? (
+                        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 140px", gap: 8, marginTop: 10 }}>
+                          <select
+                            value={form.sgrPackagingType}
+                            onChange={(e) => setForm((prev) => ({ ...prev, sgrPackagingType: e.target.value as FormState["sgrPackagingType"] }))}
+                            style={input}
+                          >
+                            <option value="">Tip ambalaj SGR</option>
+                            {SGR_PACKAGING_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                          </select>
+                          <input
+                            value={form.sgrVolumeLiters}
+                            onChange={(e) => setForm((prev) => ({ ...prev, sgrVolumeLiters: e.target.value }))}
+                            placeholder="Volum (L)"
+                            inputMode="decimal"
+                            style={input}
+                          />
+                        </div>
+                      ) : null}
                     </div>
 
                     <div style={checkBlock}>

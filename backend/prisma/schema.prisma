@@ -231,6 +231,12 @@ enum SaleDraftStatus {
   CANCELLED
 }
 
+enum SgrPackagingType {
+  PET
+  METAL
+  STICLA
+}
+
 enum MarketplaceMappingStatus {
   MAPPED
   UNMAPPED
@@ -987,6 +993,8 @@ model Product {
   publishToGlovo Boolean        @default(false)
   isSgr          Boolean        @default(false)
   sgrValue       Decimal        @default(0)
+  sgrPackagingType SgrPackagingType?
+  sgrVolumeLiters Decimal        @default(0)
   productionMode ProductionMode @default(AUTO)
 
   createdAt DateTime @default(now())

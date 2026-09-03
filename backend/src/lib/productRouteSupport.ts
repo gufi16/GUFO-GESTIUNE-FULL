@@ -50,6 +50,7 @@ type ProductLike = {
   netWeightKg?: unknown
   grossWeightKg?: unknown
   sgrValue?: unknown
+  sgrVolumeLiters?: unknown
   requiresRecipe?: boolean | null
   posSortOrder?: unknown
   trackLot?: boolean | null
@@ -163,6 +164,7 @@ export function serializeProduct(item: ProductLike | null | undefined) {
     netWeightKg: toNumber(item.netWeightKg || 0),
     grossWeightKg: toNumber(item.grossWeightKg || 0),
     sgrValue: toNumber(item.sgrValue || 0),
+    sgrVolumeLiters: toNumber(item.sgrVolumeLiters || 0),
     requiresRecipe: item.requiresRecipe === true,
     posSortOrder: Math.max(0, Math.round(toNumber(item.posSortOrder || 0))),
     trackLot: item.trackLot === true,

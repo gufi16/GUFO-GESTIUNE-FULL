@@ -2,7 +2,7 @@ import { Router } from "express"
 import path from "path"
 import fs from "fs"
 import multer from "multer"
-import { ProductClass, ProductionMode, RecipeStatus, StockCostMethod, TerminalDeviceType } from "@prisma/client"
+import { ProductClass, ProductionMode, RecipeStatus, SgrPackagingType, StockCostMethod, TerminalDeviceType } from "@prisma/client"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { buildCompanyScopedTenantWhere, requireRequestCompanyId, resolveRequestCompany } from "../lib/companyScope"
@@ -79,6 +79,28 @@ function getScopedAuth(req: AuthedRequest) {
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback
+}
+
+function resolveSgrPackagingData(payload: unknown, isSgr: boolean) {
+  if (!isSgr) {
+    return { sgrPackagingType: null, sgrVolumeLiters: 0, error: "" }
+  }
+
+  const body = (payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>
+  const type = String(body.sgrPackagingType || "").trim().toUpperCase()
+  const sgrPackagingType =
+    type === "PET" || type === "METAL" || type === "STICLA" ? (type as SgrPackagingType) : null
+  const sgrVolumeLiters = toNumber(body.sgrVolumeLiters)
+
+  if (!sgrPackagingType) {
+    return { sgrPackagingType: null, sgrVolumeLiters: 0, error: "Pentru SGR selecteaza PET, doza metal sau sticla." }
+  }
+
+  if (sgrVolumeLiters < 0.1 || sgrVolumeLiters > 3) {
+    return { sgrPackagingType: null, sgrVolumeLiters: 0, error: "Volumul SGR trebuie sa fie intre 0,1 si 3 litri." }
+  }
+
+  return { sgrPackagingType, sgrVolumeLiters, error: "" }
 }
 
 async function resolveProductTerminalIds(tenantId: string, companyId: string, payload: unknown) {
@@ -346,6 +368,11 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
     isVisibleInPos: requestedVisibleInPos,
     isSgr: requestedIsSgr
   })
+  const sgrPackaging = resolveSgrPackagingData(req.body, isSgr)
+
+  if (sgrPackaging.error) {
+    return res.status(400).json({ ok: false, error: sgrPackaging.error })
+  }
 
   console.log("[PRODUCT_CREATE] normalized", {
     classValue,
@@ -569,6 +596,8 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
           publishToGlovo: requestedPublishToGlovo,
           isSgr,
           sgrValue: isSgr ? 0.5 : 0,
+          sgrPackagingType: sgrPackaging.sgrPackagingType,
+          sgrVolumeLiters: sgrPackaging.sgrVolumeLiters,
           productionMode: finalProductionMode
         },
       })
@@ -764,6 +793,11 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
     isVisibleInPos: requestedVisibleInPos,
     isSgr: requestedIsSgr
   })
+  const sgrPackaging = resolveSgrPackagingData(req.body, isSgr)
+
+  if (sgrPackaging.error) {
+    return res.status(400).json({ ok: false, error: sgrPackaging.error })
+  }
 
   if (!name) {
     return res.status(400).json({ ok: false, error: "Denumirea produsului este obligatorie." })
@@ -996,6 +1030,8 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
           publishToGlovo: requestedPublishToGlovo,
           isSgr,
           sgrValue: isSgr ? 0.5 : 0,
+          sgrPackagingType: sgrPackaging.sgrPackagingType,
+          sgrVolumeLiters: sgrPackaging.sgrVolumeLiters,
           productionMode: finalUpdatedProductionMode
         }
       })
