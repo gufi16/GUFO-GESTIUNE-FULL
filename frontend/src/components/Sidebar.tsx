@@ -185,7 +185,7 @@ function SidebarAccordion({
   items: SidebarItem[]
   flyout?: boolean
   forceOpen?: boolean
-  onToggle?: (anchorTop: number) => void
+  onToggle?: () => void
   onNavigate?: () => void
 }) {
   const location = useLocation()
@@ -205,9 +205,9 @@ function SidebarAccordion({
     <div className="relative">
       <button
         type="button"
-        onClick={(event) => {
+        onClick={() => {
           if (flyout) {
-            onToggle?.(event.currentTarget.getBoundingClientRect().top)
+            onToggle?.()
             return
           }
           setOpen((value) => !value)
@@ -267,15 +267,13 @@ function SidebarAccordion({
 function SidebarContent({
   visibleSections,
   activeDesktopSection,
-  activeDesktopTop,
   onActiveDesktopSectionChange,
   mobile = false,
   onCloseMobile,
 }: {
   visibleSections: SidebarSection[]
   activeDesktopSection?: string | null
-  activeDesktopTop?: number
-  onActiveDesktopSectionChange?: (section: string | null, anchorTop?: number) => void
+  onActiveDesktopSectionChange?: (section: string | null) => void
   mobile?: boolean
   onCloseMobile?: () => void
 }) {
@@ -329,10 +327,9 @@ function SidebarContent({
                     onToggle={
                       mobile
                         ? undefined
-                        : (anchorTop) =>
+                        : () =>
                             onActiveDesktopSectionChange?.(
-                              activeDesktopSection === section.title ? null : section.title,
-                              anchorTop
+                              activeDesktopSection === section.title ? null : section.title
                             )
                     }
                     onNavigate={mobile ? onCloseMobile : undefined}
@@ -367,7 +364,7 @@ function SidebarContent({
       {!mobile && activeDesktopSection ? (
         <div
           className="absolute left-[calc(100%+12px)] z-50 hidden w-[292px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_20px_52px_rgba(15,35,55,0.18)] xl:flex xl:max-h-[calc(100vh-32px)] xl:flex-col"
-          style={{ top: Math.max(16, Math.min(activeDesktopTop || 96, window.innerHeight - 470)) }}
+          style={{ top: 16 }}
         >
           <div className="flex items-start justify-between border-b border-slate-100 bg-[#F8FAFC] px-4 py-3">
             <div>
@@ -417,7 +414,6 @@ export default function Sidebar({
     }))
     .filter((section) => section.items.length > 0)
   const [activeDesktopSection, setActiveDesktopSection] = useState<string | null>(null)
-  const [activeDesktopTop, setActiveDesktopTop] = useState(96)
 
   useEffect(() => {
     setActiveDesktopSection(null)
@@ -436,11 +432,7 @@ export default function Sidebar({
           <SidebarContent
             visibleSections={visibleSections}
             activeDesktopSection={activeDesktopSection}
-            activeDesktopTop={activeDesktopTop}
-            onActiveDesktopSectionChange={(section, anchorTop) => {
-              if (section && typeof anchorTop === "number") setActiveDesktopTop(anchorTop)
-              setActiveDesktopSection(section)
-            }}
+            onActiveDesktopSectionChange={setActiveDesktopSection}
           />
         </div>
       </aside>
