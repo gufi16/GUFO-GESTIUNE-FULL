@@ -120,19 +120,6 @@ function reportPeriod(from: Date, to: Date) {
   return `${pdfDate(from)} - ${pdfDate(to)}`
 }
 
-function sgrPackagingLabel(value: unknown) {
-  switch (String(value || "").trim().toUpperCase()) {
-    case "PET":
-      return "PET / plastic"
-    case "METAL":
-      return "Doza metal"
-    case "STICLA":
-      return "Sticla"
-    default:
-      return "Neclasificat"
-  }
-}
-
 function sgrVolumeLabel(value: unknown) {
   const volume = toNumber(value)
   return volume > 0 ? `${pdfFmt(volume, 3)} L` : "-"
@@ -166,16 +153,26 @@ function clipPdfCell(doc: PDFKit.PDFDocument, font: string, value: unknown, widt
 function drawAccountingTable(
   doc: PDFKit.PDFDocument,
   fonts: ReportPdfFonts,
-  options: { margin: number; y: number; title: string; columns: ReportPdfColumn[]; rows: string[][] },
+  options: {
+    margin: number
+    y: number
+    title: string
+    columns: ReportPdfColumn[]
+    rows: string[][]
+    headerColor?: string
+    totalRowIndexes?: number[]
+    rowHeight?: number
+    bottomMargin?: number
+  },
 ) {
-  const rowHeight = 25
-  const bottomMargin = options.margin + 108
+  const rowHeight = options.rowHeight || 25
+  const bottomMargin = options.bottomMargin || options.margin + 108
   let y = options.y
 
   const drawColumns = () => {
     let x = options.margin
     for (const column of options.columns) {
-      doc.save().rect(x, y, column.width, rowHeight).fill("#17324D").restore()
+      doc.save().rect(x, y, column.width, rowHeight).fill(options.headerColor || "#17324D").restore()
       doc.font(fonts.bold).fontSize(8.2).fillColor("#FFFFFF").text(column.label, x + 6, y + 8, {
         width: column.width - 12,
         height: 10,
@@ -203,11 +200,12 @@ function drawAccountingTable(
     let x = options.margin
     for (let index = 0; index < options.columns.length; index += 1) {
       const column = options.columns[index]
-      const fill = rowIndex % 2 === 0 ? "#FFFFFF" : "#F8FAFC"
+      const isTotalRow = options.totalRowIndexes?.includes(rowIndex) === true
+      const fill = isTotalRow ? "#E8F8F1" : rowIndex % 2 === 0 ? "#FFFFFF" : "#F8FAFC"
       doc.save().rect(x, y, column.width, rowHeight).fill(fill).restore()
       doc.save().lineWidth(0.55).strokeColor("#D7DEEA").rect(x, y, column.width, rowHeight).stroke().restore()
-      const value = clipPdfCell(doc, fonts.regular, row[index] || "-", column.width - 12)
-      doc.font(fonts.regular).fontSize(8.3).fillColor("#1E293B").text(value, x + 6, y + 8, {
+      const value = clipPdfCell(doc, isTotalRow ? fonts.bold : fonts.regular, row[index] || "-", column.width - 12)
+      doc.font(isTotalRow ? fonts.bold : fonts.regular).fontSize(8.3).fillColor("#1E293B").text(value, x + 6, y + 8, {
         width: column.width - 12,
         height: 10,
         lineBreak: false,
@@ -219,6 +217,83 @@ function drawAccountingTable(
   })
 
   return y
+}
+
+function sgrMaterialLabel(value: unknown) {
+  switch (String(value || "").trim().toUpperCase()) {
+    case "PET":
+      return "Plastic"
+    case "METAL":
+      return "Metal"
+    case "STICLA":
+      return "Sticla"
+    default:
+      return "Neclasificat"
+  }
+}
+
+function sgrTypeLabel(value: unknown) {
+  switch (String(value || "").trim().toUpperCase()) {
+    case "PET":
+      return "PET"
+    case "METAL":
+      return "Doza"
+    case "STICLA":
+      return "Sticla"
+    default:
+      return "Neclasificat"
+  }
+}
+
+function drawSgrReportHeader(
+  doc: PDFKit.PDFDocument,
+  fonts: ReportPdfFonts,
+  options: { companyName: string; period: string; locationName: string; generatedAt: string; totalQty: number; typeTotals: Map<string, { qty: number; value: number }>; totalSgr: number },
+) {
+  const margin = 36
+  const contentWidth = doc.page.width - margin * 2
+  let y = margin
+
+  doc.font(fonts.bold).fontSize(21).fillColor("#111827").text("RAPORT VANZARI SGR", margin, y)
+  doc.font(fonts.regular).fontSize(11).fillColor("#50627D").text("Centralizator ambalaje vandute si garantii aferente", margin, y + 28)
+  doc.save().rect(doc.page.width - margin - 142, y + 3, 142, 26).fill("#167D72").restore()
+  doc.font(fonts.bold).fontSize(8.8).fillColor("#FFFFFF").text("RAPORT CONTABIL", doc.page.width - margin - 142, y + 11, { width: 142, align: "center" })
+  y += 51
+
+  const meta = [
+    ["Companie", options.companyName],
+    ["Perioada", options.period],
+    ["Punct de lucru", options.locationName],
+    ["Data generarii", options.generatedAt],
+    ["Moneda", "RON"],
+  ]
+  const metaWidth = contentWidth / meta.length
+  meta.forEach(([label, value], index) => {
+    const x = margin + index * metaWidth
+    doc.save().rect(x, y, metaWidth, 37).fill("#F7F9FC").restore()
+    doc.save().lineWidth(0.65).strokeColor("#C8D4E3").rect(x, y, metaWidth, 37).stroke().restore()
+    doc.font(fonts.regular).fontSize(7.8).fillColor("#64748B").text(label, x + 8, y + 7)
+    doc.font(fonts.regular).fontSize(9.4).fillColor("#334155").text(value || "-", x + 8, y + 19, { width: metaWidth - 16, lineBreak: false })
+  })
+  y += 54
+
+  const cards = [
+    ["TOTAL AMBALAJE", `${pdfFmt(options.totalQty, 0)} buc`],
+    ["PET", `${pdfFmt(options.typeTotals.get("PET")?.qty || 0, 0)} buc`],
+    ["DOZE", `${pdfFmt(options.typeTotals.get("METAL")?.qty || 0, 0)} buc`],
+    ["STICLA", `${pdfFmt(options.typeTotals.get("STICLA")?.qty || 0, 0)} buc`],
+    ["TOTAL GARANTII", reportMoney(options.totalSgr)],
+  ]
+  const gap = 7
+  const cardWidth = (contentWidth - gap * (cards.length - 1)) / cards.length
+  cards.forEach(([label, value], index) => {
+    const x = margin + index * (cardWidth + gap)
+    doc.save().lineWidth(0.7).strokeColor("#C8D4E3").rect(x, y, cardWidth, 46).stroke().restore()
+    doc.font(fonts.regular).fontSize(8.1).fillColor("#64748B").text(label, x + 6, y + 8, { width: cardWidth - 12, align: "center" })
+    doc.font(fonts.bold).fontSize(15).fillColor("#111827").text(value, x + 6, y + 22, { width: cardWidth - 12, align: "center", lineBreak: false })
+  })
+
+  return y + 58
 }
 
 function ensureAccountingFooterSpace(doc: PDFKit.PDFDocument, fonts: ReportPdfFonts, y: number, margin: number, title: string) {
@@ -255,6 +330,7 @@ async function sendAccountingPdf(kind: AccountingReportKind, req: AuthedRequest,
         include: {
           product: {
             select: {
+              sku: true,
               name: true,
               isSgr: true,
               sgrValue: true,
@@ -278,7 +354,7 @@ async function sendAccountingPdf(kind: AccountingReportKind, req: AuthedRequest,
     paymentTotals.set(payment, (paymentTotals.get(payment) || 0) + toNumber(sale.total))
   }
 
-  const sgrRows = new Map<string, { name: string; packagingType: string; volumeLiters: number; qty: number; unit: number; value: number }>()
+  const sgrRows = new Map<string, { sku: string; name: string; packagingType: string; volumeLiters: number; qty: number; unit: number; value: number }>()
   let unallocatedSgr = 0
   for (const sale of sales) {
     let allocated = 0
@@ -291,8 +367,8 @@ async function sendAccountingPdf(kind: AccountingReportKind, req: AuthedRequest,
       allocated += value
       const packagingType = String(item.product.sgrPackagingType || "").trim().toUpperCase()
       const volumeLiters = toNumber(item.product.sgrVolumeLiters)
-      const key = `${item.product.name}|${packagingType}|${volumeLiters}|${unit}`
-      const row = sgrRows.get(key) || { name: item.product.name, packagingType, volumeLiters, qty: 0, unit, value: 0 }
+      const key = `${item.product.sku}|${item.product.name}|${packagingType}|${volumeLiters}|${unit}`
+      const row = sgrRows.get(key) || { sku: item.product.sku || "-", name: item.product.name, packagingType, volumeLiters, qty: 0, unit, value: 0 }
       row.qty += qty
       row.value += value
       sgrRows.set(key, row)
@@ -301,6 +377,7 @@ async function sendAccountingPdf(kind: AccountingReportKind, req: AuthedRequest,
   }
   if (unallocatedSgr > 0.0001) {
     sgrRows.set("documentat", {
+      sku: "-",
       name: "SGR conform bonurilor fiscale",
       packagingType: "",
       volumeLiters: 0,
@@ -313,7 +390,7 @@ async function sendAccountingPdf(kind: AccountingReportKind, req: AuthedRequest,
   const isSgr = kind === "sgr"
   const title = isSgr ? "RAPORT SGR" : "RAPORT VANZARI"
   const locationName = locationId ? sales[0]?.location?.name || "Locatia selectata" : "Toate locatiile"
-  const doc = new PDFDocument({ size: "A4", layout: isSgr ? "portrait" : "landscape", margin: 36, info: { Title: title, Author: "Gufo ERP" } })
+  const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 36, info: { Title: title, Author: "Gufo ERP" } })
   const fonts = registerPdfFonts(doc)
   const safeFrom = reportFileDate(req.query.dateFrom || from.toISOString().slice(0, 10))
   const safeTo = reportFileDate(req.query.dateTo || to.toISOString().slice(0, 10))
@@ -322,59 +399,117 @@ async function sendAccountingPdf(kind: AccountingReportKind, req: AuthedRequest,
   res.setHeader("Content-Disposition", `attachment; filename=${isSgr ? "Raport_SGR" : "Raport_Vanzari"}_${safeFrom}-${safeTo}.pdf`)
   doc.pipe(res)
 
-  let y = drawDocumentHero(doc, fonts, {
-    title,
-    subtitle: `${isSgr ? "Centralizator garantie-returnare pentru contabilitate" : "Centralizator vanzari pentru contabilitate"}${company.cui ? ` · CUI ${company.cui}` : ""}`,
-    companyName: company.name,
-    companyLines: [company.cui ? `CUI: ${company.cui}` : "", company.address || "", company.city || ""].filter(Boolean),
-    rightPairs: [
-      { label: "Perioada", value: reportPeriod(from, to) },
-      { label: "Locatie", value: locationName },
-      { label: "Generat", value: new Date().toLocaleDateString("ro-RO") },
-    ],
-    margin: 36,
-  })
-
+  let signatureY: number | null = null
   if (isSgr) {
-    y = drawInfoCards(doc, fonts, {
-      margin: 36,
-      y,
-      height: 100,
-      cards: [
-        { title: "Document", pairs: [{ label: "Perioada", value: reportPeriod(from, to) }, { label: "Bonuri incluse", value: String(sales.length) }] },
-        { title: "Conformitate SGR", pairs: [{ label: "Materiale", value: "PET, metal, sticla" }, { label: "Volum legal", value: "0,1 - 3 L" }] },
-      ],
-    }) + 18
+    const sortedSgrRows = Array.from(sgrRows.values()).sort((a, b) => b.value - a.value)
+    const typeTotals = new Map<string, { qty: number; value: number }>()
+    for (const row of sortedSgrRows) {
+      const key = String(row.packagingType || "").toUpperCase()
+      const total = typeTotals.get(key) || { qty: 0, value: 0 }
+      total.qty += row.qty
+      total.value += row.value
+      typeTotals.set(key, total)
+    }
+
+    const summaryRows = ["PET", "METAL", "STICLA"]
+      .map((type) => ({ type, total: typeTotals.get(type) || { qty: 0, value: 0 } }))
+      .filter(({ total }) => total.qty > 0 || total.value > 0)
+      .map(({ type, total }) => [
+        sgrTypeLabel(type),
+        sgrMaterialLabel(type),
+        pdfFmt(total.qty, 3),
+        reportMoney(0.5),
+        reportMoney(total.value),
+        totalSgr > 0 ? `${pdfFmt((total.value / totalSgr) * 100, 1)}%` : "-",
+      ])
+
+    const unclassified = typeTotals.get("") || { qty: 0, value: 0 }
+    if (unclassified.qty > 0 || unclassified.value > 0) {
+      summaryRows.push([
+        "Neclasificat",
+        "Neclasificat",
+        unclassified.qty ? pdfFmt(unclassified.qty, 3) : "-",
+        "-",
+        reportMoney(unclassified.value),
+        totalSgr > 0 ? `${pdfFmt((unclassified.value / totalSgr) * 100, 1)}%` : "-",
+      ])
+    }
+    const totalQty = sortedSgrRows.reduce((sum, row) => sum + row.qty, 0)
+    summaryRows.push(["TOTAL", "", pdfFmt(totalQty, 3), "", reportMoney(totalSgr), totalSgr > 0 ? "100,0%" : "-"])
+
+    let y = drawSgrReportHeader(doc, fonts, {
+      companyName: company.name,
+      period: reportPeriod(from, to),
+      locationName,
+      generatedAt: new Date().toLocaleDateString("ro-RO"),
+      totalQty,
+      typeTotals,
+      totalSgr,
+    })
+    doc.font(fonts.bold).fontSize(13).fillColor("#111827").text("1. Centralizator pe tip de ambalaj", 36, y)
+    y += 19
     y = drawAccountingTable(doc, fonts, {
       margin: 36,
       y,
-      title,
+      title: "Centralizator SGR",
+      headerColor: "#167D72",
+      totalRowIndexes: [summaryRows.length - 1],
+      rowHeight: 22,
+      bottomMargin: 36,
       columns: [
-        { label: "Produs / sursa", width: 165 },
-        { label: "Material", width: 85 },
-        { label: "Volum", width: 58, align: "right" },
-        { label: "Cantitate", width: 75, align: "right" },
-        { label: "Valoare SGR", width: 92, align: "right" },
+        { label: "Tip ambalaj", width: 110 },
+        { label: "Material", width: 110 },
+        { label: "Cantitate vanduta", width: 140, align: "right" },
+        { label: "Garantie / buc", width: 125, align: "right" },
+        { label: "Valoare garantii", width: 145, align: "right" },
+        { label: "Pondere din total", width: 140, align: "right" },
       ],
-      rows: Array.from(sgrRows.values())
-        .sort((a, b) => b.value - a.value)
-        .map((row) => [
-          row.name,
-          sgrPackagingLabel(row.packagingType),
-          sgrVolumeLabel(row.volumeLiters),
-          row.qty ? pdfFmt(row.qty, 3) : "-",
-          reportMoney(row.value),
-        ]),
-    }) + 16
-    y = ensureAccountingFooterSpace(doc, fonts, y, 36, title)
-    y = drawTotalsBox(doc, fonts, {
-      x: doc.page.width - 255,
+      rows: summaryRows,
+    }) + 18
+
+    doc.font(fonts.bold).fontSize(13).fillColor("#111827").text("2. Detaliere pe produse", 36, y)
+    y += 19
+    const detailRows = sortedSgrRows.map((row) => [
+      row.sku,
+      row.name,
+      sgrTypeLabel(row.packagingType),
+      sgrVolumeLabel(row.volumeLiters),
+      row.qty ? pdfFmt(row.qty, 3) : "-",
+      row.unit ? reportMoney(row.unit) : "-",
+      reportMoney(row.value),
+    ])
+    detailRows.push(["TOTAL", "", "", "", pdfFmt(totalQty, 3), "", reportMoney(totalSgr)])
+    drawAccountingTable(doc, fonts, {
+      margin: 36,
       y,
-      width: 219,
-      lines: [{ label: "TOTAL SGR", value: reportMoney(totalSgr) }],
-      highlightLast: true,
-    }) + 28
+      title: "Detaliere produse SGR",
+      totalRowIndexes: [detailRows.length - 1],
+      rowHeight: 21,
+      bottomMargin: 36,
+      columns: [
+        { label: "Cod produs", width: 82 },
+        { label: "Denumire produs", width: 236 },
+        { label: "Tip ambalaj", width: 100 },
+        { label: "Volum", width: 70, align: "right" },
+        { label: "Cantitate", width: 90, align: "right" },
+        { label: "Garantie / buc", width: 95, align: "right" },
+        { label: "Total SGR", width: 97, align: "right" },
+      ],
+      rows: detailRows,
+    })
   } else {
+    let y = drawDocumentHero(doc, fonts, {
+      title,
+      subtitle: `Centralizator vanzari pentru contabilitate${company.cui ? ` · CUI ${company.cui}` : ""}`,
+      companyName: company.name,
+      companyLines: [company.cui ? `CUI: ${company.cui}` : "", company.address || "", company.city || ""].filter(Boolean),
+      rightPairs: [
+        { label: "Perioada", value: reportPeriod(from, to) },
+        { label: "Locatie", value: locationName },
+        { label: "Generat", value: new Date().toLocaleDateString("ro-RO") },
+      ],
+      margin: 36,
+    })
     y = drawInfoCards(doc, fonts, {
       margin: 36,
       y,
@@ -420,9 +555,19 @@ async function sendAccountingPdf(kind: AccountingReportKind, req: AuthedRequest,
       ],
       highlightLast: true,
     }) + 28
+    signatureY = y
   }
 
-  drawSignatureRow(doc, fonts, { margin: 36, y, labels: ["Intocmit", "Verificat", "Contabilitate"] })
+  if (signatureY !== null) {
+    drawSignatureRow(doc, fonts, { margin: 36, y: signatureY, labels: ["Intocmit", "Verificat", "Contabilitate"] })
+  } else {
+    doc.font(fonts.regular).fontSize(8.5).fillColor("#64748B").text(
+      "Raport contabil SGR generat din Gufo ERP",
+      36,
+      doc.page.height - 34,
+      { width: doc.page.width - 72 }
+    )
+  }
   doc.end()
 }
 
