@@ -360,6 +360,7 @@ export function ProductsCatalogPage({
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [exporting, setExporting] = useState<"xlsx" | "pdf" | null>(null)
   const [uploading, setUploading] = useState(false)
   const [recipeLoading, setRecipeLoading] = useState(false)
   const [recipeSaving, setRecipeSaving] = useState(false)
@@ -1038,6 +1039,42 @@ function getDefaultVat(list = vatRates) {
     }
   }
 
+  async function exportProducts(format: "xlsx" | "pdf") {
+    if (!token) {
+      setError("Nu exista token de autentificare. Fa login din nou.")
+      return
+    }
+
+    setExporting(format)
+    setError("")
+    setMessage("")
+
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/products/export/${format}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data?.error || "Nu am putut genera exportul.")
+      }
+
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = format === "xlsx" ? "Nomenclator_produse.xlsx" : "Nomenclator_produse.pdf"
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+      setMessage(format === "xlsx" ? "Exportul Excel a fost descarcat." : "Exportul PDF a fost descarcat.")
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Nu am putut genera exportul.")
+    } finally {
+      setExporting(null)
+    }
+  }
+
   function toggleTerminal(terminalId: string) {
     setForm((prev) => ({
       ...prev,
@@ -1424,6 +1461,14 @@ function getDefaultVat(list = vatRates) {
               style={input}
             />
           </div>
+
+          <button onClick={() => exportProducts("xlsx")} disabled={exporting !== null} style={exporting ? btnDisabled : btnSecondary}>
+            {exporting === "xlsx" ? "Se genereaza..." : "Export Excel"}
+          </button>
+
+          <button onClick={() => exportProducts("pdf")} disabled={exporting !== null} style={exporting ? btnDisabled : btnSecondary}>
+            {exporting === "pdf" ? "Se genereaza..." : "Export PDF"}
+          </button>
 
           <button onClick={openAddModal} style={btnPrimary}>
             {addButtonLabel}

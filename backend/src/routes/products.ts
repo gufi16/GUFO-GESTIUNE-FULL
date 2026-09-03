@@ -2,12 +2,15 @@ import { Router } from "express"
 import path from "path"
 import fs from "fs"
 import multer from "multer"
+import ExcelJS from "exceljs"
+import PDFDocument from "pdfkit"
 import { ProductClass, ProductionMode, RecipeStatus, SgrPackagingType, StockCostMethod, TerminalDeviceType } from "@prisma/client"
 import { prisma } from "../lib/prisma"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
 import { buildCompanyScopedTenantWhere, requireRequestCompanyId, resolveRequestCompany } from "../lib/companyScope"
 import { suggestNcCodes } from "../lib/ncSuggest"
 import { buildPublicUploadUrl, ensureUploadSubdir, normalizeStoredUploadUrl } from "../lib/uploads"
+import { drawDocumentHero, drawSimpleTable, registerPdfFonts } from "../lib/professionalPdf"
 import {
   ALL_PRODUCT_CLASSES,
   MENU_COMPONENT_CLASSES,
@@ -101,6 +104,37 @@ function resolveSgrPackagingData(payload: unknown, isSgr: boolean) {
   }
 
   return { sgrPackagingType, sgrVolumeLiters, error: "" }
+}
+
+function exportMoney(value: unknown) {
+  return `${toNumber(value).toLocaleString("ro-RO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON`
+}
+
+async function getNomenclatorExportData(req: AuthedRequest) {
+  const { tenantId } = getScopedAuth(req)
+  if (!tenantId) throw new Error("Unauthorized")
+
+  const companyId = await requireRequestCompanyId(req)
+  if (!companyId) throw new Error("Compania activa lipseste.")
+
+  const [company, products] = await Promise.all([
+    prisma.company.findFirst({
+      where: { id: companyId, tenantId },
+      select: { name: true, cui: true },
+    }),
+    prisma.product.findMany({
+      where: { tenantId, companyId },
+      include: {
+        uom: { select: { code: true, name: true } },
+        vatRate: { select: { rate: true } },
+      },
+      orderBy: [{ posSortOrder: "asc" }, { name: "asc" }],
+    }),
+  ])
+
+  if (!company) throw new Error("Compania activa nu a fost gasita.")
+
+  return { company, products }
 }
 
 async function resolveProductTerminalIds(tenantId: string, companyId: string, payload: unknown) {
@@ -252,6 +286,134 @@ router.get("/api/v1/products", async (req: AuthedRequest, res) => {
   })
 
   res.json({ ok: true, items: items.map(serializeProduct) })
+})
+
+router.get("/api/v1/products/export/xlsx", async (req: AuthedRequest, res) => {
+  try {
+    const { company, products } = await getNomenclatorExportData(req)
+    const workbook = new ExcelJS.Workbook()
+    workbook.creator = "Gufo ERP"
+    workbook.created = new Date()
+    const sheet = workbook.addWorksheet("Nomenclator produse", {
+      views: [{ state: "frozen", ySplit: 3 }],
+      pageSetup: { orientation: "landscape", fitToPage: true, fitToWidth: 1 },
+    })
+
+    sheet.mergeCells("A1:F1")
+    sheet.getCell("A1").value = "NOMENCLATOR PRODUSE"
+    sheet.getCell("A1").font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } }
+    sheet.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "17324D" } }
+    sheet.getCell("A1").alignment = { horizontal: "center", vertical: "middle" }
+    sheet.getRow(1).height = 28
+
+    sheet.mergeCells("A2:F2")
+    sheet.getCell("A2").value = `${company.name}${company.cui ? ` | CUI: ${company.cui}` : ""} | Generat: ${new Date().toLocaleDateString("ro-RO")}`
+    sheet.getCell("A2").font = { italic: true, color: { argb: "475569" } }
+
+    sheet.columns = [
+      { key: "sku", width: 18 },
+      { key: "name", width: 42 },
+      { key: "uom", width: 12 },
+      { key: "sgr", width: 12 },
+      { key: "vat", width: 14 },
+      { key: "price", width: 24 },
+    ]
+    sheet.getRow(3).values = ["Cod produs", "Denumire produs", "UM", "SGR", "Cota TVA", "Pret vanzare cu TVA"]
+    const headerRow = sheet.getRow(3)
+    headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } }
+    headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "167D72" } }
+    headerRow.alignment = { horizontal: "center", vertical: "middle" }
+    headerRow.height = 22
+
+    products.forEach((product) => {
+      const row = sheet.addRow({
+        sku: product.sku,
+        name: product.name,
+        uom: product.uom?.code || product.uom?.name || "-",
+        sgr: product.isSgr ? "Da" : "Nu",
+        vat: product.vatRate ? `${toNumber(product.vatRate.rate)}%` : "Neplatitor TVA",
+        price: toNumber(product.price),
+      })
+      row.getCell("F").numFmt = '#,##0.00 "RON"'
+      if (product.isSgr) {
+        row.getCell("D").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "E8F8F1" } }
+        row.getCell("D").font = { bold: true, color: { argb: "167D72" } }
+      }
+    })
+
+    sheet.autoFilter = { from: "A3", to: { row: Math.max(3, products.length + 3), column: 6 } }
+    sheet.eachRow((row) => {
+      row.alignment = { vertical: "middle" }
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: "thin", color: { argb: "D7DEEA" } },
+          left: { style: "thin", color: { argb: "D7DEEA" } },
+          bottom: { style: "thin", color: { argb: "D7DEEA" } },
+          right: { style: "thin", color: { argb: "D7DEEA" } },
+        }
+      })
+    })
+
+    const buffer = await workbook.xlsx.writeBuffer()
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    res.setHeader("Content-Disposition", 'attachment; filename="Nomenclator_produse.xlsx"')
+    res.send(Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer))
+  } catch (error) {
+    console.error("PRODUCTS XLSX EXPORT ERROR:", error)
+    res.status(400).json({ ok: false, error: getErrorMessage(error, "Nu am putut exporta produsele in Excel.") })
+  }
+})
+
+router.get("/api/v1/products/export/pdf", async (req: AuthedRequest, res) => {
+  try {
+    const { company, products } = await getNomenclatorExportData(req)
+    const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 36, info: { Title: "Nomenclator produse", Author: "Gufo ERP" } })
+    const fonts = registerPdfFonts(doc)
+    res.setHeader("Content-Type", "application/pdf")
+    res.setHeader("Content-Disposition", 'attachment; filename="Nomenclator_produse.pdf"')
+    doc.pipe(res)
+
+    const y = drawDocumentHero(doc, fonts, {
+      title: "NOMENCLATOR PRODUSE",
+      subtitle: "Lista produse, TVA, SGR si preturi de vanzare cu TVA",
+      companyName: company.name,
+      companyLines: [company.cui ? `CUI: ${company.cui}` : ""].filter(Boolean),
+      rightPairs: [
+        { label: "Produse", value: String(products.length) },
+        { label: "Generat", value: new Date().toLocaleDateString("ro-RO") },
+      ],
+      margin: 36,
+    })
+
+    drawSimpleTable(doc, fonts, {
+      margin: 36,
+      y,
+      columns: [
+        { label: "Cod produs", width: 95 },
+        { label: "Denumire produs", width: 275 },
+        { label: "UM", width: 70, align: "center" },
+        { label: "SGR", width: 65, align: "center" },
+        { label: "Cota TVA", width: 90, align: "right" },
+        { label: "Pret vanzare cu TVA", width: 135, align: "right" },
+      ],
+      rows: products.map((product) => [
+        product.sku,
+        product.name,
+        product.uom?.code || product.uom?.name || "-",
+        product.isSgr ? "Da" : "Nu",
+        product.vatRate ? `${toNumber(product.vatRate.rate)}%` : "Neplatitor",
+        exportMoney(product.price),
+      ]),
+      drawHeader: () => {
+        doc.font(fonts.bold).fontSize(11).fillColor("#17324D").text("NOMENCLATOR PRODUSE - continuare", 36, 36)
+        return 58
+      },
+    })
+    doc.end()
+  } catch (error) {
+    console.error("PRODUCTS PDF EXPORT ERROR:", error)
+    if (!res.headersSent) res.status(400).json({ ok: false, error: getErrorMessage(error, "Nu am putut exporta produsele in PDF.") })
+  }
 })
 
 router.get("/api/v1/products/next-sku", async (req: AuthedRequest, res) => {
