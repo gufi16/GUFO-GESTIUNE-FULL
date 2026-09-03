@@ -832,6 +832,7 @@ export default function MarketplacePage() {
   const [productMappingSearch, setProductMappingSearch] = useState("")
   const [deliveryProductSearch, setDeliveryProductSearch] = useState("")
   const [saving, setSaving] = useState(false)
+  const [uploadingRestaurantImage, setUploadingRestaurantImage] = useState(false)
   const [loading, setLoading] = useState(true)
   const [loadingOrders, setLoadingOrders] = useState(false)
   const [loadingMappings, setLoadingMappings] = useState(false)
@@ -1251,6 +1252,35 @@ export default function MarketplacePage() {
       setError(e?.message || "Nu am putut salva integrarea.")
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function uploadDeliveryRestaurantImage(file: File) {
+    if (!token) {
+      setError("Sesiunea a expirat. Autentifica-te din nou.")
+      return
+    }
+    const body = new FormData()
+    body.append("image", file)
+    setUploadingRestaurantImage(true)
+    setError("")
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/products/upload-image`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body,
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok || !data.ok || !data.imageUrl) throw new Error(data.error || "Nu am putut incarca fotografia.")
+      setForms((prev) => ({
+        ...prev,
+        GUFO_DELIVERY: { ...prev.GUFO_DELIVERY, deliveryRestaurantImageUrl: String(data.imageUrl) },
+      }))
+      setMessage("Fotografia a fost incarcata. Apasa Salveaza configurarea pentru a o publica in Gufo Delivery.")
+    } catch (error: any) {
+      setError(error?.message || "Nu am putut incarca fotografia restaurantului.")
+    } finally {
+      setUploadingRestaurantImage(false)
     }
   }
 
@@ -1685,14 +1715,26 @@ export default function MarketplacePage() {
                       {selectedPlatform === "GUFO_DELIVERY" ? (
                         <div className="mt-3">
                           <DocumentField label="Fotografie restaurant in Gufo Delivery">
-                            <input
-                              value={currentForm.deliveryRestaurantImageUrl}
-                              onChange={(e) => setForms((prev) => ({ ...prev, [selectedPlatform]: { ...prev[selectedPlatform], deliveryRestaurantImageUrl: e.target.value } }))}
-                              placeholder="Link imagine restaurant din ERP"
-                              className={documentInputClass}
-                            />
+                            <div className="flex flex-wrap items-center gap-2">
+                              <label className={`${documentButtonSecondaryClass} cursor-pointer`}>
+                                <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" disabled={uploadingRestaurantImage} onChange={(event) => {
+                                  const file = event.target.files?.[0]
+                                  if (file) void uploadDeliveryRestaurantImage(file)
+                                  event.currentTarget.value = ""
+                                }} />
+                                {uploadingRestaurantImage ? "Se incarca..." : "Alege fotografie"}
+                              </label>
+                              {currentForm.deliveryRestaurantImageUrl ? <span className="text-xs font-medium text-emerald-700">Fotografie selectata</span> : null}
+                            </div>
+                            {currentForm.deliveryRestaurantImageUrl ? (
+                              <img
+                                src={currentForm.deliveryRestaurantImageUrl}
+                                alt="Previzualizare fotografie restaurant"
+                                className="mt-3 h-28 w-44 rounded-xl border border-slate-200 object-cover"
+                              />
+                            ) : null}
                           </DocumentField>
-                          <p className="mt-1 text-xs text-slate-500">Daca ramane gol, aplicatia foloseste prima fotografie disponibila din produse sau categorii.</p>
+                          <p className="mt-1 text-xs text-slate-500">Alege imaginea, apoi apasa Salveaza configurarea. Daca nu alegi una, se foloseste automat o imagine din produse sau categorii.</p>
                         </div>
                       ) : null}
                     </div>
