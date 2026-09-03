@@ -297,6 +297,7 @@ type IntegrationForm = {
   deliveryVivaClientSecret: string
   deliveryVivaSourceCode: string
   deliveryVivaConfigured: boolean
+  deliveryRestaurantImageUrl: string
   deliveryServiceArea: DeliveryServiceAreaForm
   includedCategoryIds: string[]
   includedProductIds: string[]
@@ -428,6 +429,7 @@ function emptyForm(): IntegrationForm {
     deliveryVivaClientSecret: "",
     deliveryVivaSourceCode: "",
     deliveryVivaConfigured: false,
+    deliveryRestaurantImageUrl: "",
     deliveryServiceArea: emptyDeliveryServiceArea(),
     includedCategoryIds: [],
     includedProductIds: [],
@@ -986,6 +988,10 @@ export default function MarketplacePage() {
                   ? integration.settingsJson.deliveryVivaSourceCode
                   : "",
               deliveryVivaConfigured: Boolean(integration.settingsJson?.deliveryVivaConfigured),
+              deliveryRestaurantImageUrl:
+                typeof integration.settingsJson?.deliveryRestaurantImageUrl === "string"
+                  ? integration.settingsJson.deliveryRestaurantImageUrl
+                  : "",
               deliveryServiceArea: readDeliveryServiceArea(integration.settingsJson?.deliveryServiceArea),
               includedCategoryIds: Array.isArray(integration.settingsJson?.includedCategoryIds)
                 ? integration.settingsJson.includedCategoryIds.filter((item: unknown): item is string => typeof item === "string")
@@ -1231,6 +1237,7 @@ export default function MarketplacePage() {
             deliveryVivaClientId: form.deliveryVivaClientId.trim() || undefined,
             deliveryVivaClientSecret: form.deliveryVivaClientSecret.trim() || undefined,
             deliveryVivaSourceCode: form.deliveryVivaSourceCode.trim() || undefined,
+            deliveryRestaurantImageUrl: form.deliveryRestaurantImageUrl.trim() || undefined,
             deliveryServiceArea,
             includedCategoryIds: form.includedCategoryIds,
             includedProductIds: form.includedProductIds,
@@ -1673,6 +1680,19 @@ export default function MarketplacePage() {
                       {!terminals.length && currentForm.locationId ? (
                         <div className="mt-3 rounded-[14px] border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
                           Pentru locatia selectata nu exista inca niciun POS Android configurat in ERP.
+                        </div>
+                      ) : null}
+                      {selectedPlatform === "GUFO_DELIVERY" ? (
+                        <div className="mt-3">
+                          <DocumentField label="Fotografie restaurant in Gufo Delivery">
+                            <input
+                              value={currentForm.deliveryRestaurantImageUrl}
+                              onChange={(e) => setForms((prev) => ({ ...prev, [selectedPlatform]: { ...prev[selectedPlatform], deliveryRestaurantImageUrl: e.target.value } }))}
+                              placeholder="Link imagine restaurant din ERP"
+                              className={documentInputClass}
+                            />
+                          </DocumentField>
+                          <p className="mt-1 text-xs text-slate-500">Daca ramane gol, aplicatia foloseste prima fotografie disponibila din produse sau categorii.</p>
                         </div>
                       ) : null}
                     </div>

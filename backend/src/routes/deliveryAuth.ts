@@ -537,6 +537,36 @@ router.post("/api/v1/public/delivery/account/addresses", requireDeliveryCustomer
   })
 })
 
+router.put("/api/v1/public/delivery/account/addresses/:addressId", requireDeliveryCustomerAuth, async (req: DeliveryCustomerAuthRequest, res) => {
+  const parsed = AddressSchema.safeParse(req.body)
+  if (!parsed.success) return res.status(400).json({ ok: false, error: parsed.error.flatten() })
+
+  const customerId = String(req.deliveryCustomer?.customerId || "").trim()
+  const addressId = String(req.params.addressId || "").trim()
+  const address = await prisma.deliveryCustomerAddress.findFirst({ where: { id: addressId, customerId } })
+  if (!address) return res.status(404).json({ ok: false, error: "Adresa nu a fost gasita." })
+
+  await prisma.deliveryCustomerAddress.update({
+    where: { id: addressId },
+    data: {
+      label: parsed.data.label,
+      addressLine: parsed.data.addressLine,
+      details: parsed.data.details || null,
+      city: parsed.data.city || null,
+      county: parsed.data.county || null,
+      country: parsed.data.country || "Romania",
+      postalCode: parsed.data.postalCode || null,
+      latitude: parsed.data.latitude ?? null,
+      longitude: parsed.data.longitude ?? null,
+    },
+  })
+  const customer = await prisma.deliveryCustomerAccount.findUnique({
+    where: { id: customerId },
+    include: { addresses: { orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }] } },
+  })
+  return res.json({ ok: true, customer: customer ? mapDeliveryCustomerResponse(customer) : null })
+})
+
 router.put("/api/v1/public/delivery/account/addresses/:addressId/default", requireDeliveryCustomerAuth, async (req: DeliveryCustomerAuthRequest, res) => {
   const customerId = String(req.deliveryCustomer?.customerId || "").trim()
   const addressId = String(req.params.addressId || "").trim()

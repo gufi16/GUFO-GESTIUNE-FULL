@@ -743,7 +743,10 @@ async function buildGufoDeliveryMenuPayload(req: Request, integration: GufoDeliv
       code: location.code,
       imageUrl: resolvePublicImageUrl(
         req,
-        categories.find((item) => Boolean(item.imageUrl))?.imageUrl || products.find((item) => Boolean(item.imageUrl))?.imageUrl || null
+        String(settings.deliveryRestaurantImageUrl || "").trim()
+          || categories.find((item) => Boolean(item.imageUrl))?.imageUrl
+          || products.find((item) => Boolean(item.imageUrl))?.imageUrl
+          || null
       ),
       address: location.address || null,
       city: location.city || null,
