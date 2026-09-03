@@ -5,7 +5,7 @@ import { Prisma, TerminalDeviceType } from "@prisma/client"
 import { prisma } from "../lib/prisma"
 import { buildCompanyScopedTenantWhere } from "../lib/companyScope"
 import { requireAuth, AuthedRequest } from "../middleware/requireAuth"
-import { requireDeliveryCustomerAuth, type DeliveryCustomerAuthRequest } from "./deliveryAuth"
+import { requireDeliveryCustomerAuth, resolveOptionalDeliveryCustomer, type DeliveryCustomerAuthRequest } from "./deliveryAuth"
 import { decryptSecret, encryptSecret } from "../lib/efacturaCertificate"
 
 const router = Router()
@@ -345,6 +345,27 @@ function deliveryServiceAreaContainsPoint(area: DeliveryServiceArea, point: Deli
 
 function parseDeliveryGeoPoint(lat: unknown, lng: unknown): DeliveryGeoPoint | null {
   return normalizeDeliveryGeoPoint({ lat, lng })
+}
+
+async function resolvePublicRestaurantDeliveryPoint(req: Request) {
+  const pointFromQuery = parseDeliveryGeoPoint(req.query.lat, req.query.lng)
+  if (pointFromQuery) return pointFromQuery
+
+  const customer = await resolveOptionalDeliveryCustomer(req)
+  if (!customer) return null
+
+  const requestedAddressId = String(req.query.addressId || "").trim()
+  const address = await db.deliveryCustomerAddress.findFirst({
+    where: {
+      customerId: customer.customerId,
+      ...(requestedAddressId ? { id: requestedAddressId } : {}),
+      latitude: { not: null },
+      longitude: { not: null },
+    },
+    orderBy: requestedAddressId ? undefined : [{ isDefault: "desc" }, { createdAt: "desc" }],
+  })
+
+  return address ? parseDeliveryGeoPoint(address.latitude, address.longitude) : null
 }
 
 function buildGufoDeliveryPaymentConfig(settings: MarketplaceSettings) {
@@ -1023,14 +1044,15 @@ async function buildGufoDeliveryCheckoutImportPayload(
 
   const deliverySettings = integrationSettings(integration.settingsJson)
   const deliveryArea = normalizeDeliveryServiceArea(deliverySettings.deliveryServiceArea)
-  if (deliveryArea) {
-    const deliveryPoint = parseDeliveryGeoPoint(input.deliveryAddress.lat, input.deliveryAddress.lng)
-    if (!deliveryPoint) {
-      throw new Error("Adresa de livrare trebuie pozitionata pe harta inainte de plasarea comenzii.")
-    }
-    if (!deliveryServiceAreaContainsPoint(deliveryArea, deliveryPoint)) {
-      throw new Error("Restaurantul selectat nu livreaza la aceasta adresa.")
-    }
+  if (!deliveryArea) {
+    throw new Error("Restaurantul nu are o zona de livrare configurata.")
+  }
+  const deliveryPoint = parseDeliveryGeoPoint(input.deliveryAddress.lat, input.deliveryAddress.lng)
+  if (!deliveryPoint) {
+    throw new Error("Adresa de livrare trebuie pozitionata pe harta inainte de plasarea comenzii.")
+  }
+  if (!deliveryServiceAreaContainsPoint(deliveryArea, deliveryPoint)) {
+    throw new Error("Restaurantul selectat nu livreaza la aceasta adresa.")
   }
 
   const menuPayload: GufoDeliveryMenuPayload = await buildGufoDeliveryMenuPayload(req, integration)
@@ -2431,13 +2453,12 @@ router.post("/api/v1/marketplace/webhooks/glovo/cancel/:storeId?", async (req, r
 router.get("/api/v1/public/delivery/restaurants", async (req, res) => {
   try {
     const integrations = await getPublicGufoDeliveryIntegrations()
-    const deliveryPoint = parseDeliveryGeoPoint(req.query.lat, req.query.lng)
+    const deliveryPoint = await resolvePublicRestaurantDeliveryPoint(req)
     const coveredIntegrations = integrations.filter((integration) => {
       if (!deliveryPoint) return true
       const settings = integrationSettings(integration.settingsJson)
       const area = normalizeDeliveryServiceArea(settings.deliveryServiceArea)
-      // Existing active restaurants continue to work until their administrator draws a delivery area.
-      return !area || deliveryServiceAreaContainsPoint(area, deliveryPoint)
+      return area !== null && deliveryServiceAreaContainsPoint(area, deliveryPoint)
     })
     const items = await Promise.all(coveredIntegrations.map(async (integration) => {
       const settings = integrationSettings(integration.settingsJson)

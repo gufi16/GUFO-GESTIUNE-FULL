@@ -20,6 +20,8 @@ export type DeliveryCustomerAuthRequest = Request & {
   }
 }
 
+export type DeliveryCustomerIdentity = NonNullable<DeliveryCustomerAuthRequest["deliveryCustomer"]>
+
 const RegisterSchema = z.object({
   fullName: z.string().trim().min(2),
   email: z.string().trim().email().optional(),
@@ -176,6 +178,47 @@ function mapDeliveryCustomerResponse(customer: {
       longitude: address.longitude == null ? null : Number(address.longitude),
       isDefault: address.isDefault,
     })),
+  }
+}
+
+// Public delivery endpoints may use this to personalize results when the app
+// already has a customer session, without turning initial restaurant discovery
+// into an authenticated-only endpoint.
+export async function resolveOptionalDeliveryCustomer(req: Request): Promise<DeliveryCustomerIdentity | null> {
+  const authHeader = String(req.headers.authorization || "")
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : ""
+  if (!token) return null
+
+  try {
+    const decoded = verifyAccessToken(token) as {
+      userId?: string
+      sessionId?: string | null
+      deliverySessionId?: string | null
+      role?: string
+    }
+    const customerId = String(decoded.userId || "").trim()
+    const sessionId = String(decoded.deliverySessionId || decoded.sessionId || "").trim()
+    if (!customerId || !sessionId || String(decoded.role || "").trim() !== "DELIVERY_CUSTOMER") return null
+
+    const session = await prisma.deliveryCustomerSession.findUnique({
+      where: { id: sessionId },
+      include: {
+        customer: {
+          select: { id: true, email: true, phone: true, isActive: true },
+        },
+      },
+    })
+    if (!session || session.revokedAt || session.expiresAt <= new Date()) return null
+    if (!session.customer || !session.customer.isActive || session.customer.id !== customerId) return null
+
+    return {
+      customerId: session.customer.id,
+      sessionId: session.id,
+      email: session.customer.email,
+      phone: session.customer.phone,
+    }
+  } catch {
+    return null
   }
 }
 
