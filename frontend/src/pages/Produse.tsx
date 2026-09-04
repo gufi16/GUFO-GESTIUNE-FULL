@@ -465,20 +465,6 @@ export function ProductsCatalogPage({
         .filter((option): option is ProductOption => Boolean(option)),
     [availableCrossSellOptions, form.crossSellProductIds]
   )
-  const selectedDeliveryDisplayGroups = useMemo(
-    () =>
-      form.deliveryDisplayGroupIds
-        .map((id) => deliveryOptionGroups.find((group) => group.id === id))
-        .filter((group): group is DeliveryOptionGroupSummary => Boolean(group)),
-    [deliveryOptionGroups, form.deliveryDisplayGroupIds]
-  )
-  const selectedDeliveryOptionGroups = useMemo(
-    () =>
-      form.deliveryOptionGroupIds
-        .map((id) => deliveryOptionGroups.find((group) => group.id === id))
-        .filter((group): group is DeliveryOptionGroupSummary => Boolean(group)),
-    [deliveryOptionGroups, form.deliveryOptionGroupIds]
-  )
   const categoryPlacementMode = useMemo<"category" | "subcategory">(() => {
     if (!form.categoryId) return "category"
     const current = categories.find((item) => item.id === form.categoryId)
@@ -1141,6 +1127,20 @@ function getDefaultVat(list = vatRates) {
         ? prev.terminalIds.filter((id) => id !== terminalId)
         : [...prev.terminalIds, terminalId]
     }))
+  }
+
+  function toggleDeliveryGroup(groupId: string, target: "display" | "option") {
+    setForm((prev) => {
+      const key = target === "display" ? "deliveryDisplayGroupIds" : "deliveryOptionGroupIds"
+      const groupIds = prev[key]
+
+      return {
+        ...prev,
+        [key]: groupIds.includes(groupId)
+          ? groupIds.filter((id) => id !== groupId)
+          : [...groupIds, groupId],
+      }
+    })
   }
 
   async function openRecipeModal(item: Product) {
@@ -2408,117 +2408,72 @@ function getDefaultVat(list = vatRates) {
               {activeProductTab === "delivery" ? (
                 <SectionCard title="Gufo Delivery">
                   <div style={sideStack}>
-                    <Field label="Grupuri afisate pentru acest produs">
-                      <div style={{ display: "grid", gap: 10 }}>
-                        <select
-                          multiple
-                          value={form.deliveryDisplayGroupIds}
-                          onChange={(e) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              deliveryDisplayGroupIds: Array.from(e.currentTarget.selectedOptions, (option) => option.value),
-                            }))
-                          }
-                          style={{ ...input, minHeight: 160 }}
-                        >
-                          {deliveryOptionGroups.map((group) => (
-                            <option key={group.id} value={group.id}>
-                              {group.name}
-                            </option>
-                          ))}
-                        </select>
-                        {selectedDeliveryDisplayGroups.length ? (
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                            {selectedDeliveryDisplayGroups.map((group) => (
-                              <button
-                                key={group.id}
-                                type="button"
-                                onClick={() =>
-                                  setForm((prev) => ({
-                                    ...prev,
-                                    deliveryDisplayGroupIds: prev.deliveryDisplayGroupIds.filter((id) => id !== group.id),
-                                  }))
-                                }
-                                style={{
-                                  border: "1px solid #bfdbfe",
-                                  background: "#eff6ff",
-                                  color: "#1d4ed8",
-                                  borderRadius: 999,
-                                  padding: "6px 10px",
-                                  fontSize: 13,
-                                  fontWeight: 700,
-                                  cursor: "pointer",
-                                }}
-                              >
-                                {group.name} x
-                              </button>
-                            ))}
-                          </div>
-                        ) : null}
-                        <div style={fieldHint}>
-                          Aceste grupuri apar sub produs in catalogul Gufo Delivery.
-                        </div>
-                      </div>
-                    </Field>
+                    <div style={{ ...hintBoxInline, marginBottom: 2 }}>
+                      Pentru fiecare grup alegi rolul produsului in catalog: il poate afisa cu optiuni, poate fi el insusi o alegere, sau ambele.
+                    </div>
 
-                    <Field label="Grupuri in care acest produs este alegere">
-                      <div style={{ display: "grid", gap: 10 }}>
-                        <select
-                          multiple
-                          value={form.deliveryOptionGroupIds}
-                          onChange={(e) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              deliveryOptionGroupIds: Array.from(e.currentTarget.selectedOptions, (option) => option.value),
-                            }))
-                          }
-                          style={{ ...input, minHeight: 160 }}
-                        >
-                          {deliveryOptionGroups.map((group) => (
-                            <option key={group.id} value={group.id}>
-                              {group.name}
-                            </option>
-                          ))}
-                        </select>
-                        {selectedDeliveryOptionGroups.length ? (
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                            {selectedDeliveryOptionGroups.map((group) => (
-                              <button
-                                key={group.id}
-                                type="button"
-                                onClick={() =>
-                                  setForm((prev) => ({
-                                    ...prev,
-                                    deliveryOptionGroupIds: prev.deliveryOptionGroupIds.filter((id) => id !== group.id),
-                                  }))
-                                }
+                    <div style={{ display: "grid", gap: 10 }}>
+                      {deliveryOptionGroups.map((group) => {
+                        const isDisplayGroup = form.deliveryDisplayGroupIds.includes(group.id)
+                        const isOptionProduct = form.deliveryOptionGroupIds.includes(group.id)
+                        const selectionRule = (group.minSelections || 0) > 0
+                          ? `Obligatoriu: min. ${group.minSelections}${group.maxSelections ? `, max. ${group.maxSelections}` : ""}`
+                          : group.maxSelections
+                            ? `Optional: max. ${group.maxSelections}`
+                            : "Optional"
+
+                        return (
+                          <div
+                            key={group.id}
+                            style={{
+                              border: isDisplayGroup || isOptionProduct ? "1px solid #7dd3fc" : "1px solid #dbeafe",
+                              background: isDisplayGroup || isOptionProduct ? "#f0f9ff" : "#ffffff",
+                              borderRadius: 14,
+                              padding: "13px 14px",
+                              display: "grid",
+                              gap: 11,
+                            }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                              <strong style={{ color: "#17324D", fontSize: 14 }}>{group.name}</strong>
+                              <span style={{ color: "#0369a1", fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>{selectionRule}</span>
+                            </div>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 8 }}>
+                              <label
                                 style={{
-                                  border: "1px solid #dbeafe",
-                                  background: "#f8fafc",
-                                  color: "#17324D",
-                                  borderRadius: 999,
-                                  padding: "6px 10px",
-                                  fontSize: 13,
-                                  fontWeight: 700,
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 9,
+                                  border: isDisplayGroup ? "1px solid #38bdf8" : "1px solid #e2e8f0",
+                                  background: isDisplayGroup ? "#ecfeff" : "#f8fafc",
+                                  borderRadius: 10,
+                                  padding: "9px 10px",
                                   cursor: "pointer",
                                 }}
                               >
-                                {group.name}
-                                {group.minSelections && group.maxSelections
-                                  ? ` (${group.minSelections}-${group.maxSelections})`
-                                  : group.maxSelections
-                                    ? ` (max ${group.maxSelections})`
-                                    : ""}
-                                {" "}x
-                              </button>
-                            ))}
+                                <input type="checkbox" checked={isDisplayGroup} onChange={() => toggleDeliveryGroup(group.id, "display")} />
+                                <span style={{ color: "#334155", fontSize: 13, fontWeight: 600 }}>Afiseaza grupul sub produs</span>
+                              </label>
+                              <label
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 9,
+                                  border: isOptionProduct ? "1px solid #38bdf8" : "1px solid #e2e8f0",
+                                  background: isOptionProduct ? "#ecfeff" : "#f8fafc",
+                                  borderRadius: 10,
+                                  padding: "9px 10px",
+                                  cursor: "pointer",
+                                }}
+                              >
+                                <input type="checkbox" checked={isOptionProduct} onChange={() => toggleDeliveryGroup(group.id, "option")} />
+                                <span style={{ color: "#334155", fontSize: 13, fontWeight: 600 }}>Produsul poate fi ales din grup</span>
+                              </label>
+                            </div>
                           </div>
-                        ) : null}
-                        <div style={fieldHint}>
-                          Aici marchezi ca produsul poate fi ales ca sos, extra, leguma sau alta optiune.
-                        </div>
-                      </div>
-                    </Field>
+                        )
+                      })}
+                    </div>
 
                     {!deliveryOptionGroups.length ? (
                       <div style={hintBoxInline}>
