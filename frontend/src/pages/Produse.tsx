@@ -1756,7 +1756,7 @@ function getDefaultVat(list = vatRates) {
                 <div style={productTabRailHint}>Selectează o secțiune. Modificările se salvează împreună, din butonul de jos.</div>
               </aside>
 
-              <div style={productEditorContent}>
+              <div key={activeProductTab} style={productEditorContent}>
                 <div style={productTabPanel}>
               {activeProductTab === "general" || activeProductTab === "pos" ? (
                 <>
@@ -3602,21 +3602,24 @@ const productEditorContent: CSSProperties = {
   minWidth: 0,
   minHeight: 0,
   overflowY: "auto",
-  paddingRight: 4,
+  padding: 4,
+  borderRadius: 18,
+  background: "#f8fafc",
 }
 
 const sectionCard: CSSProperties = {
-  border: "1px solid #e2e8f0",
-  borderRadius: 14,
-  padding: 14,
+  border: "1px solid #dbe5f0",
+  borderRadius: 18,
+  padding: 18,
   background: "#fff"
 }
 
 const sectionTitle: CSSProperties = {
-  fontSize: 14,
+  fontSize: 15,
   fontWeight: 800,
   color: "#0f172a",
-  marginBottom: 10
+  marginBottom: 16,
+  letterSpacing: "-0.01em",
 }
 
 const gridCompact: CSSProperties = {
@@ -3640,7 +3643,8 @@ const sideStack: CSSProperties = {
 const fieldWrap: CSSProperties = {
   display: "flex",
   flexDirection: "column",
-  gap: 4
+  gap: 6,
+  minWidth: 0,
 }
 
 const inlineFieldRow: CSSProperties = {
@@ -3650,9 +3654,11 @@ const inlineFieldRow: CSSProperties = {
 }
 
 const labelStyle: CSSProperties = {
-  fontSize: 13,
-  fontWeight: 600,
-  color: "#334155"
+  fontSize: 11,
+  fontWeight: 800,
+  color: "#64748b",
+  letterSpacing: "0.04em",
+  textTransform: "uppercase",
 }
 
 const fieldHint: CSSProperties = {
@@ -3663,8 +3669,9 @@ const fieldHint: CSSProperties = {
 
 const input: CSSProperties = {
   width: "100%",
-  padding: "9px 10px",
-  borderRadius: 10,
+  minHeight: 42,
+  padding: "9px 11px",
+  borderRadius: 11,
   border: "1px solid #cbd5e1",
   background: "#ffffff",
   outline: "none",
