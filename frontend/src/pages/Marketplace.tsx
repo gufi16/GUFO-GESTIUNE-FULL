@@ -1,4 +1,4 @@
-import { ArrowLeft, CheckCircle2, Crosshair, Link2, MapPin, Package2, RefreshCcw, Save, Search, ShoppingBag, Truck } from "lucide-react"
+import { ArrowLeft, CheckCircle2, Crosshair, Link2, MapPin, Package2, Plus, RefreshCcw, Save, Search, ShoppingBag, Trash2, Truck } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import PageHeader from "../components/PageHeader"
 import {
@@ -14,7 +14,7 @@ import {
 } from "../components/DocumentUi"
 import { API_BASE, api, authHeaders, getToken, resolvePublicAssetUrl } from "../lib/api"
 
-type TabId = "integrari" | "acoperire" | "mapari" | "comenzi"
+type TabId = "integrari" | "acoperire" | "mapari" | "optiuni" | "comenzi"
 type PlatformCode = "GLOVO" | "WOLT" | "BOLT_FOOD" | "GUFO_DELIVERY"
 
 type PlatformItem = {
@@ -66,7 +66,41 @@ type ProductItem = {
   trackLot?: boolean
   trackExpiry?: boolean
   costMethod?: string
+  price?: number | string
 }
+
+type DeliveryOptionGroup = {
+  id: string
+  name: string
+  description?: string | null
+  selectionMode: "SINGLE" | "MULTIPLE"
+  minSelections: number
+  maxSelections: number
+  sortOrder: number
+  isActive: boolean
+  productLinks: Array<{ productId: string; sortOrder: number }>
+  items: Array<{ id: string; productId: string; priceAdjustment: number | string; isDefault: boolean; isActive: boolean; product: ProductItem }>
+}
+
+type DeliveryOptionDraft = {
+  name: string
+  description: string
+  selectionMode: "SINGLE" | "MULTIPLE"
+  minSelections: string
+  maxSelections: string
+  productIds: string[]
+  itemProductIds: string[]
+}
+
+const emptyDeliveryOptionDraft = (): DeliveryOptionDraft => ({
+  name: "",
+  description: "",
+  selectionMode: "MULTIPLE",
+  minSelections: "0",
+  maxSelections: "1",
+  productIds: [],
+  itemProductIds: [],
+})
 
 type DeliveryCatalogMode = "ALL_VISIBLE" | "CATEGORY_SELECTION" | "MANUAL_SELECTION"
 type DeliveryPaymentMethodCode = "CASH" | "CARD" | "GOOGLE_PAY" | "APPLE_PAY"
@@ -344,6 +378,7 @@ const gufoDeliveryTabs = [
   { id: "integrari", title: "Configurare" },
   { id: "acoperire", title: "Zona de livrare" },
   { id: "mapari", title: "Catalog" },
+  { id: "optiuni", title: "Optiuni produse" },
 ] as Array<{ id: TabId; title: string }>
 
 const defaultPlatforms: PlatformItem[] = [
@@ -862,6 +897,9 @@ export default function MarketplacePage() {
   const [retryingGlovoPush, setRetryingGlovoPush] = useState(false)
   const [gufoDeliveryPreview, setGufoDeliveryPreview] = useState<GufoDeliveryCatalogPreview | null>(null)
   const [loadingGufoDeliveryPreview, setLoadingGufoDeliveryPreview] = useState(false)
+  const [deliveryOptionGroups, setDeliveryOptionGroups] = useState<DeliveryOptionGroup[]>([])
+  const [deliveryOptionDraft, setDeliveryOptionDraft] = useState<DeliveryOptionDraft>(emptyDeliveryOptionDraft)
+  const [savingDeliveryOption, setSavingDeliveryOption] = useState(false)
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
   const [forms, setForms] = useState<Record<PlatformCode, IntegrationForm>>({
@@ -919,18 +957,20 @@ export default function MarketplacePage() {
     setError("")
 
     try {
-      const [platformsData, locationsData, categoriesData, productsData, integrationsData] = await Promise.all([
+      const [platformsData, locationsData, categoriesData, productsData, integrationsData, deliveryOptionsData] = await Promise.all([
         api<{ ok: boolean; items: PlatformItem[] }>("/api/v1/marketplace/platforms"),
         api<{ ok: boolean; locations: LocationItem[] }>("/api/v1/meta/locations"),
         api<{ ok: boolean; items: CategoryItem[] }>("/api/v1/meta/categories"),
         api<{ items: ProductItem[] }>("/api/v1/products"),
         api<{ ok: boolean; items: IntegrationItem[] }>("/api/v1/marketplace/integrations"),
+        api<{ ok: boolean; items: DeliveryOptionGroup[] }>("/api/v1/delivery-option-groups"),
       ])
 
       setPlatforms(Array.isArray(platformsData?.items) ? platformsData.items : defaultPlatforms)
       setLocations(Array.isArray(locationsData?.locations) ? locationsData.locations : [])
       setCategories(Array.isArray(categoriesData?.items) ? categoriesData.items : [])
       setProducts(Array.isArray(productsData?.items) ? productsData.items : [])
+      setDeliveryOptionGroups(Array.isArray(deliveryOptionsData?.items) ? deliveryOptionsData.items : [])
       const nextIntegrations = Array.isArray(integrationsData?.items) ? integrationsData.items : []
       setIntegrations(nextIntegrations)
 
@@ -970,6 +1010,67 @@ export default function MarketplacePage() {
     } catch (e: any) {
       setError(e?.message || "Nu am putut incarca device-urile POS.")
       setTerminals([])
+    }
+  }
+
+  async function loadDeliveryOptionGroups() {
+    try {
+      const data = await api<{ ok: boolean; items: DeliveryOptionGroup[] }>("/api/v1/delivery-option-groups")
+      setDeliveryOptionGroups(Array.isArray(data?.items) ? data.items : [])
+    } catch (e: any) {
+      setError(e?.message || "Nu am putut incarca optiunile produselor.")
+    }
+  }
+
+  async function saveDeliveryOptionGroup() {
+    const name = deliveryOptionDraft.name.trim()
+    if (!name) {
+      setError("Completeaza numele grupului, de exemplu «Alege sosurile». ")
+      return
+    }
+    if (!deliveryOptionDraft.productIds.length) {
+      setError("Alege cel putin produsul pentru care se afiseaza acest grup.")
+      return
+    }
+    if (!deliveryOptionDraft.itemProductIds.length) {
+      setError("Alege cel putin o optiune: sos, salata, bautura sau alt produs.")
+      return
+    }
+
+    setSavingDeliveryOption(true)
+    setError("")
+    try {
+      await api("/api/v1/delivery-option-groups", {
+        method: "POST",
+        body: JSON.stringify({
+          name,
+          description: deliveryOptionDraft.description.trim() || null,
+          selectionMode: deliveryOptionDraft.selectionMode,
+          minSelections: Number(deliveryOptionDraft.minSelections || 0),
+          maxSelections: Number(deliveryOptionDraft.maxSelections || 1),
+          productIds: deliveryOptionDraft.productIds,
+          items: deliveryOptionDraft.itemProductIds.map((productId) => ({ productId, priceAdjustment: 0 })),
+        }),
+      })
+      setDeliveryOptionDraft(emptyDeliveryOptionDraft())
+      setMessage("Grupul de optiuni a fost salvat si va aparea in Gufo Delivery.")
+      await loadDeliveryOptionGroups()
+      if (selectedIntegration?.id) await loadGufoDeliveryPreview(selectedIntegration.id)
+    } catch (e: any) {
+      setError(e?.message || "Nu am putut salva grupul de optiuni.")
+    } finally {
+      setSavingDeliveryOption(false)
+    }
+  }
+
+  async function deleteDeliveryOptionGroup(id: string) {
+    if (!window.confirm("Stergi acest grup de optiuni din Gufo Delivery?")) return
+    try {
+      await api(`/api/v1/delivery-option-groups/${encodeURIComponent(id)}`, { method: "DELETE" })
+      setMessage("Grupul de optiuni a fost sters.")
+      await loadDeliveryOptionGroups()
+    } catch (e: any) {
+      setError(e?.message || "Nu am putut sterge grupul.")
     }
   }
 
@@ -2479,6 +2580,98 @@ export default function MarketplacePage() {
                 <Save size={15} className="mr-1.5" />
                 {saving ? "Se salveaza..." : "Salveaza zona"}
               </button>
+            </div>
+          </DocumentSection>
+        </div>
+      ) : null}
+
+      {activeTab === "optiuni" && selectedPlatform === "GUFO_DELIVERY" ? (
+        <div className="space-y-3">
+          <DocumentSection
+            title="Sosuri, ingrediente si alegeri pentru produs"
+            description="Configurezi o data un grup reutilizabil, apoi il trimiti spre produsele dorite. Exemplu: «Adauga sosuri», obligatoriu, pentru toate shaormele."
+            actions={
+              <button type="button" className={documentButtonSecondaryClass} onClick={() => void loadDeliveryOptionGroups()}>
+                <RefreshCcw size={14} className="mr-1.5" /> Reincarca
+              </button>
+            }
+          >
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+              <div className="rounded-[20px] border border-[#BFDBFE] bg-[#F8FBFF] p-4">
+                <div className="text-sm font-semibold text-[#17324D]">Grup nou de optiuni</div>
+                <div className="mt-1 text-sm text-slate-600">Optiunile sunt produse reale din ERP. Astfel ramane corect stocul, poza si SGR-ul.</div>
+
+                <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <DocumentField label="Nume grup">
+                    <input value={deliveryOptionDraft.name} onChange={(e) => setDeliveryOptionDraft((value) => ({ ...value, name: e.target.value }))} className={documentInputClass} placeholder="Adauga sosuri" />
+                  </DocumentField>
+                  <DocumentField label="Tip selectie">
+                    <select value={deliveryOptionDraft.selectionMode} onChange={(e) => setDeliveryOptionDraft((value) => ({ ...value, selectionMode: e.target.value as DeliveryOptionDraft["selectionMode"] }))} className={documentInputClass}>
+                      <option value="MULTIPLE">Mai multe alegeri</option>
+                      <option value="SINGLE">O singura alegere</option>
+                    </select>
+                  </DocumentField>
+                  <DocumentField label="Minim selectii">
+                    <input type="number" min="0" value={deliveryOptionDraft.minSelections} onChange={(e) => setDeliveryOptionDraft((value) => ({ ...value, minSelections: e.target.value }))} className={documentInputClass} />
+                  </DocumentField>
+                  <DocumentField label="Maxim selectii">
+                    <input type="number" min="1" value={deliveryOptionDraft.maxSelections} onChange={(e) => setDeliveryOptionDraft((value) => ({ ...value, maxSelections: e.target.value }))} className={documentInputClass} />
+                  </DocumentField>
+                </div>
+
+                <div className="mt-3">
+                  <DocumentField label="Explicatie pentru client (optional)">
+                    <input value={deliveryOptionDraft.description} onChange={(e) => setDeliveryOptionDraft((value) => ({ ...value, description: e.target.value }))} className={documentInputClass} placeholder="Alege sosurile preferate" />
+                  </DocumentField>
+                </div>
+
+                <div className="mt-4 grid grid-cols-1 gap-3">
+                  <DocumentField label="Se afiseaza pentru produsele">
+                    <select multiple value={deliveryOptionDraft.productIds} onChange={(e) => setDeliveryOptionDraft((value) => ({ ...value, productIds: Array.from(e.currentTarget.selectedOptions, (option) => option.value) }))} className="min-h-36 w-full rounded-[14px] border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-[#0F5EA8]">
+                      {products.map((product) => <option key={product.id} value={product.id}>{product.name}{product.sku ? ` · ${product.sku}` : ""}</option>)}
+                    </select>
+                  </DocumentField>
+                  <DocumentField label="Optiunile din grup">
+                    <select multiple value={deliveryOptionDraft.itemProductIds} onChange={(e) => setDeliveryOptionDraft((value) => ({ ...value, itemProductIds: Array.from(e.currentTarget.selectedOptions, (option) => option.value) }))} className="min-h-36 w-full rounded-[14px] border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-[#0F5EA8]">
+                      {products.map((product) => <option key={product.id} value={product.id}>{product.name}{product.sku ? ` · ${product.sku}` : ""}</option>)}
+                    </select>
+                  </DocumentField>
+                </div>
+
+                <div className="mt-2 text-xs text-slate-500">Tine apasat Ctrl pentru mai multe produse. Un minim mai mare ca 0 afiseaza in aplicatie eticheta „Obligatoriu”.</div>
+                <div className="mt-4 flex justify-end">
+                  <button type="button" className={documentButtonPrimaryClass} onClick={() => void saveDeliveryOptionGroup()} disabled={savingDeliveryOption}>
+                    <Plus size={15} className="mr-1.5" /> {savingDeliveryOption ? "Se salveaza..." : "Adauga grup"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">Grupuri configurate</div>
+                    <div className="mt-1 text-sm text-slate-500">{deliveryOptionGroups.length} grupuri disponibile pentru catalogul acestei firme.</div>
+                  </div>
+                </div>
+                <div className="mt-4 space-y-3">
+                  {!deliveryOptionGroups.length ? <InlineNotice tone="info">Nu exista inca grupuri. Creeaza „Adauga sosuri” sau „Alege legumele” din formularul alaturat.</InlineNotice> : null}
+                  {deliveryOptionGroups.map((group) => (
+                    <div key={group.id} className="rounded-[16px] border border-slate-200 bg-slate-50 p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="font-semibold text-slate-900">{group.name}</div>
+                          <div className="mt-1 text-xs text-slate-500">{group.minSelections > 0 ? `Obligatoriu: ${group.minSelections}-${group.maxSelections}` : `Optional: maxim ${group.maxSelections}`} · {group.selectionMode === "SINGLE" ? "o alegere" : "alegeri multiple"}</div>
+                        </div>
+                        <button type="button" onClick={() => void deleteDeliveryOptionGroup(group.id)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-600 hover:bg-rose-50" title="Sterge grupul"><Trash2 size={15} /></button>
+                      </div>
+                      {group.description ? <div className="mt-2 text-sm text-slate-600">{group.description}</div> : null}
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        {group.items.map((item) => <span key={item.id} className="rounded-full border border-white bg-white px-2.5 py-1 text-xs font-medium text-slate-700">{item.product.name}{Number(item.priceAdjustment) > 0 ? ` +${formatMoney(item.priceAdjustment)}` : ""}</span>)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </DocumentSection>
         </div>
