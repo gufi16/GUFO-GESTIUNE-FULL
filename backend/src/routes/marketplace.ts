@@ -666,7 +666,12 @@ async function buildGufoDeliveryMenuPayload(req: Request, integration: GufoDeliv
     }
   }
 
-  const deliveryProducts = terminalVisibleProducts.filter((product) => {
+  // A curated Gufo Delivery catalog is an explicit merchant choice. It must not
+  // be narrowed again by optional POS access filters used only at the terminal.
+  const catalogSourceProducts =
+    deliveryCatalogMode === "ALL_VISIBLE" ? terminalVisibleProducts : rawProducts
+
+  const deliveryProducts = catalogSourceProducts.filter((product) => {
     if (deliveryCatalogMode === "MANUAL_SELECTION") {
       return includedProductIds.has(product.id)
     }

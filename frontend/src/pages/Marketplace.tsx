@@ -1169,8 +1169,13 @@ export default function MarketplacePage() {
     }
   }
 
-  async function saveIntegration(platform: PlatformCode) {
-    const form = forms[platform]
+  async function saveIntegration(platform: PlatformCode, deliveryRestaurantImageUrlOverride?: string) {
+    const form = {
+      ...forms[platform],
+      ...(deliveryRestaurantImageUrlOverride !== undefined
+        ? { deliveryRestaurantImageUrl: deliveryRestaurantImageUrlOverride }
+        : {}),
+    }
     if (!form.locationId) {
       setError("Selecteaza locatia pentru integrare.")
       return
@@ -1272,11 +1277,13 @@ export default function MarketplacePage() {
       })
       const data = await response.json().catch(() => ({}))
       if (!response.ok || !data.ok || !data.imageUrl) throw new Error(data.error || "Nu am putut incarca fotografia.")
+      const imageUrl = String(data.imageUrl)
       setForms((prev) => ({
         ...prev,
-        GUFO_DELIVERY: { ...prev.GUFO_DELIVERY, deliveryRestaurantImageUrl: String(data.imageUrl) },
+        GUFO_DELIVERY: { ...prev.GUFO_DELIVERY, deliveryRestaurantImageUrl: imageUrl },
       }))
-      setMessage("Fotografia a fost incarcata. Apasa Salveaza configurarea pentru a o publica in Gufo Delivery.")
+      await saveIntegration("GUFO_DELIVERY", imageUrl)
+      setMessage("Fotografia restaurantului a fost incarcata si publicata in Gufo Delivery.")
     } catch (error: any) {
       setError(error?.message || "Nu am putut incarca fotografia restaurantului.")
     } finally {
@@ -1734,7 +1741,7 @@ export default function MarketplacePage() {
                               />
                             ) : null}
                           </DocumentField>
-                          <p className="mt-1 text-xs text-slate-500">Alege imaginea, apoi apasa Salveaza configurarea. Daca nu alegi una, se foloseste automat o imagine din produse sau categorii.</p>
+                          <p className="mt-1 text-xs text-slate-500">Fotografia aleasa se incarca si se publica automat. Daca nu alegi una, se foloseste automat o imagine din produse sau categorii.</p>
                         </div>
                       ) : null}
                     </div>
