@@ -634,6 +634,34 @@ export function ProductsCatalogPage({
     }
   }
 
+  async function refreshDeliveryOptionGroups() {
+    if (!token) return
+
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/delivery-option-groups`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(data?.error || "Nu am putut incarca grupele Gufo Delivery.")
+      }
+
+      setDeliveryOptionGroups(
+        Array.isArray(data?.items)
+          ? data.items.map((item: any) => ({
+              id: String(item?.id || ""),
+              name: String(item?.name || "").trim(),
+              minSelections: Number(item?.minSelections || 0),
+              maxSelections: Number(item?.maxSelections || 0),
+            }))
+          : []
+      )
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Nu am putut incarca grupele Gufo Delivery.")
+    }
+  }
+
   function getDefaultUom(list = uoms) {
     return list.find((u: any) => u.isActive !== false) || list[0] || null
   }
@@ -667,6 +695,7 @@ function getDefaultVat(list = vatRates) {
   }
 
   function openAddModal() {
+    void refreshDeliveryOptionGroups()
     const defaultUom = getDefaultUom()
     const defaultVat = getDefaultVat()
     const defaultClass = fixedClassValue || "MARFA"
@@ -718,6 +747,7 @@ function getDefaultVat(list = vatRates) {
   }
 
   function openEditModal(item: Product) {
+    void refreshDeliveryOptionGroups()
     setEditingItem(item)
     setForm({
       sku: item.sku || "",
@@ -2409,71 +2439,68 @@ function getDefaultVat(list = vatRates) {
                 <SectionCard title="Gufo Delivery">
                   <div style={sideStack}>
                     <div style={{ ...hintBoxInline, marginBottom: 2 }}>
-                      Pentru fiecare grup alegi rolul produsului in catalog: il poate afisa cu optiuni, poate fi el insusi o alegere, sau ambele.
+                      Mai intai alegi grupele din care face parte produsul. De exemplu, ketchup-ul se bifeaza in grupa „Sosuri”.
                     </div>
 
-                    <div style={{ display: "grid", gap: 10 }}>
-                      {deliveryOptionGroups.map((group) => {
-                        const isDisplayGroup = form.deliveryDisplayGroupIds.includes(group.id)
-                        const isOptionProduct = form.deliveryOptionGroupIds.includes(group.id)
-                        const selectionRule = (group.minSelections || 0) > 0
-                          ? `Obligatoriu: min. ${group.minSelections}${group.maxSelections ? `, max. ${group.maxSelections}` : ""}`
-                          : group.maxSelections
-                            ? `Optional: max. ${group.maxSelections}`
-                            : "Optional"
+                    <Field label="Produsul face parte din grupele">
+                      <div style={{ display: "grid", gap: 8 }}>
+                        {deliveryOptionGroups.map((group) => {
+                          const checked = form.deliveryOptionGroupIds.includes(group.id)
+                          const rule = (group.minSelections || 0) > 0 ? "obligatoriu" : "optional"
+                          return (
+                            <label
+                              key={group.id}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                gap: 12,
+                                border: checked ? "1px solid #38bdf8" : "1px solid #dbeafe",
+                                background: checked ? "#ecfeff" : "#f8fafc",
+                                borderRadius: 12,
+                                padding: "11px 12px",
+                                cursor: "pointer",
+                              }}
+                            >
+                              <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                <input type="checkbox" checked={checked} onChange={() => toggleDeliveryGroup(group.id, "option")} />
+                                <strong style={{ color: "#17324D", fontSize: 14 }}>{group.name}</strong>
+                              </span>
+                              <span style={{ color: "#64748b", fontSize: 12, whiteSpace: "nowrap" }}>{rule}</span>
+                            </label>
+                          )
+                        })}
+                      </div>
+                    </Field>
 
-                        return (
-                          <div
-                            key={group.id}
-                            style={{
-                              border: isDisplayGroup || isOptionProduct ? "1px solid #7dd3fc" : "1px solid #dbeafe",
-                              background: isDisplayGroup || isOptionProduct ? "#f0f9ff" : "#ffffff",
-                              borderRadius: 14,
-                              padding: "13px 14px",
-                              display: "grid",
-                              gap: 11,
-                            }}
-                          >
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                              <strong style={{ color: "#17324D", fontSize: 14 }}>{group.name}</strong>
-                              <span style={{ color: "#0369a1", fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>{selectionRule}</span>
-                            </div>
-                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 8 }}>
-                              <label
-                                style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: 9,
-                                  border: isDisplayGroup ? "1px solid #38bdf8" : "1px solid #e2e8f0",
-                                  background: isDisplayGroup ? "#ecfeff" : "#f8fafc",
-                                  borderRadius: 10,
-                                  padding: "9px 10px",
-                                  cursor: "pointer",
-                                }}
-                              >
-                                <input type="checkbox" checked={isDisplayGroup} onChange={() => toggleDeliveryGroup(group.id, "display")} />
-                                <span style={{ color: "#334155", fontSize: 13, fontWeight: 600 }}>Afiseaza grupul sub produs</span>
-                              </label>
-                              <label
-                                style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: 9,
-                                  border: isOptionProduct ? "1px solid #38bdf8" : "1px solid #e2e8f0",
-                                  background: isOptionProduct ? "#ecfeff" : "#f8fafc",
-                                  borderRadius: 10,
-                                  padding: "9px 10px",
-                                  cursor: "pointer",
-                                }}
-                              >
-                                <input type="checkbox" checked={isOptionProduct} onChange={() => toggleDeliveryGroup(group.id, "option")} />
-                                <span style={{ color: "#334155", fontSize: 13, fontWeight: 600 }}>Produsul poate fi ales din grup</span>
-                              </label>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
+                    <Field label="Afiseaza grupe de optiuni sub acest produs">
+                      <div style={{ display: "grid", gap: 8 }}>
+                        {deliveryOptionGroups.map((group) => {
+                          const checked = form.deliveryDisplayGroupIds.includes(group.id)
+                          return (
+                            <label
+                              key={group.id}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 10,
+                                border: checked ? "1px solid #38bdf8" : "1px solid #dbeafe",
+                                background: checked ? "#ecfeff" : "#f8fafc",
+                                borderRadius: 12,
+                                padding: "11px 12px",
+                                cursor: "pointer",
+                              }}
+                            >
+                              <input type="checkbox" checked={checked} onChange={() => toggleDeliveryGroup(group.id, "display")} />
+                              <span style={{ color: "#334155", fontSize: 13, fontWeight: 600 }}>{group.name}</span>
+                            </label>
+                          )
+                        })}
+                        <div style={fieldHint}>
+                          Foloseste aceasta sectiune doar pentru produsul principal care trebuie sa ofere clientului sosuri, extra sau alte alegeri.
+                        </div>
+                      </div>
+                    </Field>
 
                     {!deliveryOptionGroups.length ? (
                       <div style={hintBoxInline}>
