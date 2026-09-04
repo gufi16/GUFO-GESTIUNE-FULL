@@ -1695,6 +1695,7 @@ function getDefaultVat(list = vatRates) {
 
             <div style={productTabPanel}>
               {activeProductTab === "general" ? (
+                <>
                 <SectionCard title="Date generale">
                   <div style={gridCompact}>
                     <Field label="SKU">
@@ -2400,6 +2401,128 @@ function getDefaultVat(list = vatRates) {
                     ) : null}
                   </div>
                 </SectionCard>
+                <SectionCard title="Gufo Delivery">
+                  <div style={sideStack}>
+                    <Field label="Grupuri afisate pentru acest produs">
+                      <div style={{ display: "grid", gap: 10 }}>
+                        <select
+                          multiple
+                          value={form.deliveryDisplayGroupIds}
+                          onChange={(e) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              deliveryDisplayGroupIds: Array.from(e.currentTarget.selectedOptions, (option) => option.value),
+                            }))
+                          }
+                          style={{ ...input, minHeight: 160 }}
+                        >
+                          {deliveryOptionGroups.map((group) => (
+                            <option key={group.id} value={group.id}>
+                              {group.name}
+                            </option>
+                          ))}
+                        </select>
+                        {selectedDeliveryDisplayGroups.length ? (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                            {selectedDeliveryDisplayGroups.map((group) => (
+                              <button
+                                key={group.id}
+                                type="button"
+                                onClick={() =>
+                                  setForm((prev) => ({
+                                    ...prev,
+                                    deliveryDisplayGroupIds: prev.deliveryDisplayGroupIds.filter((id) => id !== group.id),
+                                  }))
+                                }
+                                style={{
+                                  border: "1px solid #bfdbfe",
+                                  background: "#eff6ff",
+                                  color: "#1d4ed8",
+                                  borderRadius: 999,
+                                  padding: "6px 10px",
+                                  fontSize: 13,
+                                  fontWeight: 700,
+                                  cursor: "pointer",
+                                }}
+                              >
+                                {group.name} x
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                        <div style={fieldHint}>
+                          Aceste grupuri apar sub produs in catalogul Gufo Delivery.
+                        </div>
+                      </div>
+                    </Field>
+
+                    <Field label="Grupuri in care acest produs este alegere">
+                      <div style={{ display: "grid", gap: 10 }}>
+                        <select
+                          multiple
+                          value={form.deliveryOptionGroupIds}
+                          onChange={(e) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              deliveryOptionGroupIds: Array.from(e.currentTarget.selectedOptions, (option) => option.value),
+                            }))
+                          }
+                          style={{ ...input, minHeight: 160 }}
+                        >
+                          {deliveryOptionGroups.map((group) => (
+                            <option key={group.id} value={group.id}>
+                              {group.name}
+                            </option>
+                          ))}
+                        </select>
+                        {selectedDeliveryOptionGroups.length ? (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                            {selectedDeliveryOptionGroups.map((group) => (
+                              <button
+                                key={group.id}
+                                type="button"
+                                onClick={() =>
+                                  setForm((prev) => ({
+                                    ...prev,
+                                    deliveryOptionGroupIds: prev.deliveryOptionGroupIds.filter((id) => id !== group.id),
+                                  }))
+                                }
+                                style={{
+                                  border: "1px solid #dbeafe",
+                                  background: "#f8fafc",
+                                  color: "#17324D",
+                                  borderRadius: 999,
+                                  padding: "6px 10px",
+                                  fontSize: 13,
+                                  fontWeight: 700,
+                                  cursor: "pointer",
+                                }}
+                              >
+                                {group.name}
+                                {group.minSelections && group.maxSelections
+                                  ? ` (${group.minSelections}-${group.maxSelections})`
+                                  : group.maxSelections
+                                    ? ` (max ${group.maxSelections})`
+                                    : ""}
+                                {" "}x
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                        <div style={fieldHint}>
+                          Aici marchezi ca produsul poate fi ales ca sos, extra, leguma sau alta optiune.
+                        </div>
+                      </div>
+                    </Field>
+
+                    {!deliveryOptionGroups.length ? (
+                      <div style={hintBoxInline}>
+                        Nu exista inca grupuri Gufo Delivery. Le creezi din Marketplace, tabul Gufo Delivery / Optiuni produse.
+                      </div>
+                    ) : null}
+                  </div>
+                </SectionCard>
+                </>
               ) : null}
 
               {activeProductTab === "comercial" ? (
@@ -2911,128 +3034,6 @@ function getDefaultVat(list = vatRates) {
 
               {activeProductTab === "media" ? (
                 <>
-                <SectionCard title="Gufo Delivery">
-                  <div style={sideStack}>
-                    <Field label="Grupuri afisate pentru acest produs">
-                      <div style={{ display: "grid", gap: 10 }}>
-                        <select
-                          multiple
-                          value={form.deliveryDisplayGroupIds}
-                          onChange={(e) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              deliveryDisplayGroupIds: Array.from(e.currentTarget.selectedOptions, (option) => option.value),
-                            }))
-                          }
-                          style={{ ...input, minHeight: 160 }}
-                        >
-                          {deliveryOptionGroups.map((group) => (
-                            <option key={group.id} value={group.id}>
-                              {group.name}
-                            </option>
-                          ))}
-                        </select>
-                        {selectedDeliveryDisplayGroups.length ? (
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                            {selectedDeliveryDisplayGroups.map((group) => (
-                              <button
-                                key={group.id}
-                                type="button"
-                                onClick={() =>
-                                  setForm((prev) => ({
-                                    ...prev,
-                                    deliveryDisplayGroupIds: prev.deliveryDisplayGroupIds.filter((id) => id !== group.id),
-                                  }))
-                                }
-                                style={{
-                                  border: "1px solid #bfdbfe",
-                                  background: "#eff6ff",
-                                  color: "#1d4ed8",
-                                  borderRadius: 999,
-                                  padding: "6px 10px",
-                                  fontSize: 13,
-                                  fontWeight: 700,
-                                  cursor: "pointer",
-                                }}
-                              >
-                                {group.name} x
-                              </button>
-                            ))}
-                          </div>
-                        ) : null}
-                        <div style={fieldHint}>
-                          Aceste grupuri apar sub produs in catalogul Gufo Delivery.
-                        </div>
-                      </div>
-                    </Field>
-
-                    <Field label="Grupuri in care acest produs este alegere">
-                      <div style={{ display: "grid", gap: 10 }}>
-                        <select
-                          multiple
-                          value={form.deliveryOptionGroupIds}
-                          onChange={(e) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              deliveryOptionGroupIds: Array.from(e.currentTarget.selectedOptions, (option) => option.value),
-                            }))
-                          }
-                          style={{ ...input, minHeight: 160 }}
-                        >
-                          {deliveryOptionGroups.map((group) => (
-                            <option key={group.id} value={group.id}>
-                              {group.name}
-                            </option>
-                          ))}
-                        </select>
-                        {selectedDeliveryOptionGroups.length ? (
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                            {selectedDeliveryOptionGroups.map((group) => (
-                              <button
-                                key={group.id}
-                                type="button"
-                                onClick={() =>
-                                  setForm((prev) => ({
-                                    ...prev,
-                                    deliveryOptionGroupIds: prev.deliveryOptionGroupIds.filter((id) => id !== group.id),
-                                  }))
-                                }
-                                style={{
-                                  border: "1px solid #dbeafe",
-                                  background: "#f8fafc",
-                                  color: "#17324D",
-                                  borderRadius: 999,
-                                  padding: "6px 10px",
-                                  fontSize: 13,
-                                  fontWeight: 700,
-                                  cursor: "pointer",
-                                }}
-                              >
-                                {group.name}
-                                {group.minSelections && group.maxSelections
-                                  ? ` (${group.minSelections}-${group.maxSelections})`
-                                  : group.maxSelections
-                                    ? ` (max ${group.maxSelections})`
-                                    : ""}
-                                {" "}x
-                              </button>
-                            ))}
-                          </div>
-                        ) : null}
-                        <div style={fieldHint}>
-                          Aici marchezi ca produsul poate fi ales ca sos, extra, leguma sau alta optiune.
-                        </div>
-                      </div>
-                    </Field>
-
-                    {!deliveryOptionGroups.length ? (
-                      <div style={hintBoxInline}>
-                        Nu exista inca grupuri Gufo Delivery. Le creezi din Marketplace, tabul Gufo Delivery / Optiuni produse.
-                      </div>
-                    ) : null}
-                  </div>
-                </SectionCard>
-
                 <SectionCard title="Poza produs">
                   <div style={uploadRowCompact}>
                     <label style={uploadLabel}>
