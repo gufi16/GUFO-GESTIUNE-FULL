@@ -208,6 +208,10 @@ const PublicGufoDeliveryCheckoutSchema = z.object({
       qty: z.coerce.number().positive(),
       note: z.string().trim().optional(),
       modifiers: z.array(z.string().trim().min(1)).optional(),
+      options: z.array(z.object({
+        groupId: z.string().trim().min(1),
+        productId: z.string().trim().min(1),
+      })).optional(),
     })
   ).min(1),
 })
@@ -1113,16 +1117,44 @@ async function buildGufoDeliveryCheckoutImportPayload(
       throw new Error("Un produs din cos nu mai este disponibil in meniul Gufo Delivery.")
     }
 
+    const selectedOptions = item.options || []
+    const groupById = new Map(product.optionGroups.map((group) => [group.id, group]))
+    const selectedByGroup = new Map<string, typeof selectedOptions>()
+    for (const selected of selectedOptions) {
+      const group = groupById.get(selected.groupId)
+      if (!group) throw new Error("O optiune selectata nu apartine produsului comandat.")
+      const option = group.items.find((candidate) => candidate.productId === selected.productId)
+      if (!option) throw new Error("Produsul selectat nu exista in grupa de optiuni.")
+      const list = selectedByGroup.get(group.id) || []
+      if (list.some((candidate) => candidate.productId === selected.productId)) throw new Error("Aceeasi optiune a fost selectata de doua ori.")
+      selectedByGroup.set(group.id, [...list, selected])
+    }
+    const resolvedOptions = selectedOptions.map((selected) => {
+      const group = groupById.get(selected.groupId)!
+      return { group, option: group.items.find((candidate) => candidate.productId === selected.productId)! }
+    })
+    for (const group of product.optionGroups) {
+      const count = (selectedByGroup.get(group.id) || []).length
+      if (count < Number(group.minSelections || 0) || count > Number(group.maxSelections || 1)) {
+        throw new Error(`Selectia pentru grupa „${group.name}” nu respecta regula ${group.minSelections}-${group.maxSelections}.`)
+      }
+      if (group.selectionMode === "SINGLE" && count > 1) throw new Error(`Grupa „${group.name}” permite o singura alegere.`)
+    }
+
     return {
       product,
       qty: item.qty,
       note: item.note || undefined,
-      modifiers: item.modifiers?.filter(Boolean) || [],
+      modifiers: [
+        ...(item.modifiers?.filter(Boolean) || []),
+        ...resolvedOptions.map(({ group, option }) => `${group.name}: ${option.name}`),
+      ],
+      optionAdjustment: resolvedOptions.reduce((sum, entry) => sum + toMoneyValue(entry.option.priceAdjustment), 0),
     }
   })
 
   const subtotal = toMoneyValue(
-    normalizedItems.reduce((sum, item) => sum + toMoneyValue(item.product.price) * item.qty, 0)
+    normalizedItems.reduce((sum, item) => sum + (toMoneyValue(item.product.price) + item.optionAdjustment) * item.qty, 0)
   )
   const total = subtotal
   const paymentType = String(input.payment?.type || "CARD").trim().toUpperCase()
