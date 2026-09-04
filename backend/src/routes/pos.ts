@@ -3640,6 +3640,22 @@ async function resolveSaleAuthContext(
   return null;
 }
 
+async function requirePosSaleAuth(req: PosAuthRequest, res: Response, next: NextFunction) {
+  const parsed = PosSaleSchema.safeParse(req.body);
+
+  if (parsed.success) {
+    const payloadAuth = await resolveSaleAuthContext(req, parsed.data);
+    if (payloadAuth) {
+      // Android POS includes terminal hints with every sale. Keep sales syncing after an API restart
+      // even when an older client has lost its in-memory pairing session or omitted its bearer token.
+      req.auth = payloadAuth;
+      return next();
+    }
+  }
+
+  return requirePosAuth(req, res, next);
+}
+
 export async function handlePosOperatorsList(req: PosAuthRequest, res: Response) {
   const auth = await resolvePosAuthContext(req);
   if (!auth?.tenantId) {
@@ -5858,8 +5874,8 @@ export async function handlePosSale(req: PosAuthRequest, res: Response) {
   });
 }
 
-router.post("/api/v1/pos/sales", requirePosAuth, handlePosSale);
-router.post("/api/v1/pos/receipts", requirePosAuth, handlePosSale);
+router.post("/api/v1/pos/sales", requirePosSaleAuth, handlePosSale);
+router.post("/api/v1/pos/receipts", requirePosSaleAuth, handlePosSale);
 
 export default router;
 
