@@ -35,6 +35,8 @@ type Product = {
   sgrVolumeLiters?: number
   productionMode?: "AUTO" | "MANUAL"
   crossSellProductIds?: string[]
+  deliveryDisplayGroupIds?: string[]
+  deliveryOptionGroupIds?: string[]
   crossSellProducts?: Array<{
     id: string
     sku?: string | null
@@ -73,6 +75,13 @@ type ProductOption = {
   uom?: { id: string; code: string; name: string; standardCode?: string | null } | null
   isActive?: boolean
   isVisibleInPos?: boolean
+}
+
+type DeliveryOptionGroupSummary = {
+  id: string
+  name: string
+  minSelections?: number
+  maxSelections?: number
 }
 
 type PosTerminal = {
@@ -116,6 +125,8 @@ type FormState = {
   requiresRecipe: boolean
   posSortOrder: string
   crossSellProductIds: string[]
+  deliveryDisplayGroupIds: string[]
+  deliveryOptionGroupIds: string[]
 }
 
 type RecipeLine = {
@@ -231,7 +242,9 @@ const emptyForm: FormState = {
   costMethod: "AVG",
   requiresRecipe: false,
   posSortOrder: "0",
-  crossSellProductIds: []
+  crossSellProductIds: [],
+  deliveryDisplayGroupIds: [],
+  deliveryOptionGroupIds: [],
 }
 
 const emptyRecipeForm: RecipeForm = {
@@ -358,6 +371,7 @@ export function ProductsCatalogPage({
   const [categories, setCategories] = useState<any[]>([])
   const [terminals, setTerminals] = useState<PosTerminal[]>([])
   const [productOptions, setProductOptions] = useState<ProductOption[]>([])
+  const [deliveryOptionGroups, setDeliveryOptionGroups] = useState<DeliveryOptionGroupSummary[]>([])
   const [isVatPayer, setIsVatPayer] = useState(true)
   const [warehouseMobileEnabled, setWarehouseMobileEnabled] = useState(false)
 
@@ -451,6 +465,20 @@ export function ProductsCatalogPage({
         .filter((option): option is ProductOption => Boolean(option)),
     [availableCrossSellOptions, form.crossSellProductIds]
   )
+  const selectedDeliveryDisplayGroups = useMemo(
+    () =>
+      form.deliveryDisplayGroupIds
+        .map((id) => deliveryOptionGroups.find((group) => group.id === id))
+        .filter((group): group is DeliveryOptionGroupSummary => Boolean(group)),
+    [deliveryOptionGroups, form.deliveryDisplayGroupIds]
+  )
+  const selectedDeliveryOptionGroups = useMemo(
+    () =>
+      form.deliveryOptionGroupIds
+        .map((id) => deliveryOptionGroups.find((group) => group.id === id))
+        .filter((group): group is DeliveryOptionGroupSummary => Boolean(group)),
+    [deliveryOptionGroups, form.deliveryOptionGroupIds]
+  )
   const categoryPlacementMode = useMemo<"category" | "subcategory">(() => {
     if (!form.categoryId) return "category"
     const current = categories.find((item) => item.id === form.categoryId)
@@ -526,14 +554,15 @@ export function ProductsCatalogPage({
     try {
       const headers = { Authorization: `Bearer ${token}` }
 
-      const [productsRes, uomRes, vatRes, catRes, terminalsRes, companyRes, licenseRes] = await Promise.all([
+      const [productsRes, uomRes, vatRes, catRes, terminalsRes, companyRes, licenseRes, deliveryGroupsRes] = await Promise.all([
         fetch(`${API_BASE}/api/v1/products`, { headers }),
         fetch(`${API_BASE}/api/v1/meta/uom`, { headers }),
         fetch(`${API_BASE}/api/v1/meta/vat`, { headers }),
         fetch(`${API_BASE}/api/v1/meta/categories`, { headers }),
         fetch(`${API_BASE}/api/v1/meta/terminals?deviceType=POS`, { headers }),
         fetch(`${API_BASE}/api/v1/company`, { headers }),
-        fetch(`${API_BASE}/api/v1/license/validate`, { headers })
+        fetch(`${API_BASE}/api/v1/license/validate`, { headers }),
+        fetch(`${API_BASE}/api/v1/delivery-option-groups`, { headers }),
       ])
 
       const productsData = await productsRes.json().catch(() => ({}))
@@ -543,6 +572,7 @@ export function ProductsCatalogPage({
       const terminalsData = await terminalsRes.json().catch(() => ({}))
       const companyData = await companyRes.json().catch(() => ({}))
       const licenseData = await licenseRes.json().catch(() => ({}))
+      const deliveryGroupsData = await deliveryGroupsRes.json().catch(() => ({}))
 
       if ([productsRes, uomRes, vatRes, catRes, terminalsRes, companyRes].some((r) => r.status === 401)) {
         setError("Token expirat sau invalid. Fa login din nou.")
@@ -564,6 +594,12 @@ export function ProductsCatalogPage({
             crossSellProductIds: Array.isArray(item?.crossSellProductIds)
               ? item.crossSellProductIds.map((value: any) => String(value))
               : [],
+            deliveryDisplayGroupIds: Array.isArray(item?.deliveryDisplayGroupIds)
+              ? item.deliveryDisplayGroupIds.map((value: any) => String(value))
+              : [],
+            deliveryOptionGroupIds: Array.isArray(item?.deliveryOptionGroupIds)
+              ? item.deliveryOptionGroupIds.map((value: any) => String(value))
+              : [],
             price: toNumberSafe(item?.price),
             costPrice: toNumberSafe(item?.costPrice),
             purchaseFactor: toNumberSafe(item?.purchaseFactor || 1),
@@ -578,6 +614,16 @@ export function ProductsCatalogPage({
 
       setItems(nextProducts.filter((item: Product) => item.isMenu !== true))
       setProductOptions(nextProducts.filter((item: Product) => item.isMenu !== true))
+      setDeliveryOptionGroups(
+        Array.isArray(deliveryGroupsData?.items)
+          ? deliveryGroupsData.items.map((item: any) => ({
+              id: String(item?.id || ""),
+              name: String(item?.name || "").trim(),
+              minSelections: Number(item?.minSelections || 0),
+              maxSelections: Number(item?.maxSelections || 0),
+            }))
+          : []
+      )
       setUoms(Array.isArray(uomData.items) ? uomData.items : [])
       setVatRates(Array.isArray(vatData.items) ? vatData.items : [])
       setCategories(Array.isArray(catData.items) ? catData.items : [])
@@ -668,7 +714,9 @@ function getDefaultVat(list = vatRates) {
       costMethod: "AVG",
       requiresRecipe: defaultClass === "PRODUS_FIN" || defaultClass === "SEMIFABRICATE",
       posSortOrder: "0",
-      crossSellProductIds: []
+      crossSellProductIds: [],
+      deliveryDisplayGroupIds: [],
+      deliveryOptionGroupIds: [],
     })
     setError("")
     setMessage("")
@@ -717,7 +765,9 @@ function getDefaultVat(list = vatRates) {
       costMethod: item.costMethod === "FEFO" ? "FEFO" : item.costMethod === "FIFO" ? "FIFO" : "AVG",
       requiresRecipe: item.requiresRecipe === true,
       posSortOrder: String(Math.max(0, Math.round(Number(item.posSortOrder || 0)))),
-      crossSellProductIds: Array.isArray(item.crossSellProductIds) ? item.crossSellProductIds : []
+      crossSellProductIds: Array.isArray(item.crossSellProductIds) ? item.crossSellProductIds : [],
+      deliveryDisplayGroupIds: Array.isArray(item.deliveryDisplayGroupIds) ? item.deliveryDisplayGroupIds : [],
+      deliveryOptionGroupIds: Array.isArray(item.deliveryOptionGroupIds) ? item.deliveryOptionGroupIds : [],
     })
     setError("")
     setMessage("")
@@ -888,7 +938,9 @@ function getDefaultVat(list = vatRates) {
           costMethod: form.costMethod,
           requiresRecipe: recipeEligibleClasses.includes(fixedClassValue || form.class) ? form.requiresRecipe : false,
           posSortOrder: Math.max(0, Math.round(toNumberSafe(form.posSortOrder || 0))),
-          crossSellProductIds: form.crossSellProductIds
+          crossSellProductIds: form.crossSellProductIds,
+          deliveryDisplayGroupIds: form.deliveryDisplayGroupIds,
+          deliveryOptionGroupIds: form.deliveryOptionGroupIds,
         })
       })
 
@@ -2859,6 +2911,128 @@ function getDefaultVat(list = vatRates) {
 
               {activeProductTab === "media" ? (
                 <>
+                <SectionCard title="Gufo Delivery">
+                  <div style={sideStack}>
+                    <Field label="Grupuri afisate pentru acest produs">
+                      <div style={{ display: "grid", gap: 10 }}>
+                        <select
+                          multiple
+                          value={form.deliveryDisplayGroupIds}
+                          onChange={(e) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              deliveryDisplayGroupIds: Array.from(e.currentTarget.selectedOptions, (option) => option.value),
+                            }))
+                          }
+                          style={{ ...input, minHeight: 160 }}
+                        >
+                          {deliveryOptionGroups.map((group) => (
+                            <option key={group.id} value={group.id}>
+                              {group.name}
+                            </option>
+                          ))}
+                        </select>
+                        {selectedDeliveryDisplayGroups.length ? (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                            {selectedDeliveryDisplayGroups.map((group) => (
+                              <button
+                                key={group.id}
+                                type="button"
+                                onClick={() =>
+                                  setForm((prev) => ({
+                                    ...prev,
+                                    deliveryDisplayGroupIds: prev.deliveryDisplayGroupIds.filter((id) => id !== group.id),
+                                  }))
+                                }
+                                style={{
+                                  border: "1px solid #bfdbfe",
+                                  background: "#eff6ff",
+                                  color: "#1d4ed8",
+                                  borderRadius: 999,
+                                  padding: "6px 10px",
+                                  fontSize: 13,
+                                  fontWeight: 700,
+                                  cursor: "pointer",
+                                }}
+                              >
+                                {group.name} x
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                        <div style={fieldHint}>
+                          Aceste grupuri apar sub produs in catalogul Gufo Delivery.
+                        </div>
+                      </div>
+                    </Field>
+
+                    <Field label="Grupuri in care acest produs este alegere">
+                      <div style={{ display: "grid", gap: 10 }}>
+                        <select
+                          multiple
+                          value={form.deliveryOptionGroupIds}
+                          onChange={(e) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              deliveryOptionGroupIds: Array.from(e.currentTarget.selectedOptions, (option) => option.value),
+                            }))
+                          }
+                          style={{ ...input, minHeight: 160 }}
+                        >
+                          {deliveryOptionGroups.map((group) => (
+                            <option key={group.id} value={group.id}>
+                              {group.name}
+                            </option>
+                          ))}
+                        </select>
+                        {selectedDeliveryOptionGroups.length ? (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                            {selectedDeliveryOptionGroups.map((group) => (
+                              <button
+                                key={group.id}
+                                type="button"
+                                onClick={() =>
+                                  setForm((prev) => ({
+                                    ...prev,
+                                    deliveryOptionGroupIds: prev.deliveryOptionGroupIds.filter((id) => id !== group.id),
+                                  }))
+                                }
+                                style={{
+                                  border: "1px solid #dbeafe",
+                                  background: "#f8fafc",
+                                  color: "#17324D",
+                                  borderRadius: 999,
+                                  padding: "6px 10px",
+                                  fontSize: 13,
+                                  fontWeight: 700,
+                                  cursor: "pointer",
+                                }}
+                              >
+                                {group.name}
+                                {group.minSelections && group.maxSelections
+                                  ? ` (${group.minSelections}-${group.maxSelections})`
+                                  : group.maxSelections
+                                    ? ` (max ${group.maxSelections})`
+                                    : ""}
+                                {" "}x
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                        <div style={fieldHint}>
+                          Aici marchezi ca produsul poate fi ales ca sos, extra, leguma sau alta optiune.
+                        </div>
+                      </div>
+                    </Field>
+
+                    {!deliveryOptionGroups.length ? (
+                      <div style={hintBoxInline}>
+                        Nu exista inca grupuri Gufo Delivery. Le creezi din Marketplace, tabul Gufo Delivery / Optiuni produse.
+                      </div>
+                    ) : null}
+                  </div>
+                </SectionCard>
+
                 <SectionCard title="Poza produs">
                   <div style={uploadRowCompact}>
                     <label style={uploadLabel}>

@@ -215,6 +215,25 @@ async function resolveProductTerminalIds(tenantId: string, companyId: string, pa
   return terminals.map((terminal) => terminal.id)
 }
 
+async function resolveDeliveryOptionGroupIds(tenantId: string, companyId: string, groupIds: string[]) {
+  const normalizedIds = Array.from(new Set(groupIds.map((value) => String(value || "").trim()).filter(Boolean)))
+  if (!normalizedIds.length) return [] as string[]
+
+  const groups = await prisma.deliveryOptionGroup.findMany({
+    where: {
+      id: { in: normalizedIds },
+      ...buildCompanyScopedTenantWhere(tenantId, companyId),
+    },
+    select: { id: true },
+  })
+
+  if (groups.length !== normalizedIds.length) {
+    throw new Error("Unele grupuri Gufo Delivery nu exista sau nu apartin companiei active.")
+  }
+
+  return normalizedIds
+}
+
 function hasBarcodePayload(body: Record<string, unknown> | null | undefined) {
   if (!body) return false
   return Object.prototype.hasOwnProperty.call(body, "barcode") || Object.prototype.hasOwnProperty.call(body, "barcodes")
@@ -323,6 +342,20 @@ router.get("/api/v1/products", async (req: AuthedRequest, res) => {
           targetProduct: true,
         },
         orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }]
+      },
+      deliveryOptionGroups: {
+        select: {
+          groupId: true,
+          sortOrder: true,
+        },
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+      },
+      deliveryOptionItems: {
+        select: {
+          groupId: true,
+          sortOrder: true,
+        },
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
       },
       recipe: {
         include: {
@@ -547,6 +580,9 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
   const posSortOrder = normalizeProductPosSortOrder(req.body?.posSortOrder)
   const requestedBarcodes = normalizeBarcodeList(req.body?.barcodes ?? req.body?.barcode)
   const requestedCrossSellProductIds = normalizeCrossSellProductIds(req.body?.crossSellProductIds)
+  const deliveryDisplayGroupIds = normalizeCrossSellProductIds(req.body?.deliveryDisplayGroupIds)
+  const deliveryOptionGroupIds = normalizeCrossSellProductIds(req.body?.deliveryOptionGroupIds)
+  const allDeliveryGroupIds = [...deliveryDisplayGroupIds, ...deliveryOptionGroupIds]
 
   if (!ALL_PRODUCT_CLASSES.includes(classValue)) {
     return res.status(400).json({ ok: false, error: "Clasificare produs invalida." })
@@ -635,6 +671,10 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
     if (grossWeightKg <= 0) {
       return res.status(400).json({ ok: false, error: "Greutatea bruta / UM trebuie sa fie mai mare decat 0 pentru bunurile cu risc fiscal ridicat." })
     }
+  }
+
+  if (allDeliveryGroupIds.length) {
+    await resolveDeliveryOptionGroupIds(tenantId, companyId, allDeliveryGroupIds)
   }
 
   const [vatRate, fallbackVatRate, uom, purchaseUom, category, department, crossSellProducts] = await Promise.all([
@@ -857,6 +897,9 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
         })
       }
 
+      if (deliveryDisplayGroupIds.length) await tx.deliveryProductOptionGroup.createMany({ data: deliveryDisplayGroupIds.map((groupId, sortOrder) => ({ productId: created.id, groupId, sortOrder })) })
+      if (deliveryOptionGroupIds.length) await tx.deliveryOptionGroupItem.createMany({ data: deliveryOptionGroupIds.map((groupId, sortOrder) => ({ groupId, productId: created.id, sortOrder })) })
+
       const withBarcodes = await tx.product.findUniqueOrThrow({
         where: { id: created.id },
         include: {
@@ -886,6 +929,20 @@ router.post("/api/v1/products", async (req: AuthedRequest, res) => {
           crossSellLinks: {
             include: {
               targetProduct: true,
+            },
+            orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+          },
+          deliveryOptionGroups: {
+            select: {
+              groupId: true,
+              sortOrder: true,
+            },
+            orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+          },
+          deliveryOptionItems: {
+            select: {
+              groupId: true,
+              sortOrder: true,
             },
             orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
           },
@@ -976,6 +1033,9 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
   const shouldUpdateBarcodes = hasBarcodePayload(req.body as Record<string, unknown> | undefined)
   const requestedBarcodes = normalizeBarcodeList(req.body?.barcodes ?? req.body?.barcode)
   const requestedCrossSellProductIds = normalizeCrossSellProductIds(req.body?.crossSellProductIds)
+  const deliveryDisplayGroupIds = normalizeCrossSellProductIds(req.body?.deliveryDisplayGroupIds)
+  const deliveryOptionGroupIds = normalizeCrossSellProductIds(req.body?.deliveryOptionGroupIds)
+  const allDeliveryGroupIds = [...deliveryDisplayGroupIds, ...deliveryOptionGroupIds]
   const terminalIds = await resolveProductTerminalIds(tenantId, companyId, req.body)
 
   if (!ALL_PRODUCT_CLASSES.includes(classValue)) {
@@ -1185,6 +1245,10 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
     return res.status(400).json({ ok: false, error: "Unele produse cross-sell nu exista sau nu apartin companiei active." })
   }
 
+  if (allDeliveryGroupIds.length) {
+    await resolveDeliveryOptionGroupIds(tenantId, companyId, allDeliveryGroupIds)
+  }
+
   try {
     const forcedInactiveBecauseMissingRecipe = finalRequestedRequiresRecipe && !existingRecipe
 
@@ -1298,6 +1362,11 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
         })
       }
 
+      await tx.deliveryProductOptionGroup.deleteMany({ where: { productId: id } })
+      await tx.deliveryOptionGroupItem.deleteMany({ where: { productId: id } })
+      if (deliveryDisplayGroupIds.length) await tx.deliveryProductOptionGroup.createMany({ data: deliveryDisplayGroupIds.map((groupId, sortOrder) => ({ productId: id, groupId, sortOrder })) })
+      if (deliveryOptionGroupIds.length) await tx.deliveryOptionGroupItem.createMany({ data: deliveryOptionGroupIds.map((groupId, sortOrder) => ({ groupId, productId: id, sortOrder })) })
+
       return tx.product.findUniqueOrThrow({
         where: { id },
         include: {
@@ -1327,6 +1396,20 @@ router.put("/api/v1/products/:id", async (req: AuthedRequest, res) => {
           crossSellLinks: {
             include: {
               targetProduct: true,
+            },
+            orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+          },
+          deliveryOptionGroups: {
+            select: {
+              groupId: true,
+              sortOrder: true,
+            },
+            orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+          },
+          deliveryOptionItems: {
+            select: {
+              groupId: true,
+              sortOrder: true,
             },
             orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
           },

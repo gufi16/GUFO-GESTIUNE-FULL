@@ -73,6 +73,14 @@ type ProductLike = {
       isVisibleInPos?: boolean | null
     } | null
   }> | null
+  deliveryOptionGroups?: Array<{
+    groupId?: string | null
+    sortOrder?: unknown
+  }> | null
+  deliveryOptionItems?: Array<{
+    groupId?: string | null
+    sortOrder?: unknown
+  }> | null
 }
 
 type RecipeIngredientLike = ProductLike & {
@@ -157,6 +165,36 @@ export function serializeProduct(item: ProductLike | null | undefined) {
         })
     : []
 
+  const deliveryDisplayGroupIds = Array.isArray(item.deliveryOptionGroups)
+    ? item.deliveryOptionGroups
+        .map((entry) => ({
+          groupId: String(entry?.groupId || "").trim(),
+          sortOrder: Math.max(0, Math.round(toNumber(entry?.sortOrder || 0))),
+        }))
+        .filter((entry) => entry.groupId)
+        .sort((left, right) => {
+          const orderDiff = left.sortOrder - right.sortOrder
+          if (orderDiff !== 0) return orderDiff
+          return left.groupId.localeCompare(right.groupId, "ro")
+        })
+        .map((entry) => entry.groupId)
+    : []
+
+  const deliveryOptionGroupIds = Array.isArray(item.deliveryOptionItems)
+    ? item.deliveryOptionItems
+        .map((entry) => ({
+          groupId: String(entry?.groupId || "").trim(),
+          sortOrder: Math.max(0, Math.round(toNumber(entry?.sortOrder || 0))),
+        }))
+        .filter((entry) => entry.groupId)
+        .sort((left, right) => {
+          const orderDiff = left.sortOrder - right.sortOrder
+          if (orderDiff !== 0) return orderDiff
+          return left.groupId.localeCompare(right.groupId, "ro")
+        })
+        .map((entry) => entry.groupId)
+    : []
+
   return {
     ...item,
     price: toNumber(item.price),
@@ -190,6 +228,8 @@ export function serializeProduct(item: ProductLike | null | undefined) {
       : [],
     crossSellProducts,
     crossSellProductIds: crossSellProducts.map((entry) => entry.id),
+    deliveryDisplayGroupIds,
+    deliveryOptionGroupIds,
   }
 }
 

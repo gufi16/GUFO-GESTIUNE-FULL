@@ -88,8 +88,6 @@ type DeliveryOptionDraft = {
   selectionMode: "SINGLE" | "MULTIPLE"
   minSelections: string
   maxSelections: string
-  productIds: string[]
-  itemProductIds: string[]
 }
 
 const emptyDeliveryOptionDraft = (): DeliveryOptionDraft => ({
@@ -98,8 +96,6 @@ const emptyDeliveryOptionDraft = (): DeliveryOptionDraft => ({
   selectionMode: "MULTIPLE",
   minSelections: "0",
   maxSelections: "1",
-  productIds: [],
-  itemProductIds: [],
 })
 
 type DeliveryCatalogMode = "ALL_VISIBLE" | "CATEGORY_SELECTION" | "MANUAL_SELECTION"
@@ -1028,15 +1024,6 @@ export default function MarketplacePage() {
       setError("Completeaza numele grupului, de exemplu «Alege sosurile». ")
       return
     }
-    if (!deliveryOptionDraft.productIds.length) {
-      setError("Alege cel putin produsul pentru care se afiseaza acest grup.")
-      return
-    }
-    if (!deliveryOptionDraft.itemProductIds.length) {
-      setError("Alege cel putin o optiune: sos, salata, bautura sau alt produs.")
-      return
-    }
-
     setSavingDeliveryOption(true)
     setError("")
     try {
@@ -1048,8 +1035,6 @@ export default function MarketplacePage() {
           selectionMode: deliveryOptionDraft.selectionMode,
           minSelections: Number(deliveryOptionDraft.minSelections || 0),
           maxSelections: Number(deliveryOptionDraft.maxSelections || 1),
-          productIds: deliveryOptionDraft.productIds,
-          items: deliveryOptionDraft.itemProductIds.map((productId) => ({ productId, priceAdjustment: 0 })),
         }),
       })
       setDeliveryOptionDraft(emptyDeliveryOptionDraft())
@@ -2599,7 +2584,7 @@ export default function MarketplacePage() {
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-[0.95fr_1.05fr]">
               <div className="rounded-[20px] border border-[#BFDBFE] bg-[#F8FBFF] p-4">
                 <div className="text-sm font-semibold text-[#17324D]">Grup nou de optiuni</div>
-                <div className="mt-1 text-sm text-slate-600">Optiunile sunt produse reale din ERP. Astfel ramane corect stocul, poza si SGR-ul.</div>
+                <div className="mt-1 text-sm text-slate-600">Definesti aici doar regula grupului. Produsele in care apare si produsele care devin alegeri se asociaza din editorul de produs.</div>
 
                 <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
                   <DocumentField label="Nume grup">
@@ -2624,21 +2609,7 @@ export default function MarketplacePage() {
                     <input value={deliveryOptionDraft.description} onChange={(e) => setDeliveryOptionDraft((value) => ({ ...value, description: e.target.value }))} className={documentInputClass} placeholder="Alege sosurile preferate" />
                   </DocumentField>
                 </div>
-
-                <div className="mt-4 grid grid-cols-1 gap-3">
-                  <DocumentField label="Se afiseaza pentru produsele">
-                    <select multiple value={deliveryOptionDraft.productIds} onChange={(e) => setDeliveryOptionDraft((value) => ({ ...value, productIds: Array.from(e.currentTarget.selectedOptions, (option) => option.value) }))} className="min-h-36 w-full rounded-[14px] border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-[#0F5EA8]">
-                      {products.map((product) => <option key={product.id} value={product.id}>{product.name}{product.sku ? ` · ${product.sku}` : ""}</option>)}
-                    </select>
-                  </DocumentField>
-                  <DocumentField label="Optiunile din grup">
-                    <select multiple value={deliveryOptionDraft.itemProductIds} onChange={(e) => setDeliveryOptionDraft((value) => ({ ...value, itemProductIds: Array.from(e.currentTarget.selectedOptions, (option) => option.value) }))} className="min-h-36 w-full rounded-[14px] border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-[#0F5EA8]">
-                      {products.map((product) => <option key={product.id} value={product.id}>{product.name}{product.sku ? ` · ${product.sku}` : ""}</option>)}
-                    </select>
-                  </DocumentField>
-                </div>
-
-                <div className="mt-2 text-xs text-slate-500">Tine apasat Ctrl pentru mai multe produse. Un minim mai mare ca 0 afiseaza in aplicatie eticheta „Obligatoriu”.</div>
+                <div className="mt-3 text-xs text-slate-500">Daca minimul este `0`, grupul este optional. Daca minimul este mai mare ca `0`, grupul devine obligatoriu in catalog.</div>
                 <div className="mt-4 flex justify-end">
                   <button type="button" className={documentButtonPrimaryClass} onClick={() => void saveDeliveryOptionGroup()} disabled={savingDeliveryOption}>
                     <Plus size={15} className="mr-1.5" /> {savingDeliveryOption ? "Se salveaza..." : "Adauga grup"}
@@ -2665,8 +2636,8 @@ export default function MarketplacePage() {
                         <button type="button" onClick={() => void deleteDeliveryOptionGroup(group.id)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-600 hover:bg-rose-50" title="Sterge grupul"><Trash2 size={15} /></button>
                       </div>
                       {group.description ? <div className="mt-2 text-sm text-slate-600">{group.description}</div> : null}
-                      <div className="mt-3 flex flex-wrap gap-1.5">
-                        {group.items.map((item) => <span key={item.id} className="rounded-full border border-white bg-white px-2.5 py-1 text-xs font-medium text-slate-700">{item.product.name}{Number(item.priceAdjustment) > 0 ? ` +${formatMoney(item.priceAdjustment)}` : ""}</span>)}
+                      <div className="mt-3 text-xs text-slate-500">
+                        {group.productLinks.length} produse afiseaza grupul · {group.items.length} produse sunt disponibile ca alegere
                       </div>
                     </div>
                   ))}
