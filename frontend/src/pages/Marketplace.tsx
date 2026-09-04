@@ -895,6 +895,8 @@ export default function MarketplacePage() {
   const [loadingGufoDeliveryPreview, setLoadingGufoDeliveryPreview] = useState(false)
   const [deliveryOptionGroups, setDeliveryOptionGroups] = useState<DeliveryOptionGroup[]>([])
   const [deliveryOptionDraft, setDeliveryOptionDraft] = useState<DeliveryOptionDraft>(emptyDeliveryOptionDraft)
+  const [deliveryOptionItemIds, setDeliveryOptionItemIds] = useState<string[]>([])
+  const [deliveryOptionProductSearch, setDeliveryOptionProductSearch] = useState("")
   const [savingDeliveryOption, setSavingDeliveryOption] = useState(false)
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
@@ -1035,9 +1037,12 @@ export default function MarketplacePage() {
           selectionMode: deliveryOptionDraft.selectionMode,
           minSelections: Number(deliveryOptionDraft.minSelections || 0),
           maxSelections: Number(deliveryOptionDraft.maxSelections || 1),
+          items: deliveryOptionItemIds.map((productId, sortOrder) => ({ productId, sortOrder })),
         }),
       })
       setDeliveryOptionDraft(emptyDeliveryOptionDraft())
+      setDeliveryOptionItemIds([])
+      setDeliveryOptionProductSearch("")
       setMessage("Grupul de optiuni a fost salvat si va aparea in Gufo Delivery.")
       await loadDeliveryOptionGroups()
       if (selectedIntegration?.id) await loadGufoDeliveryPreview(selectedIntegration.id)
@@ -2574,7 +2579,7 @@ export default function MarketplacePage() {
         <div className="space-y-3">
           <DocumentSection
             title="Sosuri, ingrediente si alegeri pentru produs"
-            description="Configurezi o data un grup reutilizabil, apoi il trimiti spre produsele dorite. Exemplu: «Adauga sosuri», obligatoriu, pentru toate shaormele."
+            description="Creezi grupele reutilizabile pe care clientul le vede la comanda: Sosuri, Salate sau Extra. Apoi le aloci din editorul produsului principal."
             actions={
               <button type="button" className={documentButtonSecondaryClass} onClick={() => void loadDeliveryOptionGroups()}>
                 <RefreshCcw size={14} className="mr-1.5" /> Reincarca
@@ -2583,23 +2588,37 @@ export default function MarketplacePage() {
           >
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-[0.95fr_1.05fr]">
               <div className="rounded-[20px] border border-[#BFDBFE] bg-[#F8FBFF] p-4">
-                <div className="text-sm font-semibold text-[#17324D]">Grup nou de optiuni</div>
-                <div className="mt-1 text-sm text-slate-600">Definesti aici doar regula grupului. Produsele in care apare si produsele care devin alegeri se asociaza din editorul de produs.</div>
+                <div className="text-sm font-semibold text-[#17324D]">Adauga grup de alegeri</div>
+                <div className="mt-1 text-sm text-slate-600">Definesti regula o singura data. In produs alegi daca grupa este oferita clientului sau daca produsul este o alegere in acea grupa.</div>
+
+                <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  {[
+                    ["1", "Creeaza grupa", "Ex: Alege sosul"],
+                    ["2", "Ataseaz-o produsului", "Ex: Shaorma mica"],
+                    ["3", "Adauga alegerile", "Ex: ketchup, maioneza"],
+                  ].map(([step, title, detail]) => (
+                    <div key={step} className="rounded-[14px] border border-sky-100 bg-white px-3 py-2.5">
+                      <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-sky-700">Pasul {step}</div>
+                      <div className="mt-1 text-xs font-semibold text-slate-800">{title}</div>
+                      <div className="mt-0.5 text-[11px] text-slate-500">{detail}</div>
+                    </div>
+                  ))}
+                </div>
 
                 <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <DocumentField label="Nume grup">
-                    <input value={deliveryOptionDraft.name} onChange={(e) => setDeliveryOptionDraft((value) => ({ ...value, name: e.target.value }))} className={documentInputClass} placeholder="Adauga sosuri" />
+                  <DocumentField label="Numele pe care il vede clientul">
+                    <input value={deliveryOptionDraft.name} onChange={(e) => setDeliveryOptionDraft((value) => ({ ...value, name: e.target.value }))} className={documentInputClass} placeholder="Alege sosul" />
                   </DocumentField>
-                  <DocumentField label="Tip selectie">
+                  <DocumentField label="Cate alegeri permite">
                     <select value={deliveryOptionDraft.selectionMode} onChange={(e) => setDeliveryOptionDraft((value) => ({ ...value, selectionMode: e.target.value as DeliveryOptionDraft["selectionMode"] }))} className={documentInputClass}>
                       <option value="MULTIPLE">Mai multe alegeri</option>
                       <option value="SINGLE">O singura alegere</option>
                     </select>
                   </DocumentField>
-                  <DocumentField label="Minim selectii">
+                  <DocumentField label="Minim de ales">
                     <input type="number" min="0" value={deliveryOptionDraft.minSelections} onChange={(e) => setDeliveryOptionDraft((value) => ({ ...value, minSelections: e.target.value }))} className={documentInputClass} />
                   </DocumentField>
-                  <DocumentField label="Maxim selectii">
+                  <DocumentField label="Maxim de ales">
                     <input type="number" min="1" value={deliveryOptionDraft.maxSelections} onChange={(e) => setDeliveryOptionDraft((value) => ({ ...value, maxSelections: e.target.value }))} className={documentInputClass} />
                   </DocumentField>
                 </div>
@@ -2609,10 +2628,58 @@ export default function MarketplacePage() {
                     <input value={deliveryOptionDraft.description} onChange={(e) => setDeliveryOptionDraft((value) => ({ ...value, description: e.target.value }))} className={documentInputClass} placeholder="Alege sosurile preferate" />
                   </DocumentField>
                 </div>
-                <div className="mt-3 text-xs text-slate-500">Daca minimul este `0`, grupul este optional. Daca minimul este mai mare ca `0`, grupul devine obligatoriu in catalog.</div>
+                <div className="mt-3 rounded-[12px] border border-sky-100 bg-white px-3 py-2 text-xs text-slate-600">`0` la minim inseamna optional. `1` sau mai mult inseamna ca clientul trebuie sa aleaga inainte sa adauge produsul in cos.</div>
+
+                <div className="mt-4 rounded-[16px] border border-slate-200 bg-white p-3">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <div>
+                      <div className="text-sm font-semibold text-slate-900">Produse disponibile in aceasta grupa</div>
+                      <div className="mt-0.5 text-xs text-slate-500">Bifeaza alegerile clientului: maioneza, ketchup, salata sau extra.</div>
+                    </div>
+                    <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-800">{deliveryOptionItemIds.length} selectate</span>
+                  </div>
+                  <div className="relative mt-3">
+                    <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      value={deliveryOptionProductSearch}
+                      onChange={(event) => setDeliveryOptionProductSearch(event.target.value)}
+                      className={`${documentInputClass} pl-9`}
+                      placeholder="Cauta maioneza, ketchup, salata..."
+                    />
+                  </div>
+                  <div className="mt-3 max-h-56 space-y-1 overflow-y-auto pr-1">
+                    {products
+                      .filter((product) => product.isVisibleInPos !== false)
+                      .filter((product) => {
+                        const query = deliveryOptionProductSearch.trim().toLocaleLowerCase("ro")
+                        return !query || `${product.name} ${product.sku}`.toLocaleLowerCase("ro").includes(query)
+                      })
+                      .slice(0, 80)
+                      .map((product) => {
+                        const checked = deliveryOptionItemIds.includes(product.id)
+                        return (
+                          <label key={product.id} className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-3 py-2.5 ${checked ? "border-sky-300 bg-sky-50" : "border-slate-100 bg-slate-50 hover:border-slate-200"}`}>
+                            <span className="flex min-w-0 items-center gap-3">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => setDeliveryOptionItemIds((current) => checked ? current.filter((id) => id !== product.id) : [...current, product.id])}
+                              />
+                              <span className="min-w-0">
+                                <span className="block truncate text-sm font-semibold text-slate-800">{product.name}</span>
+                                <span className="block truncate text-xs text-slate-500">{product.sku || "Fara cod"}</span>
+                              </span>
+                            </span>
+                            <span className="shrink-0 text-xs font-medium text-slate-600">{Number(product.price || 0).toFixed(2)} lei</span>
+                          </label>
+                        )
+                      })}
+                    {!products.length ? <InlineNotice tone="info">Nu exista produse disponibile in ERP pentru a le adauga in grupa.</InlineNotice> : null}
+                  </div>
+                </div>
                 <div className="mt-4 flex justify-end">
                   <button type="button" className={documentButtonPrimaryClass} onClick={() => void saveDeliveryOptionGroup()} disabled={savingDeliveryOption}>
-                    <Plus size={15} className="mr-1.5" /> {savingDeliveryOption ? "Se salveaza..." : "Adauga grup"}
+                    <Plus size={15} className="mr-1.5" /> {savingDeliveryOption ? "Se salveaza..." : "Creeaza grupa"}
                   </button>
                 </div>
               </div>

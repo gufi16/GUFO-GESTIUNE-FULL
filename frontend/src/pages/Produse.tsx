@@ -2443,11 +2443,43 @@ function getDefaultVat(list = vatRates) {
                 <SectionCard title="Gufo Delivery">
                   <div style={sideStack}>
                     <div style={{ ...hintBoxInline, marginBottom: 2 }}>
-                      Mai intai alegi grupele din care face parte produsul. De exemplu, ketchup-ul se bifeaza in grupa „Sosuri”.
+                      Stabilesti rolul produsului in comanda clientului. Pentru o shaorma bifezi grupele oferite; pentru ketchup bifezi grupa in care poate fi ales.
                     </div>
 
-                    <Field label="Produsul face parte din grupele">
-                      <div style={{ display: "grid", gap: 8 }}>
+                    <Field label="1. Clientul poate alege aceste grupe la acest produs">
+                      <div style={fieldHint}>
+                        Exemplu: la „Shaorma mica” bifezi „Alege sosul”, „Alege salata” si „Extra”.
+                      </div>
+                      <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+                        {deliveryOptionGroups.map((group) => {
+                          const checked = form.deliveryDisplayGroupIds.includes(group.id)
+                          return (
+                            <label
+                              key={group.id}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 10,
+                                border: checked ? "1px solid #38bdf8" : "1px solid #dbeafe",
+                                background: checked ? "#ecfeff" : "#f8fafc",
+                                borderRadius: 12,
+                                padding: "11px 12px",
+                                cursor: "pointer",
+                              }}
+                            >
+                              <input type="checkbox" checked={checked} onChange={() => toggleDeliveryGroup(group.id, "display")} />
+                              <span style={{ color: "#334155", fontSize: 13, fontWeight: 600 }}>{group.name}</span>
+                            </label>
+                          )
+                        })}
+                      </div>
+                    </Field>
+
+                    <Field label="2. Acest produs este o alegere in grupele">
+                      <div style={fieldHint}>
+                        Exemplu: la ketchup bifezi „Alege sosul”; la salata verde bifezi „Alege salata”.
+                      </div>
+                      <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
                         {deliveryOptionGroupsLoading ? (
                           <div style={hintBoxInline}>Se incarca grupele Gufo Delivery...</div>
                         ) : null}
@@ -2477,35 +2509,6 @@ function getDefaultVat(list = vatRates) {
                             </label>
                           )
                         })}
-                      </div>
-                    </Field>
-
-                    <Field label="Afiseaza grupe de optiuni sub acest produs">
-                      <div style={{ display: "grid", gap: 8 }}>
-                        {deliveryOptionGroups.map((group) => {
-                          const checked = form.deliveryDisplayGroupIds.includes(group.id)
-                          return (
-                            <label
-                              key={group.id}
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 10,
-                                border: checked ? "1px solid #38bdf8" : "1px solid #dbeafe",
-                                background: checked ? "#ecfeff" : "#f8fafc",
-                                borderRadius: 12,
-                                padding: "11px 12px",
-                                cursor: "pointer",
-                              }}
-                            >
-                              <input type="checkbox" checked={checked} onChange={() => toggleDeliveryGroup(group.id, "display")} />
-                              <span style={{ color: "#334155", fontSize: 13, fontWeight: 600 }}>{group.name}</span>
-                            </label>
-                          )
-                        })}
-                        <div style={fieldHint}>
-                          Foloseste aceasta sectiune doar pentru produsul principal care trebuie sa ofere clientului sosuri, extra sau alte alegeri.
-                        </div>
                       </div>
                     </Field>
 
