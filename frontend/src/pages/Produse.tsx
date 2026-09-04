@@ -1735,11 +1735,28 @@ function getDefaultVat(list = vatRates) {
               </button>
             </div>
 
-            <div style={{ marginBottom: 12 }}>
-              <DocumentTabs items={productModalTabs} activeId={activeProductTab} onChange={setActiveProductTab} />
-            </div>
+            <div style={productEditorBody}>
+              <aside style={productTabRail}>
+                <div style={productTabRailLabel}>Editor produs</div>
+                {productModalTabs.map((tab, index) => {
+                  const active = activeProductTab === tab.id
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setActiveProductTab(tab.id)}
+                      style={{ ...productTabButton, ...(active ? productTabButtonActive : null) }}
+                    >
+                      <span style={{ ...productTabNumber, ...(active ? productTabNumberActive : null) }}>{index + 1}</span>
+                      <span>{tab.title}</span>
+                    </button>
+                  )
+                })}
+                <div style={productTabRailHint}>Selectează o secțiune. Modificările se salvează împreună, din butonul de jos.</div>
+              </aside>
 
-            <div style={productTabPanel}>
+              <div style={productEditorContent}>
+                <div style={productTabPanel}>
               {activeProductTab === "general" ? (
                 <>
                 <SectionCard title="Date generale">
@@ -3127,6 +3144,8 @@ function getDefaultVat(list = vatRates) {
                 )}
                 </>
               ) : null}
+                </div>
+              </div>
             </div>
 
             <div style={actionsRow}>
@@ -3489,7 +3508,95 @@ const modalHeader: CSSProperties = {
 const productTabPanel: CSSProperties = {
   display: "flex",
   flexDirection: "column",
-  gap: 12
+  gap: 12,
+  minWidth: 0,
+}
+
+const productEditorBody: CSSProperties = {
+  display: "flex",
+  flex: 1,
+  minHeight: 0,
+  gap: 16,
+  overflow: "hidden",
+}
+
+const productTabRail: CSSProperties = {
+  width: 208,
+  flexShrink: 0,
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+  padding: 12,
+  border: "1px solid #dbe5f0",
+  borderRadius: 16,
+  background: "linear-gradient(180deg, #f8fbff 0%, #f8fafc 100%)",
+}
+
+const productTabRailLabel: CSSProperties = {
+  padding: "2px 4px 8px",
+  color: "#64748b",
+  fontSize: 11,
+  fontWeight: 800,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+}
+
+const productTabButton: CSSProperties = {
+  width: "100%",
+  display: "flex",
+  alignItems: "center",
+  gap: 9,
+  border: "1px solid transparent",
+  borderRadius: 12,
+  background: "transparent",
+  color: "#334155",
+  padding: "10px 9px",
+  fontSize: 13,
+  fontWeight: 700,
+  textAlign: "left",
+  cursor: "pointer",
+}
+
+const productTabButtonActive: CSSProperties = {
+  borderColor: "#17324D",
+  background: "#17324D",
+  color: "#ffffff",
+  boxShadow: "0 8px 18px rgba(23,50,77,0.16)",
+}
+
+const productTabNumber: CSSProperties = {
+  width: 22,
+  height: 22,
+  flexShrink: 0,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: 999,
+  background: "#e2e8f0",
+  color: "#475569",
+  fontSize: 11,
+  fontWeight: 800,
+}
+
+const productTabNumberActive: CSSProperties = {
+  background: "rgba(255,255,255,0.16)",
+  color: "#ffffff",
+}
+
+const productTabRailHint: CSSProperties = {
+  marginTop: "auto",
+  padding: "10px 4px 2px",
+  color: "#64748b",
+  fontSize: 11,
+  lineHeight: 1.45,
+}
+
+const productEditorContent: CSSProperties = {
+  flex: 1,
+  minWidth: 0,
+  minHeight: 0,
+  overflowY: "auto",
+  paddingRight: 4,
 }
 
 const sectionCard: CSSProperties = {
@@ -3942,21 +4049,27 @@ const modalOverlay: CSSProperties = {
   inset: 0,
   background: "rgba(17, 24, 39, 0.45)",
   display: "flex",
-  alignItems: "flex-start",
+  alignItems: "center",
   justifyContent: "center",
   padding: 12,
   zIndex: 50,
-  overflowY: "auto"
+  overflow: "hidden"
 }
 
 const modalCard: CSSProperties = {
   width: "100%",
-  maxWidth: 1240,
+  maxWidth: 1320,
+  height: "calc(100dvh - 32px)",
+  maxHeight: 920,
+  display: "flex",
+  flexDirection: "column",
+  boxSizing: "border-box",
   background: "#ffffff",
   borderRadius: 16,
   padding: 16,
   boxShadow: "0 30px 60px rgba(0,0,0,0.18)",
-  margin: "8px 0"
+  margin: 0,
+  overflow: "hidden"
 }
 
 const recipeModalCard: CSSProperties = {
