@@ -3,7 +3,7 @@ import type { CSSProperties, ReactNode } from "react"
 import { useSearchParams } from "react-router-dom"
 import PageHeader from "../components/PageHeader"
 import { DocumentTabs } from "../components/DocumentUi"
-import { API_BASE, getToken } from "../lib/api"
+import { API_BASE, api, getToken } from "../lib/api"
 import { formatFactorRo, formatMoneyRo, formatQtyRo, parseLocaleNumber } from "../lib/format"
 
 type Product = {
@@ -372,6 +372,8 @@ export function ProductsCatalogPage({
   const [terminals, setTerminals] = useState<PosTerminal[]>([])
   const [productOptions, setProductOptions] = useState<ProductOption[]>([])
   const [deliveryOptionGroups, setDeliveryOptionGroups] = useState<DeliveryOptionGroupSummary[]>([])
+  const [deliveryOptionGroupsLoading, setDeliveryOptionGroupsLoading] = useState(false)
+  const [deliveryOptionGroupsError, setDeliveryOptionGroupsError] = useState("")
   const [isVatPayer, setIsVatPayer] = useState(true)
   const [warehouseMobileEnabled, setWarehouseMobileEnabled] = useState(false)
 
@@ -601,16 +603,21 @@ export function ProductsCatalogPage({
 
       setItems(nextProducts.filter((item: Product) => item.isMenu !== true))
       setProductOptions(nextProducts.filter((item: Product) => item.isMenu !== true))
-      setDeliveryOptionGroups(
-        Array.isArray(deliveryGroupsData?.items)
-          ? deliveryGroupsData.items.map((item: any) => ({
-              id: String(item?.id || ""),
-              name: String(item?.name || "").trim(),
-              minSelections: Number(item?.minSelections || 0),
-              maxSelections: Number(item?.maxSelections || 0),
-            }))
-          : []
-      )
+      if (deliveryGroupsRes.ok) {
+        setDeliveryOptionGroups(
+          Array.isArray(deliveryGroupsData?.items)
+            ? deliveryGroupsData.items.map((item: any) => ({
+                id: String(item?.id || ""),
+                name: String(item?.name || "").trim(),
+                minSelections: Number(item?.minSelections || 0),
+                maxSelections: Number(item?.maxSelections || 0),
+              })).filter((item: DeliveryOptionGroupSummary) => item.id && item.name)
+            : []
+        )
+        setDeliveryOptionGroupsError("")
+      } else {
+        setDeliveryOptionGroupsError(deliveryGroupsData?.error || "Nu am putut incarca grupele Gufo Delivery.")
+      }
       setUoms(Array.isArray(uomData.items) ? uomData.items : [])
       setVatRates(Array.isArray(vatData.items) ? vatData.items : [])
       setCategories(Array.isArray(catData.items) ? catData.items : [])
@@ -637,15 +644,10 @@ export function ProductsCatalogPage({
   async function refreshDeliveryOptionGroups() {
     if (!token) return
 
+    setDeliveryOptionGroupsLoading(true)
+    setDeliveryOptionGroupsError("")
     try {
-      const response = await fetch(`${API_BASE}/api/v1/delivery-option-groups`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      const data = await response.json().catch(() => ({}))
-
-      if (!response.ok) {
-        throw new Error(data?.error || "Nu am putut incarca grupele Gufo Delivery.")
-      }
+      const data = await api<{ items?: unknown[] }>("/api/v1/delivery-option-groups")
 
       setDeliveryOptionGroups(
         Array.isArray(data?.items)
@@ -654,11 +656,13 @@ export function ProductsCatalogPage({
               name: String(item?.name || "").trim(),
               minSelections: Number(item?.minSelections || 0),
               maxSelections: Number(item?.maxSelections || 0),
-            }))
+            })).filter((item: DeliveryOptionGroupSummary) => item.id && item.name)
           : []
       )
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Nu am putut incarca grupele Gufo Delivery.")
+      setDeliveryOptionGroupsError(error instanceof Error ? error.message : "Nu am putut incarca grupele Gufo Delivery.")
+    } finally {
+      setDeliveryOptionGroupsLoading(false)
     }
   }
 
@@ -2444,6 +2448,9 @@ function getDefaultVat(list = vatRates) {
 
                     <Field label="Produsul face parte din grupele">
                       <div style={{ display: "grid", gap: 8 }}>
+                        {deliveryOptionGroupsLoading ? (
+                          <div style={hintBoxInline}>Se incarca grupele Gufo Delivery...</div>
+                        ) : null}
                         {deliveryOptionGroups.map((group) => {
                           const checked = form.deliveryOptionGroupIds.includes(group.id)
                           const rule = (group.minSelections || 0) > 0 ? "obligatoriu" : "optional"
@@ -2502,7 +2509,29 @@ function getDefaultVat(list = vatRates) {
                       </div>
                     </Field>
 
-                    {!deliveryOptionGroups.length ? (
+                    {deliveryOptionGroupsError ? (
+                      <div
+                        style={{
+                          border: "1px solid #fecaca",
+                          background: "#fff1f2",
+                          borderRadius: 12,
+                          padding: "11px 12px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 12,
+                          color: "#9f1239",
+                          fontSize: 13,
+                        }}
+                      >
+                        <span>Nu am putut incarca grupele: {deliveryOptionGroupsError}</span>
+                        <button type="button" onClick={() => void refreshDeliveryOptionGroups()} style={btnSecondarySmall} disabled={deliveryOptionGroupsLoading}>
+                          Reincarca grupele
+                        </button>
+                      </div>
+                    ) : null}
+
+                    {!deliveryOptionGroupsLoading && !deliveryOptionGroupsError && !deliveryOptionGroups.length ? (
                       <div style={hintBoxInline}>
                         Nu exista inca grupuri Gufo Delivery. Le creezi din Marketplace, tabul Gufo Delivery / Optiuni produse.
                       </div>
