@@ -2034,6 +2034,42 @@ function getDefaultVat(list = vatRates) {
                       </div>
                     </Field>
 
+                    <Field label="Vizibilitate pe device POS">
+                      <details style={posDevicesDetails}>
+                        <summary style={posDevicesSummary}>
+                          <span>
+                            {form.terminalIds.length
+                              ? `${form.terminalIds.length} device-uri selectate`
+                              : "Vizibil pe toate device-urile POS"}
+                          </span>
+                          <span style={posDevicesSummaryHint}>Configureaza</span>
+                        </summary>
+                        <div style={posDevicesBody}>
+                          {!terminals.length ? (
+                            <div style={checkHint}>
+                              Nu exista device-uri POS active pe tenant. Fara selectie, produsul ramane vizibil peste tot.
+                            </div>
+                          ) : (
+                            terminals.map((terminal) => {
+                              const checked = form.terminalIds.includes(terminal.id)
+                              return (
+                                <label key={terminal.id} style={terminalOptionRow}>
+                                  <span style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                                    <input type="checkbox" checked={checked} onChange={() => toggleTerminal(terminal.id)} />
+                                    <strong style={{ color: "#17324d", fontSize: 13 }}>{terminal.label}</strong>
+                                  </span>
+                                  <span style={fieldHint}>
+                                    {terminal.location?.name || "Fara locatie"}
+                                    {terminal.deviceId ? ` · ${terminal.deviceId}` : ""}
+                                  </span>
+                                </label>
+                              )
+                            })
+                          )}
+                        </div>
+                      </details>
+                    </Field>
+
                     {!form.isMenu ? (
                       <Field label="Produse cross-sell">
                         <div
@@ -2781,109 +2817,79 @@ function getDefaultVat(list = vatRates) {
               ) : null}
 
               {activeProductTab === "control" ? (
-                <>
-                <SectionCard title="Loturi si cost">
-                  <div style={sideStack}>
-                    <div style={checkBlock}>
-                      <label style={checkLabel}>
-                        <input
-                          type="checkbox"
-                          checked={form.trackLot}
-                          onChange={(e) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              trackLot: e.target.checked,
-                              trackExpiry: e.target.checked ? prev.trackExpiry : false,
-                              costMethod: e.target.checked ? prev.costMethod : "AVG",
-                            }))
-                          }
-                        />
-                        <span>Urmareste lot</span>
-                      </label>
-                      <div style={checkHint}>Activeaza loturi distincte pe intrari, consum si transfer.</div>
-                    </div>
-
-                    <div style={checkBlock}>
-                      <label style={checkLabel}>
-                        <input
-                          type="checkbox"
-                          checked={form.trackExpiry}
-                          onChange={(e) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              trackLot: e.target.checked ? true : prev.trackLot,
-                              trackExpiry: e.target.checked,
-                              costMethod: e.target.checked && prev.costMethod === "AVG" ? "FEFO" : prev.costMethod,
-                            }))
-                          }
-                        />
-                        <span>Urmareste expirare</span>
-                      </label>
-                      <div style={checkHint}>Pentru produse cu expirare, sistemul poate consuma FEFO.</div>
-                    </div>
-
-                    <Field label="Metoda cost">
-                      <select
-                        value={form.costMethod}
-                        onChange={(e) =>
+                <div style={controlDashboard}>
+                  <section style={controlPanel}>
+                    <div style={controlPanelHeading}>Loturi si cost</div>
+                    <div style={settingStack}>
+                    <SettingRow title="Urmareste lot" description="Loturi distincte pe intrari, consum si transfer.">
+                      <Toggle
+                        checked={form.trackLot}
+                        onChange={(checked) =>
                           setForm((prev) => ({
                             ...prev,
-                            costMethod: e.target.value as "AVG" | "FIFO" | "FEFO",
-                            trackLot: e.target.value === "AVG" ? prev.trackLot : true,
-                            trackExpiry: e.target.value === "FEFO" ? true : prev.trackExpiry,
+                            trackLot: checked,
+                            trackExpiry: checked ? prev.trackExpiry : false,
+                            costMethod: checked ? prev.costMethod : "AVG",
                           }))
                         }
-                        style={input}
-                      >
-                        {STOCK_COST_METHOD_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
+                      />
+                    </SettingRow>
+
+                    <SettingRow title="Urmareste expirare" description="Pentru produse cu expirare, consumul poate urma regula FEFO.">
+                      <Toggle
+                        checked={form.trackExpiry}
+                        onChange={(checked) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            trackLot: checked ? true : prev.trackLot,
+                            trackExpiry: checked,
+                            costMethod: checked && prev.costMethod === "AVG" ? "FEFO" : prev.costMethod,
+                          }))
+                        }
+                      />
+                    </SettingRow>
+
+                    <Field label="Metoda de cost">
+                      <select value={form.costMethod} onChange={(e) => setForm((prev) => ({
+                        ...prev,
+                        costMethod: e.target.value as "AVG" | "FIFO" | "FEFO",
+                        trackLot: e.target.value === "AVG" ? prev.trackLot : true,
+                        trackExpiry: e.target.value === "FEFO" ? true : prev.trackExpiry,
+                      }))} style={input}>
+                        {STOCK_COST_METHOD_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                       </select>
                     </Field>
-                  </div>
-                </SectionCard>
-
-                <SectionCard title="Setari rapide">
-                  <div style={sideStack}>
-                    <div style={checkBlock}>
-                      <label style={checkLabel}>
-                        <input
-                          type="checkbox"
-                          checked={form.isMenu}
-                          onChange={(e) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              isMenu: e.target.checked,
-                              posMenuCategory: e.target.checked ? prev.posMenuCategory : "",
-                            }))
-                          }
-                        />
-                        <span>Este meniu</span>
-                      </label>
-                      <div style={checkHint}>
-                        Marcheaza produsul ca meniu vandabil. Componentele meniului se pot tine in retetar.
-                      </div>
                     </div>
+                  </section>
 
-                    <div style={checkBlock}>
-                      <label style={checkLabel}>
-                        <input
-                          type="checkbox"
-                          checked={form.isSgr}
-                          onChange={(e) =>
+                  <section style={controlPanel}>
+                    <div style={controlPanelHeading}>Setari rapide</div>
+                    <div style={settingStack}>
+                    <SettingRow title="Este meniu" description="Marcheaza produsul ca meniu vandabil; componentele se gestioneaza in retetar.">
+                      <Toggle
+                          checked={form.isMenu}
+                          onChange={(checked) =>
                             setForm((prev) => ({
                               ...prev,
-                              isSgr: e.target.checked,
-                              sgrPackagingType: e.target.checked ? prev.sgrPackagingType : "",
-                              sgrVolumeLiters: e.target.checked ? prev.sgrVolumeLiters : "",
+                              isMenu: checked,
+                              posMenuCategory: checked ? prev.posMenuCategory : "",
                             }))
                           }
-                        />
-                        <span>SGR</span>
-                      </label>
-                      <div style={checkHint}>SGR = 0.50 lei fara TVA.</div>
+                      />
+                    </SettingRow>
+
+                    <SettingRow title="SGR" description="Garantie SGR: 0,50 lei fara TVA.">
+                      <Toggle
+                          checked={form.isSgr}
+                          onChange={(checked) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              isSgr: checked,
+                              sgrPackagingType: checked ? prev.sgrPackagingType : "",
+                              sgrVolumeLiters: checked ? prev.sgrVolumeLiters : "",
+                            }))
+                          }
+                      />
                       {form.isSgr ? (
                         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 140px", gap: 8, marginTop: 10 }}>
                           <select
@@ -2905,34 +2911,20 @@ function getDefaultVat(list = vatRates) {
                           />
                         </div>
                       ) : null}
-                    </div>
+                    </SettingRow>
 
-                    <div style={checkBlock}>
-                      <label style={checkLabel}>
-                        <input
-                          type="checkbox"
-                          checked={form.includeInNomenclatorExport}
-                          onChange={(e) =>
-                            setForm((prev) => ({ ...prev, includeInNomenclatorExport: e.target.checked }))
-                          }
-                        />
-                        <span>Include in exporturile nomenclatorului</span>
-                      </label>
-                      <div style={checkHint}>
-                        Apare in Export Excel si Export PDF. Debifeaza pentru a pastra produsul in ERP fara sa-l exporti.
-                      </div>
-                    </div>
+                    <SettingRow title="Include in exporturile nomenclatorului" description="Produsul apare in exportul Excel si PDF.">
+                      <Toggle
+                        checked={form.includeInNomenclatorExport}
+                        onChange={(checked) => setForm((prev) => ({ ...prev, includeInNomenclatorExport: checked }))}
+                      />
+                    </SettingRow>
 
-                    <div style={checkBlock}>
-                      <label style={checkLabel}>
-                        <input
-                          type="checkbox"
-                          checked={form.isFiscalRiskProduct}
-                          onChange={(e) => setForm((prev) => ({ ...prev, isFiscalRiskProduct: e.target.checked }))}
-                        />
-                        <span>Bun cu risc fiscal ridicat</span>
-                      </label>
-                      <div style={checkHint}>Activeaza verificarea automata pentru RO e-Transport pe documente.</div>
+                    <SettingRow title="Bun cu risc fiscal ridicat" description="Activeaza verificarea automata pentru RO e-Transport pe documente.">
+                      <Toggle
+                        checked={form.isFiscalRiskProduct}
+                        onChange={(checked) => setForm((prev) => ({ ...prev, isFiscalRiskProduct: checked }))}
+                      />
                       {fiscalRiskPrompt ? (
                         <div
                           style={{
@@ -2986,20 +2978,12 @@ function getDefaultVat(list = vatRates) {
                           </div>
                         </div>
                       ) : null}
-                    </div>
+                    </SettingRow>
 
                     {form.isVisibleInPos ? (
-                      <div style={checkBlock}>
-                        <label style={checkLabel}>
-                          <input
-                            type="checkbox"
-                            checked={form.isVisibleInPos}
-                            onChange={(e) => setForm((prev) => ({ ...prev, isVisibleInPos: e.target.checked }))}
-                          />
-                          <span>Vizibil in POS</span>
-                        </label>
-                        <div style={checkHint}>Daca este debifat, produsul nu apare in Android POS.</div>
-                      </div>
+                      <SettingRow title="Vizibil in POS" description="Daca este dezactivat, produsul nu apare in Android POS.">
+                        <Toggle checked={form.isVisibleInPos} onChange={(checked) => setForm((prev) => ({ ...prev, isVisibleInPos: checked }))} />
+                      </SettingRow>
                     ) : (
                       <div
                         style={{
@@ -3017,94 +3001,16 @@ function getDefaultVat(list = vatRates) {
                       </div>
                     )}
 
-                    <div style={checkBlock}>
-                      <div style={{ display: "grid", gap: 10 }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                          <span style={{ fontWeight: 700, color: "#0f172a" }}>Vizibilitate pe device POS</span>
-                          <span style={{ color: "#64748b", fontSize: 12 }}>
-                            {form.terminalIds.length ? `${form.terminalIds.length} selectate` : "Toate POS-urile"}
-                          </span>
-                        </div>
+                    <SettingRow title="Publica in Glovo" description="Marcaj pentru produsele sau meniurile trimise in Glovo Merchant.">
+                      <Toggle checked={form.publishToGlovo} onChange={(checked) => setForm((prev) => ({ ...prev, publishToGlovo: checked }))} />
+                    </SettingRow>
 
-                        {!terminals.length ? (
-                          <div style={checkHint}>
-                            Nu exista device-uri POS active pe tenant. Daca nu selectezi nimic, produsul ramane vizibil pe toate device-urile.
-                          </div>
-                        ) : (
-                          <div
-                            style={{
-                              display: "grid",
-                              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                              gap: 10,
-                            }}
-                          >
-                            {terminals.map((terminal) => {
-                              const checked = form.terminalIds.includes(terminal.id)
-                              return (
-                                <label
-                                  key={terminal.id}
-                                  style={{
-                                    border: checked ? "1px solid #67e8f9" : "1px solid #dbeafe",
-                                    background: checked ? "#ecfeff" : "#f8fafc",
-                                    borderRadius: 14,
-                                    padding: "12px 14px",
-                                    display: "grid",
-                                    gap: 6,
-                                    cursor: "pointer",
-                                  }}
-                                >
-                                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                    <input
-                                      type="checkbox"
-                                      checked={checked}
-                                      onChange={() => toggleTerminal(terminal.id)}
-                                    />
-                                    <span style={{ fontWeight: 700, color: "#0f172a" }}>{terminal.label}</span>
-                                  </div>
-                                  <span style={{ color: "#64748b", fontSize: 12, lineHeight: 1.4 }}>
-                                    {terminal.location?.name || "Fara locatie"}
-                                    {terminal.deviceId ? ` · ${terminal.deviceId}` : ""}
-                                  </span>
-                                </label>
-                              )
-                            })}
-                          </div>
-                        )}
-                      </div>
+                    <SettingRow title="Produs activ" description="Disponibil pentru lucru curent; retetarul obligatoriu il poate mentine inactiv.">
+                      <Toggle checked={form.isActive} onChange={(checked) => setForm((prev) => ({ ...prev, isActive: checked }))} />
+                    </SettingRow>
                     </div>
-
-                    <div style={checkBlock}>
-                      <label style={checkLabel}>
-                        <input
-                          type="checkbox"
-                          checked={form.publishToGlovo}
-                          onChange={(e) =>
-                            setForm((prev) => ({ ...prev, publishToGlovo: e.target.checked }))
-                          }
-                        />
-                        <span>Publica in Glovo</span>
-                      </label>
-                      <div style={checkHint}>
-                        Marcaj pentru produsele sau meniurile pe care vrei sa le trimiti in Glovo Merchant.
-                      </div>
-                    </div>
-
-                    <div style={checkBlock}>
-                      <label style={checkLabel}>
-                        <input
-                          type="checkbox"
-                          checked={form.isActive}
-                          onChange={(e) => setForm((prev) => ({ ...prev, isActive: e.target.checked }))}
-                        />
-                        <span>Produs activ</span>
-                      </label>
-                      <div style={checkHint}>
-                        Activeaza produsul pentru lucru curent. Daca retetarul este obligatoriu si lipseste, sistemul il tine inactiv.
-                      </div>
-                    </div>
-                  </div>
-                </SectionCard>
-                </>
+                  </section>
+                </div>
               ) : null}
 
               {activeProductTab === "media" ? (
@@ -3506,6 +3412,32 @@ const cardSubtitleCompact: CSSProperties = {
   marginTop: 2
 }
 
+function SettingRow({ title, description, children }: { title: string; description: string; children: ReactNode }) {
+  return (
+    <div style={settingRow}>
+      <div style={{ minWidth: 0 }}>
+        <div style={settingRowTitle}>{title}</div>
+        <div style={settingRowDescription}>{description}</div>
+      </div>
+      <div style={settingRowAction}>{children}</div>
+    </div>
+  )
+}
+
+function Toggle({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      style={{ ...toggleButton, background: checked ? "#0878ef" : "#b8c5d6" }}
+    >
+      <span style={{ ...toggleKnob, transform: checked ? "translateX(16px)" : "translateX(0)" }} />
+    </button>
+  )
+}
+
 const productHeaderIdentity: CSSProperties = {
   display: "flex",
   alignItems: "center",
@@ -3716,6 +3648,126 @@ const fieldWrap: CSSProperties = {
   flexDirection: "column",
   gap: 6,
   minWidth: 0,
+}
+
+const controlDashboard: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(280px, 0.9fr) minmax(360px, 1.1fr)",
+  gap: 14,
+  alignItems: "start",
+}
+
+const controlPanel: CSSProperties = {
+  border: "1px solid #d7e7fb",
+  borderRadius: 14,
+  padding: 14,
+  background: "#ffffff",
+  boxShadow: "0 8px 20px rgba(25, 78, 132, 0.05)",
+}
+
+const controlPanelHeading: CSSProperties = {
+  marginBottom: 10,
+  color: "#17324d",
+  fontSize: 14,
+  fontWeight: 800,
+}
+
+const settingStack: CSSProperties = {
+  display: "grid",
+  gap: 8,
+}
+
+const settingRow: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 14,
+  minHeight: 58,
+  padding: "10px 11px",
+  border: "1px solid #e3edf9",
+  borderRadius: 10,
+  background: "#f9fbff",
+}
+
+const settingRowTitle: CSSProperties = {
+  color: "#17324d",
+  fontSize: 12,
+  fontWeight: 800,
+}
+
+const settingRowDescription: CSSProperties = {
+  marginTop: 3,
+  color: "#66809e",
+  fontSize: 11,
+  lineHeight: 1.35,
+}
+
+const settingRowAction: CSSProperties = {
+  flexShrink: 0,
+  display: "flex",
+  alignItems: "center",
+}
+
+const toggleButton: CSSProperties = {
+  width: 38,
+  height: 22,
+  padding: 3,
+  border: "none",
+  borderRadius: 999,
+  cursor: "pointer",
+  transition: "background 160ms ease",
+}
+
+const toggleKnob: CSSProperties = {
+  display: "block",
+  width: 16,
+  height: 16,
+  borderRadius: 999,
+  background: "#ffffff",
+  boxShadow: "0 1px 3px rgba(15, 23, 42, 0.24)",
+  transition: "transform 160ms ease",
+}
+
+const posDevicesDetails: CSSProperties = {
+  border: "1px solid #d7e7fb",
+  borderRadius: 11,
+  background: "#fbfdff",
+}
+
+const posDevicesSummary: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+  cursor: "pointer",
+  padding: "10px 11px",
+  color: "#17324d",
+  fontSize: 12,
+  fontWeight: 700,
+}
+
+const posDevicesSummaryHint: CSSProperties = {
+  color: "#0878ef",
+  fontSize: 11,
+  fontWeight: 800,
+}
+
+const posDevicesBody: CSSProperties = {
+  display: "grid",
+  gap: 7,
+  padding: "0 10px 10px",
+}
+
+const terminalOptionRow: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 10,
+  padding: "9px 10px",
+  borderRadius: 9,
+  border: "1px solid #e3edf9",
+  background: "#ffffff",
+  cursor: "pointer",
 }
 
 const inlineFieldRow: CSSProperties = {
