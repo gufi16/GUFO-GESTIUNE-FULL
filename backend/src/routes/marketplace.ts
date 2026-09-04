@@ -417,9 +417,23 @@ function buildPublicBaseUrl(req: Request) {
 }
 
 function resolvePublicImageUrl(req: Request, rawUrl: unknown) {
-  const text = String(rawUrl || "").trim()
+  let text = String(rawUrl || "").trim()
   if (!text) return null
-  if (/^https?:\/\//i.test(text)) return text
+  if (/^https?:\/\//i.test(text)) {
+    try {
+      const parsed = new URL(text)
+      if (parsed.pathname.startsWith("/uploads/")) {
+        text = `/api${parsed.pathname}${parsed.search}`
+      } else if (parsed.pathname.startsWith("/api/uploads/")) {
+        text = `${parsed.pathname}${parsed.search}`
+      } else {
+        return text
+      }
+    } catch {
+      return text
+    }
+  }
+  if (text.startsWith("/uploads/")) text = `/api${text}`
   const normalized = text.startsWith("/") ? text : `/${text.replace(/^\/+/, "")}`
   const baseUrl = buildPublicBaseUrl(req)
   return baseUrl ? `${baseUrl}${normalized}` : normalized
@@ -511,7 +525,6 @@ async function buildGufoDeliveryMenuPayload(req: Request, integration: GufoDeliv
   const categories = await db.category.findMany({
     where: {
       isActive: true,
-      isVisibleInPos: true,
       ...scopedWhere,
     },
     include: {
@@ -534,7 +547,6 @@ async function buildGufoDeliveryMenuPayload(req: Request, integration: GufoDeliv
   const rawProducts = await db.product.findMany({
     where: {
       isActive: true,
-      isVisibleInPos: true,
       ...scopedWhere,
       OR: [
         { categoryId: null },
@@ -542,7 +554,6 @@ async function buildGufoDeliveryMenuPayload(req: Request, integration: GufoDeliv
           category: {
             is: {
               isActive: true,
-              isVisibleInPos: true,
             },
           },
         },
@@ -610,42 +621,6 @@ async function buildGufoDeliveryMenuPayload(req: Request, integration: GufoDeliv
     throw new Error("POS-ul tinta configurat pentru Gufo Delivery nu este valid.")
   }
 
-  const selectedDepartmentIds = new Set(terminal.departmentAccesses.map((item) => item.departmentId))
-  const selectedCategoryIds = new Set(terminal.categoryAccesses.map((item) => item.categoryId))
-  const selectedProductIds = new Set(terminal.productAccesses.map((item) => item.productId))
-  const terminalFiltersEnabled =
-    selectedDepartmentIds.size > 0 || selectedCategoryIds.size > 0 || selectedProductIds.size > 0
-
-  const effectiveCategoryIds = new Set<string>(selectedCategoryIds)
-  const effectiveDepartmentIds = new Set<string>(selectedDepartmentIds)
-
-  let terminalTreeChanged = true
-  while (terminalTreeChanged) {
-    terminalTreeChanged = false
-    for (const category of categories) {
-      if (category.parentCategoryId && effectiveCategoryIds.has(category.parentCategoryId) && !effectiveCategoryIds.has(category.id)) {
-        effectiveCategoryIds.add(category.id)
-        terminalTreeChanged = true
-      }
-    }
-  }
-
-  for (const category of categories) {
-    if (category.departmentId && selectedDepartmentIds.has(category.departmentId)) {
-      effectiveCategoryIds.add(category.id)
-    }
-  }
-
-  const terminalVisibleProducts = terminalFiltersEnabled
-    ? rawProducts.filter((product) => {
-        if (selectedProductIds.has(product.id)) return true
-        if (product.categoryId && effectiveCategoryIds.has(product.categoryId)) return true
-        if (product.departmentId && effectiveDepartmentIds.has(product.departmentId)) return true
-        if (product.category?.departmentId && effectiveDepartmentIds.has(product.category.departmentId)) return true
-        return false
-      })
-    : rawProducts
-
   const deliveryCatalogMode = normalizeDeliveryCatalogMode(settings.deliveryCatalogMode)
   const includedCategoryIds = new Set(normalizeUniqueStringArray(settings.includedCategoryIds))
   const includedProductIds = new Set(normalizeUniqueStringArray(settings.includedProductIds))
@@ -666,12 +641,8 @@ async function buildGufoDeliveryMenuPayload(req: Request, integration: GufoDeliv
     }
   }
 
-  // A curated Gufo Delivery catalog is an explicit merchant choice. It must not
-  // be narrowed again by optional POS access filters used only at the terminal.
-  const catalogSourceProducts =
-    deliveryCatalogMode === "ALL_VISIBLE" ? terminalVisibleProducts : rawProducts
-
-  const deliveryProducts = catalogSourceProducts.filter((product) => {
+  // Delivery catalog settings are independent from POS visibility/access rules.
+  const deliveryProducts = rawProducts.filter((product) => {
     if (deliveryCatalogMode === "MANUAL_SELECTION") {
       return includedProductIds.has(product.id)
     }

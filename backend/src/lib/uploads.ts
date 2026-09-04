@@ -59,7 +59,7 @@ export function ensureUploadSubdir(name: string) {
 }
 
 export function buildPublicUploadUrl(folder: string, filename: string) {
-  return `/uploads/${folder}/${filename}`
+  return `/api/uploads/${folder}/${filename}`
 }
 
 export function normalizeStoredUploadUrl(value: unknown) {
@@ -80,6 +80,10 @@ export function normalizeStoredUploadUrl(value: unknown) {
   }
 
   if (text.startsWith("/uploads/")) {
+    return `/api${text}`
+  }
+
+  if (text.startsWith("/api/uploads/")) {
     return text
   }
 
@@ -87,6 +91,9 @@ export function normalizeStoredUploadUrl(value: unknown) {
     try {
       const parsed = new URL(text)
       if (parsed.pathname.startsWith("/uploads/")) {
+        return `/api${parsed.pathname}`
+      }
+      if (parsed.pathname.startsWith("/api/uploads/")) {
         return parsed.pathname
       }
     } catch {

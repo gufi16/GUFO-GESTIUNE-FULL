@@ -1970,7 +1970,7 @@ export default function MarketplacePage() {
                           }
                           className={documentInputClass}
                         >
-                          <option value="ALL_VISIBLE">Toate produsele vizibile in POS</option>
+                          <option value="ALL_VISIBLE">Toate produsele active din ERP</option>
                           <option value="CATEGORY_SELECTION">Doar categorii selectate</option>
                           <option value="MANUAL_SELECTION">Selectie manuala de produse</option>
                         </select>
@@ -1991,7 +1991,7 @@ export default function MarketplacePage() {
 
                     {currentForm.deliveryCatalogMode === "ALL_VISIBLE" ? (
                       <div className="rounded-[14px] border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-                        Vor fi incluse toate produsele care sunt marcate vizibile in POS.
+                        Vor fi incluse toate produsele active din ERP pentru aceasta locatie.
                       </div>
                     ) : null}
 
@@ -2499,7 +2499,7 @@ export default function MarketplacePage() {
 
             <div className="mt-4 rounded-[18px] border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
               {currentForm.deliveryCatalogMode === "ALL_VISIBLE"
-                ? "Pentru aceasta locatie vor merge in Gufo Delivery toate produsele marcate vizibile in POS."
+                ? "Pentru aceasta locatie vor merge in Gufo Delivery toate produsele active din ERP."
                 : currentForm.deliveryCatalogMode === "CATEGORY_SELECTION"
                   ? `Pentru aceasta locatie vor merge doar produsele din ${currentForm.includedCategoryIds.length} categorii selectate.`
                   : `Pentru aceasta locatie vor merge doar cele ${currentForm.includedProductIds.length} produse selectate manual.`}

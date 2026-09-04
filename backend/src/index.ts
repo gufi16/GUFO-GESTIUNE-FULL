@@ -187,6 +187,9 @@ app.use(express.json({ limit: "10mb" }))
 app.use(cookieParser())
 app.use(morgan("dev"))
 app.use("/uploads", express.static(uploadsDir))
+// Tenant domains proxy API calls under /api, while their root is the ERP SPA.
+// Keep uploaded images on the API route so they never resolve to the SPA HTML.
+app.use("/api/uploads", express.static(uploadsDir))
 app.use((req, res, next) => {
   const originalJson = res.json.bind(res)
   res.json = ((body: unknown) => originalJson(repairDeepStrings(body))) as typeof res.json
