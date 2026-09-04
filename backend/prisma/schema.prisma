@@ -108,6 +108,11 @@ enum PaymentType {
   MIXED
 }
 
+enum DeliveryOptionSelectionMode {
+  SINGLE
+  MULTIPLE
+}
+
 enum DeliveryCustomerAuthProvider {
   PASSWORD
   GOOGLE
@@ -1034,6 +1039,8 @@ model Product {
   terminalAccesses      TerminalProductAccess[]
   crossSellLinks        ProductCrossSell[]        @relation("ProductCrossSellSource")
   crossSellLinkedFrom   ProductCrossSell[]        @relation("ProductCrossSellTarget")
+  deliveryOptionGroups  DeliveryProductOptionGroup[]
+  deliveryOptionItems   DeliveryOptionGroupItem[]
 
     @@unique([tenantId, companyId, sku])
     @@index([tenantId])
@@ -1064,6 +1071,62 @@ model ProductCrossSell {
   @@index([tenantId])
   @@index([sourceProductId, sortOrder])
   @@index([targetProductId])
+}
+
+model DeliveryOptionGroup {
+  id            String                      @id @default(cuid())
+  tenantId      String
+  companyId     String?
+  name          String
+  description   String?
+  selectionMode DeliveryOptionSelectionMode @default(MULTIPLE)
+  minSelections Int                         @default(0)
+  maxSelections Int                         @default(1)
+  sortOrder     Int                         @default(0)
+  isActive      Boolean                     @default(true)
+  createdAt     DateTime                    @default(now())
+  updatedAt     DateTime                    @updatedAt
+
+  productLinks DeliveryProductOptionGroup[]
+  items        DeliveryOptionGroupItem[]
+
+  @@index([tenantId, companyId])
+  @@index([tenantId, isActive, sortOrder])
+}
+
+model DeliveryProductOptionGroup {
+  id        String              @id @default(cuid())
+  productId String
+  groupId   String
+  sortOrder Int                 @default(0)
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  product Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  group   DeliveryOptionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, groupId])
+  @@index([productId, sortOrder])
+  @@index([groupId, sortOrder])
+}
+
+model DeliveryOptionGroupItem {
+  id              String              @id @default(cuid())
+  groupId         String
+  productId       String
+  priceAdjustment Decimal             @default(0)
+  isDefault       Boolean             @default(false)
+  sortOrder       Int                 @default(0)
+  isActive        Boolean             @default(true)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  group   DeliveryOptionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  product Product             @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([groupId, productId])
+  @@index([groupId, sortOrder])
+  @@index([productId])
 }
 
 model TerminalDepartmentAccess {

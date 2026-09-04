@@ -596,6 +596,48 @@ async function buildGufoDeliveryMenuPayload(req: Request, integration: GufoDeliv
           barcode: true,
         },
       },
+      deliveryOptionGroups: {
+        where: { group: { isActive: true } },
+        orderBy: { sortOrder: "asc" },
+        include: {
+          group: {
+            include: {
+              items: {
+                where: { isActive: true, product: { isActive: true } },
+                orderBy: { sortOrder: "asc" },
+                include: {
+                  product: {
+                    select: {
+                      id: true,
+                      name: true,
+                      imageUrl: true,
+                      price: true,
+                      isSgr: true,
+                      sgrValue: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      crossSellLinks: {
+        orderBy: { sortOrder: "asc" },
+        include: {
+          targetProduct: {
+            select: {
+              id: true,
+              name: true,
+              imageUrl: true,
+              price: true,
+              isActive: true,
+              isSgr: true,
+              sgrValue: true,
+            },
+          },
+        },
+      },
     },
     orderBy: [{ posSortOrder: "asc" }, { name: "asc" }],
   })
@@ -700,6 +742,34 @@ async function buildGufoDeliveryMenuPayload(req: Request, integration: GufoDeliv
           : null,
         posSortOrder: Math.max(0, Number(product.posSortOrder || 0)),
         barcode: Array.isArray(product.barcodes) && product.barcodes[0]?.barcode ? product.barcodes[0].barcode : null,
+        optionGroups: product.deliveryOptionGroups.map((link) => ({
+          id: link.group.id,
+          name: link.group.name,
+          description: link.group.description || null,
+          selectionMode: link.group.selectionMode,
+          minSelections: link.group.minSelections,
+          maxSelections: link.group.maxSelections,
+          items: link.group.items.map((item) => ({
+            id: item.id,
+            productId: item.product.id,
+            name: item.product.name,
+            imageUrl: resolvePublicImageUrl(req, item.product.imageUrl),
+            priceAdjustment: Number(item.priceAdjustment || 0),
+            isDefault: item.isDefault,
+            isSgr: item.product.isSgr,
+            sgrValue: Number(item.product.sgrValue || 0),
+          })),
+        })),
+        crossSellProducts: product.crossSellLinks
+          .filter((link) => link.targetProduct.isActive)
+          .map((link) => ({
+            id: link.targetProduct.id,
+            name: link.targetProduct.name,
+            imageUrl: resolvePublicImageUrl(req, link.targetProduct.imageUrl),
+            price: Number(link.targetProduct.price || 0),
+            isSgr: link.targetProduct.isSgr,
+            sgrValue: Number(link.targetProduct.sgrValue || 0),
+          })),
       }
     })
     .sort((left, right) => {
