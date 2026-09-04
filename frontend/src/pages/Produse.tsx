@@ -147,7 +147,7 @@ type RecipeForm = {
   items: RecipeLine[]
 }
 
-type ProductModalTab = "general" | "comercial" | "control" | "media"
+type ProductModalTab = "general" | "comercial" | "control" | "delivery" | "media"
 
 type NcSuggestion = {
   code: string
@@ -507,6 +507,7 @@ export function ProductsCatalogPage({
     { id: "general" as const, title: "Date generale" },
     { id: "comercial" as const, title: "Unitati si achizitie" },
     { id: "control" as const, title: "Control si loturi" },
+    { id: "delivery" as const, title: "Gufo Delivery" },
     { id: "media" as const, title: "Poza produs" },
   ]
   const imagePreviewSrc = livePreviewUrl || form.imageUrl.trim()
@@ -2401,6 +2402,10 @@ function getDefaultVat(list = vatRates) {
                     ) : null}
                   </div>
                 </SectionCard>
+                </>
+              ) : null}
+
+              {activeProductTab === "delivery" ? (
                 <SectionCard title="Gufo Delivery">
                   <div style={sideStack}>
                     <Field label="Grupuri afisate pentru acest produs">
@@ -2522,7 +2527,6 @@ function getDefaultVat(list = vatRates) {
                     ) : null}
                   </div>
                 </SectionCard>
-                </>
               ) : null}
 
               {activeProductTab === "comercial" ? (
