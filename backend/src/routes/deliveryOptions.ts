@@ -5,7 +5,9 @@ import { buildCompanyScopedTenantWhere, requireRequestCompanyId } from "../lib/c
 import { AuthedRequest, requireAuth } from "../middleware/requireAuth"
 
 const router = Router()
-router.use(requireAuth)
+// Keep ERP authentication scoped to this router's endpoints. A pathless router.use()
+// would also intercept every later API route, including the public POS pairing route.
+router.use("/api/v1/delivery-option-groups", requireAuth)
 
 const ItemSchema = z.object({
   productId: z.string().min(1),
@@ -137,6 +139,38 @@ router.delete("/api/v1/delivery-option-groups/:id", async (req: AuthedRequest, r
     return res.json({ ok: true })
   } catch (error) {
     return res.status(400).json({ ok: false, error: error instanceof Error ? error.message : "Nu am putut sterge grupul." })
+  }
+})
+
+const ProductAssignmentSchema = z.object({
+  productId: z.string().min(1),
+  role: z.enum(["DISPLAY", "OPTION"]),
+  priceAdjustment: z.coerce.number().min(0).default(0),
+})
+
+router.put("/api/v1/delivery-option-groups/:id/product-assignment", async (req: AuthedRequest, res) => {
+  try {
+    const tenantId = tenantIdFor(req)
+    const companyId = await requireRequestCompanyId(req)
+    const input = ProductAssignmentSchema.parse(req.body)
+    const group = await db.deliveryOptionGroup.findFirst({ where: { id: req.params.id, tenantId, companyId }, select: { id: true } })
+    if (!group) return res.status(404).json({ ok: false, error: "Grupul nu exista." })
+    await validateProductIds(tenantId, companyId, [input.productId])
+    if (input.role === "DISPLAY") {
+      await db.deliveryProductOptionGroup.upsert({
+        where: { productId_groupId: { productId: input.productId, groupId: group.id } },
+        update: {}, create: { productId: input.productId, groupId: group.id },
+      })
+    } else {
+      await db.deliveryOptionGroupItem.upsert({
+        where: { groupId_productId: { groupId: group.id, productId: input.productId } },
+        update: { priceAdjustment: input.priceAdjustment, isActive: true },
+        create: { groupId: group.id, productId: input.productId, priceAdjustment: input.priceAdjustment },
+      })
+    }
+    return res.json({ ok: true })
+  } catch (error) {
+    return res.status(400).json({ ok: false, error: error instanceof Error ? error.message : "Nu am putut salva asocierea." })
   }
 })
 
