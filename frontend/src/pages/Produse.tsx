@@ -1723,23 +1723,28 @@ function getDefaultVat(list = vatRates) {
         <div style={modalOverlay}>
           <div style={modalCard}>
             <div style={modalHeader}>
-              <div>
-                <div style={cardTitle}>{editingItem ? "Edit produs" : "Adauga produs"}</div>
-                <div style={cardSubtitleCompact}>
-                  {editingItem
-                    ? "SKU stabil dupa salvare."
-                    : "SKU propus automat, editabil doar la creare."}
+              <div style={productHeaderIdentity}>
+                <div style={productHeaderMark}>P</div>
+                <div>
+                  <div style={cardTitle}>{editingItem ? "Edit produs" : "Adauga produs"}</div>
+                  <div style={cardSubtitleCompact}>
+                    {editingItem
+                      ? "SKU stabil dupa salvare."
+                      : "SKU propus automat, editabil doar la creare."}
+                  </div>
                 </div>
               </div>
 
-              <button onClick={closeModal} style={btnSecondary}>
-                Inchide
-              </button>
+              <div style={productHeaderActions}>
+                <span style={{ ...productStatusPill, ...(form.isActive ? null : productStatusPillInactive) }}>
+                  <span style={productStatusDot} /> {form.isActive ? "Produs activ" : "Produs inactiv"}
+                </span>
+                <button onClick={closeModal} style={productCloseButton} aria-label="Inchide editorul">×</button>
+              </div>
             </div>
 
             <div style={productEditorBody}>
               <aside style={productTabRail}>
-                <div style={productTabRailLabel}>Editor produs</div>
                 {productModalTabs.map((tab, index) => {
                   const active = activeProductTab === tab.id
                   return (
@@ -1754,7 +1759,6 @@ function getDefaultVat(list = vatRates) {
                     </button>
                   )
                 })}
-                <div style={productTabRailHint}>Selectează o secțiune. Modificările se salvează împreună, din butonul de jos.</div>
               </aside>
 
               <div key={activeProductTab} style={productEditorContent}>
@@ -3498,8 +3502,70 @@ const cardTitle: CSSProperties = {
 
 const cardSubtitleCompact: CSSProperties = {
   fontSize: 12,
-  color: "#64748b",
+  color: "#5c7495",
   marginTop: 2
+}
+
+const productHeaderIdentity: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+}
+
+const productHeaderMark: CSSProperties = {
+  width: 34,
+  height: 34,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: 10,
+  background: "linear-gradient(135deg, #17324D 0%, #27649a 100%)",
+  color: "#ffffff",
+  fontWeight: 900,
+  fontSize: 14,
+  boxShadow: "0 5px 12px rgba(23,50,77,0.2)",
+}
+
+const productHeaderActions: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 12,
+}
+
+const productStatusPill: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  padding: "7px 10px",
+  borderRadius: 999,
+  background: "#dcfce7",
+  color: "#087443",
+  fontSize: 11,
+  fontWeight: 800,
+}
+
+const productStatusPillInactive: CSSProperties = {
+  background: "#f1f5f9",
+  color: "#64748b",
+}
+
+const productStatusDot: CSSProperties = {
+  width: 7,
+  height: 7,
+  borderRadius: 999,
+  background: "#10b981",
+}
+
+const productCloseButton: CSSProperties = {
+  width: 32,
+  height: 32,
+  border: "none",
+  borderRadius: 10,
+  background: "transparent",
+  color: "#17324D",
+  fontSize: 22,
+  lineHeight: 1,
+  cursor: "pointer",
 }
 
 const modalHeader: CSSProperties = {
@@ -3507,12 +3573,13 @@ const modalHeader: CSSProperties = {
   justifyContent: "space-between",
   alignItems: "flex-start",
   gap: 10,
-  marginBottom: 12,
+  marginBottom: 16,
   position: "sticky",
   top: 0,
-  background: "#fff",
+  background: "#f3f8ff",
   zIndex: 2,
-  paddingBottom: 4
+  padding: "4px 4px 12px",
+  borderBottom: "1px solid #dbeafe",
 }
 
 const productTabPanel: CSSProperties = {
@@ -3531,15 +3598,15 @@ const productEditorBody: CSSProperties = {
 }
 
 const productTabRail: CSSProperties = {
-  width: 208,
+  width: 178,
   flexShrink: 0,
   display: "flex",
   flexDirection: "column",
-  gap: 6,
-  padding: 12,
-  border: "1px solid #dbe5f0",
-  borderRadius: 16,
-  background: "linear-gradient(180deg, #f8fbff 0%, #f8fafc 100%)",
+  gap: 7,
+  padding: "4px 2px",
+  border: "none",
+  borderRadius: 0,
+  background: "transparent",
 }
 
 const productTabRailLabel: CSSProperties = {
@@ -3557,33 +3624,33 @@ const productTabButton: CSSProperties = {
   alignItems: "center",
   gap: 9,
   border: "1px solid transparent",
-  borderRadius: 12,
+  borderRadius: 10,
   background: "transparent",
   color: "#334155",
-  padding: "10px 9px",
-  fontSize: 13,
+  padding: "9px 8px",
+  fontSize: 12,
   fontWeight: 700,
   textAlign: "left",
   cursor: "pointer",
 }
 
 const productTabButtonActive: CSSProperties = {
-  borderColor: "#17324D",
-  background: "#17324D",
+  borderColor: "#0878ef",
+  background: "#0878ef",
   color: "#ffffff",
-  boxShadow: "0 8px 18px rgba(23,50,77,0.16)",
+  boxShadow: "0 7px 16px rgba(8,120,239,0.18)",
 }
 
 const productTabNumber: CSSProperties = {
-  width: 22,
-  height: 22,
+  width: 21,
+  height: 21,
   flexShrink: 0,
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
   borderRadius: 999,
-  background: "#e2e8f0",
-  color: "#475569",
+  background: "#e6effa",
+  color: "#17324D",
   fontSize: 11,
   fontWeight: 800,
 }
@@ -3606,23 +3673,23 @@ const productEditorContent: CSSProperties = {
   minWidth: 0,
   minHeight: 0,
   overflowY: "auto",
-  padding: 4,
-  borderRadius: 18,
-  background: "#f8fafc",
+  padding: 0,
+  borderRadius: 14,
+  background: "transparent",
 }
 
 const sectionCard: CSSProperties = {
-  border: "1px solid #dbe5f0",
-  borderRadius: 18,
-  padding: 18,
+  border: "1px solid #d7e7fb",
+  borderRadius: 14,
+  padding: 16,
   background: "#fff"
 }
 
 const sectionTitle: CSSProperties = {
   fontSize: 15,
   fontWeight: 800,
-  color: "#0f172a",
-  marginBottom: 16,
+  color: "#17324D",
+  marginBottom: 14,
   letterSpacing: "-0.01em",
 }
 
@@ -3660,9 +3727,8 @@ const inlineFieldRow: CSSProperties = {
 const labelStyle: CSSProperties = {
   fontSize: 11,
   fontWeight: 800,
-  color: "#64748b",
-  letterSpacing: "0.04em",
-  textTransform: "uppercase",
+  color: "#17324D",
+  letterSpacing: "0.01em",
 }
 
 const fieldHint: CSSProperties = {
@@ -3676,8 +3742,8 @@ const input: CSSProperties = {
   minHeight: 42,
   padding: "9px 11px",
   borderRadius: 11,
-  border: "1px solid #cbd5e1",
-  background: "#ffffff",
+  border: "1px solid #c7dcf7",
+  background: "#fbfdff",
   outline: "none",
   fontSize: 13,
   boxSizing: "border-box"
@@ -4064,7 +4130,7 @@ const imagePreviewText: CSSProperties = {
 const modalOverlay: CSSProperties = {
   position: "fixed",
   inset: 0,
-  background: "rgba(17, 24, 39, 0.45)",
+  background: "rgba(12, 31, 53, 0.48)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -4075,16 +4141,17 @@ const modalOverlay: CSSProperties = {
 
 const modalCard: CSSProperties = {
   width: "100%",
-  maxWidth: 1320,
+  maxWidth: 1200,
   height: "calc(100dvh - 32px)",
   maxHeight: 920,
   display: "flex",
   flexDirection: "column",
   boxSizing: "border-box",
-  background: "#ffffff",
-  borderRadius: 16,
+  background: "#f3f8ff",
+  border: "1px solid rgba(255,255,255,0.72)",
+  borderRadius: 18,
   padding: 16,
-  boxShadow: "0 30px 60px rgba(0,0,0,0.18)",
+  boxShadow: "0 30px 70px rgba(6, 26, 52, 0.3)",
   margin: 0,
   overflow: "hidden"
 }
