@@ -12,7 +12,7 @@ import {
   documentInputClass,
   documentTextareaClass,
 } from "../components/DocumentUi"
-import { API_BASE, api, authHeaders, getToken } from "../lib/api"
+import { API_BASE, api, authHeaders, getToken, resolvePublicAssetUrl } from "../lib/api"
 
 type TabId = "integrari" | "acoperire" | "mapari" | "comenzi"
 type PlatformCode = "GLOVO" | "WOLT" | "BOLT_FOOD" | "GUFO_DELIVERY"
@@ -78,6 +78,22 @@ type DeliveryServiceAreaForm = {
   centerLng: string
   radiusKm: string
   polygon: DeliveryGeoPoint[]
+}
+
+function resolveDeliveryRestaurantImageUrl(rawUrl: string) {
+  const value = String(rawUrl || "").trim()
+  if (!value) return ""
+
+  try {
+    const parsed = /^https?:\/\//i.test(value) ? new URL(value) : null
+    if (parsed?.pathname.startsWith("/uploads/")) {
+      return resolvePublicAssetUrl(`/api${parsed.pathname}${parsed.search}`)
+    }
+  } catch {
+    // Keep the original value so the normal asset resolver can handle it.
+  }
+
+  return resolvePublicAssetUrl(value.startsWith("/uploads/") ? `/api${value}` : value)
 }
 
 type IntegrationItem = {
@@ -1735,7 +1751,7 @@ export default function MarketplacePage() {
                             </div>
                             {currentForm.deliveryRestaurantImageUrl ? (
                               <img
-                                src={currentForm.deliveryRestaurantImageUrl}
+                                src={resolveDeliveryRestaurantImageUrl(currentForm.deliveryRestaurantImageUrl)}
                                 alt="Previzualizare fotografie restaurant"
                                 className="mt-3 h-28 w-44 rounded-xl border border-slate-200 object-cover"
                               />
