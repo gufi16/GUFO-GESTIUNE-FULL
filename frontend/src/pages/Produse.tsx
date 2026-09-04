@@ -147,7 +147,7 @@ type RecipeForm = {
   items: RecipeLine[]
 }
 
-type ProductModalTab = "general" | "pos" | "comercial" | "control" | "delivery" | "media"
+type ProductModalTab = "general" | "catalog" | "pos" | "comercial" | "control" | "delivery" | "media"
 
 type NcSuggestion = {
   code: string
@@ -492,7 +492,8 @@ export function ProductsCatalogPage({
 
   const isFinishedProduct = form.class === "PRODUS_FIN"
   const productModalTabs = [
-    { id: "general" as const, title: "Date generale" },
+    { id: "general" as const, title: "Informații" },
+    { id: "catalog" as const, title: "Catalog și producție" },
     { id: "pos" as const, title: "POS și extra" },
     { id: "comercial" as const, title: "Unitati si achizitie" },
     { id: "control" as const, title: "Control si loturi" },
@@ -1758,9 +1759,9 @@ function getDefaultVat(list = vatRates) {
 
               <div key={activeProductTab} style={productEditorContent}>
                 <div style={productTabPanel}>
-              {activeProductTab === "general" || activeProductTab === "pos" ? (
+              {activeProductTab === "general" || activeProductTab === "catalog" || activeProductTab === "pos" ? (
                 <>
-                <SectionCard title={activeProductTab === "pos" ? "Gufo POS și produse extra" : "Date generale"}>
+                <SectionCard title={activeProductTab === "pos" ? "Gufo POS și produse extra" : activeProductTab === "catalog" ? "Catalog și producție" : "Informații de bază"}>
                   <div style={gridCompact}>
                     <div style={{ display: activeProductTab === "general" ? "contents" : "none" }}>
                     <Field label="SKU">
@@ -1816,6 +1817,9 @@ function getDefaultVat(list = vatRates) {
                           : "Poti salva codul de bare acum, iar Gufo Depozit il va folosi imediat dupa activare."}
                       </div>
                     </Field>
+
+                    </div>
+                    <div style={{ display: activeProductTab === "catalog" ? "contents" : "none" }}>
 
                     <Field label="Clasificare">
                       <select
