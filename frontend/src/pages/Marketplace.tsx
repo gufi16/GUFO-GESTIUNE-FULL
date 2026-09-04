@@ -2628,7 +2628,7 @@ export default function MarketplacePage() {
                     <input value={deliveryOptionDraft.description} onChange={(e) => setDeliveryOptionDraft((value) => ({ ...value, description: e.target.value }))} className={documentInputClass} placeholder="Alege sosurile preferate" />
                   </DocumentField>
                 </div>
-                <div className="mt-3 rounded-[12px] border border-sky-100 bg-white px-3 py-2 text-xs text-slate-600">`0` la minim inseamna optional. `1` sau mai mult inseamna ca clientul trebuie sa aleaga inainte sa adauge produsul in cos.</div>
+                <div className="mt-3 rounded-[12px] border border-sky-100 bg-white px-3 py-2 text-xs text-slate-600">`0` la minim inseamna optional. `1` sau mai mult inseamna ca clientul trebuie sa aleaga inainte sa adauge produsul in cos. Ordinea se stabilește separat, în produsul la care aloci grupa.</div>
 
                 <div className="mt-4 rounded-[16px] border border-slate-200 bg-white p-3">
                   <div className="flex flex-wrap items-baseline justify-between gap-2">

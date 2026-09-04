@@ -1177,6 +1177,17 @@ function getDefaultVat(list = vatRates) {
     })
   }
 
+  function setDeliveryDisplayGroupPosition(groupId: string, value: string) {
+    const requestedPosition = Math.max(1, Math.round(Number(value) || 1))
+    setForm((prev) => {
+      const currentIndex = prev.deliveryDisplayGroupIds.indexOf(groupId)
+      if (currentIndex < 0) return prev
+      const ordered = prev.deliveryDisplayGroupIds.filter((id) => id !== groupId)
+      ordered.splice(Math.min(requestedPosition - 1, ordered.length), 0, groupId)
+      return { ...prev, deliveryDisplayGroupIds: ordered }
+    })
+  }
+
   async function openRecipeModal(item: Product) {
     if (!token) {
       setError("Nu exista token de autentificare. Fa login din nou.")
@@ -2453,6 +2464,7 @@ function getDefaultVat(list = vatRates) {
                       <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
                         {deliveryOptionGroups.map((group) => {
                           const checked = form.deliveryDisplayGroupIds.includes(group.id)
+                          const position = form.deliveryDisplayGroupIds.indexOf(group.id) + 1
                           return (
                             <label
                               key={group.id}
@@ -2469,6 +2481,20 @@ function getDefaultVat(list = vatRates) {
                             >
                               <input type="checkbox" checked={checked} onChange={() => toggleDeliveryGroup(group.id, "display")} />
                               <span style={{ color: "#334155", fontSize: 13, fontWeight: 600 }}>{group.name}</span>
+                              {checked ? (
+                                <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, color: "#475569", fontSize: 12, fontWeight: 600 }}>
+                                  Poziție
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    max={form.deliveryDisplayGroupIds.length}
+                                    value={position}
+                                    onClick={(event) => event.stopPropagation()}
+                                    onChange={(event) => setDeliveryDisplayGroupPosition(group.id, event.target.value)}
+                                    style={{ width: 54, border: "1px solid #bae6fd", borderRadius: 7, padding: "4px 6px", background: "#fff", color: "#0f172a" }}
+                                  />
+                                </span>
+                              ) : null}
                             </label>
                           )
                         })}
