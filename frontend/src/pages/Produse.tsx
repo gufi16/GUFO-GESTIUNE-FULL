@@ -147,7 +147,7 @@ type RecipeForm = {
   items: RecipeLine[]
 }
 
-type ProductModalTab = "general" | "comercial" | "control" | "delivery" | "media"
+type ProductModalTab = "general" | "pos" | "comercial" | "control" | "delivery" | "media"
 
 type NcSuggestion = {
   code: string
@@ -493,6 +493,7 @@ export function ProductsCatalogPage({
   const isFinishedProduct = form.class === "PRODUS_FIN"
   const productModalTabs = [
     { id: "general" as const, title: "Date generale" },
+    { id: "pos" as const, title: "POS și extra" },
     { id: "comercial" as const, title: "Unitati si achizitie" },
     { id: "control" as const, title: "Control si loturi" },
     { id: "delivery" as const, title: "Gufo Delivery" },
@@ -1757,10 +1758,11 @@ function getDefaultVat(list = vatRates) {
 
               <div style={productEditorContent}>
                 <div style={productTabPanel}>
-              {activeProductTab === "general" ? (
+              {activeProductTab === "general" || activeProductTab === "pos" ? (
                 <>
-                <SectionCard title="Date generale">
+                <SectionCard title={activeProductTab === "pos" ? "Gufo POS și produse extra" : "Date generale"}>
                   <div style={gridCompact}>
+                    <div style={{ display: activeProductTab === "general" ? "contents" : "none" }}>
                     <Field label="SKU">
                       <input
                         value={form.sku}
@@ -1999,6 +2001,9 @@ function getDefaultVat(list = vatRates) {
                         style={{ ...input, background: "#f8fafc" }}
                       />
                     </Field>
+
+                    </div>
+                    <div style={{ display: activeProductTab === "pos" ? "contents" : "none" }}>
 
                     <Field label="Pozitie Gufo POS">
                       <input
@@ -2462,6 +2467,7 @@ function getDefaultVat(list = vatRates) {
                         </div>
                       </Field>
                     ) : null}
+                    </div>
                   </div>
                 </SectionCard>
                 </>
@@ -3615,7 +3621,7 @@ const sectionTitle: CSSProperties = {
 
 const gridCompact: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
   gap: 10
 }
 
