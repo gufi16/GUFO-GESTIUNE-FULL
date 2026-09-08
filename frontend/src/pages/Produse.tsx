@@ -3299,7 +3299,10 @@ function MetricCard({ title, value }: { title: string; value: string }) {
 function SectionCard({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div style={sectionCard}>
-      <div style={sectionTitle}>{title}</div>
+      <div style={sectionHeading}>
+        <span style={sectionHeadingMark} aria-hidden="true">{title.charAt(0)}</span>
+        <div style={sectionTitle}>{title}</div>
+      </div>
       {children}
     </div>
   )
@@ -3508,10 +3511,10 @@ const modalHeader: CSSProperties = {
   marginBottom: 16,
   position: "sticky",
   top: 0,
-  background: "#f3f8ff",
+  background: "#ffffff",
   zIndex: 2,
-  padding: "4px 4px 12px",
-  borderBottom: "1px solid #dbeafe",
+  padding: "8px 12px 14px",
+  borderBottom: "1px solid #dce8f7",
 }
 
 const productTabPanel: CSSProperties = {
@@ -3525,7 +3528,7 @@ const productEditorBody: CSSProperties = {
   display: "flex",
   flex: 1,
   minHeight: 0,
-  gap: 16,
+  gap: 18,
   overflow: "hidden",
 }
 
@@ -3535,10 +3538,10 @@ const productTabRail: CSSProperties = {
   display: "flex",
   flexDirection: "column",
   gap: 7,
-  padding: "4px 2px",
-  border: "none",
-  borderRadius: 0,
-  background: "transparent",
+  padding: 10,
+  border: "1px solid #dce8f7",
+  borderRadius: 14,
+  background: "#f8fbff",
 }
 
 const productTabRailLabel: CSSProperties = {
@@ -3556,10 +3559,10 @@ const productTabButton: CSSProperties = {
   alignItems: "center",
   gap: 9,
   border: "1px solid transparent",
-  borderRadius: 10,
-  background: "transparent",
+  borderRadius: 9,
+  background: "#ffffff",
   color: "#334155",
-  padding: "9px 8px",
+  padding: "10px 9px",
   fontSize: 12,
   fontWeight: 700,
   textAlign: "left",
@@ -3605,23 +3608,45 @@ const productEditorContent: CSSProperties = {
   minWidth: 0,
   minHeight: 0,
   overflowY: "auto",
-  padding: 0,
-  borderRadius: 14,
-  background: "transparent",
+  padding: 18,
+  border: "1px solid #dce8f7",
+  borderRadius: 16,
+  background: "#fbfdff",
 }
 
 const sectionCard: CSSProperties = {
-  border: "1px solid #d7e7fb",
+  border: "1px solid #dce8f7",
   borderRadius: 14,
-  padding: 16,
+  padding: 18,
   background: "#fff"
 }
 
+const sectionHeading: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 9,
+  marginBottom: 18,
+  paddingBottom: 13,
+  borderBottom: "1px solid #e8eff8",
+}
+
+const sectionHeadingMark: CSSProperties = {
+  width: 28,
+  height: 28,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: 8,
+  background: "#e8f2ff",
+  color: "#0878ef",
+  fontSize: 12,
+  fontWeight: 900,
+}
+
 const sectionTitle: CSSProperties = {
-  fontSize: 15,
+  fontSize: 16,
   fontWeight: 800,
   color: "#17324D",
-  marginBottom: 14,
   letterSpacing: "-0.01em",
 }
 
@@ -3646,7 +3671,7 @@ const sideStack: CSSProperties = {
 const fieldWrap: CSSProperties = {
   display: "flex",
   flexDirection: "column",
-  gap: 6,
+  gap: 7,
   minWidth: 0,
 }
 
@@ -3780,7 +3805,8 @@ const labelStyle: CSSProperties = {
   fontSize: 11,
   fontWeight: 800,
   color: "#17324D",
-  letterSpacing: "0.01em",
+  letterSpacing: "0.025em",
+  textTransform: "uppercase",
 }
 
 const fieldHint: CSSProperties = {
@@ -3791,11 +3817,11 @@ const fieldHint: CSSProperties = {
 
 const input: CSSProperties = {
   width: "100%",
-  minHeight: 42,
-  padding: "9px 11px",
-  borderRadius: 11,
-  border: "1px solid #c7dcf7",
-  background: "#fbfdff",
+  minHeight: 40,
+  padding: "8px 10px",
+  borderRadius: 9,
+  border: "1px solid #cadcf3",
+  background: "#ffffff",
   outline: "none",
   fontSize: 13,
   boxSizing: "border-box"
